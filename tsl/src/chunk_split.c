@@ -13,6 +13,7 @@
 #include <catalog/pg_constraint.h>
 #include <commands/tablecmds.h>
 #include <storage/bufmgr.h>
+#include <storage/lockdefs.h>
 #include <utils/acl.h>
 #include <utils/snapshot.h>
 #include <utils/syscache.h>
@@ -743,7 +744,7 @@ compute_compression_size_stats_fraction(Form_compression_chunk_size ccs, double 
 static void
 update_compression_stats_for_split(const SplitRelationInfo *split_relations,
 								   const SplitRelationInfo *compressed_split_relations,
-								   int split_factor, Oid amoid)
+								   int split_factor)
 {
 	double total_tuples = 0;
 
@@ -835,14 +836,12 @@ update_compression_stats_for_split(const SplitRelationInfo *split_relations,
  */
 static void
 update_chunk_stats_for_split(const SplitRelationInfo *split_relations,
-							 const SplitRelationInfo *compressed_split_relations, int split_factor,
-							 Oid amoid)
+							 const SplitRelationInfo *compressed_split_relations, int split_factor)
 {
 	if (compressed_split_relations)
 		update_compression_stats_for_split(split_relations,
 										   compressed_split_relations,
-										   split_factor,
-										   amoid);
+										   split_factor);
 	/*
 	 * Update reltuples in pg_class. The reltuples are normally updated on
 	 * reindex, so this update only matters in case of no indexes.
@@ -856,7 +855,7 @@ update_chunk_stats_for_split(const SplitRelationInfo *split_relations,
 		double ntuples = sri->stats.tuples_alive;
 
 		rel = table_open(sri->relid, AccessShareLock);
-		update_relstats(relRelation, rel, ntuples);
+		update_relstats(relRelation, sri->relid, RelationGetNumberOfBlocks(rel), ntuples);
 		table_close(rel, NoLock);
 	}
 
@@ -886,9 +885,13 @@ Datum
 chunk_split_chunk(PG_FUNCTION_ARGS)
 {
 	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	const Chunk *chunk;
 	Relation srcrel;
 
-	srcrel = table_open(relid, AccessExclusiveLock);
+	chunk = ts_chunk_get_by_relid_locked(relid, AccessExclusiveLock, true);
+
+	/* Chunk already locked, so use NoLock */
+	srcrel = table_open(relid, NoLock);
 
 	if (srcrel->rd_rel->relkind != RELKIND_RELATION)
 		ereport(ERROR,
@@ -917,8 +920,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	 * including open scans and pending AFTER trigger events.
 	 */
 	CheckTableNotInUse(srcrel, "split_chunk");
-
-	const Chunk *chunk = ts_chunk_get_by_relid(relid, true);
 
 	if (chunk->fd.osm_chunk)
 		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cannot split OSM chunks")));
@@ -1085,7 +1086,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 															NameStr(chunk->fd.schema_name),
 															NULL,
 															InvalidOid,
-															amoid,
 															&created);
 	Ensure(created, "could not create chunk for split");
 	Assert(new_chunk);
@@ -1170,7 +1170,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	ts_cache_release(&hcache);
 
 	/* Update stats after split is done */
-	update_chunk_stats_for_split(split_relations, compressed_split_relations, SPLIT_FACTOR, amoid);
+	update_chunk_stats_for_split(split_relations, compressed_split_relations, SPLIT_FACTOR);
 
 	DEBUG_WAITPOINT("split_chunk_at_end");
 

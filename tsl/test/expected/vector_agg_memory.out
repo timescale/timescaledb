@@ -10,11 +10,9 @@ create or replace function ts_debug_allocated_bytes(text = 'PortalContext') retu
     language c strict volatile;
 create table mvagg (t int, s0 int, s1 int);
 select create_hypertable('mvagg', 't', chunk_time_interval => pow(10, 9)::int);
-NOTICE:  adding not-null constraint to column "t"
  create_hypertable  
 --------------------
  (1,public,mvagg,t)
-(1 row)
 
 insert into mvagg select generate_series(1, 2 * pow(10, 6)::int) t, 1 s0, 1 s1;
 -- Need two segmentbys to prevent compressed index scans to force hash aggregation.
@@ -30,22 +28,20 @@ select count(compress_chunk(x)) from show_chunks('mvagg') x;
  count 
 -------
      2
-(1 row)
 
 vacuum analyze mvagg;
 -- We are going to log memory usage as a function of number of aggregated elements
 -- here.
 create table log(n int, bytes int, a bigint, b bigint, c bigint, d bigint, e bigint, f bigint);
 -- First, ensure that the underlying decompression has constant memory usage.
-explain (costs off) select distinct on (s0, s1) ts_debug_allocated_bytes() bytes,
+explain (buffers off, costs off) select distinct on (s0, s1) ts_debug_allocated_bytes() bytes,
         s0, s1, t
     from mvagg where t >= -1 and t < 1000000 order by s0, s1, t desc;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result
    ->  Unique
          ->  Merge Append
-               Sort Key: _hyper_1_1_chunk.s0, _hyper_1_1_chunk.s1, _hyper_1_1_chunk.t DESC
+               Sort Key: mvagg.s0, mvagg.s1, mvagg.t DESC
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                      Vectorized Filter: ((t >= '-1'::integer) AND (t < 1000000))
                      ->  Index Scan using compress_hyper_2_3_chunk_s0_s1__ts_meta_min_1__ts_meta_max__idx on compress_hyper_2_3_chunk
@@ -54,7 +50,6 @@ explain (costs off) select distinct on (s0, s1) ts_debug_allocated_bytes() bytes
                      Vectorized Filter: ((t >= '-1'::integer) AND (t < 1000000))
                      ->  Index Scan using compress_hyper_2_4_chunk_s0_s1__ts_meta_min_1__ts_meta_max__idx on compress_hyper_2_4_chunk
                            Index Cond: ((_ts_meta_min_1 < 1000000) AND (_ts_meta_max_1 >= '-1'::integer))
-(12 rows)
 
 truncate log;
 \set ECHO none
@@ -65,56 +60,46 @@ select * from log where (
 );
  n | bytes | a | b | c | d | e | f 
 ---+-------+---+---+---+---+---+---
-(0 rows)
 
 -- Test the vectorized aggregation with grouping by segmentby with various number
 -- of input row. We expect approximately constant memory usage.
 truncate log;
 set max_parallel_workers_per_gather = 0;
 set timescaledb.debug_require_vector_agg = 'require';
--- Despite the tweaks above, we are unable to force the HashAggregation, because
--- the unsorted DecompressChunk paths for aggregation are not created properly
--- (see issue #6836). Limit the memory consumed by tuplesort.
-set work_mem = '64kB';
-explain (costs off) select ts_debug_allocated_bytes() bytes,
+set enable_sort to off;
+set enable_indexscan to off;
+set enable_bitmapscan to off;
+-- We should reliably see HashAggregate here because of the tweaks we made above.
+explain (buffers off, costs off) select ts_debug_allocated_bytes() bytes,
         count(*) a, count(t) b, sum(t) c, avg(t) d, min(t) e, max(t) f
             from mvagg where t >= -1 and t < 1000000 group by s1;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
- Finalize GroupAggregate
-   Group Key: _hyper_1_1_chunk.s1
-   ->  Merge Append
-         Sort Key: _hyper_1_1_chunk.s1
+--- QUERY PLAN ---
+ Finalize HashAggregate
+   Group Key: mvagg.s1
+   ->  Append
          ->  Custom Scan (VectorAgg)
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                      Vectorized Filter: ((t >= '-1'::integer) AND (t < 1000000))
-                     ->  Sort
-                           Sort Key: compress_hyper_2_3_chunk.s1
-                           ->  Seq Scan on compress_hyper_2_3_chunk
-                                 Filter: ((_ts_meta_max_1 >= '-1'::integer) AND (_ts_meta_min_1 < 1000000))
+                     ->  Seq Scan on compress_hyper_2_3_chunk
+                           Filter: ((_ts_meta_max_1 >= '-1'::integer) AND (_ts_meta_min_1 < 1000000))
          ->  Custom Scan (VectorAgg)
                ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
                      Vectorized Filter: ((t >= '-1'::integer) AND (t < 1000000))
-                     ->  Sort
-                           Sort Key: compress_hyper_2_4_chunk.s1
-                           ->  Index Scan using compress_hyper_2_4_chunk_s0_s1__ts_meta_min_1__ts_meta_max__idx on compress_hyper_2_4_chunk
-                                 Index Cond: ((_ts_meta_min_1 < 1000000) AND (_ts_meta_max_1 >= '-1'::integer))
-(18 rows)
+                     ->  Seq Scan on compress_hyper_2_4_chunk
+                           Filter: ((_ts_meta_max_1 >= '-1'::integer) AND (_ts_meta_min_1 < 1000000))
 
 \set ECHO none
 reset timescaledb.debug_require_vector_agg;
 reset max_parallel_workers_per_gather;
 reset work_mem;
+reset enable_sort;
 select * from log where (
     -- For aggregation by segmentby, memory usage should be constant regardless
     -- of the number of tuples. Still, we have to allow for small variations
-    -- that can be caused by other reasons. Currently the major increase is
-    -- caused by tuplesort, because we are unable to force hash aggregation due
-    -- to unrelated planning bugs.
-    select regr_slope(bytes, n) > 0.05 from log
+    -- that can be caused by other reasons.
+    select regr_slope(bytes, n) > 0.01 from log
 );
  n | bytes | a | b | c | d | e | f 
 ---+-------+---+---+---+---+---+---
-(0 rows)
 
 reset timescaledb.debug_require_vector_agg;

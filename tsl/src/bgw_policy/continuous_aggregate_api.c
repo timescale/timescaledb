@@ -137,7 +137,7 @@ policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config, b
 	int64 res = get_time_from_config(dim, config, POL_REFRESH_CONF_KEY_END_OFFSET, end_isnull);
 
 	if (*end_isnull)
-		return ts_time_get_end_or_max(ts_dimension_get_partition_type(dim));
+		return ts_time_get_noend_or_max(ts_dimension_get_partition_type(dim));
 	return res;
 }
 
@@ -401,9 +401,12 @@ interval_to_int64(Datum interval, Oid type)
 			break;
 	}
 
-	pg_unreachable();
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("unsupported interval argument type: %s", format_type_be(type))));
 
-	return 0;
+	/* Needed to make windows compiler happy */
+	pg_unreachable();
 }
 
 /*
@@ -448,7 +451,7 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 
 static void
 parse_offset_arg(const ContinuousAgg *cagg, Oid offset_type, NullableDatum arg,
-				 CaggPolicyOffset *offset)
+				 ContinuousAggPolicyOffset *offset)
 {
 	offset->isnull = arg.isnull;
 
@@ -532,6 +535,18 @@ policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config
 
 	if (jobs == NIL)
 		return overlap_result;
+
+	if (ContinuousAggIsHierarchical(cagg))
+	{
+		/* if this is an existing job, it will also be in the list of jobs */
+		int max_concurrent = existing_job_id ? 1 : 0;
+
+		if (list_length(jobs) > max_concurrent)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("multiple refresh policies are not supported for hierarchical "
+							"continuous aggregates")));
+	}
 
 	Hypertable *mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 	const Dimension *dim = get_open_dimension_for_hypertable(mat_ht, true);
@@ -736,9 +751,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 								"\"%s\", skipping",
 								get_rel_name(cagg->relid)),
 						 errdetail("A refresh policy with the same start and end offset already "
-								   "exists "
-								   "for "
-								   "continuous aggregate \"%s\".",
+								   "exists for continuous aggregate \"%s\".",
 								   get_rel_name(cagg->relid))));
 				PG_RETURN_INT32(-1);
 			}

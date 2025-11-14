@@ -9,23 +9,18 @@ AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
  id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
-(0 rows)
 
 CREATE TABLE test_table(time timestamptz, junk int);
 CREATE TABLE test_table_int(time bigint, junk int);
 SELECT create_hypertable('test_table', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (1,public,test_table,t)
-(1 row)
 
 SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (2,public,test_table_int,t)
-(1 row)
 
 CREATE INDEX second_index on test_table (time);
 CREATE INDEX third_index on test_table (time);
@@ -36,21 +31,18 @@ NOTICE:  reorder policy already exists on hypertable "test_table", skipping
  add_reorder_policy 
 --------------------
                  -1
-(1 row)
 
 select add_reorder_policy('test_table', 'second_index', true);
 WARNING:  reorder policy already exists for hypertable "test_table"
  add_reorder_policy 
 --------------------
                  -1
-(1 row)
 
 select add_reorder_policy('test_table', 'third_index', true);
 WARNING:  reorder policy already exists for hypertable "test_table"
  add_reorder_policy 
 --------------------
                  -1
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- Error whenever incorrect arguments are applied (must have table and index)
@@ -68,7 +60,6 @@ select add_reorder_policy(NULL, 'third_index');
  add_reorder_policy 
 --------------------
                    
-(1 row)
 
 select add_reorder_policy(2, 'third_index');
 ERROR:  OID 2 does not refer to a table
@@ -77,30 +68,25 @@ select * from _timescaledb_config.bgw_job where id=:job_id;
   id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |   proc_name    |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                          config                           |      check_schema      |      check_name      | timezone 
 ------+-----------------------+-------------------+-------------+-------------+--------------+------------------------+----------------+-------------------+-----------+----------------+---------------+---------------+-----------------------------------------------------------+------------------------+----------------------+----------
  1000 | Reorder Policy [1000] | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | _timescaledb_functions | policy_reorder | default_perm_user | t         | f              |               |             1 | {"index_name": "test_table_time_idx", "hypertable_id": 1} | _timescaledb_functions | policy_reorder_check | 
-(1 row)
 
 -- Now check that default scheduling interval for reorder policy is calculated correctly
 -- Should be 1/2 default chunk interval length
 CREATE TABLE test_table2(time timestamptz, junk int);
 SELECT create_hypertable('test_table2', 'time', chunk_time_interval=>INTERVAL '1 day');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (3,public,test_table2,t)
-(1 row)
 
 select add_reorder_policy('test_table2', 'test_table2_time_idx');
  add_reorder_policy 
 --------------------
                1001
-(1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |   proc_name    |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                           config                           |      check_schema      |      check_name      | timezone 
 ------+-----------------------+-------------------+-------------+-------------+--------------+------------------------+----------------+-------------------+-----------+----------------+---------------+---------------+------------------------------------------------------------+------------------------+----------------------+----------
  1000 | Reorder Policy [1000] | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | _timescaledb_functions | policy_reorder | default_perm_user | t         | f              |               |             1 | {"index_name": "test_table_time_idx", "hypertable_id": 1}  | _timescaledb_functions | policy_reorder_check | 
  1001 | Reorder Policy [1001] | @ 12 hours        | @ 0         |          -1 | @ 5 mins     | _timescaledb_functions | policy_reorder | default_perm_user | t         | f              |               |             3 | {"index_name": "test_table2_time_idx", "hypertable_id": 3} | _timescaledb_functions | policy_reorder_check | 
-(2 rows)
 
 DROP TABLE test_table2;
 -- Make sure that test_table2 reorder policy gets dropped
@@ -108,7 +94,6 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |   proc_name    |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                          config                           |      check_schema      |      check_name      | timezone 
 ------+-----------------------+-------------------+-------------+-------------+--------------+------------------------+----------------+-------------------+-----------+----------------+---------------+---------------+-----------------------------------------------------------+------------------------+----------------------+----------
  1000 | Reorder Policy [1000] | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | _timescaledb_functions | policy_reorder | default_perm_user | t         | f              |               |             1 | {"index_name": "test_table_time_idx", "hypertable_id": 1} | _timescaledb_functions | policy_reorder_check | 
-(1 row)
 
 -- Error whenever incorrect arguments are applied (must have table and interval)
 \set ON_ERROR_STOP 0
@@ -131,7 +116,6 @@ select add_retention_policy('test_table', INTERVAL '3 month', true);
  add_retention_policy 
 ----------------------
                  1002
-(1 row)
 
 -- Should not add new policy with different parameters
 select add_retention_policy('test_table', INTERVAL '3 month', true);
@@ -139,34 +123,29 @@ NOTICE:  retention policy already exists for hypertable "test_table", skipping
  add_retention_policy 
 ----------------------
                    -1
-(1 row)
 
 select add_retention_policy('test_table', INTERVAL '1 year', if_not_exists => true);
 WARNING:  retention policy already exists for hypertable "test_table"
  add_retention_policy 
 ----------------------
                    -1
-(1 row)
 
 select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
 WARNING:  retention policy already exists for hypertable "test_table"
  add_retention_policy 
 ----------------------
                    -1
-(1 row)
 
 select add_retention_policy('test_table', INTERVAL '3 days', if_not_exists => true);
 WARNING:  retention policy already exists for hypertable "test_table"
  add_retention_policy 
 ----------------------
                    -1
-(1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_retention' ORDER BY id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                     config                     |      check_schema      |       check_name       | timezone 
 ------+-------------------------+-------------------+-------------+-------------+--------------+------------------------+------------------+-------------------+-----------+----------------+---------------+---------------+------------------------------------------------+------------------------+------------------------+----------
  1002 | Retention Policy [1002] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention | default_perm_user | t         | f              |               |             1 | {"drop_after": "@ 3 mons", "hypertable_id": 1} | _timescaledb_functions | policy_retention_check | 
-(1 row)
 
 \set ON_ERROR_STOP 0
 select add_retention_policy('test_table', INTERVAL '1 year');
@@ -178,13 +157,11 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_retention' O
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                     config                     |      check_schema      |       check_name       | timezone 
 ------+-------------------------+-------------------+-------------+-------------+--------------+------------------------+------------------+-------------------+-----------+----------------+---------------+---------------+------------------------------------------------+------------------------+------------------------+----------
  1002 | Retention Policy [1002] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention | default_perm_user | t         | f              |               |             1 | {"drop_after": "@ 3 mons", "hypertable_id": 1} | _timescaledb_functions | policy_retention_check | 
-(1 row)
 
 select remove_retention_policy('test_table');
  remove_retention_policy 
 -------------------------
  
-(1 row)
 
 -- Test set_integer_now_func and add_retention_policy with
 -- hypertables that have integer time dimension
@@ -193,7 +170,6 @@ select * from _timescaledb_catalog.dimension;
 ----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
   1 |             1 | time        | timestamp with time zone | t       |            |                          |                   |    604800000000 |                          |                         | 
   2 |             2 | time        | bigint                   | t       |            |                          |                   |               1 |                          |                         | 
-(2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA IF NOT EXISTS my_new_schema;
@@ -204,7 +180,6 @@ select set_integer_now_func('test_table_int', 'my_new_schema.dummy_now2');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 select * from _timescaledb_catalog.dimension;
@@ -212,58 +187,48 @@ select * from _timescaledb_catalog.dimension;
 ----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
   1 |             1 | time        | timestamp with time zone | t       |            |                          |                   |    604800000000 |                          |                         | 
   2 |             2 | time        | bigint                   | t       |            |                          |                   |               1 |                          | my_new_schema           | dummy_now2
-(2 rows)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_retention' ORDER BY id;
  id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
-(0 rows)
 
 select remove_reorder_policy('test_table');
  remove_reorder_policy 
 -----------------------
  
-(1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
  id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
-(0 rows)
 
 select add_retention_policy('test_table', INTERVAL '3 month');
  add_retention_policy 
 ----------------------
                  1003
-(1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                     config                     |      check_schema      |       check_name       | timezone 
 ------+-------------------------+-------------------+-------------+-------------+--------------+------------------------+------------------+-------------------+-----------+----------------+---------------+---------------+------------------------------------------------+------------------------+------------------------+----------
  1003 | Retention Policy [1003] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention | default_perm_user | t         | f              |               |             1 | {"drop_after": "@ 3 mons", "hypertable_id": 1} | _timescaledb_functions | policy_retention_check | 
-(1 row)
 
 select remove_retention_policy('test_table');
  remove_retention_policy 
 -------------------------
  
-(1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
  id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
-(0 rows)
 
 select add_retention_policy('test_table_int', 1);
  add_retention_policy 
 ----------------------
                  1004
-(1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                config                 |      check_schema      |       check_name       | timezone 
 ------+-------------------------+-------------------+-------------+-------------+--------------+------------------------+------------------+-------------------+-----------+----------------+---------------+---------------+---------------------------------------+------------------------+------------------------+----------
  1004 | Retention Policy [1004] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention | default_perm_user | t         | f              |               |             2 | {"drop_after": 1, "hypertable_id": 2} | _timescaledb_functions | policy_retention_check | 
-(1 row)
 
 -- Should not add new policy with different parameters
 select add_retention_policy('test_table_int', 2, true);
@@ -271,18 +236,15 @@ WARNING:  retention policy already exists for hypertable "test_table_int"
  add_retention_policy 
 ----------------------
                    -1
-(1 row)
 
 select remove_retention_policy('test_table_int');
  remove_retention_policy 
 -------------------------
  
-(1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
  id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
-(0 rows)
 
 -- Make sure remove works when there's nothing to remove
 select remove_retention_policy('test_table', true);
@@ -290,14 +252,12 @@ NOTICE:  retention policy not found for hypertable "test_table", skipping
  remove_retention_policy 
 -------------------------
  
-(1 row)
 
 select remove_reorder_policy('test_table', true);
 NOTICE:  reorder policy not found for hypertable "test_table", skipping
  remove_reorder_policy 
 -----------------------
  
-(1 row)
 
 \set ON_ERROR_STOP 0
 select remove_retention_policy();
@@ -321,7 +281,6 @@ ERROR:  OID 2 does not refer to a table
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
  id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
-(0 rows)
 
 select add_retention_policy('test_table', INTERVAL '2 month') as job_id \gset
 select add_reorder_policy('test_table', 'third_index') as reorder_job_id \gset
@@ -329,44 +288,37 @@ select count(*) from _timescaledb_config.bgw_job where id=:job_id;
  count 
 -------
      1
-(1 row)
 
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
  count 
 -------
      1
-(1 row)
 
 select delete_job(:job_id);
  delete_job 
 ------------
  
-(1 row)
 
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
  count 
 -------
      0
-(1 row)
 
 -- Job config should still be there
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
  count 
 -------
      1
-(1 row)
 
 select delete_job(:reorder_job_id);
  delete_job 
 ------------
  
-(1 row)
 
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
  count 
 -------
      0
-(1 row)
 
 -- Now make sure policy args have correct job deletion dependency
 select add_retention_policy('test_table', INTERVAL '2 month') as job_id \gset
@@ -375,26 +327,22 @@ select count(*) from _timescaledb_config.bgw_job where id=:job_id;
  count 
 -------
      1
-(1 row)
 
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
  count 
 -------
      1
-(1 row)
 
 DROP TABLE test_table;
 select count(*) from _timescaledb_config.bgw_job where id=:job_id;
  count 
 -------
      0
-(1 row)
 
 select count(*) from _timescaledb_config.bgw_job where id=:reorder_job_id;
  count 
 -------
      0
-(1 row)
 
 -- Check that we can't add policies on non-hypertables
 CREATE TABLE non_hypertable(junk int, more_junk int);
@@ -408,40 +356,33 @@ ERROR:  table "non_hypertable" is not a hypertable
 -- Now make sure things work with multiple policies on multiple hypertables
 CREATE TABLE test_table(time timestamptz, junk int);
 SELECT create_hypertable('test_table', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (4,public,test_table,t)
-(1 row)
 
 CREATE INDEX second_index on test_table (time);
 CREATE TABLE test_table2(time timestamptz, junk int);
 SELECT create_hypertable('test_table2', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (5,public,test_table2,t)
-(1 row)
 
 CREATE INDEX junk_index on test_table2 (junk);
 select add_retention_policy('test_table', INTERVAL '2 days');
  add_retention_policy 
 ----------------------
                  1009
-(1 row)
 
 select add_retention_policy('test_table2', INTERVAL '1 days');
  add_retention_policy 
 ----------------------
                  1010
-(1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                     config                     |      check_schema      |       check_name       | timezone 
 ------+-------------------------+-------------------+-------------+-------------+--------------+------------------------+------------------+-------------------+-----------+----------------+---------------+---------------+------------------------------------------------+------------------------+------------------------+----------
  1009 | Retention Policy [1009] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention | default_perm_user | t         | f              |               |             4 | {"drop_after": "@ 2 days", "hypertable_id": 4} | _timescaledb_functions | policy_retention_check | 
  1010 | Retention Policy [1010] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention | default_perm_user | t         | f              |               |             5 | {"drop_after": "@ 1 day", "hypertable_id": 5}  | _timescaledb_functions | policy_retention_check | 
-(2 rows)
 
 DROP TABLE test_table;
 DROP TABLE test_table_int;
@@ -449,26 +390,22 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                    config                     |      check_schema      |       check_name       | timezone 
 ------+-------------------------+-------------------+-------------+-------------+--------------+------------------------+------------------+-------------------+-----------+----------------+---------------+---------------+-----------------------------------------------+------------------------+------------------------+----------
  1010 | Retention Policy [1010] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention | default_perm_user | t         | f              |               |             5 | {"drop_after": "@ 1 day", "hypertable_id": 5} | _timescaledb_functions | policy_retention_check | 
-(1 row)
 
 DROP TABLE test_table2;
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
  id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
-(0 rows)
 
 -- Now test chunk_stat insertion
 select ts_test_chunk_stats_insert(123, 123, 45);
  ts_test_chunk_stats_insert 
 ----------------------------
  
-(1 row)
 
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
     123 |      123 |                45
-(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_internal.bgw_policy_chunk_stats;
@@ -477,15 +414,12 @@ TRUNCATE _timescaledb_internal.bgw_policy_chunk_stats;
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-(0 rows)
 
 CREATE TABLE test_table(time timestamptz, junk int);
 SELECT create_hypertable('test_table', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (6,public,test_table,t)
-(1 row)
 
 CREATE INDEX second_index on test_table (time);
 insert into test_table values (now(), 1);
@@ -495,7 +429,6 @@ select c.id from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertabl
 ----
   1
   2
-(2 rows)
 
 select c.id as chunk_id from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as h where c.hypertable_id=h.id and h.table_name='test_table' ORDER BY c.id LIMIT 1 \gset
 select add_reorder_policy('test_table', 'second_index') as job_id \gset
@@ -504,19 +437,16 @@ select ts_test_chunk_stats_insert(:job_id, :chunk_id, 1);
  ts_test_chunk_stats_insert 
 ----------------------------
  
-(1 row)
 
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
    1011 |        1 |                 1
-(1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |   proc_name    |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                       config                       |      check_schema      |      check_name      | timezone 
 ------+-----------------------+-------------------+-------------+-------------+--------------+------------------------+----------------+-------------------+-----------+----------------+---------------+---------------+----------------------------------------------------+------------------------+----------------------+----------
  1011 | Reorder Policy [1011] | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | _timescaledb_functions | policy_reorder | default_perm_user | t         | f              |               |             6 | {"index_name": "second_index", "hypertable_id": 6} | _timescaledb_functions | policy_reorder_check | 
-(1 row)
 
 -- Deleting a chunk that has nothing to do with the job should do nothing
 select c.table_name as other_chunk_name,c.schema_name as other_chunk_schema from _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as h where c.id != :chunk_id \gset
@@ -526,96 +456,80 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
    1011 |        1 |                 1
-(1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |   proc_name    |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                       config                       |      check_schema      |      check_name      | timezone 
 ------+-----------------------+-------------------+-------------+-------------+--------------+------------------------+----------------+-------------------+-----------+----------------+---------------+---------------+----------------------------------------------------+------------------------+----------------------+----------
  1011 | Reorder Policy [1011] | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | _timescaledb_functions | policy_reorder | default_perm_user | t         | f              |               |             6 | {"index_name": "second_index", "hypertable_id": 6} | _timescaledb_functions | policy_reorder_check | 
-(1 row)
 
 -- Dropping the hypertable should drop the chunk, which should drop the reorder policy
 DROP TABLE test_table;
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-(0 rows)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
  id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
-(0 rows)
 
 -- Now check dropping a job will drop the chunk_stat row
 CREATE TABLE test_table(time timestamptz, junk int);
 SELECT create_hypertable('test_table', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (7,public,test_table,t)
-(1 row)
 
 select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
 select add_retention_policy('test_table', INTERVAL '2 days', true);
  add_retention_policy 
 ----------------------
                  1013
-(1 row)
 
 select ts_test_chunk_stats_insert(:job_id, 123, 1);
  ts_test_chunk_stats_insert 
 ----------------------------
  
-(1 row)
 
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
    1012 |      123 |                 1
-(1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                          config                           |      check_schema      |       check_name       | timezone 
 ------+-------------------------+-------------------+-------------+-------------+--------------+------------------------+------------------+-------------------+-----------+----------------+---------------+---------------+-----------------------------------------------------------+------------------------+------------------------+----------
  1012 | Reorder Policy [1012]   | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | _timescaledb_functions | policy_reorder   | default_perm_user | t         | f              |               |             7 | {"index_name": "test_table_time_idx", "hypertable_id": 7} | _timescaledb_functions | policy_reorder_check   | 
  1013 | Retention Policy [1013] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention | default_perm_user | t         | f              |               |             7 | {"drop_after": "@ 2 days", "hypertable_id": 7}            | _timescaledb_functions | policy_retention_check | 
-(2 rows)
 
 -- Dropping the drop_chunks job should not affect the chunk_stats row
 select remove_retention_policy('test_table');
  remove_retention_policy 
 -------------------------
  
-(1 row)
 
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
    1012 |      123 |                 1
-(1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
   id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |   proc_name    |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                          config                           |      check_schema      |      check_name      | timezone 
 ------+-----------------------+-------------------+-------------+-------------+--------------+------------------------+----------------+-------------------+-----------+----------------+---------------+---------------+-----------------------------------------------------------+------------------------+----------------------+----------
  1012 | Reorder Policy [1012] | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | _timescaledb_functions | policy_reorder | default_perm_user | t         | f              |               |             7 | {"index_name": "test_table_time_idx", "hypertable_id": 7} | _timescaledb_functions | policy_reorder_check | 
-(1 row)
 
 select remove_reorder_policy('test_table');
  remove_reorder_policy 
 -----------------------
  
-(1 row)
 
 -- Row should be gone
 select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
  job_id | chunk_id | num_times_job_run 
 --------+----------+-------------------
-(0 rows)
 
 SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
  id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
-(0 rows)
 
 -- Now test if alter_job works
 select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
@@ -623,104 +537,88 @@ select add_reorder_policy('test_table', 'test_table_time_idx') as job_id \gset
   id  |   application_name    | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |   proc_name    |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                          config                           |      check_schema      |      check_name      | timezone 
 ------+-----------------------+-------------------+-------------+-------------+--------------+------------------------+----------------+-------------------+-----------+----------------+---------------+---------------+-----------------------------------------------------------+------------------------+----------------------+----------
  1014 | Reorder Policy [1014] | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | _timescaledb_functions | policy_reorder | default_perm_user | t         | f              |               |             7 | {"index_name": "test_table_time_idx", "hypertable_id": 7} | _timescaledb_functions | policy_reorder_check | 
-(1 row)
 
 -- No change
 select * from alter_job(:job_id);
  job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                          config                           | next_start |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+-------------+-------------+--------------+-----------+-----------------------------------------------------------+------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 84 hours        | @ 0         |          -1 | @ 5 mins     | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity  | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 -- Changes expected
 select * from alter_job(:job_id, INTERVAL '3 years', INTERVAL '5 min', 5, INTERVAL '123 sec');
  job_id | schedule_interval | max_runtime | max_retries |  retry_period   | scheduled |                          config                           | next_start |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+-------------+-------------+-----------------+-----------+-----------------------------------------------------------+------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 3 years         | @ 5 mins    |           5 | @ 2 mins 3 secs | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity  | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 select * from alter_job(:job_id, INTERVAL '123 years');
  job_id | schedule_interval | max_runtime | max_retries |  retry_period   | scheduled |                          config                           | next_start |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+-------------+-------------+-----------------+-----------+-----------------------------------------------------------+------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 123 years       | @ 5 mins    |           5 | @ 2 mins 3 secs | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity  | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 select * from alter_job(:job_id, retry_period => INTERVAL '33 hours');
  job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                          config                           | next_start |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+-------------+-------------+--------------+-----------+-----------------------------------------------------------+------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 123 years       | @ 5 mins    |           5 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity  | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 select * from alter_job(:job_id, max_runtime => INTERVAL '456 sec');
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 123 years       | @ 7 mins 36 secs |           5 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity  | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 select * from alter_job(:job_id, max_retries => 0);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 123 years       | @ 7 mins 36 secs |           0 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity  | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 select * from alter_job(:job_id, max_retries => -1);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 123 years       | @ 7 mins 36 secs |          -1 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity  | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 select * from alter_job(:job_id, max_retries => 20);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity  | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 -- No change
 select * from alter_job(:job_id, max_runtime => NULL);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity  | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 select * from alter_job(:job_id, max_retries => NULL);
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 123 years       | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity  | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 --change schedule_interval when bgw_job_stat does not exist
 select * from alter_job(:job_id, schedule_interval=>'1 min');
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 1 min           | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity  | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 select count(*) = 0 from _timescaledb_internal.bgw_job_stat where job_id = :job_id;
  ?column? 
 ----------
  t
-(1 row)
 
 --set next_start when bgw_job_stat does not exist
 select * from alter_job(:job_id, next_start=>'2001-01-01 01:01:01');
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           |          next_start          |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------------------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 1 min           | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | Mon Jan 01 01:01:01 2001 PST | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 --change schedule_interval when no last_finish set
 select * from alter_job(:job_id, schedule_interval=>'10 min');
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 10 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | -infinity  | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 --next_start overrides any schedule_interval changes
 select * from alter_job(:job_id, schedule_interval=>'20 min', next_start=>'2002-01-01 01:01:01');
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           |          next_start          |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------------------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 20 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | Tue Jan 01 01:01:01 2002 PST | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 --set the last_finish manually
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -731,60 +629,51 @@ select * from alter_job(:job_id, schedule_interval=>'20 min');
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           |          next_start          |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------------------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 20 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | Tue Jan 01 01:01:01 2002 PST | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 --changing the interval changes next_start
 select * from alter_job(:job_id, schedule_interval=>'30 min');
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           |          next_start          |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------------------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 30 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | Wed Jan 01 01:31:01 2003 PST | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 --explicit next start overrides.
 select * from alter_job(:job_id, schedule_interval=>'40 min', next_start=>'2004-01-01 01:01:01');
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           |          next_start          |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------------------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 40 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | Thu Jan 01 01:01:01 2004 PST | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 --test pausing
 select * from alter_job(:job_id, next_start=>'infinity');
  job_id | schedule_interval |   max_runtime    | max_retries | retry_period | scheduled |                          config                           | next_start |                check_config                 | fixed_schedule | initial_start | timezone |   application_name    
 --------+-------------------+------------------+-------------+--------------+-----------+-----------------------------------------------------------+------------+---------------------------------------------+----------------+---------------+----------+-----------------------
    1014 | @ 40 mins         | @ 7 mins 36 secs |          20 | @ 33 hours   | t         | {"index_name": "test_table_time_idx", "hypertable_id": 7} | infinity   | _timescaledb_functions.policy_reorder_check | f              |               |          | Reorder Policy [1014]
-(1 row)
 
 --test that you can use now() to unpause
 select next_start = now() from alter_job(:job_id, next_start=>now());
  ?column? 
 ----------
  t
-(1 row)
 
 --test pausing/resuming via scheduled parameter
 select job_id from alter_job(:job_id, scheduled=>false);
  job_id 
 --------
    1014
-(1 row)
 
 select job_status, next_start from timescaledb_information.job_stats where job_id = :job_id;
  job_status | next_start 
 ------------+------------
  Paused     | 
-(1 row)
 
 select job_id from alter_job(:job_id, scheduled=>true);
  job_id 
 --------
    1014
-(1 row)
 
 select job_status from timescaledb_information.job_stats where job_id = :job_id;
  job_status 
 ------------
  Scheduled
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- negative infinity disallowed (used as special value)
@@ -809,7 +698,6 @@ NOTICE:  job 1234 not found, skipping
  job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled | config | next_start | check_config | fixed_schedule | initial_start | timezone | application_name 
 --------+-------------------+-------------+-------------+--------------+-----------+--------+------------+--------------+----------------+---------------+----------+------------------
         |                   |             |             |              |           |        |            |              |                |               |          | 
-(1 row)
 
 \set ON_ERROR_STOP 0
 select * from alter_job(1234);
@@ -819,7 +707,6 @@ select remove_reorder_policy('test_table');
  remove_reorder_policy 
 -----------------------
  
-(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 set session timescaledb.license_key='Community';

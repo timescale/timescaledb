@@ -28,6 +28,8 @@ SELECT hypertable_relid,
 ORDER BY 1,2,3;
 $$ LANGUAGE sql;
 
+select _timescaledb_functions.invalidation_plugin_name() as plugin_name \gset
+
 -- Creating a table with a primary key since we need a replica
 -- identity to use logical decoding.
 CREATE TABLE conditions (
@@ -46,7 +48,7 @@ SELECT recorded_at, (random()*3 + 1)::int, random()*80 - 40
   	               '2025-03-31'::timestamptz,
 		       '1 minute'::interval) AS recorded_at;
 
-select from pg_create_logical_replication_slot('my_slot', 'timescaledb-invalidations', false, true);
+select from pg_create_logical_replication_slot('my_slot', :'plugin_name', false, true);
 
 -- Generate a few entries in one go. This caused some problems
 -- initially, so check this first.
@@ -170,6 +172,24 @@ SELECT * FROM get_invalidations('my_slot', 'conditions', 'does_not_exist');
 -- attribute after this. (This turned out to be a problem during
 -- testing.)
 SELECT * FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
+
+-- Check that adding a lot of invalidations as separate transactions
+-- in one go reads them all from the WAL.
+DO $$
+DECLARE
+  rec RECORD;
+BEGIN
+  FOR rec IN
+     SELECT t, d FROM generate_series('2020-05-10'::timestamptz, '2020-05-11'::timestamptz, '1 minute'::interval) t,
+                       generate_series(1,10) d
+  LOOP
+     INSERT INTO conditions VALUES (rec.t, rec.d, 100.0 * random());
+     COMMIT;
+  END LOOP;
+END
+$$;
+
+SELECT count(*) FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
 
 -- Test using a table without a primary key but with an index that can
 -- be used as replica identity.

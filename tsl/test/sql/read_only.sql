@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
 
 -- Following tests checks that API functions which modify data (including catalog)
 -- properly recognize read-only transaction state
@@ -15,17 +15,17 @@ CREATE TABLE test_table(time bigint NOT NULL, device int);
 -- EXPLAIN should work in read-only mode, when enabling in transaction.
 START TRANSACTION;
 SET transaction_read_only TO on;
-EXPLAIN (COSTS OFF) SELECT * FROM test_table;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM test_table;
 ROLLBACK;
 
 START TRANSACTION;
 SET transaction_read_only TO on;
-EXPLAIN (ANALYZE ON, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM test_table;
+EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM test_table;
 ROLLBACK;
 
 START TRANSACTION;
 SET transaction_read_only TO on;
-EXPLAIN (COSTS OFF) INSERT INTO test_table VALUES (1, 1);
+EXPLAIN (BUFFERS OFF, COSTS OFF) INSERT INTO test_table VALUES (1, 1);
 ROLLBACK;
 
 -- This should give an error since we are using ANALYZE and a DML. The
@@ -34,7 +34,7 @@ ROLLBACK;
 \set ON_ERROR_STOP 0
 START TRANSACTION;
 SET transaction_read_only TO on;
-EXPLAIN (ANALYZE ON, COSTS OFF, TIMING OFF, SUMMARY OFF) INSERT INTO test_table VALUES (1, 1);
+EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF) INSERT INTO test_table VALUES (1, 1);
 ROLLBACK;
 \set ON_ERROR_STOP 1
 
@@ -42,17 +42,17 @@ SET default_transaction_read_only TO on;
 
 -- EXPLAIN should work in read-only mode, even when using the default.
 START TRANSACTION;
-EXPLAIN (COSTS OFF) SELECT * FROM test_table;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM test_table;
 ROLLBACK;
 
 START TRANSACTION;
 SET transaction_read_only TO on;
-EXPLAIN (ANALYZE ON, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM test_table;
+EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM test_table;
 ROLLBACK;
 
 START TRANSACTION;
 SET transaction_read_only TO on;
-EXPLAIN (COSTS OFF) INSERT INTO test_table VALUES (1, 1);
+EXPLAIN (BUFFERS OFF, COSTS OFF) INSERT INTO test_table VALUES (1, 1);
 ROLLBACK;
 
 -- This should give an error since we are using ANALYZE and a DML. The
@@ -61,7 +61,7 @@ ROLLBACK;
 \set ON_ERROR_STOP 0
 START TRANSACTION;
 SET transaction_read_only TO on;
-EXPLAIN (ANALYZE ON, COSTS OFF, TIMING OFF, SUMMARY OFF) INSERT INTO test_table VALUES (1, 1);
+EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF) INSERT INTO test_table VALUES (1, 1);
 ROLLBACK;
 \set ON_ERROR_STOP 1
 
@@ -105,7 +105,7 @@ SET default_transaction_read_only TO off;
 SET client_min_messages TO error;
 DROP TABLESPACE IF EXISTS tablespace1;
 RESET client_min_messages;
-CREATE TABLESPACE tablespace1 OWNER :ROLE_CLUSTER_SUPERUSER LOCATION :TEST_TABLESPACE1_PATH;
+CREATE TABLESPACE tablespace1 OWNER :ROLE_SUPERUSER LOCATION :TEST_TABLESPACE1_PATH;
 
 SET default_transaction_read_only TO on;
 

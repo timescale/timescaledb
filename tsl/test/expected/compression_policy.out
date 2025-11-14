@@ -10,7 +10,6 @@ CREATE TABLE sensor_data_1month(
 );
 SELECT FROM create_hypertable('sensor_data_1month', 'time', chunk_time_interval => INTERVAL '1 month');
 --
-(1 row)
 
 ALTER TABLE sensor_data_1month SET (timescaledb.compress);
 -- Add a compression policy and check the schedule interval
@@ -19,7 +18,6 @@ SELECT schedule_interval from timescaledb_information.jobs where job_id = :compr
  schedule_interval 
 -------------------
  @ 12 hours
-(1 row)
 
 ----
 -- Chunk interval 1 week - compression schedule interval should be 12 hours
@@ -30,7 +28,6 @@ CREATE TABLE sensor_data_1week(
 );
 SELECT FROM create_hypertable('sensor_data_1week', 'time', chunk_time_interval => INTERVAL '1 week');
 --
-(1 row)
 
 ALTER TABLE sensor_data_1week SET (timescaledb.compress);
 -- Add a compression policy and check the schedule interval
@@ -39,7 +36,6 @@ SELECT schedule_interval from timescaledb_information.jobs where job_id = :compr
  schedule_interval 
 -------------------
  @ 12 hours
-(1 row)
 
 ----
 -- Chunk interval 1 day - compression schedule interval should be 12 hours
@@ -50,7 +46,6 @@ CREATE TABLE sensor_data_1day(
 );
 SELECT FROM create_hypertable('sensor_data_1day', 'time', chunk_time_interval => INTERVAL '1 day');
 --
-(1 row)
 
 ALTER TABLE sensor_data_1day SET (timescaledb.compress);
 -- Add a compression policy and check the schedule interval
@@ -59,7 +54,6 @@ SELECT schedule_interval from timescaledb_information.jobs where job_id = :compr
  schedule_interval 
 -------------------
  @ 12 hours
-(1 row)
 
 ----
 -- Chunk interval 1 hour - compression schedule interval should be 30 minutes
@@ -70,7 +64,6 @@ CREATE TABLE sensor_data_1hour(
 );
 SELECT FROM create_hypertable('sensor_data_1hour', 'time', chunk_time_interval => INTERVAL '1 hour');
 --
-(1 row)
 
 ALTER TABLE sensor_data_1hour SET (timescaledb.compress);
 -- Add a compression policy and check the schedule interval
@@ -79,7 +72,6 @@ SELECT schedule_interval from timescaledb_information.jobs where job_id = :compr
  schedule_interval 
 -------------------
  @ 30 mins
-(1 row)
 
 ----
 -- Chunk interval 1 hour - compression schedule is set to a custom value
@@ -90,7 +82,6 @@ CREATE TABLE sensor_data_1hour_custom(
 );
 SELECT FROM create_hypertable('sensor_data_1hour_custom', 'time', chunk_time_interval => INTERVAL '1 hour');
 --
-(1 row)
 
 ALTER TABLE sensor_data_1hour_custom SET (timescaledb.compress);
 -- Add a compression policy and check the schedule interval
@@ -99,5 +90,4 @@ SELECT schedule_interval from timescaledb_information.jobs where job_id = :compr
  schedule_interval 
 -------------------
  @ 7 days
-(1 row)
 

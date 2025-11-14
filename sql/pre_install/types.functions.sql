@@ -59,7 +59,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.dimension_info_out(_timescaled
 CREATE OR REPLACE FUNCTION _timescaledb_functions.bloom1in(cstring) RETURNS _timescaledb_internal.bloom1 AS 'byteain' LANGUAGE INTERNAL STRICT IMMUTABLE PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_functions.bloom1out(_timescaledb_internal.bloom1) RETURNS cstring AS 'byteaout' LANGUAGE INTERNAL STRICT IMMUTABLE PARALLEL SAFE;
 
-CREATE OR REPLACE FUNCTION _timescaledb_functions.has_invalidation_trigger(regclass)
-   RETURNS bool
+CREATE OR REPLACE FUNCTION _timescaledb_functions.invalidation_plugin_name()
+   RETURNS text
    LANGUAGE C STRICT PARALLEL SAFE
-   AS '@MODULE_PATHNAME@', 'ts_has_invalidation_trigger';
+   AS '@MODULE_PATHNAME@', 'ts_invalidation_plugin_name';
+

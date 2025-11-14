@@ -218,7 +218,14 @@ get_watermark_const(HTAB *watermarks, int32 watermark_hypertable_id, List *range
 		 * removed from the query cache by PostgreSQL when an invalidation for the watermark
 		 * hypertable is processed (see CacheInvalidateRelcacheByRelid).
 		 */
-		Oid ht_relid = ts_hypertable_id_to_relid(watermark_hypertable_id, false);
+		Oid ht_relid = ts_hypertable_id_to_relid(watermark_hypertable_id, true);
+
+		if (!OidIsValid(ht_relid))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid materialized hypertable ID: %d", watermark_hypertable_id)));
+		}
 
 		/* Given table is not a part of our range tables */
 		if (!list_member_oid(range_table_oids, ht_relid))
@@ -430,6 +437,12 @@ cagg_sort_pushdown(Query *parse, int *cursor_opts)
 		cagg_group = list_nth(rt_rte->subquery->groupClause, rt_tle->ressortgroupref - 1);
 		cagg_group->sortop = sort->sortop;
 		cagg_group->nulls_first = sort->nulls_first;
+#if PG18_GE
+		/* Track sort order
+		 * https://github.com/postgres/postgres/commit/0d2aa4d4
+		 */
+		cagg_group->reverse_sort = sort->reverse_sort;
+#endif
 
 		linitial_node(SortGroupClause, rt_rte->subquery->sortClause)->tleSortGroupRef =
 			rt_tle->ressortgroupref;

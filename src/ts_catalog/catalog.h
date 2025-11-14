@@ -37,7 +37,7 @@ typedef enum CatalogTable
 	DIMENSION_SLICE,
 	CHUNK,
 	CHUNK_CONSTRAINT,
-	CHUNK_INDEX,
+	CHUNK_REWRITE,
 	TABLESPACE,
 	BGW_JOB,
 	BGW_JOB_STAT,
@@ -48,6 +48,7 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
 	CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
 	CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+	CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
 	COMPRESSION_SETTINGS,
 	COMPRESSION_CHUNK_SIZE,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
@@ -485,56 +486,6 @@ enum Anum_chunk_constraint_chunk_id_constraint_name_idx
 	Anum_chunk_constraint_chunk_id_constraint_name_idx_chunk_id = 1,
 	Anum_chunk_constraint_chunk_id_constraint_name_idx_constraint_name,
 	_Anum_chunk_constraint_chunk_id_constraint_name_idx_max,
-};
-
-/************************************
- *
- * Chunk index table definitions
- *
- ************************************/
-
-#define CHUNK_INDEX_TABLE_NAME "chunk_index"
-
-enum Anum_chunk_index
-{
-	Anum_chunk_index_chunk_id = 1,
-	Anum_chunk_index_index_name,
-	Anum_chunk_index_hypertable_id,
-	Anum_chunk_index_hypertable_index_name,
-	_Anum_chunk_index_max,
-};
-
-#define Natts_chunk_index (_Anum_chunk_index_max - 1)
-
-typedef struct FormData_chunk_index
-{
-	int32 chunk_id;
-	NameData index_name;
-	int32 hypertable_id;
-	NameData hypertable_index_name;
-} FormData_chunk_index;
-
-typedef FormData_chunk_index *Form_chunk_index;
-
-enum
-{
-	CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX = 0,
-	CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-	_MAX_CHUNK_INDEX_INDEX,
-};
-
-enum Anum_chunk_index_chunk_id_index_name_idx
-{
-	Anum_chunk_index_chunk_id_index_name_idx_chunk_id = 1,
-	Anum_chunk_index_chunk_id_index_name_idx_index_name,
-	_Anum_chunk_index_chunk_id_index_name_idx_max,
-};
-
-enum Anum_chunk_index_hypertable_id_hypertable_index_name_idx
-{
-	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id = 1,
-	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
-	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_max,
 };
 
 /************************************
@@ -1123,6 +1074,44 @@ typedef enum Anum_continuous_aggs_materialization_invalidation_log_idx
 #define Natts_continuous_aggs_materialization_invalidation_log_idx                                 \
 	(_Anum_continuous_aggs_materialization_invalidation_log_idx_max - 1)
 
+/****** CONTINUOUS_AGGS_MATERIALIZATION_RANGES_TABLE definitions*/
+#define CONTINUOUS_AGGS_MATERIALIZATION_RANGES_TABLE_NAME "continuous_aggs_materialization_ranges"
+typedef enum Anum_continuous_aggs_materialization_ranges
+{
+	Anum_continuous_aggs_materialization_ranges_materialization_id = 1,
+	Anum_continuous_aggs_materialization_ranges_lowest_modified_value,
+	Anum_continuous_aggs_materialization_ranges_greatest_modified_value,
+	_Anum_continuous_aggs_materialization_ranges_max,
+} Anum_continuous_aggs_materialization_ranges;
+
+#define Natts_continuous_aggs_materialization_ranges                                               \
+	(_Anum_continuous_aggs_materialization_ranges_max - 1)
+
+typedef struct FormData_continuous_aggs_materialization_ranges
+{
+	int32 materialization_id;
+	int64 lowest_modified_value;
+	int64 greatest_modified_value;
+} FormData_continuous_aggs_materialization_ranges;
+
+typedef FormData_continuous_aggs_materialization_ranges
+	*Form_continuous_aggs_materialization_ranges;
+
+enum
+{
+	CONTINUOUS_AGGS_MATERIALIZATION_RANGES_IDX = 0,
+	_MAX_CONTINUOUS_AGGS_MATERIALIZATION_RANGES_INDEX,
+};
+typedef enum Anum_continuous_aggs_materialization_ranges_idx
+{
+	Anum_continuous_aggs_materialization_ranges_idx_materialization_id = 1,
+	Anum_continuous_aggs_materialization_ranges_idx_lowest_modified_value,
+	_Anum_continuous_aggs_materialization_ranges_idx_max,
+} Anum_continuous_aggs_materialization_ranges_idx;
+
+#define Natts_continuous_aggs_materialization_ranges_idx                                           \
+	(_Anum_continuous_aggs_materialization_ranges_idx_max - 1)
+
 /****** CONTINUOUS_AGGS_WATERMARK_TABLE definitions*/
 #define CONTINUOUS_AGGS_WATERMARK_TABLE_NAME "continuous_aggs_watermark"
 typedef enum Anum_continuous_aggs_watermark
@@ -1166,6 +1155,7 @@ typedef enum Anum_compression_settings
 	Anum_compression_settings_orderby,
 	Anum_compression_settings_orderby_desc,
 	Anum_compression_settings_orderby_nullsfirst,
+	Anum_compression_settings_index,
 	_Anum_compression_settings_max,
 } Anum_compression_settings;
 
@@ -1179,6 +1169,7 @@ typedef struct FormData_compression_settings
 	ArrayType *orderby;
 	ArrayType *orderby_desc;
 	ArrayType *orderby_nullsfirst;
+	Jsonb *index;
 } FormData_compression_settings;
 
 typedef FormData_compression_settings *Form_compression_settings;
@@ -1255,6 +1246,38 @@ typedef enum Anum_compression_chunk_size_pkey
 } Anum_compression_chunk_size_pkey;
 
 #define Natts_compression_chunk_size_pkey (_Anum_compression_chunk_size_pkey_max - 1)
+
+#define CHUNK_REWRITE_TABLE_NAME "chunk_rewrite"
+
+typedef enum Anum_chunk_rewrite
+{
+	Anum_chunk_rewrite_chunk_relid = 1,
+	Anum_chunk_rewrite_new_relid,
+	_Anum_chunk_rewrite_max,
+} Anum_chunk_rewrite;
+
+#define Natts_chunk_rewrite (_Anum_chunk_rewrite_max - 1)
+
+typedef struct FormData_chunk_rewrite
+{
+	Oid chunk_relid;
+	Oid new_relid;
+} FormData_chunk_rewrite;
+
+typedef FormData_chunk_rewrite *Form_chunk_rewrite;
+
+enum
+{
+	CHUNK_REWRITE_IDX = 0,
+	_MAX_CHUNK_REWRITE_INDEX,
+};
+typedef enum Anum_chunk_rewrite_pkey
+{
+	Anum_chunk_rewrite_key_chunk_relid = 1,
+	_Anum_chunk_rewrite_key_max,
+} Anum_chunk_rewrite_pkey;
+
+#define Natts_chunk_rewrite_key (_Anum_chunk_rewrite_key_max - 1)
 
 /*
  * The maximum number of indexes a catalog table can have.

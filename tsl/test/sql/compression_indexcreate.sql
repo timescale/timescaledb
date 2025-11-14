@@ -4,7 +4,7 @@
 
 -- force index scan to be used when possible
 set enable_seqscan to false;
-\set PREFIX 'EXPLAIN (analyze, costs off, summary off, timing off) '
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, summary off, timing off) '
 create table segind(time timestamptz, a int, b int);
 select create_hypertable('segind', by_range('time'));
 

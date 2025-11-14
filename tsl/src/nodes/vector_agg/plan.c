@@ -18,7 +18,7 @@
 
 #include "exec.h"
 #include "import/list.h"
-#include "nodes/decompress_chunk/vector_quals.h"
+#include "nodes/columnar_scan/vector_quals.h"
 #include "nodes/vector_agg.h"
 #include "utils.h"
 
@@ -92,10 +92,10 @@ resolve_outer_special_vars_mutator(Node *node, void *context)
 		/*
 		 * Reference into the output targetlist of the child scan node.
 		 */
-		TargetEntry *decompress_chunk_tentry =
+		TargetEntry *columnar_scan_tentry =
 			castNode(TargetEntry, list_nth(custom->scan.plan.targetlist, var->varattno - 1));
 
-		return resolve_outer_special_vars_mutator((Node *) decompress_chunk_tentry->expr, context);
+		return resolve_outer_special_vars_mutator((Node *) columnar_scan_tentry->expr, context);
 	}
 
 	if (var->varno == INDEX_VAR)
@@ -354,6 +354,12 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 		{
 			switch (typlen)
 			{
+				case 1:
+#ifdef TS_USE_UMASH
+					return VAGT_HashSerialized;
+#else
+					return VAGT_Invalid;
+#endif
 				case 2:
 					return VAGT_HashSingleFixed2;
 				case 4:
@@ -366,11 +372,14 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 			}
 		}
 #ifdef TS_USE_UMASH
-		else
+		/*
+		 * We also have the UUID type which is by-reference and has a
+		 * columnar in-memory representation, but no specialized single-column
+		 * vectorized grouping support. It can use the serialized grouping
+		 * strategy.
+		 */
+		else if (single_grouping_var->vartype == TEXTOID)
 		{
-			Ensure(single_grouping_var->vartype == TEXTOID,
-				   "invalid vector type %d for grouping",
-				   single_grouping_var->vartype);
 			return VAGT_HashSingleText;
 		}
 #endif
@@ -391,19 +400,20 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
  * aggregation node in the plan tree. This is used for testing.
  */
 bool
-has_vector_agg_node(Plan *plan, bool *has_normal_agg)
+has_vector_agg_node(Plan *plan, bool *has_postgres_partial_agg)
 {
-	if (IsA(plan, Agg))
+	if (IsA(plan, Agg) && castNode(Agg, plan)->aggsplit == AGGSPLIT_INITIAL_SERIAL)
 	{
-		*has_normal_agg = true;
+		*has_postgres_partial_agg = true;
+		return false;
 	}
 
-	if (plan->lefttree && has_vector_agg_node(plan->lefttree, has_normal_agg))
+	if (plan->lefttree && has_vector_agg_node(plan->lefttree, has_postgres_partial_agg))
 	{
 		return true;
 	}
 
-	if (plan->righttree && has_vector_agg_node(plan->righttree, has_normal_agg))
+	if (plan->righttree && has_vector_agg_node(plan->righttree, has_postgres_partial_agg))
 	{
 		return true;
 	}
@@ -437,7 +447,7 @@ has_vector_agg_node(Plan *plan, bool *has_normal_agg)
 		ListCell *lc;
 		foreach (lc, append_plans)
 		{
-			if (has_vector_agg_node(lfirst(lc), has_normal_agg))
+			if (has_vector_agg_node(lfirst(lc), has_postgres_partial_agg))
 			{
 				return true;
 			}
@@ -482,7 +492,7 @@ vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi
 
 	if (strcmp(customscan->methods->CustomName, "ColumnarScan") == 0)
 	{
-		vectoragg_plan_decompress_chunk(childplan, vqi);
+		vectoragg_plan_columnar_scan(childplan, vqi);
 		return true;
 	}
 

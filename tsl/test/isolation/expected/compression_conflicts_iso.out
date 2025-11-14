@@ -12,7 +12,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step IB: BEGIN;
 step I1: 
@@ -35,27 +34,23 @@ step C1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch LIMIT 1;
 count(*)|count(*) only
 --------+-------------
       10|            0
-(1 row)
 
 step S1: SELECT count(*) from ts_device_table;
 count
 -----
    10
-(1 row)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      1
-(1 row)
 
 
 starting permutation: LockChunk1 IBRR I1 C1 UnlockChunk Ic Cc SC1 S1 SChunkStat
@@ -70,7 +65,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step I1: 
@@ -93,27 +87,23 @@ step C1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch LIMIT 1;
 count(*)|count(*) only
 --------+-------------
       10|            0
-(1 row)
 
 step S1: SELECT count(*) from ts_device_table;
 count
 -----
    10
-(1 row)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      1
-(1 row)
 
 
 starting permutation: LockChunk1 IBS I1 C1 UnlockChunk Ic Cc SC1 S1 SChunkStat
@@ -128,7 +118,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step I1: 
@@ -151,27 +140,23 @@ step C1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch LIMIT 1;
 count(*)|count(*) only
 --------+-------------
       10|            0
-(1 row)
 
 step S1: SELECT count(*) from ts_device_table;
 count
 -----
    10
-(1 row)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      1
-(1 row)
 
 
 starting permutation: LockChunk1 IB Iu1 C1 UnlockChunk Ic Cc SC1 S1 SU SChunkStat
@@ -186,7 +171,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step IB: BEGIN;
 step Iu1: 
@@ -209,33 +193,28 @@ step C1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch LIMIT 1;
 count(*)|count(*) only
 --------+-------------
       10|            0
-(1 row)
 
 step S1: SELECT count(*) from ts_device_table;
 count
 -----
    10
-(1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   98
-(1 row)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      1
-(1 row)
 
 
 starting permutation: LockChunk1 IBRR Iu1 C1 UnlockChunk Ic Cc SC1 S1 SU SChunkStat
@@ -250,7 +229,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step Iu1: 
@@ -273,33 +251,28 @@ step C1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch LIMIT 1;
 count(*)|count(*) only
 --------+-------------
       10|            0
-(1 row)
 
 step S1: SELECT count(*) from ts_device_table;
 count
 -----
    10
-(1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   98
-(1 row)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      1
-(1 row)
 
 
 starting permutation: LockChunk1 IBS Iu1 C1 UnlockChunk Ic Cc SC1 S1 SU SChunkStat
@@ -314,7 +287,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step Iu1: 
@@ -337,33 +309,28 @@ step C1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch LIMIT 1;
 count(*)|count(*) only
 --------+-------------
       10|            0
-(1 row)
 
 step S1: SELECT count(*) from ts_device_table;
 count
 -----
    10
-(1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   98
-(1 row)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      1
-(1 row)
 
 
 starting permutation: LockChunk1 C1 IB I1 UnlockChunk Cc Ic SC1 SA SChunkStat
@@ -378,7 +345,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step C1: 
   BEGIN;
@@ -399,7 +365,6 @@ step C1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step I1: <... completed>
@@ -408,7 +373,6 @@ step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS
 count(*)|count(*) only
 --------+-------------
       10|            0
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -423,14 +387,12 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: LockChunk1 C1 IBRR I1 UnlockChunk Cc Ic SC1 SA SChunkStat
@@ -445,7 +407,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step C1: 
   BEGIN;
@@ -466,7 +427,6 @@ step C1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step I1: <... completed>
@@ -475,7 +435,6 @@ step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS
 count(*)|count(*) only
 --------+-------------
       10|            0
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -490,14 +449,12 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: LockChunk1 C1 IBS I1 UnlockChunk Cc Ic SC1 SA SChunkStat
@@ -512,7 +469,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step C1: 
   BEGIN;
@@ -533,7 +489,6 @@ step C1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step I1: <... completed>
@@ -542,7 +497,6 @@ step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS
 count(*)|count(*) only
 --------+-------------
       10|            0
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -557,14 +511,12 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: LockChunk1 C1 IB Iu1 UnlockChunk Cc Ic SC1 SA SChunkStat
@@ -579,7 +531,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step C1: 
   BEGIN;
@@ -600,7 +551,6 @@ step C1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step Iu1: <... completed>
@@ -609,7 +559,6 @@ step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS
 count(*)|count(*) only
 --------+-------------
       10|           10
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -624,14 +573,12 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: LockChunk1 C1 IBRR Iu1 UnlockChunk Cc Ic SC1 SA SChunkStat
@@ -646,7 +593,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step C1: 
   BEGIN;
@@ -667,7 +613,6 @@ step C1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step Iu1: <... completed>
@@ -676,7 +621,6 @@ step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS
 count(*)|count(*) only
 --------+-------------
       10|           10
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -691,14 +635,12 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: LockChunk1 C1 IBS Iu1 UnlockChunk Cc Ic SC1 SA SChunkStat
@@ -713,7 +655,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step C1: 
   BEGIN;
@@ -734,7 +675,6 @@ step C1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step Iu1: <... completed>
@@ -743,7 +683,6 @@ step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS
 count(*)|count(*) only
 --------+-------------
       10|           10
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -758,14 +697,12 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: C1 Cc LockChunkTuple IB I1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -782,7 +719,6 @@ step C1:
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step LockChunkTuple: 
@@ -793,7 +729,6 @@ step LockChunkTuple:
 chunk_status
 ------------
            1
-(1 row)
 
 step IB: BEGIN;
 step I1: 
@@ -810,7 +745,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -825,7 +759,6 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBRR I1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -842,7 +775,6 @@ step C1:
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step LockChunkTuple: 
@@ -853,7 +785,6 @@ step LockChunkTuple:
 chunk_status
 ------------
            1
-(1 row)
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step I1: 
@@ -870,7 +801,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -885,7 +815,6 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBS I1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -902,7 +831,6 @@ step C1:
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step LockChunkTuple: 
@@ -913,7 +841,6 @@ step LockChunkTuple:
 chunk_status
 ------------
            1
-(1 row)
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step I1: 
@@ -930,7 +857,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -945,7 +871,6 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IB I1 INu1 UnlockChunkTuple Ic INc SChunkStat SU SA
@@ -962,7 +887,6 @@ step C1:
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step LockChunkTuple: 
@@ -973,7 +897,6 @@ step LockChunkTuple:
 chunk_status
 ------------
            1
-(1 row)
 
 step IB: BEGIN;
 step I1: 
@@ -990,13 +913,11 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   99
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1011,7 +932,6 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   99
-(10 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBRR I1 INu1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -1028,7 +948,6 @@ step C1:
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step LockChunkTuple: 
@@ -1039,7 +958,6 @@ step LockChunkTuple:
 chunk_status
 ------------
            1
-(1 row)
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step I1: 
@@ -1056,7 +974,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1071,7 +988,6 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   99
-(10 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBS I1 INu1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -1088,7 +1004,6 @@ step C1:
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step LockChunkTuple: 
@@ -1099,7 +1014,6 @@ step LockChunkTuple:
 chunk_status
 ------------
            1
-(1 row)
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step I1: 
@@ -1116,7 +1030,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1131,7 +1044,6 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   99
-(10 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IB Iu1 IN1 UnlockChunkTuple Ic INc SChunkStat SU SA
@@ -1148,7 +1060,6 @@ step C1:
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step LockChunkTuple: 
@@ -1159,7 +1070,6 @@ step LockChunkTuple:
 chunk_status
 ------------
            1
-(1 row)
 
 step IB: BEGIN;
 step Iu1: 
@@ -1176,13 +1086,11 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   98
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1197,7 +1105,6 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBRR Iu1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -1214,7 +1121,6 @@ step C1:
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step LockChunkTuple: 
@@ -1225,7 +1131,6 @@ step LockChunkTuple:
 chunk_status
 ------------
            1
-(1 row)
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step Iu1: 
@@ -1242,7 +1147,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1257,7 +1161,6 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBS Iu1 IN1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -1274,7 +1177,6 @@ step C1:
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step LockChunkTuple: 
@@ -1285,7 +1187,6 @@ step LockChunkTuple:
 chunk_status
 ------------
            1
-(1 row)
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step Iu1: 
@@ -1302,7 +1203,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1317,7 +1217,6 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IB Iu1 INu1 UnlockChunkTuple Ic INc SChunkStat SU SA
@@ -1334,7 +1233,6 @@ step C1:
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step LockChunkTuple: 
@@ -1345,7 +1243,6 @@ step LockChunkTuple:
 chunk_status
 ------------
            1
-(1 row)
 
 step IB: BEGIN;
 step Iu1: 
@@ -1362,13 +1259,11 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   99
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1383,7 +1278,6 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   99
-(10 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBRR Iu1 INu1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -1400,7 +1294,6 @@ step C1:
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step LockChunkTuple: 
@@ -1411,7 +1304,6 @@ step LockChunkTuple:
 chunk_status
 ------------
            1
-(1 row)
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step Iu1: 
@@ -1428,7 +1320,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1443,7 +1334,6 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   99
-(10 rows)
 
 
 starting permutation: C1 Cc LockChunkTuple IBS Iu1 INu1 UnlockChunkTuple Ic INc SChunkStat SA
@@ -1460,7 +1350,6 @@ step C1:
 compress
 --------
 t       
-(1 row)
 
 step Cc: COMMIT;
 step LockChunkTuple: 
@@ -1471,7 +1360,6 @@ step LockChunkTuple:
 chunk_status
 ------------
            1
-(1 row)
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step Iu1: 
@@ -1488,7 +1376,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1503,7 +1390,6 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   99
-(10 rows)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 RC IB I1 UnlockChunk Ic SH SA SChunkStat
@@ -1517,7 +1403,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -1528,7 +1413,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -1541,7 +1425,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step RC: 
   DO $$
@@ -1570,7 +1453,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1585,14 +1467,12 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 RC IBRR I1 UnlockChunk Ic SH SA SChunkStat
@@ -1606,7 +1486,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -1617,7 +1496,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -1630,7 +1508,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step RC: 
   DO $$
@@ -1659,7 +1536,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1674,14 +1550,12 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 RC IBS I1 UnlockChunk Ic SH SA SChunkStat
@@ -1695,7 +1569,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -1706,7 +1579,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -1719,7 +1591,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step RC: 
   DO $$
@@ -1748,7 +1619,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1763,14 +1633,12 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 RC IB Iu1 UnlockChunk Ic SH SA SChunkStat
@@ -1784,7 +1652,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -1795,7 +1662,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -1808,7 +1674,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step RC: 
   DO $$
@@ -1837,7 +1702,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1852,14 +1716,12 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 RC IBRR Iu1 UnlockChunk Ic SH SA SChunkStat SU
@@ -1873,7 +1735,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -1884,7 +1745,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -1897,7 +1757,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step RC: 
   DO $$
@@ -1926,7 +1785,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -1941,20 +1799,17 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   98
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 RC IBS Iu1 UnlockChunk Ic SH SA SChunkStat SU
@@ -1968,7 +1823,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -1979,7 +1833,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -1992,7 +1845,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step RC: 
   DO $$
@@ -2021,7 +1873,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -2036,20 +1887,17 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   98
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 RC IN1 UnlockChunk INc SH SA SChunkStat
@@ -2063,7 +1911,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -2074,7 +1921,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -2087,7 +1933,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step RC: 
   DO $$
@@ -2113,7 +1958,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -2128,14 +1972,12 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 RC INu1 UnlockChunk INc SH SA SChunkStat SU
@@ -2149,7 +1991,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -2160,7 +2001,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -2173,7 +2013,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step RC: 
   DO $$
@@ -2199,7 +2038,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -2214,20 +2052,17 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   99
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   99
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 IB I1 RC UnlockChunk Ic SH SA SChunkStat
@@ -2241,7 +2076,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -2252,7 +2086,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -2265,7 +2098,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step IB: BEGIN;
 step I1: 
@@ -2294,7 +2126,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -2309,14 +2140,12 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 IBRR I1 RC UnlockChunk Ic SH SA SChunkStat
@@ -2330,7 +2159,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -2341,7 +2169,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -2354,7 +2181,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step I1: 
@@ -2383,7 +2209,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -2398,14 +2223,12 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 IBS I1 RC UnlockChunk Ic SH SA SChunkStat
@@ -2419,7 +2242,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -2430,7 +2252,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -2443,7 +2264,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step I1: 
@@ -2472,7 +2292,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -2487,14 +2306,12 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 IB Iu1 RC UnlockChunk Ic SH SA SChunkStat SU
@@ -2508,7 +2325,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -2519,7 +2335,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -2532,7 +2347,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step IB: BEGIN;
 step Iu1: 
@@ -2561,7 +2375,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -2576,20 +2389,17 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   98
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 IBRR Iu1 RC UnlockChunk Ic SH SA SChunkStat SU
@@ -2603,7 +2413,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -2614,7 +2423,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -2627,7 +2435,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step Iu1: 
@@ -2656,7 +2463,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -2671,20 +2477,17 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   98
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 IBS Iu1 RC UnlockChunk Ic SH SA SChunkStat SU
@@ -2698,7 +2501,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -2709,7 +2511,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -2722,7 +2523,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step Iu1: 
@@ -2751,7 +2551,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -2766,20 +2565,17 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   98
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   98
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 IN1 RC UnlockChunk INc SH SA SChunkStat
@@ -2793,7 +2589,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -2804,7 +2599,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -2817,7 +2611,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100) ON CONFLICT DO NOTHING; <waiting ...>
 step RC: 
@@ -2843,7 +2636,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -2858,14 +2650,12 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 
 starting permutation: CA1 CAc I1 SChunkStat LockChunk1 INu1 RC UnlockChunk INc SH SA SChunkStat SU
@@ -2879,7 +2669,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step I1: 
@@ -2890,7 +2679,6 @@ step SChunkStat: SELECT status from _timescaledb_catalog.chunk
 status
 ------
      9
-(1 row)
 
 step LockChunk1: 
   BEGIN;
@@ -2903,7 +2691,6 @@ step LockChunk1:
 lock_chunktable
 ---------------
                
-(1 row)
 
 step INu1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 99) ON CONFLICT(time, device) DO UPDATE SET value = 99; <waiting ...>
 step RC: 
@@ -2929,7 +2716,6 @@ step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compressi
 total_chunks|number_compressed_chunks
 ------------+------------------------
            1|                       1
-(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
@@ -2944,20 +2730,17 @@ time|device|location|value
    8|     1|     100|   20
    9|     1|     100|   20
    1|     1|     100|   99
-(10 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
 status
 ------
      9
-(1 row)
 
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
    1|     1|     100|   99
-(1 row)
 
 
 starting permutation: CA1 CAc LockChunkTuple DA1 SA SF UnlockChunkTuple DAc
@@ -2971,7 +2754,6 @@ step CA1:
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;
 step LockChunkTuple: 
@@ -2982,7 +2764,6 @@ step LockChunkTuple:
 chunk_status
 ------------
            1
-(1 row)
 
 step DA1: 
   BEGIN;
@@ -3004,7 +2785,6 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step SF: 
 step UnlockChunkTuple: ROLLBACK;
@@ -3012,7 +2792,6 @@ step DA1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step DAc: COMMIT;
 
@@ -3031,7 +2810,6 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step CA1: 
   BEGIN;
@@ -3053,7 +2831,6 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
 
 step SF: 
 step SR: ROLLBACK;
@@ -3061,6 +2838,5 @@ step CA1: <... completed>
 compress
 --------
 t       
-(1 row)
 
 step CAc: COMMIT;

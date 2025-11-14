@@ -345,3 +345,36 @@ SELECT compress_chunk(show_chunks('test10'));
 
 RESET timescaledb.enable_rowlevel_compression_locking;
 DROP TABLE test10;
+
+RESET enable_indexscan;
+RESET enable_seqscan;
+RESET enable_bitmapscan;
+
+-- Test chunk merging with default compression settings
+CREATE TABLE test_defaults ("Time" timestamptz, i integer, value integer) WITH (tsdb.hypertable, tsdb.chunk_interval='1 hour');
+CREATE INDEX ON test_defaults (i);
+ALTER TABLE test_defaults set (timescaledb.compress, timescaledb.compress_chunk_time_interval='2 hours');
+SELECT delete_job(1000);
+
+-- This will generate 24 chunks
+INSERT INTO test_defaults
+SELECT t, i, gen_rand_minstd()
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t
+CROSS JOIN generate_series(1, 5, 1) i;
+
+-- Compression is set to merge those 24 chunks into 12 2 hour chunks
+
+SELECT
+  $$
+  SELECT * FROM test_defaults ORDER BY i, "Time"
+  $$ AS "QUERY" \gset
+
+SELECT 'test_defaults' AS "HYPERTABLE_NAME" \gset
+\ir include/compression_test_merge.sql
+\set TYPE timestamptz
+\set ORDER_BY_COL_NAME Time
+\set SEGMENT_META_COL_MIN _ts_meta_min_1
+\set SEGMENT_META_COL_MAX _ts_meta_max_1
+\ir include/compression_test_hypertable_segment_meta.sql
+
+DROP TABLE test_defaults;

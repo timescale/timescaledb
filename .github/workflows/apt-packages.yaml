@@ -1,5 +1,5 @@
 # Test installing our ubuntu and debian packages for the latest version.
-name: APT packages
+name: "Packaging tests: APT"
 "on":
   schedule:
     # run daily 0:00 on main branch
@@ -15,8 +15,8 @@ name: APT packages
   workflow_dispatch:
 jobs:
   apt_tests:
-    name: APT ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
-    runs-on: ubuntu-latest
+    name: APT ${{ matrix.arch }} ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
+    runs-on: ${{ matrix.runner }}
     container:
       image: ${{ matrix.image }}
       env:
@@ -24,12 +24,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "debian:11-slim", "debian:12-slim", "ubuntu:22.04", "ubuntu:24.04" ]
-        pg: [ 15, 16, 17 ]
+        arch: [ "x86", "ARM" ]
+        image: [ "debian:11-slim", "debian:12-slim", "debian:13-slim", "ubuntu:22.04", "ubuntu:24.04" ]
+        pg: [ 15, 16, 17, 18 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
             pkg_suffix: "-oss"
+          - arch: "x86"
+            runner: "ubuntu-latest"
+          - arch: "ARM"
+            runner: "cloud-image-runner-ubuntu-24-arm64"
+        exclude:
+          - image: "debian:11-slim"
+            pg: 18
+
 
     steps:
     - name: Add repositories
@@ -40,7 +49,12 @@ jobs:
         image_type=$(lsb_release -i -s | tr '[:upper:]' '[:lower:]')
         echo "deb https://packagecloud.io/timescale/timescaledb/${image_type}/ $(lsb_release -c -s) main" \
           > /etc/apt/sources.list.d/timescaledb.list
-        wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
+        if [ "${image_type}" = "ubuntu" ]; then
+          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
+        else
+          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
+        fi
+
 
     - name: Install timescaledb
       run: |
@@ -85,6 +99,7 @@ jobs:
         fi
 
     - name: Test Downgrade
+      if: matrix.pg != '18' # pg18 only has 1 version so downgrade is not possible
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.
@@ -98,6 +113,15 @@ jobs:
         if [ "$prev_version" != "$installed_version" ];then
           false
         fi
+
+    - name: Install toolkit
+      run: |
+        apt-get install -y --no-install-recommends \
+          timescaledb-toolkit-postgresql-${{ matrix.pg }}
+
+    - name: List available toolkit versions
+      run: |
+        apt-cache show timescaledb-toolkit-postgresql-${{ matrix.pg }} | grep -e Version: -e Depends: | tr '\n' ' ' | sed -e 's! Version: !\n!g' -e 's!Version: !!' -e 's!$!\n!'
 
     - name: PostgreSQL log
       if: always()

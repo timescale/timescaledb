@@ -5,7 +5,6 @@ step s3_wait_before_lock: SELECT debug_waitpoint_enable('chunk_attach_before_loc
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1b: BEGIN;
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11'))); <waiting ...>
@@ -14,7 +13,6 @@ step s3_release_lock: SELECT debug_waitpoint_release('chunk_attach_before_lock')
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_attach: <... completed>
 ERROR:  chunk creation failed due to collision
@@ -23,7 +21,6 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     1
-(1 row)
 
 
 starting permutation: s1b s1_attach s3_show_num_rows s4_insert s1c s3_show_num_chunks s3_show_num_rows
@@ -33,7 +30,6 @@ step s3_show_num_rows: SELECT count(*) FROM attach_test;
 count
 -----
     0
-(1 row)
 
 step s4_insert: INSERT INTO attach_test VALUES ('2025-06-03 00:15', 1, 31.5); <waiting ...>
 step s1c: COMMIT;
@@ -42,13 +38,11 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     1
-(1 row)
 
 step s3_show_num_rows: SELECT count(*) FROM attach_test;
 count
 -----
     1
-(1 row)
 
 
 starting permutation: s3_wait_before_lock s1b s1_attach s3_show_chunk_rows s4_violate s3_release_lock s1c s3_show_num_chunks s3_show_chunk_rows
@@ -56,7 +50,6 @@ step s3_wait_before_lock: SELECT debug_waitpoint_enable('chunk_attach_before_loc
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1b: BEGIN;
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11'))); <waiting ...>
@@ -64,14 +57,12 @@ step s3_show_chunk_rows: SELECT count(*) FROM chunk_to_attach;
 count
 -----
     0
-(1 row)
 
 step s4_violate: INSERT INTO chunk_to_attach VALUES ('2025-08-01 20:00', 1, 34);
 step s3_release_lock: SELECT debug_waitpoint_release('chunk_attach_before_lock');
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_attach: <... completed>
 ERROR:  dimension constraint for column "time" violated by some row
@@ -80,13 +71,11 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     0
-(1 row)
 
 step s3_show_chunk_rows: SELECT count(*) FROM chunk_to_attach;
 count
 -----
     1
-(1 row)
 
 
 starting permutation: s1b s3_show_num_chunks s1_attach s4_violate s1c s3_show_num_chunks s3_show_chunk_rows
@@ -95,24 +84,21 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     0
-(1 row)
 
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11')));
 step s4_violate: INSERT INTO chunk_to_attach VALUES ('2025-08-01 20:00', 1, 34); <waiting ...>
 step s1c: COMMIT;
 step s4_violate: <... completed>
-ERROR:  new row for relation "chunk_to_attach" violates check constraint "constraint_X"
+ERROR:  new row for relation "chunk_to_attach" violates chunk constraint
 step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     1
-(1 row)
 
 step s3_show_chunk_rows: SELECT count(*) FROM chunk_to_attach;
 count
 -----
     0
-(1 row)
 
 
 starting permutation: s3_wait_before_lock s1b s1_attach s4_drop s3_release_lock s1c
@@ -120,7 +106,6 @@ step s3_wait_before_lock: SELECT debug_waitpoint_enable('chunk_attach_before_loc
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1b: BEGIN;
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11'))); <waiting ...>
@@ -129,7 +114,6 @@ step s3_release_lock: SELECT debug_waitpoint_release('chunk_attach_before_lock')
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_attach: <... completed>
 ERROR:  relation with OID X does not exist
@@ -141,7 +125,6 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     0
-(1 row)
 
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11')));
 step s4_drop: DROP TABLE chunk_to_attach; <waiting ...>
@@ -151,7 +134,6 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     0
-(1 row)
 
 step s3_show_chunk_rows: SELECT count(*) FROM chunk_to_attach;
 ERROR:  relation "chunk_to_attach" does not exist
@@ -161,7 +143,6 @@ step s3_wait_before_lock: SELECT debug_waitpoint_enable('chunk_attach_before_loc
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1b: BEGIN;
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11'))); <waiting ...>
@@ -170,7 +151,6 @@ step s3_release_lock: SELECT debug_waitpoint_release('chunk_attach_before_lock')
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_attach: <... completed>
 step s1c: COMMIT;
@@ -178,7 +158,6 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     1
-(1 row)
 
 
 starting permutation: s1b s3_show_num_chunks s1_attach s4_truncate s1c s3_show_num_chunks s3_show_chunk_rows
@@ -187,7 +166,6 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     0
-(1 row)
 
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11')));
 step s4_truncate: TRUNCATE TABLE attach_test; <waiting ...>
@@ -197,7 +175,6 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     0
-(1 row)
 
 step s3_show_chunk_rows: SELECT count(*) FROM chunk_to_attach;
 ERROR:  relation "chunk_to_attach" does not exist
@@ -207,7 +184,6 @@ step s3_wait_before_lock: SELECT debug_waitpoint_enable('chunk_attach_before_loc
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1b: BEGIN;
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11'))); <waiting ...>
@@ -217,7 +193,6 @@ step s3_release_lock: SELECT debug_waitpoint_release('chunk_attach_before_lock')
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_attach: <... completed>
 step s1c: COMMIT;
@@ -225,7 +200,6 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     1
-(1 row)
 
 
 starting permutation: s1b s3_show_num_chunks s1_attach s4_compress s1c s3_show_num_chunks s3_show_chunk_rows
@@ -234,7 +208,6 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     0
-(1 row)
 
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11')));
 step s4_compress: CALL convert_to_columnstore('chunk_to_attach');
@@ -244,13 +217,11 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     1
-(1 row)
 
 step s3_show_chunk_rows: SELECT count(*) FROM chunk_to_attach;
 count
 -----
     0
-(1 row)
 
 
 starting permutation: s2_attach s3_wait_before_lock s1b s1_attach s2_compress s3_release_lock s1c
@@ -259,7 +230,6 @@ step s3_wait_before_lock: SELECT debug_waitpoint_enable('chunk_attach_before_loc
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1b: BEGIN;
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11'))); <waiting ...>
@@ -268,7 +238,6 @@ step s3_release_lock: SELECT debug_waitpoint_release('chunk_attach_before_lock')
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_attach: <... completed>
 step s1c: COMMIT;
@@ -280,7 +249,6 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     0
-(1 row)
 
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11')));
 step s2_attach: CALL attach_chunk('attach_test', 'temp_chunk', jsonb_build_object('time', jsonb_build_array('2025-05-01', '2025-05-11'))); <waiting ...>
@@ -291,7 +259,6 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     2
-(1 row)
 
 
 starting permutation: s1b s2b s3_show_num_chunks s1_attach s2_attach_same s1c s2c s3_show_num_chunks
@@ -301,7 +268,6 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     0
-(1 row)
 
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11')));
 step s2_attach_same: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11'))); <waiting ...>
@@ -313,7 +279,6 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     1
-(1 row)
 
 
 starting permutation: s3_wait_before_detach s1b s3_show_num_chunks s1_attach s4_detach s3_release_detach s1c s3_show_num_chunks
@@ -321,14 +286,12 @@ step s3_wait_before_detach: SELECT debug_waitpoint_enable('chunk_detach_before_l
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1b: BEGIN;
 step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     0
-(1 row)
 
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11')));
 step s4_detach: CALL detach_chunk('chunk_to_attach'); <waiting ...>
@@ -336,7 +299,6 @@ step s3_release_detach: SELECT debug_waitpoint_release('chunk_detach_before_lock
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s4_detach: <... completed>
 ERROR:  hypertable not found for the chunk
@@ -345,7 +307,6 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     1
-(1 row)
 
 
 starting permutation: s2_attach s3_wait_before_lock s1b s1_attach s2_detach s3_release_lock s1c s3_show_num_chunks
@@ -354,7 +315,6 @@ step s3_wait_before_lock: SELECT debug_waitpoint_enable('chunk_attach_before_loc
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1b: BEGIN;
 step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_object('time', jsonb_build_array('2025-06-01', '2025-06-11'))); <waiting ...>
@@ -363,7 +323,6 @@ step s3_release_lock: SELECT debug_waitpoint_release('chunk_attach_before_lock')
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_attach: <... completed>
 step s1c: COMMIT;
@@ -371,5 +330,4 @@ step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
     1
-(1 row)
 

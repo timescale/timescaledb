@@ -8,7 +8,6 @@ SELECT _timescaledb_functions.start_background_workers();
  start_background_workers 
 --------------------------
  t
-(1 row)
 
 CREATE DATABASE :TEST_DBNAME_2;
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
@@ -107,7 +106,6 @@ SELECT wait_worker_counts(1,1,0,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 -- Now create the extension in test db 2
 SET client_min_messages = ERROR;
@@ -117,7 +115,6 @@ SELECT wait_worker_counts(1,1,1,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 DROP DATABASE :TEST_DBNAME WITH (FORCE);
 -- Now the db_scheduler for test db should have disappeared
@@ -125,7 +122,6 @@ SELECT wait_worker_counts(1,0,1,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 -- Now let's restart the scheduler in test db 2 and make sure our backend_start changed
 SELECT backend_start as orig_backend_start
@@ -138,13 +134,11 @@ SELECT _timescaledb_functions.restart_background_workers();
  restart_background_workers 
 ----------------------------
  t
-(1 row)
 
 SELECT wait_worker_counts(1,0,1,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 SELECT (backend_start > :'orig_backend_start'::timestamptz) backend_start_changed,
 (wait_event = 'virtualxid') wait_event_changed
@@ -154,14 +148,12 @@ AND datname = :'TEST_DBNAME_2';
  backend_start_changed | wait_event_changed 
 -----------------------+--------------------
  t                     | t
-(1 row)
 
 COMMIT;
 SELECT wait_worker_counts(1,0,1,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 SELECT (wait_event IS DISTINCT FROM 'virtualxid') wait_event_changed
 FROM pg_stat_activity
@@ -170,46 +162,39 @@ AND datname = :'TEST_DBNAME_2';
  wait_event_changed 
 --------------------
  t
-(1 row)
 
 -- Test stop
 SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-(1 row)
 
 SELECT wait_worker_counts(1,0,0,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 -- Make sure it doesn't break if we stop twice in a row
 SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-(1 row)
 
 SELECT wait_worker_counts(1,0,0,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 -- test start
 SELECT _timescaledb_functions.start_background_workers();
  start_background_workers 
 --------------------------
  t
-(1 row)
 
 SELECT wait_worker_counts(1,0,1,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 -- make sure start is idempotent
 SELECT backend_start as orig_backend_start
@@ -240,7 +225,6 @@ SELECT _timescaledb_functions.start_background_workers() as start_background_wor
  t                        |              18
  t                        |              19
  t                        |              20
-(20 rows)
 
 -- Here we're waiting to see if something shows up in pg_stat_activity,
 --  so we have to condition our loop in the opposite way. We'll only wait
@@ -270,32 +254,27 @@ select wait_equals(:'orig_backend_start', :'TEST_DBNAME_2');
  wait_equals 
 -------------
  t
-(1 row)
 
 -- Make sure restart starts a worker even if it is stopped
 SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-(1 row)
 
 SELECT wait_worker_counts(1,0,0,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 SELECT _timescaledb_functions.restart_background_workers();
  restart_background_workers 
 ----------------------------
  t
-(1 row)
 
 SELECT wait_worker_counts(1,0,1,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 -- Make sure drop extension statement restarts the worker and on rollback it keeps running
 -- Now let's restart the scheduler and make sure our backend_start changed
@@ -309,7 +288,6 @@ SELECT wait_worker_counts(1,0,1,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 ROLLBACK;
 CREATE FUNCTION wait_greater(TIMESTAMPTZ,TEXT) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
@@ -337,7 +315,6 @@ SELECT wait_greater(:'orig_backend_start',:'TEST_DBNAME_2');
  wait_greater 
 --------------
  t
-(1 row)
 
 -- Make sure canceling the launcher backend causes a restart of schedulers
 SELECT backend_start as orig_backend_start
@@ -348,32 +325,27 @@ SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE backend_type = 'Timesc
  pg_cancel_backend 
 -------------------
  t
-(1 row)
 
 SELECT wait_worker_counts(1,0,1,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 SELECT wait_greater(:'orig_backend_start', :'TEST_DBNAME_2');
  wait_greater 
 --------------
  t
-(1 row)
 
 -- Make sure running pre_restore function stops background workers
 SELECT timescaledb_pre_restore();
  timescaledb_pre_restore 
 -------------------------
  t
-(1 row)
 
 SELECT wait_worker_counts(1,0,0,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 -- Make sure a restart with restoring on first starts the background worker
 BEGIN;
@@ -381,13 +353,11 @@ SELECT _timescaledb_functions.restart_background_workers();
  restart_background_workers 
 ----------------------------
  t
-(1 row)
 
 SELECT wait_worker_counts(1,0,1,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 COMMIT;
 -- Then the worker dies when it sees that restoring is on after the txn commits
@@ -395,7 +365,6 @@ SELECT wait_worker_counts(1,0,0,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 --And post_restore starts them
 BEGIN;
@@ -403,13 +372,11 @@ SELECT timescaledb_post_restore();
  timescaledb_post_restore 
 --------------------------
  t
-(1 row)
 
 SELECT wait_worker_counts(1,0,1,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 COMMIT;
 -- And they stay started
@@ -417,7 +384,6 @@ SELECT wait_worker_counts(1,0,1,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 -- Make sure dropping the extension means that the scheduler is stopped
 BEGIN;
@@ -427,7 +393,6 @@ SELECT wait_worker_counts(1,0,0,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 -- Test that background workers are stopped with DROP OWNED
 ALTER ROLE :ROLE_DEFAULT_PERM_USER WITH SUPERUSER;
@@ -440,7 +405,6 @@ SELECT wait_worker_counts(launcher_ct=>1, scheduler1_ct=> 0, scheduler2_ct=>1, t
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 -- drop a non-owner of the extension results in no change to worker counts
 DROP OWNED BY :ROLE_DEFAULT_PERM_USER_2;
@@ -448,7 +412,6 @@ SELECT wait_worker_counts(launcher_ct=>1, scheduler1_ct=> 0, scheduler2_ct=>1, t
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 -- drop of owner of extension results in extension drop and a stop to the bgw
 DROP OWNED BY :ROLE_DEFAULT_PERM_USER;
@@ -457,7 +420,6 @@ SELECT wait_worker_counts(launcher_ct=>1, scheduler1_ct=>0, scheduler2_ct=>0, te
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 ALTER ROLE :ROLE_DEFAULT_PERM_USER WITH NOSUPERUSER;
@@ -560,7 +522,6 @@ SELECT wait_worker_counts(1,0,0,1);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 COMMIT;
 -- End our transaction and it should immediately exit because it's a template database.
@@ -568,7 +529,6 @@ SELECT wait_worker_counts(1,0,0,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 \c :TEST_DBNAME_2
 -- Now try creating a DB from a template with the extension already installed.
@@ -578,7 +538,6 @@ SELECT wait_worker_counts(1,1,0,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 DROP DATABASE :TEST_DBNAME WITH (FORCE);
 -- Now make sure that there's no race between create database and create extension.
@@ -596,7 +555,6 @@ SELECT wait_worker_counts(1,1,0,0);
  wait_worker_counts 
 --------------------
  t
-(1 row)
 
 -- test rename database
 CREATE DATABASE db_rename_test;
@@ -608,7 +566,6 @@ SELECT wait_for_bgw_scheduler('db_rename_test');
  wait_for_bgw_scheduler 
 ------------------------
  BGW Scheduler found.
-(1 row)
 
 ALTER DATABASE db_rename_test RENAME TO db_rename_test2;
 WARNING:  you need to manually restart any running background workers after this command
@@ -618,14 +575,12 @@ SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
  wait_for_bgw_scheduler 
 ------------------------
  BGW Scheduler found.
-(1 row)
 
 CREATE DATABASE db_from_template WITH TEMPLATE :TEST_DBNAME;
 SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
  wait_for_bgw_scheduler 
 ------------------------
  BGW Scheduler found.
-(1 row)
 
 DROP DATABASE db_from_template WITH (FORCE);
 -- test alter database set tablespace
@@ -638,7 +593,6 @@ SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
  wait_for_bgw_scheduler 
 ------------------------
  BGW Scheduler found.
-(1 row)
 
 -- Connect to TEST_DBNAME (_timescaledb_functions.stop_background_workers() is not available in TEST_DBNAME_2)
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -646,13 +600,11 @@ SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-(1 row)
 
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE backend_type = 'TimescaleDB Background Worker Launcher';
  pg_terminate_backend 
 ----------------------
  t
-(1 row)
 
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 -- make sure nobody is using it
@@ -669,7 +621,6 @@ CALL kill_database_backends(:'TEST_DBNAME_2');
 SELECT * FROM pg_stat_activity WHERE datname = :'TEST_DBNAME_2';
  datid | datname | pid | leader_pid | usesysid | usename | application_name | client_addr | client_hostname | client_port | backend_start | xact_start | query_start | state_change | wait_event_type | wait_event | state | backend_xid | backend_xmin | query_id | query | backend_type 
 -------+---------+-----+------------+----------+---------+------------------+-------------+-----------------+-------------+---------------+------------+-------------+--------------+-----------------+------------+-------+-------------+--------------+----------+-------+--------------
-(0 rows)
 
 DROP DATABASE :TEST_DBNAME_2 WITH (force);
 -- Clean up the template database, removing our test utilities etc

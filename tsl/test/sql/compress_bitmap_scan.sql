@@ -31,6 +31,10 @@ select ts,
     (mix(ts % 1483) * 1483)::int payload
 from generate_series(1, 1000000) ts;
 
+-- tweak dataset to get whole number actual row results
+update bscan set payload = -537, s = 1 where id in (1,2);
+delete from bscan where payload = -537 and id not in (1,2);
+
 create index on bscan(payload);
 
 select count(compress_chunk(x)) from show_chunks('bscan') x;
@@ -40,21 +44,27 @@ vacuum full analyze bscan;
 
 -- We have many conditions here, so it's less selective and the bitmap scan
 -- overhead grows. This query should use Seq Scan.
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from bscan where id = 1 or id = 2 or id = 3 or id = 4 or id = 5
     or id = 6 or id = 7 or id = 8
 ;
 
 -- This should be Bitmap Heap Scan because we have an OR of highly selective
 -- conditions.
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from bscan where id = 1 or id = 2
 ;
 
 -- Also try a join with a Bitmap Heap Scan
-explain (analyze, verbose, costs off, timing off, summary off)
+set enable_mergejoin to off;
+set enable_hashjoin to off;
+
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from bscan t1, bscan t2
 where (t2.id = 1 or t2.id = 2)
     and t1.s = t2.s
     and t1.payload = -537;
 ;
+
+reset enable_mergejoin;
+reset enable_hashjoin;

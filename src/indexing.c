@@ -502,6 +502,22 @@ ts_indexing_mark_as_invalid(Oid index_id)
 	return ts_indexing_mark_as(index_id, IndexInvalid);
 }
 
+TS_FUNCTION_INFO_V1(ts_index_matches);
+Datum
+ts_index_matches(PG_FUNCTION_ARGS)
+{
+	Oid index1 = PG_GETARG_OID(0);
+	Oid index2 = PG_GETARG_OID(1);
+	bool result;
+
+	if (!OidIsValid(index1) || !OidIsValid(index2))
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid index")));
+
+	result = ts_indexing_compare(index1, index2);
+
+	PG_RETURN_BOOL(result);
+}
+
 /* Returns true if the indexes are equivalent */
 bool
 ts_indexing_compare(Oid index1, Oid index2)
@@ -536,6 +552,23 @@ ts_indexing_compare(Oid index1, Oid index2)
 								   indexrel1->rd_opfamily,
 								   indexrel2->rd_opfamily,
 								   attmap);
+
+	if (result)
+	{
+		/*
+		 * CompareIndexInfo does not compare indoption, which means it will
+		 * consider two indexes with different ASC/DESC or NULLS FIRST/LAST
+		 * options as equivalent.
+		 */
+		for (int i = 0; i < IndexRelationGetNumberOfKeyAttributes(indexrel1); i++)
+		{
+			if (indexrel1->rd_indoption[i] != indexrel2->rd_indoption[i])
+			{
+				result = false;
+				break;
+			}
+		}
+	}
 
 	index_close(indexrel1, NoLock);
 	index_close(indexrel2, NoLock);

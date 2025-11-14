@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Connect as superuser to use SET ROLE later
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET timezone TO PST8PDT;
 -- Run tests with default role
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -21,7 +21,7 @@ SELECT
 SELECT format('\! diff %s %s', :'TEST_RESULTS_VIEW', :'TEST_RESULTS_TABLE') as "DIFF_CMD",
       format('\! diff %s %s', :'TEST_RESULTS_VIEW_HASHAGG', :'TEST_RESULTS_TABLE') as "DIFF_CMD2"
 \gset
-\set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
+\set EXPLAIN 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 SET client_min_messages TO NOTICE;
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
@@ -33,7 +33,6 @@ select table_name from create_hypertable( 'conditions', 'timec');
  table_name 
 ------------
  conditions
-(1 row)
 
 insert into conditions values ( '2018-01-01 09:20:00-08', 'SFO', 55, 45);
 insert into conditions values ( '2018-01-02 09:30:00-08', 'por', 100, 100);
@@ -64,7 +63,6 @@ FROM ( select max(timec)as timeval from conditions ) as q;
          time_bucket          
 ------------------------------
  Sat Nov 03 17:00:00 2018 PDT
-(1 row)
 
 CALL refresh_continuous_aggregate('mat_m1', NULL, NULL);
 --test first/last
@@ -80,7 +78,6 @@ FROM ( select max(timec)as timeval from conditions ) as q;
          time_bucket          
 ------------------------------
  Sat Nov 03 17:00:00 2018 PDT
-(1 row)
 
 CALL refresh_continuous_aggregate('mat_m2', NULL, NULL);
 --normal view --
@@ -95,11 +92,10 @@ set enable_hashagg = false;
 -- group by, we will still need a sort
 :EXPLAIN
 select * from mat_m1 order by sumh, sumt, minl, timec ;
-                                                                                                   QUERY PLAN                                                                                                   
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
-   Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-   Sort Key: _hyper_2_3_chunk.sumh, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.timec
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.sumh, _materialized_hypertable_2.sumt, _materialized_hypertable_2.minl, _materialized_hypertable_2.timec
    ->  Append
          ->  Append
                ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
@@ -119,21 +115,19 @@ select * from mat_m1 order by sumh, sumt, minl, timec ;
                            ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                                  Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                                  Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
-(22 rows)
 
 :EXPLAIN
 select * from regview order by timec desc;
-                                                                                                                     QUERY PLAN                                                                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
-   Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
-   Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)) DESC
+   Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), (min(conditions.location)), (sum(conditions.temperature)), (sum(conditions.humidity))
+   Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)) DESC
    ->  Finalize GroupAggregate
-         Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), min(_hyper_1_1_chunk.location), sum(_hyper_1_1_chunk.temperature), sum(_hyper_1_1_chunk.humidity)
-         Group Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+         Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+         Group Key: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec))
          ->  Sort
-               Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (PARTIAL min(_hyper_1_1_chunk.location)), (PARTIAL sum(_hyper_1_1_chunk.temperature)), (PARTIAL sum(_hyper_1_1_chunk.humidity))
-               Sort Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), (PARTIAL min(conditions.location)), (PARTIAL sum(conditions.temperature)), (PARTIAL sum(conditions.humidity))
+               Sort Key: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec))
                ->  Append
                      ->  Partial GroupAggregate
                            Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), PARTIAL min(_hyper_1_1_chunk.location), PARTIAL sum(_hyper_1_1_chunk.temperature), PARTIAL sum(_hyper_1_1_chunk.humidity)
@@ -151,7 +145,6 @@ select * from regview order by timec desc;
                                  Sort Key: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec))
                                  ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
                                        Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-(26 rows)
 
 -- PUSHDOWN cases --
 -- all group by elts in order by , reorder group by elts to match
@@ -159,11 +152,10 @@ select * from regview order by timec desc;
 -- This should prevent an additional sort after GroupAggregate
 :EXPLAIN
 select * from mat_m1 order by timec desc, location;
-                                                                                                   QUERY PLAN                                                                                                   
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
-   Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-   Sort Key: _hyper_2_3_chunk.timec DESC, _hyper_2_3_chunk.location
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.timec DESC, _materialized_hypertable_2.location
    ->  Append
          ->  Append
                ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
@@ -183,15 +175,13 @@ select * from mat_m1 order by timec desc, location;
                            ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                                  Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                                  Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
-(22 rows)
 
 :EXPLAIN
 select * from mat_m1 order by location, timec desc;
-                                                                                                   QUERY PLAN                                                                                                   
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
-   Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-   Sort Key: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec DESC
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.location, _materialized_hypertable_2.timec DESC
    ->  Append
          ->  Append
                ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
@@ -211,15 +201,13 @@ select * from mat_m1 order by location, timec desc;
                            ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                                  Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                                  Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
-(22 rows)
 
 :EXPLAIN
 select * from mat_m1 order by location, timec asc;
-                                                                                                   QUERY PLAN                                                                                                   
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
-   Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-   Sort Key: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.location, _materialized_hypertable_2.timec
    ->  Append
          ->  Append
                ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
@@ -239,12 +227,10 @@ select * from mat_m1 order by location, timec asc;
                            ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                                  Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                                  Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
-(22 rows)
 
 :EXPLAIN
 select * from mat_m1 where timec > '2018-10-01' order by timec desc;
-                                                                                                         QUERY PLAN                                                                                                         
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
    Sort Key: _hyper_2_4_chunk.timec DESC
@@ -264,13 +250,11 @@ select * from mat_m1 where timec > '2018-10-01' order by timec desc;
                                  Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                                  Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
                                  Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
-(19 rows)
 
 -- outer sort is used by mat_m1 for grouping. But doesn't avoid a sort after the join ---
 :EXPLAIN
 select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01' and l.locname = mat_m1.location order by timec desc;
-                                                                                                               QUERY PLAN                                                                                                               
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: l.locid, _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
    Sort Key: _hyper_2_4_chunk.timec DESC
@@ -297,12 +281,10 @@ select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01'
                                              Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                                              Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
                                              Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
-(26 rows)
 
 :EXPLAIN
 select * from mat_m2 where timec > '2018-10-01' order by timec desc;
-                                                                                                                                              QUERY PLAN                                                                                                                                              
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.firsth, _hyper_3_6_chunk.lasth, _hyper_3_6_chunk.maxtemp, _hyper_3_6_chunk.mintemp
    Sort Key: _hyper_3_6_chunk.timec DESC
@@ -322,12 +304,10 @@ select * from mat_m2 where timec > '2018-10-01' order by timec desc;
                                  Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
                                  Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
                                  Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
-(19 rows)
 
 :EXPLAIN
 select * from (select * from mat_m2 where timec > '2018-10-01' order by timec desc ) as q limit 1;
-                                                                                                                                                 QUERY PLAN                                                                                                                                                 
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit
    Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.firsth, _hyper_3_6_chunk.lasth, _hyper_3_6_chunk.maxtemp, _hyper_3_6_chunk.mintemp
    ->  Sort
@@ -349,12 +329,10 @@ select * from (select * from mat_m2 where timec > '2018-10-01' order by timec de
                                        Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
                                        Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
                                        Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
-(21 rows)
 
 :EXPLAIN
 select * from (select * from mat_m2 where timec > '2018-10-01' order by timec desc , location asc nulls first) as q limit 1;
-                                                                                                                                                 QUERY PLAN                                                                                                                                                 
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit
    Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.firsth, _hyper_3_6_chunk.lasth, _hyper_3_6_chunk.maxtemp, _hyper_3_6_chunk.mintemp
    ->  Sort
@@ -376,15 +354,13 @@ select * from (select * from mat_m2 where timec > '2018-10-01' order by timec de
                                        Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
                                        Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
                                        Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
-(21 rows)
 
 --plans with CTE
 :EXPLAIN
 with m1 as (
 Select * from mat_m2 where timec > '2018-10-01' order by timec desc )
 select * from m1;
-                                                                                                                                              QUERY PLAN                                                                                                                                              
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.firsth, _hyper_3_6_chunk.lasth, _hyper_3_6_chunk.maxtemp, _hyper_3_6_chunk.mintemp
    Sort Key: _hyper_3_6_chunk.timec DESC
@@ -404,19 +380,17 @@ select * from m1;
                                  Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.humidity, _hyper_1_2_chunk.temperature
                                  Index Cond: ((_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
                                  Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
-(19 rows)
 
 -- should reorder mat_m1 group by only based on mat_m1 order-by
 :EXPLAIN
 select * from mat_m1, mat_m2 where mat_m1.timec > '2018-10-01' and mat_m1.timec = mat_m2.timec order by mat_m1.timec desc;
-                                                                                                                                                 QUERY PLAN                                                                                                                                                 
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
-   Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, _hyper_3_5_chunk.location, _hyper_3_5_chunk.timec, _hyper_3_5_chunk.firsth, _hyper_3_5_chunk.lasth, _hyper_3_5_chunk.maxtemp, _hyper_3_5_chunk.mintemp
+   Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
    Sort Key: _hyper_2_4_chunk.timec DESC
    ->  Hash Join
-         Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, _hyper_3_5_chunk.location, _hyper_3_5_chunk.timec, _hyper_3_5_chunk.firsth, _hyper_3_5_chunk.lasth, _hyper_3_5_chunk.maxtemp, _hyper_3_5_chunk.mintemp
-         Hash Cond: (_hyper_3_5_chunk.timec = _hyper_2_4_chunk.timec)
+         Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+         Hash Cond: (_materialized_hypertable_3.timec = _hyper_2_4_chunk.timec)
          ->  Append
                ->  Append
                      ->  Index Scan using _hyper_3_5_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_5_chunk
@@ -454,25 +428,23 @@ select * from mat_m1, mat_m2 where mat_m1.timec > '2018-10-01' and mat_m1.timec 
                                              Output: _hyper_1_2_chunk_1.location, _hyper_1_2_chunk_1.timec, _hyper_1_2_chunk_1.temperature, _hyper_1_2_chunk_1.humidity
                                              Index Cond: ((_hyper_1_2_chunk_1.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk_1.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
                                              Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
-(43 rows)
 
 --should reorder only for mat_m1.
 :EXPLAIN
 select * from mat_m1, regview where mat_m1.timec > '2018-10-01' and mat_m1.timec = regview.timec order by mat_m1.timec desc;
-                                                                                                                                                               QUERY PLAN                                                                                                                                                               
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
-   Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
+   Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), (min(conditions.location)), (sum(conditions.temperature)), (sum(conditions.humidity))
    Sort Key: _hyper_2_4_chunk.timec DESC
    ->  Hash Join
-         Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
-         Hash Cond: ((time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)) = _hyper_2_4_chunk.timec)
+         Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), (min(conditions.location)), (sum(conditions.temperature)), (sum(conditions.humidity))
+         Hash Cond: ((time_bucket('@ 1 day'::interval, conditions.timec)) = _hyper_2_4_chunk.timec)
          ->  Finalize GroupAggregate
-               Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), min(_hyper_1_1_chunk.location), sum(_hyper_1_1_chunk.temperature), sum(_hyper_1_1_chunk.humidity)
-               Group Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec))
                ->  Sort
-                     Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (PARTIAL min(_hyper_1_1_chunk.location)), (PARTIAL sum(_hyper_1_1_chunk.temperature)), (PARTIAL sum(_hyper_1_1_chunk.humidity))
-                     Sort Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), (PARTIAL min(conditions.location)), (PARTIAL sum(conditions.temperature)), (PARTIAL sum(conditions.humidity))
+                     Sort Key: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec))
                      ->  Append
                            ->  Partial GroupAggregate
                                  Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), PARTIAL min(_hyper_1_1_chunk.location), PARTIAL sum(_hyper_1_1_chunk.temperature), PARTIAL sum(_hyper_1_1_chunk.humidity)
@@ -508,7 +480,6 @@ select * from mat_m1, regview where mat_m1.timec > '2018-10-01' and mat_m1.timec
                                              Output: _hyper_1_2_chunk_1.location, _hyper_1_2_chunk_1.timec, _hyper_1_2_chunk_1.temperature, _hyper_1_2_chunk_1.humidity
                                              Index Cond: ((_hyper_1_2_chunk_1.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk_1.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
                                              Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
-(47 rows)
 
 select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01' and l.locname = mat_m1.location order by timec desc;
  locid | location |            timec             | minl | sumt | sumh 
@@ -516,7 +487,6 @@ select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01'
      2 | NYC      | Fri Nov 02 17:00:00 2018 PDT | NYC  |      |     
      2 | NYC      | Thu Nov 01 17:00:00 2018 PDT | NYC  |   30 |   25
      2 | NYC      | Wed Oct 31 17:00:00 2018 PDT | NYC  |  325 |  200
-(3 rows)
 
 \set ECHO none
 ---- Run the same queries with hash agg enabled now
@@ -533,11 +503,10 @@ set timescaledb.enable_cagg_reorder_groupby = false;
 set enable_hashagg = false;
 :EXPLAIN
 select * from mat_m1 order by timec desc, location;
-                                                                                                   QUERY PLAN                                                                                                   
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
-   Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-   Sort Key: _hyper_2_3_chunk.timec DESC, _hyper_2_3_chunk.location
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.timec DESC, _materialized_hypertable_2.location
    ->  Append
          ->  Append
                ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
@@ -557,7 +526,6 @@ select * from mat_m1 order by timec desc, location;
                            ->  Index Scan using _hyper_1_2_chunk_conditions_timec_idx on _timescaledb_internal._hyper_1_2_chunk
                                  Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
                                  Index Cond: (_hyper_1_2_chunk.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
-(22 rows)
 
 -----------------------------------------------------------------------
 -- Test the cagg_watermark function. The watermark gives the point
@@ -599,7 +567,6 @@ LIMIT 10;
  SFO      | Mon Jan 01 16:00:00 2018 PST |   65 |   45
  SFO      | Sun Dec 31 16:00:00 2017 PST |   55 |   45
  por      | Mon Jan 01 16:00:00 2018 PST |  100 |  100
-(9 rows)
 
 -- Query that joins two caggs. This should force the watermark cache
 -- to reset when the materialized hypertable ID changes. A hash join
@@ -625,14 +592,12 @@ LIMIT 10;
  SFO      | Mon Jan 01 16:00:00 2018 PST |   65 |   45 |     45 |    45 |      65 |      65
  SFO      | Sun Dec 31 16:00:00 2017 PST |   55 |   45 |     45 |    45 |      55 |      55
  por      | Mon Jan 01 16:00:00 2018 PST |  100 |  100 |    100 |   100 |     100 |     100
-(9 rows)
 
 -- Show the current watermark
 SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_id));
          to_timestamp         
 ------------------------------
  Sat Nov 03 17:00:00 2018 PDT
-(1 row)
 
 -- The watermark should, in this case, be the same as the invalidation
 -- threshold
@@ -642,7 +607,6 @@ WHERE hypertable_id = :raw_id;
          to_timestamp         
 ------------------------------
  Sat Nov 03 17:00:00 2018 PDT
-(1 row)
 
 -- The watermark is the end of materialization (end of last bucket)
 -- while the MAX is the start of the last bucket
@@ -650,7 +614,6 @@ SELECT max(timec) FROM :mat_table;
              max              
 ------------------------------
  Fri Nov 02 17:00:00 2018 PDT
-(1 row)
 
 -- Drop the most recent chunk
 SELECT chunk_name, range_start, range_end
@@ -660,13 +623,11 @@ WHERE hypertable_name = :'mat_name';
 ------------------+------------------------------+------------------------------
  _hyper_2_3_chunk | Wed Nov 29 16:00:00 2017 PST | Wed Feb 07 16:00:00 2018 PST
  _hyper_2_4_chunk | Wed Sep 05 17:00:00 2018 PDT | Wed Nov 14 16:00:00 2018 PST
-(2 rows)
 
 SELECT drop_chunks('mat_m1', newer_than=>'2018-01-01'::timestamptz);
               drop_chunks               
 ----------------------------------------
  _timescaledb_internal._hyper_2_4_chunk
-(1 row)
 
 SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
@@ -674,7 +635,6 @@ WHERE hypertable_name = :'mat_name';
     chunk_name    |         range_start          |          range_end           
 ------------------+------------------------------+------------------------------
  _hyper_2_3_chunk | Wed Nov 29 16:00:00 2017 PST | Wed Feb 07 16:00:00 2018 PST
-(1 row)
 
 -- The watermark should be updated to reflect the dropped data (i.e.,
 -- the cache should be reset)
@@ -682,7 +642,6 @@ SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark
          to_timestamp         
 ------------------------------
  Tue Jan 02 16:00:00 2018 PST
-(1 row)
 
 -- Since we removed the last chunk, the invalidation threshold doesn't
 -- move back, while the watermark does.
@@ -692,14 +651,12 @@ WHERE hypertable_id = :raw_id;
          to_timestamp         
 ------------------------------
  Sat Nov 03 17:00:00 2018 PDT
-(1 row)
 
 -- Compare the new watermark to the MAX time in the table
 SELECT max(timec) FROM :mat_table;
              max              
 ------------------------------
  Mon Jan 01 16:00:00 2018 PST
-(1 row)
 
 -- Try a subtransaction
 SAVEPOINT clear_cagg;
@@ -720,7 +677,6 @@ LIMIT 10;
  SFO      | Mon Jan 01 16:00:00 2018 PST |   65 |   45 |     45 |    45 |      65 |      65
  SFO      | Sun Dec 31 16:00:00 2017 PST |   55 |   45 |     45 |    45 |      55 |      55
  por      | Mon Jan 01 16:00:00 2018 PST |  100 |  100 |    100 |   100 |     100 |     100
-(9 rows)
 
 ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.materialized_only=true);
 SELECT m1.location, m1.timec, sumt, sumh, firsth, lasth, maxtemp, mintemp
@@ -741,7 +697,6 @@ LIMIT 10;
           |                              |      |      |     45 |    30 |      65 |      45
           |                              |      |      |     45 |    45 |      65 |      55
           |                              |      |      |        |       |         |        
-(9 rows)
 
 ROLLBACK;
 -----
@@ -755,7 +710,6 @@ SELECT create_hypertable('temperature', 'time');
     create_hypertable     
 --------------------------
  (4,public,temperature,t)
-(1 row)
 
 INSERT INTO temperature VALUES ('2000-01-01 01:00:00'::timestamptz, 5);
 CREATE TABLE temperature_wo_tz (
@@ -767,7 +721,6 @@ psql:include/cagg_query_common.sql:316: WARNING:  column type "timestamp without
        create_hypertable        
 --------------------------------
  (5,public,temperature_wo_tz,t)
-(1 row)
 
 INSERT INTO temperature_wo_tz VALUES ('2000-01-01 01:00:00'::timestamp, 5);
 CREATE TABLE temperature_date (
@@ -778,7 +731,6 @@ SELECT create_hypertable('temperature_date', 'time');
        create_hypertable       
 -------------------------------
  (6,public,temperature_date,t)
-(1 row)
 
 INSERT INTO temperature_date VALUES ('2000-01-01 01:00:00'::timestamp, 5);
 -- Integer based tables
@@ -795,25 +747,19 @@ CREATE TABLE table_bigint (
   data bigint
 );
 SELECT create_hypertable('table_smallint', 'time', chunk_time_interval => 10);
-psql:include/cagg_query_common.sql:345: NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (7,public,table_smallint,t)
-(1 row)
 
 SELECT create_hypertable('table_int', 'time', chunk_time_interval => 10);
-psql:include/cagg_query_common.sql:346: NOTICE:  adding not-null constraint to column "time"
    create_hypertable    
 ------------------------
  (8,public,table_int,t)
-(1 row)
 
 SELECT create_hypertable('table_bigint', 'time', chunk_time_interval => 10);
-psql:include/cagg_query_common.sql:347: NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (9,public,table_bigint,t)
-(1 row)
 
 CREATE OR REPLACE FUNCTION integer_now_smallint() returns smallint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM table_smallint $$;
 CREATE OR REPLACE FUNCTION integer_now_int() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM table_int $$;
@@ -822,19 +768,16 @@ SELECT set_integer_now_func('table_smallint', 'integer_now_smallint');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 SELECT set_integer_now_func('table_int', 'integer_now_int');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 SELECT set_integer_now_func('table_bigint', 'integer_now_bigint');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 INSERT INTO table_smallint VALUES(1,2);
 INSERT INTO table_int VALUES(1,2);
@@ -855,7 +798,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours';
  user_view_schema | user_view_name |                      bucket_func                      | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+----------------+-------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_4_hours   | public.time_bucket(interval,timestamp with time zone) | @ 4 hours    |               |               |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours;
 psql:include/cagg_query_common.sql:374: NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_14_chunk
@@ -869,7 +811,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_offset';
  user_view_schema |   user_view_name    |                          bucket_func                           | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+---------------------+----------------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_offset | public.time_bucket(interval,timestamp with time zone,interval) | @ 4 hours    |               | @ 30 mins     |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_offset;
 psql:include/cagg_query_common.sql:382: NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_15_chunk
@@ -883,7 +824,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_offset2';
  user_view_schema |    user_view_name    |                          bucket_func                           | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+----------------------+----------------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_offset2 | public.time_bucket(interval,timestamp with time zone,interval) | @ 4 hours    |               | @ 30 mins     |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_offset2;
 psql:include/cagg_query_common.sql:390: NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_16_chunk
@@ -898,7 +838,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_offset_ts';
  user_view_schema |     user_view_name     |                                               bucket_func                                               | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+------------------------+---------------------------------------------------------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_offset_ts | public.time_bucket(interval,timestamp with time zone,pg_catalog.text,timestamp with time zone,interval) | @ 4 hours    |               | @ 30 mins     | UTC             | f
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_offset_ts;
 psql:include/cagg_query_common.sql:399: NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_17_chunk
@@ -912,7 +851,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin';
  user_view_schema |   user_view_name    |                                  bucket_func                                   | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+---------------------+--------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_origin | public.time_bucket(interval,timestamp with time zone,timestamp with time zone) | @ 4 hours    | Sat Jan 01 01:00:00 2000 PST |               |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_origin;
 psql:include/cagg_query_common.sql:407: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_18_chunk
@@ -927,7 +865,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin2';
  user_view_schema |    user_view_name    |                                  bucket_func                                   | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+----------------------+--------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_origin2 | public.time_bucket(interval,timestamp with time zone,timestamp with time zone) | @ 4 hours    | Sat Jan 01 01:00:00 2000 PST |               |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_origin2;
 psql:include/cagg_query_common.sql:416: NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_19_chunk
@@ -942,7 +879,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin_ts';
  user_view_schema |     user_view_name     |                                               bucket_func                                               | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+------------------------+---------------------------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_origin_ts | public.time_bucket(interval,timestamp with time zone,pg_catalog.text,timestamp with time zone,interval) | @ 4 hours    | Sat Jan 01 01:00:00 2000 PST |               | UTC             | f
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_origin_ts;
 psql:include/cagg_query_common.sql:425: NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_20_chunk
@@ -957,7 +893,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin_ts2';
  user_view_schema |     user_view_name      |                                               bucket_func                                               | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+-------------------------+---------------------------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_origin_ts2 | public.time_bucket(interval,timestamp with time zone,pg_catalog.text,timestamp with time zone,interval) | @ 4 hours    | Sat Jan 01 01:00:00 2000 PST |               | UTC             | f
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_origin_ts2;
 psql:include/cagg_query_common.sql:434: NOTICE:  drop cascades to table _timescaledb_internal._hyper_17_21_chunk
@@ -972,7 +907,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_wo_tz';
  user_view_schema |   user_view_name   |                       bucket_func                        | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+--------------------+----------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_wo_tz | public.time_bucket(interval,timestamp without time zone) | @ 4 hours    |               |               |                 | t
-(1 row)
 
 CREATE MATERIALIZED VIEW cagg_4_hours_origin_ts_wo_tz
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
@@ -984,7 +918,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin_ts_wo_tz';
  user_view_schema |        user_view_name        |                                     bucket_func                                      | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+------------------------------+--------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_origin_ts_wo_tz | public.time_bucket(interval,timestamp without time zone,timestamp without time zone) | @ 4 hours    | Fri Dec 31 17:00:00 1999 PST |               |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_origin_ts_wo_tz;
 psql:include/cagg_query_common.sql:450: NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_23_chunk
@@ -999,7 +932,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_origin_ts_wo_tz2';
  user_view_schema |        user_view_name         |                                     bucket_func                                      | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+-------------------------------+--------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_origin_ts_wo_tz2 | public.time_bucket(interval,timestamp without time zone,timestamp without time zone) | @ 4 hours    | Fri Dec 31 17:00:00 1999 PST |               |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_origin_ts_wo_tz2;
 psql:include/cagg_query_common.sql:459: NOTICE:  drop cascades to table _timescaledb_internal._hyper_20_24_chunk
@@ -1013,7 +945,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_offset_wo_tz';
  user_view_schema |      user_view_name       |                            bucket_func                            | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+---------------------------+-------------------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_offset_wo_tz | public.time_bucket(interval,timestamp without time zone,interval) | @ 4 hours    |               | @ 30 mins     |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_offset_wo_tz;
 psql:include/cagg_query_common.sql:467: NOTICE:  drop cascades to table _timescaledb_internal._hyper_21_25_chunk
@@ -1030,7 +961,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date';
  user_view_schema |  user_view_name   |                 bucket_func                  | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+-------------------+----------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_date | public.time_bucket(interval,pg_catalog.date) | @ 4 days     |               |               |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_date;
 psql:include/cagg_query_common.sql:477: NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_26_chunk
@@ -1044,7 +974,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_origin';
  user_view_schema |      user_view_name      |                         bucket_func                          | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+--------------------------+--------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_date_origin | public.time_bucket(interval,pg_catalog.date,pg_catalog.date) | @ 4 days     | Sat Jan 01 00:00:00 2000 PST |               |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_date_origin;
 psql:include/cagg_query_common.sql:485: NOTICE:  drop cascades to table _timescaledb_internal._hyper_23_27_chunk
@@ -1058,7 +987,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_origin2';
  user_view_schema |      user_view_name       |                         bucket_func                          | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+---------------------------+--------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_date_origin2 | public.time_bucket(interval,pg_catalog.date,pg_catalog.date) | @ 4 days     | Sat Jan 01 00:00:00 2000 PST |               |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_date_origin2;
 psql:include/cagg_query_common.sql:493: NOTICE:  drop cascades to table _timescaledb_internal._hyper_24_28_chunk
@@ -1072,7 +1000,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_offset';
  user_view_schema |      user_view_name      |                      bucket_func                      | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+--------------------------+-------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_4_hours_date_offset | public.time_bucket(interval,pg_catalog.date,interval) | @ 4 days     |               | @ 30 mins     |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_4_hours_date_offset;
 psql:include/cagg_query_common.sql:501: NOTICE:  drop cascades to table _timescaledb_internal._hyper_25_29_chunk
@@ -1087,7 +1014,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_smallint';
  user_view_schema | user_view_name |              bucket_func              | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+----------------+---------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_smallint  | public.time_bucket(smallint,smallint) | 2            |               |               |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_smallint;
 psql:include/cagg_query_common.sql:510: NOTICE:  drop cascades to table _timescaledb_internal._hyper_26_30_chunk
@@ -1101,7 +1027,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_smallint_offset';
  user_view_schema |    user_view_name    |                  bucket_func                   | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+----------------------+------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_smallint_offset | public.time_bucket(smallint,smallint,smallint) | 2            |               | 1             |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_smallint_offset;
 psql:include/cagg_query_common.sql:518: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_31_chunk
@@ -1115,7 +1040,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_int';
  user_view_schema | user_view_name |             bucket_func             | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+----------------+-------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_int       | public.time_bucket(integer,integer) | 2            |               |               |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_int;
 psql:include/cagg_query_common.sql:526: NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_32_chunk
@@ -1129,7 +1053,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_int_offset';
  user_view_schema | user_view_name  |                 bucket_func                 | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+-----------------+---------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_int_offset | public.time_bucket(integer,integer,integer) | 2            |               | 1             |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_int_offset;
 psql:include/cagg_query_common.sql:534: NOTICE:  drop cascades to table _timescaledb_internal._hyper_29_33_chunk
@@ -1142,7 +1065,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_bigint';
  user_view_schema | user_view_name |            bucket_func            | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+----------------+-----------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_bigint    | public.time_bucket(bigint,bigint) | 2            |               |               |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_bigint;
 CREATE MATERIALIZED VIEW cagg_bigint_offset
@@ -1154,7 +1076,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_bigint_offset';
  user_view_schema |   user_view_name   |               bucket_func                | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+--------------------+------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_bigint_offset | public.time_bucket(bigint,bigint,bigint) | 2            |               | 1             |                 | t
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_bigint_offset;
 -- Without named parameter
@@ -1167,10 +1088,9 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_bigint_offset2';
  user_view_schema |   user_view_name    |               bucket_func                | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+---------------------+------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_bigint_offset2 | public.time_bucket(bigint,bigint,bigint) | 2            |               | 1             |                 | t
-(1 row)
 
 -- mess with the bucket_func signature to make sure it will raise an exception
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 \set ON_ERROR_STOP 0
 BEGIN;
 UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_func = 'func_does_not_exist()';
@@ -1206,7 +1126,6 @@ SHOW timezone;
  TimeZone 
 ----------
  PST8PDT
-(1 row)
 
 -- Populate it
 INSERT INTO temperature
@@ -1253,7 +1172,6 @@ SELECT time_bucket('4 hour', time), max(value) FROM temperature GROUP BY 1 ORDER
  Wed Jan 01 12:00:00 2020 PST |   6
  Wed Jan 01 16:00:00 2020 PST |   6
  Wed Jan 01 20:00:00 2020 PST |   6
-(12 rows)
 
 SELECT * FROM cagg_4_hours;
          time_bucket          | max 
@@ -1270,7 +1188,6 @@ SELECT * FROM cagg_4_hours;
  Wed Jan 01 12:00:00 2020 PST |   6
  Wed Jan 01 16:00:00 2020 PST |   6
  Wed Jan 01 20:00:00 2020 PST |   6
-(12 rows)
 
 ALTER MATERIALIZED VIEW cagg_4_hours SET (timescaledb.materialized_only=true);
 SELECT * FROM cagg_4_hours;
@@ -1288,7 +1205,6 @@ SELECT * FROM cagg_4_hours;
  Wed Jan 01 12:00:00 2020 PST |   6
  Wed Jan 01 16:00:00 2020 PST |   6
  Wed Jan 01 20:00:00 2020 PST |   6
-(12 rows)
 
 SELECT time_bucket('4 hour', time, '30m'::interval), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
          time_bucket          | max 
@@ -1306,7 +1222,6 @@ SELECT time_bucket('4 hour', time, '30m'::interval), max(value) FROM temperature
  Wed Jan 01 12:30:00 2020 PST |   6
  Wed Jan 01 16:30:00 2020 PST |   6
  Wed Jan 01 20:30:00 2020 PST |   6
-(13 rows)
 
 SELECT * FROM cagg_4_hours_offset;
          time_bucket          | max 
@@ -1324,7 +1239,6 @@ SELECT * FROM cagg_4_hours_offset;
  Wed Jan 01 12:30:00 2020 PST |   6
  Wed Jan 01 16:30:00 2020 PST |   6
  Wed Jan 01 20:30:00 2020 PST |   6
-(13 rows)
 
 ALTER MATERIALIZED VIEW cagg_4_hours_offset SET (timescaledb.materialized_only=true);
 SELECT * FROM cagg_4_hours_offset;
@@ -1343,7 +1257,6 @@ SELECT * FROM cagg_4_hours_offset;
  Wed Jan 01 12:30:00 2020 PST |   6
  Wed Jan 01 16:30:00 2020 PST |   6
  Wed Jan 01 20:30:00 2020 PST |   6
-(13 rows)
 
 SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00 PST'::timestamptz), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
          time_bucket          | max 
@@ -1361,7 +1274,6 @@ SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00 PST'::timestamptz), max(
  Wed Jan 01 13:00:00 2020 PST |   6
  Wed Jan 01 17:00:00 2020 PST |   6
  Wed Jan 01 21:00:00 2020 PST |   6
-(13 rows)
 
 SELECT * FROM cagg_4_hours_origin;
          time_bucket          | max 
@@ -1379,7 +1291,6 @@ SELECT * FROM cagg_4_hours_origin;
  Wed Jan 01 13:00:00 2020 PST |   6
  Wed Jan 01 17:00:00 2020 PST |   6
  Wed Jan 01 21:00:00 2020 PST |   6
-(13 rows)
 
 ALTER MATERIALIZED VIEW cagg_4_hours_origin SET (timescaledb.materialized_only=true);
 SELECT * FROM cagg_4_hours_origin;
@@ -1398,7 +1309,6 @@ SELECT * FROM cagg_4_hours_origin;
  Wed Jan 01 13:00:00 2020 PST |   6
  Wed Jan 01 17:00:00 2020 PST |   6
  Wed Jan 01 21:00:00 2020 PST |   6
-(13 rows)
 
 -- Update the last bucket and re-materialize
 INSERT INTO temperature values('2020-01-01 23:55:00 PST', 10);
@@ -1420,7 +1330,6 @@ SELECT * FROM cagg_4_hours;
  Wed Jan 01 12:00:00 2020 PST |   6
  Wed Jan 01 16:00:00 2020 PST |   6
  Wed Jan 01 20:00:00 2020 PST |  10
-(12 rows)
 
 SELECT * FROM cagg_4_hours_offset;
          time_bucket          | max 
@@ -1438,7 +1347,6 @@ SELECT * FROM cagg_4_hours_offset;
  Wed Jan 01 12:30:00 2020 PST |   6
  Wed Jan 01 16:30:00 2020 PST |   6
  Wed Jan 01 20:30:00 2020 PST |  10
-(13 rows)
 
 SELECT * FROM cagg_4_hours_origin;
          time_bucket          | max 
@@ -1456,7 +1364,6 @@ SELECT * FROM cagg_4_hours_origin;
  Wed Jan 01 13:00:00 2020 PST |   6
  Wed Jan 01 17:00:00 2020 PST |   6
  Wed Jan 01 21:00:00 2020 PST |  10
-(13 rows)
 
 -- Check the real-time functionality
 ALTER MATERIALIZED VIEW cagg_4_hours SET (timescaledb.materialized_only=false);
@@ -1473,7 +1380,6 @@ ORDER BY mat_hypertable_id, watermark;
  cagg_4_hours        | 1577952000000000 | Thu Jan 02 00:00:00 2020 PST
  cagg_4_hours_offset | 1577953800000000 | Thu Jan 02 00:30:00 2020 PST
  cagg_4_hours_origin | 1577955600000000 | Thu Jan 02 01:00:00 2020 PST
-(3 rows)
 
 -- Insert new data
 INSERT INTO temperature values('2020-01-02 00:10:00 PST', 2222);
@@ -1498,7 +1404,6 @@ SELECT * FROM cagg_4_hours;
  Thu Jan 02 00:00:00 2020 PST | 2222
  Thu Jan 02 04:00:00 2020 PST | 5555
  Thu Jan 02 08:00:00 2020 PST | 8888
-(15 rows)
 
 -- Watermark is at Thu Jan 02 00:30:00 2020 PST - only two inserted tuples should be seen
 SELECT * FROM cagg_4_hours_offset;
@@ -1519,7 +1424,6 @@ SELECT * FROM cagg_4_hours_offset;
  Wed Jan 01 20:30:00 2020 PST |   10
  Thu Jan 02 04:30:00 2020 PST | 5555
  Thu Jan 02 08:30:00 2020 PST | 8888
-(15 rows)
 
 -- Watermark is at Thu Jan 02 01:00:00 2020 PST - only two inserted tuples should be seen
 SELECT * FROM cagg_4_hours_origin;
@@ -1540,7 +1444,6 @@ SELECT * FROM cagg_4_hours_origin;
  Wed Jan 01 21:00:00 2020 PST |   10
  Thu Jan 02 05:00:00 2020 PST | 5555
  Thu Jan 02 09:00:00 2020 PST | 8888
-(15 rows)
 
 -- Update materialized data
 SET client_min_messages TO DEBUG1;
@@ -1581,7 +1484,6 @@ SELECT * FROM cagg_4_hours;
  Thu Jan 02 00:00:00 2020 PST | 2222
  Thu Jan 02 04:00:00 2020 PST | 5555
  Thu Jan 02 08:00:00 2020 PST | 8888
-(15 rows)
 
 ALTER MATERIALIZED VIEW cagg_4_hours SET (timescaledb.materialized_only=true);
 SELECT * FROM cagg_4_hours;
@@ -1602,7 +1504,6 @@ SELECT * FROM cagg_4_hours;
  Thu Jan 02 00:00:00 2020 PST | 2222
  Thu Jan 02 04:00:00 2020 PST | 5555
  Thu Jan 02 08:00:00 2020 PST | 8888
-(15 rows)
 
 SELECT time_bucket('4 hour', time), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
          time_bucket          | max  
@@ -1622,7 +1523,6 @@ SELECT time_bucket('4 hour', time), max(value) FROM temperature GROUP BY 1 ORDER
  Thu Jan 02 00:00:00 2020 PST | 2222
  Thu Jan 02 04:00:00 2020 PST | 5555
  Thu Jan 02 08:00:00 2020 PST | 8888
-(15 rows)
 
 SELECT * FROM cagg_4_hours_offset;
          time_bucket          | max  
@@ -1642,7 +1542,6 @@ SELECT * FROM cagg_4_hours_offset;
  Wed Jan 01 20:30:00 2020 PST | 2222
  Thu Jan 02 04:30:00 2020 PST | 5555
  Thu Jan 02 08:30:00 2020 PST | 8888
-(15 rows)
 
 ALTER MATERIALIZED VIEW cagg_4_hours_offset SET (timescaledb.materialized_only=true);
 SELECT * FROM cagg_4_hours_offset;
@@ -1663,7 +1562,6 @@ SELECT * FROM cagg_4_hours_offset;
  Wed Jan 01 20:30:00 2020 PST | 2222
  Thu Jan 02 04:30:00 2020 PST | 5555
  Thu Jan 02 08:30:00 2020 PST | 8888
-(15 rows)
 
 SELECT time_bucket('4 hour', time, '30m'::interval), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
          time_bucket          | max  
@@ -1683,7 +1581,6 @@ SELECT time_bucket('4 hour', time, '30m'::interval), max(value) FROM temperature
  Wed Jan 01 20:30:00 2020 PST | 2222
  Thu Jan 02 04:30:00 2020 PST | 5555
  Thu Jan 02 08:30:00 2020 PST | 8888
-(15 rows)
 
 SELECT * FROM cagg_4_hours_origin;
          time_bucket          | max  
@@ -1703,7 +1600,6 @@ SELECT * FROM cagg_4_hours_origin;
  Wed Jan 01 21:00:00 2020 PST | 2222
  Thu Jan 02 05:00:00 2020 PST | 5555
  Thu Jan 02 09:00:00 2020 PST | 8888
-(15 rows)
 
 ALTER MATERIALIZED VIEW cagg_4_hours_origin SET (timescaledb.materialized_only=true);
 SELECT * FROM cagg_4_hours_origin;
@@ -1724,7 +1620,6 @@ SELECT * FROM cagg_4_hours_origin;
  Wed Jan 01 21:00:00 2020 PST | 2222
  Thu Jan 02 05:00:00 2020 PST | 5555
  Thu Jan 02 09:00:00 2020 PST | 8888
-(15 rows)
 
 SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00 PST'::timestamptz), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
          time_bucket          | max  
@@ -1744,7 +1639,6 @@ SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00 PST'::timestamptz), max(
  Wed Jan 01 21:00:00 2020 PST | 2222
  Thu Jan 02 05:00:00 2020 PST | 5555
  Thu Jan 02 09:00:00 2020 PST | 8888
-(15 rows)
 
 -- Test invalidations
 TRUNCATE temperature;
@@ -1808,7 +1702,6 @@ SELECT * FROM cagg_4_hours;
  Wed Jan 01 12:00:00 2020 PST |    6
  Wed Jan 01 16:00:00 2020 PST | 5555
  Wed Jan 01 20:00:00 2020 PST | 8888
-(12 rows)
 
 ALTER MATERIALIZED VIEW cagg_4_hours SET (timescaledb.materialized_only=false);
 SELECT * FROM cagg_4_hours;
@@ -1826,7 +1719,6 @@ SELECT * FROM cagg_4_hours;
  Wed Jan 01 12:00:00 2020 PST |    6
  Wed Jan 01 16:00:00 2020 PST | 5555
  Wed Jan 01 20:00:00 2020 PST | 8888
-(12 rows)
 
 SELECT time_bucket('4 hour', time), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
          time_bucket          | max  
@@ -1843,7 +1735,6 @@ SELECT time_bucket('4 hour', time), max(value) FROM temperature GROUP BY 1 ORDER
  Wed Jan 01 12:00:00 2020 PST |    6
  Wed Jan 01 16:00:00 2020 PST | 5555
  Wed Jan 01 20:00:00 2020 PST | 8888
-(12 rows)
 
 ALTER MATERIALIZED VIEW cagg_4_hours_offset SET (timescaledb.materialized_only=true);
 SELECT * FROM cagg_4_hours_offset;
@@ -1862,7 +1753,6 @@ SELECT * FROM cagg_4_hours_offset;
  Wed Jan 01 12:30:00 2020 PST | 2222
  Wed Jan 01 16:30:00 2020 PST | 8888
  Wed Jan 01 20:30:00 2020 PST |    6
-(13 rows)
 
 ALTER MATERIALIZED VIEW cagg_4_hours_offset SET (timescaledb.materialized_only=false);
 SELECT * FROM cagg_4_hours_offset;
@@ -1881,7 +1771,6 @@ SELECT * FROM cagg_4_hours_offset;
  Wed Jan 01 12:30:00 2020 PST | 2222
  Wed Jan 01 16:30:00 2020 PST | 8888
  Wed Jan 01 20:30:00 2020 PST |    6
-(13 rows)
 
 SELECT time_bucket('4 hour', time, '30m'::interval), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
          time_bucket          | max  
@@ -1899,7 +1788,6 @@ SELECT time_bucket('4 hour', time, '30m'::interval), max(value) FROM temperature
  Wed Jan 01 12:30:00 2020 PST | 2222
  Wed Jan 01 16:30:00 2020 PST | 8888
  Wed Jan 01 20:30:00 2020 PST |    6
-(13 rows)
 
 ALTER MATERIALIZED VIEW cagg_4_hours_origin SET (timescaledb.materialized_only=true);
 SELECT * FROM cagg_4_hours_origin;
@@ -1918,7 +1806,6 @@ SELECT * FROM cagg_4_hours_origin;
  Wed Jan 01 13:00:00 2020 PST | 5555
  Wed Jan 01 17:00:00 2020 PST | 8888
  Wed Jan 01 21:00:00 2020 PST |    6
-(13 rows)
 
 ALTER MATERIALIZED VIEW cagg_4_hours_origin SET (timescaledb.materialized_only=false);
 SELECT * FROM cagg_4_hours_origin;
@@ -1937,7 +1824,6 @@ SELECT * FROM cagg_4_hours_origin;
  Wed Jan 01 13:00:00 2020 PST | 5555
  Wed Jan 01 17:00:00 2020 PST | 8888
  Wed Jan 01 21:00:00 2020 PST |    6
-(13 rows)
 
 SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00 PST'::timestamptz), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
          time_bucket          | max  
@@ -1955,7 +1841,6 @@ SELECT time_bucket('4 hour', time, '2000-01-01 01:00:00 PST'::timestamptz), max(
  Wed Jan 01 13:00:00 2020 PST | 5555
  Wed Jan 01 17:00:00 2020 PST | 8888
  Wed Jan 01 21:00:00 2020 PST |    6
-(13 rows)
 
 --- Test with variable width buckets (use February, since hourly origins are not supported with variable sized buckets)
 TRUNCATE temperature;
@@ -1980,7 +1865,6 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_
                  34 |      1577995200000000 |     9223372036854775807
                  35 |  -9223372036854775808 |     -210866803200000001
                  35 |      1577995200000000 |     9223372036854775807
-(10 rows)
 
 CREATE MATERIALIZED VIEW cagg_1_year
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
@@ -2005,7 +1889,6 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_
                  35 |  -9223372036854775808 |     9223372036854775807
                  35 |      1577995200000000 |     9223372036854775807
                  36 |      1609459200000000 |     9223372036854775807
-(14 rows)
 
 ---
 -- Tests with integer based hypertables
@@ -2041,7 +1924,6 @@ SELECT time_bucket('10', time), SUM(data) FROM table_int GROUP BY 1 ORDER BY 1;
           30 |  50
           40 |  50
           50 |   5
-(11 rows)
 
 SELECT * FROM cagg_int;
  time_bucket | value 
@@ -2057,7 +1939,6 @@ SELECT * FROM cagg_int;
           30 |    50
           40 |    50
           50 |     5
-(11 rows)
 
 SELECT time_bucket('10', time, "offset"=>5), SUM(data) FROM table_int GROUP BY 1 ORDER BY 1;
  time_bucket | sum 
@@ -2073,7 +1954,6 @@ SELECT time_bucket('10', time, "offset"=>5), SUM(data) FROM table_int GROUP BY 1
           25 |  50
           35 |  50
           45 |  30
-(11 rows)
 
 SELECT * FROM cagg_int_offset;
  time_bucket | value 
@@ -2089,7 +1969,6 @@ SELECT * FROM cagg_int_offset;
           25 |    50
           35 |    50
           45 |    30
-(11 rows)
 
 -- Update table
 INSERT INTO table_int VALUES(51, 100);
@@ -2110,7 +1989,6 @@ SELECT time_bucket('10', time), SUM(data) FROM table_int GROUP BY 1 ORDER BY 1;
           40 |  50
           50 | 105
          100 | 555
-(12 rows)
 
 SELECT * FROM cagg_int;
  time_bucket | value 
@@ -2127,7 +2005,6 @@ SELECT * FROM cagg_int;
           40 |    50
           50 |     5
          100 |   555
-(12 rows)
 
 CALL refresh_continuous_aggregate('cagg_int', NULL, NULL);
 SELECT * FROM cagg_int;
@@ -2145,7 +2022,6 @@ SELECT * FROM cagg_int;
           40 |    50
           50 |   105
          100 |   555
-(12 rows)
 
 SELECT time_bucket('10', time, "offset"=>5), SUM(data) FROM table_int GROUP BY 1 ORDER BY 1;
  time_bucket | sum 
@@ -2162,7 +2038,6 @@ SELECT time_bucket('10', time, "offset"=>5), SUM(data) FROM table_int GROUP BY 1
           35 |  50
           45 | 130
           95 | 555
-(12 rows)
 
 SELECT * FROM cagg_int_offset;  -- the value 100 is part of the already serialized bucket, so it should not be visible
  time_bucket | value 
@@ -2179,7 +2054,6 @@ SELECT * FROM cagg_int_offset;  -- the value 100 is part of the already serializ
           35 |    50
           45 |    30
           95 |   555
-(12 rows)
 
 CALL refresh_continuous_aggregate('cagg_int_offset', NULL, NULL);
 SELECT * FROM cagg_int_offset;
@@ -2197,7 +2071,6 @@ SELECT * FROM cagg_int_offset;
           35 |    50
           45 |   130
           95 |   555
-(12 rows)
 
 -- Ensure everything was materialized
 ALTER MATERIALIZED VIEW cagg_int SET (timescaledb.materialized_only=true);
@@ -2217,7 +2090,6 @@ SELECT * FROM cagg_int;
           40 |    50
           50 |   105
          100 |   555
-(12 rows)
 
 SELECT * FROM cagg_int_offset;
  time_bucket | value 
@@ -2234,7 +2106,6 @@ SELECT * FROM cagg_int_offset;
           35 |    50
           45 |   130
           95 |   555
-(12 rows)
 
 -- Check that the refresh is properly aligned
 INSERT INTO table_int VALUES(114, 0);
@@ -2263,7 +2134,6 @@ SELECT * FROM cagg_int_offset;
           45 |   130
           95 |   555
          105 |     0
-(13 rows)
 
 SELECT time_bucket('10', time, "offset"=>5), SUM(data) FROM table_int GROUP BY 1 ORDER BY 1;
  time_bucket | sum 
@@ -2281,7 +2151,6 @@ SELECT time_bucket('10', time, "offset"=>5), SUM(data) FROM table_int GROUP BY 1
           45 | 130
           95 | 555
          105 |   0
-(13 rows)
 
 -- Variable sized buckets with origin
 CREATE MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin
@@ -2294,7 +2163,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_hour_variable_bucket_fix
  user_view_schema |              user_view_name              |                                               bucket_func                                               | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+------------------------------------------+---------------------------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
  public           | cagg_1_hour_variable_bucket_fixed_origin | public.time_bucket(interval,timestamp with time zone,pg_catalog.text,timestamp with time zone,interval) | @ 1 year     | Fri Dec 31 17:05:00 1999 PST |               | UTC             | f
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin;
 psql:include/cagg_query_common.sql:837: NOTICE:  drop cascades to 2 other objects
@@ -2309,7 +2177,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_hour_variable_bucket_fix
  user_view_schema |              user_view_name               |                                               bucket_func                                               | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+-------------------------------------------+---------------------------------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
  public           | cagg_1_hour_variable_bucket_fixed_origin2 | public.time_bucket(interval,timestamp with time zone,pg_catalog.text,timestamp with time zone,interval) | @ 1 hour     | Fri Dec 31 17:05:00 1999 PST |               | UTC             | f
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin2;
 psql:include/cagg_query_common.sql:846: NOTICE:  drop cascades to 2 other objects
@@ -2324,7 +2191,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_hour_variable_bucket_fix
  user_view_schema |              user_view_name               |                          bucket_func                           | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+-------------------------------------------+----------------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
  public           | cagg_1_hour_variable_bucket_fixed_origin3 | public.time_bucket(interval,timestamp with time zone,interval) | @ 1 year     |               | @ 5 mins      |                 | f
-(1 row)
 
 DROP MATERIALIZED VIEW cagg_1_hour_variable_bucket_fixed_origin3;
 psql:include/cagg_query_common.sql:855: NOTICE:  drop cascades to 2 other objects
@@ -2418,7 +2284,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_hour_offset';
  user_view_schema |   user_view_name   |                                  bucket_func                                   | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+--------------------+--------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
  public           | cagg_1_hour_offset | public.time_bucket(interval,timestamp with time zone,timestamp with time zone) | @ 1 hour     | Sun Jan 02 01:00:00 2000 PST |               |                 | t
-(1 row)
 
 CREATE MATERIALIZED VIEW cagg_1_week_offset
   WITH (timescaledb.continuous) AS
@@ -2430,7 +2295,6 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_1_week_offset';
  user_view_schema |   user_view_name   |                                  bucket_func                                   | bucket_width |        bucket_origin         | bucket_offset | bucket_timezone | bucket_fixed_width 
 ------------------+--------------------+--------------------------------------------------------------------------------+--------------+------------------------------+---------------+-----------------+--------------------
  public           | cagg_1_week_offset | public.time_bucket(interval,timestamp with time zone,timestamp with time zone) | @ 7 days     | Sun Jan 02 01:00:00 2000 PST |               |                 | t
-(1 row)
 
 -- Compare output
 SELECT * FROM cagg_1_week_offset;
@@ -2438,14 +2302,12 @@ SELECT * FROM cagg_1_week_offset;
 ------------------------------+-----------
  Sun Jan 30 01:00:00 2000 PST |         5
  Sun Jan 26 01:00:00 2020 PST |         6
-(2 rows)
 
 SELECT time_bucket('1 week', time, origin=>'2000-01-02 01:00:00 PST'::timestamptz), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
          time_bucket          | max 
 ------------------------------+-----
  Sun Jan 30 01:00:00 2000 PST |   5
  Sun Jan 26 01:00:00 2020 PST |   6
-(2 rows)
 
 INSERT INTO temperature values('2030-01-01 05:05:00 PST', 22222);
 INSERT INTO temperature values('2030-01-03 05:05:00 PST', 55555);
@@ -2458,7 +2320,6 @@ SELECT * FROM cagg_1_week_offset;
  Sun Jan 30 01:00:00 2000 PST |         5
  Sun Jan 26 01:00:00 2020 PST |         6
  Sun Dec 30 01:00:00 2029 PST |     55555
-(3 rows)
 
 SELECT time_bucket('1 week', time, origin=>'2000-01-02 01:00:00 PST'::timestamptz), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
          time_bucket          |  max  
@@ -2466,7 +2327,6 @@ SELECT time_bucket('1 week', time, origin=>'2000-01-02 01:00:00 PST'::timestampt
  Sun Jan 30 01:00:00 2000 PST |     5
  Sun Jan 26 01:00:00 2020 PST |     6
  Sun Dec 30 01:00:00 2029 PST | 55555
-(3 rows)
 
 -- Test refresh
 CALL refresh_continuous_aggregate('cagg_1_hour_offset', NULL, NULL);
@@ -2480,7 +2340,6 @@ SELECT * FROM cagg_1_week_offset;
  Sun Jan 30 01:00:00 2000 PST |         5
  Sun Jan 26 01:00:00 2020 PST |         6
  Sun Dec 30 01:00:00 2029 PST |     55555
-(3 rows)
 
 SELECT time_bucket('1 week', time, origin=>'2000-01-02 01:00:00 PST'::timestamptz), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
          time_bucket          |  max  
@@ -2488,7 +2347,6 @@ SELECT time_bucket('1 week', time, origin=>'2000-01-02 01:00:00 PST'::timestampt
  Sun Jan 30 01:00:00 2000 PST |     5
  Sun Jan 26 01:00:00 2020 PST |     6
  Sun Dec 30 01:00:00 2029 PST | 55555
-(3 rows)
 
 TRUNCATE temperature;
 SELECT * FROM cagg_1_week_offset;
@@ -2497,11 +2355,9 @@ SELECT * FROM cagg_1_week_offset;
  Sun Jan 30 01:00:00 2000 PST |         5
  Sun Jan 26 01:00:00 2020 PST |         6
  Sun Dec 30 01:00:00 2029 PST |     55555
-(3 rows)
 
 SELECT time_bucket('1 week', time, origin=>'2000-01-02 01:00:00 PST'::timestamptz), max(value) FROM temperature GROUP BY 1 ORDER BY 1;
  time_bucket | max 
 -------------+-----
-(0 rows)
 
 DROP VIEW caggs_info;

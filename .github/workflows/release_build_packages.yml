@@ -1,4 +1,4 @@
-name: "Build distribution packages"
+name: "Packaging: Build distributions"
 
 "on":
   release:
@@ -13,12 +13,16 @@ jobs:
       run: |
         echo "# 📦 Distribution Package Build Summary" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Release Version:** \`${{ github.event.release.tag_name }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "**Release URL:** [${{ github.event.release.name }}](${{ github.event.release.html_url }})" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** \`${{ github.event.release.tag_name }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**URL:** [${{ github.event.release.name }}](${{ github.event.release.html_url }})" >> $GITHUB_STEP_SUMMARY
         echo "**Triggered at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "## 🚀 Build Status" >> $GITHUB_STEP_SUMMARY
+        echo "| Package | Status | Workflow |" >> $GITHUB_STEP_SUMMARY
+        echo "| --- | --- | --- |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
+
+        echo "HAS_FAILURES=false" >> $GITHUB_ENV
 
     - name: Build Docker Image
       env:
@@ -26,68 +30,34 @@ jobs:
       run: |
         echo "🐳 Triggering Docker image build..." | tee -a build.log
         if gh workflow run docker-image.yml -R timescale/timescaledb-docker -f version=${{ github.event.release.tag_name }} -f tag_latest=true -f registry=prod; then
-          echo "| 🐳 Docker Image | ✅ Triggered | [timescaledb-docker](https://github.com/timescale/timescaledb-docker/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Docker build triggered successfully" | tee -a build.log
+          echo "| 🐳 Docker Image | ✅ Triggered | [timescaledb-docker](https://github.com/timescale/timescaledb-docker/actions/workflows/docker-image.yml) |" >> $GITHUB_STEP_SUMMARY
         else
-          echo "| 🐳 Docker Image | ❌ Failed | [timescaledb-docker](https://github.com/timescale/timescaledb-docker/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "❌ Docker build failed to trigger" | tee -a build.log
-          exit 1
+          echo "| 🐳 Docker Image | ❌ Failed | [timescaledb-docker](https://github.com/timescale/timescaledb-docker/actions/workflows/docker-image.yml) |" >> $GITHUB_STEP_SUMMARY
+          echo "HAS_FAILURES=true" >> $GITHUB_ENV
         fi
 
-    - name: Build Debian Packages
+    - name: Build APT Packages
       env:
         GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
       run: |
-        echo "🐧 Triggering Debian package build..." | tee -a build.log
-        if gh workflow run timescaledb-debian.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true; then
-          echo "| 🐧 Debian Packages | ✅ Triggered | [release-build-scripts](https://github.com/timescale/release-build-scripts/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Debian build triggered successfully" | tee -a build.log
+        echo "🐧 Triggering APT package build..." | tee -a build.log
+        if gh workflow run timescaledb-apt.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true; then
+          echo "| 🐧 APT Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-apt.yml) |" >> $GITHUB_STEP_SUMMARY
         else
-          echo "| 🐧 Debian Packages | ❌ Failed | [release-build-scripts](https://github.com/timescale/release-build-scripts/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "❌ Debian build failed to trigger" | tee -a build.log
-          exit 1
-        fi
-
-    - name: Build Ubuntu Packages
-      env:
-        GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-      run: |
-        echo "🟠 Triggering Ubuntu package build..." | tee -a build.log
-        if gh workflow run timescaledb-ubuntu.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true; then
-          echo "| 🟠 Ubuntu Packages | ✅ Triggered | [release-build-scripts](https://github.com/timescale/release-build-scripts/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Ubuntu build triggered successfully" | tee -a build.log
-        else
-          echo "| 🟠 Ubuntu Packages | ❌ Failed | [release-build-scripts](https://github.com/timescale/release-build-scripts/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "❌ Ubuntu build failed to trigger" | tee -a build.log
-          exit 1
-        fi
-
-    - name: Build ARM64 APT Packages
-      env:
-        GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-      run: |
-        echo "💪 Triggering ARM64 APT package build..." | tee -a build.log
-        if gh workflow run timescaledb-apt-arm64.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true; then
-          echo "| 💪 ARM64 APT Packages | ✅ Triggered | [release-build-scripts](https://github.com/timescale/release-build-scripts/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "✅ ARM64 APT build triggered successfully" | tee -a build.log
-        else
-          echo "| 💪 ARM64 APT Packages | ❌ Failed | [release-build-scripts](https://github.com/timescale/release-build-scripts/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "❌ ARM64 APT build failed to trigger" | tee -a build.log
-          exit 1
+          echo "| 🐧 APT Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-apt.yml) |" >> $GITHUB_STEP_SUMMARY
+          echo "HAS_FAILURES=true" >> $GITHUB_ENV
         fi
 
     - name: Build RPM Packages
       env:
         GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
       run: |
-        echo "🔴 Triggering RPM package build..." | tee -a build.log
+        echo "⚙ Triggering RPM package build..." | tee -a build.log
         if gh workflow run timescaledb-rpm.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true; then
-          echo "| 🔴 RPM Packages | ✅ Triggered | [release-build-scripts](https://github.com/timescale/release-build-scripts/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "✅ RPM build triggered successfully" | tee -a build.log
+          echo "| ⚙ RPM Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-rpm.yml) |" >> $GITHUB_STEP_SUMMARY
         else
-          echo "| 🔴 RPM Packages | ❌ Failed | [release-build-scripts](https://github.com/timescale/release-build-scripts/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "❌ RPM build failed to trigger" | tee -a build.log
-          exit 1
+          echo "| ⚙ RPM Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-rpm.yml) |" >> $GITHUB_STEP_SUMMARY
+          echo "HAS_FAILURES=true" >> $GITHUB_ENV
         fi
 
     - name: Build Homebrew Packages
@@ -96,12 +66,10 @@ jobs:
       run: |
         echo "🍺 Triggering Homebrew package build..." | tee -a build.log
         if gh workflow run timescaledb-homebrew.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true; then
-          echo "| 🍺 Homebrew Packages | ✅ Triggered | [release-build-scripts](https://github.com/timescale/release-build-scripts/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Homebrew build triggered successfully" | tee -a build.log
+          echo "| 🍺 Homebrew Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-homebrew.yml) |" >> $GITHUB_STEP_SUMMARY
         else
-          echo "| 🍺 Homebrew Packages | ❌ Failed | [release-build-scripts](https://github.com/timescale/release-build-scripts/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "❌ Homebrew build failed to trigger" | tee -a build.log
-          exit 1
+          echo "| 🍺 Homebrew Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-homebrew.yml) |" >> $GITHUB_STEP_SUMMARY
+          echo "HAS_FAILURES=true" >> $GITHUB_ENV
         fi
 
     - name: Build Windows Packages
@@ -110,54 +78,25 @@ jobs:
       run: |
         echo "🪟 Triggering Windows package build..." | tee -a build.log
         if gh workflow run timescaledb-windows.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true; then
-          echo "| 🪟 Windows Packages | ✅ Triggered | [release-build-scripts](https://github.com/timescale/release-build-scripts/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Windows build triggered successfully" | tee -a build.log
+          echo "| 🪟 Windows Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-windows.yml) |" >> $GITHUB_STEP_SUMMARY
         else
-          echo "| 🪟 Windows Packages | ❌ Failed | [release-build-scripts](https://github.com/timescale/release-build-scripts/actions) |" >> $GITHUB_STEP_SUMMARY
-          echo "❌ Windows build failed to trigger" | tee -a build.log
-          exit 1
+          echo "| 🪟 Windows Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-windows.yml) |" >> $GITHUB_STEP_SUMMARY
+          echo "HAS_FAILURES=true" >> $GITHUB_ENV
         fi
 
     - name: Generate final summary
       if: always()
       run: |
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "## 📊 Build Execution Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        # Count successful and failed builds
-        SUCCESS_COUNT=$(grep -c "✅ Triggered" $GITHUB_STEP_SUMMARY || echo "0")
-        TOTAL_BUILDS=7
-        
-        echo "**Total Builds:** $TOTAL_BUILDS" >> $GITHUB_STEP_SUMMARY
-        echo "**Successful:** $SUCCESS_COUNT" >> $GITHUB_STEP_SUMMARY
-        echo "**Failed:** $((TOTAL_BUILDS - SUCCESS_COUNT))" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        if [ "$SUCCESS_COUNT" -eq "$TOTAL_BUILDS" ]; then
-          echo "🎉 **All distribution packages triggered successfully!**" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "⚠️ **Some package builds failed to trigger. Check the logs above.**" >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "---" >> $GITHUB_STEP_SUMMARY
         echo "## 📋 Next Steps" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "1. Monitor the triggered workflows in their respective repositories" >> $GITHUB_STEP_SUMMARY
         echo "2. Check build artifacts once workflows complete" >> $GITHUB_STEP_SUMMARY
         echo "3. Verify package availability in distribution channels" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+
+    - name: Validate workflow dispatch status
+      if: ${{ env.HAS_FAILURES == 'true' }}
+      run: |
         echo "---" >> $GITHUB_STEP_SUMMARY
-        echo "*Build completed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')*" >> $GITHUB_STEP_SUMMARY
-        
-        # Show build log summary
-        if [ -f build.log ]; then
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "<details>" >> $GITHUB_STEP_SUMMARY
-          echo "<summary>📄 Detailed Build Log</summary>" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          cat build.log >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "</details>" >> $GITHUB_STEP_SUMMARY
-        fi
+        echo "❌ one or more workflows could not get dispatched" >> $GITHUB_STEP_SUMMARY
+        exit 1

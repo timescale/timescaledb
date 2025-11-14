@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_params_create() RETURNS VOID
@@ -42,7 +42,6 @@ SELECT ts_bgw_params_create();
  ts_bgw_params_create 
 ----------------------
  
-(1 row)
 
 CREATE TABLE conditions (
     time         TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -51,7 +50,6 @@ CREATE TABLE conditions (
 );
 SELECT FROM create_hypertable('conditions', by_range('time'));
 --
-(1 row)
 
 INSERT INTO conditions
 SELECT
@@ -95,13 +93,11 @@ SELECT ts_bgw_params_reset_time(0, true);
  ts_bgw_params_reset_time 
 --------------------------
  
-(1 row)
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT * FROM sorted_bgw_log;
  msg_no | mock_time |              application_name              |                                                                                   msg                                                                                    
@@ -121,7 +117,6 @@ SELECT * FROM sorted_bgw_log;
       9 |         0 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Mon Nov 24 00:00:00 4714 UTC BC, Sun Feb 09 00:00:00 2025 UTC ] (batch 4 of 4)
      10 |         0 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
      11 |         0 | Refresh Continuous Aggregate Policy [1000] | inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-(15 rows)
 
 CREATE MATERIALIZED VIEW conditions_by_day_manual_refresh
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
@@ -143,13 +138,11 @@ SELECT count(*) FROM conditions_by_day;
  count 
 -------
    145
-(1 row)
 
 SELECT count(*) FROM conditions_by_day_manual_refresh;
  count 
 -------
    145
-(1 row)
 
 -- Should have no differences
 SELECT
@@ -161,7 +154,6 @@ FROM
  has_diff 
 ----------
  f
-(1 row)
 
 TRUNCATE bgw_log, conditions_by_day;
 SELECT
@@ -174,20 +166,17 @@ FROM
                                                            config                                                            
 -----------------------------------------------------------------------------------------------------------------------------
  {"end_offset": null, "start_offset": null, "buckets_per_batch": 10, "mat_hypertable_id": 2, "max_batches_per_execution": 2}
-(1 row)
 
 -- advance time by 1h so that job runs one more time
 SELECT ts_bgw_params_reset_time(extract(epoch from interval '1 hour')::bigint * 1000000, true);
  ts_bgw_params_reset_time 
 --------------------------
  
-(1 row)
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT * FROM sorted_bgw_log;
  msg_no | mock_time  |              application_name              |                                                                                  msg                                                                                  
@@ -201,19 +190,16 @@ SELECT * FROM sorted_bgw_log;
       4 | 3600000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
       5 | 3600000000 | Refresh Continuous Aggregate Policy [1000] | inserted 50 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
       6 | 3600000000 | Refresh Continuous Aggregate Policy [1000] | reached maximum number of batches per execution (2), batches not processed (2)
-(9 rows)
 
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
     75
-(1 row)
 
 SELECT count(*) FROM conditions_by_day_manual_refresh;
  count 
 -------
    145
-(1 row)
 
 -- Should have differences
 SELECT
@@ -225,20 +211,17 @@ FROM
  has_diff 
 ----------
  t
-(1 row)
 
 -- advance time by 2h so that job runs one more time
 SELECT ts_bgw_params_reset_time(extract(epoch from interval '2 hour')::bigint * 1000000, true);
  ts_bgw_params_reset_time 
 --------------------------
  
-(1 row)
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT * FROM sorted_bgw_log;
  msg_no | mock_time  |              application_name              |                                                                                   msg                                                                                    
@@ -260,7 +243,6 @@ SELECT * FROM sorted_bgw_log;
       3 | 7200000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Mon Nov 24 00:00:00 4714 UTC BC, Sun Feb 09 00:00:00 2025 UTC ] (batch 2 of 2)
       4 | 7200000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
       5 | 7200000000 | Refresh Continuous Aggregate Policy [1000] | inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-(17 rows)
 
 -- Should have no differences
 SELECT
@@ -272,7 +254,6 @@ FROM
  has_diff 
 ----------
  f
-(1 row)
 
 -- Set max_batches_per_execution to 10
 SELECT
@@ -285,7 +266,6 @@ FROM
                                                             config                                                            
 ------------------------------------------------------------------------------------------------------------------------------
  {"end_offset": null, "start_offset": null, "buckets_per_batch": 10, "mat_hypertable_id": 2, "max_batches_per_execution": 10}
-(1 row)
 
 TRUNCATE bgw_log;
 -- Insert data into the past
@@ -303,14 +283,12 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '3 hour')::bigint * 
  ts_bgw_params_reset_time 
 --------------------------
  
-(1 row)
 
 -- Should process all four batches in the past
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT * FROM sorted_bgw_log;
  msg_no |  mock_time  |              application_name              |                                                                                  msg                                                                                  
@@ -329,32 +307,27 @@ SELECT * FROM sorted_bgw_log;
       9 | 10800000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Wed Feb 05 00:00:00 2020 UTC, Sun Feb 09 00:00:00 2020 UTC ] (batch 4 of 4)
      10 | 10800000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
      11 | 10800000000 | Refresh Continuous Aggregate Policy [1000] | inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-(14 rows)
 
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
    295
-(1 row)
 
 SELECT count(*) FROM conditions_by_day_manual_refresh;
  count 
 -------
    145
-(1 row)
 
 CALL refresh_continuous_aggregate('conditions_by_day_manual_refresh', NULL, NULL);
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
    295
-(1 row)
 
 SELECT count(*) FROM conditions_by_day_manual_refresh;
  count 
 -------
    295
-(1 row)
 
 -- Should have no differences
 SELECT
@@ -366,7 +339,6 @@ FROM
  has_diff 
 ----------
  f
-(1 row)
 
 -- Check invalid configurations
 \set ON_ERROR_STOP 0
@@ -400,32 +372,27 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '4 hour')::bigint * 
  ts_bgw_params_reset_time 
 --------------------------
  
-(1 row)
 
 -- Should fallback to single batch processing because there's no data to be refreshed on the original hypertable
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT * FROM sorted_bgw_log;
  msg_no |  mock_time  |              application_name              |                                                                            msg                                                                            
 --------+-------------+--------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------
       0 | 14400000000 | DB Scheduler                               | [TESTING] Registered new background worker
       1 | 14400000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | no min slice range start for continuous aggregate "public.conditions_by_day", falling back to single batch processing
-      1 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu Mar 06 00:00:00 2025 UTC ]
-      2 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | deleted 295 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
-      3 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-(6 rows)
+      0 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu Mar 06 00:00:00 2025 UTC ]
+      1 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | deleted 295 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
+      2 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
 -- Should return zero rows
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
      0
-(1 row)
 
 -- 1 day of data
 INSERT INTO conditions
@@ -443,32 +410,27 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '5 hour')::bigint * 
  ts_bgw_params_reset_time 
 --------------------------
  
-(1 row)
 
 -- Should fallback to single batch processing because the refresh size is too small
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT * FROM sorted_bgw_log;
  msg_no |  mock_time  |              application_name              |                                                                          msg                                                                           
 --------+-------------+--------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------
       0 | 18000000000 | DB Scheduler                               | [TESTING] Registered new background worker
       1 | 18000000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | only one batch produced for continuous aggregate "public.conditions_by_day", falling back to single batch processing
-      1 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Wed Feb 05 00:00:00 2020 UTC, Fri Feb 07 00:00:00 2020 UTC ]
-      2 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
-      3 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-(6 rows)
+      0 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Wed Feb 05 00:00:00 2020 UTC, Fri Feb 07 00:00:00 2020 UTC ]
+      1 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
+      2 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
 -- Should return 10 rows because the bucket width is `1 day` and buckets per batch is `10`
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
     10
-(1 row)
 
 TRUNCATE conditions_by_day, conditions, bgw_log;
 -- Less than 1 day of data (smaller than the bucket width)
@@ -479,38 +441,33 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '6 hour')::bigint * 
  ts_bgw_params_reset_time 
 --------------------------
  
-(1 row)
 
 -- Should fallback to single batch processing because the refresh size is too small
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT * FROM sorted_bgw_log;
  msg_no |  mock_time  |              application_name              |                                                                            msg                                                                            
 --------+-------------+--------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------
       0 | 21600000000 | DB Scheduler                               | [TESTING] Registered new background worker
-      1 | 21600000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | refresh window size (7 days) is smaller than or equal to batch size (10 days), falling back to single batch processing
-      1 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu Mar 06 00:00:00 2025 UTC ]
-      2 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
-      3 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-(6 rows)
+      1 | 21600000000 | DB Scheduler                               | [TESTING] Registered new background worker
+      2 | 21600000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu Mar 06 00:00:00 2025 UTC ]
+      1 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
+      2 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
 -- Should return 1 row
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
      1
-(1 row)
 
 SELECT delete_job(:job_id);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT
     add_continuous_aggregate_policy(
@@ -543,13 +500,11 @@ SELECT ts_bgw_params_reset_time(0, true);
  ts_bgw_params_reset_time 
 --------------------------
  
-(1 row)
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT * FROM sorted_bgw_log;
  msg_no | mock_time |              application_name              |                                                                                  msg                                                                                  
@@ -572,20 +527,17 @@ SELECT * FROM sorted_bgw_log;
       0 |         0 | Refresh Continuous Aggregate Policy [1002] | continuous aggregate refresh (individual invalidation) on "conditions_by_day_manual_refresh" in window [ Mon Feb 24 00:00:00 2025 UTC, Wed Mar 12 00:00:00 2025 UTC ]
       1 |         0 | Refresh Continuous Aggregate Policy [1002] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
       2 |         0 | Refresh Continuous Aggregate Policy [1002] | inserted 80 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
-(18 rows)
 
 -- Both continuous aggregates should have the same data
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
     80
-(1 row)
 
 SELECT count(*) FROM conditions_by_day_manual_refresh;
  count 
 -------
     80
-(1 row)
 
 -- Should have no differences
 SELECT
@@ -597,20 +549,17 @@ FROM
  has_diff 
 ----------
  f
-(1 row)
 
 -- Testing with explicit refresh_newest_first = false (from oldest to newest)
 SELECT delete_job(:job_id);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT delete_job(:job_id_manual);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT
     add_continuous_aggregate_policy(
@@ -630,20 +579,17 @@ WHERE
                                                               config                                                              
 ----------------------------------------------------------------------------------------------------------------------------------
  {"end_offset": null, "start_offset": "@ 15 days", "buckets_per_batch": 5, "mat_hypertable_id": 2, "refresh_newest_first": false}
-(1 row)
 
 TRUNCATE bgw_log, conditions_by_day;
 SELECT ts_bgw_params_reset_time(0, true);
  ts_bgw_params_reset_time 
 --------------------------
  
-(1 row)
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT * FROM sorted_bgw_log;
  msg_no | mock_time |              application_name              |                                                                                  msg                                                                                  
@@ -662,20 +608,17 @@ SELECT * FROM sorted_bgw_log;
       9 |         0 | Refresh Continuous Aggregate Policy [1003] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Tue Mar 11 00:00:00 2025 UTC, Wed Mar 12 00:00:00 2025 UTC ] (batch 4 of 4)
      10 |         0 | Refresh Continuous Aggregate Policy [1003] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
      11 |         0 | Refresh Continuous Aggregate Policy [1003] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-(14 rows)
 
 -- Both continuous aggregates should have the same data
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
     80
-(1 row)
 
 SELECT count(*) FROM conditions_by_day_manual_refresh;
  count 
 -------
     80
-(1 row)
 
 -- Should have no differences
 SELECT
@@ -687,9 +630,83 @@ FROM
  has_diff 
 ----------
  f
-(1 row)
 
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_CLUSTER_SUPERUSER;
+-- Tests with Variable sized bucket
+SELECT delete_job(:job_id);
+ delete_job 
+------------
+ 
+
+TRUNCATE conditions;
+INSERT INTO conditions
+SELECT
+    t, d, 10
+FROM
+    generate_series(
+        '2025-01-01 00:00:00+00',
+        '2025-10-08 00:00:00+00',
+        '1 hour'::interval) AS t,
+    generate_series(1,5) AS d;
+CREATE MATERIALIZED VIEW conditions_by_month
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT
+    time_bucket('1 month', time),
+    device_id,
+    count(*),
+    min(temperature),
+    max(temperature),
+    avg(temperature),
+    sum(temperature)
+FROM
+    conditions
+GROUP BY
+    1, 2
+WITH NO DATA;
+SELECT
+    add_continuous_aggregate_policy(
+        'conditions_by_month',
+        start_offset => INTERVAL '600 days',
+        end_offset => INTERVAL '7 days',
+        schedule_interval => INTERVAL '1 day',
+        refresh_newest_first => false
+    ) AS job_id \gset
+SELECT
+    config
+FROM
+    timescaledb_information.jobs
+WHERE
+    job_id = :'job_id';
+                                                     config                                                      
+-----------------------------------------------------------------------------------------------------------------
+ {"end_offset": "@ 7 days", "start_offset": "@ 600 days", "mat_hypertable_id": 4, "refresh_newest_first": false}
+
+TRUNCATE bgw_log, conditions_by_day;
+SELECT ts_bgw_params_reset_time(0, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+
+SELECT * FROM sorted_bgw_log;
+ msg_no | mock_time |              application_name              |                                                                                   msg                                                                                   
+--------+-----------+--------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Mon Dec 23 00:00:00 2024 UTC, Wed Jan 22 00:00:00 2025 UTC ] (batch 1 of 3)
+      1 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
+      2 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
+      3 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Wed Jan 22 00:00:00 2025 UTC, Fri Feb 21 00:00:00 2025 UTC ] (batch 2 of 3)
+      4 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 5 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
+      5 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
+      6 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Fri Feb 21 00:00:00 2025 UTC, Sat Mar 01 00:00:00 2025 UTC ] (batch 3 of 3)
+      7 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 5 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
+      8 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_SUPERUSER;
 REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_policy_user;
 DROP ROLE test_cagg_refresh_policy_user;

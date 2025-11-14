@@ -6,7 +6,7 @@
 -- We need memory usage in PortalContext after the completion of the query, so
 -- we'll have to log it from a trigger that runs after the query is completed.
 
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
 
 create table uk_price_paid(price integer, "date" date, postcode1 text, postcode2 text, type smallint, is_new bool, duration smallint, addr1 text, addr2 text, street text, locality text, town text, district text, country text, category smallint);
 -- Aim to about 100 partitions, the data is from 1995 to 2022.
@@ -29,6 +29,28 @@ create function log_memory() returns trigger as $$
         return new;
     end;
 $$ language plpgsql;
+
+-- Prepare version dependent TopTransactionContext total memory usage query.
+-- Using prepared statements to avoid contaminating memory usage numbers.
+-- PG18 removed parent column so we have to use path to get TopTransactionContext child entries.
+-- https://github.com/postgres/postgres/commit/f0d11275
+create or replace function prepare_transaction_total_memory_usage_stmt() returns void
+language plpgsql as
+$$
+begin
+    if current_setting('server_version_num')::int < 180000 then
+        prepare total_stmt as select sum(total_bytes)
+        from pg_backend_memory_contexts
+		where parent = 'TopTransactionContext';
+    else
+        prepare total_stmt as select sum(m.total_bytes)
+        from pg_backend_memory_contexts m
+        inner join pg_backend_memory_contexts p
+            on (m.path[m.level-1] = p.path[p.level])
+        where p.name = 'TopTransactionContext';
+    end if;
+end;
+$$;
 
 -- Add a trigger that runs after completion of each INSERT/COPY and logs the
 -- current memory usage.
@@ -72,9 +94,11 @@ $$;
 
 -- TopTransactionContext usage needs to remain the same after every insert
 -- There was a leak earlier in the child CurTransactionContext
+
+SELECT prepare_transaction_total_memory_usage_stmt();
 BEGIN;
 INSERT INTO test_ht VALUES ('1980-01-01 00:00:00-00', to_double('23.11', 0));
-SELECT sum(total_bytes) from pg_backend_memory_contexts where parent = 'TopTransactionContext';
+EXECUTE total_stmt;
 INSERT INTO test_ht VALUES ('1980-02-01 00:00:00-00', to_double('24.11', 0));
-SELECT sum(total_bytes) from pg_backend_memory_contexts where parent = 'TopTransactionContext';
+EXECUTE total_stmt;
 COMMIT;

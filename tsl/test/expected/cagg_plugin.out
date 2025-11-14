@@ -12,7 +12,6 @@ SELECT setseed(1);
  setseed 
 ---------
  
-(1 row)
 
 CREATE FUNCTION get_invalidations(slot text, hypertable name, attr name)
 RETURNS TABLE (hypertable_relid regclass,
@@ -28,6 +27,7 @@ SELECT hypertable_relid,
   FROM changes
 ORDER BY 1,2,3;
 $$ LANGUAGE sql;
+select _timescaledb_functions.invalidation_plugin_name() as plugin_name \gset
 -- Creating a table with a primary key since we need a replica
 -- identity to use logical decoding.
 CREATE TABLE conditions (
@@ -40,22 +40,19 @@ SELECT create_hypertable('conditions', 'recorded_at');
     create_hypertable    
 -------------------------
  (1,public,conditions,t)
-(1 row)
 
 SELECT setseed(1.0);
  setseed 
 ---------
  
-(1 row)
 
 INSERT INTO conditions
 SELECT recorded_at, (random()*3 + 1)::int, random()*80 - 40
   FROM generate_series('2025-02-01'::timestamptz,
   	               '2025-03-31'::timestamptz,
 		       '1 minute'::interval) AS recorded_at;
-select from pg_create_logical_replication_slot('my_slot', 'timescaledb-invalidations', false, true);
+select from pg_create_logical_replication_slot('my_slot', :'plugin_name', false, true);
 --
-(1 row)
 
 -- Generate a few entries in one go. This caused some problems
 -- initially, so check this first.
@@ -68,7 +65,6 @@ SELECT * FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
 ------------------+------------------------+-------------------------
  conditions       | 2020-05-01 12:34:56+00 | 2020-05-01 12:34:56+00
  conditions       | 2020-05-02 12:34:56+00 | 2020-05-02 13:45:00+00
-(2 rows)
 
 -- Generate a single invalidation line and check how that appears.
 INSERT INTO conditions VALUES ('2020-05-01 12:34:56Z', 99, 37.0);
@@ -76,7 +72,6 @@ SELECT * FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
  hypertable_relid | lowest_modified_value  | greatest_modified_value 
 ------------------+------------------------+-------------------------
  conditions       | 2020-05-01 12:34:56+00 | 2020-05-01 12:34:56+00
-(1 row)
 
 INSERT INTO conditions VALUES
        ('2020-05-02 12:34:56Z', 99, 37.0),
@@ -86,7 +81,6 @@ SELECT * FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
  hypertable_relid | lowest_modified_value  | greatest_modified_value 
 ------------------+------------------------+-------------------------
  conditions       | 2020-05-02 12:34:56+00 | 2020-05-02 13:45:00+00
-(1 row)
 
 -- This should generate an invalidation including the full range since
 -- it is inside a transaction.
@@ -99,21 +93,18 @@ SELECT * FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
  hypertable_relid | lowest_modified_value  | greatest_modified_value 
 ------------------+------------------------+-------------------------
  conditions       | 2025-02-01 00:00:00+00 | 2025-03-31 00:00:00+00
-(1 row)
 
 UPDATE conditions SET temp = 0.0 WHERE device_id = 99;
 SELECT * FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
  hypertable_relid | lowest_modified_value  | greatest_modified_value 
 ------------------+------------------------+-------------------------
  conditions       | 2020-05-01 12:34:56+00 | 2025-03-31 00:00:00+00
-(1 row)
 
 DELETE FROM conditions WHERE device_id = 99;
 SELECT * FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
  hypertable_relid | lowest_modified_value  | greatest_modified_value 
 ------------------+------------------------+-------------------------
  conditions       | 2020-05-01 12:34:56+00 | 2025-03-31 00:00:00+00
-(1 row)
 
 -- Test that we can do multiple changes (in different transactions) in
 -- a suite and get the changes for that using the plugin.
@@ -136,7 +127,6 @@ SELECT * FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
  conditions       | 2020-05-01 12:34:56+00 | 2025-03-31 00:00:00+00
  conditions       | 2020-05-02 12:34:56+00 | 2020-05-02 13:45:00+00
  conditions       | 2025-02-01 00:00:00+00 | 2025-03-31 00:00:00+00
-(5 rows)
 
 -- Test that we can do multiple changes in a single transaction get
 -- the changes for that using the plugin.
@@ -157,7 +147,6 @@ SELECT * FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
  hypertable_relid | lowest_modified_value  | greatest_modified_value 
 ------------------+------------------------+-------------------------
  conditions       | 2020-06-01 12:34:56+00 | 2020-07-31 00:00:00+00
-(1 row)
 
 -- Insert some tuples, remove a column, and insert some more data, all
 -- inside a transaction, and check that it behaves sane even when the
@@ -173,7 +162,6 @@ SELECT * FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
  hypertable_relid | lowest_modified_value  | greatest_modified_value 
 ------------------+------------------------+-------------------------
  conditions       | 2020-05-01 12:34:56+00 | 2020-05-01 12:34:58+00
-(1 row)
 
 -- Test to insert some changes and then drop the table to check that
 -- it behaves sane.
@@ -195,14 +183,12 @@ SELECT create_hypertable('conditions', 'recorded_at');
     create_hypertable    
 -------------------------
  (2,public,conditions,t)
-(1 row)
 
 -- New hypertable: we should not see the ones that we inserted before
 -- dropping the old version of the hypertable.
 SELECT * FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
  hypertable_relid | lowest_modified_value | greatest_modified_value 
 ------------------+-----------------------+-------------------------
-(0 rows)
 
 -- Insert some data so that we have some entries.
 INSERT INTO conditions VALUES ('2020-05-01 12:34:56Z', 104, 37.0);
@@ -219,7 +205,26 @@ SELECT * FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
  hypertable_relid | lowest_modified_value  | greatest_modified_value 
 ------------------+------------------------+-------------------------
  conditions       | 2020-05-01 12:34:56+00 | 2020-05-01 12:34:56+00
-(1 row)
+
+-- Check that adding a lot of invalidations as separate transactions
+-- in one go reads them all from the WAL.
+DO $$
+DECLARE
+  rec RECORD;
+BEGIN
+  FOR rec IN
+     SELECT t, d FROM generate_series('2020-05-10'::timestamptz, '2020-05-11'::timestamptz, '1 minute'::interval) t,
+                       generate_series(1,10) d
+  LOOP
+     INSERT INTO conditions VALUES (rec.t, rec.d, 100.0 * random());
+     COMMIT;
+  END LOOP;
+END
+$$;
+SELECT count(*) FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
+ count 
+-------
+ 14410
 
 -- Test using a table without a primary key but with an index that can
 -- be used as replica identity.
@@ -235,7 +240,6 @@ SELECT create_hypertable('conditions_index', 'captured_at');
        create_hypertable       
 -------------------------------
  (3,public,conditions_index,t)
-(1 row)
 
 INSERT INTO conditions_index VALUES
        ('2020-05-02 12:34:56Z', 42, 37.0),
@@ -244,7 +248,6 @@ SELECT * FROM get_invalidations('my_slot', 'conditions_index', 'captured_at');
  hypertable_relid | lowest_modified_value  | greatest_modified_value 
 ------------------+------------------------+-------------------------
  conditions_index | 2020-05-02 12:34:56+00 | 2020-05-02 13:45:00+00
-(1 row)
 
 -- Test using a table without a primary key but with a replica
 -- identity using full rows.
@@ -258,7 +261,6 @@ SELECT create_hypertable('conditions_full', 'recorded_at');
       create_hypertable       
 ------------------------------
  (4,public,conditions_full,t)
-(1 row)
 
 INSERT INTO conditions_full VALUES
        ('2020-05-02 12:34:56Z', 42, 37.0),
@@ -267,7 +269,6 @@ SELECT * FROM get_invalidations('my_slot', 'conditions_full', 'recorded_at');
  hypertable_relid | lowest_modified_value  | greatest_modified_value 
 ------------------+------------------------+-------------------------
  conditions_full  | 2020-05-02 12:34:56+00 | 2020-05-02 13:45:00+00
-(1 row)
 
 -- Test getting invalidations for multiple hypertables in one go, to
 -- make sure that the plugin works with multiple tables as well.
@@ -298,11 +299,9 @@ ORDER BY hypertable_relid;
 ------------------+------------------------+------------------------
  conditions_index | 2020-05-03 12:00:00+00 | 2020-05-03 13:00:00+00
  conditions_full  | 2020-05-03 11:34:00+00 | 2020-05-03 12:45:00+00
-(2 rows)
 
 SELECT * FROM pg_drop_replication_slot('my_slot');
  pg_drop_replication_slot 
 --------------------------
  
-(1 row)
 

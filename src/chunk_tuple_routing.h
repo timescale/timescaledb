@@ -6,30 +6,37 @@
 #pragma once
 
 #include <postgres.h>
-#include <nodes/execnodes.h>
+#include <executor/nodeModifyTable.h>
 
+#include "chunk_insert_state.h"
 #include "hypertable.h"
-#include "nodes/chunk_dispatch/chunk_insert_state.h"
+
+typedef struct ModifyHypertableState ModifyHypertableState;
 
 typedef struct ChunkTupleRouting
 {
-	Relation partition_root;
 	Hypertable *hypertable;
-	ResultRelInfo *hypertable_rri;
-	Cache *hypertable_cache;
-	MemoryContext memcxt;
+	/*
+	 * When single_chunk_insert is true, root_rel and root_rri point to the
+	 * chunk being inserted into. Otherwise, they point to the hypertable.
+	 */
+	Relation root_rel;
+	ResultRelInfo *root_rri;
+	bool single_chunk_insert;
 
 	SubspaceStore *subspace;
 	EState *estate;
 	bool create_compressed_chunk;
+	bool has_dropped_attrs;
 
-	ModifyHypertableState *mht_state;  /* state for the ModifyHypertable custom scan node */
-	OnConflictAction onConflictAction; /* ON CONFLICT action for the current statement */
+	ModifyHypertableState *mht_state; /* state for the ModifyHypertable custom scan node */
+	ChunkInsertState *cis;
 
 	SharedCounters *counters; /* shared counters for the current statement */
 } ChunkTupleRouting;
 
-ChunkTupleRouting *ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri);
+ChunkTupleRouting *ts_chunk_tuple_routing_create(EState *estate, Hypertable *ht,
+												 ResultRelInfo *rri);
 void ts_chunk_tuple_routing_destroy(ChunkTupleRouting *ctr);
 ChunkInsertState *ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point);
 extern void ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis,

@@ -4,8 +4,8 @@
 
 SET timezone TO 'America/Los_Angeles';
 
-\set PREFIX 'EXPLAIN (costs off, summary off, timing off) '
-\set ANALYZE  'EXPLAIN (analyze, costs off, summary off, timing off) '
+\set PREFIX 'EXPLAIN (buffers off, costs off, summary off, timing off) '
+\set ANALYZE  'EXPLAIN (analyze, buffers off, costs off, summary off, timing off) '
 CREATE TABLE test1 (timec timestamptz , i integer ,
       b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'timec', chunk_time_interval=> INTERVAL '7 days');
@@ -1009,3 +1009,91 @@ ON CONFLICT DO NOTHING;
 
 DROP TABLE t_1sec;
 
+-- regression test for SDC 3210
+
+CREATE TABLE gen_column(
+	"timestamp"                         timestamp with time zone NOT NULL,
+	device_id                           text,
+	device_id_generated 				text GENERATED ALWAYS AS (device_id) STORED,
+	speed                               double precision
+);
+
+ALTER TABLE gen_column ADD CONSTRAINT unique_device_timestamp_sensor
+	UNIQUE (device_id_generated, "timestamp");
+
+CREATE INDEX gen_column_timestamp_idx
+	ON gen_column
+	USING btree ("timestamp" DESC);
+
+SELECT create_hypertable(
+	relation => 'gen_column',
+	time_column_name => 'timestamp',
+	chunk_time_interval => interval '06:00:00',
+	create_default_indexes => false
+);
+
+ALTER TABLE gen_column SET (
+	timescaledb.compress,
+	timescaledb.compress_segmentby = 'device_id_generated',
+	timescaledb.compress_orderby='"timestamp"'
+);
+
+insert into gen_column ( "timestamp", device_id, speed) values
+( '2025-06-06 10:00:00', 'device_id_1', 100),
+( '2025-06-06 10:01:00', 'device_id_2', 100),
+( '2025-06-06 10:02:00', 'device_id_3', 100);
+
+SELECT compress_chunk(show_chunks('gen_column'));
+
+insert into gen_column ( "timestamp", device_id, speed) values
+( '2025-06-06 10:03:00', 'device_id_1', 100),
+( '2025-06-06 10:00:00', 'device_id_1', 110),
+( '2025-06-06 10:00:00', 'device_id_1', 110)
+ON CONFLICT DO NOTHING;
+
+-- should contain 2 rows for device_1 and one per any other device
+SELECT device_id_generated, count(*)
+FROM gen_column
+GROUP BY 1
+ORDER BY 1;
+
+SELECT decompress_chunk(show_chunks('gen_column'));
+
+ALTER TABLE gen_column SET (
+	timescaledb.compress,
+	timescaledb.compress_segmentby = '',
+	timescaledb.compress_orderby='"timestamp"'
+);
+SELECT compress_chunk(show_chunks('gen_column'));
+
+insert into gen_column ( "timestamp", device_id, speed) values
+( '2025-06-06 10:04:00', 'device_id_1', 100),
+( '2025-06-06 10:00:00', 'device_id_1', 110),
+( '2025-06-06 10:00:00', 'device_id_1', 110)
+ON CONFLICT DO NOTHING;
+
+-- should contain 3 rows for device_1 and one per any other device
+SELECT device_id_generated, count(*)
+FROM gen_column
+GROUP BY 1
+ORDER BY 1;
+
+DROP TABLE gen_column;
+
+-- test insert into compressed chunk directly works
+-- to ensure maintenance operations work unhindered we dont
+-- want to block direct inserts into compressed chunks
+CREATE TABLE direct_compressed_insert (time timestamptz) WITH (tsdb.hypertable);
+
+INSERT INTO direct_compressed_insert SELECT generate_series('2024-01-01'::timestamptz, '2024-01-01 1:00:00'::timestamptz, '1 second');
+SELECT count(compress_chunk(c)) FROM show_chunks('direct_compressed_insert') c;
+SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk ORDER BY id DESC LIMIT 1 \gset
+
+CREATE TABLE compressed_batches AS SELECT * FROM :CHUNK;
+SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 DESC;
+
+-- should have not ModifyHypertable node
+EXPLAIN (costs off,timing off, summary off) INSERT INTO :CHUNK SELECT * FROM compressed_batches;
+INSERT INTO :CHUNK SELECT * FROM compressed_batches;
+
+SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 DESC;

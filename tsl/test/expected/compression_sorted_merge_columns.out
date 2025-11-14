@@ -5,11 +5,9 @@
 create table t(x int, time timestamp, timetz timestamptz, int32 int4, int64 int8, s text);
 select create_hypertable('t', 'x');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "x"
  create_hypertable 
 -------------------
  (1,public,t,t)
-(1 row)
 
 insert into t values
 (1, '2022-01-01', '2023-01-01',  5, -13, 'a'),
@@ -36,7 +34,6 @@ select * from t order by time;
  2 | Sun Jan 01 00:00:00 2023 | Wed Jan 01 00:00:00 2025 PST |     1 |   -13 | b
  3 | Mon Jan 01 00:00:00 2024 | Fri Jan 01 00:00:00 2021 PST |     3 |   -16 | d
  4 | Wed Jan 01 00:00:00 2025 | Fri Jan 01 00:00:00 2021 PST |    -2 |    12 | e
-(6 rows)
 
 -- Test the fix for #7975: batch sort merge over eligible OpExpr and FuncExpr
 select time::timestamptz + interval '1 second' from t order by time::timestamptz + interval '1 second';
@@ -48,7 +45,6 @@ select time::timestamptz + interval '1 second' from t order by time::timestamptz
  Sun Jan 01 00:00:01 2023 PST
  Mon Jan 01 00:00:01 2024 PST
  Wed Jan 01 00:00:01 2025 PST
-(6 rows)
 
 select time + interval '1 second' from t order by time + interval '1 second';
          ?column?         
@@ -59,7 +55,6 @@ select time + interval '1 second' from t order by time + interval '1 second';
  Sun Jan 01 00:00:01 2023
  Mon Jan 01 00:00:01 2024
  Wed Jan 01 00:00:01 2025
-(6 rows)
 
 select decompress_chunk(show_chunks('t')) \gset
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby='x', timescaledb.compress_orderby='timetz,time');
@@ -73,7 +68,6 @@ select * from t order by timetz, time;
  1 | Sat Jan 01 00:00:00 2022 | Sun Jan 01 00:00:00 2023 PST |     5 |   -13 | a
  2 | Sun Jan 01 00:00:00 2023 | Wed Jan 01 00:00:00 2025 PST |     1 |   -13 | b
  5 | Fri Jan 01 00:00:00 2021 | Thu Jan 01 00:00:00 2026 PST |    -2 |    14 | e
-(6 rows)
 
 select timetz::timestamp + interval '1 second' from t order by timetz::timestamp + interval '1 second';
          ?column?         
@@ -84,7 +78,6 @@ select timetz::timestamp + interval '1 second' from t order by timetz::timestamp
  Sun Jan 01 00:00:01 2023
  Wed Jan 01 00:00:01 2025
  Thu Jan 01 00:00:01 2026
-(6 rows)
 
 select timetz + interval '1 second' from t order by timetz + interval '1 second';
            ?column?           
@@ -95,7 +88,6 @@ select timetz + interval '1 second' from t order by timetz + interval '1 second'
  Sun Jan 01 00:00:01 2023 PST
  Wed Jan 01 00:00:01 2025 PST
  Thu Jan 01 00:00:01 2026 PST
-(6 rows)
 
 select decompress_chunk(show_chunks('t')) \gset
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby='x', timescaledb.compress_orderby='int32,timetz,time');
@@ -109,7 +101,6 @@ select * from t order by int32, timetz, time;
  2 | Sun Jan 01 00:00:00 2023 | Wed Jan 01 00:00:00 2025 PST |     1 |   -13 | b
  3 | Mon Jan 01 00:00:00 2024 | Fri Jan 01 00:00:00 2021 PST |     3 |   -16 | d
  1 | Sat Jan 01 00:00:00 2022 | Sun Jan 01 00:00:00 2023 PST |     5 |   -13 | a
-(6 rows)
 
 select int32 + 1 from t order by int32 + 1;
  ?column? 
@@ -120,7 +111,6 @@ select int32 + 1 from t order by int32 + 1;
         2
         4
         6
-(6 rows)
 
 -- Sort Merge not used because only last Order By expression can be sort-transformed, not both of them
 \set ON_ERROR_STOP 0
@@ -139,7 +129,6 @@ select * from t order by int64, int32, timetz, time;
  4 | Wed Jan 01 00:00:00 2025 | Fri Jan 01 00:00:00 2021 PST |    -2 |    12 | e
  5 | Fri Jan 01 00:00:00 2021 | Thu Jan 01 00:00:00 2026 PST |    -2 |    14 | e
  6 | Fri Jan 01 00:00:00 2021 | Sat Jan 01 00:00:00 2022 PST |    -4 |    15 | c
-(6 rows)
 
 -- Both sides of OpExpr have to be of the same type for sort_transform to work
 select int64 + 1 from t order by int64 + 1::int8;
@@ -151,7 +140,6 @@ select int64 + 1 from t order by int64 + 1::int8;
        13
        15
        16
-(6 rows)
 
 -- Batch sort merge won't be used as sides of OpExpr are of different types (int8 vs int4)
 \set ON_ERROR_STOP 0
@@ -170,7 +158,6 @@ select * from t order by s, int32, time desc;
  3 | Mon Jan 01 00:00:00 2024 | Fri Jan 01 00:00:00 2021 PST |     3 |   -16 | d
  4 | Wed Jan 01 00:00:00 2025 | Fri Jan 01 00:00:00 2021 PST |    -2 |    12 | e
  5 | Fri Jan 01 00:00:00 2021 | Thu Jan 01 00:00:00 2026 PST |    -2 |    14 | e
-(6 rows)
 
 -- Batch sort merge won't be used as only Int and Date/Time types are allowed in OpExpr
 \set ON_ERROR_STOP 0

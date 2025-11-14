@@ -8,11 +8,9 @@
 create function stable_abs(x int4) returns int4 as 'int4abs' language internal stable;
 create table dvagg(a int, b int);
 select create_hypertable('dvagg', 'a', chunk_time_interval => 1000);
-NOTICE:  adding not-null constraint to column "a"
  create_hypertable  
 --------------------
  (1,public,dvagg,t)
-(1 row)
 
 insert into dvagg select x, x % 5 from generate_series(1, 999) x;
 alter table dvagg set (timescaledb.compress);
@@ -20,7 +18,6 @@ select compress_chunk(show_chunks('dvagg'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 alter table dvagg add column c int default 7;
 insert into dvagg select x, x % 5, 11 from generate_series(1001, 1999) x;
@@ -30,14 +27,12 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_3_chunk
-(2 rows)
 
 vacuum analyze dvagg;
 -- Just the most basic vectorized aggregation query on a table with default
 -- compressed column.
-explain (costs off) select sum(c) from dvagg;
-                            QUERY PLAN                            
-------------------------------------------------------------------
+explain (buffers off, costs off) select sum(c) from dvagg;
+--- QUERY PLAN ---
  Finalize Aggregate
    ->  Append
          ->  Custom Scan (VectorAgg)
@@ -46,13 +41,11 @@ explain (costs off) select sum(c) from dvagg;
          ->  Custom Scan (VectorAgg)
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
                      ->  Seq Scan on compress_hyper_2_4_chunk
-(8 rows)
 
 select sum(c) from dvagg;
   sum  
 -------
  17982
-(1 row)
 
 set timescaledb.debug_require_vector_agg = 'require';
 ---- Uncomment to generate reference
@@ -63,65 +56,54 @@ select sum(c) from dvagg where b >= 0;
   sum  
 -------
  17982
-(1 row)
 
 select sum(c) from dvagg where b = 0;
  sum  
 ------
  3582
-(1 row)
 
 select sum(c) from dvagg where b in (0, 1);
  sum  
 ------
  7182
-(1 row)
 
 select sum(c) from dvagg where b in (0, 1, 3);
   sum  
 -------
  10782
-(1 row)
 
 select sum(c) from dvagg where b > 10;
  sum 
 -----
     
-(1 row)
 
 select count(*) from dvagg where b >= 0;
  count 
 -------
   1998
-(1 row)
 
 select count(*) from dvagg where b = 0;
  count 
 -------
    398
-(1 row)
 
 select count(*) from dvagg where b in (0, 1);
  count 
 -------
    798
-(1 row)
 
 select count(*) from dvagg where b in (0, 1, 3);
  count 
 -------
   1198
-(1 row)
 
 select count(*) from dvagg where b > 10;
  count 
 -------
      0
-(1 row)
 
-explain (costs off) select sum(c) from dvagg where b in (0, 1, 3);
-                               QUERY PLAN                                
--------------------------------------------------------------------------
+explain (buffers off, costs off) select sum(c) from dvagg where b in (0, 1, 3);
+--- QUERY PLAN ---
  Finalize Aggregate
    ->  Append
          ->  Custom Scan (VectorAgg)
@@ -132,17 +114,14 @@ explain (costs off) select sum(c) from dvagg where b in (0, 1, 3);
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
                      Vectorized Filter: (b = ANY ('{0,1,3}'::integer[]))
                      ->  Seq Scan on compress_hyper_2_4_chunk
-(10 rows)
 
 select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
    sum   | sum  |  sum  
 ---------+------+-------
  1197600 | 1600 | 10782
-(1 row)
 
-explain (costs off) select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
-                               QUERY PLAN                                
--------------------------------------------------------------------------
+explain (buffers off, costs off) select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
+--- QUERY PLAN ---
  Finalize Aggregate
    ->  Append
          ->  Custom Scan (VectorAgg)
@@ -153,13 +132,11 @@ explain (costs off) select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
                      Vectorized Filter: (b = ANY ('{0,1,3}'::integer[]))
                      ->  Seq Scan on compress_hyper_2_4_chunk
-(10 rows)
 
 reset timescaledb.enable_vectorized_aggregation;
 -- The runtime chunk exclusion should work.
-explain (costs off) select sum(c) from dvagg where a < stable_abs(1000);
-                              QUERY PLAN                               
------------------------------------------------------------------------
+explain (buffers off, costs off) select sum(c) from dvagg where a < stable_abs(1000);
+--- QUERY PLAN ---
  Finalize Aggregate
    ->  Custom Scan (ChunkAppend) on dvagg
          Chunks excluded during startup: 1
@@ -168,7 +145,6 @@ explain (costs off) select sum(c) from dvagg where a < stable_abs(1000);
                      Vectorized Filter: (a < stable_abs(1000))
                      ->  Seq Scan on compress_hyper_2_2_chunk
                            Filter: (_ts_meta_min_1 < stable_abs(1000))
-(8 rows)
 
 -- The case with HAVING can still be vectorized because it is applied after
 -- final aggregation.
@@ -176,26 +152,19 @@ select sum(c) from dvagg having sum(c) > 0;
   sum  
 -------
  17982
-(1 row)
 
 -- Some negative cases.
 set timescaledb.debug_require_vector_agg to 'forbid';
-explain (costs off) select sum(c) from dvagg group by grouping sets ((), (a));
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+explain (buffers off, costs off) select sum(c) from dvagg group by grouping sets ((), (a));
+--- QUERY PLAN ---
  MixedAggregate
-   Hash Key: _hyper_1_1_chunk.a
+   Hash Key: dvagg.a
    Group Key: ()
    ->  Append
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               ->  Sort
-                     Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1
-                     ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Seq Scan on compress_hyper_2_2_chunk
          ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
-               ->  Sort
-                     Sort Key: compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1
-                     ->  Seq Scan on compress_hyper_2_4_chunk
-(12 rows)
+               ->  Seq Scan on compress_hyper_2_4_chunk
 
 -- As a reference, the result on decompressed table.
 select decompress_chunk(show_chunks('dvagg'));
@@ -203,12 +172,10 @@ select decompress_chunk(show_chunks('dvagg'));
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_3_chunk
-(2 rows)
 
 select sum(c) from dvagg;
   sum  
 -------
  17982
-(1 row)
 
 drop table dvagg;

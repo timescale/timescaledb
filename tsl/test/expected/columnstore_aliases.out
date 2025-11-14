@@ -30,11 +30,9 @@ $$;
 -- result of each query is not particularly important.
 CREATE TABLE test1 (ts timestamptz, i integer, b bigint, t text);
 SELECT * FROM create_hypertable('test1', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | test1      | t
-(1 row)
 
 INSERT INTO test1 SELECT t,  random(), random(), random()::text
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
@@ -57,19 +55,17 @@ CALL convert_to_columnstore(:'chunk',
 CALL add_columnstore_policy('test1', interval '1 day');
 CALL remove_columnstore_policy('test1');
 SELECT * FROM timescaledb_information.hypertable_columnstore_settings;
- hypertable | segmentby | orderby | compress_interval_length 
-------------+-----------+---------+--------------------------
- test1      | b         | ts DESC | 
-(1 row)
+ hypertable | segmentby | orderby | compress_interval_length | index 
+------------+-----------+---------+--------------------------+-------
+ test1      | b         | ts DESC |                          | 
 
 SELECT * FROM timescaledb_information.chunk_columnstore_settings ORDER BY chunk;
- hypertable |                 chunk                  | segmentby | orderby 
-------------+----------------------------------------+-----------+---------
- test1      | _timescaledb_internal._hyper_1_1_chunk | b         | ts DESC
- test1      | _timescaledb_internal._hyper_1_2_chunk | b         | ts DESC
- test1      | _timescaledb_internal._hyper_1_3_chunk | b         | ts DESC
- test1      | _timescaledb_internal._hyper_1_4_chunk | b         | ts DESC
-(4 rows)
+ hypertable |                 chunk                  | segmentby | orderby |                           index                           
+------------+----------------------------------------+-----------+---------+-----------------------------------------------------------
+ test1      | _timescaledb_internal._hyper_1_1_chunk | b         | ts DESC | [{"type": "minmax", "column": "ts", "source": "orderby"}]
+ test1      | _timescaledb_internal._hyper_1_2_chunk | b         | ts DESC | [{"type": "minmax", "column": "ts", "source": "orderby"}]
+ test1      | _timescaledb_internal._hyper_1_3_chunk | b         | ts DESC | [{"type": "minmax", "column": "ts", "source": "orderby"}]
+ test1      | _timescaledb_internal._hyper_1_4_chunk | b         | ts DESC | [{"type": "minmax", "column": "ts", "source": "orderby"}]
 
 VACUUM FULL test1;
 -- We only care about the column names for the result. They should be
@@ -77,20 +73,16 @@ VACUUM FULL test1;
 SELECT * FROM chunk_columnstore_stats('test1') where 1 = 2 order by chunk_name;
  chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 SELECT * FROM hypertable_columnstore_stats('test1') where 1 = 2;
  total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 CREATE TABLE test2 (ts timestamptz, i integer, b bigint, t text);
 SELECT * FROM create_hypertable('test2', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              3 | public      | test2      | t
-(1 row)
 
 INSERT INTO test2 SELECT t,  random(), random(), random()::text
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
@@ -103,5 +95,4 @@ SELECT * FROM timescaledb_information.hypertables WHERE hypertable_name = 'test2
  hypertable_schema | hypertable_name |       owner       | num_dimensions | num_chunks | compression_enabled | tablespaces | primary_dimension |  primary_dimension_type  
 -------------------+-----------------+-------------------+----------------+------------+---------------------+-------------+-------------------+--------------------------
  public            | test2           | default_perm_user |              1 |          4 | t                   |             | ts                | timestamp with time zone
-(1 row)
 

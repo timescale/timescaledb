@@ -39,7 +39,8 @@ typedef struct Dimension
 #define IS_OPEN_DIMENSION(d) ((d)->type == DIMENSION_TYPE_OPEN)
 #define IS_CLOSED_DIMENSION(d) ((d)->type == DIMENSION_TYPE_CLOSED)
 #define IS_VALID_OPEN_DIM_TYPE(type)                                                               \
-	(IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type) || ts_type_is_int8_binary_compatible(type))
+	(IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type) || IS_UUID_TYPE(type) ||                     \
+	 ts_type_is_int8_binary_compatible(type))
 
 /*
  * A hyperspace defines how to partition in a N-dimensional space.

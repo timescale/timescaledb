@@ -31,6 +31,7 @@
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/invalidation.h"
+#include "continuous_aggs/invalidation_multi.h"
 #include "continuous_aggs/invalidation_record.h"
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
@@ -40,7 +41,7 @@
 #include "export.h"
 #include "hypertable.h"
 #include "license_guc.h"
-#include "nodes/decompress_chunk/planner.h"
+#include "nodes/columnar_scan/planner.h"
 #include "nodes/gapfill/gapfill_functions.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/vector_agg/plan.h"
@@ -133,13 +134,12 @@ CrossModuleFunctions tsl_cm_functions = {
 	.finalize_agg_sfunc = tsl_finalize_agg_sfunc,
 	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
-	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
-	.continuous_agg_call_invalidation_trigger = execute_cagg_trigger,
 	.continuous_agg_refresh = continuous_agg_refresh,
 	.continuous_agg_process_hypertable_invalidations =
 		continuous_agg_process_hypertable_invalidations,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
+	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_validate_query = continuous_agg_validate_query,
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
@@ -171,6 +171,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.uuid_compressor_finish = tsl_uuid_compressor_finish,
 	.bloom1_contains = bloom1_contains,
 	.bloom1_contains_any = bloom1_contains_any,
+	.bloom1_get_hash_function = bloom1_get_hash_function,
 	.process_compress_table = tsl_process_compress_table,
 	.process_altertable_cmd = tsl_process_altertable_cmd,
 	.process_rename_cmd = tsl_process_rename_cmd,
@@ -179,7 +180,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,
-	.compression_enable = tsl_compression_enable,
+	.columnstore_setup = tsl_columnstore_setup,
 	.compressor_init = tsl_compressor_init,
 	.compressor_add_slot = tsl_compressor_add_slot,
 	.compressor_flush = tsl_compressor_flush,
@@ -217,7 +218,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	ts_cm_functions = &tsl_cm_functions;
 
 	_continuous_aggs_cache_inval_init();
-	_decompress_chunk_init();
+	_columnar_scan_init();
 	_skip_scan_init();
 	_vector_agg_init();
 

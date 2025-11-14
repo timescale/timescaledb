@@ -28,6 +28,10 @@ extern bool ts_guc_enable_constraint_exclusion;
 extern bool ts_guc_enable_cagg_reorder_groupby;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_window_functions;
 extern TSDLLEXPORT int ts_guc_cagg_max_individual_materializations;
+extern TSDLLEXPORT bool ts_guc_enable_cagg_wal_based_invalidation;
+extern TSDLLEXPORT int ts_guc_cagg_wal_batch_size;
+extern TSDLLEXPORT int ts_guc_cagg_low_work_mem;
+extern TSDLLEXPORT int ts_guc_cagg_high_work_mem;
 extern bool ts_guc_enable_now_constify;
 extern bool ts_guc_enable_foreign_key_propagation;
 extern TSDLLEXPORT bool ts_guc_enable_osm_reads;
@@ -40,6 +44,9 @@ extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
 extern bool ts_guc_enable_direct_compress_copy;
 extern bool ts_guc_enable_direct_compress_copy_sort_batches;
 extern bool ts_guc_enable_direct_compress_copy_client_sorted;
+extern bool ts_guc_enable_direct_compress_insert;
+extern bool ts_guc_enable_direct_compress_insert_sort_batches;
+extern bool ts_guc_enable_direct_compress_insert_client_sorted;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
 extern TSDLLEXPORT bool ts_guc_enable_transparent_decompression;
@@ -68,7 +75,9 @@ extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
 #endif
 extern bool ts_guc_enable_event_triggers;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan;
+extern TSDLLEXPORT bool ts_guc_enable_multikey_skip_scan;
 extern TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier;
+extern TSDLLEXPORT bool ts_guc_debug_skip_scan_info;
 
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;

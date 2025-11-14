@@ -18,7 +18,7 @@ typedef struct BulkInsertStateData *BulkInsertState;
 
 #include "batch_metadata_builder_minmax.h"
 #include "hypertable.h"
-#include "nodes/decompress_chunk/detoaster.h"
+#include "nodes/columnar_scan/detoaster.h"
 #include "ts_catalog/compression_settings.h"
 
 /*
@@ -94,12 +94,12 @@ typedef struct SegmentInfo
 } SegmentInfo;
 
 /* this struct holds information about a segmentby column,
- * and additionally stores the mapping for this column in
- * the uncompressed chunk. */
+ * and additionally stores the offset for this column in
+ * the chunk. */
 typedef struct CompressedSegmentInfo
 {
 	SegmentInfo *segment_info;
-	int16 decompressed_chunk_offset;
+	int16 chunk_offset;
 } CompressedSegmentInfo;
 
 typedef struct PerCompressedColumn
@@ -250,12 +250,9 @@ typedef struct RowCompressor
 	 */
 	int16 *uncompressed_col_to_compressed_col;
 	int16 count_metadata_column_offset;
-	int16 sequence_num_metadata_column_offset;
 
 	/* the number of uncompressed rows compressed into the current compressed row */
 	uint32 rows_compressed_into_current_value;
-	/* a unique monotonically increasing (according to order by) id for each compressed row */
-	int32 sequence_num;
 
 	/* cached arrays used to build the HeapTuple */
 	Datum *compressed_values;

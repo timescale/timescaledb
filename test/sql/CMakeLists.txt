@@ -58,6 +58,7 @@ set(TEST_FILES
     update.sql
     upsert.sql
     util.sql
+    uuid.sql
     vacuum.sql
     vacuum_parallel.sql
     version.sql
@@ -96,7 +97,8 @@ set(SOLO_TESTS
     index
     pg_dump_unprivileged
     tablespace
-    telemetry)
+    telemetry
+    net)
 
 list(APPEND SOLO_TESTS ${LOADER_TEST_FILE})
 

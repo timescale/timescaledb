@@ -30,6 +30,7 @@
 #include "debug_point.h"
 #include "dimension.h"
 #include "export.h"
+#include "guc.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "invalidation.h"
@@ -84,7 +85,7 @@ static int64 tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, Tuple
 static inline void cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry,
 										  int32 hypertable_id);
 static inline void cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry,
-											   Oid chunk_reloid, Relation chunk_relation);
+											   Oid chunk_reloid);
 static inline void update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval);
 static void cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry);
 static void cache_inval_cleanup(void);
@@ -122,6 +123,11 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 	Oid dimtype;
 
 	datum = heap_getattr(tuple, col, tupdesc, &isnull);
+	/*
+	 * Since this is the value of the primary partitioning column and we require
+	 * partitioning columns to be NOT NULL we should never see a NULL here.
+	 */
+	Ensure(!isnull, "primary partition column cannot be NULL");
 
 	if (NULL != d->partitioning)
 	{
@@ -132,13 +138,6 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 	Assert(d->type == DIMENSION_TYPE_OPEN);
 
 	dimtype = ts_dimension_get_partition_type(d);
-
-	if (isnull)
-		ereport(ERROR,
-				(errcode(ERRCODE_NOT_NULL_VIOLATION),
-				 errmsg("NULL value in column \"%s\" violates not-null constraint",
-						NameStr(d->fd.column_name)),
-				 errhint("Columns used for time partitioning cannot be NULL")));
 
 	return ts_time_value_to_internal(datum, dimtype);
 }
@@ -179,8 +178,7 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 }
 
 static inline void
-cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chunk_reloid,
-							Relation chunk_relation)
+cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chunk_reloid)
 {
 	Chunk *modified_tuple_chunk = ts_chunk_get_by_relid(chunk_reloid, false);
 	if (modified_tuple_chunk == NULL)
@@ -193,8 +191,7 @@ cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chun
 
 	cache_entry->previous_chunk_relid = modified_tuple_chunk->table_id;
 	cache_entry->previous_chunk_open_dimension =
-		get_attnum(chunk_relation->rd_id,
-				   NameStr(cache_entry->hypertable_open_dimension.fd.column_name));
+		get_attnum(chunk_reloid, NameStr(cache_entry->hypertable_open_dimension.fd.column_name));
 
 	if (cache_entry->previous_chunk_open_dimension == InvalidAttrNumber)
 	{
@@ -202,7 +199,7 @@ cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chun
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("open dimension '%s' not found in chunk %s",
 						NameStr(cache_entry->hypertable_open_dimension.fd.column_name),
-						get_rel_name(chunk_relation->rd_id))));
+						get_rel_name(chunk_reloid))));
 	}
 }
 
@@ -216,66 +213,16 @@ update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval)
 		cache_entry->greatest_modified_value = timeval;
 }
 
-/*
- * Trigger to store what the max/min updated values are for a function.
- * This is used by continuous aggregates to ensure that the aggregated values
- * are updated correctly. Upon creating a continuous aggregate for a hypertable,
- * this trigger should be registered, if it does not already exist.
- */
-Datum
-continuous_agg_trigfn(PG_FUNCTION_ARGS)
-{
-	/*
-	 * Use TriggerData to determine which row to return/work with, in the case
-	 * of updates, we'll need to call the functions twice, once with the old
-	 * rows (which act like deletes) and once with the new rows.
-	 */
-	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-	char *hypertable_id_str;
-	int32 hypertable_id;
-
-	if (trigdata == NULL || trigdata->tg_trigger == NULL || trigdata->tg_trigger->tgnargs < 0)
-		ereport(ERROR,
-				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				errmsg("must supply hypertable id"));
-
-	hypertable_id_str = trigdata->tg_trigger->tgargs[0];
-	hypertable_id = atol(hypertable_id_str);
-
-	if (!CALLED_AS_TRIGGER(fcinfo))
-		ereport(ERROR,
-				errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
-				errmsg("function \"%s\" was not called by trigger manager",
-					   get_func_name(fcinfo->flinfo->fn_oid)));
-	if (!TRIGGER_FIRED_AFTER(trigdata->tg_event) || !TRIGGER_FIRED_FOR_ROW(trigdata->tg_event))
-		ereport(ERROR,
-				errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
-				errmsg("continuous agg trigger function must be called in per row after trigger"));
-	execute_cagg_trigger(hypertable_id,
-						 trigdata->tg_relation,
-						 trigdata->tg_trigtuple,
-						 trigdata->tg_newtuple,
-						 TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event));
-	if (!TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
-		return PointerGetDatum(trigdata->tg_trigtuple);
-	else
-		return PointerGetDatum(trigdata->tg_newtuple);
-}
-
-/*
- * chunk_tuple is the tuple from trigdata->tg_trigtuple
- * i.e. the one being/inserts/deleted/updated.
- * (for updates: this is the row before modification)
- * chunk_newtuple is the tuple from trigdata->tg_newtuple.
- */
 void
-execute_cagg_trigger(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tuple,
-					 HeapTuple chunk_newtuple, bool update)
+continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tuple,
+							  HeapTuple chunk_newtuple, bool update)
 {
+	Assert(!ts_guc_enable_cagg_wal_based_invalidation);
 	ContinuousAggsCacheInvalEntry *cache_entry;
 	bool found;
 	int64 timeval;
 	Oid chunk_relid = chunk_rel->rd_id;
+
 	/* On first call, init the mctx and hash table */
 	if (!continuous_aggs_cache_inval_htab)
 		cache_inval_init();
@@ -288,7 +235,7 @@ execute_cagg_trigger(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tu
 
 	/* handle the case where we need to repopulate the cached chunk data */
 	if (cache_entry->previous_chunk_relid != chunk_relid)
-		cache_entry_switch_to_chunk(cache_entry, chunk_relid, chunk_rel);
+		cache_entry_switch_to_chunk(cache_entry, chunk_relid);
 
 	timeval = tuple_get_time(&cache_entry->hypertable_open_dimension,
 							 chunk_tuple,
@@ -470,6 +417,7 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 	ScanKeyData scankey[1];
 	ScannerCtx scanctx;
 
+	PushActiveSnapshot(GetLatestSnapshot());
 	ScanKeyInit(&scankey[0],
 				Anum_continuous_aggs_invalidation_threshold_pkey_hypertable_id,
 				BTEqualStrategyNumber,
@@ -494,7 +442,7 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 		   parallel session updates the scanned value and commits during a scan, we end up in a
 		   situation where we see the old and the new value. This causes ts_scanner_scan_one() to
 		   fail. */
-		.snapshot = GetLatestSnapshot(),
+		.snapshot = GetActiveSnapshot(),
 	};
 
 	/* If we don't find any invalidation threshold watermark, then we've never done any
@@ -502,7 +450,8 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 	 * first materialization needs to scan the entire table anyway; the invalidations are redundant.
 	 */
 	if (!ts_scanner_scan_one(&scanctx, false, CAGG_INVALIDATION_THRESHOLD_NAME))
-		return INVAL_NEG_INFINITY;
+		min_val = INVAL_NEG_INFINITY;
+	PopActiveSnapshot();
 
 	return min_val;
 }

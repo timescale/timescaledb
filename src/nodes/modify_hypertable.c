@@ -7,46 +7,100 @@
 #include <postgres.h>
 #include <nodes/execnodes.h>
 #include <nodes/makefuncs.h>
+#include <utils/syscache.h>
 
 #include "compat/compat.h"
 #include "chunk_tuple_routing.h"
+#include "cross_module_fn.h"
+#include "guc.h"
+#include "indexing.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/modify_hypertable.h"
 
 #if PG18_GE
 #include <commands/explain_format.h>
 #endif
 
-static ChunkDispatchState *
-get_chunk_dispatch_state(PlanState *substate)
+static AttrNumber
+rel_get_natts(Oid relid)
 {
-	switch (nodeTag(substate))
+	HeapTuple tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tp))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+	AttrNumber natts = ((Form_pg_class) GETSTRUCT(tp))->relnatts;
+	ReleaseSysCache(tp);
+	return natts;
+}
+
+static bool
+rel_has_dropped_attrs(Oid relid)
+{
+	AttrNumber natts = rel_get_natts(relid);
+	for (AttrNumber attno = 1; attno <= natts; attno++)
 	{
-		case T_CustomScanState:
-		{
-			if (ts_is_chunk_dispatch_state(substate))
-				return (ChunkDispatchState *) substate;
-			break;
-		}
-		case T_ResultState:
-			return get_chunk_dispatch_state(castNode(ResultState, substate)->ps.lefttree);
-		default:
-			break;
+		HeapTuple tp = SearchSysCache2(ATTNUM, ObjectIdGetDatum(relid), Int16GetDatum(attno));
+		if (!HeapTupleIsValid(tp))
+			continue;
+		Form_pg_attribute att_tup = (Form_pg_attribute) GETSTRUCT(tp);
+		bool result = att_tup->attisdropped || att_tup->atthasmissing;
+		ReleaseSysCache(tp);
+		if (result)
+			return true;
+	}
+	return false;
+}
+
+static bool
+should_use_direct_compress(ModifyHypertableState *state)
+{
+	if (!ts_guc_enable_direct_compress_insert)
+		return false;
+
+	ModifyTableState *mtstate = linitial_node(ModifyTableState, state->cscan_state.custom_ps);
+	ResultRelInfo *resultRelInfo = mtstate->resultRelInfo;
+	Hypertable *ht = state->ctr->hypertable;
+
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		return false;
+
+	if (ts_hypertable_has_continuous_aggregates(ht->fd.id))
+	{
+		ereport(WARNING,
+				(errmsg("disabling direct compress because the destination table has continuous "
+						"aggregates")));
+		return false;
 	}
 
-	return NULL;
+	if (resultRelInfo->ri_TrigDesc)
+	{
+		ereport(WARNING,
+				(errmsg("disabling direct compress because the destination table has triggers")));
+		return false;
+	}
+
+	if (ts_indexing_relation_has_primary_or_unique_index(state->ctr->root_rel))
+	{
+		ereport(WARNING,
+				(errmsg("disabling direct compress because the destination table has unique "
+						"constraints")));
+		return false;
+	}
+
+	Plan *subplan = mtstate->ps.plan->lefttree;
+	if (subplan->plan_rows < 10)
+	{
+		ereport(WARNING, (errmsg("disabling direct compress because of too small batch size")));
+		return false;
+	}
+
+	return true;
 }
 
 /*
  * ModifyHypertable is a plan node that implements DML for hypertables.
  * It is a wrapper around the ModifyTable plan node that calls the wrapped ModifyTable
  * plan.
- *
- * The wrapping is needed to setup state in the execution phase, and give access
- * to the ModifyTableState node to sub-plan states in the PlanState tree. For
- * instance, the ChunkDispatchState node needs to set the arbiter index list in
- * the ModifyTableState node whenever it inserts into a new chunk.
  */
 static void
 modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
@@ -78,21 +132,45 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	if (estate->es_auxmodifytables && linitial(estate->es_auxmodifytables) == mtstate)
 		linitial(estate->es_auxmodifytables) = node;
 
+	state->ht =
+		ts_hypertable_cache_get_cache_and_entry(RelationGetRelid(
+													mtstate->resultRelInfo->ri_RelationDesc),
+												CACHE_FLAG_MISSING_OK,
+												&state->ht_cache);
+
 	/*
-	 * Find the ChunkDispatchState subnode and set their parent
-	 * ModifyTableState node
+	 * If we are inserting into a chunk directly, rri will point to the chunk
+	 * itself, so we need to get the hypertable from the chunk.
 	 */
-	PlanState *subplan = outerPlanState(mtstate);
+	if (!state->ht)
+	{
+		Chunk *chunk =
+			ts_chunk_get_by_relid(RelationGetRelid(mtstate->resultRelInfo->ri_RelationDesc), true);
+		state->ht = ts_hypertable_cache_get_entry(state->ht_cache,
+												  chunk->hypertable_relid,
+												  CACHE_FLAG_NONE);
+	}
+	state->has_continuous_aggregate = ts_hypertable_has_continuous_aggregates(state->ht->fd.id);
 
 	if (mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE)
 	{
-		/* setup chunk dispatch state only for INSERTs */
-		ChunkDispatchState *cds = get_chunk_dispatch_state(subplan);
+		/* setup chunk tuple routing state for INSERT/MERGE */
+		state->ctr = ts_chunk_tuple_routing_create(estate, state->ht, mtstate->resultRelInfo);
+		state->ctr->mht_state = state;
 
-		/* Ensure that we found at least one ChunkDispatchState node */
-		Assert(cds);
+		if (mtstate->operation == CMD_INSERT && should_use_direct_compress(state))
+		{
+			state->columnstore_insert = true;
+			state->ctr->create_compressed_chunk = true;
+		}
 
-		ts_chunk_dispatch_state_set_parent(cds, mtstate);
+		if (mtstate->operation == CMD_MERGE)
+			state->ctr->has_dropped_attrs =
+				rel_has_dropped_attrs(state->ctr->hypertable->main_table_relid);
+
+		/* setup per tuple exprcontext for tuple routing */
+		if (!estate->es_per_tuple_exprcontext)
+			estate->es_per_tuple_exprcontext = CreateExprContext(estate);
 	}
 }
 
@@ -106,7 +184,19 @@ modify_hypertable_exec(CustomScanState *node)
 static void
 modify_hypertable_end(CustomScanState *node)
 {
+	ModifyHypertableState *state = (ModifyHypertableState *) node;
+	if (state->compressor)
+	{
+		ts_cm_functions->compressor_flush(state->compressor, state->bulk_writer);
+		ts_cm_functions->compressor_free(state->compressor, state->bulk_writer);
+		state->compressor = NULL;
+		state->bulk_writer = NULL;
+	}
 	ExecEndNode(linitial(node->custom_ps));
+	if (state->ctr)
+		ts_chunk_tuple_routing_destroy(state->ctr);
+
+	ts_cache_release(&state->ht_cache);
 }
 
 static void
@@ -155,17 +245,17 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 
 	/*
 	 * For INSERT we have to read the number of decompressed batches and
-	 * tuples from the ChunkDispatchState below the ModifyTable.
+	 * tuples from the ChunkTupleRouting state below the ModifyTable.
 	 */
 	if ((mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE) &&
 		outerPlanState(mtstate))
 	{
-		ChunkDispatchState *cds = get_chunk_dispatch_state(outerPlanState(mtstate));
+		SharedCounters *counters = state->ctr->counters;
 
-		state->batches_deleted += cds->dispatch->counters->batches_deleted;
-		state->batches_filtered += cds->dispatch->counters->batches_filtered;
-		state->batches_decompressed += cds->dispatch->counters->batches_decompressed;
-		state->tuples_decompressed += cds->dispatch->counters->tuples_decompressed;
+		state->batches_deleted += counters->batches_deleted;
+		state->batches_filtered += counters->batches_filtered;
+		state->batches_decompressed += counters->batches_decompressed;
+		state->tuples_decompressed += counters->tuples_decompressed;
 	}
 	if (state->batches_filtered > 0)
 		ExplainPropertyInteger("Batches filtered", NULL, state->batches_filtered, es);
@@ -175,6 +265,8 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		ExplainPropertyInteger("Tuples decompressed", NULL, state->tuples_decompressed, es);
 	if (state->batches_deleted > 0)
 		ExplainPropertyInteger("Batches deleted", NULL, state->batches_deleted, es);
+	if (ts_guc_enable_direct_compress_insert && state->mt->operation == CMD_INSERT)
+		ExplainPropertyBool("Direct Compress", state->columnstore_insert, es);
 }
 
 static CustomExecMethods modify_hypertable_state_methods = {
@@ -390,29 +482,16 @@ static CustomPathMethods modify_hypertable_path_methods = {
 };
 
 Path *
-ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hypertable *ht,
-								 RelOptInfo *rel)
+ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath, RelOptInfo *rel)
 {
-	Path *path = &mtpath->path;
-	Cache *hcache = ts_hypertable_cache_pin();
-	ModifyHypertablePath *hmpath;
-
-	if (mtpath->operation == CMD_INSERT || mtpath->operation == CMD_MERGE)
-	{
-		mtpath->subpath = ts_chunk_dispatch_path_create(root, mtpath);
-	}
-
-	hmpath = palloc0(sizeof(ModifyHypertablePath));
+	ModifyHypertablePath *mht_path = palloc0(sizeof(ModifyHypertablePath));
 
 	/* Copy costs, etc. */
-	memcpy(&hmpath->cpath.path, path, sizeof(Path));
-	hmpath->cpath.path.type = T_CustomPath;
-	hmpath->cpath.path.pathtype = T_CustomScan;
-	hmpath->cpath.custom_paths = list_make1(mtpath);
-	hmpath->cpath.methods = &modify_hypertable_path_methods;
-	path = &hmpath->cpath.path;
+	memcpy(&mht_path->cpath.path, &mtpath->path, sizeof(Path));
+	mht_path->cpath.path.type = T_CustomPath;
+	mht_path->cpath.path.pathtype = T_CustomScan;
+	mht_path->cpath.custom_paths = list_make1(mtpath);
+	mht_path->cpath.methods = &modify_hypertable_path_methods;
 
-	ts_cache_release(&hcache);
-
-	return path;
+	return &mht_path->cpath.path;
 }

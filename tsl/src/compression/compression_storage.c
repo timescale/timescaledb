@@ -135,6 +135,9 @@ compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid 
 	compress_rel = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
 
 	create->relation = compress_rel;
+	/* Inherit the persistence (LOGGED or UNLOGGED) from the uncompressed chunk */
+	create->relation->relpersistence = get_rel_persistence(src_chunk->table_id);
+
 	tbladdress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
 	CommandCounterIncrement();
 	chunk->table_id = tbladdress.objectId;
@@ -295,7 +298,8 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 	HeapTuple index_tuple;
 	List *indexcols = NIL;
 
-	StringInfo buf = makeStringInfo();
+	StringInfoData buf;
+	initStringInfo(&buf);
 
 	if (settings->fd.segmentby)
 	{
@@ -306,8 +310,8 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		{
 			IndexElem *segment_elem = makeNode(IndexElem);
 			segment_elem->name = TextDatumGetCString(datum);
-			appendStringInfoString(buf, segment_elem->name);
-			appendStringInfoString(buf, ", ");
+			appendStringInfoString(&buf, segment_elem->name);
+			appendStringInfoString(&buf, ", ");
 			indexcols = lappend(indexcols, segment_elem);
 		}
 	}
@@ -315,21 +319,22 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 	SortByDir ordering;
 	SortByNulls nulls_ordering;
 
-	StringInfo orderby_buf = makeStringInfo();
+	StringInfoData orderby_buf;
+	initStringInfo(&orderby_buf);
 	for (int i = 1; i <= ts_array_length(settings->fd.orderby); i++)
 	{
-		resetStringInfo(orderby_buf);
+		resetStringInfo(&orderby_buf);
 		/* Add min metadata column */
 		IndexElem *orderby_min_elem = makeNode(IndexElem);
 		orderby_min_elem->name = column_segment_min_name(i);
 		if (ts_array_get_element_bool(settings->fd.orderby_desc, i))
 		{
-			appendStringInfoString(orderby_buf, " DESC");
+			appendStringInfoString(&orderby_buf, " DESC");
 			ordering = SORTBY_DESC;
 		}
 		else
 		{
-			appendStringInfoString(orderby_buf, " ASC");
+			appendStringInfoString(&orderby_buf, " ASC");
 			ordering = SORTBY_ASC;
 		}
 		orderby_min_elem->ordering = ordering;
@@ -338,7 +343,7 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		{
 			if (orderby_min_elem->ordering != SORTBY_DESC)
 			{
-				appendStringInfoString(orderby_buf, " NULLS FIRST");
+				appendStringInfoString(&orderby_buf, " NULLS FIRST");
 				nulls_ordering = SORTBY_NULLS_FIRST;
 			}
 			else
@@ -354,14 +359,14 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 			}
 			else
 			{
-				appendStringInfoString(orderby_buf, " NULLS LAST");
+				appendStringInfoString(&orderby_buf, " NULLS LAST");
 				nulls_ordering = SORTBY_NULLS_LAST;
 			}
 		}
 		orderby_min_elem->nulls_ordering = nulls_ordering;
-		appendStringInfoString(buf, orderby_min_elem->name);
-		appendStringInfoString(buf, orderby_buf->data);
-		appendStringInfoString(buf, ", ");
+		appendStringInfoString(&buf, orderby_min_elem->name);
+		appendStringInfoString(&buf, orderby_buf.data);
+		appendStringInfoString(&buf, ", ");
 		indexcols = lappend(indexcols, orderby_min_elem);
 
 		/* Add max metadata column */
@@ -369,9 +374,9 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		orderby_max_elem->name = column_segment_max_name(i);
 		orderby_max_elem->ordering = orderby_min_elem->ordering;
 		orderby_max_elem->nulls_ordering = orderby_min_elem->nulls_ordering;
-		appendStringInfoString(buf, orderby_max_elem->name);
-		appendStringInfoString(buf, orderby_buf->data);
-		appendStringInfoString(buf, ", ");
+		appendStringInfoString(&buf, orderby_max_elem->name);
+		appendStringInfoString(&buf, orderby_buf.data);
+		appendStringInfoString(&buf, ", ");
 		indexcols = lappend(indexcols, orderby_max_elem);
 	}
 
@@ -398,7 +403,7 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		 NameStr(index_name),
 		 NameStr(chunk->fd.schema_name),
 		 NameStr(chunk->fd.table_name),
-		 buf->data);
+		 buf.data);
 
 	ReleaseSysCache(index_tuple);
 }

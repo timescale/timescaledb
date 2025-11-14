@@ -159,6 +159,9 @@ $BODY$
     c.convalidated
     FROM pg_constraint c
     WHERE c.conrelid = rel
+-- to avoid showing not null constraints which are new to PG18
+-- https://github.com/postgres/postgres/commit/14e87ffa
+	AND c.conname NOT LIKE '%not_null%'
     ORDER BY c.conname;
 $BODY$;
 
@@ -194,6 +197,9 @@ BEGIN
     c.convalidated
     FROM pg_class cl, pg_constraint c
     WHERE format('%I.%I', cl.relnamespace::regnamespace::name, cl.relname) LIKE format('%I.%s', schema_name, table_name)
+-- to avoid showing not null constraints which are new to PG18
+-- https://github.com/postgres/postgres/commit/14e87ffa
+	AND c.conname NOT LIKE '%not_null%'
     AND c.conrelid = cl.oid
     ORDER BY cl.relname, c.conname;
 END

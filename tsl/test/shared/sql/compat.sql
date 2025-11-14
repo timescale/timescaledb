@@ -32,7 +32,6 @@ SELECT pg_typeof(_timescaledb_internal.get_os_info());
 SELECT _timescaledb_internal.get_partition_for_key(NULL::text);
 SELECT _timescaledb_internal.get_partition_hash(NULL::text);
 SELECT _timescaledb_internal.hypertable_local_size(NULL,NULL);
-SELECT _timescaledb_internal.indexes_local_size(NULL,NULL);
 SELECT _timescaledb_internal.interval_to_usec(NULL);
 SELECT _timescaledb_internal.partialize_agg(NULL::text);
 SELECT _timescaledb_internal.policy_compression_check(NULL);
@@ -90,12 +89,6 @@ SELECT time_bucket(INTERVAL '1 hour', time),
 FROM sensor_data
 GROUP BY 1
 WITH DATA;
-
-DROP TRIGGER ts_cagg_invalidation_trigger ON sensor_data;
-
-CREATE TRIGGER ts_cagg_invalidation_trigger
-    AFTER INSERT OR DELETE OR UPDATE ON sensor_data
-    FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.continuous_agg_invalidation_trigger(:'hypertable_id');
 
 INSERT INTO sensor_data values('1980-01-01 00:00:00-00', 1);
 CALL refresh_continuous_aggregate('sensor_data_hourly', NULL, NULL);

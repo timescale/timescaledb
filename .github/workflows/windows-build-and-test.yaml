@@ -29,6 +29,7 @@ jobs:
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
       pg17_latest: ${{ steps.config.outputs.pg17_latest }}
+      pg18_latest: ${{ steps.config.outputs.pg18_latest }}
 
     steps:
     - name: Checkout source code
@@ -47,26 +48,25 @@ jobs:
 
   build:
     # Change the JOB_NAME variable below when changing the name.
-    name: PG${{ matrix.pg }} ${{ matrix.build_type }} ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
+    runs-on: windows-2025
     needs: config
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 15, 16, 17 ]
-        os: [ windows-2022 ]
+        versions:
+          - { pg: 15, pg_version: "${{ needs.config.outputs.pg15_latest }}" }
+          - { pg: 16, pg_version: "${{ needs.config.outputs.pg16_latest }}" }
+          - { pg: 17, pg_version: "${{ needs.config.outputs.pg17_latest }}" }
+#          - { pg: 18, pg_version: "${{ needs.config.outputs.pg18_latest }}" }
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
-        include:
-          - pg: 15
-            pg_version: "15.12"
-#            pg_version: ${{ needs.config.outputs.pg15_latest }}
-          - pg: 16
-            pg_version: "16.8"
-#            pg_version: ${{ needs.config.outputs.pg16_latest }}
-          - pg: 17
-            pg_version: "17.4"
-#            pg_version: ${{ needs.config.outputs.pg17_latest }}
+        event_name: ["${{ github.event_name }}"]
+        exclude:
+          - versions: { pg: 15, pg_version: "${{ needs.config.outputs.pg15_latest }}" }
+            event_name: "pull_request"
+          - versions: { pg: 16, pg_version: "${{ needs.config.outputs.pg16_latest }}" }
+            event_name: "pull_request"
     env:
       # PostgreSQL configuration
       PGPORT: 55432
@@ -74,25 +74,47 @@ jobs:
       TABLESPACE1: D:\tablespace1\
       TABLESPACE2: D:\tablespace2\
       IGNORES: >-
-        compress_bloom_sparse_debug
-        compress_bloom_sparse_compat
-        compress_qualpushdown_saop
-        compressed_copy
-        compression_algos
-        compression_uuid
         bgw_launcher
         chunk_adaptive
+        compress_bloom_sparse_compat
+        compress_bloom_sparse_debug
+        compress_qualpushdown_saop
+        compression_algos
+        compression_uuid
+        direct_compress_copy
+        merge_append_partially_compressed
         metadata
         telemetry
-      SKIPS: >-
-        bgw_db_scheduler
-        bgw_db_scheduler_fixed
+        vector_agg_byte
+        vector_agg_filter
         vector_agg_groupagg
         vector_agg_grouping
         vector_agg_text
         vector_agg_uuid
         vectorized_aggregation
+        ${{ matrix.versions.pg < 16 && 'columnar_scan_cost' || '' }}
+      SKIPS: >-
+        bgw_db_scheduler
+        bgw_db_scheduler_fixed
     steps:
+
+    - name: Remove Existing PostgreSQL
+      shell: powershell
+      run: |
+        # Search for any installed application package containing 'PostgreSQL' in the name.
+        $PostgresPackages = Get-Package -Name "*PostgreSQL*" -Provider Programs -ErrorAction SilentlyContinue
+        if ($PostgresPackages) {
+            Write-Host "Found $($PostgresPackages.Count) PostgreSQL package(s) to uninstall."
+            # Use Uninstall-Package with -Force for a silent, non-interactive removal.
+            $PostgresPackages | Uninstall-Package -Force
+            # Manually remove common installation paths and data folders
+            # to ensure no conflicts with the new installation.
+            Remove-Item "C:\Program Files\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item "C:\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
+        } else {
+            Write-Host "No registered PostgreSQL installation found. Skipping uninstall step."
+        }
+
     - name: Setup WSL
       uses: Vampire/setup-wsl@v3.1.4
       with:
@@ -105,13 +127,12 @@ jobs:
         echo 'Acquire::http::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
         echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
 
-    # The apt-update is allowed to fail because of a known issue in WSL
-    # where the apt spec for the debian backports repo is messed up
-    # https://github.com/Vampire/setup-wsl/issues/76
     - name: Install additional packages in WSL
       shell: wsl-bash {0}
       run: |
-        apt-get update || true
+        # Workaround for https://github.com/Vampire/setup-wsl/issues/76
+        sed -i 's#ftp.debian.org/debian bullseye-backports#archive.debian.org/debian bullseye-backports#' /etc/apt/sources.list
+        apt-get update
         apt-get install --yes --no-install-recommends cmake gawk gcc git gnupg jq make postgresql-client postgresql-common tree
 
     - name: Configure git
@@ -146,33 +167,27 @@ jobs:
       uses: actions/cache@v4
       id: cache-postgresql
       with:
-        path: ~\PostgreSQL\${{ matrix.pg }}
+        path: C:\Progra~1\PostgreSQL\${{ matrix.versions.pg }}
         key: "${{ runner.os }}-build-pg${{ matrix.pkg_version }}\
           -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
-    # Force install PostgreSQL 17 since the package still on moderation
-    # https://community.chocolatey.org/packages/postgresql17
-    - name: Install PostgreSQL ${{ matrix.pg }} (using ${{ matrix.pg_version }})
+    - name: Install PostgreSQL ${{ matrix.versions.pg }} (using ${{ matrix.versions.pg_version }})
       if: github.event_name != 'schedule' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        choco feature disable --name=usePackageExitCodes
-        choco feature disable --name=showDownloadProgress
-        choco install postgresql${{ matrix.pg }} --version ${{ matrix.pg_version }} `
-          --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
+        $version = ${{ matrix.versions.pg_version }}
+        $version = $version.Replace('"', '') + "-1"
+        winget install --id PostgreSQL.PostgreSQL.${{ matrix.versions.pg }} --version $version --force --accept-source-agreements --accept-package-agreements --disable-interactivity
 
     # This is for nightly builds. Here we pick the latest version of the package.
-    - name: Install PostgreSQL ${{ matrix.pg }}
+    - name: Install PostgreSQL ${{ matrix.versions.pg }}
       if: github.event_name == 'schedule' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        choco feature disable --name=usePackageExitCodes
-        choco feature disable --name=showDownloadProgress
-        choco install postgresql${{ matrix.pg }} `
-          --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
+        winget install --id PostgreSQL.PostgreSQL.${{ matrix.versions.pg }} --force --accept-source-agreements --accept-package-agreements --disable-interactivity
 
     - name: Configure TimescaleDB
       run: cmake -B build_win -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
-        -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" `
-        -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}" -DASSERTIONS=ON `
+        -DPG_CONFIG=C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_config `
+        -DASSERTIONS=ON `
         -DTEST_PG_LOG_DIRECTORY="log"
     - name: Build TimescaleDB
       run: cmake --build build_win --config ${{ matrix.build_type }}
@@ -180,38 +195,40 @@ jobs:
       run: cmake --install build_win --config ${{ matrix.build_type }}
 
     - name: Setup postgres cluster
+      if: github.event_name == 'schedule'
       run: |
-        ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         mkdir -p ${{ env.TABLESPACE1 }}\_default
         mkdir -p ${{ env.TABLESPACE2 }}\_default
         icacls ${{ env.TABLESPACE1 }} /grant runneradmin:F /T
         icacls ${{ env.TABLESPACE2 }} /grant runneradmin:F /T
         copy build_win/test/postgresql.conf ${{ env.PGDATA }}
-        copy build_win/test/pg_hba.conf ${{ env.PGDATA }}
         icacls . /grant runneradmin:F /T
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postmaster.log
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=60
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postmaster.log
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_isready -U postgres -d postgres --timeout=60
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
         echo "PG version:"
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SELECT version();'
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'SELECT version();'
         echo "Log configuration:"
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW logging_collector;'
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW log_filename;'
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW log_directory;'
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SELECT pg_current_logfile();'
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'SHOW logging_collector;'
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'SHOW log_filename;'
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'SHOW log_directory;'
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'SELECT pg_current_logfile();'
         echo "Data directory:"
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW data_directory;'
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'SHOW data_directory;'
 
     - name: Install postgres for test runner
+      if: github.event_name == 'schedule'
       shell: wsl-bash {0}
       run: |
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh || true
         echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
         echo 'Acquire::http::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
         echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
-        apt-get install -y --force-yes postgresql-server-dev-${{ matrix.pg }}
+        apt-get install -y --force-yes postgresql-server-dev-${{ matrix.versions.pg }}
 
     - name: Run tests
+      if: github.event_name == 'schedule'
       shell: wsl-bash {0}
       env:
         WSLENV: "IGNORES:SKIPS"
@@ -224,18 +241,19 @@ jobs:
         make -C build_wsl regresschecklocal IGNORES="${IGNORES}" SKIPS="${SKIPS}" | tee -a installcheck.log
 
     - name: Setup postgres cluster for TSL tests
+      if: github.event_name == 'schedule'
       run: |
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl stop
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_ctl stop
         timeout 10
         Remove-Item -Recurse ${{ env.PGDATA }}
-        ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         copy build_win/tsl/test/postgresql.conf ${{ env.PGDATA }}
-        copy build_win/tsl/test/pg_hba.conf ${{ env.PGDATA }}
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log="postmaster.log"
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log="postmaster.log"
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
+        C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
 
     - name: Run TSL tests
+      if: github.event_name == 'schedule'
       shell: wsl-bash {0}
       env:
         WSLENV: "IGNORES:SKIPS"
@@ -262,7 +280,7 @@ jobs:
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: Regression ${{ matrix.pg }} diff ${{ matrix.os }} ${{ matrix.build_type }} Build
+        name: Regression ${{ matrix.versions.pg }} diff ${{ matrix.os }} ${{ matrix.build_type }} Build
         path: |
           regression.log
           installcheck.log
@@ -271,14 +289,14 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: PostgreSQL ${{ matrix.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
+        name: PostgreSQL ${{ matrix.versions.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
         path: ${{ env.PGDATA }}\log\postmaster.log
 
     - name: Upload CMake Logs
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: CMake Logs ${{ matrix.pg }} ${{ matrix.os }} ${{ matrix.build_type }}
+        name: CMake Logs ${{ matrix.versions.pg }} ${{ matrix.os }} ${{ matrix.build_type }}
         path: |
             build_win/CMakeCache.txt
             build_win/CMakeFiles/CMakeConfigureLog.yaml
@@ -302,7 +320,7 @@ jobs:
         # GitHub Actions allow you neither to use the env context for the job name,
         # nor to access the job name from the step context, so we have to
         # duplicate it to work around this nonsense.
-        JOB_NAME: PG${{ matrix.pg }} ${{ matrix.build_type }} ${{ matrix.os }}
+        JOB_NAME: PG${{ matrix.versions.pg }} ${{ matrix.build_type }} ${{ matrix.os }}
         CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
         GITHUB_REF_NAME: ${{ github.ref_name }}

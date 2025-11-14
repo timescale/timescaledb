@@ -64,10 +64,8 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00'
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
 
--- Refresh the rest (and try DEBUG output)
-SET client_min_messages TO DEBUG1;
+-- Refresh the rest
 CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
-RESET client_min_messages;
 
 -- Compare the aggregate to the equivalent query on the source table
 SELECT * FROM daily_temp

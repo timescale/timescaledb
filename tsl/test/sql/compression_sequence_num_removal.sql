@@ -5,9 +5,9 @@
 -- test query planning with hypertable which contains
 -- compressed chunks that depend on sequence number optimization
 -- which is removed in latest schema revision
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-\set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
+\set EXPLAIN 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 
 CREATE TABLE hyper(
     time INT NOT NULL,
@@ -48,7 +48,7 @@ ORDER BY ch1.id LIMIT 1 \gset
 SELECT schemaname || '.' || indexname AS "CHUNK_INDEX" FROM pg_indexes where tablename = :'CHUNK_NAME'
 LIMIT 1 \gset
 
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -72,7 +72,7 @@ ORDER BY ch1.id OFFSET 2 LIMIT 1 \gset
 SELECT schemaname || '.' || indexname AS "CHUNK_INDEX" FROM pg_indexes where tablename = :'CHUNK_NAME'
 LIMIT 1 \gset
 
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -133,7 +133,7 @@ WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 AND ch1.compressed_chunk_id = comp_ch.id
 ORDER BY ch1.id LIMIT 1 \gset
 
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -151,7 +151,7 @@ WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 AND ch1.compressed_chunk_id = comp_ch.id
 ORDER BY ch1.id OFFSET 3 LIMIT 1 \gset
 
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -199,7 +199,7 @@ WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 AND ch1.compressed_chunk_id = comp_ch.id
 ORDER BY ch1.id LIMIT 1 \gset
 
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SELECT :'CHUNK_FULL_NAME'::regclass::oid as "CHUNK_OID" \gset
 SELECT (power(2,31)+1)::bigint as "CHUNK_NEW_OID" \gset
 UPDATE pg_class SET oid = :CHUNK_NEW_OID

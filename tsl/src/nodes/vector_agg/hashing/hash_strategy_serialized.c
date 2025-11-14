@@ -13,7 +13,7 @@
 #include <common/hashfn.h>
 
 #include "compression/arrow_c_data_interface.h"
-#include "nodes/decompress_chunk/compressed_batch.h"
+#include "nodes/columnar_scan/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
 #include "nodes/vector_agg/grouping_policy_hash.h"
 #include "template_helper.h"
@@ -126,32 +126,37 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 		if (column_values->decompression_type > 0)
 		{
 			num_bytes += column_values->decompression_type;
+			continue;
+		}
+
+		if (column_values->decompression_type == DT_ArrowBits)
+		{
+			num_bytes += 1;
+			continue;
+		}
+
+		Assert(column_values->decompression_type == DT_ArrowText ||
+			   column_values->decompression_type == DT_ArrowTextDict);
+		Assert((column_values->decompression_type == DT_ArrowTextDict) ==
+			   (column_values->buffers[3] != NULL));
+
+		const uint32 data_row = (column_values->decompression_type == DT_ArrowTextDict) ?
+									((int16 *) column_values->buffers[3])[row] :
+									row;
+		const uint32 start = ((uint32 *) column_values->buffers[1])[data_row];
+		const int32 value_bytes = ((uint32 *) column_values->buffers[1])[data_row + 1] - start;
+
+		if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
+		{
+			/* Short varlena, unaligned. */
+			const int total_bytes = value_bytes + VARHDRSZ_SHORT;
+			num_bytes += total_bytes;
 		}
 		else
 		{
-			Assert(column_values->decompression_type == DT_ArrowText ||
-				   column_values->decompression_type == DT_ArrowTextDict);
-			Assert((column_values->decompression_type == DT_ArrowTextDict) ==
-				   (column_values->buffers[3] != NULL));
-
-			const uint32 data_row = (column_values->decompression_type == DT_ArrowTextDict) ?
-										((int16 *) column_values->buffers[3])[row] :
-										row;
-			const uint32 start = ((uint32 *) column_values->buffers[1])[data_row];
-			const int32 value_bytes = ((uint32 *) column_values->buffers[1])[data_row + 1] - start;
-
-			if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
-			{
-				/* Short varlena, unaligned. */
-				const int total_bytes = value_bytes + VARHDRSZ_SHORT;
-				num_bytes += total_bytes;
-			}
-			else
-			{
-				/* Long varlena, requires alignment. */
-				const int total_bytes = value_bytes + VARHDRSZ;
-				num_bytes = TYPEALIGN(4, num_bytes) + total_bytes;
-			}
+			/* Long varlena, requires alignment. */
+			const int total_bytes = value_bytes + VARHDRSZ;
+			num_bytes = TYPEALIGN(4, num_bytes) + total_bytes;
 		}
 	}
 
@@ -303,6 +308,13 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 
 			offset += column_values->decompression_type;
 
+			continue;
+		}
+
+		if (column_values->decompression_type == DT_ArrowBits)
+		{
+			serialized_key_storage[offset] = arrow_row_is_valid(column_values->buffers[1], row);
+			offset += 1;
 			continue;
 		}
 

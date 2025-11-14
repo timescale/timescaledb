@@ -29,14 +29,12 @@ SELECT create_hypertable('conditions', 'time', chunk_time_interval => 10);
     create_hypertable    
 -------------------------
  (1,public,conditions,t)
-(1 row)
 
 CREATE TABLE measurements (time int NOT NULL, device int, temp float);
 SELECT create_hypertable('measurements', 'time', chunk_time_interval => 10);
      create_hypertable     
 ---------------------------
  (2,public,measurements,t)
-(1 row)
 
 CREATE OR REPLACE FUNCTION bigint_now()
 RETURNS bigint LANGUAGE SQL STABLE AS
@@ -54,13 +52,11 @@ SELECT set_integer_now_func('conditions', 'bigint_now');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 SELECT set_integer_now_func('measurements', 'int_now');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 INSERT INTO conditions
 SELECT t, ceil(abs(timestamp_hash(to_timestamp(t)::timestamp))%4)::int,
@@ -102,7 +98,6 @@ SELECT * FROM hypertable_invalidation_thresholds;
 --------------+-----------
  conditions   |       110
  measurements |       110
-(2 rows)
 
 INSERT INTO conditions VALUES (10, 4, 23.7);
 INSERT INTO conditions VALUES (10, 5, 23.8), (19, 3, 23.6);
@@ -118,7 +113,6 @@ SELECT hypertable, lowest_modified_value, greatest_modified_value
  conditions   |                    60 |                      70
  measurements |                    20 |                      20
  measurements |                    30 |                      80
-(5 rows)
 
 \set ON_ERROR_STOP 0
 CALL add_process_hypertable_invalidations_policy('conditions_10',
@@ -224,7 +218,6 @@ SELECT hypertable, lowest_modified_value, greatest_modified_value
  conditions   |                    60 |                      70
  measurements |                    20 |                      20
  measurements |                    30 |                      80
-(5 rows)
 
 CALL run_job(get_job_id_for('conditions'));
 SELECT hypertable, lowest_modified_value, greatest_modified_value
@@ -233,7 +226,6 @@ SELECT hypertable, lowest_modified_value, greatest_modified_value
 --------------+-----------------------+-------------------------
  measurements |                    20 |                      20
  measurements |                    30 |                      80
-(2 rows)
 
 -- Running it twice should work and not change anything.
 CALL run_job(get_job_id_for('conditions'));
@@ -243,14 +235,12 @@ SELECT hypertable, lowest_modified_value, greatest_modified_value
 --------------+-----------------------+-------------------------
  measurements |                    20 |                      20
  measurements |                    30 |                      80
-(2 rows)
 
 CALL run_job(get_job_id_for('measurements'));
 SELECT hypertable, lowest_modified_value, greatest_modified_value
   FROM hypertable_invalidations;
  hypertable | lowest_modified_value | greatest_modified_value 
 ------------+-----------------------+-------------------------
-(0 rows)
 
 \set ON_ERROR_STOP 0
 CALL _timescaledb_functions.policy_process_hypertable_invalidations(NULL, NULL);
@@ -267,7 +257,6 @@ SELECT hypertable, lowest_modified_value, greatest_modified_value
 --------------+-----------------------+-------------------------
  measurements |                    40 |                      40
  measurements |                    50 |                      50
-(2 rows)
 
 CALL refresh_continuous_aggregate('measure_10', NULL, NULL,
      options => '{"process_hypertable_invalidations": false}');
@@ -277,7 +266,6 @@ SELECT hypertable, lowest_modified_value, greatest_modified_value
 --------------+-----------------------+-------------------------
  measurements |                    40 |                      40
  measurements |                    50 |                      50
-(2 rows)
 
 -- Check that a refresh with hypertable invalidation processing
 -- enabled move the invalidations.
@@ -287,7 +275,6 @@ SELECT hypertable, lowest_modified_value, greatest_modified_value
   FROM hypertable_invalidations;
  hypertable | lowest_modified_value | greatest_modified_value 
 ------------+-----------------------+-------------------------
-(0 rows)
 
 -- Check that a refresh by default moves the invalidations.
 INSERT INTO measurements VALUES (60, 16, 12.3);
@@ -298,14 +285,12 @@ SELECT hypertable, lowest_modified_value, greatest_modified_value
 --------------+-----------------------+-------------------------
  measurements |                    60 |                      60
  measurements |                    61 |                      61
-(2 rows)
 
 CALL refresh_continuous_aggregate('measure_10', NULL, NULL);
 SELECT hypertable, lowest_modified_value, greatest_modified_value
   FROM hypertable_invalidations;
  hypertable | lowest_modified_value | greatest_modified_value 
 ------------+-----------------------+-------------------------
-(0 rows)
 
 -- Check permissions. Only owner should be able to remove policy.
 \set ON_ERROR_STOP 0
@@ -338,21 +323,18 @@ SELECT jsonb_pretty(config)
      "mat_hypertable_id": 4,                  +
      "process_hypertable_invalidations": false+
  }
-(1 row)
 
 INSERT INTO measurements VALUES (70, 19, 12.3), (71, 20, 34.5);
 SELECT hypertable, lowest_modified_value, greatest_modified_value FROM hypertable_invalidations;
   hypertable  | lowest_modified_value | greatest_modified_value 
 --------------+-----------------------+-------------------------
  measurements |                    70 |                      71
-(1 row)
 
 CALL run_job(:job_id);
 SELECT hypertable, lowest_modified_value, greatest_modified_value FROM hypertable_invalidations;
   hypertable  | lowest_modified_value | greatest_modified_value 
 --------------+-----------------------+-------------------------
  measurements |                    70 |                      71
-(1 row)
 
 -- Enable invalidations and check that it now moves invalidations
 SELECT jsonb_pretty(config)
@@ -365,11 +347,9 @@ SELECT jsonb_pretty(config)
      "mat_hypertable_id": 4,                 +
      "process_hypertable_invalidations": true+
  }
-(1 row)
 
 CALL run_job(:job_id);
 SELECT hypertable, lowest_modified_value, greatest_modified_value FROM hypertable_invalidations;
  hypertable | lowest_modified_value | greatest_modified_value 
 ------------+-----------------------+-------------------------
-(0 rows)
 

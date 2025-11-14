@@ -43,6 +43,12 @@ WHERE ht.compression_state != 2 --> no internal compression tables
   AND ht.interval_length IS NOT NULL
   AND ht.dimension_num = 1;
 
+-- Get status of existing jobs.
+--
+-- Note that we will always list all jobs that are available in the
+-- database, but some fields might be null if, for example, the job
+-- has not yet executed, or there is no hypertable associated with the
+-- job.
 CREATE OR REPLACE VIEW timescaledb_information.job_stats AS
 SELECT ht.schema_name AS hypertable_schema,
   ht.table_name AS hypertable_name,
@@ -75,7 +81,7 @@ SELECT ht.schema_name AS hypertable_schema,
   js.total_successes,
   js.total_failures
 FROM _timescaledb_config.bgw_job j
-  INNER JOIN _timescaledb_internal.bgw_job_stat js ON j.id = js.job_id
+  LEFT JOIN _timescaledb_internal.bgw_job_stat js ON j.id = js.job_id
   LEFT JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id
   LEFT JOIN pg_stat_activity pgs ON pgs.datname = current_database()
     AND pgs.application_name = j.application_name
@@ -122,11 +128,7 @@ SELECT ht.schema_name AS hypertable_schema,
   mat_ht.schema_name AS materialization_hypertable_schema,
   mat_ht.table_name AS materialization_hypertable_name,
   directview.viewdefinition AS view_definition,
-  cagg.finalized,
-  CASE WHEN _timescaledb_functions.has_invalidation_trigger(format('%I.%I', ht.schema_name, ht.table_name)::regclass)
-       THEN 'trigger'
-       ELSE 'wal'
-  END AS invalidate_using
+  cagg.finalized
 FROM _timescaledb_catalog.continuous_agg cagg,
   _timescaledb_catalog.hypertable ht,
   LATERAL (
@@ -176,22 +178,22 @@ FROM (
     dim.column_name AS primary_dimension,
     dim.column_type AS primary_dimension_type,
     row_number() OVER (PARTITION BY chcons.chunk_id ORDER BY dim.id) AS chunk_dimension_num,
-    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
       _timescaledb_functions.to_timestamp(dimsl.range_start)
     ELSE
       NULL
     END AS range_start,
-    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
       _timescaledb_functions.to_timestamp(dimsl.range_end)
     ELSE
       NULL
     END AS range_end,
-    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
       NULL
     ELSE
       dimsl.range_start
     END AS integer_range_start,
-    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
       NULL
     ELSE
       dimsl.range_end
@@ -375,7 +377,8 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertable_compression_settings A
 		format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
 		array_to_string(segmentby,',') AS segmentby,
 		un.orderby,
-    d.compress_interval_length
+    d.compress_interval_length,
+    s.index AS index
   FROM _timescaledb_catalog.hypertable ht
   JOIN LATERAL (
     SELECT
@@ -403,7 +406,8 @@ CREATE OR REPLACE VIEW timescaledb_information.chunk_compression_settings AS
 		format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
 		format('%I.%I',ch.schema_name,ch.table_name)::regclass AS chunk,
 		array_to_string(segmentby,',') AS segmentby,
-		un.orderby
+		un.orderby,
+    s.index AS index
 	FROM _timescaledb_catalog.hypertable ht
     INNER JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
     INNER JOIN _timescaledb_catalog.compression_settings s ON (format('%I.%I',ch.schema_name,ch.table_name)::regclass = s.relid)

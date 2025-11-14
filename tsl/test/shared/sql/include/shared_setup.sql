@@ -53,16 +53,13 @@ ALTER TABLE metrics_compressed DROP COLUMN filler_3;
 INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 CREATE INDEX ON metrics_compressed(time);
 CREATE INDEX ON metrics_compressed(device_id,time);
-ANALYZE metrics_compressed;
 
 -- compress chunks
 ALTER TABLE metrics_compressed SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
 SELECT compress_chunk(show_chunks('metrics_compressed'));
+UPDATE metrics_compressed SET v3 = 42 WHERE device_id=1 AND time > '2000-01-01' AND time < '2000-01-02';
 
--- Reindexing compressed hypertable to update statistics
--- this is for planner tests which depend on them
--- necessary because this operation was previously done by compress_chunk
-REINDEX TABLE _timescaledb_internal._compressed_hypertable_4;
+VACUUM ANALYZE metrics_compressed;
 
 -- create hypertable with space partitioning and compression
 CREATE TABLE metrics_space_compressed(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
@@ -147,4 +144,38 @@ BEGIN
     END LOOP;
   END LOOP;
 END$$;
+
+CREATE MATERIALIZED VIEW hourly_device_metrics WITH (tsdb.continuous) AS
+SELECT
+    time_bucket('1 hour', time) AS hour,
+    d.device_id,
+    d.name AS device_name,
+    AVG(v0) AS avg_v0,
+    MAX(v1) AS max_v1,
+    MIN(v2) AS min_v2
+FROM metrics
+JOIN devices d ON metrics.device_id = d.device_id
+GROUP BY 1,2,3;
+
+CREATE MATERIALIZED VIEW daily_device_metrics WITH (tsdb.continuous) AS
+SELECT
+    time_bucket('1 day', hour) AS day,
+    device_id,
+    device_name,
+    AVG(avg_v0) AS avg_v0,
+    MAX(max_v1) AS max_v1,
+    MIN(min_v2) AS min_v2
+FROM hourly_device_metrics
+GROUP BY 1,2,3;
+
+CREATE MATERIALIZED VIEW weekly_device_metrics WITH (tsdb.continuous) AS
+SELECT
+    time_bucket('7 day', day) AS week,
+    device_id,
+    device_name,
+    AVG(avg_v0) AS avg_v0,
+    MAX(max_v1) AS max_v1,
+    MIN(min_v2) AS min_v2
+FROM daily_device_metrics
+GROUP BY 1,2,3;
 

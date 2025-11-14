@@ -18,6 +18,10 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev DESC NULLS FIRST;
+
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 
 -- NULLS FIRST doesn't match segmentby NULL direction
@@ -25,6 +29,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 
 -- multicolumn sort with dev as leading column matching (segmentby dev, order by time DESC) compression index
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev, time DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time;
 
 -- multicolumn sort not matching compression index
@@ -55,6 +61,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 
 -- dev_name is not a leading column
 :PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev = 1 ORDER BY dev_name;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev = 1 AND dev_name IS NOT NULL ORDER BY dev_name;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev = 1;
 
 -- Basic tests for "segmentby = 'dev'"
@@ -87,6 +95,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 
 -- DISTINCT ON queries
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_4', length(md5(now()::text)) FROM :TABLE;
@@ -133,6 +143,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;

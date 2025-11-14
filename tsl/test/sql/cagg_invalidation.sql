@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- Disable background workers since we are testing manual refresh
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET datestyle TO 'ISO, YMD';
@@ -691,9 +691,6 @@ WHERE cagg_id = :cond_10_id;
 -- should trigger two individual refreshes
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
 
--- Allow at most 5 individual invalidations per refresh
-SET timescaledb.materializations_per_refresh_window=5;
-
 -- Insert into every second bucket
 INSERT INTO conditions VALUES (20, 1, 1.0);
 INSERT INTO conditions VALUES (40, 1, 1.0);
@@ -704,32 +701,6 @@ INSERT INTO conditions VALUES (120, 1, 1.0);
 INSERT INTO conditions VALUES (140, 1, 1.0);
 
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-
-\set VERBOSITY default
-\set ON_ERROR_STOP 0
--- Test acceptable values for materializations per refresh
-SET timescaledb.materializations_per_refresh_window=' 5 ';
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
--- Large value will be treated as LONG_MAX
-SET timescaledb.materializations_per_refresh_window=342239897234023842394249234766923492347;
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
-
--- Test bad values for materializations per refresh
-SET timescaledb.materializations_per_refresh_window='foo';
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
-SET timescaledb.materializations_per_refresh_window='2bar';
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
-
-SET timescaledb.materializations_per_refresh_window='-';
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
-\set VERBOSITY terse
-RESET timescaledb.materializations_per_refresh_window;
-\set ON_ERROR_STOP 1
 
 -- Test refresh with undefined invalidation threshold and variable sized buckets
 CREATE TABLE timestamp_ht (

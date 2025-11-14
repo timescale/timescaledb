@@ -19,13 +19,13 @@ jobs:
       fail-fast: false
       matrix:
         # run only on the 3 latest PG versions as we have rate limit on coverity
-        pg: [15, 16, 17]
+        pg: [16, 17, 18]
         os: [ubuntu-22.04]
     steps:
     - name: Install Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install gnupg systemd-coredump gdb postgresql-common libkrb5-dev
+        sudo apt-get install gnupg systemd-coredump gdb postgresql-common
         yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         sudo apt-get update
         sudo apt-get install postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}

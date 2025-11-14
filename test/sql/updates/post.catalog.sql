@@ -6,13 +6,14 @@ SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_comp
   FROM pg_extension
  WHERE extname = 'timescaledb' \gset
 
+\if ! :PG_UPGRADE_TEST
 \d+ _timescaledb_catalog.hypertable
 \d+ _timescaledb_catalog.chunk
 \d+ _timescaledb_catalog.dimension
 \d+ _timescaledb_catalog.dimension_slice
 \d+ _timescaledb_catalog.chunk_constraint
-\d+ _timescaledb_catalog.chunk_index
 \d+ _timescaledb_catalog.tablespace
+\endif
 
 -- since we forgot to add bool and null compression with 2.19.0 to the preinstall
 -- script fresh installations of 2.19+ won't have these compression algorithms
@@ -38,8 +39,36 @@ WHERE classoid = 'pg_class'::regclass
   AND nspname IN ('_timescaledb_catalog', '_timescaledb_config')
 ORDER BY schema, name, initpriv;
 
-\di _timescaledb_catalog.*
-\ds+ _timescaledb_catalog.*
+-- indexes in _timescaledb_catalog schema
+SELECT n.nspname as "Schema",
+  c.relname as "Name",
+  CASE c.relkind WHEN 'r' THEN 'table' WHEN 'v' THEN 'view' WHEN 'm' THEN 'materialized view' WHEN 'i' THEN 'index' WHEN 'S' THEN 'sequence' WHEN 't' THEN 'TOAST table' WHEN 'f' THEN 'foreign table' WHEN 'p' THEN 'partitioned table' WHEN 'I' THEN 'partitioned index' END as "Type",
+  pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+  c2.relname as "Table"
+FROM pg_catalog.pg_class c
+     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+     LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+     LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+     LEFT JOIN pg_catalog.pg_class c2 ON i.indrelid = c2.oid
+WHERE c.relkind IN ('i','I','')
+      AND n.nspname = '_timescaledb_catalog'
+  AND pg_catalog.pg_table_is_visible(c.oid)
+ORDER BY 1,2;
+
+-- sequences in _timescaledb_catalog schema
+SELECT n.nspname as "Schema",
+  c.relname as "Name",
+  CASE c.relkind WHEN 'r' THEN 'table' WHEN 'v' THEN 'view' WHEN 'm' THEN 'materialized view' WHEN 'i' THEN 'index' WHEN 'S' THEN 'sequence' WHEN 't' THEN 'TOAST table' WHEN 'f' THEN 'foreign table' WHEN 'p' THEN 'partitioned table' WHEN 'I' THEN 'partitioned index' END as "Type",
+  pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
+  CASE c.relpersistence WHEN 'p' THEN 'permanent' WHEN 't' THEN 'temporary' WHEN 'u' THEN 'unlogged' END as "Persistence",
+  pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) as "Size",
+  pg_catalog.obj_description(c.oid, 'pg_class') as "Description"
+FROM pg_catalog.pg_class c
+     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind IN ('S','')
+      AND n.nspname = '_timescaledb_catalog'
+  AND pg_catalog.pg_table_is_visible(c.oid)
+ORDER BY 1,2;
 
 -- Functions in schemas:
 --   * _timescaledb_internal
@@ -126,8 +155,6 @@ JOIN _timescaledb_catalog.chunk ON chunk.id = chunk_constraint.chunk_id
 WHERE NOT chunk.dropped
 ORDER BY chunk_constraint.chunk_id, chunk_constraint.dimension_slice_id, chunk_constraint.constraint_name;
 
-SELECT index_name FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
-
 -- Show attnum of all regclass objects belonging to our extension
 -- if those are not the same between fresh install/update our update scripts are broken
 SELECT
@@ -144,6 +171,9 @@ ORDER BY attrelid::regclass::text,att.attnum;
 SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid)
 FROM pg_constraint
 WHERE conrelid::regclass::text ~ '^_timescaledb_'
+\if :PG_UPGRADE_TEST
+AND pg_get_constraintdef(oid) NOT LIKE 'NOT NULL %'
+\endif
 ORDER BY 1, 2, 3;
 
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass;

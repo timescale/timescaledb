@@ -25,7 +25,6 @@ SELECT * FROM create_hypertable('"public"."one_Partition"', 'timeCustom', associ
  hypertable_id | schema_name |  table_name   | created 
 ---------------+-------------+---------------+---------
              1 | public      | one_Partition | t
-(1 row)
 
 --output command tags
 \set QUIET off
@@ -63,7 +62,6 @@ SELECT * FROM test.relation WHERE schema='public' ORDER BY schema, name;
  schema |     name      | type  |       owner       
 --------+---------------+-------+-------------------
  public | one_Partition | table | default_perm_user
-(1 row)
 
 \set ON_ERROR_STOP 0
 SELECT * FROM "one_Partition";
@@ -78,11 +76,9 @@ ERROR:  must be owner of hypertable "one_Partition"
 CREATE TABLE "1dim"(time timestamp, temp float);
 SELECT create_hypertable('"1dim"', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  (2,public,1dim,t)
-(1 row)
 
 INSERT INTO "1dim" VALUES('2017-01-20T09:00:01', 22.5);
 INSERT INTO "1dim" VALUES('2017-01-20T09:00:21', 21.2);
@@ -93,7 +89,6 @@ SELECT * FROM "1dim";
  Fri Jan 20 09:00:01 2017 | 22.5
  Fri Jan 20 09:00:21 2017 | 21.2
  Fri Jan 20 09:00:47 2017 | 25.1
-(3 rows)
 
 \ir include/ddl_ops_1.sql
 -- This file and its contents are licensed under the Apache License 2.0.
@@ -125,13 +120,11 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1"', 'time', 'Device_id', 
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
              3 | public      | Hypertable_1 | t
-(1 row)
 
 SELECT * FROM create_hypertable('"customSchema"."Hypertable_1"', 'time', NULL, 1, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
  hypertable_id | schema_name  |  table_name  | created 
 ---------------+--------------+--------------+---------
              4 | customSchema | Hypertable_1 | t
-(1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name  |  table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
@@ -140,7 +133,6 @@ SELECT * FROM _timescaledb_catalog.hypertable;
   2 | public       | 1dim          | _timescaledb_internal  | _hyper_2                |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
   3 | public       | Hypertable_1  | _timescaledb_internal  | _hyper_3                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
   4 | customSchema | Hypertable_1  | _timescaledb_internal  | _hyper_4                |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
-(4 rows)
 
 CREATE INDEX ON PUBLIC."Hypertable_1" (time, "temp_c");
 CREATE INDEX "ind_humidity" ON PUBLIC."Hypertable_1" (time, "humidity");
@@ -153,61 +145,65 @@ INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, s
 VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000001, 'dev1', 30, 70, 1, 2, 3, 100);
-SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY hypertable_id, hypertable_index_name, chunk_id;
- chunk_id |                        index_name                         | hypertable_id |          hypertable_index_name           
-----------+-----------------------------------------------------------+---------------+------------------------------------------
-        1 | _hyper_1_1_chunk_one_Partition_device_id_timeCustom_idx   |             1 | one_Partition_device_id_timeCustom_idx
-        2 | _hyper_1_2_chunk_one_Partition_device_id_timeCustom_idx   |             1 | one_Partition_device_id_timeCustom_idx
-        3 | _hyper_1_3_chunk_one_Partition_device_id_timeCustom_idx   |             1 | one_Partition_device_id_timeCustom_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_idx             |             1 | one_Partition_timeCustom_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_idx             |             1 | one_Partition_timeCustom_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_idx             |             1 | one_Partition_timeCustom_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_0_idx    |             1 | one_Partition_timeCustom_series_0_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_0_idx    |             1 | one_Partition_timeCustom_series_0_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_0_idx    |             1 | one_Partition_timeCustom_series_0_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx    |             1 | one_Partition_timeCustom_series_1_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx    |             1 | one_Partition_timeCustom_series_1_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx    |             1 | one_Partition_timeCustom_series_1_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_2_idx    |             1 | one_Partition_timeCustom_series_2_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_2_idx    |             1 | one_Partition_timeCustom_series_2_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_2_idx    |             1 | one_Partition_timeCustom_series_2_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_bool_idx |             1 | one_Partition_timeCustom_series_bool_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_bool_idx |             1 | one_Partition_timeCustom_series_bool_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_bool_idx |             1 | one_Partition_timeCustom_series_bool_idx
-        4 | _hyper_2_4_chunk_1dim_time_idx                            |             2 | 1dim_time_idx
-        5 | _hyper_3_5_chunk_Hypertable_1_Device_id_time_idx          |             3 | Hypertable_1_Device_id_time_idx
-        5 | _hyper_3_5_chunk_Hypertable_1_time_Device_id_idx          |             3 | Hypertable_1_time_Device_id_idx
-        5 | _hyper_3_5_chunk_Hypertable_1_time_idx                    |             3 | Hypertable_1_time_idx
-        5 | _hyper_3_5_chunk_Hypertable_1_time_temp_c_idx             |             3 | Hypertable_1_time_temp_c_idx
-        5 | _hyper_3_5_chunk_Unique1                                  |             3 | Unique1
-        5 | _hyper_3_5_chunk_ind_humidity                             |             3 | ind_humidity
-        5 | _hyper_3_5_chunk_ind_sensor_1                             |             3 | ind_sensor_1
-        6 | _hyper_4_6_chunk_Hypertable_1_time_Device_id_idx          |             4 | Hypertable_1_time_Device_id_idx
-        6 | _hyper_4_6_chunk_Hypertable_1_time_idx                    |             4 | Hypertable_1_time_idx
-        6 | _hyper_4_6_chunk_Unique1                                  |             4 | Unique1
-(29 rows)
+SELECT * FROM test.show_indexesp('%.%');
+              Table               |                                    Index                                    |         Columns          | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------+-----------------------------------------------------------------------------+--------------------------+------+--------+---------+-----------+------------
+ "one_Partition"._hyper_1_1_chunk | "one_Partition"."_hyper_1_1_chunk_one_Partition_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_1_chunk | "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_0_idx"    | {timeCustom,series_0}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_1_chunk | "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx"    | {timeCustom,series_1}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_1_chunk | "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_2_idx"    | {timeCustom,series_2}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_1_chunk | "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_1_chunk | "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_2_chunk | "one_Partition"."_hyper_1_2_chunk_one_Partition_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_2_chunk | "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_0_idx"    | {timeCustom,series_0}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_2_chunk | "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx"    | {timeCustom,series_1}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_2_chunk | "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_2_idx"    | {timeCustom,series_2}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_2_chunk | "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_2_chunk | "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_3_chunk | "one_Partition"."_hyper_1_3_chunk_one_Partition_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_3_chunk | "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_0_idx"    | {timeCustom,series_0}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_3_chunk | "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx"    | {timeCustom,series_1}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_3_chunk | "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_2_idx"    | {timeCustom,series_2}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_3_chunk | "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_3_chunk | "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
+ "customSchema"."Hypertable_1"    | "customSchema"."Hypertable_1_time_Device_id_idx"                            | {time,Device_id}         |      | f      | f       | f         | 
+ "customSchema"."Hypertable_1"    | "customSchema"."Hypertable_1_time_idx"                                      | {time}                   |      | f      | f       | f         | 
+ "customSchema"."Hypertable_1"    | "customSchema"."Unique1"                                                    | {time}                   |      | t      | f       | f         | 
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper_%');
+                 Table                  |                                  Index                                   |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------+--------------------------------------------------------------------------+------------------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_2_4_chunk | _timescaledb_internal._hyper_2_4_chunk_1dim_time_idx                     | {time}           |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_3_5_chunk | _timescaledb_internal."_hyper_3_5_chunk_Hypertable_1_time_Device_id_idx" | {time,Device_id} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_3_5_chunk | _timescaledb_internal."_hyper_3_5_chunk_Hypertable_1_time_idx"           | {time}           |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_3_5_chunk | _timescaledb_internal."_hyper_3_5_chunk_Hypertable_1_Device_id_time_idx" | {Device_id,time} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_3_5_chunk | _timescaledb_internal."_hyper_3_5_chunk_Hypertable_1_time_temp_c_idx"    | {time,temp_c}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_3_5_chunk | _timescaledb_internal._hyper_3_5_chunk_ind_humidity                      | {time,humidity}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_3_5_chunk | _timescaledb_internal._hyper_3_5_chunk_ind_sensor_1                      | {time,sensor_1}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_3_5_chunk | _timescaledb_internal."_hyper_3_5_chunk_Unique1"                         | {time,Device_id} |      | t      | f       | f         | 
+ _timescaledb_internal._hyper_4_6_chunk | _timescaledb_internal."_hyper_4_6_chunk_Hypertable_1_time_Device_id_idx" | {time,Device_id} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_4_6_chunk | _timescaledb_internal."_hyper_4_6_chunk_Hypertable_1_time_idx"           | {time}           |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_4_6_chunk | _timescaledb_internal."_hyper_4_6_chunk_Unique1"                         | {time}           |      | t      | f       | f         | 
 
 --expect error cases
 \set ON_ERROR_STOP 0
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000000, 'dev1', 31, 71, 72, 4, 1, 102);
-psql:include/ddl_ops_1.sql:56: ERROR:  duplicate key value violates unique constraint "_hyper_4_6_chunk_Unique1"
+psql:include/ddl_ops_1.sql:57: ERROR:  duplicate key value violates unique constraint "_hyper_4_6_chunk_Unique1"
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" ("Device_id");
-psql:include/ddl_ops_1.sql:57: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+psql:include/ddl_ops_1.sql:58: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (time);
-psql:include/ddl_ops_1.sql:58: ERROR:  cannot create a unique index without the column "Device_id" (used in partitioning)
+psql:include/ddl_ops_1.sql:59: ERROR:  cannot create a unique index without the column "Device_id" (used in partitioning)
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (sensor_1);
-psql:include/ddl_ops_1.sql:59: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+psql:include/ddl_ops_1.sql:60: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 UPDATE ONLY PUBLIC."Hypertable_1" SET time = 0 WHERE TRUE;
 DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
 \set ON_ERROR_STOP 1
 CREATE TABLE my_ht (time BIGINT, val integer);
 SELECT * FROM create_hypertable('my_ht', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
-psql:include/ddl_ops_1.sql:66: NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              5 | public      | my_ht      | t
-(1 row)
 
 ALTER TABLE my_ht ADD COLUMN val2 integer;
 SELECT * FROM test.show_columns('my_ht');
@@ -216,12 +212,11 @@ SELECT * FROM test.show_columns('my_ht');
  time   | bigint  | t
  val    | integer | f
  val2   | integer | f
-(3 rows)
 
 -- Should error when adding again
 \set ON_ERROR_STOP 0
 ALTER TABLE my_ht ADD COLUMN val2 integer;
-psql:include/ddl_ops_1.sql:72: ERROR:  column "val2" of relation "my_ht" already exists
+psql:include/ddl_ops_1.sql:73: ERROR:  column "val2" of relation "my_ht" already exists
 \set ON_ERROR_STOP 1
 -- Should create
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
@@ -232,11 +227,10 @@ SELECT * FROM test.show_columns('my_ht');
  val    | integer | f
  val2   | integer | f
  val3   | integer | f
-(4 rows)
 
 -- Should skip and not error
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
-psql:include/ddl_ops_1.sql:80: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
+psql:include/ddl_ops_1.sql:81: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
 SELECT * FROM test.show_columns('my_ht');
  Column |  Type   | NotNull 
 --------+---------+---------
@@ -244,7 +238,6 @@ SELECT * FROM test.show_columns('my_ht');
  val    | integer | f
  val2   | integer | f
  val3   | integer | f
-(4 rows)
 
 -- Should drop
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
@@ -254,18 +247,16 @@ SELECT * FROM test.show_columns('my_ht');
  time   | bigint  | t
  val    | integer | f
  val2   | integer | f
-(3 rows)
 
 -- Should skip and not error
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
-psql:include/ddl_ops_1.sql:88: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
+psql:include/ddl_ops_1.sql:89: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
 SELECT * FROM test.show_columns('my_ht');
  Column |  Type   | NotNull 
 --------+---------+---------
  time   | bigint  | t
  val    | integer | f
  val2   | integer | f
-(3 rows)
 
 --Test default index creation on create_hypertable().
 --Make sure that we do not duplicate indexes that already exists
@@ -281,14 +272,12 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
  hypertable_id | schema_name |               table_name                | created 
 ---------------+-------------+-----------------------------------------+---------
              6 | public      | Hypertable_1_with_default_index_enabled | t
-(1 row)
 
 SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
                             Index                             |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
 --------------------------------------------------------------+------------------+------+--------+---------+-----------+------------
  "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" | {Device_id,Time} |      | f      | f       | f         | 
  "Hypertable_1_with_default_index_enabled_Time_idx"           | {Time}           |      | f      | f       | f         | 
-(2 rows)
 
 ROLLBACK;
 --Space index exists: only time index created
@@ -303,14 +292,12 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
  hypertable_id | schema_name |               table_name                | created 
 ---------------+-------------+-----------------------------------------+---------
              7 | public      | Hypertable_1_with_default_index_enabled | t
-(1 row)
 
 SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
                             Index                             |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
 --------------------------------------------------------------+------------------+------+--------+---------+-----------+------------
  "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" | {Device_id,Time} |      | f      | f       | f         | 
  "Hypertable_1_with_default_index_enabled_Time_idx"           | {Time}           |      | f      | f       | f         | 
-(2 rows)
 
 ROLLBACK;
 --Time index exists, only partition index created
@@ -325,14 +312,12 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
  hypertable_id | schema_name |               table_name                | created 
 ---------------+-------------+-----------------------------------------+---------
              8 | public      | Hypertable_1_with_default_index_enabled | t
-(1 row)
 
 SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
                             Index                             |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
 --------------------------------------------------------------+------------------+------+--------+---------+-----------+------------
  "Hypertable_1_with_default_index_enabled_Device_id_Time_idx" | {Device_id,Time} |      | f      | f       | f         | 
  "Hypertable_1_with_default_index_enabled_Time_idx"           | {Time}           |      | f      | f       | f         | 
-(2 rows)
 
 ROLLBACK;
 --No space partitioning, only time index created
@@ -346,13 +331,11 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
  hypertable_id | schema_name |               table_name                | created 
 ---------------+-------------+-----------------------------------------+---------
              9 | public      | Hypertable_1_with_default_index_enabled | t
-(1 row)
 
 SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
                        Index                        | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
 ----------------------------------------------------+---------+------+--------+---------+-----------+------------
  "Hypertable_1_with_default_index_enabled_Time_idx" | {Time}  |      | f      | f       | f         | 
-(1 row)
 
 ROLLBACK;
 --Disable index creation: no default indexes created
@@ -366,12 +349,10 @@ SELECT * FROM create_hypertable('"public"."Hypertable_1_with_default_index_enabl
  hypertable_id | schema_name |               table_name                | created 
 ---------------+-------------+-----------------------------------------+---------
             10 | public      | Hypertable_1_with_default_index_enabled | t
-(1 row)
 
 SELECT * FROM test.show_indexes('"Hypertable_1_with_default_index_enabled"');
  Index | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
 -------+---------+------+--------+---------+-----------+------------
-(0 rows)
 
 ROLLBACK;
 \ir include/ddl_ops_2.sql
@@ -400,37 +381,43 @@ FOR EACH STATEMENT EXECUTE FUNCTION empty_trigger_func();
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
 -- Change should be reflected here
-SELECT * FROM _timescaledb_catalog.chunk_index;
- chunk_id |                        index_name                         | hypertable_id |          hypertable_index_name           
-----------+-----------------------------------------------------------+---------------+------------------------------------------
-        1 | _hyper_1_1_chunk_one_Partition_device_id_timeCustom_idx   |             1 | one_Partition_device_id_timeCustom_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_0_idx    |             1 | one_Partition_timeCustom_series_0_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx    |             1 | one_Partition_timeCustom_series_1_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_2_idx    |             1 | one_Partition_timeCustom_series_2_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_series_bool_idx |             1 | one_Partition_timeCustom_series_bool_idx
-        1 | _hyper_1_1_chunk_one_Partition_timeCustom_idx             |             1 | one_Partition_timeCustom_idx
-        2 | _hyper_1_2_chunk_one_Partition_device_id_timeCustom_idx   |             1 | one_Partition_device_id_timeCustom_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_0_idx    |             1 | one_Partition_timeCustom_series_0_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx    |             1 | one_Partition_timeCustom_series_1_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_2_idx    |             1 | one_Partition_timeCustom_series_2_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_series_bool_idx |             1 | one_Partition_timeCustom_series_bool_idx
-        2 | _hyper_1_2_chunk_one_Partition_timeCustom_idx             |             1 | one_Partition_timeCustom_idx
-        3 | _hyper_1_3_chunk_one_Partition_device_id_timeCustom_idx   |             1 | one_Partition_device_id_timeCustom_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_0_idx    |             1 | one_Partition_timeCustom_series_0_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx    |             1 | one_Partition_timeCustom_series_1_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_2_idx    |             1 | one_Partition_timeCustom_series_2_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_series_bool_idx |             1 | one_Partition_timeCustom_series_bool_idx
-        3 | _hyper_1_3_chunk_one_Partition_timeCustom_idx             |             1 | one_Partition_timeCustom_idx
-        4 | _hyper_2_4_chunk_1dim_time_idx                            |             2 | 1dim_time_idx
-        5 | _hyper_3_5_chunk_Hypertable_1_time_Device_id_idx          |             3 | Hypertable_1_time_Device_id_idx
-        5 | _hyper_3_5_chunk_Hypertable_1_time_idx                    |             3 | Hypertable_1_time_idx
-        5 | _hyper_3_5_chunk_Hypertable_1_Device_id_time_idx          |             3 | Hypertable_1_Device_id_time_idx
-        5 | _hyper_3_5_chunk_Unique1                                  |             3 | Unique1
-        6 | _hyper_4_6_chunk_Hypertable_1_time_Device_id_idx          |             4 | Hypertable_1_time_Device_id_idx
-        6 | _hyper_4_6_chunk_Hypertable_1_time_idx                    |             4 | Hypertable_1_time_idx
-        6 | _hyper_4_6_chunk_Unique1                                  |             4 | Unique1
-        5 | _hyper_3_5_chunk_ind_humdity2                             |             3 | ind_humdity2
-(27 rows)
+SELECT * FROM test.show_indexesp('%.%');
+              Table               |                                    Index                                    |         Columns          | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------+-----------------------------------------------------------------------------+--------------------------+------+--------+---------+-----------+------------
+ "one_Partition"._hyper_1_1_chunk | "one_Partition"."_hyper_1_1_chunk_one_Partition_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_1_chunk | "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_0_idx"    | {timeCustom,series_0}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_1_chunk | "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx"    | {timeCustom,series_1}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_1_chunk | "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_2_idx"    | {timeCustom,series_2}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_1_chunk | "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_1_chunk | "one_Partition"."_hyper_1_1_chunk_one_Partition_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_2_chunk | "one_Partition"."_hyper_1_2_chunk_one_Partition_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_2_chunk | "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_0_idx"    | {timeCustom,series_0}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_2_chunk | "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx"    | {timeCustom,series_1}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_2_chunk | "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_2_idx"    | {timeCustom,series_2}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_2_chunk | "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_2_chunk | "one_Partition"."_hyper_1_2_chunk_one_Partition_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_3_chunk | "one_Partition"."_hyper_1_3_chunk_one_Partition_device_id_timeCustom_idx"   | {device_id,timeCustom}   |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_3_chunk | "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_0_idx"    | {timeCustom,series_0}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_3_chunk | "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx"    | {timeCustom,series_1}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_3_chunk | "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_2_idx"    | {timeCustom,series_2}    |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_3_chunk | "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_series_bool_idx" | {timeCustom,series_bool} |      | f      | f       | f         | 
+ "one_Partition"._hyper_1_3_chunk | "one_Partition"."_hyper_1_3_chunk_one_Partition_timeCustom_idx"             | {timeCustom}             |      | f      | f       | f         | 
+ "customSchema"."Hypertable_1"    | "customSchema"."Hypertable_1_time_Device_id_idx"                            | {time,Device_id}         |      | f      | f       | f         | 
+ "customSchema"."Hypertable_1"    | "customSchema"."Hypertable_1_time_idx"                                      | {time}                   |      | f      | f       | f         | 
+ "customSchema"."Hypertable_1"    | "customSchema"."Unique1"                                                    | {time}                   |      | t      | f       | f         | 
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%');
+                 Table                  |                                  Index                                   |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------+--------------------------------------------------------------------------+------------------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_2_4_chunk | _timescaledb_internal._hyper_2_4_chunk_1dim_time_idx                     | {time}           |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_3_5_chunk | _timescaledb_internal."_hyper_3_5_chunk_Hypertable_1_time_Device_id_idx" | {time,Device_id} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_3_5_chunk | _timescaledb_internal."_hyper_3_5_chunk_Hypertable_1_time_idx"           | {time}           |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_3_5_chunk | _timescaledb_internal."_hyper_3_5_chunk_Hypertable_1_Device_id_time_idx" | {Device_id,time} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_3_5_chunk | _timescaledb_internal._hyper_3_5_chunk_ind_humdity2                      | {time,humidity}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_3_5_chunk | _timescaledb_internal."_hyper_3_5_chunk_Unique1"                         | {time,Device_id} |      | t      | f       | f         | 
+ _timescaledb_internal._hyper_4_6_chunk | _timescaledb_internal."_hyper_4_6_chunk_Hypertable_1_time_Device_id_idx" | {time,Device_id} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_4_6_chunk | _timescaledb_internal."_hyper_4_6_chunk_Hypertable_1_time_idx"           | {time}           |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_4_6_chunk | _timescaledb_internal."_hyper_4_6_chunk_Unique1"                         | {time}           |      | t      | f       | f         | 
 
 --create column with same name as previously renamed one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;
@@ -442,11 +429,9 @@ CREATE TABLE plain_table_su (time timestamp, temp float);
 CREATE TABLE hypertable_su (time timestamp, temp float);
 SELECT create_hypertable('hypertable_su', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (11,public,hypertable_su,t)
-(1 row)
 
 CREATE INDEX "ind_1" ON hypertable_su (time);
 INSERT INTO hypertable_su VALUES('2017-01-20T09:00:01', 22.5);
@@ -484,7 +469,6 @@ SELECT * FROM hypertable_su;
            time           | temp 
 --------------------------+------
  Fri Jan 20 09:00:01 2017 | 22.5
-(1 row)
 
 \set ON_ERROR_STOP 0
 CREATE INDEX ON hypertable_su (time, temp);
@@ -504,7 +488,6 @@ SELECT * FROM hypertable_su;
 --------------------------+------
  Fri Jan 20 09:00:01 2017 | 22.5
  Fri Jan 20 09:00:01 2017 | 22.5
-(2 rows)
 
 \set ON_ERROR_STOP 0
 CREATE INDEX ON hypertable_su (time, temp);
@@ -523,7 +506,6 @@ SELECT * FROM hypertable_su;
  Fri Jan 20 09:00:01 2017 | 22.5
  Fri Jan 20 09:00:01 2017 | 22.5
  Fri Jan 20 09:00:01 2017 | 22.5
-(3 rows)
 
 CREATE INDEX ON hypertable_su (time, temp);
 ALTER TABLE hypertable_su ADD COLUMN val2 integer;

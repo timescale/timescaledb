@@ -109,6 +109,16 @@
 
 #endif
 
+#if defined __has_attribute
+#if __has_attribute(nonstring)
+#define TS_NONSTRING __attribute__((nonstring))
+#else
+#define TS_NONSTRING
+#endif
+#else
+#define TS_NONSTRING
+#endif
+
 #include <assert.h>
 #include <string.h>
 
@@ -497,7 +507,7 @@ TEST_DEF void
 salsa20_stream(
     void *dst, size_t len, const uint8_t nonce[static 8], const uint8_t key[static 32])
 {
-	static const uint8_t sigma[16] = "expand 32-byte k";
+	static const uint8_t TS_NONSTRING sigma[16] = "expand 32-byte k";
 	uint8_t in[16];
 
 	if (len == 0)
@@ -1056,7 +1066,7 @@ umash_params_prepare(struct umash_params *params)
 FN void
 umash_params_derive(struct umash_params *params, uint64_t bits, const void *key)
 {
-	uint8_t umash_key[32] = "Do not use UMASH VS adversaries.";
+	uint8_t umash_key[32] TS_NONSTRING = "Do not use UMASH VS adversaries.";
 
 	if (key != NULL)
 		memcpy(umash_key, key, sizeof(umash_key));

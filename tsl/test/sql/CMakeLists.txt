@@ -8,14 +8,17 @@ set(TEST_FILES
     bgw_policy.sql
     bgw_security.sql
     cagg_api.sql
+    cagg_config.sql
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
+    cagg_invalidation_multi.sql
     cagg_policy.sql
     cagg_policy_move.sql
     cagg_policy_concurrent.sql
     cagg_plugin.sql
-    cagg_refresh.sql
+    cagg_refresh_using_trigger.sql
+    cagg_refresh_using_wal.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
     cagg_watermark.sql
@@ -24,7 +27,7 @@ set(TEST_FILES
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
-    compress_bloom_sparse.sql
+    compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
     compress_float8_corrupt.sql
@@ -32,6 +35,7 @@ set(TEST_FILES
     compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
+    direct_compress_insert.sql
     compression.sql
     compression_allocation.sql
     compression_conflicts.sql
@@ -54,18 +58,17 @@ set(TEST_FILES
     create_table_with.sql
     custom_hashagg.sql
     decompress_index.sql
-    foreign_keys_test.sql
-    merge_append_partially_compressed.sql
-    merge_chunks.sql
     merge_compress.sql
-    modify_exclusion.sql
     move.sql
+    plan_skip_scan_notnull.sql
     policy_generalization.sql
+    recompression_integrity_tests.sql
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql
     split_chunk.sql
     transparent_decompression_join_index.sql
+    unlogged.sql
     vector_agg_functions.sql
     vector_agg_groupagg.sql
     vector_agg_param.sql
@@ -76,7 +79,10 @@ set(TEST_TEMPLATES
     cagg_query_using_merge.sql.in
     cagg_union_view.sql.in
     cagg_permissions.sql.in
+    compress_bloom_sparse.sql.in
     compression_permissions.sql.in
+    foreign_keys_test.sql.in
+    modify_exclusion.sql.in
     ordered_append.sql.in
     plan_skip_scan.sql.in
     transparent_decompression.sql.in
@@ -87,7 +93,7 @@ if(USE_TELEMETRY)
 endif()
 
 if(NOT APPLE)
-  list(APPEND TEST_FILES compressed_copy.sql)
+  list(APPEND TEST_FILES direct_compress_copy.sql)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -145,13 +151,14 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     insert_memory_usage.sql
     information_view_chunk_count.sql
     read_only.sql
-    transparent_decompression_queries.sql
     tsl_tables.sql
     license_tsl.sql
+    merge_chunks.sql
     fixed_schedules.sql
     partialize_finalize.sql
     recompress_chunk_segmentwise.sql
     feature_flags.sql
+    vector_agg_byte.sql
     vector_agg_default.sql
     vector_agg_filter.sql
     vector_agg_grouping.sql
@@ -169,7 +176,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_repair.sql.in
     cagg_usage.sql.in
     compression_update_delete.sql.in
-    continuous_aggs.sql.in)
+    continuous_aggs.sql.in
+    transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry_stats.sql)
@@ -177,12 +185,13 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES cagg_planning.sql skip_scan_dagg.sql
-       plan_skip_scan_dagg.sql)
+  list(APPEND TEST_FILES cagg_planning.sql skip_scan_dagg.sql)
+  list(APPEND TEST_TEMPLATES plan_skip_scan_dagg.sql.in)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  list(APPEND TEST_FILES privilege_maintain.sql)
+  list(APPEND TEST_FILES privilege_maintain.sql
+       merge_append_partially_compressed.sql)
 endif()
 
 set(SOLO_TESTS
@@ -203,13 +212,19 @@ set(SOLO_TESTS
     cagg_bgw
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
-    cagg_invalidation
-    cagg_plugin
     cagg_policy_incremental
     move
     reorder
     split_chunk
-    telemetry_stats)
+    telemetry_stats
+    # These are solo tests because of a bug in PostgreSQL 17.5. A fix for it
+    # seems to be scheduled for release with 17.6.
+    #
+    # See
+    # https://github.com/postgres/postgres/commit/d87d07b7ad3b782cb74566cd771ecdb2823adf6a
+    cagg_invalidation
+    cagg_invalidation_multi
+    cagg_plugin)
 
 # Check if PostgreSQL was compiled with JIT support
 set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")

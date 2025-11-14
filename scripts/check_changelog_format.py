@@ -91,6 +91,12 @@ def main():
         sys.exit(1)
 
     file_name = sys.argv[1]
+
+    # Check if the file exists
+    if not os.path.exists(file_name):
+        print(f"{file_name} does not exist")
+        sys.exit(1)
+
     this_pr_number = int(os.environ["PR_NUMBER"])
     pr_issues = set(get_referenced_issues(this_pr_number))
 

@@ -17,7 +17,6 @@ SELECT table_name FROM create_hypertable('conditions', 'time');
  table_name 
 ------------
  conditions
-(1 row)
 
 INSERT INTO
     conditions ("time", city, temperature, device_id)
@@ -87,7 +86,6 @@ SELECT * FROM conditions_summary ORDER BY bucket, device_name;
  Sun Jun 13 17:00:00 2021 PDT | thermo_2    |  22 |  22 |  22
  Sun Jun 13 17:00:00 2021 PDT | thermo_3    |  24 |  24 |  24
  Sun Jun 13 17:00:00 2021 PDT | thermo_4    |  24 |  28 |  79
-(4 rows)
 
 -- Execute repair for materialized only cagg
 CALL _timescaledb_internal.cagg_try_repair('conditions_summary', FALSE);
@@ -116,7 +114,6 @@ SELECT * FROM conditions_summary ORDER BY bucket, device_name;
  Sun Jun 13 17:00:00 2021 PDT | thermo_2    |  22 |  22 |  22
  Sun Jun 13 17:00:00 2021 PDT | thermo_3    |  24 |  24 |  24
  Sun Jun 13 17:00:00 2021 PDT | thermo_4    |  24 |  28 |  79
-(4 rows)
 
 CALL _timescaledb_internal.cagg_try_repair('conditions_summary', TRUE);
 DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary has been rebuilt!
@@ -144,7 +141,6 @@ SELECT * FROM conditions_summary ORDER BY bucket, device_name;
  Sun Jun 13 17:00:00 2021 PDT | thermo_2    |  22 |  22 |  22
  Sun Jun 13 17:00:00 2021 PDT | thermo_3    |  24 |  24 |  24
  Sun Jun 13 17:00:00 2021 PDT | thermo_4    |  24 |  28 |  79
-(4 rows)
 
 -- Switch to realtime cagg
 ALTER MATERIALIZED VIEW conditions_summary SET (timescaledb.materialized_only=false);
@@ -186,7 +182,6 @@ SELECT * FROM conditions_summary ORDER BY bucket, device_name;
  Sun Jun 20 17:00:00 2021 PDT | thermo_1    |  31 |  34 |  65
  Sun Jun 20 17:00:00 2021 PDT | thermo_2    |  34 |  34 |  68
  Sun Jun 20 17:00:00 2021 PDT | thermo_3    |  31 |  32 |  95
-(7 rows)
 
 -- Execute repair for realtime cagg
 CALL _timescaledb_internal.cagg_try_repair('conditions_summary', FALSE);
@@ -229,7 +224,6 @@ SELECT * FROM conditions_summary ORDER BY bucket, device_name;
  Sun Jun 20 17:00:00 2021 PDT | thermo_1    |  31 |  34 |  65
  Sun Jun 20 17:00:00 2021 PDT | thermo_2    |  34 |  34 |  68
  Sun Jun 20 17:00:00 2021 PDT | thermo_3    |  31 |  32 |  95
-(7 rows)
 
 CALL _timescaledb_internal.cagg_try_repair('conditions_summary', TRUE);
 DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary has been rebuilt!
@@ -271,7 +265,6 @@ SELECT * FROM conditions_summary ORDER BY bucket, device_name;
  Sun Jun 20 17:00:00 2021 PDT | thermo_1    |  31 |  34 |  65
  Sun Jun 20 17:00:00 2021 PDT | thermo_2    |  34 |  34 |  68
  Sun Jun 20 17:00:00 2021 PDT | thermo_3    |  31 |  32 |  95
-(7 rows)
 
 -- Tests without join
 CREATE MATERIALIZED VIEW conditions_summary_nojoin

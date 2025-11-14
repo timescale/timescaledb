@@ -552,3 +552,20 @@ from :fn true) bulk join :fn false) rowbyrow using (path)
 group by 2, 3 order by 1 desc
 ;
 
+\set algo bool
+\set type bool
+select count(*)
+    , coalesce((bulk.rows >= 0)::text, bulk.sqlstate) bulk_result
+    , coalesce((rowbyrow.rows >= 0)::text, rowbyrow.sqlstate) rowbyrow_result
+from :fn true) bulk join :fn false) rowbyrow using (path)
+group by 2, 3 order by 1 desc
+;
+
+\set algo uuid
+\set type uuid
+select count(*)
+    , coalesce((bulk.rows >= 0)::text, bulk.sqlstate) bulk_result
+    , coalesce((rowbyrow.rows >= 0)::text, rowbyrow.sqlstate) rowbyrow_result
+from :fn true) bulk join :fn false) rowbyrow using (path)
+group by 2, 3 order by 1 desc
+;

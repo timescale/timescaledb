@@ -22,7 +22,6 @@ SELECT * FROM create_hypertable('records', 'time',
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | records    | t
-(1 row)
 
 CREATE MATERIALIZED VIEW records_monthly
     WITH (timescaledb.continuous, timescaledb.materialized_only=false)
@@ -70,14 +69,12 @@ SELECT * FROM records_monthly;
  Wed Mar 01 16:00:00 2000 PST |        1 |      3.14 |            0
  Thu Mar 09 16:00:00 2000 PST |        1 |      3.14 |            0
  Fri Mar 03 16:00:00 2000 PST |        1 |      3.14 |            0
-(32 rows)
 
 SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'records_monthly' ORDER BY range_start;
  chunk_name | range_start | range_end 
 ------------+-------------+-----------
-(0 rows)
 
 SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
@@ -116,7 +113,6 @@ WHERE hypertable_name = 'records' ORDER BY range_start;
  _hyper_1_30_chunk | Thu Mar 30 00:00:00 2000 PST | Thu Mar 30 01:00:00 2000 PST
  _hyper_1_31_chunk | Fri Mar 31 00:00:00 2000 PST | Fri Mar 31 01:00:00 2000 PST
  _hyper_1_32_chunk | Sat Apr 01 00:00:00 2000 PST | Sat Apr 01 01:00:00 2000 PST
-(32 rows)
 
 CALL refresh_continuous_aggregate('records_monthly', NULL, NULL);
 \set VERBOSITY default
@@ -138,7 +134,6 @@ SELECT drop_chunks('records', '2000-03-16'::timestamptz);
  _timescaledb_internal._hyper_1_13_chunk
  _timescaledb_internal._hyper_1_14_chunk
  _timescaledb_internal._hyper_1_15_chunk
-(15 rows)
 
 \set VERBOSITY terse
 DROP MATERIALIZED VIEW records_monthly;
@@ -178,7 +173,6 @@ SELECT create_hypertable('conditions', 'time_int', chunk_time_interval => 4);
     create_hypertable    
 -------------------------
  (3,public,conditions,t)
-(1 row)
 
 INSERT INTO conditions
 SELECT time_val, 1 FROM generate_series(0, 19, 1) AS time_val;
@@ -186,7 +180,6 @@ SELECT set_integer_now_func('conditions', 'test_int_now');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 CREATE MATERIALIZED VIEW conditions_2
     WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
@@ -209,7 +202,6 @@ SELECT * FROM conditions_2 ORDER BY bucket;
      14 |   2 |     2
      16 |   2 |     2
      18 |   2 |     2
-(10 rows)
 
 UPDATE conditions SET value = 4.00 WHERE time_int = 0;
 UPDATE conditions SET value = 4.00 WHERE time_int = 6;
@@ -219,7 +211,6 @@ SELECT drop_chunks('conditions', 4);
                drop_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_3_65_chunk
-(1 row)
 
 SELECT * FROM conditions_2 ORDER BY bucket;
  bucket | sum | count 
@@ -234,7 +225,6 @@ SELECT * FROM conditions_2 ORDER BY bucket;
      14 |   2 |     2
      16 |   2 |     2
      18 |   2 |     2
-(10 rows)
 
 CALL refresh_cagg_by_chunk_range('conditions_2', 'conditions', 8);
 INFO:  range_start=4 range_end=8
@@ -251,14 +241,12 @@ SELECT * FROM conditions_2 ORDER BY bucket;
      14 |   2 |     2
      16 |   2 |     2
      18 |   2 |     2
-(10 rows)
 
 UPDATE conditions SET value = 4.00 WHERE time_int = 19;
 SELECT drop_chunks('conditions', 8);
                drop_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_3_66_chunk
-(1 row)
 
 CALL refresh_cagg_by_chunk_range('conditions_2', 'conditions', 12);
 INFO:  range_start=8 range_end=12
@@ -275,7 +263,6 @@ SELECT * FROM conditions_2 ORDER BY bucket;
      14 |   2 |     2
      16 |   2 |     2
      18 |   2 |     2
-(10 rows)
 
 CALL refresh_cagg_by_chunk_range('conditions_2', 'conditions', NULL);
 INFO:  range_start=8 range_end=20
@@ -292,6 +279,5 @@ SELECT * FROM conditions_2 ORDER BY bucket;
      14 |   2 |     2
      16 |   2 |     2
      18 |   5 |     2
-(10 rows)
 
 DROP PROCEDURE refresh_cagg_by_chunk_range(REGCLASS, REGCLASS, INTEGER);

@@ -368,9 +368,9 @@ invalidations_write_record(InvalidationCacheEntry *entry, bool last_write,
 {
 	LogicalDecodingContext *ctx = args->ctx;
 
-	TS_DEBUG_LOG("write entry: hypertable_id=%u, lowest_modified_value=" UINT64_FORMAT
-				 ", greatest_modified_value=" UINT64_FORMAT,
-				 entry->hypertable_relid,
+	TS_DEBUG_LOG("write entry: hypertable=\"%s\", lowest_modified=" UINT64_FORMAT
+				 ", highest_modified=" UINT64_FORMAT,
+				 get_rel_name(entry->hypertable_relid),
 				 entry->lowest_modified,
 				 entry->highest_modified);
 

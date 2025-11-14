@@ -14,14 +14,14 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        pg: [15, 16, 17]
+        pg: [15, 16, 17, 18]
       fail-fast: false
 
     steps:
     - name: Install Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install gnupg systemd-coredump gdb postgresql-common libkrb5-dev python3-psutil
+        sudo apt-get install gnupg systemd-coredump gdb postgresql-common python3-psutil
         yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         sudo apt-get update
         sudo apt-get install postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}

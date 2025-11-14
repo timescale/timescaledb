@@ -12,8 +12,8 @@ ERROR:  invalid Oid
 SELECT _timescaledb_internal.cagg_migrate_plan_exists(0);
 WARNING:  function _timescaledb_internal.cagg_migrate_plan_exists(integer) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  cagg_migrate_plan_exists 
+--------------------------
  f
-(1 row)
 
 SELECT _timescaledb_internal.cagg_migrate_pre_validation(NULL,NULL,NULL);
 WARNING:  function _timescaledb_internal.cagg_migrate_pre_validation(text,text,text) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
@@ -33,8 +33,8 @@ ERROR:  query returned no rows
 SELECT _timescaledb_internal.chunk_id_from_relid(0);
 WARNING:  function _timescaledb_internal.chunk_id_from_relid(oid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  chunk_id_from_relid 
+---------------------
                    0
-(1 row)
 
 SELECT _timescaledb_internal.chunk_status(0);
 WARNING:  function _timescaledb_internal.chunk_status(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
@@ -42,12 +42,12 @@ ERROR:  invalid Oid
 SELECT _timescaledb_internal.chunks_local_size(NULL,NULL);
 WARNING:  function _timescaledb_internal.chunks_local_size(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  chunks_local_size 
-(0 rows)
+-------------------
 
 SELECT _timescaledb_internal.compressed_chunk_local_stats(NULL,NULL);
 WARNING:  function _timescaledb_internal.compressed_chunk_local_stats(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  compressed_chunk_local_stats 
-(0 rows)
+------------------------------
 
 SELECT _timescaledb_internal.create_chunk(0,NULL,NULL,NULL,0);
 WARNING:  function _timescaledb_internal.create_chunk(regclass,jsonb,name,name,regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
@@ -65,13 +65,13 @@ WARNING:  function _timescaledb_internal.freeze_chunk(regclass) is deprecated an
 ERROR:  invalid Oid
 SELECT FROM _timescaledb_internal.generate_uuid();
 WARNING:  function _timescaledb_internal.generate_uuid() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-(1 row)
+--
 
 SELECT _timescaledb_internal.get_approx_row_count(0);
 WARNING:  function _timescaledb_internal.get_approx_row_count(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  get_approx_row_count 
+----------------------
                     0
-(1 row)
 
 SELECT _timescaledb_internal.get_compressed_chunk_index_for_recompression(0);
 WARNING:  function _timescaledb_internal.get_compressed_chunk_index_for_recompression(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
@@ -82,48 +82,43 @@ ERROR:  hypertable "<NULL>" not found
 SELECT pg_typeof(_timescaledb_internal.get_git_commit());
 WARNING:  function _timescaledb_internal.get_git_commit() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  pg_typeof 
+-----------
  record
-(1 row)
 
 SELECT pg_typeof(_timescaledb_internal.get_os_info());
 WARNING:  function _timescaledb_internal.get_os_info() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  pg_typeof 
+-----------
  record
-(1 row)
 
 SELECT _timescaledb_internal.get_partition_for_key(NULL::text);
 WARNING:  function _timescaledb_internal.get_partition_for_key(anyelement) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  get_partition_for_key 
+-----------------------
                       
-(1 row)
 
 SELECT _timescaledb_internal.get_partition_hash(NULL::text);
 WARNING:  function _timescaledb_internal.get_partition_hash(anyelement) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  get_partition_hash 
+--------------------
                    
-(1 row)
 
 SELECT _timescaledb_internal.hypertable_local_size(NULL,NULL);
 WARNING:  function _timescaledb_internal.hypertable_local_size(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  hypertable_local_size 
-(0 rows)
-
-SELECT _timescaledb_internal.indexes_local_size(NULL,NULL);
-WARNING:  function _timescaledb_internal.indexes_local_size(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- indexes_local_size 
-(0 rows)
+-----------------------
 
 SELECT _timescaledb_internal.interval_to_usec(NULL);
 WARNING:  function _timescaledb_internal.interval_to_usec(interval) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  interval_to_usec 
+------------------
                  
-(1 row)
 
 SELECT _timescaledb_internal.partialize_agg(NULL::text);
 WARNING:  function _timescaledb_internal.partialize_agg(anyelement) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  partialize_agg 
+----------------
  
-(1 row)
 
 SELECT _timescaledb_internal.policy_compression_check(NULL);
 WARNING:  function _timescaledb_internal.policy_compression_check(jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
@@ -146,8 +141,8 @@ ERROR:  config must not be NULL
 SELECT _timescaledb_internal.range_value_to_pretty(0,0);
 WARNING:  function _timescaledb_internal.range_value_to_pretty(bigint,regtype) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  range_value_to_pretty 
+-----------------------
  0
-(1 row)
 
 SELECT _timescaledb_internal.recompress_chunk_segmentwise(0,true);
 WARNING:  function _timescaledb_internal.recompress_chunk_segmentwise(regclass,boolean) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
@@ -155,8 +150,8 @@ ERROR:  invalid Oid
 SELECT _timescaledb_internal.relation_size(0);
 WARNING:  function _timescaledb_internal.relation_size(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  relation_size 
+---------------
  (,,,)
-(1 row)
 
 SELECT _timescaledb_internal.restart_background_workers();
 WARNING:  function _timescaledb_internal.restart_background_workers() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
@@ -176,44 +171,44 @@ ERROR:  invalid Oid
 SELECT _timescaledb_internal.time_to_internal(NULL::timestamptz);
 WARNING:  function _timescaledb_internal.time_to_internal(anyelement) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  time_to_internal 
+------------------
                  
-(1 row)
 
 SELECT _timescaledb_internal.to_date(0);
 WARNING:  function _timescaledb_internal.to_date(bigint) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
   to_date   
+------------
  01-01-1970
-(1 row)
 
 SELECT _timescaledb_internal.to_interval(0);
 WARNING:  function _timescaledb_internal.to_interval(bigint) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  to_interval 
+-------------
  @ 0
-(1 row)
 
 SELECT _timescaledb_internal.to_timestamp(0);
 WARNING:  function _timescaledb_internal.to_timestamp(bigint) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
          to_timestamp         
+------------------------------
  Wed Dec 31 16:00:00 1969 PST
-(1 row)
 
 SELECT _timescaledb_internal.to_timestamp_without_timezone(0);
 WARNING:  function _timescaledb_internal.to_timestamp_without_timezone(bigint) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  to_timestamp_without_timezone 
+-------------------------------
  Thu Jan 01 00:00:00 1970
-(1 row)
 
 SELECT _timescaledb_internal.to_unix_microseconds(NULL);
 WARNING:  function _timescaledb_internal.to_unix_microseconds(timestamp with time zone) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  to_unix_microseconds 
+----------------------
                      
-(1 row)
 
 SELECT _timescaledb_internal.tsl_loaded();
 WARNING:  function _timescaledb_internal.tsl_loaded() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  tsl_loaded 
+------------
  t
-(1 row)
 
 SELECT _timescaledb_internal.unfreeze_chunk(0);
 WARNING:  function _timescaledb_internal.unfreeze_chunk(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
@@ -272,10 +267,6 @@ FROM sensor_data
 GROUP BY 1
 WITH DATA;
 NOTICE:  continuous aggregate "sensor_data_hourly" is already up-to-date
-DROP TRIGGER ts_cagg_invalidation_trigger ON sensor_data;
-CREATE TRIGGER ts_cagg_invalidation_trigger
-    AFTER INSERT OR DELETE OR UPDATE ON sensor_data
-    FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.continuous_agg_invalidation_trigger(:'hypertable_id');
 INSERT INTO sensor_data values('1980-01-01 00:00:00-00', 1);
 CALL refresh_continuous_aggregate('sensor_data_hourly', NULL, NULL);
 -- should not return rows because there's old invalid regions
@@ -284,7 +275,6 @@ FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
 WHERE hypertable_id = :'hypertable_id';
  lowest_modified_value | greatest_modified_value 
 -----------------------+-------------------------
-(0 rows)
 
 -- insert old data to create invalidation log
 INSERT INTO sensor_data values('1979-12-31 00:00:00-00', 1);
@@ -295,7 +285,6 @@ WHERE hypertable_id = :'hypertable_id';
  lowest_modified_value | greatest_modified_value 
 -----------------------+-------------------------
        315446400000000 |         315446400000000
-(1 row)
 
 DROP MATERIALIZED VIEW sensor_data_hourly;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_X_X_chunk

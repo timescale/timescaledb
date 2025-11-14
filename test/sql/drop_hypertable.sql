@@ -19,7 +19,8 @@ INSERT INTO hyper_with_dependencies VALUES (now(), 1.0);
 DROP TABLE hyper_with_dependencies;
 \set ON_ERROR_STOP 1
 DROP TABLE hyper_with_dependencies CASCADE;
-\dv
+-- check that the view is dropped
+SELECT oid FROM pg_class WHERE relname = 'dependent_view';
 
 CREATE TABLE chunk_with_dependencies (time timestamp, temp float8);
 SELECT create_hypertable('chunk_with_dependencies', 'time');
@@ -32,7 +33,8 @@ CREATE VIEW dependent_view_chunk AS SELECT * FROM _timescaledb_internal._hyper_3
 DROP TABLE chunk_with_dependencies;
 \set ON_ERROR_STOP 1
 DROP TABLE chunk_with_dependencies CASCADE;
-\dv
+-- check that the view is dropped
+SELECT oid FROM pg_class WHERE relname = 'dependent_view_chunk';
 
 -- Calling create hypertable again will increment hypertable ID
 -- although no new hypertable is created. Make sure we can handle this.
@@ -47,4 +49,13 @@ SELECT create_hypertable('should_drop', 'time');
 INSERT INTO should_drop VALUES (now(), 1.0);
 SELECT * from _timescaledb_catalog.hypertable;
 SELECT * from _timescaledb_catalog.dimension;
+
+-- test dropping multiple objects at once
+CREATE TABLE t1 (time timestamptz) WITH (tsdb.hypertable);
+INSERT INTO t1 VALUES ('2025-01-01');
+CREATE TABLE t2 (time timestamptz) WITH (tsdb.hypertable);
+INSERT INTO t2 VALUES ('2025-01-01');
+CREATE TABLE t3 (time timestamptz);
+
+DROP TABLE t1, t2, t3;
 

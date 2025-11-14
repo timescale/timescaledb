@@ -10,12 +10,15 @@
 #include <parser/parse_coerce.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
+#include <utils/fmgrprotos.h>
 #include <utils/rangetypes.h>
 #include <utils/timestamp.h>
+#include <utils/uuid.h>
 
 #include "guc.h"
 #include "time_utils.h"
 #include "utils.h"
+#include "uuid.h"
 
 TS_FUNCTION_INFO_V1(ts_make_range_from_internal_time);
 TS_FUNCTION_INFO_V1(ts_get_internal_time_min);
@@ -37,6 +40,13 @@ subtract_interval_from_now(Oid timetype, const Interval *interval)
 			res = DirectFunctionCall1(timestamptz_timestamp, res);
 			res = DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(interval));
 			return DirectFunctionCall1(timestamp_date, res);
+		case UUIDOID:
+		{
+			res = DirectFunctionCall2(timestamptz_mi_interval, res, IntervalPGetDatum(interval));
+			pg_uuid_t *uuid =
+				ts_create_uuid_v7_from_unixtime_us(DatumGetTimestampTz(res), true, true);
+			return UUIDPGetDatum(uuid);
+		}
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -199,6 +209,8 @@ ts_time_datum_get_min(Oid timetype)
 			return Int32GetDatum(PG_INT32_MIN);
 		case INT8OID:
 			return Int64GetDatum(PG_INT64_MIN);
+		case UUIDOID:
+			return Int64GetDatum(TS_TIME_UUID_MIN);
 		default:
 			break;
 	}
@@ -229,6 +241,7 @@ ts_time_datum_get_end(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "END is not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -255,7 +268,8 @@ ts_time_datum_get_max(Oid timetype)
 			return Int32GetDatum(PG_INT32_MAX);
 		case INT8OID:
 			return Int64GetDatum(PG_INT64_MAX);
-			break;
+		case UUIDOID:
+			return Int64GetDatum(TS_TIME_UUID_MAX);
 		default:
 			break;
 	}
@@ -277,6 +291,7 @@ ts_time_datum_get_nobegin(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "NOBEGIN is not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -309,6 +324,7 @@ ts_time_datum_get_noend(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "NOEND is not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -338,6 +354,8 @@ ts_time_get_min(Oid timetype)
 			return PG_INT32_MIN;
 		case INT8OID:
 			return PG_INT64_MIN;
+		case UUIDOID:
+			return TS_TIME_UUID_MIN;
 		default:
 			break;
 	}
@@ -365,6 +383,8 @@ ts_time_get_max(Oid timetype)
 			return PG_INT32_MAX;
 		case INT8OID:
 			return PG_INT64_MAX;
+		case UUIDOID:
+			return TS_TIME_UUID_MAX;
 		default:
 			break;
 	}
@@ -391,6 +411,7 @@ ts_time_get_end(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "END is not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -426,6 +447,7 @@ ts_time_get_nobegin(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "-Infinity not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -456,6 +478,7 @@ ts_time_get_noend(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "+Infinity not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:

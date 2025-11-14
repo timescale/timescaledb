@@ -33,18 +33,18 @@
 #include "algorithms/null.h"
 #include "algorithms/uuid_compress.h"
 #include "batch_metadata_builder.h"
+#include "chunk_insert_state.h"
 #include "compression.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
 #include "debug_point.h"
 #include "guc.h"
-#include "nodes/chunk_dispatch/chunk_insert_state.h"
 #include "nodes/modify_hypertable.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
-#include <nodes/decompress_chunk/vector_quals.h>
+#include <nodes/columnar_scan/vector_quals.h>
 
 /*
  * Timing parameters for truncate locking heuristics.
@@ -189,7 +189,6 @@ truncate_relation(Oid table_oid)
 #else
 		RelationSetNewRelfilenumber(rel, rel->rd_rel->relpersistence);
 #endif
-		Assert(rel->rd_rel->relpersistence != RELPERSISTENCE_UNLOGGED);
 		table_close(rel, NoLock);
 	}
 
@@ -225,7 +224,7 @@ static void
 delete_relation_rows(Oid table_oid)
 {
 	Relation rel = table_open(table_oid, RowExclusiveLock);
-	Snapshot snap = GetLatestSnapshot();
+	Snapshot snap = RegisterSnapshot(GetLatestSnapshot());
 
 	/* Delete the rows in the table */
 	RelationDeleteAllRows(rel, snap);
@@ -239,6 +238,7 @@ delete_relation_rows(Oid table_oid)
 	}
 
 	table_close(rel, NoLock);
+	UnregisterSnapshot(snap);
 }
 
 /*
@@ -307,6 +307,8 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	/* Sanity check we are dealing with relations */
 	Ensure(in_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
 	Ensure(out_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
+
+	PushActiveSnapshot(GetTransactionSnapshot());
 
 	/* Before calling row compressor relation should be segmented and sorted as configured
 	 * by compress_segmentby and compress_orderby.
@@ -472,7 +474,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			 get_rel_name(matched_index_rel->rd_id));
 
 		index_scan =
-			index_beginscan_compat(in_rel, matched_index_rel, GetTransactionSnapshot(), NULL, 0, 0);
+			index_beginscan_compat(in_rel, matched_index_rel, GetActiveSnapshot(), NULL, 0, 0);
 		slot = table_slot_create(in_rel, NULL);
 		index_rescan(index_scan, NULL, 0, NULL, 0);
 		report_reltuples = calculate_reltuples_to_report(in_rel->rd_rel->reltuples);
@@ -576,6 +578,9 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
+
+	PopActiveSnapshot();
+
 	cstat.rowcnt_pre_compression = row_compressor.rowcnt_pre_compression;
 	cstat.rowcnt_post_compression = row_compressor.num_compressed_rows;
 
@@ -640,11 +645,12 @@ compression_create_tuplesort_state(CompressionSettings *settings, Relation rel)
 static Tuplesortstate *
 compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 {
+	PushActiveSnapshot(GetLatestSnapshot());
 	Tuplesortstate *tuplesortstate;
 	TableScanDesc scan;
 	TupleTableSlot *slot;
 	tuplesortstate = compression_create_tuplesort_state(settings, in_rel);
-	scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, NULL);
+	scan = table_beginscan(in_rel, GetActiveSnapshot(), 0, NULL);
 	slot = table_slot_create(in_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
@@ -664,7 +670,7 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 	ExecDropSingleTupleTableSlot(slot);
 
 	tuplesort_performsort(tuplesortstate);
-
+	PopActiveSnapshot();
 	return tuplesortstate;
 }
 
@@ -1626,11 +1632,12 @@ decompress_chunk(Oid in_table, Oid out_table)
 	Relation in_rel = table_open(in_table, ExclusiveLock);
 	int64 nrows_processed = 0;
 
+	PushActiveSnapshot(GetLatestSnapshot());
 	BulkWriter writer = bulk_writer_build(out_rel, 0);
 	RowDecompressor decompressor =
 		build_decompressor(RelationGetDescr(in_rel), RelationGetDescr(out_rel));
 	TupleTableSlot *slot = table_slot_create(in_rel, NULL);
-	TableScanDesc scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
+	TableScanDesc scan = table_beginscan(in_rel, GetActiveSnapshot(), 0, (ScanKey) NULL);
 	int64 report_reltuples = calculate_reltuples_to_report(in_rel->rd_rel->reltuples);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
@@ -1666,6 +1673,8 @@ decompress_chunk(Oid in_table, Oid out_table)
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
+
+	PopActiveSnapshot();
 }
 
 static void
@@ -2235,7 +2244,16 @@ tsl_compressed_data_in(PG_FUNCTION_ARGS)
 	const char *input = PG_GETARG_CSTRING(0);
 	size_t input_len = strlen(input);
 	int decoded_len;
+#if PG18_GE
+	/* With version 18 pointer type changed to uint8
+	 * for better readability.
+	 *
+	 * https://github.com/postgres/postgres/commit/b28c59a6
+	 */
+	uint8 *decoded;
+#else
 	char *decoded;
+#endif
 	StringInfoData data;
 	Datum result;
 
@@ -2251,7 +2269,7 @@ tsl_compressed_data_in(PG_FUNCTION_ARGS)
 
 	decoded[decoded_len] = '\0';
 	data = (StringInfoData){
-		.data = decoded,
+		.data = (char *) decoded,
 		.len = decoded_len,
 		.maxlen = decoded_len,
 	};
@@ -2267,7 +2285,16 @@ tsl_compressed_data_out(PG_FUNCTION_ARGS)
 	Datum bytes_data = DirectFunctionCall1(tsl_compressed_data_send, PG_GETARG_DATUM(0));
 	bytea *bytes = DatumGetByteaP(bytes_data);
 	int raw_len = VARSIZE_ANY_EXHDR(bytes);
+#if PG18_GE
+	/* With version 18 pointer type changed to uint8
+	 * for better readability.
+	 *
+	 * https://github.com/postgres/postgres/commit/b28c59a6
+	 */
+	const uint8 *raw_data = (uint8 *) VARDATA(bytes);
+#else
 	const char *raw_data = VARDATA(bytes);
+#endif
 	int encoded_len = pg_b64_enc_len(raw_len);
 	char *encoded = palloc(encoded_len + 1);
 	encoded_len = pg_b64_encode(raw_data, raw_len, encoded, encoded_len);

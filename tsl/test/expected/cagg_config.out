@@ -1,0 +1,34 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Show the defaults
+SHOW timescaledb.cagg_processing_wal_batch_size;
+ timescaledb.cagg_processing_wal_batch_size 
+--------------------------------------------
+ 10000
+
+SHOW timescaledb.cagg_processing_low_work_mem;
+ timescaledb.cagg_processing_low_work_mem 
+------------------------------------------
+ 39321kB
+
+SHOW timescaledb.cagg_processing_high_work_mem;
+ timescaledb.cagg_processing_high_work_mem 
+-------------------------------------------
+ 52428kB
+
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+SET timescaledb.cagg_processing_wal_batch_size TO 100;
+ERROR:  100 is outside the valid range for parameter "timescaledb.cagg_processing_wal_batch_size" (1000 .. 10000000)
+SET timescaledb.cagg_processing_wal_batch_size TO 10000001;
+ERROR:  10000001 is outside the valid range for parameter "timescaledb.cagg_processing_wal_batch_size" (1000 .. 10000000)
+SET timescaledb.cagg_processing_low_work_mem TO 52428;
+ERROR:  invalid value for parameter "timescaledb.cagg_processing_low_work_mem": 52428
+DETAIL:  "cagg_processing_low_work_mem" must be less than value of "cagg_processing_high_work_mem".
+HINT:  Set "cagg_processing_low_work_mem" to a value less than 52428.
+SET timescaledb.cagg_processing_high_work_mem TO 39321;
+ERROR:  invalid value for parameter "timescaledb.cagg_processing_high_work_mem": 39321
+DETAIL:  "cagg_processing_high_work_mem" must be greater than value of "cagg_processing_low_work_mem".
+HINT:  Set "cagg_processing_high_work_mem" to a value greater than 39321.
+\set ON_ERROR_STOP 1

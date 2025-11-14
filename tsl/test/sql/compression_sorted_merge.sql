@@ -7,7 +7,7 @@
 -- still faster than sort.
 SET work_mem to '16MB';
 
-\set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 
 CREATE TABLE test1 (
 time timestamptz NOT NULL,
@@ -191,7 +191,7 @@ SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 -- Tests based on attributes
 ------
 
-set timescaledb.debug_require_batch_sorted_merge to 'require';
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 
 -- Should be optimized (some batches qualify by pushed down filter on _ts_meta_max_3)
 :PREFIX
@@ -275,11 +275,11 @@ SELECT x3,time FROM test1 ORDER BY time DESC;
 SELECT time,x3 FROM test1 ORDER BY time DESC;
 
 -- Test with projection and constants
-EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
+EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
 
 -- Test with projection and constants
-EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
+EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
 
 -- With projection and selection on compressed column (value smaller as max value for some batches, so batches are opened and filter has to be applied)
@@ -470,14 +470,14 @@ ALTER TABLE test_costs SET (timescaledb.compress, timescaledb.compress_segmentby
 -- Create 100 segments
 INSERT INTO test_costs
 SELECT
-'2000-01-01 02:01:00-00'::timestamptz AS time,
+time,
 segment_by,
 random() as x1
 FROM
-generate_series(1, 100, 1) AS g2(segment_by)
+generate_series(1, 100, 1) AS g2(segment_by),
+generate_series('2000-01-01 02:01:00-00', '2000-01-06 00:00:00+00', interval '1 hour') time
 ORDER BY time;
 
-SELECT add_compression_policy('test_costs','1 minute'::INTERVAL);
 
 SELECT compress_chunk(i) FROM show_chunks('test_costs') i;
 ANALYZE test_costs;
@@ -495,11 +495,12 @@ SELECT decompress_chunk(i) FROM show_chunks('test_costs') i;
 -- Add 900 segments (1000 segments total)
 INSERT INTO test_costs
 SELECT
-'2000-01-01 02:01:00-00'::timestamptz AS time,
+time,
 segment_by,
 random() as x1
 FROM
-generate_series(100, 1000, 1) AS g2(segment_by)
+generate_series(100, 1000, 1) AS g2(segment_by),
+generate_series('2000-01-01 02:01:00-00', '2000-01-06 00:00:00+00', interval '1 hour') time
 ORDER BY time;
 
 -- Recompress chunk
@@ -546,6 +547,8 @@ SELECT chunk_schema || '.' || chunk_name AS "chunk_table_bugtab"
 SELECT compress_chunk(i) FROM show_chunks('bugtab') i;
 
 ANALYZE bugtab;
+
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 
 :PREFIX
 SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;

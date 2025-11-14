@@ -24,13 +24,11 @@
 #include <catalog/index.h>
 #include <catalog/indexing.h>
 #include <catalog/pg_namespace.h>
-#include <catalog/pg_trigger.h>
 #include <catalog/pg_type.h>
 #include <catalog/toasting.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
-#include <commands/trigger.h>
 #include <commands/view.h>
 #include <executor/spi.h>
 #include <fmgr.h>
@@ -71,6 +69,7 @@
 #include "finalize.h"
 #include "invalidation_threshold.h"
 
+#include "continuous_aggs/invalidation_multi.h"
 #include "debug_assert.h"
 #include "dimension.h"
 #include "extension_constants.h"
@@ -96,39 +95,15 @@ static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_func
 												 const bool bucket_fixed_width);
 static void cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartcolname,
 								   int64 mat_tbltimecol_interval);
-static void cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id);
-static void mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable *ht);
+static void mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matcolinfo,
+												  Hypertable *ht);
 static ObjectAddress create_view_for_query(Query *selquery, RangeVar *viewrel);
 static void fixup_userview_query_tlist(Query *userquery, List *tlist_aliases);
 static void cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
-						CAggTimebucketInfo *bucket_info, WithClauseResult *with_clause_options);
+						ContinuousAggTimeBucketInfo *bucket_info,
+						WithClauseResult *with_clause_options);
 
 #define MATPARTCOL_INTERVAL_FACTOR 10
-#define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"
-
-static bool
-has_continuous_aggs_attached(int32 raw_hypertable_id)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-
-	iterator.ctx.index =
-		catalog_get_index(ts_catalog_get(), CONTINUOUS_AGG, CONTINUOUS_AGG_RAW_HYPERTABLE_ID_IDX);
-
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_continuous_agg_raw_hypertable_id_idx_raw_hypertable_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(raw_hypertable_id));
-
-	ts_scanner_foreach(&iterator)
-	{
-		ts_scan_iterator_close(&iterator);
-		return true;
-	}
-	ts_scan_iterator_close(&iterator);
-	return false;
-}
 
 static void
 makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
@@ -143,11 +118,12 @@ makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
 
 /* STATIC functions defined on the structs above. */
 static int32 mattablecolumninfo_create_materialization_table(
-	MatTableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
-	CAggTimebucketInfo *bucket_info, bool create_addl_index, char *tablespacename,
+	MaterializationHypertableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
+	ContinuousAggTimeBucketInfo *bucket_info, bool create_addl_index, char *tablespacename,
 	char *table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress);
-static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo,
-														  Query *userview_query, bool finalized);
+static Query *
+mattablecolumninfo_get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo,
+											Query *userview_query, bool finalized);
 
 /*
  * Create a entry for the materialization table in table CONTINUOUS_AGGS.
@@ -416,49 +392,6 @@ cagg_add_logical_decoding_slot_finalize(void)
 }
 
 /*
- * Add continuous agg invalidation trigger to hypertable
- * relid - oid of hypertable
- * hypertableid - argument to pass to trigger
- * (the hypertable id from timescaledb catalog)
- */
-static void
-cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
-{
-	char hypertable_id_str[12];
-	ObjectAddress objaddr;
-	char *relname = get_rel_name(relid);
-	Oid schemaid = get_rel_namespace(relid);
-	char *schema = get_namespace_name(schemaid);
-	Cache *hcache;
-	Hypertable *ht;
-
-	CreateTrigStmt stmt_template = {
-		.type = T_CreateTrigStmt,
-		.row = true,
-		/* Using OR REPLACE option introduced on Postgres 14 */
-		.replace = true,
-		.timing = TRIGGER_TYPE_AFTER,
-		.trigname = CAGGINVAL_TRIGGER_NAME,
-		.relation = makeRangeVar(schema, relname, -1),
-		.funcname =
-			list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(CAGG_INVALIDATION_TRIGGER)),
-		.args = NIL, /* to be filled in later */
-		.events = TRIGGER_TYPE_INSERT | TRIGGER_TYPE_UPDATE | TRIGGER_TYPE_DELETE,
-	};
-
-	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_NONE, &hcache);
-	CreateTrigStmt local_stmt = stmt_template;
-	pg_ltoa(hypertable_id, hypertable_id_str);
-	local_stmt.args = list_make1(makeString(hypertable_id_str));
-	objaddr = ts_hypertable_create_trigger(ht, &local_stmt, NULL);
-	if (!OidIsValid(objaddr.objectId))
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not create continuous aggregate trigger")));
-	ts_cache_release(&hcache);
-}
-
-/*
  * Add additional indexes to materialization table for the columns derived from
  * the group-by column list of the partial select query.
  * If partial select query has:
@@ -467,7 +400,8 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
  * i.e. #indexes =(  #grp-cols - 1)
  */
 static void
-mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable *ht)
+mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matcolinfo,
+									  Hypertable *ht)
 {
 	IndexStmt stmt = {
 		.type = T_IndexStmt,
@@ -533,12 +467,10 @@ mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable
  *        materialization table
  */
 static int32
-mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, int32 hypertable_id,
-												RangeVar *mat_rel, CAggTimebucketInfo *bucket_info,
-												bool create_addl_index, char *const tablespacename,
-												char *const table_access_method,
-												int64 matpartcol_interval,
-												ObjectAddress *mataddress)
+mattablecolumninfo_create_materialization_table(
+	MaterializationHypertableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
+	ContinuousAggTimeBucketInfo *bucket_info, bool create_addl_index, char *const tablespacename,
+	char *const table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress)
 {
 	Oid uid, saved_uid;
 	int sec_ctx;
@@ -608,8 +540,8 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
  * the materialization columns and remove HAVING clause and ORDER BY.
  */
 static Query *
-mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo, Query *userview_query,
-											bool finalized)
+mattablecolumninfo_get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo,
+											Query *userview_query, bool finalized)
 {
 	Query *partial_selquery = NULL;
 
@@ -717,41 +649,6 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
 	}
 }
 
-static const char *invalidate_using_info[] = {
-	[ContinuousAggInvalidateUsingDefault] = "default",
-	[ContinuousAggInvalidateUsingTrigger] = "trigger",
-	[ContinuousAggInvalidateUsingWal] = "wal",
-};
-
-static ContinuousAggInvalidateUsing
-get_invalidate_using(WithClauseResult *with_clause_options)
-{
-	if (with_clause_options[CreateMaterializedViewFlagInvalidateUsing].is_default)
-		return ContinuousAggInvalidateUsingDefault;
-
-	const char *invalidate_using = text_to_cstring(
-		DatumGetTextP(with_clause_options[CreateMaterializedViewFlagInvalidateUsing].parsed));
-
-	for (size_t i = 0; i < sizeof(invalidate_using_info) / sizeof(*invalidate_using_info); ++i)
-		if (strcmp(invalidate_using_info[i], invalidate_using) == 0)
-			return i;
-	ereport(ERROR,
-			errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			errmsg("unrecognized value \"%s\" for invalidate_using", invalidate_using));
-	return -1; /* To keep linter happy */
-}
-
-static void
-error_not_in_prerequisite_state(const char *wanted, const char *used)
-{
-	ereport(ERROR,
-			errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-			errmsg("cannot use %s-based invalidation collection with hypertable that is using "
-				   "%s-based invalidation collection",
-				   wanted,
-				   used));
-}
-
 /*
  * Modifies the passed in ViewStmt to do the following
  * a) Create a hypertable for the continuous agg materialization.
@@ -786,7 +683,6 @@ error_not_in_prerequisite_state(const char *wanted, const char *used)
  *
  * Notes: ViewStmt->query is the raw parse tree
  * panquery is the output of running parse_anlayze( ViewStmt->query)
- *               so don't recreate invalidation trigger.
 
  * Since 1.7, we support real time aggregation.
  * If real time aggregation is off i.e. materialized only, the mcagg view is as described in Step 2.
@@ -809,11 +705,11 @@ error_not_in_prerequisite_state(const char *wanted, const char *used)
  */
 static void
 cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
-			CAggTimebucketInfo *bucket_info, WithClauseResult *with_clause_options)
+			ContinuousAggTimeBucketInfo *bucket_info, WithClauseResult *with_clause_options)
 {
 	ObjectAddress mataddress;
 	char relnamebuf[NAMEDATALEN];
-	MatTableColumnInfo mattblinfo;
+	MaterializationHypertableColumnInfo mattblinfo;
 	FinalizeQueryInfo finalqinfo;
 	CatalogSecurityContext sec_ctx;
 	bool is_create_mattbl_index;
@@ -827,9 +723,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	bool materialized_only =
 		DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
 	bool finalized = DatumGetBool(with_clause_options[CreateMaterializedViewFlagFinalized].parsed);
-	ContinuousAggInvalidateUsing invalidate_using = get_invalidate_using(with_clause_options);
-	bool trigger_exists = has_invalidation_trigger(bucket_info->htoid);
-	bool caggs_exists = has_continuous_aggs_attached(bucket_info->htid);
 	bool slot_prepared = false;
 
 	int64 matpartcol_interval = 0;
@@ -864,46 +757,18 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	stmt->options = NULL;
 
 	/*
-	 * If we want to create a continuous aggregate using WAL-based
-	 * invalidation collection, it should not have an invalidation trigger
-	 * already.
-	 */
-	if (invalidate_using == ContinuousAggInvalidateUsingWal && trigger_exists)
-		error_not_in_prerequisite_state("wal", "trigger");
-
-	/*
-	 * If we want to create a continuous aggregate with a trigger, the
-	 * hypertable should either have a trigger already, or if there is no
-	 * trigger, no hypertables should be attached to it.
-	 */
-	if (invalidate_using == ContinuousAggInvalidateUsingTrigger && !trigger_exists && caggs_exists)
-		error_not_in_prerequisite_state("trigger", "wal");
-
-	/*
-	 * If we didn't specify which collection method to use, we pick whatever
-	 * is used, or the default if there are no continuous aggregates attached.
-	 */
-	if (invalidate_using == ContinuousAggInvalidateUsingDefault)
-	{
-		if (!caggs_exists)
-			invalidate_using = ContinuousAggInvalidateUsingTrigger; /* default case */
-		else if (trigger_exists)
-			invalidate_using = ContinuousAggInvalidateUsingTrigger;
-		else
-			invalidate_using = ContinuousAggInvalidateUsingWal;
-	}
-
-	/*
 	 * Step 0: Create logical replication slot if used. This needs to be first
 	 * since we cannot do this in a transaction that has performed any writes.
 	 */
-	char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
-	ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
-	if (invalidate_using == ContinuousAggInvalidateUsingWal &&
-		SearchNamedReplicationSlot(slot_name, true) == NULL)
+	if (ts_guc_enable_cagg_wal_based_invalidation)
 	{
-		cagg_add_logical_decoding_slot_prepare(slot_name);
-		slot_prepared = true;
+		char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
+		ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
+		if (SearchNamedReplicationSlot(slot_name, true) == NULL)
+		{
+			cagg_add_logical_decoding_slot_prepare(slot_name);
+			slot_prepared = true;
+		}
 	}
 
 	/*
@@ -1037,11 +902,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 										 bucket_info->bf->bucket_time_timezone,
 										 bucket_info->bf->bucket_fixed_interval);
 
-	/* Step 5: Create trigger on raw hypertable, if needed, and finalize slot
-	 * creation if that needs to be done. */
-	if (invalidate_using == ContinuousAggInvalidateUsingTrigger)
-		cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
-	else if (slot_prepared)
+	/* Step 5: Finalize slot creation if using wal based invalidation. */
+	if (ts_guc_enable_cagg_wal_based_invalidation && slot_prepared)
 		cagg_add_logical_decoding_slot_finalize();
 }
 
@@ -1050,7 +912,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 									WithClauseResult *with_clause_options)
 {
 	const CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, node);
-	CAggTimebucketInfo timebucket_exprinfo;
+	ContinuousAggTimeBucketInfo timebucket_exprinfo;
 	Oid nspid;
 	bool finalized = with_clause_options[CreateMaterializedViewFlagFinalized].parsed;
 	ViewStmt viewstmt = {
@@ -1158,7 +1020,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		refresh_window.start = cagg_get_time_min(cagg);
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
-		CaggRefreshContext context = { .callctx = CAGG_REFRESH_CREATION };
+		ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_CREATION };
 		continuous_agg_refresh_internal(cagg,
 										&refresh_window,
 										context,
@@ -1204,7 +1066,7 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	relation_close(direct_view_rel, NoLock);
 	RemoveRangeTableEntries(direct_query);
 
-	CAggTimebucketInfo timebucket_exprinfo =
+	ContinuousAggTimeBucketInfo timebucket_exprinfo =
 		cagg_validate_query(direct_query,
 							agg->data.finalized,
 							NameStr(agg->data.user_view_schema),

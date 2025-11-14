@@ -19,7 +19,6 @@ SELECT pg_sleep(1);
  pg_sleep 
 ----------
  
-(1 row)
 
 CALL run_job(:job_id);
 SELECT last_finish > :'last_finish' AS job_executed,
@@ -29,7 +28,6 @@ SELECT last_finish > :'last_finish' AS job_executed,
  job_executed | last_run_success 
 --------------+------------------
  t            | f
-(1 row)
 
 -- Running it as the default user should fail since they do not own
 -- the job. This should be the case also for the telemetry job, which

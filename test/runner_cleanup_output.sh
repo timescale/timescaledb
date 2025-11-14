@@ -5,12 +5,23 @@ set -e
 
 RUNNER=${1:-""}
 
-sed  -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' \
-     -e 's! Memory: [0-9]\{1,\}kB!!' \
-     -e 's! Memory Usage: [0-9]\{1,\}kB!!' \
-     -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' \
-     -e '/Heap Fetches: [0-9]\{1,\}/d' \
-     -e '/found [0-9]\{1,\} removable, [0-9]\{1,\} nonremovable row versions in [0-9]\{1,\} pages/d' | \
+sed  -E -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' \
+     -e 's! Disk: [0-9]+kB!!' \
+     -e 's! Memory: [0-9]+kB!!' \
+     -e 's! Memory Usage: [0-9]+kB!!' \
+     -e 's! Average  Peak Memory: [0-9]+kB!!' \
+     -e 's!ERROR:  permission denied for materialized view!ERROR:  permission denied for view!' \
+	 -e 's/(actual rows=[0-9]+) /\1.00 /' \
+	 -e '/^ ?\([0-9]+ row[s]?\)$/d' \
+	 -e '/ +QUERY PLAN +/{N;s/ +QUERY PLAN +\n-+/--- QUERY PLAN ---/;}' \
+     -e '/Disabled: true/d' \
+     -e '/Heap Fetches: [0-9]+/d' \
+     -e '/Buckets: [0-9]\+/d' \
+     -e '/Index Searches: [0-9]+/d' \
+     -e '/Storage: Memory  Maximum Storage: [0-9]+kB/d' \
+     -e '/Window: /d' \
+     -e '/Batches: [0-9]+/d' \
+     -e '/found [0-9]+ removable, [0-9]+ nonremovable row versions in [0-9]+ pages/d' | \
 grep -av 'DEBUG:  rehashing catalog cache id' | \
 grep -av 'DEBUG:  compacted fsync request queue from' | \
 grep -av 'DEBUG:  creating and filling new WAL file' | \
@@ -18,9 +29,7 @@ grep -av 'DEBUG:  done creating and filling new WAL file' | \
 grep -av 'DEBUG:  flushed relation because a checkpoint occurred concurrently' | \
 grep -av 'NOTICE:  cancelling the background worker for job' | \
 if [ "${RUNNER}" = "shared" ]; then \
-    sed -e '/^-\{1,\}$/d' \
-        -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g' \
-        -e 's!^ \{1,\}QUERY PLAN \{1,\}$!QUERY PLAN!'; \
+    sed -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g'; \
 else \
     cat; \
 fi | \

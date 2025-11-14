@@ -73,8 +73,8 @@ extern Datum policies_show(PG_FUNCTION_ARGS);
 typedef struct CaggPolicyConfig
 {
 	Oid partition_type;
-	CaggPolicyOffset offset_start;
-	CaggPolicyOffset offset_end;
+	ContinuousAggPolicyOffset offset_start;
+	ContinuousAggPolicyOffset offset_end;
 } CaggPolicyConfig;
 
 typedef struct refresh_policy

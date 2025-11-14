@@ -196,13 +196,15 @@ INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
 VACUUM ANALYZE mytab_prep;
 
 -- plan should be invalidated to return results from the uncompressed chunk also
-EXPLAIN (COSTS OFF) EXECUTE p1;
+set enable_sort to off; /* penalize MergeAppend for predictable plans on PG < 17. */
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
 EXECUTE p1;
+reset enable_sort;
 
 -- check plan again after recompression
 SELECT compress_chunk(:'chunk_to_compress_prep');
 VACUUM ANALYZE mytab_prep;
-EXPLAIN (COSTS OFF) EXECUTE p1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
 EXECUTE p1;
 
 -- verify segmentwise recompression when index exists, decompress + compress otherwise
@@ -234,7 +236,7 @@ SELECT compress_chunk(:'chunk_to_compress_mytab');
 VACUUM ANALYZE mytab;
 -- make sure we are hitting the index and that the index contains the tuples
 SET enable_seqscan TO off;
-EXPLAIN (COSTS OFF) SELECT count(*) FROM mytab where a = 2;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT count(*) FROM mytab where a = 2;
 SELECT count(*) FROM mytab where a = 2;
 RESET enable_seqscan;
 

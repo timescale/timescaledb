@@ -5,8 +5,6 @@
  */
 #include <postgres.h>
 
-#include "bgw/job.h"
-#include "bgw_policy/policies_v2.h"
 #include <access/xact.h>
 #include <executor/spi.h>
 #include <fmgr.h>
@@ -20,6 +18,9 @@
 #include <utils/lsyscache.h>
 #include <utils/snapmgr.h>
 
+#include "bgw_policy/policies_v2.h"
+#include "continuous_aggs/invalidation_multi.h"
+#include "debug_point.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "guc.h"
@@ -40,13 +41,14 @@
 		 LOG :                                                                                     \
 		 DEBUG1)
 
-typedef struct CaggRefreshState
+typedef struct ContinuousAggRefreshState
 {
 	ContinuousAgg cagg;
 	Hypertable *cagg_ht;
 	InternalTimeRange refresh_window;
 	SchemaAndName partial_view;
-} CaggRefreshState;
+	bool bucketing_refresh_window;
+} ContinuousAggRefreshState;
 
 static Hypertable *cagg_get_hypertable_or_fail(int32 hypertable_id);
 static InternalTimeRange get_largest_bucketed_window(Oid timetype, int64 bucket_width);
@@ -54,39 +56,63 @@ static InternalTimeRange
 compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 										  const InternalTimeRange *const refresh_window,
 										  const int64 bucket_width);
-static InternalTimeRange
-compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
-											  const InternalTimeRange *const refresh_window,
-											  const ContinuousAggsBucketFunction *bucket_function);
-static void continuous_agg_refresh_init(CaggRefreshState *refresh, const ContinuousAgg *cagg,
-										const InternalTimeRange *refresh_window);
-static void continuous_agg_refresh_execute(const CaggRefreshState *refresh,
+static void continuous_agg_refresh_init(ContinuousAggRefreshState *refresh,
+										const ContinuousAgg *cagg,
+										const InternalTimeRange *refresh_window,
+										bool bucketing_refresh_window);
+static void continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
 										   const InternalTimeRange *bucketed_refresh_window,
 										   const int32 chunk_id);
 static void log_refresh_window(int elevel, const ContinuousAgg *cagg,
-							   const InternalTimeRange *refresh_window, const char *msg,
-							   CaggRefreshContext context);
+							   const InternalTimeRange *refresh_window,
+							   ContinuousAggRefreshContext context);
 static void continuous_agg_refresh_execute_wrapper(const InternalTimeRange *bucketed_refresh_window,
-												   const CaggRefreshContext context,
+												   const ContinuousAggRefreshContext context,
 												   const long iteration, void *arg1_refresh,
 												   void *arg2_chunk_id);
-static void update_merged_refresh_window(const InternalTimeRange *bucketed_refresh_window,
-										 const CaggRefreshContext context, const long iteration,
-										 void *arg1_merged_refresh_window, void *arg2);
 static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   const InternalTimeRange *refresh_window,
 											   const InvalidationStore *invalidations,
-											   int32 chunk_id, const bool do_merged_refresh,
-											   const InternalTimeRange merged_refresh_window,
-											   const CaggRefreshContext context);
-static void emit_up_to_date_notice(const ContinuousAgg *cagg, const CaggRefreshContext context);
+											   int32 chunk_id,
+											   const ContinuousAggRefreshContext context,
+											   bool bucketing_refresh_window);
+static void emit_up_to_date_notice(const ContinuousAgg *cagg,
+								   const ContinuousAggRefreshContext context);
 static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 												   const InternalTimeRange *refresh_window,
-												   const CaggRefreshContext context, int32 chunk_id,
+												   const ContinuousAggRefreshContext context,
+												   int32 chunk_id, bool bucketing_refresh_window,
 												   bool force);
 static void fill_bucket_offset_origin(const ContinuousAgg *cagg,
 									  const InternalTimeRange *const refresh_window,
 									  NullableDatum *offset, NullableDatum *origin);
+
+/*
+ * Get all hypertables that are using WAL-invalidations.
+ */
+static List *
+get_all_wal_using_hypertables(void)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	List *hypertables = NIL;
+
+	/* Collect OID of all tables using continuous aggregates */
+	ts_scanner_foreach(&iterator)
+	{
+		bool isnull;
+		Datum datum = slot_getattr(ts_scan_iterator_slot(&iterator),
+								   Anum_continuous_agg_raw_hypertable_id,
+								   &isnull);
+
+		Assert(!isnull);
+		int32 hypertable_id = DatumGetInt32(datum);
+		hypertables = list_append_unique_int(hypertables, hypertable_id);
+	}
+	ts_scan_iterator_close(&iterator);
+
+	return hypertables;
+}
 
 static Hypertable *
 cagg_get_hypertable_or_fail(int32 hypertable_id)
@@ -209,7 +235,7 @@ compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
  * Get the offset as Datum value of an integer based bucket
  */
 static Datum
-int_bucket_offset_to_datum(Oid type, const ContinuousAggsBucketFunction *bucket_function)
+int_bucket_offset_to_datum(Oid type, const ContinuousAggBucketFunction *bucket_function)
 {
 	Assert(bucket_function->bucket_time_based == false);
 
@@ -302,10 +328,10 @@ fill_bucket_offset_origin(const ContinuousAgg *cagg, const InternalTimeRange *co
  * The circumscribed behaviour is also used for a refresh on drop, when the refresh is called during
  * dropping chunks manually or as part of retention policy.
  */
-static InternalTimeRange
+InternalTimeRange
 compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 											  const InternalTimeRange *const refresh_window,
-											  const ContinuousAggsBucketFunction *bucket_function)
+											  const ContinuousAggBucketFunction *bucket_function)
 {
 	Assert(cagg != NULL);
 	Assert(cagg->bucket_function != NULL);
@@ -384,13 +410,14 @@ compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
  * The state holds information for executing a refresh of a continuous aggregate.
  */
 static void
-continuous_agg_refresh_init(CaggRefreshState *refresh, const ContinuousAgg *cagg,
-							const InternalTimeRange *refresh_window)
+continuous_agg_refresh_init(ContinuousAggRefreshState *refresh, const ContinuousAgg *cagg,
+							const InternalTimeRange *refresh_window, bool bucketing_refresh_window)
 {
 	MemSet(refresh, 0, sizeof(*refresh));
 	refresh->cagg = *cagg;
 	refresh->cagg_ht = cagg_get_hypertable_or_fail(cagg->data.mat_hypertable_id);
 	refresh->refresh_window = *refresh_window;
+	refresh->bucketing_refresh_window = bucketing_refresh_window;
 	refresh->partial_view.schema = &refresh->cagg.data.partial_view_schema;
 	refresh->partial_view.name = &refresh->cagg.data.partial_view_name;
 }
@@ -402,21 +429,13 @@ continuous_agg_refresh_init(CaggRefreshState *refresh, const ContinuousAgg *cagg
  * refresh state.
  */
 static void
-continuous_agg_refresh_execute(const CaggRefreshState *refresh,
+continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
 							   const InternalTimeRange *bucketed_refresh_window,
 							   const int32 chunk_id)
 {
 	SchemaAndName cagg_hypertable_name = {
 		.schema = &refresh->cagg_ht->fd.schema_name,
 		.name = &refresh->cagg_ht->fd.table_name,
-	};
-	/* The materialization function takes two ranges, one for new data and one
-	 * for invalidated data. A refresh just uses one of them so the other one
-	 * has a zero range. */
-	InternalTimeRange unused_invalidation_range = {
-		.type = refresh->refresh_window.type,
-		.start = 0,
-		.end = 0,
 	};
 	const Dimension *time_dim = hyperspace_get_open_dimension(refresh->cagg_ht->space, 0);
 
@@ -428,14 +447,14 @@ continuous_agg_refresh_execute(const CaggRefreshState *refresh,
 										  cagg_hypertable_name,
 										  &time_dim->fd.column_name,
 										  *bucketed_refresh_window,
-										  unused_invalidation_range,
 										  chunk_id);
 }
 
 static void
 log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
-				   const char *msg, CaggRefreshContext context)
+				   ContinuousAggRefreshContext context)
 {
+	const char *msg = "continuous aggregate refresh (individual invalidation) on";
 	if (context.callctx == CAGG_REFRESH_POLICY_BATCHED)
 		elog(elevel,
 			 "%s \"%s\" in window [ %s, %s ] (batch %d of %d)",
@@ -455,58 +474,35 @@ log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRang
 }
 
 typedef void (*scan_refresh_ranges_funct_t)(const InternalTimeRange *bucketed_refresh_window,
-											const CaggRefreshContext context,
+											const ContinuousAggRefreshContext context,
 											const long iteration, /* 0 is first range */
 											void *arg1, void *arg2);
 
 static void
 continuous_agg_refresh_execute_wrapper(const InternalTimeRange *bucketed_refresh_window,
-									   const CaggRefreshContext context, const long iteration,
-									   void *arg1_refresh, void *arg2_chunk_id)
+									   const ContinuousAggRefreshContext context,
+									   const long iteration, void *arg1_refresh,
+									   void *arg2_chunk_id)
 {
-	const CaggRefreshState *refresh = (const CaggRefreshState *) arg1_refresh;
+	const ContinuousAggRefreshState *refresh = (const ContinuousAggRefreshState *) arg1_refresh;
 	const int32 chunk_id = *(const int32 *) arg2_chunk_id;
 	(void) iteration;
 
-	log_refresh_window(CAGG_REFRESH_LOG_LEVEL,
-					   &refresh->cagg,
-					   bucketed_refresh_window,
-					   "continuous aggregate refresh (individual invalidation) on",
-					   context);
+	log_refresh_window(CAGG_REFRESH_LOG_LEVEL, &refresh->cagg, bucketed_refresh_window, context);
 	continuous_agg_refresh_execute(refresh, bucketed_refresh_window, chunk_id);
-}
-
-static void
-update_merged_refresh_window(const InternalTimeRange *bucketed_refresh_window,
-							 const CaggRefreshContext context, const long iteration,
-							 void *arg1_merged_refresh_window, void *arg2)
-{
-	InternalTimeRange *merged_refresh_window = (InternalTimeRange *) arg1_merged_refresh_window;
-	(void) arg2;
-
-	if (iteration == 0)
-		*merged_refresh_window = *bucketed_refresh_window;
-	else
-	{
-		if (bucketed_refresh_window->start < merged_refresh_window->start)
-			merged_refresh_window->start = bucketed_refresh_window->start;
-
-		if (bucketed_refresh_window->end > merged_refresh_window->end)
-			merged_refresh_window->end = bucketed_refresh_window->end;
-	}
 }
 
 static long
 continuous_agg_scan_refresh_window_ranges(const ContinuousAgg *cagg,
 										  const InternalTimeRange *refresh_window,
 										  const InvalidationStore *invalidations,
-										  const ContinuousAggsBucketFunction *bucket_function,
-										  const CaggRefreshContext context,
+										  const ContinuousAggRefreshContext context,
 										  scan_refresh_ranges_funct_t exec_func, void *func_arg1,
 										  void *func_arg2)
 {
 	TupleTableSlot *slot;
 	long count = 0;
+	ContinuousAggRefreshState *refresh = (ContinuousAggRefreshState *) func_arg1;
 
 	slot = MakeSingleTupleTableSlot(invalidations->tupdesc, &TTSOpsMinimalTuple);
 
@@ -533,9 +529,19 @@ continuous_agg_scan_refresh_window_ranges(const ContinuousAgg *cagg,
 			.end = ts_time_saturating_add(DatumGetInt64(end), 1, refresh_window->type),
 		};
 
-		InternalTimeRange bucketed_refresh_window =
-			compute_circumscribed_bucketed_refresh_window(cagg, &invalidation, bucket_function);
+		InternalTimeRange bucketed_refresh_window = {
+			.type = invalidation.type,
+			.start = invalidation.start,
+			.end = invalidation.end,
+		};
 
+		if (refresh->bucketing_refresh_window)
+		{
+			bucketed_refresh_window =
+				compute_circumscribed_bucketed_refresh_window(cagg,
+															  &invalidation,
+															  cagg->bucket_function);
+		}
 		(*exec_func)(&bucketed_refresh_window, context, count, func_arg1, func_arg2);
 
 		count++;
@@ -576,13 +582,12 @@ static void
 continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 								   const InternalTimeRange *refresh_window,
 								   const InvalidationStore *invalidations, int32 chunk_id,
-								   const bool do_merged_refresh,
-								   const InternalTimeRange merged_refresh_window,
-								   const CaggRefreshContext context)
+								   const ContinuousAggRefreshContext context,
+								   bool bucketing_refresh_window)
 {
-	CaggRefreshState refresh;
+	ContinuousAggRefreshState refresh;
 
-	continuous_agg_refresh_init(&refresh, cagg, refresh_window);
+	continuous_agg_refresh_init(&refresh, cagg, refresh_window, bucketing_refresh_window);
 
 	/*
 	 * If we're refreshing a finalized CAgg then we should force
@@ -597,35 +602,15 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	if (ContinuousAggIsFinalized(cagg))
 		chunk_id = INVALID_CHUNK_ID;
 
-	if (do_merged_refresh)
-	{
-		Assert(merged_refresh_window.type == refresh_window->type);
-		Assert(merged_refresh_window.start >= refresh_window->start);
-		Assert((cagg->bucket_function->bucket_fixed_interval == false) ||
-			   (merged_refresh_window.end -
-					ts_continuous_agg_fixed_bucket_width(cagg->bucket_function) <=
-				refresh_window->end));
-
-		log_refresh_window(CAGG_REFRESH_LOG_LEVEL,
-						   cagg,
-						   &merged_refresh_window,
-						   "continuous aggregate refresh (merged invalidation) on",
-						   context);
-		continuous_agg_refresh_execute(&refresh, &merged_refresh_window, chunk_id);
-	}
-	else
-	{
-		long count pg_attribute_unused();
-		count = continuous_agg_scan_refresh_window_ranges(cagg,
-														  refresh_window,
-														  invalidations,
-														  cagg->bucket_function,
-														  context,
-														  continuous_agg_refresh_execute_wrapper,
-														  (void *) &refresh /* arg1 */,
-														  (void *) &chunk_id /* arg2 */);
-		Assert(count);
-	}
+	long count pg_attribute_unused();
+	count = continuous_agg_scan_refresh_window_ranges(cagg,
+													  refresh_window,
+													  invalidations,
+													  context,
+													  continuous_agg_refresh_execute_wrapper,
+													  (void *) &refresh /* arg1 */,
+													  (void *) &chunk_id /* arg2 */);
+	Assert(count);
 }
 
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
@@ -675,7 +660,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	else
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
-	CaggRefreshContext context = { .callctx = CAGG_REFRESH_WINDOW };
+	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_WINDOW };
 	continuous_agg_refresh_internal(cagg,
 									&refresh_window,
 									context,
@@ -690,7 +675,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 }
 
 static void
-emit_up_to_date_notice(const ContinuousAgg *cagg, const CaggRefreshContext context)
+emit_up_to_date_notice(const ContinuousAgg *cagg, const ContinuousAggRefreshContext context)
 {
 	switch (context.callctx)
 	{
@@ -706,54 +691,39 @@ emit_up_to_date_notice(const ContinuousAgg *cagg, const CaggRefreshContext conte
 	}
 }
 
-void
-continuous_agg_calculate_merged_refresh_window(const ContinuousAgg *cagg,
-											   const InternalTimeRange *refresh_window,
-											   const InvalidationStore *invalidations,
-											   const ContinuousAggsBucketFunction *bucket_function,
-											   InternalTimeRange *merged_refresh_window,
-											   const CaggRefreshContext context)
-{
-	long count pg_attribute_unused();
-	count = continuous_agg_scan_refresh_window_ranges(cagg,
-													  refresh_window,
-													  invalidations,
-													  bucket_function,
-													  context,
-													  update_merged_refresh_window,
-													  (void *) merged_refresh_window,
-													  NULL /* arg2 */);
-	Assert(count);
-}
-
 static bool
 process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 									   const InternalTimeRange *refresh_window,
-									   const CaggRefreshContext context, int32 chunk_id, bool force)
+									   const ContinuousAggRefreshContext context, int32 chunk_id,
+									   bool bucketing_refresh_window, bool force)
 {
 	InvalidationStore *invalidations;
 	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id, false);
-	bool do_merged_refresh = false;
-	InternalTimeRange merged_refresh_window;
 
-	/* Lock the continuous aggregate's materialized hypertable to protect
-	 * against concurrent refreshes. Only concurrent reads will be
-	 * allowed. This is a heavy lock that serializes all refreshes on the same
-	 * continuous aggregate. We might want to consider relaxing this in the
-	 * future, e.g., we'd like to at least allow concurrent refreshes on the
-	 * same continuous aggregate when they don't have overlapping refresh
-	 * windows.
+	/* Lock the continuous aggregate's materialized hypertable to protect against
+	 * concurrent invalidation log processing.
+	 *
+	 * It will produce rows in the `continuous_aggs_materialization_ranges` table
+	 * to be materialized later either serially or in parallel for non-overlap
+	 * refresh ranges.
+	 *
+	 * This is supposed to be a short transaction and in the future we can consider
+	 * relaxing this lock.
 	 */
-	LockRelationOid(hyper_relid, RowExclusiveLock);
+	LockRelationOid(hyper_relid, ShareUpdateExclusiveLock);
 	invalidations = invalidation_process_cagg_log(cagg,
 												  refresh_window,
 												  ts_guc_cagg_max_individual_materializations,
-												  &do_merged_refresh,
-												  &merged_refresh_window,
 												  context,
 												  force);
 
-	if (invalidations != NULL || do_merged_refresh)
+	DEBUG_WAITPOINT("before_process_cagg_invalidations_for_refresh_lock");
+
+	SPI_commit_and_chain();
+
+	DEBUG_WAITPOINT("after_process_cagg_invalidations_for_refresh_lock");
+
+	if (invalidations != NULL)
 	{
 		if (context.callctx == CAGG_REFRESH_CREATION)
 		{
@@ -768,9 +738,8 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 										   refresh_window,
 										   invalidations,
 										   chunk_id,
-										   do_merged_refresh,
-										   merged_refresh_window,
-										   context);
+										   context,
+										   bucketing_refresh_window);
 		if (invalidations)
 			invalidation_store_free(invalidations);
 		return true;
@@ -782,7 +751,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 void
 continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 								const InternalTimeRange *refresh_window_arg,
-								const CaggRefreshContext context, const bool start_isnull,
+								const ContinuousAggRefreshContext context, const bool start_isnull,
 								const bool end_isnull, bool bucketing_refresh_window, bool force,
 								bool process_hypertable_invalidations, bool extend_last_bucket)
 {
@@ -939,19 +908,86 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	}
 
 	if (process_hypertable_invalidations)
-		invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
+	{
+		/*
+		 * If we are using trigger-based invalidations, we can process the
+		 * invalidations for the associated hypertable only and later read the
+		 * invalidations for other hypertables, but when using WAL-based
+		 * invalidation we need to process all of the hypertables that are
+		 * currently using WAL.
+		 *
+		 * We want to prevent any changes to how invalidations are collected
+		 * in the meantime since changing the invalidation collection method
+		 * while this is running might cause problems and miss invalidations.
+		 *
+		 * Concurrency on the replication slot is controlled using some
+		 * special sauce in ReplicationSlotAcquire(), which is called inside
+		 * pg_logical_slot_get_changes_guts().
+		 *
+		 * This will currently generate an error rather than blocking on the
+		 * lock, so we need to add a separate lock to ensure a blocking
+		 * behaviour.
+		 */
+		if (!ts_guc_enable_cagg_wal_based_invalidation)
+			invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
+		else
+			multi_invalidation_process_hypertable_log(get_all_wal_using_hypertables());
+	}
 
 	/* Commit and Start a new transaction */
 	SPI_commit_and_chain();
 
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
 
-	if (!process_cagg_invalidations_and_refresh(cagg,
-												&refresh_window,
-												context,
-												INVALID_CHUNK_ID,
-												force))
+	bool refreshed = process_cagg_invalidations_and_refresh(cagg,
+															&refresh_window,
+															context,
+															INVALID_CHUNK_ID,
+															bucketing_refresh_window,
+															force);
+
+	/* check if we have any pending materializations in our refresh window range,
+	 * if so, we need to process them
+	 * Note that we use the original refresh window range here, not the one that has been processed
+	 * by the refresh function*/
+	refresh_window = *refresh_window_arg;
+	bool has_pending_materializations =
+		continuous_agg_has_pending_materializations(cagg, refresh_window);
+
+	if (has_pending_materializations)
+	{
+		ContinuousAggRefreshState refresh;
+		continuous_agg_refresh_init(&refresh, cagg, &refresh_window, bucketing_refresh_window);
+
+		InternalTimeRange invalidation = {
+			.type = refresh_window.type,
+			.start = refresh_window.start,
+			/* Invalidations are inclusive at the end, while refresh windows
+			 * aren't, so add one to the end of the invalidated region */
+			.end = ts_time_saturating_add(refresh_window.end, 1, refresh_window.type),
+		};
+
+		InternalTimeRange bucketed_refresh_window = {
+			.type = invalidation.type,
+			.start = invalidation.start,
+			.end = invalidation.end,
+		};
+
+		if (bucketing_refresh_window)
+		{
+			bucketed_refresh_window =
+				compute_circumscribed_bucketed_refresh_window(cagg,
+															  &invalidation,
+															  cagg->bucket_function);
+		}
+
+		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window, INVALID_CHUNK_ID);
+	}
+
+	if (!refreshed && !has_pending_materializations)
 		emit_up_to_date_notice(cagg, context);
+
+	DEBUG_WAITPOINT("after_process_cagg_materializations");
 
 	/* Restore search_path */
 	AtEOXact_GUC(false, save_nestlevel);
@@ -1022,10 +1058,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		if (NULL == slice || TS_TIME_IS_MIN(slice->fd.range_start, refresh_window.type) ||
 			TS_TIME_IS_NOBEGIN(slice->fd.range_start, refresh_window.type))
 		{
-			elog(LOG,
+			elog(DEBUG1,
 				 "no min slice range start for continuous aggregate \"%s.%s\", falling back to "
-				 "single "
-				 "batch processing",
+				 "single batch processing",
 				 NameStr(cagg->data.user_view_schema),
 				 NameStr(cagg->data.user_view_name));
 			return NIL;
@@ -1043,7 +1078,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		if (NULL == slice || TS_TIME_IS_MAX(slice->fd.range_end, refresh_window.type) ||
 			TS_TIME_IS_NOEND(slice->fd.range_end, refresh_window.type))
 		{
-			elog(LOG,
+			elog(DEBUG1,
 				 "no min slice range start for continuous aggregate \"%s.%s\", falling back to "
 				 "single batch processing",
 				 NameStr(cagg->data.user_view_schema),
@@ -1078,7 +1113,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		Datum refresh_size_interval = ts_internal_to_interval_value(refresh_window_size, type);
 		Datum batch_size_interval = ts_internal_to_interval_value(batch_size, type);
 
-		elog(LOG,
+		elog(DEBUG1,
 			 "refresh window size (%s) is smaller than or equal to batch size (%s), falling back "
 			 "to single batch processing",
 			 ts_datum_to_string(refresh_size_interval, type),
@@ -1121,6 +1156,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			WHERE \
 				hypertable_id = $1 \
 				AND dimension_id = $2 \
+				AND range_end >= range_start \
 			ORDER BY \
 				%s \
 		), \
@@ -1132,6 +1168,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 				_timescaledb_catalog.continuous_aggs_materialization_invalidation_log \
 			WHERE \
 				materialization_id = $3 \
+				AND greatest_modified_value >= lowest_modified_value \
 			UNION ALL \
 			SELECT \
 				pg_catalog.min(lowest_modified_value) AS lowest_modified_value, \
@@ -1140,6 +1177,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 				_timescaledb_catalog.continuous_aggs_hypertable_invalidation_log \
 			WHERE \
 				hypertable_id = $1 \
+				AND greatest_modified_value >= lowest_modified_value \
 		) \
 		SELECT \
 			refresh_start AS start, \
@@ -1207,7 +1245,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	if (SPI_processed == 1)
 	{
-		elog(LOG,
+		elog(DEBUG1,
 			 "only one batch produced for continuous aggregate \"%s.%s\", falling back to single "
 			 "batch processing",
 			 NameStr(cagg->data.user_view_schema),
@@ -1264,7 +1302,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			 (batch == 0 && !refresh_newest_first)) &&
 			original_refresh_window->start_isnull)
 		{
-			range->start = ts_time_get_nobegin_or_min(range->type);
+			range->start = cagg_get_time_min(cagg);
 			range->start_isnull = true;
 		}
 
@@ -1283,7 +1321,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	if (refresh_window_list == NIL)
 	{
-		elog(LOG,
+		elog(DEBUG1,
 			 "no valid batches produced for continuous aggregate \"%s.%s\", falling back to single "
 			 "batch processing",
 			 NameStr(cagg->data.user_view_schema),

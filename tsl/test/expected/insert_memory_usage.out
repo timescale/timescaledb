@@ -4,15 +4,14 @@
 -- Test that transaction memory usage with COPY doesn't grow.
 -- We need memory usage in PortalContext after the completion of the query, so
 -- we'll have to log it from a trigger that runs after the query is completed.
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
 create table uk_price_paid(price integer, "date" date, postcode1 text, postcode2 text, type smallint, is_new bool, duration smallint, addr1 text, addr2 text, street text, locality text, town text, district text, country text, category smallint);
+alter table uk_price_paid set unlogged;
 -- Aim to about 100 partitions, the data is from 1995 to 2022.
 select create_hypertable('uk_price_paid', 'date', chunk_time_interval => interval '90 day');
-NOTICE:  adding not-null constraint to column "date"
      create_hypertable      
 ----------------------------
  (1,public,uk_price_paid,t)
-(1 row)
 
 -- This is where we log the memory usage.
 create table portal_memory_log(id serial, bytes bigint);
@@ -65,7 +64,6 @@ select * from portal_memory_log where (
 );
  id | bytes 
 ----+-------
-(0 rows)
 
 -- INSERT into a compressed table.
 truncate uk_price_paid;
@@ -75,7 +73,6 @@ select count(compress_chunk(chunk)) from show_chunks('uk_price_paid') chunk;
  count 
 -------
    111
-(1 row)
 
 truncate portal_memory_log;
 alter sequence portal_memory_log_id_seq restart with 1;
@@ -93,5 +90,4 @@ select * from portal_memory_log where (
 );
  id | bytes 
 ----+-------
-(0 rows)
 

@@ -10,7 +10,7 @@
 -- * attach_foreign_table_chunk
 -- * hypertable_osm_range_update
 
-\set EXPLAIN 'EXPLAIN (COSTS OFF)'
+\set EXPLAIN 'EXPLAIN (BUFFERS OFF, COSTS OFF)'
 
 CREATE OR REPLACE VIEW chunk_view AS
   SELECT
@@ -499,7 +499,7 @@ DO $$
 DECLARE
     r RECORD;
 BEGIN
-	EXPLAIN (COSTS OFF) UPDATE ht_try SET value = 2
+	EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE ht_try SET value = 2
 	WHERE acq_id = 10 AND timec > now() - '15 years'::interval INTO r;
 END
 $$ LANGUAGE plpgsql;
@@ -553,10 +553,10 @@ SELECT FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :osm_chunk_id
 SELECT FROM _timescaledb_catalog.dimension_slice WHERE id = :osm_dimension_slice;
 
 -- foreign chunk no longer appears in the inheritance hierarchy
-\d+ ht_try
+SELECT * FROM test.show_subtables('ht_try');
 
 -- verify that still can read from the table after catalog manipulations
-EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM ht_try;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM ht_try;
 ROLLBACK;
 
 -- TEST error out when trying to drop an OSM chunk from a hypertable that
@@ -632,8 +632,7 @@ ORDER BY table_name;
 SELECT * FROM hyper_constr order by time;
 
 --verify the check constraint exists on the OSM chunk
-SELECT conname FROM pg_constraint
-where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
+SELECT * FROM test.show_constraints('child_hyper_constr');
 
 -- TEST foreign key trigger: deleting data from foreign table measure
 -- does not error out due to data in osm chunk
@@ -842,5 +841,104 @@ DROP EVENT TRIGGER ddl_start_trigger;
 DROP EVENT TRIGGER ddl_end_trigger;
 DROP TABLE ht_try;
 
+--TEST ALTER TABLE propagation with foreign chunks
+\c :TEST_DBNAME :ROLE_4
+CREATE TABLE ht_alter(ts timestamptz) WITH (tsdb.hypertable,tsdb.compress=false);
+
+INSERT INTO ht_alter SELECT '2025-01-01';
+\c postgres_fdw_db :ROLE_4
+CREATE TABLE fdw_ht_alter(ts timestamptz NOT NULL, device text, value float);
+INSERT INTO fdw_ht_alter SELECT '2021-05-05';
+
+\c :TEST_DBNAME :ROLE_4
+-- this is a stand-in for the OSM table
+CREATE FOREIGN TABLE child_ht_alter(ts timestamptz NOT NULL)
+ SERVER s3_server OPTIONS ( schema_name 'public', table_name 'fdw_ht_alter');
+SELECT _timescaledb_functions.attach_osm_table_chunk('ht_alter', 'child_ht_alter');
+
+ALTER TABLE ht_alter SET (autovacuum_enabled = false);
+ALTER TABLE ht_alter RESET (autovacuum_enabled);
+
+-- test DML blocker on frozen chunks
+CREATE TABLE dml_blocks (time timestamptz, device text, value float) WITH (tsdb.hypertable, tsdb.segmentby='device');
+
+-- DML on hypertable before freezing should work
+INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
+BEGIN;
+UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM dml_blocks WHERE device = 'dev2';
+COPY dml_blocks FROM STDIN;
+2025-01-01	dev1	1.0
+\.
+ROLLBACK;
+SELECT show_chunks('dml_blocks') AS "CHUNK" \gset
+
+-- DML on chunk before freezing should work
+BEGIN;
+INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
+UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM :CHUNK WHERE device = 'dev2';
+COPY :CHUNK FROM STDIN;
+2025-01-01	dev1	1.0
+\.
+ROLLBACK;
+
+SELECT _timescaledb_functions.freeze_chunk(:'CHUNK');
+
+-- DML on hypertable after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
+UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM dml_blocks WHERE device = 'dev2';
+COPY dml_blocks FROM STDIN;
+2025-01-01	dev1	1.0
+\.
+\set ON_ERROR_STOP 1
+
+-- DML on chunk after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
+UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM :CHUNK WHERE device = 'dev2';
+COPY :CHUNK FROM STDIN;
+2025-01-01	dev1	1.0
+\.
+\set ON_ERROR_STOP 1
+
+-- repeat tests with compressed chunk
+SELECT _timescaledb_functions.unfreeze_chunk(:'CHUNK');
+SELECT compress_chunk(:'CHUNK');
+SELECT _timescaledb_functions.freeze_chunk(:'CHUNK');
+SELECT format('%I.%I', schema_name, table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk ORDER BY id DESC LIMIT 1 \gset
+
+-- DML on hypertable after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
+UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM dml_blocks WHERE device = 'dev2';
+COPY dml_blocks FROM STDIN;
+2025-01-01	dev1	1.0
+\.
+\set ON_ERROR_STOP 1
+
+-- DML on chunk after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
+UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM :CHUNK WHERE device = 'dev2';
+COPY :CHUNK FROM STDIN;
+2025-01-01	dev1	1.0
+\.
+\set ON_ERROR_STOP 1
+
+-- DML on chunk after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO :COMPRESSED_CHUNK SELECT;
+UPDATE :COMPRESSED_CHUNK SET device = 'dev3' WHERE device = 'dev1';
+DELETE FROM :COMPRESSED_CHUNK WHERE device = 'dev1';
+COPY :COMPRESSED_CHUNK FROM STDIN;
+\set ON_ERROR_STOP 1
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
 -- clean up databases created
 DROP DATABASE postgres_fdw_db WITH (FORCE);

@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 --telemetry tests that require a community license
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
 SET timezone TO 'America/Los_Angeles';
 -- function call info size is too variable for this test, so disable it
 SET timescaledb.telemetry_level='no_functions';
@@ -10,7 +10,6 @@ SELECT setseed(1);
  setseed 
 ---------
  
-(1 row)
 
 -- Create a materialized view from the telemetry report so that we
 -- don't regenerate telemetry for every query.  Filter heap_size for
@@ -28,7 +27,6 @@ FROM relations;
  num_continuous_aggs | num_hypertables 
 ---------------------+-----------------
  0                   | 0
-(1 row)
 
 -- check telemetry picks up flagged content from metadata
 SELECT r -> 'db_metadata' AS db_metadata
@@ -36,7 +34,6 @@ FROM telemetry_report;
  db_metadata 
 -------------
  {}
-(1 row)
 
 -- check timescaledb_telemetry.cloud
 SELECT r -> 'instance_metadata' AS instance_metadata
@@ -44,7 +41,6 @@ FROM telemetry_report r;
  instance_metadata 
 -------------------
  {"cloud": "ci"}
-(1 row)
 
 CREATE TABLE normal (time timestamptz NOT NULL, device int, temp float);
 CREATE TABLE part (time timestamptz NOT NULL, device int, temp float) PARTITION BY RANGE (time);
@@ -59,7 +55,6 @@ SELECT table_name FROM create_hypertable('hyper', 'time');
  table_name 
 ------------
  hyper
-(1 row)
 
 CREATE MATERIALIZED VIEW contagg
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
@@ -151,7 +146,6 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_caggs_using_real_time_aggregation": 1      +
      }                                                   +
  }
-(1 row)
 
 -- Insert data
 INSERT INTO normal
@@ -173,13 +167,11 @@ SELECT count(c) FROM show_chunks('hyper') c;
  count 
 -------
      9
-(1 row)
 
 SELECT count(c) FROM show_chunks('contagg') c;
  count 
 -------
      2
-(1 row)
 
 -- Update and show the telemetry report
 REFRESH MATERIALIZED VIEW telemetry_report;
@@ -257,7 +249,6 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_caggs_using_real_time_aggregation": 1      +
      }                                                   +
  }
-(1 row)
 
 -- Actual row count should be the same as reltuples stats for all tables
 SELECT (SELECT count(*) FROM normal) num_inserted_rows,
@@ -267,7 +258,6 @@ SELECT (SELECT count(*) FROM normal) num_inserted_rows,
  num_inserted_rows | normal_reltuples | hyper_reltuples | part_reltuples 
 -------------------+------------------+-----------------+----------------
                697 | 697              | 1394            | 697
-(1 row)
 
 -- Add compression
 ALTER TABLE hyper SET (timescaledb.compress);
@@ -279,7 +269,6 @@ FROM show_chunks('hyper') c ORDER BY c LIMIT 4;
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 ALTER MATERIALIZED VIEW contagg SET (timescaledb.compress);
 NOTICE:  defaulting compress_segmentby to device
@@ -289,7 +278,6 @@ FROM show_chunks('contagg') c ORDER BY c LIMIT 1;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_2_10_chunk
-(1 row)
 
 -- Turn of real-time aggregation
 ALTER MATERIALIZED VIEW contagg SET (timescaledb.materialized_only = true);
@@ -375,7 +363,6 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_caggs_using_real_time_aggregation": 0       +
      }                                                    +
  }
-(1 row)
 
 -- check telemetry for fixed schedule jobs works
 create or replace procedure job_test_fixed(jobid int, config jsonb) language plpgsql as $$
@@ -393,64 +380,54 @@ select get_telemetry_report()->'num_user_defined_actions_fixed';
  ?column? 
 ----------
  0
-(1 row)
 
 select get_telemetry_report()->'num_user_defined_actions';
  ?column? 
 ----------
  0
-(1 row)
 
 select add_job('job_test_fixed', '1 week');
  add_job 
 ---------
     1000
-(1 row)
 
 select add_job('job_test_drifting', '1 week', fixed_schedule => false);
  add_job 
 ---------
     1001
-(1 row)
 
 -- add continuous aggregate refresh policy for contagg
 select add_continuous_aggregate_policy('contagg', interval '3 weeks', NULL, interval '3 weeks'); -- drifting
  add_continuous_aggregate_policy 
 ---------------------------------
                             1002
-(1 row)
 
 -- add retention policy, fixed
 select add_retention_policy('hyper', interval '1 year', initial_start => now());
  add_retention_policy 
 ----------------------
                  1003
-(1 row)
 
 -- add compression policy
 select add_compression_policy('hyper', interval '3 weeks', initial_start => now());
  add_compression_policy 
 ------------------------
                    1004
-(1 row)
 
 select r->'num_user_defined_actions_fixed' as UDA_fixed, r->'num_user_defined_actions' AS UDA_drifting FROM get_telemetry_report() r;
  uda_fixed | uda_drifting 
 -----------+--------------
  1         | 1
-(1 row)
 
 select r->'num_continuous_aggs_policies_fixed' as contagg_fixed, r->'num_continuous_aggs_policies' as contagg_drifting FROM get_telemetry_report() r;
  contagg_fixed | contagg_drifting 
 ---------------+------------------
  0             | 1
-(1 row)
 
 select r->'num_compression_policies_fixed' as compress_fixed, r->'num_retention_policies_fixed' as retention_fixed FROM get_telemetry_report() r;
  compress_fixed | retention_fixed 
 ----------------+-----------------
  1              | 1
-(1 row)
 
 DELETE FROM _timescaledb_config.bgw_job WHERE id = 2;
 TRUNCATE _timescaledb_internal.bgw_job_stat_history;
@@ -493,7 +470,6 @@ SELECT jsonb_pretty(get_telemetry_report() -> 'errors_by_sqlerrcode');
          "P0001": 2                          +
      }                                       +
  }
-(1 row)
 
 -- for job statistics, insert some records into bgw_job_stats
 INSERT INTO _timescaledb_internal.bgw_job_stat
@@ -555,7 +531,6 @@ SELECT jsonb_pretty(get_telemetry_report() -> 'stats_by_job_type');
          "max_consecutive_failures": 1         +
      }                                         +
  }
-(1 row)
 
 -- create nested continuous aggregates - copied from cagg_on_cagg_common
 CREATE TABLE conditions (
@@ -566,7 +541,6 @@ SELECT create_hypertable('conditions', 'time');
     create_hypertable    
 -------------------------
  (5,public,conditions,t)
-(1 row)
 
 CREATE MATERIALIZED VIEW conditions_summary_hourly_1
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
@@ -596,7 +570,6 @@ SELECT jsonb_pretty(get_telemetry_report() -> 'relations' -> 'continuous_aggrega
  jsonb_pretty 
 --------------
  2
-(1 row)
 
 DROP VIEW relations;
 DROP MATERIALIZED VIEW telemetry_report;

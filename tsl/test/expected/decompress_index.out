@@ -1,15 +1,13 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
 CREATE TABLE ht_metrics_compressed(time timestamptz, device int, value float, tag text);
 ALTER TABLE ht_metrics_compressed SET (autovacuum_enabled = false);
 SELECT create_hypertable('ht_metrics_compressed','time',create_default_indexes:=false, chunk_time_interval => interval '100 day');
-NOTICE:  adding not-null constraint to column "time"
          create_hypertable          
 ------------------------------------
  (1,public,ht_metrics_compressed,t)
-(1 row)
 
 ALTER TABLE ht_metrics_compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time');
 -- helper function: float -> pseudorandom float [0..1].
@@ -30,49 +28,40 @@ select count(*) from :CHUNK;
  count  
 --------
  155520
-(1 row)
 
 select count(distinct tag) from :CHUNK;
  count 
 -------
     29
-(1 row)
 
 select device, min(time), max(time) from :CHUNK group by 1 order by 1, 2, 3;
  device |                 min                 |                max                 
 --------+-------------------------------------+------------------------------------
       1 | Mon May 18 00:00:01.037881 2020 PDT | Sat Aug 15 23:58:21.04471 2020 PDT
       2 | Mon May 18 00:00:01.013087 2020 PDT | Sat Aug 15 23:58:21.04471 2020 PDT
-(2 rows)
 
 -- decompress with no indexes
 select where compress_chunk(:'CHUNK') is null;
 --
-(0 rows)
 
 select where decompress_chunk(:'CHUNK') is null;
 --
-(0 rows)
 
 -- decompress with one index
 select where compress_chunk(:'CHUNK') is null;
 --
-(0 rows)
 
 create index on :CHUNK(device, time);
 select where decompress_chunk(:'CHUNK') is null;
 --
-(0 rows)
 
 -- decompress with two indexes
 select where compress_chunk(:'CHUNK') is null;
 --
-(0 rows)
 
 create index on :CHUNK(tag);
 select where decompress_chunk(:'CHUNK') is null;
 --
-(0 rows)
 
 -- check the data after decompression
 set enable_seqscan to off;
@@ -80,39 +69,79 @@ select count(*) from :CHUNK;
  count  
 --------
  155520
-(1 row)
 
 select count(distinct tag) from :CHUNK;
  count 
 -------
     29
-(1 row)
 
 select distinct on (device) device, time from :CHUNK order by 1, 2;
  device |                time                 
 --------+-------------------------------------
       1 | Mon May 18 00:00:01.037881 2020 PDT
       2 | Mon May 18 00:00:01.013087 2020 PDT
-(2 rows)
 
 -- To avoid differences in PG15 output which doesn't support this feature
 SET timescaledb.enable_skipscan_for_distinct_aggregates TO false;
 -- check that the indexes are used
-explain (costs off) select count(distinct tag) from :CHUNK;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+explain (buffers off, costs off) select count(distinct tag) from :CHUNK;
+--- QUERY PLAN ---
  Aggregate
    ->  Index Only Scan using _hyper_1_1_chunk_tag_idx on _hyper_1_1_chunk
-(2 rows)
 
-explain (costs off) select distinct on (device) device, time from :CHUNK order by 1, 2;
-                                       QUERY PLAN                                       
-----------------------------------------------------------------------------------------
+explain (buffers off, costs off) select distinct on (device) device, time from :CHUNK order by 1, 2;
+--- QUERY PLAN ---
  Unique
    ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
          ->  Index Only Scan using _hyper_1_1_chunk_device_time_idx on _hyper_1_1_chunk
                Index Cond: (device > NULL::integer)
-(4 rows)
 
 RESET timescaledb.enable_skipscan_for_distinct_aggregates;
 drop table ht_metrics_compressed;
+-- Fix for issue #8681: IndexScan is not chosen for columnstore segmented on varchar column
+-- We should chose IndexScan now, and use SkipScan as well
+CREATE TABLE record (time timestamptz not null, data varchar);
+SELECT table_name FROM create_hypertable('record','time');
+WARNING:  column type "character varying" used for "data" does not follow best practices
+ table_name 
+------------
+ record
+
+ALTER TABLE record SET (timescaledb.compress,timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='data');
+INSERT INTO record
+SELECT time, (array['Yes', 'No', 'Maybe'])[floor(random() * 3 + 1)]
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03'::timestamptz, '10 minute'::interval) AS g1(time);
+analyze record;
+SELECT compress_chunk(ch) FROM show_chunks('record') ch;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_3_5_chunk
+
+-- enable_seqscan is OFF, should see IndexScan
+explain (buffers off, costs off) SELECT * FROM record ORDER BY data;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_3_5_chunk
+   ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_6_chunk
+
+-- SkipScan is chosen because IndexScan is chosen
+explain (buffers off, costs off) SELECT DISTINCT ON(data) * FROM record;
+--- QUERY PLAN ---
+ Unique
+   ->  Custom Scan (SkipScan) on _hyper_3_5_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk
+               ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_6_chunk
+
+-- (seg_col = const) condition is checked even when seg_col is coerced
+explain (buffers off, costs off) SELECT * FROM record WHERE data='Yes' ORDER BY data;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_3_5_chunk
+   ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_6_chunk
+         Index Cond: ((data)::text = 'Yes'::text)
+
+explain (buffers off, costs off) SELECT * FROM record WHERE 'Yes' <= data ORDER BY data;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_3_5_chunk
+   ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_6_chunk
+         Index Cond: ((data)::text >= 'Yes'::text)
+
+drop table record cascade;

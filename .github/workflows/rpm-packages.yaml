@@ -1,5 +1,5 @@
 # Test rpm package installation for latest version
-name: RPM packages
+name: "Packaging tests: RPM"
 "on":
   schedule:
     # run daily 0:00 on main branch
@@ -24,11 +24,14 @@ jobs:
       fail-fast: false
       matrix:
         image: [ "rockylinux:8", "rockylinux:9" ]
-        pg: [ 15, 16, 17 ]
+        pg: [ 15, 16, 17, 18 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
             pkg_suffix: "-oss"
+        exclude:
+          - image: "rockylinux:8"
+            pg: 18
 
     steps:
     - name: Add postgres repositories
@@ -93,6 +96,7 @@ jobs:
         fi
 
     - name: Test Downgrade
+      if: matrix.pg != '18' # pg18 only has 1 version so downgrade is not possible
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.
@@ -107,4 +111,15 @@ jobs:
         if [ "$prev_version" != "$installed_version" ];then
           false
         fi
+
+    - name: Install toolkit
+      if: matrix.pg != 17 && matrix.image != 'rockylinux:9' # timescaledb-toolkit currently not available for PG17 and Rocky9
+      run: |
+        yum install -y timescaledb-toolkit-postgresql-${{ matrix.pg }}
+
+    - name: List available toolkit versions
+      if: matrix.pg != 17 && matrix.image != 'rockylinux:9' # timescaledb-toolkit currently not available for PG17 and Rocky9
+      run: |
+        yum --showduplicates list timescaledb-toolkit-postgresql-${{ matrix.pg }}
+
 

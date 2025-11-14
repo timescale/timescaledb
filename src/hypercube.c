@@ -194,16 +194,10 @@ ts_hypercube_from_constraints(const ChunkConstraints *constraints, ScanIterator 
 	for (i = 0; i < constraints->num_constraints; i++)
 	{
 		ChunkConstraint *cc = chunk_constraints_get(constraints, i);
-		ScanTupLock tuplock = {
-			.lockmode = LockTupleKeyShare,
-			.waitpolicy = LockWaitBlock,
-			.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
-		};
 
 		if (is_dimension_constraint(cc))
 		{
 			DimensionSlice *slice;
-			ScanTupLock *const tuplock_ptr = RecoveryInProgress() ? NULL : &tuplock;
 
 			Assert(hc->num_slices < constraints->num_dimension_constraints);
 
@@ -216,9 +210,7 @@ ts_hypercube_from_constraints(const ChunkConstraints *constraints, ScanIterator 
 			 * ephemeral recovery mode), so we only take the lock if we are not
 			 * in recovery mode.
 			 */
-			slice = ts_dimension_slice_scan_iterator_get_by_id(slice_it,
-															   cc->fd.dimension_slice_id,
-															   tuplock_ptr);
+			slice = ts_dimension_slice_scan_iterator_get_by_id(slice_it, cc->fd.dimension_slice_id);
 			Assert(slice != NULL);
 			hc->slices[hc->num_slices++] = slice;
 		}

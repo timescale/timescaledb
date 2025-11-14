@@ -27,11 +27,9 @@
 --
 CREATE TABLE chunk_test(time integer, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test', 'time', 'tag', 2, chunk_time_interval => 3);
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (1,public,chunk_test,t)
-(1 row)
 
 INSERT INTO chunk_test VALUES (4, 24.3, 1, 1);
 SELECT * FROM _timescaledb_catalog.dimension_slice;
@@ -39,7 +37,6 @@ SELECT * FROM _timescaledb_catalog.dimension_slice;
 ----+--------------+----------------------+------------
   1 |            1 |                    3 |          6
   2 |            2 | -9223372036854775808 | 1073741823
-(2 rows)
 
 INSERT INTO chunk_test VALUES (4, 24.3, 2, 1);
 INSERT INTO chunk_test VALUES (10, 24.3, 2, 1);
@@ -58,35 +55,30 @@ ORDER BY c.id, d.id;
  _hyper_1_2_chunk |            2 |        3 |           1073741823 | 9223372036854775807
  _hyper_1_3_chunk |            1 |        4 |                    9 |                  12
  _hyper_1_3_chunk |            2 |        3 |           1073741823 | 9223372036854775807
-(6 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT set_number_partitions('chunk_test', 3);
  set_number_partitions 
 -----------------------
  
-(1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT set_chunk_time_interval('chunk_test', 1::bigint);
  set_chunk_time_interval 
 -------------------------
  
-(1 row)
 
 INSERT INTO chunk_test VALUES (8, 24.3, 11233, 1);
 SELECT set_chunk_time_interval('chunk_test', 5::bigint);
  set_chunk_time_interval 
 -------------------------
  
-(1 row)
 
 SELECT * FROM _timescaledb_catalog.dimension;
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
 ----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
   2 |             1 | tag         | integer     | f       |          3 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
   1 |             1 | time        | integer     | t       |            |                          |                    |               5 |                          |                         | 
-(2 rows)
 
 INSERT INTO chunk_test VALUES (7, 24.3, 79669, 1);
 INSERT INTO chunk_test VALUES (8, 24.3, 79669, 1);
@@ -117,16 +109,13 @@ ORDER BY c.id, d.id;
  _hyper_1_7_chunk |            2 |        6 | -9223372036854775808 |           715827882
  _hyper_1_8_chunk |            1 |        9 |                   15 |                  20
  _hyper_1_8_chunk |            2 |        6 | -9223372036854775808 |           715827882
-(16 rows)
 
 --test the edges of an open partition -- INT_64_MAX and INT_64_MIN.
 CREATE TABLE chunk_test_ends(time bigint, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test_ends', 'time', chunk_time_interval => 5);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable       
 ------------------------------
  (2,public,chunk_test_ends,t)
-(1 row)
 
 INSERT INTO chunk_test_ends VALUES ((-9223372036854775808)::bigint, 23.1, 11233, 1);
 INSERT INTO chunk_test_ends VALUES (9223372036854775807::bigint, 24.1, 11233, 1);
@@ -146,17 +135,14 @@ SELECT * FROM chunk_test_ends ORDER BY time asc, tag, temp;
   9223372036854775807 | 24.2 | 11233 |     1
   9223372036854775807 | 24.3 | 11233 |     1
   9223372036854775807 | 24.4 | 11233 |     1
-(8 rows)
 
 --further tests of set_chunk_time_interval
 CREATE TABLE chunk_test2(time TIMESTAMPTZ, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test2', 'time', 'tag', 2, chunk_time_interval => 3);
 WARNING:  unexpected interval: smaller than one second
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (3,public,chunk_test2,t)
-(1 row)
 
 SELECT interval_length
 FROM _timescaledb_catalog.dimension d
@@ -167,14 +153,12 @@ ORDER BY d.id;
 -----------------
                3
                 
-(2 rows)
 
 -- should work since time column is non-INT
 SELECT set_chunk_time_interval('chunk_test2', INTERVAL '1 minute');
  set_chunk_time_interval 
 -------------------------
  
-(1 row)
 
 SELECT interval_length
 FROM _timescaledb_catalog.dimension d
@@ -185,14 +169,12 @@ ORDER BY d.id;
 -----------------
         60000000
                 
-(2 rows)
 
 -- should still work for non-INT time columns
 SELECT set_chunk_time_interval('chunk_test2', 1000000);
  set_chunk_time_interval 
 -------------------------
  
-(1 row)
 
 SELECT interval_length
 FROM _timescaledb_catalog.dimension d
@@ -203,7 +185,6 @@ ORDER BY d.id;
 -----------------
          1000000
                 
-(2 rows)
 
 \set ON_ERROR_STOP 0
 select set_chunk_time_interval(NULL,NULL::interval);
@@ -224,11 +205,9 @@ ERROR:  invalid interval: an explicit interval must be specified
 -- Issue https://github.com/timescale/timescaledb/issues/7406
 CREATE TABLE test_ht (time TIMESTAMPTZ, v1 INTEGER);
 SELECT create_hypertable('test_ht', by_range('time', INTERVAL '1 hour'));
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  (4,t)
-(1 row)
 
 CREATE TABLE test_tb (time TIMESTAMPTZ, v1 INTEGER);
 CREATE OR REPLACE FUNCTION test_tb_trg_insert() RETURNS TRIGGER AS $$
@@ -252,7 +231,6 @@ SELECT relname, relreplident FROM show_chunks('test_ht') ch JOIN pg_class c ON (
       relname      | relreplident 
 -------------------+--------------
  _hyper_4_11_chunk | d
-(1 row)
 
 -- Clean up
 TRUNCATE test_ht, test_tb;
@@ -271,26 +249,22 @@ SELECT relname, relreplident FROM show_chunks('test_ht') ch JOIN pg_class c ON (
       relname      | relreplident 
 -------------------+--------------
  _hyper_4_12_chunk | f
-(1 row)
 
 -- All tables should have the same number of rows
 SELECT count(*) FROM test_tb;
  count 
 -------
      2
-(1 row)
 
 SELECT count(*) FROM test_ht;
  count 
 -------
      2
-(1 row)
 
 SELECT count(*) FROM test_output;
  count 
 -------
      2
-(1 row)
 
 -- test ALTER TABLE SET (tsdb.chunk_interval) on a hypertable
 CREATE TABLE t_with(time timestamptz not null, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time');
@@ -298,12 +272,10 @@ SELECT time_interval FROM timescaledb_information.dimensions WHERE hypertable_na
  time_interval 
 ---------------
  @ 7 days
-(1 row)
 
 ALTER TABLE t_with SET (tsdb.chunk_interval = '1 hour');
 SELECT time_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 't_with';
  time_interval 
 ---------------
  @ 1 hour
-(1 row)
 

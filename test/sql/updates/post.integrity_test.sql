@@ -17,42 +17,7 @@ DECLARE
     index_row      RECORD;
     chunk_count    INTEGER;
     chunk_constraint_count INTEGER;
-    chunk_index_count      INTEGER;
-    chunk_index_count2     INTEGER;
 BEGIN
-    -- Check integrity of chunk indexes on non-distributed hypertables
-    -- (distributed ones do not have chunk indexes on the access node)
-    FOR index_row IN
-    SELECT h.schema_name, c.relname AS index_name, h.id AS hypertable_id, h.table_name AS hypertable_name
-    FROM _timescaledb_catalog.hypertable h
-    INNER JOIN pg_index i ON (i.indrelid = format('%I.%I', h.schema_name, h.table_name)::regclass)
-    INNER JOIN pg_class c ON (i.indexrelid = c.oid)
-    EXCEPT
-    SELECT h.schema_name, c.relname AS index_name, h.id AS hypertable_id, h.table_name AS hypertable_name
-    FROM _timescaledb_catalog.hypertable h
-    INNER JOIN pg_index i ON (i.indrelid = format('%I.%I', h.schema_name, h.table_name)::regclass)
-    INNER JOIN pg_class c ON (i.indexrelid = c.oid)
-    INNER JOIN pg_constraint cc ON (c.oid = cc.conindid)
-    LOOP
-        SELECT count(*) FROM _timescaledb_catalog.chunk c
-        WHERE c.hypertable_id = index_row.hypertable_id AND NOT dropped
-        INTO STRICT chunk_count;
-
-        SELECT count(c.*) FROM _timescaledb_catalog.chunk_index c
-        WHERE c.hypertable_id = index_row.hypertable_id
-        AND c.hypertable_index_name = index_row.index_name
-        INTO STRICT chunk_index_count;
-
-        SELECT count(c.*) FROM _timescaledb_catalog.chunk_index c
-        WHERE c.hypertable_id = index_row.hypertable_id
---        AND c.hypertable_index_name = index_row.index_name
-        INTO STRICT chunk_index_count2;
-
-        IF chunk_index_count != chunk_count THEN
-           RAISE EXCEPTION 'Missing chunk index %. Expected %, but found %,%', index_row.index_name, chunk_count, chunk_index_count, chunk_index_count2;
-        END IF;
-    END LOOP;
-
     -- Check integrity of chunk_constraints
     FOR constraint_row IN
     SELECT c.conname, h.id AS hypertable_id FROM _timescaledb_catalog.hypertable h INNER JOIN

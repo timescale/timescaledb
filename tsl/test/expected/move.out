@@ -19,11 +19,9 @@ CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER_2 LOCATION :TEST_TAB
 -- LICENSE-TIMESCALE for a copy of the license.
 CREATE TABLE cluster_test(time INTEGER, temp float, location int, value TEXT);
 SELECT create_hypertable('cluster_test', 'time', chunk_time_interval => 5);
-psql:include/cluster_test_setup.sql:7: NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (1,public,cluster_test,t)
-(1 row)
 
 CREATE INDEX on cluster_test (location);
 CREATE OR REPLACE FUNCTION ensure_scans_work(table_name TEXT, should_output REGCLASS=NULL, seqscan BOOLEAN=FALSE, indexscan BOOLEAN=FALSE, bitmapscan BOOLEAN=FALSE) RETURNS TABLE (a TEXT, b TEXT)
@@ -33,7 +31,7 @@ $BODY$
             SET LOCAL enable_seqscan=%1$s;
             SET LOCAL enable_indexscan=%2$s;
             SET LOCAL enable_bitmapscan=%3$s;
-            EXPLAIN (costs off) SELECT * FROM %4$I WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM %4$I WHERE time=7
         $INNER$, seqscan, indexscan, bitmapscan, table_name) as a,
         format($INNER$
             WITH T1 as (SELECT * FROM %1$I WHERE time=7),
@@ -52,7 +50,7 @@ $BODY$
             SET LOCAL enable_seqscan=%1$s;
             SET LOCAL enable_indexscan=%2$s;
             SET LOCAL enable_bitmapscan=%3$s;
-            EXPLAIN (costs off) SELECT * FROM %4$I WHERE time=6
+            EXPLAIN (buffers off, costs off) SELECT * FROM %4$I WHERE time=6
         $INNER$, seqscan, indexscan, bitmapscan, table_name) as a,
         format($INNER$
             WITH T1 as (SELECT * FROM %1$I WHERE time=7),
@@ -68,7 +66,6 @@ SELECT * FROM test.show_indexes('cluster_test');
 ---------------------------+------------+------+--------+---------+-----------+------------
  cluster_test_location_idx | {location} |      | f      | f       | f         | 
  cluster_test_time_idx     | {time}     |      | f      | f       | f         | 
-(2 rows)
 
 -- Show clustered indexes
 SELECT indexrelid::regclass, indisclustered
@@ -76,7 +73,6 @@ FROM pg_index
 WHERE indisclustered = true ORDER BY 1;
  indexrelid | indisclustered 
 ------------+----------------
-(0 rows)
 
 -- Create two chunks
 INSERT INTO cluster_test VALUES
@@ -101,7 +97,6 @@ FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY ctid;
  (0,3) |    4 | 18.3 |        2 | f         |      1
  (0,4) |    2 | 12.4 |        8 | g         |      1
  (0,5) |    1 | 23.4 |        5 | i         |      1
-(5 rows)
 
 SELECT ctid, time, temp, location, substring(value for 30), length(value)
 FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
@@ -112,7 +107,6 @@ FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
  (0,3) |    5 | 25.4 |        1 | e                              |      1
  (0,4) |    7 | 20.3 |        4 | xyzzyxyzzyxyzzyxyzzyxyzzyxyzzy | 500000
  (0,5) |    9 | 11.4 |        1 | h                              |      1
-(5 rows)
 
 BEGIN;
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seqscan => true) \gexec
@@ -120,13 +114,11 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_seqscan=t;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_2_chunk
    Filter: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -139,20 +131,17 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', indexscan => true) \gexec
 
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=t;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using _hyper_1_2_chunk_cluster_test_time_idx on _hyper_1_2_chunk
    Index Cond: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -165,22 +154,19 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bitmapscan => true) \gexec
 
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=t;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Bitmap Heap Scan on _hyper_1_2_chunk
    Recheck Cond: ("time" = 7)
    ->  Bitmap Index Scan on _hyper_1_2_chunk_cluster_test_time_idx
          Index Cond: ("time" = 7)
-(4 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -193,7 +179,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 COMMIT;
 -- Show chunk indexes
@@ -202,14 +187,12 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
 ------------------------------------------------------------------+------------+------+--------+---------+-----------+------------
  _timescaledb_internal._hyper_1_1_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx     | {time}     |      | f      | f       | f         | 
-(2 rows)
 
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_2_chunk');
                               Index                               |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace 
 ------------------------------------------------------------------+------------+------+--------+---------+-----------+------------
  _timescaledb_internal._hyper_1_2_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx     | {time}     |      | f      | f       | f         | 
-(2 rows)
 
 \set ON_ERROR_STOP 0
 -- cannot move a chunk with no reorder index on first call
@@ -255,14 +238,12 @@ RESET client_min_messages;
 -- move with chunk index for reorder
 SELECT FROM move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx');
 --
-(1 row)
 
 SELECT * FROM test.show_subtables('cluster_test');
                  Child                  | Tablespace  
 ----------------------------------------+-------------
  _timescaledb_internal._hyper_1_1_chunk | 
  _timescaledb_internal._hyper_1_2_chunk | tablespace1
-(2 rows)
 
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
                  Table                  |                              Index                               |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace  
@@ -271,7 +252,6 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx     | {time}     |      | f      | f       | f         | tablespace1
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | tablespace1
-(4 rows)
 
 BEGIN;
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seqscan => true) \gexec
@@ -279,13 +259,11 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_seqscan=t;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_2_chunk
    Filter: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -298,20 +276,17 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', indexscan => true) \gexec
 
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=t;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using _hyper_1_2_chunk_cluster_test_time_idx on _hyper_1_2_chunk
    Index Cond: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -324,22 +299,19 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bitmapscan => true) \gexec
 
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=t;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Bitmap Heap Scan on _hyper_1_2_chunk
    Recheck Cond: ("time" = 7)
    ->  Bitmap Index Scan on _hyper_1_2_chunk_cluster_test_time_idx
          Index Cond: ("time" = 7)
-(4 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -352,7 +324,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 COMMIT;
 SET enable_seqscan=Default;
@@ -368,7 +339,6 @@ FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY ctid;
  (0,3) |    4 | 18.3 |        2 | f         |      1
  (0,4) |    2 | 12.4 |        8 | g         |      1
  (0,5) |    1 | 23.4 |        5 | i         |      1
-(5 rows)
 
 SELECT ctid, time, temp, location, substring(value for 30), length(value)
 FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
@@ -379,7 +349,6 @@ FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
  (0,3) |    7 | 20.3 |        4 | xyzzyxyzzyxyzzyxyzzyxyzzyxyzzy | 500000
  (0,4) |    6 | 27.3 |        9 | d                              |      1
  (0,5) |    5 | 25.4 |        1 | e                              |      1
-(5 rows)
 
 -- move back to pg_default
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'pg_default', index_destination_tablespace=>'pg_default', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
@@ -387,14 +356,12 @@ INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan
  move_chunk 
 ------------
  
-(1 row)
 
 SELECT * FROM test.show_subtables('cluster_test');
                  Child                  | Tablespace 
 ----------------------------------------+------------
  _timescaledb_internal._hyper_1_1_chunk | 
  _timescaledb_internal._hyper_1_2_chunk | 
-(2 rows)
 
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
                  Table                  |                              Index                               |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace 
@@ -403,7 +370,6 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx     | {time}     |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | 
-(4 rows)
 
 -- move chunk and indexes to different tablespaces
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace2', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
@@ -411,14 +377,12 @@ INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan
  move_chunk 
 ------------
  
-(1 row)
 
 SELECT * FROM test.show_subtables('cluster_test');
                  Child                  | Tablespace  
 ----------------------------------------+-------------
  _timescaledb_internal._hyper_1_1_chunk | 
  _timescaledb_internal._hyper_1_2_chunk | tablespace1
-(2 rows)
 
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
                  Table                  |                              Index                               |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace  
@@ -427,7 +391,6 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx     | {time}     |      | f      | f       | f         | tablespace2
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | tablespace2
-(4 rows)
 
 -- keep chunk in same space and move index tablespace
 SELECT move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'pg_default', index_destination_tablespace=>'tablespace2', reorder_index=>'_timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx', verbose=>TRUE);
@@ -435,14 +398,12 @@ INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan
  move_chunk 
 ------------
  
-(1 row)
 
 SELECT * FROM test.show_subtables('cluster_test');
                  Child                  | Tablespace 
 ----------------------------------------+------------
  _timescaledb_internal._hyper_1_1_chunk | 
  _timescaledb_internal._hyper_1_2_chunk | 
-(2 rows)
 
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
                  Table                  |                              Index                               |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace  
@@ -451,7 +412,6 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx     | {time}     |      | f      | f       | f         | tablespace2
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | tablespace2
-(4 rows)
 
 --TEST with compression bug 4000
 --compress chunk and then  move chunk and index to different tablespaces
@@ -460,7 +420,6 @@ SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk') as ch;
                    ch                   
 ----------------------------------------
  _timescaledb_internal._hyper_1_2_chunk
-(1 row)
 
 SELECT true INTO move_chunk_compressed FROM move_chunk(chunk=>'_timescaledb_internal._hyper_1_2_chunk', destination_tablespace=>'tablespace2', index_destination_tablespace=>'tablespace1', verbose=>TRUE);
 SELECT * FROM test.show_subtables('cluster_test');
@@ -468,7 +427,6 @@ SELECT * FROM test.show_subtables('cluster_test');
 ----------------------------------------+-------------
  _timescaledb_internal._hyper_1_1_chunk | 
  _timescaledb_internal._hyper_1_2_chunk | tablespace2
-(2 rows)
 
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
                  Table                  |                              Index                               |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace  
@@ -477,11 +435,9 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx     | {time}     |      | f      | f       | f         | tablespace1
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | tablespace1
-(4 rows)
 
 SELECT * FROM test.show_indexesp('_timescaledb_internal.compress_hyper%_chunk');
                      Table                      |                                         Index                                         |                 Columns                  | Expr | Unique | Primary | Exclusion | Tablespace  
 ------------------------------------------------+---------------------------------------------------------------------------------------+------------------------------------------+------+--------+---------+-----------+-------------
  _timescaledb_internal.compress_hyper_2_3_chunk | _timescaledb_internal.compress_hyper_2_3_chunk_location__ts_meta_min_1__ts_meta_m_idx | {location,_ts_meta_min_1,_ts_meta_max_1} |      | f      | f       | f         | tablespace1
-(1 row)
 

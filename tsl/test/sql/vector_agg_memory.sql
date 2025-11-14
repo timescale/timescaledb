@@ -36,7 +36,7 @@ vacuum analyze mvagg;
 create table log(n int, bytes int, a bigint, b bigint, c bigint, d bigint, e bigint, f bigint);
 
 -- First, ensure that the underlying decompression has constant memory usage.
-explain (costs off) select distinct on (s0, s1) ts_debug_allocated_bytes() bytes,
+explain (buffers off, costs off) select distinct on (s0, s1) ts_debug_allocated_bytes() bytes,
         s0, s1, t
     from mvagg where t >= -1 and t < 1000000 order by s0, s1, t desc;
 
@@ -64,12 +64,12 @@ select * from log where (
 truncate log;
 set max_parallel_workers_per_gather = 0;
 set timescaledb.debug_require_vector_agg = 'require';
--- Despite the tweaks above, we are unable to force the HashAggregation, because
--- the unsorted DecompressChunk paths for aggregation are not created properly
--- (see issue #6836). Limit the memory consumed by tuplesort.
-set work_mem = '64kB';
+set enable_sort to off;
+set enable_indexscan to off;
+set enable_bitmapscan to off;
 
-explain (costs off) select ts_debug_allocated_bytes() bytes,
+-- We should reliably see HashAggregate here because of the tweaks we made above.
+explain (buffers off, costs off) select ts_debug_allocated_bytes() bytes,
         count(*) a, count(t) b, sum(t) c, avg(t) d, min(t) e, max(t) f
             from mvagg where t >= -1 and t < 1000000 group by s1;
 
@@ -87,14 +87,13 @@ format('insert into log
 reset timescaledb.debug_require_vector_agg;
 reset max_parallel_workers_per_gather;
 reset work_mem;
+reset enable_sort;
 
 select * from log where (
     -- For aggregation by segmentby, memory usage should be constant regardless
     -- of the number of tuples. Still, we have to allow for small variations
-    -- that can be caused by other reasons. Currently the major increase is
-    -- caused by tuplesort, because we are unable to force hash aggregation due
-    -- to unrelated planning bugs.
-    select regr_slope(bytes, n) > 0.05 from log
+    -- that can be caused by other reasons.
+    select regr_slope(bytes, n) > 0.01 from log
 );
 
 reset timescaledb.debug_require_vector_agg;

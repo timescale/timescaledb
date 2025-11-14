@@ -8,11 +8,9 @@ CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
 $$ LANGUAGE SQL;
 create table test(ts int, s text, c text);
 select create_hypertable('test', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (1,public,test,t)
-(1 row)
 
 alter table test set (timescaledb.compress, timescaledb.compress_segmentby = 's',
     timescaledb.compress_orderby = 'ts');
@@ -27,7 +25,6 @@ select count(compress_chunk(x)) from show_chunks('test') x;
  count 
 -------
      1
-(1 row)
 
 -- Test the debug function
 create or replace function ts_bloom1_debug_info(in _timescaledb_internal.bloom1,
@@ -64,7 +61,6 @@ group by 1 order by min(bits_total);
  (0000000000010011,64,)   |  500 |    10 | 1 | {64}             | {NULL}                        |                          |                  1 |        6 |                   9.75
  (0000000000100011,128,)  |  500 |    10 | 1 | {128}            | {NULL}                        |                          |                  9 |       48 |                  31.54
  (0000000000000001,8192,) | 1000 |    10 | 1 | {8192}           | {NULL}                        |                          |                985 |     4211 |                  13.61
-(3 rows)
 
 -- One way to inspect the IO efficiency: ratio of bytes that would have been
 -- read w/o the index to the sum of bytes read by the bloom filter check
@@ -81,7 +77,6 @@ from col;
  round 
 -------
   5.95
-(1 row)
 
 -- Compressed bytes-per-value vs bloom filter bytes-per-value.
 with col as (
@@ -94,7 +89,6 @@ from col;
  compressed_bytes_per_row | filter_bytes_per_row 
 --------------------------+----------------------
                      7.26 |                 0.53
-(1 row)
 
 -- Test the debug hash function.
 create or replace function ts_bloom1_debug_hash(in anyelement, out int8)
@@ -103,7 +97,6 @@ select min(ts_bloom1_debug_hash(c)) from test;
          min          
 ----------------------
  -9221783940407213644
-(1 row)
 
 -- This shouldn't change compared to what was released in 2.20, not to break the
 -- binary compatibility.
@@ -111,67 +104,106 @@ select ts_bloom1_debug_hash('test'::text);
  ts_bloom1_debug_hash 
 ----------------------
    505112506223281103
-(1 row)
 
 select ts_bloom1_debug_hash('test'::varchar);
  ts_bloom1_debug_hash 
 ----------------------
    505112506223281103
-(1 row)
 
 select ts_bloom1_debug_hash('test'::bpchar);
  ts_bloom1_debug_hash 
 ----------------------
  -8127218844099566047
-(1 row)
 
 select ts_bloom1_debug_hash('c9757a73-7632-462e-bcfa-d5d9659e498f'::uuid);
  ts_bloom1_debug_hash 
 ----------------------
  -1807136374307054089
-(1 row)
 
 select ts_bloom1_debug_hash(1::int4);
  ts_bloom1_debug_hash 
 ----------------------
   4717996019076358352
-(1 row)
 
 select ts_bloom1_debug_hash(1::int8);
  ts_bloom1_debug_hash 
 ----------------------
   4717996019076358352
-(1 row)
 
 select ts_bloom1_debug_hash(1::float4);
  ts_bloom1_debug_hash 
 ----------------------
   4033440226552636220
-(1 row)
 
 select ts_bloom1_debug_hash(1::float8);
  ts_bloom1_debug_hash 
 ----------------------
   4033440226552636220
-(1 row)
 
 select ts_bloom1_debug_hash('2025-05-05'::date);
  ts_bloom1_debug_hash 
 ----------------------
  -5348595084310508225
-(1 row)
 
 select ts_bloom1_debug_hash('2025-05-05'::timestamp);
  ts_bloom1_debug_hash 
 ----------------------
   6141104473732294652
-(1 row)
 
 select ts_bloom1_debug_hash('2025-05-05'::timestamptz);
  ts_bloom1_debug_hash 
 ----------------------
   2448302731963240730
-(1 row)
+
+-- The "contains" functions should error out when called with wrong arguments.
+\set ON_ERROR_STOP 0
+select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb_internal.bloom1, 1::bit) ;
+ERROR:  the argument type bit lacks an extended hash function
+select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, array[1::bit]) ;
+ERROR:  the argument type bit lacks an extended hash function
+\set ON_ERROR_STOP 1
+-- Test that the "contains" function cope with different source chunks.
+create table detoaster(ts int, tag text) with (tsdb.hypertable,
+    tsdb.partition_column = 'ts', tsdb.compress, tsdb.compress_orderby = 'ts')
+;
+insert into detoaster select ts, ts::text from generate_series(1, 1000) ts;
+insert into detoaster select ts, ts::text from generate_series(1000001, 1001000) ts;
+create index on detoaster(tag);
+select count(compress_chunk(x)) from show_chunks('detoaster') x;
+ count 
+-------
+     2
+
+with chunks as (
+  select
+    row_number() over (order by table_name) index,
+    schema_name || '.' || table_name chunk
+  from _timescaledb_catalog.chunk
+    where id in (select compressed_chunk_id from _timescaledb_catalog.chunk
+      where hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'detoaster'))
+)
+select max(chunk) filter (where index = 1) chunk1,
+    max(chunk) filter (where index = 2) chunk2
+from chunks
+\gset
+create view v(f) as (select _ts_meta_v2_bloom1_tag from :chunk1
+    union all select _ts_meta_v2_bloom1_tag from :chunk2);
+select
+    _timescaledb_functions.bloom1_contains(f, '1'::text),
+    _timescaledb_functions.bloom1_contains(f, '1000001'::text)
+from v
+;
+ bloom1_contains | bloom1_contains 
+-----------------+-----------------
+ t               | f
+ f               | t
+
+select (ts_bloom1_debug_info(f)).* from v;
+ toast_header | toasted_bytes | compressed_bytes | detoasted_bytes | bits_total | bits_set | estimated_elements 
+--------------+---------------+------------------+-----------------+------------+----------+--------------------
+            1 |            16 |                  |            1024 |       8192 |     4199 |                981
+            1 |            16 |                  |            1024 |       8192 |     4210 |                984
 
 -- Test that the stateful detoaster copes with different chunks.
 create table detoaster(ts int, tag text) with (tsdb.hypertable,

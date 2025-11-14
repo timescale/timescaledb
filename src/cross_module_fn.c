@@ -92,7 +92,6 @@ CROSSMODULE_WRAPPER(bloom1_contains);
 CROSSMODULE_WRAPPER(bloom1_contains_any);
 
 /* continuous aggregate */
-CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(continuous_agg_process_hypertable_invalidations);
 CROSSMODULE_WRAPPER(continuous_agg_validate_query);
@@ -157,7 +156,7 @@ process_compress_table_default(Hypertable *ht, WithClauseResult *with_clause_opt
 }
 
 static void
-compression_enable_default(Hypertable *ht, WithClauseResult *with_clause_options)
+columnstore_setup_default(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -169,7 +168,7 @@ error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("function \"%s\" is not supported under the current \"%s\" license",
-					get_func_name(fcinfo->flinfo->fn_oid),
+					fcinfo->flinfo ? get_func_name(fcinfo->flinfo->fn_oid) : "unknown",
 					ts_guc_license),
 			 errhint("Upgrade your license to 'timescale' to use this free community feature.")));
 
@@ -274,9 +273,8 @@ continuous_agg_invalidate_mat_ht_all_default(const Hypertable *raw_ht, const Hyp
 }
 
 static void
-continuous_agg_call_invalidation_trigger_default(int32 hypertable_id, Relation chunk_rel,
-												 HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
-												 bool update)
+continuous_agg_dml_invalidate_default(int32 hypertable_id, Relation chunk_rel,
+									  HeapTuple chunk_tuple, HeapTuple chunk_newtuple, bool update)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -296,6 +294,13 @@ preprocess_query_tsl_default_fn_community(Query *parse, int *cursor_opts)
 	/* No op in community licensed code */
 }
 
+static PGFunction
+bloom1_get_hash_function_default(Oid type, FmgrInfo **finfo)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -307,7 +312,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.set_rel_pathlist_query = NULL,
 	.process_altertable_cmd = NULL,
 	.process_rename_cmd = NULL,
-	.process_explain_def = NULL,
 
 	/* gapfill */
 	.gapfill_marker = error_no_default_fn_pg_community,
@@ -363,12 +367,11 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.finalize_agg_sfunc = error_no_default_fn_pg_community,
 	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
-	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
-	.continuous_agg_call_invalidation_trigger = continuous_agg_call_invalidation_trigger_default,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
 	.continuous_agg_process_hypertable_invalidations = error_no_default_fn_pg_community,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht_all_default,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
+	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,
@@ -402,11 +405,12 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.uuid_compressor_finish = error_no_default_fn_pg_community,
 	.bloom1_contains = error_no_default_fn_pg_community,
 	.bloom1_contains_any = error_no_default_fn_pg_community,
+	.bloom1_get_hash_function = bloom1_get_hash_function_default,
 
 	.decompress_batches_for_insert = error_no_default_fn_chunk_insert_state_community,
 	.init_decompress_state_for_insert = error_no_default_fn_chunk_insert_state_community,
 
-	.compression_enable = compression_enable_default,
+	.columnstore_setup = columnstore_setup_default,
 
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,

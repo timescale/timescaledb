@@ -94,7 +94,8 @@ cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht)
 	List *grp_colnames = cagg_find_groupingcols(agg, mat_ht);
 	if (grp_colnames)
 	{
-		StringInfo info = makeStringInfo();
+		StringInfoData info;
+		initStringInfo(&info);
 		ListCell *lc;
 		foreach (lc, grp_colnames)
 		{
@@ -102,17 +103,17 @@ cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht)
 			/* skip time dimension col if it appears in group-by list */
 			if (namestrcmp((Name) & (mat_ht_dim->fd.column_name), grpcol) == 0)
 				continue;
-			if (info->len > 0)
-				appendStringInfoString(info, ",");
-			appendStringInfoString(info, quote_identifier(grpcol));
+			if (info.len > 0)
+				appendStringInfoString(&info, ",");
+			appendStringInfoString(&info, quote_identifier(grpcol));
 		}
 
-		if (info->len > 0)
+		if (info.len > 0)
 		{
 			DefElem *segby;
 			segby = makeDefElemExtended(EXTENSION_NAMESPACE,
 										"compress_segmentby",
-										(Node *) makeString(info->data),
+										(Node *) makeString(info.data),
 										DEFELEM_UNSPEC,
 										-1);
 			defelems = lappend(defelems, segby);
@@ -179,6 +180,7 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		cagg_update_materialized_only(agg, materialized_only);
 		ts_cache_release(&hcache);
 	}
+
 	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
 	{
 		Cache *hcache = ts_hypertable_cache_pin();
@@ -192,6 +194,7 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		ts_dimension_set_chunk_interval(dim, interval);
 		ts_cache_release(&hcache);
 	}
+
 	List *compression_options = ts_continuous_agg_get_compression_defelems(with_clause_options);
 
 	if (list_length(compression_options) > 0)
@@ -204,12 +207,14 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		cagg_alter_compression(agg, mat_ht, compression_options);
 		ts_cache_release(&hcache);
 	}
+
 	if (!with_clause_options[CreateMaterializedViewFlagCreateGroupIndexes].is_default)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot alter create_group_indexes option for continuous aggregates")));
 	}
+
 	if (!with_clause_options[CreateMaterializedViewFlagFinalized].is_default)
 	{
 		ereport(ERROR,
