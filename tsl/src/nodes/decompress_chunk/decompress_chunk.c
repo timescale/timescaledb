@@ -64,12 +64,12 @@ static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compress
 										 const CompressionInfo *compression_info,
 										 const SortInfo *sort_info);
 
-static ColumnarScanPath *
-columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path);
+static ColumnarScanPath *columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *info,
+												   Path *compressed_path);
 
-static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
-											 const Chunk *chunk, RelOptInfo *chunk_rel,
-											 bool needs_sequence_num);
+static void columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
+										  const Chunk *chunk, RelOptInfo *chunk_rel,
+										  bool needs_sequence_num);
 
 static SortInfo build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 							   const CompressionInfo *info, List *pathkeys);
@@ -992,11 +992,11 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	chunk_rel->partial_pathlist = NIL;
 
 	/* add RangeTblEntry and RelOptInfo for compressed chunk */
-	decompress_chunk_add_plannerinfo(root,
-									 compression_info,
-									 chunk,
-									 chunk_rel,
-									 sort_info.needs_sequence_num);
+	columnar_scan_add_plannerinfo(root,
+								  compression_info,
+								  chunk,
+								  chunk_rel,
+								  sort_info.needs_sequence_num);
 
 	if (sort_info.use_compressed_sort)
 	{
@@ -2093,8 +2093,8 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
  * and add it to PlannerInfo
  */
 static void
-decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Chunk *chunk,
-								 RelOptInfo *chunk_rel, bool needs_sequence_num)
+columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Chunk *chunk,
+							  RelOptInfo *chunk_rel, bool needs_sequence_num)
 {
 	Index compressed_index = root->simple_rel_array_size;
 
