@@ -56,7 +56,7 @@ static CustomExecMethods decompress_chunk_state_methods = {
  */
 
 Node *
-decompress_chunk_state_create(CustomScan *cscan)
+columnar_scan_state_create(CustomScan *cscan)
 {
 	ColumnarScanState *chunk_state;
 
@@ -157,14 +157,14 @@ constify_tableoid(List *node, Index chunk_index, Oid chunk_relid)
 }
 
 pg_attribute_always_inline static TupleTableSlot *
-decompress_chunk_exec_impl(ColumnarScanState *chunk_state, const BatchQueueFunctions *funcs);
+columnar_scan_exec_impl(ColumnarScanState *chunk_state, const BatchQueueFunctions *funcs);
 
 static TupleTableSlot *
 decompress_chunk_exec_fifo(CustomScanState *node)
 {
 	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	Assert(!chunk_state->decompress_context.batch_sorted_merge);
-	return decompress_chunk_exec_impl(chunk_state, &BatchQueueFunctionsFifo);
+	return columnar_scan_exec_impl(chunk_state, &BatchQueueFunctionsFifo);
 }
 
 static TupleTableSlot *
@@ -172,7 +172,7 @@ decompress_chunk_exec_heap(CustomScanState *node)
 {
 	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	Assert(chunk_state->decompress_context.batch_sorted_merge);
-	return decompress_chunk_exec_impl(chunk_state, &BatchQueueFunctionsHeap);
+	return columnar_scan_exec_impl(chunk_state, &BatchQueueFunctionsHeap);
 }
 
 /*
@@ -425,7 +425,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
  * relatively hot loop.
  */
 pg_attribute_always_inline static TupleTableSlot *
-decompress_chunk_exec_impl(ColumnarScanState *chunk_state, const BatchQueueFunctions *bqfuncs)
+columnar_scan_exec_impl(ColumnarScanState *chunk_state, const BatchQueueFunctions *bqfuncs)
 {
 	DecompressContext *dcontext = &chunk_state->decompress_context;
 	BatchQueue *bq = chunk_state->batch_queue;

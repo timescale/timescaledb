@@ -41,7 +41,7 @@
 
 static CustomScanMethods decompress_chunk_plan_methods = {
 	.CustomName = "ColumnarScan",
-	.CreateCustomScanState = decompress_chunk_state_create,
+	.CreateCustomScanState = columnar_scan_state_create,
 };
 
 /* Check if the provided plan is a DecompressChunkPlan */

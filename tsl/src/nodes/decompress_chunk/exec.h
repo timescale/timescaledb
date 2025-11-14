@@ -44,7 +44,7 @@ typedef struct ColumnarScanState
 	List *vectorized_quals_original;
 } ColumnarScanState;
 
-extern Node *decompress_chunk_state_create(CustomScan *cscan);
+extern Node *columnar_scan_state_create(CustomScan *cscan);
 
 TupleTableSlot *decompress_chunk_exec_vector_agg_impl(CustomScanState *vector_agg_state,
 													  ColumnarScanState *decompress_state);
