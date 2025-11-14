@@ -46,7 +46,7 @@ static CustomScanMethods decompress_chunk_plan_methods = {
 
 /* Check if the provided plan is a DecompressChunkPlan */
 bool
-ts_is_decompress_chunk_plan(Plan *plan)
+ts_is_columnar_scan_plan(Plan *plan)
 {
 	return IsA(plan, CustomScan) &&
 		   castNode(CustomScan, plan)->methods == &decompress_chunk_plan_methods;

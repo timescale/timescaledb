@@ -1023,7 +1023,7 @@ Node *
 vector_agg_state_create(CustomScan *cscan)
 {
 	VectorAggState *state = (VectorAggState *) newNode(sizeof(VectorAggState), T_CustomScanState);
-	Assert(ts_is_decompress_chunk_plan((Plan *) linitial(cscan->custom_plans)));
+	Assert(ts_is_columnar_scan_plan((Plan *) linitial(cscan->custom_plans)));
 
 	state->custom.methods = &exec_methods;
 

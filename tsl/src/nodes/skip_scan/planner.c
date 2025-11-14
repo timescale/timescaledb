@@ -127,7 +127,7 @@ setup_index_plan(CustomScan *skip_plan, Plan *child_plan)
 	{
 		skip_plan->scan = castNode(IndexOnlyScan, child_plan)->scan;
 	}
-	else if (ts_is_decompress_chunk_plan(child_plan))
+	else if (ts_is_columnar_scan_plan(child_plan))
 	{
 		CustomScan *csplan = castNode(CustomScan, plan);
 		skip_plan->scan = csplan->scan;
