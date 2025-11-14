@@ -4,6 +4,8 @@
 
 -- Test grouping by uuid segmentby column (scalar by-reference fixed-width column).
 
+\pset null $
+
 CREATE TABLE public.plan_plus(
   "time"        timestamp with time zone NOT NULL,
   device        uuid                     NOT NULL,
@@ -90,7 +92,7 @@ SELECT count(*) FROM (SELECT device FROM plan_plus GROUP BY device) t;
 SELECT count(*) FROM (SELECT device, field FROM plan_plus GROUP BY device, field) t;
 
 
--- UUID groupping
+-- UUID grouping
 create table uuid_table(ts int, u uuid);
 select count(*) from create_hypertable('uuid_table', 'ts', chunk_time_interval => 6);
 alter table uuid_table set (timescaledb.compress);
@@ -115,6 +117,10 @@ select count(compress_chunk(x, true)) from show_chunks('uuid_table') x;
 
 SET timescaledb.debug_require_vector_agg = 'require';
 
+---- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off;
+--set timescaledb.debug_require_vector_agg = 'allow';
+
 SELECT ver, u, ts, uuid_ts from uuid_table
 where uuid_ts < '2025-06-25 16:16:46.347779+01' and ver = 7
 order by 1,2;
@@ -122,5 +128,22 @@ order by 1,2;
 SELECT ver, u, count(*), sum(ts) from uuid_table
 where uuid_ts < '2025-06-25 16:16:46.347779+01' and ver = 7
 group by 1,2 order by 1,2;
+
+select uuid_version(u), count(*) from uuid_table group by 1 order by 1;
+
+select to_uuidv7_boundary(uuid_ts), count(*)
+    from uuid_table group by 1 order by 1;
+
+select uuid_version(to_uuidv7_boundary(uuid_ts)), count(*)
+    from uuid_table group by 1 order by 1;
+
+select uuid_extract_timestamp(u), count(*)
+    from uuid_table group by 1 order by 1;
+
+select uuid_timestamp(u), count(*)
+    from uuid_table group by 1 order by 1;
+
+select uuid_timestamp(to_uuidv7_boundary(uuid_ts)), count(*)
+    from uuid_table group by 1 order by 1;
 
 RESET timescaledb.debug_require_vector_agg;
