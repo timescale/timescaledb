@@ -65,7 +65,7 @@ static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compress
 										 const SortInfo *sort_info);
 
 static ColumnarScanPath *
-decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path);
+columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path);
 
 static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
 											 const Chunk *chunk, RelOptInfo *chunk_rel,
@@ -1188,7 +1188,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	}
 
 	Path *chunk_path_no_sort =
-		(Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
+		(Path *) columnar_scan_path_create(root, compression_info, compressed_path);
 	List *decompressed_paths = list_make1(chunk_path_no_sort);
 
 	/*
@@ -2189,7 +2189,7 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 }
 
 static ColumnarScanPath *
-decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path)
+columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path)
 {
 	ColumnarScanPath *path;
 
