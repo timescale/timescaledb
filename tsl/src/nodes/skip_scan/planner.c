@@ -671,7 +671,7 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			has_caa = true;
 		}
 
-		if (IsA(subpath, IndexPath) || ts_is_decompress_chunk_path(subpath))
+		if (IsA(subpath, IndexPath) || ts_is_columnar_scan_path(subpath))
 		{
 			subpath = (Path *) skip_scan_path_create(root, subpath, &dpinfo);
 			if (!subpath)
@@ -907,7 +907,7 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 	{
 		index_path = castNode(IndexPath, child_path);
 	}
-	else if (ts_is_decompress_chunk_path(child_path))
+	else if (ts_is_columnar_scan_path(child_path))
 	{
 		if (!ts_guc_enable_compressed_skip_scan)
 			return NULL;
@@ -1155,7 +1155,7 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 	var->varattno = get_attnum(chunk_rte->relid, attname);
 
 	/* Get attribute number for distinct column on a compressed chunk */
-	if (ts_is_decompress_chunk_path(child_path))
+	if (ts_is_columnar_scan_path(child_path))
 	{
 		/* distinct column has to be a segmentby column */
 		ColumnarScanPath *dcpath = (ColumnarScanPath *) child_path;
@@ -1191,7 +1191,7 @@ build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo, List 
 	foreach (lc, subpaths)
 	{
 		Path *child = lfirst(lc);
-		if (IsA(child, IndexPath) || ts_is_decompress_chunk_path(child))
+		if (IsA(child, IndexPath) || ts_is_columnar_scan_path(child))
 		{
 			if (top_pathkeys && !pathkeys_contained_in(top_pathkeys, child->pathkeys))
 				continue;

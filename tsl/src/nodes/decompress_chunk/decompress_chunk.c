@@ -352,9 +352,9 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 }
 
 ColumnarScanPath *
-copy_decompress_chunk_path(ColumnarScanPath *src)
+copy_columnar_scan_path(ColumnarScanPath *src)
 {
-	Assert(ts_is_decompress_chunk_path(&src->custom_path.path));
+	Assert(ts_is_columnar_scan_path(&src->custom_path.path));
 
 	ColumnarScanPath *dst = palloc(sizeof(ColumnarScanPath));
 	memcpy(dst, src, sizeof(ColumnarScanPath));
@@ -886,7 +886,7 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 		return NULL;
 	}
 
-	Assert(ts_is_decompress_chunk_path(path));
+	Assert(ts_is_columnar_scan_path(path));
 
 	/*
 	 * We should be given an unsorted DecompressChunk path.
@@ -898,7 +898,7 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 	 * chunk path because the original can be recycled in add_path, and our
 	 * sorted path must be independent.
 	 */
-	ColumnarScanPath *path_copy = copy_decompress_chunk_path((ColumnarScanPath *) path);
+	ColumnarScanPath *path_copy = copy_columnar_scan_path((ColumnarScanPath *) path);
 
 	/*
 	 * Create the Sort path.
@@ -1204,7 +1204,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		Assert(!sort_info->use_compressed_sort);
 
 		ColumnarScanPath *path_copy =
-			copy_decompress_chunk_path((ColumnarScanPath *) chunk_path_no_sort);
+			copy_columnar_scan_path((ColumnarScanPath *) chunk_path_no_sort);
 
 		path_copy->reverse = sort_info->reverse;
 		path_copy->batch_sorted_merge = true;
@@ -1263,7 +1263,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			 * it accordingly
 			 */
 			ColumnarScanPath *path_copy =
-				copy_decompress_chunk_path((ColumnarScanPath *) chunk_path_no_sort);
+				copy_columnar_scan_path((ColumnarScanPath *) chunk_path_no_sort);
 			path_copy->reverse = sort_info->reverse;
 			path_copy->needs_sequence_num = sort_info->needs_sequence_num;
 			path_copy->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
@@ -2725,7 +2725,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 
 /* Check if the provided path is a DecompressChunkPath */
 bool
-ts_is_decompress_chunk_path(Path *path)
+ts_is_columnar_scan_path(Path *path)
 {
 	return IsA(path, CustomPath) &&
 		   castNode(CustomPath, path)->methods == &decompress_chunk_path_methods;

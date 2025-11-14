@@ -310,9 +310,9 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 	 * used columns in attno order, and the pathtarget before grouping is
 	 * computed later and has the grouping columns in front.
 	 */
-	if (ts_is_decompress_chunk_path(subpath))
+	if (ts_is_columnar_scan_path(subpath))
 	{
-		subpath = (Path *) copy_decompress_chunk_path((ColumnarScanPath *) subpath);
+		subpath = (Path *) copy_columnar_scan_path((ColumnarScanPath *) subpath);
 		subpath->pathtarget = chunk_target_before_grouping;
 	}
 	else

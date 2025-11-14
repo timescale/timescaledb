@@ -60,7 +60,7 @@ typedef struct ColumnarScanPath
 void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht,
 										const Chunk *chunk);
 
-extern bool ts_is_decompress_chunk_path(Path *path);
+extern bool ts_is_columnar_scan_path(Path *path);
 extern bool ts_is_decompress_chunk_plan(Plan *plan);
 
-ColumnarScanPath *copy_decompress_chunk_path(ColumnarScanPath *src);
+ColumnarScanPath *copy_columnar_scan_path(ColumnarScanPath *src);
