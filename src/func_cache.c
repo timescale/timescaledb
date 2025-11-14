@@ -261,6 +261,44 @@ static FuncInfo funcinfo[] = {
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
+		/* Do not allow uuid bucketing in caggs until support for it is
+		 * implemented and tested */
+		.allowed_in_cagg_definition = false,
+		.funcname = "time_bucket",
+		.nargs = 2,
+		.arg_types = { INTERVALOID, UUIDOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_sort_transform,
+	},
+	/* Interval Bucket with origin */
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		/* Do not allow uuid bucketing in caggs until support for it is
+		 * implemented and tested */
+		.allowed_in_cagg_definition = false,
+		.funcname = "time_bucket",
+		.nargs = 3,
+		.arg_types = { INTERVALOID, UUIDOID, TIMESTAMPTZOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_sort_transform,
+	},
+	/* Interval Bucket with offset */
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		/* Do not allow uuid bucketing in caggs until support for it is
+		 * implemented and tested */
+		.allowed_in_cagg_definition = false,
+		.funcname = "time_bucket",
+		.nargs = 3,
+		.arg_types = { INTERVALOID, UUIDOID, INTERVALOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 2,

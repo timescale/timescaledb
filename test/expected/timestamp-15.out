@@ -1264,11 +1264,11 @@ SELECT
 time_bucket(NULL::interval,now(),'Europe/Berlin'),
 time_bucket('1day',NULL::timestamptz,'Europe/Berlin'),
 time_bucket('1day',now(),NULL::text),
-time_bucket('1day','2020-02-03','Europe/Berlin',NULL),
-time_bucket('1day','2020-02-03','Europe/Berlin','2020-04-01',NULL),
-time_bucket('1day','2020-02-03','Europe/Berlin',NULL,NULL),
-time_bucket('1day','2020-02-03','Europe/Berlin',"offset":=NULL::interval),
-time_bucket('1day','2020-02-03','Europe/Berlin',origin:=NULL::timestamptz);
+time_bucket('1day',timestamptz '2020-02-03','Europe/Berlin',NULL),
+time_bucket('1day',timestamptz '2020-02-03','Europe/Berlin','2020-04-01',NULL),
+time_bucket('1day',timestamptz '2020-02-03','Europe/Berlin',NULL,NULL),
+time_bucket('1day',timestamptz '2020-02-03','Europe/Berlin',"offset":=NULL::interval),
+time_bucket('1day',timestamptz '2020-02-03','Europe/Berlin',origin:=NULL::timestamptz);
  time_bucket | time_bucket | time_bucket |      time_bucket       |      time_bucket       |      time_bucket       |      time_bucket       |      time_bucket       
 -------------+-------------+-------------+------------------------+------------------------+------------------------+------------------------+------------------------
              |             |             | 2020-02-02 18:00:00-05 | 2020-02-03 00:00:00-05 | 2020-02-02 18:00:00-05 | 2020-02-02 18:00:00-05 | 2020-02-02 18:00:00-05

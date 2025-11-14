@@ -11,9 +11,12 @@
 #include <utils/datetime.h>
 #include <utils/fmgrprotos.h>
 #include <utils/timestamp.h>
+#include <utils/uuid.h>
 
+#include "export.h"
 #include "time_bucket.h"
 #include "utils.h"
+#include "uuid.h"
 
 #define TIME_BUCKET(period, timestamp, offset, min, max, result)                                   \
 	do                                                                                             \
@@ -457,6 +460,88 @@ ts_date_offset_bucket(PG_FUNCTION_ARGS)
 	time = DirectFunctionCall2(date_pl_interval, date, PG_GETARG_DATUM(2));
 	date = DirectFunctionCall1(timestamp_date, time);
 	PG_RETURN_DATUM(date);
+}
+
+TS_FUNCTION_INFO_V1(ts_uuid_bucket);
+
+Datum
+ts_uuid_bucket(PG_FUNCTION_ARGS)
+{
+	Datum ts = DirectFunctionCall1(ts_timestamptz_from_uuid_v7, PG_GETARG_DATUM(1));
+	Datum origin = (PG_NARGS() > 2 ? PG_GETARG_DATUM(2) : TimestampTzGetDatum(DEFAULT_ORIGIN));
+
+	PG_RETURN_DATUM(DirectFunctionCall3(ts_timestamptz_bucket, PG_GETARG_DATUM(0), ts, origin));
+}
+
+TS_FUNCTION_INFO_V1(ts_uuid_offset_bucket);
+
+TSDLLEXPORT Datum
+ts_uuid_offset_bucket(PG_FUNCTION_ARGS)
+{
+	Datum uuid = PG_GETARG_DATUM(1);
+	Datum timestamp = DirectFunctionCall1(ts_timestamptz_from_uuid_v7, uuid);
+
+	LOCAL_FCINFO(fcinfo_local, 3);
+	Datum result;
+
+	InitFunctionCallInfoData(*fcinfo_local, NULL, 3, InvalidOid, NULL, NULL);
+
+	fcinfo_local->args[0].value = PG_GETARG_DATUM(0); /* Period */
+	fcinfo_local->args[0].isnull = PG_ARGISNULL(0);
+	fcinfo_local->args[1].value = timestamp;
+	fcinfo_local->args[1].isnull = PG_ARGISNULL(1);
+	fcinfo_local->args[2].value = PG_GETARG_DATUM(2);
+	fcinfo_local->args[2].isnull = PG_ARGISNULL(2);
+
+	result = ts_timestamptz_offset_bucket(fcinfo_local);
+
+	/* Check for null result, since caller is clearly not expecting one */
+	if (fcinfo_local->isnull)
+		elog(ERROR, "function %p returned NULL", (void *) ts_timestamptz_offset_bucket);
+
+	return result;
+}
+
+TS_FUNCTION_INFO_V1(ts_uuid_timezone_bucket);
+
+/*
+ * time_bucket(bucket_width INTERVAL, ts uuid, timezone TEXT, origin uuid DEFAULT
+ * NULL, "offset" INTERVAL DEFAULT NULL) RETURNS TIMESTAMPTZ
+ */
+TSDLLEXPORT Datum
+ts_uuid_timezone_bucket(PG_FUNCTION_ARGS)
+{
+	/*
+	 * We need to check for NULL arguments here because the function cannot be
+	 * defined STRICT due to the optional arguments.
+	 */
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+		PG_RETURN_NULL();
+
+	Datum uuid = PG_GETARG_DATUM(1);
+	Datum timestamp = DirectFunctionCall1(ts_timestamptz_from_uuid_v7, uuid);
+
+	LOCAL_FCINFO(fcinfo_local, 4);
+	Datum result;
+
+	InitFunctionCallInfoData(*fcinfo_local, NULL, 4, InvalidOid, NULL, NULL);
+
+	fcinfo_local->args[0].value = PG_GETARG_DATUM(0); /* Period */
+	fcinfo_local->args[0].isnull = PG_ARGISNULL(0);
+	fcinfo_local->args[1].value = timestamp;
+	fcinfo_local->args[1].isnull = PG_ARGISNULL(1);
+	fcinfo_local->args[2].value = PG_GETARG_DATUM(2);
+	fcinfo_local->args[2].isnull = PG_ARGISNULL(2);
+	fcinfo_local->args[3].value = PG_GETARG_DATUM(3);
+	fcinfo_local->args[3].isnull = PG_ARGISNULL(3);
+
+	result = ts_timestamptz_timezone_bucket(fcinfo_local);
+
+	/* Check for null result, since caller is clearly not expecting one */
+	if (fcinfo_local->isnull)
+		elog(ERROR, "function %p returned NULL", (void *) ts_timestamptz_timezone_bucket);
+
+	return result;
 }
 
 TSDLLEXPORT int64
