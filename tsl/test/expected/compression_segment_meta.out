@@ -59,7 +59,6 @@ insert into metric select i from generate_series(1, 10) i;
  ?column? | ?column? 
 ----------+----------
  t        | t
-(1 row)
 
 ----NULL tests
 --First
@@ -73,7 +72,6 @@ insert into metric select NULLIF(i,1) from generate_series(1, 10) i;
  ?column? | ?column? 
 ----------+----------
  t        | t
-(1 row)
 
 --Last
 truncate metric;
@@ -86,7 +84,6 @@ insert into metric select NULLIF(i,10) from generate_series(1, 10) i;
  ?column? | ?column? 
 ----------+----------
  t        | t
-(1 row)
 
 --Middle
 truncate metric;
@@ -99,7 +96,6 @@ insert into metric select NULLIF(i,5) from generate_series(1, 10) i;
  ?column? | ?column? 
 ----------+----------
  t        | t
-(1 row)
 
 --All NULLS should return null object
 truncate metric;
@@ -111,7 +107,6 @@ FROM metric;
  ?column? | ?column? 
 ----------+----------
  t        | t
-(1 row)
 
 --
 --type tests
@@ -134,7 +129,6 @@ CREATE TABLE base_texts AS SELECT
  ?column? | ?column? 
 ----------+----------
  t        | t
-(1 row)
 
 --toasted text
 DROP TABLE base_texts;
@@ -152,7 +146,6 @@ SELECT pg_total_relation_size(reltoastrelid)
  pg_total_relation_size 
 ------------------------
                   24576
-(1 row)
 
 \ir include/compression_test_segment_meta.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -162,7 +155,6 @@ SELECT pg_total_relation_size(reltoastrelid)
  ?column? | ?column? 
 ----------+----------
  t        | t
-(1 row)
 
 --name is a fixed-length pass by reference type
 CREATE TABLE base_name AS SELECT
@@ -182,7 +174,6 @@ CREATE TABLE base_name AS SELECT
  ?column? | ?column? 
 ----------+----------
  t        | t
-(1 row)
 
 --array
 CREATE TABLE text_array AS SELECT
@@ -202,7 +193,6 @@ CREATE TABLE text_array AS SELECT
  ?column? | ?column? 
 ----------+----------
  t        | t
-(1 row)
 
 --Points doesn't have an ordering so make sure it errors
 CREATE TABLE points AS SELECT

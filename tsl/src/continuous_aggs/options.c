@@ -94,7 +94,8 @@ cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht)
 	List *grp_colnames = cagg_find_groupingcols(agg, mat_ht);
 	if (grp_colnames)
 	{
-		StringInfo info = makeStringInfo();
+		StringInfoData info;
+		initStringInfo(&info);
 		ListCell *lc;
 		foreach (lc, grp_colnames)
 		{
@@ -102,17 +103,17 @@ cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht)
 			/* skip time dimension col if it appears in group-by list */
 			if (namestrcmp((Name) & (mat_ht_dim->fd.column_name), grpcol) == 0)
 				continue;
-			if (info->len > 0)
-				appendStringInfoString(info, ",");
-			appendStringInfoString(info, quote_identifier(grpcol));
+			if (info.len > 0)
+				appendStringInfoString(&info, ",");
+			appendStringInfoString(&info, quote_identifier(grpcol));
 		}
 
-		if (info->len > 0)
+		if (info.len > 0)
 		{
 			DefElem *segby;
 			segby = makeDefElemExtended(EXTENSION_NAMESPACE,
 										"compress_segmentby",
-										(Node *) makeString(info->data),
+										(Node *) makeString(info.data),
 										DEFELEM_UNSPEC,
 										-1);
 			defelems = lappend(defelems, segby);
@@ -192,20 +193,6 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 
 		ts_dimension_set_chunk_interval(dim, interval);
 		ts_cache_release(&hcache);
-	}
-
-	/*
-	 * We do not support changing the invalidation method on a continuous
-	 * aggregate. We will add support for this using a dedicated function
-	 * since it needs to be changed for the hypertable.
-	 */
-	if (!with_clause_options[CreateMaterializedViewFlagInvalidateUsing].is_default)
-	{
-		ereport(ERROR,
-				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				errmsg("cannot change invalidation method for continuous aggregate"),
-				errdetail("All continuous aggregates for a hypertable need to use the same "
-						  "invalidation collection method."));
 	}
 
 	List *compression_options = ts_continuous_agg_get_compression_defelems(with_clause_options);

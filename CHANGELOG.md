@@ -5,6 +5,81 @@ This page lists all the latest features and updates to TimescaleDB. When
 you use psql to update your database, use the -X flag and prevent any .psqlrc 
 commands from accidentally triggering the load of a previous DB version.**
 
+## 2.23.1 (2025-11-13)
+
+This release contains performance improvements and bug fixes since the 2.23.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#8873](https://github.com/timescale/timescaledb/pull/8873) Don't error on failure to update job stats
+* [#8875](https://github.com/timescale/timescaledb/pull/8875) Fix decoding of UUID v7 timestamp microseconds
+* [#8879](https://github.com/timescale/timescaledb/pull/8879) Fix blocker for multiple hierarchical continuous aggregate policies
+* [#8882](https://github.com/timescale/timescaledb/pull/8882) Fix crash in policy creation
+
+**Thanks**
+* @alexanderlaw for reporting a crash when creating a policy
+* @leppaott for reporting an issue with hierarchical continuous aggregates
+
+## 2.23.0 (2025-10-29)
+
+This release contains performance improvements and bug fixes since the 2.22.1 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.23.0**
+* This release introduces full PostgreSQL 18 support for all existing features. TimescaleDB v2.23 is available for PostgreSQL 15, 16, 17, and 18.
+* UUIDv7 compression is now enabled by default on the columnstore. This feature was shipped in [v2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.22.0). It saves you at least 30% of storage and delivers ~2× faster query performance with UUIDv7 columns in the filter conditions.
+* Added the ability to set hypertables to unlogged, addressing an open community request [#836](https://github.com/timescale/timescaledb/issues/836). This allows the tradeoff between durability and performance, with the latter being favourable for larger imports.
+* By allowing [set-returning functions](https://www.postgresql.org/docs/current/functions-srf.html) in continuous aggregates, this releases addresses a long standing blocker, raised by the community [#1717](https://github.com/timescale/timescaledb/issues/1717).
+
+**PostgreSQL 15 deprecation announcement**
+
+We will continue supporting PostgreSQL 15 until June 2026. Closer to that time, we will announce the specific TimescaleDB version in which PostgreSQL 15 support will not be included going forward.
+
+**Features**
+* [#8373](https://github.com/timescale/timescaledb/pull/8373) More precise estimates of row numbers for columnar storage based on Postgres statistics.
+* [#8581](https://github.com/timescale/timescaledb/pull/8581) Allow mixing Postgres and TimescaleDB options in `ALTER TABLE SET`.
+* [#8582](https://github.com/timescale/timescaledb/pull/8582) Make `partition_column` in `CREATE TABLE WITH` optional.
+* [#8588](https://github.com/timescale/timescaledb/pull/8588) Automatically create a columnstore policy when a hypertable with columnstore enabled is created via `CREATE TABLE WITH` statement.
+* [#8606](https://github.com/timescale/timescaledb/pull/8606) Add job history config parameters for maximum successes and failures to keep for each job.
+* [#8632](https://github.com/timescale/timescaledb/pull/8632) Remove `ChunkDispatch` custom node.
+* [#8637](https://github.com/timescale/timescaledb/pull/8637) Add `INSERT` support for direct compress.
+* [#8661](https://github.com/timescale/timescaledb/pull/8661) Allow `ALTER TABLE ONLY` to change `reloptions` to apply setting changes only to future chunks.
+* [#8703](https://github.com/timescale/timescaledb/pull/8703) Allow set-returning functions in continuous aggregates.
+* [#8734](https://github.com/timescale/timescaledb/pull/8734) Support direct compress when inserting into a chunk.
+* [#8741](https://github.com/timescale/timescaledb/pull/8741) Add support for unlogged hypertables.
+* [#8769](https://github.com/timescale/timescaledb/pull/8769) Remove continuous aggregate invalidation trigger.
+* [#8798](https://github.com/timescale/timescaledb/pull/8798) Enable UUIDv7 compression by default.
+* [#8804](https://github.com/timescale/timescaledb/pull/8804) Remove `insert_blocker` trigger.
+
+**Bugfixes**
+* [#8561](https://github.com/timescale/timescaledb/pull/8561) Show warning when direct compress is skipped due to triggers or unique constraints.
+* [#8567](https://github.com/timescale/timescaledb/pull/8567) Do not require a job to have executed to show status.
+* [#8654](https://github.com/timescale/timescaledb/pull/8654) Fix `approximate_row_count` for compressed chunks.
+* [#8704](https://github.com/timescale/timescaledb/pull/8704) Fix direct `DELETE` on compressed chunk.
+* [#8728](https://github.com/timescale/timescaledb/pull/8728) Don't block dropping hypertables with other objects.
+* [#8735](https://github.com/timescale/timescaledb/pull/8735) Fix `ColumnarScan` for `UNION` queries.
+* [#8739](https://github.com/timescale/timescaledb/pull/8739) Fix cached utility statements.
+* [#8742](https://github.com/timescale/timescaledb/pull/8742) Potential internal program error when grouping by `bool` columns of a compressed hypertable.
+* [#8743](https://github.com/timescale/timescaledb/pull/8743) Modify schedule interval for job history pruning.
+* [#8746](https://github.com/timescale/timescaledb/pull/8746) Support show/drop chunks with UUIDv7 partitioning.
+* [#8753](https://github.com/timescale/timescaledb/pull/8753) Allow sorts over decompressed index scans for `ChunkAppend`.
+* [#8758](https://github.com/timescale/timescaledb/pull/8758) Improve error message on catalog version mismatch.
+* [#8774](https://github.com/timescale/timescaledb/pull/8774) Add GUC for WAL based invalidation of continuous aggregates.
+* [#8782](https://github.com/timescale/timescaledb/pull/8782) Stops sparse index from allowing multiple options.
+* [#8799](https://github.com/timescale/timescaledb/pull/8799) Set `next_start` for `WITH` clause compression policy.
+* [#8807](https://github.com/timescale/timescaledb/pull/8807) Only warn but not fail the compression if bloom filter indexes are configured but disabled with a GUC.
+
+**GUCs**
+* `cagg_processing_wal_batch_size`: Batch size when processing WAL entries.
+* `enable_cagg_wal_based_invalidation`: Enable experimental invalidations for continuous aggregates using WAL.
+* `enable_direct_compress_insert`: Enable direct compression during `INSERT`.
+* `enable_direct_compress_insert_client_sorted`: Enable direct compress `INSERT` with presorted data.
+* `enable_direct_compress_insert_sort_batches`: Enable batch sorting during direct compress `INSERT`.
+
+**Thanks**
+* @brandonpurcell-dev For highlighting issues with `show_chunks()` and UUIDv7 partitioning
+* @moodgorning for reporting an issue with the `timescaledb_information.job_stats` view
+* @ruideyllot for reporting set-returning functions not working in continuous aggregates
+* @t-aistleitner for reporting an issue with utility statements in plpgsql functions
+
 ## 2.22.1 (2025-09-30)
 
 This release contains performance improvements and bug fixes since the [2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.20.0) release. We recommend that you upgrade at the next available opportunity.

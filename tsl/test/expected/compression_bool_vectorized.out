@@ -9,7 +9,6 @@ select create_hypertable('t1','ts');
  create_hypertable 
 -------------------
  (1,public,t1,t)
-(1 row)
 
 alter table t1 set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 insert into t1 values (1, true);
@@ -22,7 +21,6 @@ select compress_chunk(show_chunks('t1'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 select * from t1 order by 1;
  ts | b 
@@ -33,46 +31,39 @@ select * from t1 order by 1;
   4 | t
   5 | f
   6 | 
-(6 rows)
 
 select * from t1 where b is null order by 1;
  ts | b 
 ----+---
   3 | 
   6 | 
-(2 rows)
 
 select * from t1 where b = true order by 1;
  ts | b 
 ----+---
   1 | t
   4 | t
-(2 rows)
 
 select * from t1 where b = false order by 1;
  ts | b 
 ----+---
   2 | f
   5 | f
-(2 rows)
 
 select * from t1 where ts > 3 and b is null order by 1;
  ts | b 
 ----+---
   6 | 
-(1 row)
 
 select * from t1 where ts > 3 and b = true order by 1;
  ts | b 
 ----+---
   4 | t
-(1 row)
 
 select * from t1 where ts > 3 and b = false order by 1;
  ts | b 
 ----+---
   5 | f
-(1 row)
 
 -- delete all null values and compress again
 delete from t1 where b is null;
@@ -80,7 +71,6 @@ select compress_chunk(show_chunks('t1'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 select * from t1 order by 1;
  ts | b 
@@ -89,41 +79,34 @@ select * from t1 order by 1;
   2 | f
   4 | t
   5 | f
-(4 rows)
 
 select * from t1 where b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from t1 where b = true order by 1;
  ts | b 
 ----+---
   1 | t
   4 | t
-(2 rows)
 
 select * from t1 where b = false order by 1;
  ts | b 
 ----+---
   2 | f
   5 | f
-(2 rows)
 
 select * from t1 where ts > 3 and b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from t1 where ts > 3 and b = true order by 1;
  ts | b 
 ----+---
   4 | t
-(1 row)
 
 select * from t1 where ts > 3 and b = false order by 1;
  ts | b 
 ----+---
   5 | f
-(1 row)
 

@@ -32,7 +32,6 @@ SELECT debug_waitpoint_enable('test_debug_point');
  debug_waitpoint_enable 
 ------------------------
  
-(1 row)
 
 \set ON_ERROR_STOP 0
 SELECT debug_waitpoint_enable('test_debug_point');
@@ -42,7 +41,6 @@ SELECT debug_waitpoint_release('test_debug_point');
  debug_waitpoint_release 
 -------------------------
  
-(1 row)
 
 -- debug point not enabled
 \set ON_ERROR_STOP 0
@@ -61,13 +59,11 @@ SELECT test_error_injection('test_error');
  test_error_injection 
 ----------------------
  
-(1 row)
 
 SELECT debug_waitpoint_enable('test_error');
  debug_waitpoint_enable 
 ------------------------
  
-(1 row)
 
 \set ON_ERROR_STOP 0
 SELECT test_error_injection('test_error');
@@ -77,13 +73,11 @@ SELECT debug_waitpoint_release('test_error');
  debug_waitpoint_release 
 -------------------------
  
-(1 row)
 
 SELECT test_error_injection('test_error');
  test_error_injection 
 ----------------------
  
-(1 row)
 
 -- Test Scanner
 RESET ROLE;
@@ -96,7 +90,6 @@ SELECT create_hypertable('hyper', 'time');
  create_hypertable  
 --------------------
  (1,public,hyper,t)
-(1 row)
 
 INSERT INTO hyper VALUES ('2021-01-01', 1.0), ('2022-01-01', 2.0);
 SELECT test.scanner();
@@ -108,7 +101,6 @@ NOTICE:  4. IndexScan: "_timescaledb_internal._hyper_1_2_chunk"
  scanner 
 ---------
  
-(1 row)
 
 -- Test errdata_to_jsonb
 RESET ROLE;
@@ -118,5 +110,4 @@ SELECT test.errdata_to_jsonb();
                                                                                                                                                                                                                                                                                                                          errdata_to_jsonb                                                                                                                                                                                                                                                                                                                          
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  {"hint": "test error hint", "detail": "test error detail", "domain": "test error domain", "lineno": 123, "context": "test error context", "message": "test error message", "filename": "test error filename", "funcname": "test error function", "proc_name": "proc_name", "detail_log": "test error detail log", "sqlerrcode": "22023", "table_name": "test error table", "column_name": "test error column", "proc_schema": "proc_schema", "schema_name": "test error schema", "datatype_name": "test error datatype", "internalquery": "test error internal query", "context_domain": "test error context domain", "constraint_name": "test error constraint"}
-(1 row)
 

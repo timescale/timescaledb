@@ -735,3 +735,10 @@ SELECT t, 1 FROM generate_series(now() - interval '3 hours', now(), interval '1 
 -- run again without and should have 362 rows
 CALL run_job(:job_id);
 SELECT count(*) FROM issue_6902;
+
+-- test untyped interval error handling
+CREATE TABLE m(time timestamptz) WITH (tsdb.hypertable);
+CREATE MATERIALIZED VIEW cagg_error WITH (tsdb.continuous)
+AS SELECT time_bucket('1 day', time) FROM m GROUP BY 1;
+SELECT timescaledb_experimental.add_policies('cagg_error', drop_after => '20 days');
+

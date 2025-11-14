@@ -18,7 +18,6 @@ FROM tw GROUP BY 1,2;
 ------+--------------------------+--------
  uuid | Fri Sep 15 12:00:00 2023 |       
  uuid | Fri Sep 15 12:50:00 2023 | 147673
-(2 rows)
 
 -- Should return same result for simpler Losf lookup query
 SELECT id,
@@ -29,7 +28,6 @@ FROM tw GROUP BY 1,2;
 ------+--------------------------+--------
  uuid | Fri Sep 15 12:00:00 2023 |       
  uuid | Fri Sep 15 12:50:00 2023 | 147673
-(2 rows)
 
 -- Should return same result when using CTE instead of input table
 WITH data (id, time, value) AS (
@@ -43,7 +41,6 @@ FROM data GROUP BY 1,2;
 ------+--------------------------+--------
  uuid | Fri Sep 15 12:00:00 2023 |       
  uuid | Fri Sep 15 12:50:00 2023 | 147673
-(2 rows)
 
 -- Pick an average value instead of min
 WITH data (id, time, value) AS (
@@ -57,7 +54,6 @@ FROM data GROUP BY 1,2;
 ------+--------------------------+----------
  uuid | Fri Sep 15 12:00:00 2023 |         
  uuid | Fri Sep 15 12:50:00 2023 | 148536.5
-(2 rows)
 
 -- Call Locf both for filling gaps and setting the non-NULL value for "gapfill_start" tuple
 WITH data (id, time, value) AS (
@@ -73,7 +69,6 @@ FROM data GROUP BY 1,2;
  uuid | Fri Sep 15 12:50:00 2023 | 148536.5
  uuid | Fri Sep 15 12:51:00 2023 | 148536.5
  uuid | Fri Sep 15 12:52:00 2023 | 148536.5
-(4 rows)
 
 -- Use Locf lookup for multiple groupby values, use 2nd groupby column as a correlation var in the lookup
 -- Make sure correlation var is obtained from correct tuple passed to Locf lookup expression
@@ -89,7 +84,6 @@ FROM data GROUP BY 1,2,3 ORDER BY 1,2,3;
  uuid | 12 | Fri Sep 15 12:00:00 2023 |       
  uuid | 12 | Fri Sep 15 12:50:00 2023 | 147673
  uuid | 14 | Fri Sep 15 12:50:00 2023 | 149400
-(3 rows)
 
 -- Same but use two correlation vars in Locf lookup
 WITH data (id, gr, time, value) AS (
@@ -104,7 +98,6 @@ FROM data GROUP BY 1,2,3 ORDER BY 1,2,3;
  uuid | 12 | Fri Sep 15 12:00:00 2023 |       
  uuid | 12 | Fri Sep 15 12:50:00 2023 | 147673
  uuid | 14 | Fri Sep 15 12:50:00 2023 | 149400
-(3 rows)
 
 drop table tw cascade;
 RESET timezone;
@@ -224,7 +217,6 @@ ORDER BY
  Sat Jul 05 17:25:00 2025 PDT | bb044d29-c136-412d-a193-354f090dafcb | FFFF000D6F4DA7B2 |            3 | temperature_ambient |            3 |                     23
  Sat Jul 05 17:25:00 2025 PDT | d439a8fc-7285-4d32-82bc-2105c9ed2d52 | FFFF000D6F4DA7B2 |            3 | temperature_ambient |            3 |                   24.5
  Sat Jul 05 17:25:00 2025 PDT | e0145b95-6faa-4eb3-815d-5d0a91ba909c | FFFF000D6F4DA7B2 |            3 | temperature_ambient |            3 |                     24
-(56 rows)
 
 -- Fix for #4894: gapfill error over aggregates in expressions with groupby columns and columns out of order
 CREATE TABLE hourly (
@@ -264,7 +256,6 @@ SELECT
  Fri Sep 30 21:00:00 2022 PDT |     |    
  Fri Sep 30 22:00:00 2022 PDT |     |    
  Fri Sep 30 22:00:00 2022 PDT |     |    
-(12 rows)
 
 -- Expression over 2 aggregates and 1 groupby column
 SELECT
@@ -286,7 +277,6 @@ SELECT
  Fri Sep 30 21:00:00 2022 PDT |       
  Fri Sep 30 22:00:00 2022 PDT |       
  Fri Sep 30 22:00:00 2022 PDT |       
-(12 rows)
 
 -- Expression over 2 aggregates and 2 groupby columns
 SELECT
@@ -308,7 +298,6 @@ SELECT
  Fri Sep 30 21:00:00 2022 PDT |       
  Fri Sep 30 22:00:00 2022 PDT |       
  Fri Sep 30 22:00:00 2022 PDT |       
-(12 rows)
 
 -- Expressions over aggregates and complex groupby expressions
 SELECT
@@ -330,7 +319,6 @@ SELECT
  Fri Sep 30 21:00:00 2022 PDT |         
  Fri Sep 30 22:00:00 2022 PDT |         
  Fri Sep 30 22:00:00 2022 PDT |         
-(12 rows)
 
 SELECT
  time_bucket_gapfill('1 hour', time) as time,
@@ -351,7 +339,6 @@ SELECT
  Fri Sep 30 21:00:00 2022 PDT |         
  Fri Sep 30 22:00:00 2022 PDT |         
  Fri Sep 30 22:00:00 2022 PDT |         
-(12 rows)
 
 SELECT
  time_bucket_gapfill('1 hour', time) as time,
@@ -374,6 +361,5 @@ SELECT
  Fri Sep 30 21:00:00 2022 PDT |      |      |        5
  Fri Sep 30 22:00:00 2022 PDT |      |      |        4
  Fri Sep 30 22:00:00 2022 PDT |      |      |        5
-(12 rows)
 
 drop table hourly cascade;

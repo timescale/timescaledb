@@ -21,10 +21,10 @@
 
 #include "compat/compat.h"
 #include "compression/arrow_c_data_interface.h"
-#include "nodes/decompress_chunk/compressed_batch.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
-#include "nodes/decompress_chunk/exec.h"
-#include "nodes/decompress_chunk/vector_quals.h"
+#include "nodes/columnar_scan/columnar_scan.h"
+#include "nodes/columnar_scan/compressed_batch.h"
+#include "nodes/columnar_scan/exec.h"
+#include "nodes/columnar_scan/vector_quals.h"
 #include "nodes/vector_agg.h"
 #include "nodes/vector_agg/plan.h"
 #include "nodes/vector_agg/vector_slot.h"
@@ -750,9 +750,9 @@ vector_agg_rescan(CustomScanState *node)
 /*
  * Get the next slot to aggregate for a compressed batch.
  *
- * Implements "get next slot" on top of DecompressChunk. Note that compressed
- * tuples are read directly from the DecompressChunk child node, which means
- * that the processing normally done in DecompressChunk is actually done here
+ * Implements "get next slot" on top of ColumnarScan. Note that compressed
+ * tuples are read directly from the ColumnarScan child node, which means
+ * that the processing normally done in ColumnarScan is actually done here
  * (batch processing and filtering).
  *
  * Returns an TupleTableSlot that implements a compressed batch.
@@ -789,13 +789,13 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 		if (dcontext->ps->instrument)
 		{
 			/*
-			 * Ensure proper EXPLAIN output for the underlying DecompressChunk
+			 * Ensure proper EXPLAIN output for the underlying ColumnarScan
 			 * node.
 			 *
 			 * This value is normally updated by InstrStopNode(), and is
 			 * required so that the calculations in InstrEndLoop() run properly.
 			 * We have to call it manually because we run the underlying
-			 * DecompressChunk manually and not as a normal Postgres node.
+			 * ColumnarScan manually and not as a normal Postgres node.
 			 */
 			dcontext->ps->instrument->running = true;
 		}
@@ -808,7 +808,7 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 
 	/*
 	 * Count rows filtered out by vectorized filters for EXPLAIN. Normally
-	 * this is done in tuple-by-tuple interface of DecompressChunk, so that
+	 * this is done in tuple-by-tuple interface of ColumnarScan, so that
 	 * it doesn't say it filtered out more rows that were returned (e.g.
 	 * with LIMIT). Here we always work in full batches. The batches that
 	 * were fully filtered out, and their rows, were already counted in
@@ -820,13 +820,13 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 	if (dcontext->ps->instrument)
 	{
 		/*
-		 * Ensure proper EXPLAIN output for the underlying DecompressChunk
+		 * Ensure proper EXPLAIN output for the underlying ColumnarScan
 		 * node.
 		 *
 		 * This value is normally updated by InstrStopNode(), and is
 		 * required so that the calculations in InstrEndLoop() run properly.
 		 * We have to call it manually because we run the underlying
-		 * DecompressChunk manually and not as a normal Postgres node.
+		 * ColumnarScan manually and not as a normal Postgres node.
 		 */
 		dcontext->ps->instrument->tuplecount += not_filtered_rows;
 	}
@@ -1031,8 +1031,8 @@ vector_agg_state_create(CustomScan *cscan)
 	 * Initialize VectorAggState to process vector slots from different
 	 * subnodes.
 	 *
-	 * When the child is DecompressChunk, VectorAgg doesn't read the slot from
-	 * the child node. Instead, it bypasses DecompressChunk and reads
+	 * When the child is ColumnarScan, VectorAgg doesn't read the slot from
+	 * the child node. Instead, it bypasses ColumnarScan and reads
 	 * compressed tuples directly from the grandchild. It therefore needs to
 	 * handle batch decompression and vectorized qual filtering itself, in its
 	 * own "get next slot" implementation.

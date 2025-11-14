@@ -11,8 +11,13 @@ use Test::More;
 # used to mark the start and end of activity happening as a result
 # compression/decompression.
 
-# Publishing node
-my $db = TimescaleNode->create('publisher', allows_streaming => 'logical');
+# Publishing node - create with manual initialization to set max_worker_processes=0
+my $db = TimescaleNode->new('publisher');
+$db->init(allows_streaming => 'logical');
+# Set max_process_workers to 0 before starting the node
+$db->append_conf('postgresql.conf', 'max_worker_processes=0');
+$db->start();
+$db->safe_psql('postgres', 'CREATE EXTENSION timescaledb');
 
 sub run_queries
 {
@@ -57,13 +62,6 @@ sub discard_wal
 
 my $server_version = 0 + $db->safe_psql('postgres',
 	"select current_setting('server_version_num')::int");
-
-# stop background jobs because they can scribble in our WAL
-run_queries(
-	qq/
-	SELECT _timescaledb_functions.stop_background_workers();
-	/
-);
 
 run_queries(
 	qq/
@@ -233,13 +231,6 @@ table _timescaledb_catalog.compression_chunk_size: DELETE: chunk_id[integer]:1
 table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:null dropped[boolean]:false status[integer]:0 osm_chunk[boolean]:false
 table _timescaledb_catalog.compression_settings: DELETE: relid[regclass]:'_timescaledb_internal._hyper_1_1_chunk'
 table _timescaledb_catalog.chunk: DELETE: id[integer]:4)
-);
-
-# re-enable background jobs
-run_queries(
-	qq/
-	SELECT public.alter_job(id::integer, scheduled=>true) FROM _timescaledb_config.bgw_job;
-	/
 );
 
 pass();

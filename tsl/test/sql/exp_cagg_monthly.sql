@@ -105,7 +105,7 @@ ORDER by month, city;
 
 -- Special check for "invalid or missing information about the bucketing
 -- function" code path
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE TEMPORARY TABLE restore_table ( LIKE _timescaledb_catalog.continuous_aggs_bucket_function );
 INSERT INTO restore_table SELECT * FROM  _timescaledb_catalog.continuous_aggs_bucket_function;
 DELETE FROM _timescaledb_catalog.continuous_aggs_bucket_function;

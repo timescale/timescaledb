@@ -74,6 +74,7 @@
 #include "trigger.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_column_stats.h"
+#include "ts_catalog/chunk_rewrite.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
@@ -2193,6 +2194,13 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		else
 			time_type = InvalidOid;
 
+		/*
+		 * Treat UUID (v7) as a timestamptz type. The expected input is an interval or absolute
+		 * timestamptz.
+		 */
+		if (IS_UUID_TYPE(time_type))
+			time_type = TIMESTAMPTZOID;
+
 		/* note that arg_types will be the same for all specified "ANY" elements for a given call */
 		arg_type = InvalidOid;
 		if (!PG_ARGISNULL(1))
@@ -2560,20 +2568,21 @@ chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, MemoryContext mct
 			if (fail_if_not_found)
 			{
 				int i = 0;
-				StringInfo info = makeStringInfo();
+				StringInfoData info;
+				initStringInfo(&info);
 				while (i < nkeys)
 				{
-					appendStringInfo(info,
+					appendStringInfo(&info,
 									 "%s: %s",
 									 displaykey[i].name,
 									 displaykey[i].as_string(scankey[i].sk_argument));
 					if (++i < nkeys)
-						appendStringInfoString(info, ", ");
+						appendStringInfoString(&info, ", ");
 				}
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
 						 errmsg("chunk not found"),
-						 errdetail("%s", info->data)));
+						 errdetail("%s", info.data)));
 			}
 			break;
 		case 1:
@@ -2782,17 +2791,21 @@ chunk_simple_scan(ScanIterator *iterator, FormData_chunk *form, bool missing_ok,
 	if (count == 0 && !missing_ok)
 	{
 		int i = 0;
-		StringInfo info = makeStringInfo();
+		StringInfoData info;
+		initStringInfo(&info);
 		while (i < iterator->ctx.nkeys)
 		{
-			appendStringInfo(info,
+			appendStringInfo(&info,
 							 "%s: %s",
 							 displaykey[i].name,
 							 displaykey[i].as_string(iterator->ctx.scankey[i].sk_argument));
 			if (++i < iterator->ctx.nkeys)
-				appendStringInfoString(info, ", ");
+				appendStringInfoString(&info, ", ");
 		}
-		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("chunk not found")));
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("chunk not found"),
+				 errdetail("%s", info.data)));
 	}
 
 	return count == 1;
@@ -3113,6 +3126,14 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserv
 		 * cleaned up when processing the eventtrigger.
 		 */
 		relid = ts_get_relation_relid(NameStr(form.schema_name), NameStr(form.table_name), true);
+	}
+
+	/*
+	 * Cleanup dependent catalogs.
+	 */
+	if (OidIsValid(relid))
+	{
+		ts_chunk_rewrite_delete(relid, false);
 	}
 
 	if (form.compressed_chunk_id != INVALID_CHUNK_ID)
@@ -4365,6 +4386,13 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 
 	time_type = ts_dimension_get_partition_type(time_dim);
 
+	/*
+	 * Treat UUID (v7) as a timestamptz type. The expected input is an interval or absolute
+	 * timestamptz.
+	 */
+	if (IS_UUID_TYPE(time_type))
+		time_type = TIMESTAMPTZOID;
+
 	/* note that arg_types will be the same for all specified "ANY" elements for a given call */
 	if (!PG_ARGISNULL(1))
 	{
@@ -4574,6 +4602,12 @@ bool
 ts_chunk_is_compressed(const Chunk *chunk)
 {
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED);
+}
+
+bool
+ts_chunk_needs_compression(const Chunk *chunk)
+{
+	return !ts_chunk_is_compressed(chunk);
 }
 
 bool
@@ -5472,9 +5506,22 @@ Datum
 ts_merge_two_chunks(PG_FUNCTION_ARGS)
 {
 	Datum chunks[2] = { PG_GETARG_DATUM(0), PG_GETARG_DATUM(1) };
+	bool concurrently = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 	ArrayType *chunk_array =
 		construct_array(chunks, 2, REGCLASSOID, sizeof(Oid), true, TYPALIGN_INT);
-	return DirectFunctionCall1(ts_cm_functions->merge_chunks, PointerGetDatum(chunk_array));
+	return DirectFunctionCall2(ts_cm_functions->merge_chunks,
+							   PointerGetDatum(chunk_array),
+							   BoolGetDatum(concurrently));
+}
+
+TS_FUNCTION_INFO_V1(ts_merge_chunks_concurrently);
+
+Datum
+ts_merge_chunks_concurrently(PG_FUNCTION_ARGS)
+{
+	return DirectFunctionCall2(ts_cm_functions->merge_chunks,
+							   PG_GETARG_DATUM(0),
+							   BoolGetDatum(true));
 }
 
 void

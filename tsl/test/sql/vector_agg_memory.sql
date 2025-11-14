@@ -65,6 +65,8 @@ truncate log;
 set max_parallel_workers_per_gather = 0;
 set timescaledb.debug_require_vector_agg = 'require';
 set enable_sort to off;
+set enable_indexscan to off;
+set enable_bitmapscan to off;
 
 -- We should reliably see HashAggregate here because of the tweaks we made above.
 explain (buffers off, costs off) select ts_debug_allocated_bytes() bytes,

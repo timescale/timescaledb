@@ -28,8 +28,8 @@
 #include "compat/compat.h"
 #include "guc.h"
 #include "nodes/chunk_append/chunk_append.h"
+#include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include <import/planner.h>
 
@@ -49,7 +49,7 @@ typedef struct SkipKeyInfo
 
 	/* attribute number of the Skip qual comparison column on the indexed table/chunk
 	 * "indexed_column_attno = distinct_attno" for (SkipScan <- Index Scan) scenario,
-	 * it can be different for (SkipScan <- DecompressChunk <- compressed Index Scan) scenario,
+	 * it can be different for (SkipScan <- ColumnarScan <- compressed Index Scan) scenario,
 	 * in that case "indexed_column_attno" is the attribute number of the compressed chunk column
 	 * corresponding to the distinct column "distinct_attno" on the decompressed chunk consumed by
 	 * SkipScan
@@ -820,16 +820,15 @@ check_notnull_skipkey(SkipKeyInfo *skinfo, Path *child_path, IndexPath *index_pa
 		if (ic->indexcol > skinfo->scankey_attno - 1)
 			break;
 
-		/* Lossy index quals may not cover NULL values but BTree quals are never lossy  */
-		Assert(!ic->lossy);
-
 		/* We may have row comparison with skip key not being a leading col,
 		 * like (col, skipcol) > (3, 5), but it can allow NULL skipcols to pass if (col>3) is true,
 		 * so for row comparisons we will only look at leading "indexcol" and not at "indexcols".
 		 */
 		if (ic->indexcol == skinfo->scankey_attno - 1)
 		{
-			/* Any simple index clause but "isNull" filters out nulls */
+			/* Any simple index qual but "isNull" filters out nulls,
+			 * including "lossy" index quals extracted from index clauses.
+			 */
 			ListCell *lc;
 			foreach (lc, ic->indexquals)
 			{
@@ -1071,7 +1070,7 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 		else
 			skip_scan_path->cpath.path.total_cost = startup;
 	}
-	/* For (SkipScan <- DecompressChunks <- compressed IndexScan) scenario
+	/* For (SkipScan <- ColumnarScan <- compressed IndexScan) scenario
 	 * we will estimate cost as (ndistinct * costs( child_path LIMIT 1 OFFSET x))
 	 * i.e. as if we computed "ndistinct" LIMIT 1 queries on the "child_path" after initial setup.
 	 * If there is no qual above IndexScan, then OFFSET=0 (we don't need to scan tuples to pass qual

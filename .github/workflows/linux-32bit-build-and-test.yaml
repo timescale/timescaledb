@@ -24,7 +24,7 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+      pg_latest: ${{ github.event_name == 'pull_request' && steps.setter.outputs.PG_LATEST_ONLY || steps.setter.outputs.PG_LATEST }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@v4
@@ -73,6 +73,7 @@ jobs:
           vector_agg_text
           vector_agg_uuid
           vectorized_aggregation
+          ${{ matrix.pg < 16 && 'columnar_scan_cost' || '' }}
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
@@ -93,7 +94,7 @@ jobs:
       run: |
         PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
         echo '/tmp/core.%h.%e.%t' > /proc/sys/kernel/core_pattern
-        apt-get install -y gcc make cmake libssl-dev libkrb5-dev libipc-run-perl \
+        apt-get install -y gcc make cmake libssl-dev libipc-run-perl \
           libtest-most-perl sudo gdb git wget gawk lbzip2 flex bison lcov base-files \
           locales clang-14 llvm-14 llvm-14-dev llvm-14-tools postgresql-client pkgconf \
           icu-devtools
@@ -189,12 +190,15 @@ jobs:
         export LANG=C.UTF-8
         #
         # Even disabling parallel plans the Sort Method on 32bits
-        # is always 'still in progress' for PG17. So for now added
+        # is always 'still in progress' for PG17 and PG18. So for now added
         # those tests to SKIPS.
         #
         PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
         if [ ${PG_MAJOR} -eq 17 ]; then
-          SKIPS="${SKIPS} constraint_exclusion_prepared ordered_append*"
+          SKIPS="${SKIPS} constraint_exclusion_prepared-17 ordered_append*"
+        fi
+        if [ ${PG_MAJOR} -eq 18 ]; then
+          SKIPS="${SKIPS} constraint_exclusion_prepared-18 ordered_append*"
         fi
         # PostgreSQL cannot be run as root. So, switch to postgres user.
         runuser -u postgres -- \

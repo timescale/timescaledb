@@ -89,9 +89,9 @@ CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
 CROSSMODULE_WRAPPER(bloom1_contains);
+CROSSMODULE_WRAPPER(bloom1_contains_any);
 
 /* continuous aggregate */
-CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(continuous_agg_process_hypertable_invalidations);
 CROSSMODULE_WRAPPER(continuous_agg_validate_query);
@@ -168,7 +168,7 @@ error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("function \"%s\" is not supported under the current \"%s\" license",
-					get_func_name(fcinfo->flinfo->fn_oid),
+					fcinfo->flinfo ? get_func_name(fcinfo->flinfo->fn_oid) : "unknown",
 					ts_guc_license),
 			 errhint("Upgrade your license to 'timescale' to use this free community feature.")));
 
@@ -272,6 +272,14 @@ continuous_agg_invalidate_mat_ht_all_default(const Hypertable *raw_ht, const Hyp
 	pg_unreachable();
 }
 
+static void
+continuous_agg_dml_invalidate_default(int32 hypertable_id, Relation chunk_rel,
+									  HeapTuple chunk_tuple, HeapTuple chunk_newtuple, bool update)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
 TS_FUNCTION_INFO_V1(ts_tsl_loaded);
 
 PGDLLEXPORT Datum
@@ -359,11 +367,11 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.finalize_agg_sfunc = error_no_default_fn_pg_community,
 	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
-	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
 	.continuous_agg_process_hypertable_invalidations = error_no_default_fn_pg_community,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht_all_default,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
+	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,
@@ -396,6 +404,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.uuid_compressor_append = error_no_default_fn_pg_community,
 	.uuid_compressor_finish = error_no_default_fn_pg_community,
 	.bloom1_contains = error_no_default_fn_pg_community,
+	.bloom1_contains_any = error_no_default_fn_pg_community,
 	.bloom1_get_hash_function = bloom1_get_hash_function_default,
 
 	.decompress_batches_for_insert = error_no_default_fn_chunk_insert_state_community,

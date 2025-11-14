@@ -86,8 +86,6 @@ static void compression_settings_set_manually_for_create(Hypertable *ht,
 static void compression_settings_set_manually_for_alter(Hypertable *ht,
 														CompressionSettings *settings,
 														WithClauseResult *with_clause_options);
-static void compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
-											  WithClauseResult *with_clause_options);
 
 static char *
 compression_column_segment_metadata_name(const char *type, int16 column_index)
@@ -403,10 +401,12 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 			{
 				if (!ts_guc_enable_sparse_index_bloom)
 				{
-					ereport(ERROR,
+					ereport(WARNING,
 							(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 							 errmsg("Creating bloom sparse index is disabled"),
-							 errhint("Set \"enable_sparse_index_bloom\" to true.")));
+							 errhint("Either set \"enable_sparse_index_bloom\" to true or remove "
+									 "the bloom filter indexes from \"sparse_index\" configuration "
+									 "of the hypertable.")));
 				}
 				/*
 				 * Add bloom filter sparse index for this column.
@@ -1386,7 +1386,7 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 	return has_object ? JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL)) : NULL;
 }
 
-static void
+void
 compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 								  WithClauseResult *with_clause_options)
 {

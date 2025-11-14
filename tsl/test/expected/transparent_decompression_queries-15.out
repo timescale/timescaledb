@@ -8,7 +8,6 @@ WARNING:  column type "timestamp without time zone" used for "ts" does not follo
      create_hypertable     
 ---------------------------
  (1,public,test_chartab,t)
-(1 row)
 
 insert into test_chartab
 values(8864, '0014070000006190' , 392 , '2019-12-14 02:52:05.863');
@@ -24,34 +23,29 @@ select * from test_chartab order by mac_id , ts limit 2;
 ------------+------------------+-----+------------------------------
        8864 | 0014070000006190 | 392 | Sat Dec 14 02:52:05.863 2019
        8864 | 0014070000011039 | 150 | Sat Dec 14 02:52:05.863 2019
-(2 rows)
 
 --compress the data and check --
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 select * from test_chartab order by mac_id , ts limit 2;
  job_run_id |      mac_id      | rtt |              ts              
 ------------+------------------+-----+------------------------------
        8864 | 0014070000006190 | 392 | Sat Dec 14 02:52:05.863 2019
        8864 | 0014070000011039 | 150 | Sat Dec 14 02:52:05.863 2019
-(2 rows)
 
 SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_2_chunk
-(1 row)
 
 select * from test_chartab order by mac_id , ts limit 2;
  job_run_id |      mac_id      | rtt |              ts              
 ------------+------------------+-----+------------------------------
        8864 | 0014070000006190 | 392 | Sat Dec 14 02:52:05.863 2019
        8864 | 0014070000011039 | 150 | Sat Dec 14 02:52:05.863 2019
-(2 rows)
 
 VACUUM ANALYZE test_chartab;
 -- test constraintawareappend sort node handling
@@ -65,7 +59,6 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
     create_hypertable    
 -------------------------
  (3,public,merge_sort,t)
-(1 row)
 
 ALTER TABLE merge_sort SET (timescaledb.compress = true, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device_id, measure_id');
 INSERT INTO merge_sort SELECT time, 1, 1, extract(epoch from time) * 0.001 FROM generate_series('2000-01-01'::timestamp,'2000-02-01'::timestamp,'5 sec'::interval) g1(time);
@@ -74,7 +67,6 @@ SELECT compress_chunk(ch) FROM show_chunks('merge_sort') ch LIMIT 1;
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_5_chunk
-(1 row)
 
 VACUUM ANALYZE merge_sort;
 -- this should have a MergeAppend with children wrapped in Sort nodes
@@ -86,8 +78,7 @@ EXPLAIN (analyze,buffers off, costs off,timing off,summary off) SELECT
 FROM merge_sort
 WHERE time < now()
 GROUP BY 2, 3;
-                                                                           QUERY PLAN                                                                           
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate (actual rows=1.00 loops=1)
    Group Key: merge_sort.device_id, merge_sort.measure_id
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=535681.00 loops=1)
@@ -119,7 +110,6 @@ GROUP BY 2, 3;
                      Sort Method: quicksort 
                      ->  Seq Scan on _hyper_3_9_chunk (actual rows=86401.00 loops=1)
                            Filter: ("time" < now())
-(31 rows)
 
 -- this should exclude the decompressed chunk
 EXPLAIN (analyze,buffers off, costs off,timing off,summary off) SELECT
@@ -130,8 +120,7 @@ EXPLAIN (analyze,buffers off, costs off,timing off,summary off) SELECT
 FROM merge_sort
 WHERE time > '2000-01-10'::text::timestamp
 GROUP BY 2, 3;
-                                                          QUERY PLAN                                                           
--------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate (actual rows=1.00 loops=1)
    Group Key: merge_sort.device_id, merge_sort.measure_id
    ->  Sort (actual rows=380160.00 loops=1)
@@ -148,7 +137,6 @@ GROUP BY 2, 3;
                            Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
                      ->  Seq Scan on _hyper_3_9_chunk (actual rows=86401.00 loops=1)
                            Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
-(16 rows)
 
 RESET enable_hashagg;
 RESET timescaledb.enable_chunkwise_aggregation;
@@ -174,25 +162,22 @@ WHERE check_equal_228(rtt) ORDER BY ts;
 ------------+------------------+-----+------------------------------
        8864 | 001407000001DD2E | 228 | Sat Dec 14 02:52:05.863 2019
        8890 | 001407000001DD2E | 228 | Fri Dec 20 02:52:05.863 2019
-(2 rows)
 
 EXPLAIN (analyze,buffers off, costs off,timing off,summary off)
 SELECT * from test_chartab
 WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on test_chartab (actual rows=1.00 loops=1)
-   Order: test_chartab.ts
-   Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
-         Filter: ((ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone) AND check_equal_228(rtt))
-         Rows Removed by Filter: 2
-         ->  Sort (actual rows=3.00 loops=1)
-               Sort Key: compress_hyper_2_3_chunk._ts_meta_min_1
-               Sort Method: quicksort 
+--- QUERY PLAN ---
+ Sort (actual rows=1.00 loops=1)
+   Sort Key: test_chartab.ts
+   Sort Method: quicksort 
+   ->  Custom Scan (ChunkAppend) on test_chartab (actual rows=1.00 loops=1)
+         Chunks excluded during startup: 0
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+               Filter: check_equal_228(rtt)
+               Rows Removed by Filter: 2
+               Vectorized Filter: (ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)
                ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=3.00 loops=1)
                      Filter: (_ts_meta_min_1 < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)
-(11 rows)
 
 -- test pseudoconstant qual #3241
 CREATE TABLE pseudo(time timestamptz NOT NULL);
@@ -200,7 +185,6 @@ SELECT create_hypertable('pseudo','time');
   create_hypertable  
 ---------------------
  (5,public,pseudo,t)
-(1 row)
 
 ALTER TABLE pseudo SET (timescaledb.compress);
 INSERT INTO pseudo SELECT '2000-01-01';
@@ -208,13 +192,11 @@ SELECT compress_chunk(show_chunks('pseudo'));
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_5_11_chunk
-(1 row)
 
 SELECT * FROM pseudo WHERE now() IS NOT NULL;
              time             
 ------------------------------
  Sat Jan 01 00:00:00 2000 PST
-(1 row)
 
 -- ensure needed decompression paths underneath a sort node
 -- are not recycled by PostgreSQL
@@ -235,7 +217,6 @@ SELECT create_hypertable('options_data', 'date', chunk_time_interval => interval
      create_hypertable     
 ---------------------------
  (7,public,options_data,t)
-(1 row)
 
 INSERT INTO options_data (date, contract_code, expiry_code, option_type, strike, price, source, meta)
 SELECT
@@ -262,13 +243,11 @@ SELECT compress_chunk(ch) FROM show_chunks('options_data', older_than=> '2023-12
  _timescaledb_internal._hyper_7_14_chunk
  _timescaledb_internal._hyper_7_15_chunk
  _timescaledb_internal._hyper_7_16_chunk
-(4 rows)
 
 VACUUM ANALYZE options_data;
 SELECT max(date) AS date FROM options_data WHERE contract_code='CONTRACT2023-12-03 04:00:00+01';
  date 
 ------
  
-(1 row)
 
 RESET random_page_cost;

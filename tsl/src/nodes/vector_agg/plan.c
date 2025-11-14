@@ -19,7 +19,7 @@
 
 #include "exec.h"
 #include "import/list.h"
-#include "nodes/decompress_chunk/vector_quals.h"
+#include "nodes/columnar_scan/vector_quals.h"
 #include "nodes/vector_agg.h"
 #include "utils.h"
 
@@ -93,10 +93,10 @@ resolve_outer_special_vars_mutator(Node *node, void *context)
 		/*
 		 * Reference into the output targetlist of the child scan node.
 		 */
-		TargetEntry *decompress_chunk_tentry =
+		TargetEntry *columnar_scan_tentry =
 			castNode(TargetEntry, list_nth(custom->scan.plan.targetlist, var->varattno - 1));
 
-		return resolve_outer_special_vars_mutator((Node *) decompress_chunk_tentry->expr, context);
+		return resolve_outer_special_vars_mutator((Node *) columnar_scan_tentry->expr, context);
 	}
 
 	if (var->varno == INDEX_VAR)
@@ -601,7 +601,7 @@ vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi
 
 	if (strcmp(customscan->methods->CustomName, "ColumnarScan") == 0)
 	{
-		vectoragg_plan_decompress_chunk(childplan, vqi);
+		vectoragg_plan_columnar_scan(childplan, vqi);
 		return true;
 	}
 

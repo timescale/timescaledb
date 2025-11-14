@@ -103,12 +103,14 @@ typedef struct CrossModuleFunctions
 	PGFunction finalize_agg_ffunc;
 	DDLResult (*process_cagg_viewstmt)(Node *stmt, const char *query_string, void *pstmt,
 									   WithClauseResult *with_clause_options);
-	PGFunction continuous_agg_invalidation_trigger;
 	PGFunction continuous_agg_refresh;
 	PGFunction continuous_agg_process_hypertable_invalidations;
 	void (*continuous_agg_invalidate_raw_ht)(const Hypertable *raw_ht, int64 start, int64 end);
 	void (*continuous_agg_invalidate_mat_ht)(const Hypertable *raw_ht, const Hypertable *mat_ht,
 											 int64 start, int64 end);
+	void (*continuous_agg_dml_invalidate)(int32 hypertable_id, Relation chunk_rel,
+										  HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
+										  bool update);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_validate_query;
@@ -162,6 +164,7 @@ typedef struct CrossModuleFunctions
 	PGFunction uuid_compressor_append;
 	PGFunction uuid_compressor_finish;
 	PGFunction bloom1_contains;
+	PGFunction bloom1_contains_any;
 	PGFunction (*bloom1_get_hash_function)(Oid type, FmgrInfo **finfo);
 
 	PGFunction create_chunk;

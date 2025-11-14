@@ -32,7 +32,7 @@ select ts,
     ts % 23 segmentby,
     ts % 29 with_minmax,
     (mix(ts % 1483) * 1483)::int::text with_bloom
-from generate_series(1, 100000) ts;
+from generate_series(0, 100000) ts;
 
 create index on saop(with_bloom);
 
@@ -45,10 +45,39 @@ explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where segmentby = any(array['1', '10']);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where '1' = any(array[segmentby, segmentby]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_minmax = any(array['1', '10']);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array['1', '10']);
+
+set timescaledb.enable_sparse_index_bloom to off;
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_bloom = any(array['1', '10']);
+
+reset timescaledb.enable_sparse_index_bloom;
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_bloom = any(array['1', '10']::varchar(255)[]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_bloom::varchar = any(array['1', '10']);
+
+select * from (
+    select 3 priority, 'C' "COLLATION"
+    union all (select 2, collname from pg_collation where collname ilike 'en_us%' order by collencoding, collname limit 1)
+    union all (select 1, collname from pg_collation where collname ilike 'en_us_utf%8%' order by collencoding, collname limit 1)
+) c
+order by priority limit 1 \gset
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where (with_bloom collate :"COLLATION") = any(array['1', '10']::varchar(255)[]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_bloom in ('1', '10');
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = all(array['1', '10']);
@@ -78,6 +107,9 @@ explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[]::text[]);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_bloom = any(null::text[]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[null, null]);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
@@ -100,6 +132,12 @@ select * from saop where (segmentby = '1') = (segmentby = '2');
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where (segmentby = any(array['1', '2'])) = (segmentby = any(array['3', '4']));
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_bloom = any(case when with_minmax = '1' then array['1'] else array['2'] end);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_bloom = any(case when segmentby = '1' then array['1'] else array['2'] end);
 
 
 -- Partial pushdown of AND scalar array operation.
@@ -160,6 +198,9 @@ execute array_param(array['1', '10']);
 explain (analyze, buffers off, costs off, timing off, summary off)
 execute array_param(array[]::text[]);
 
+explain (analyze, buffers off, costs off, timing off, summary off)
+execute array_param(null::text[]);
+
 -- Custom plans.
 set plan_cache_mode = force_custom_plan;
 
@@ -168,5 +209,8 @@ execute array_param(array['1', '10']);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 execute array_param(array[]::text[]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+execute array_param(null::text[]);
 
 reset timescaledb.enable_chunk_append;

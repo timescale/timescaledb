@@ -30,7 +30,6 @@ WARNING:  column type "character varying" used for "name" does not follow best p
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
              1 | public      | sample_table | t
-(1 row)
 
 \set start_date '2022-01-28 01:09:53.583252+05:30'
 INSERT INTO sample_table
@@ -66,7 +65,6 @@ SELECT compress_chunk(show_chunks('sample_table'));
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_2_chunk
-(2 rows)
 
 -- check chunk compression status
 SELECT chunk_status,
@@ -77,7 +75,6 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 --------------+------------------
             1 | _hyper_1_1_chunk
             1 | _hyper_1_2_chunk
-(2 rows)
 
 -- test rows visibility
 BEGIN;
@@ -86,7 +83,6 @@ SELECT count(*) FROM sample_table WHERE name = 'updated row';
  count 
 -------
      0
-(1 row)
 
 -- update 4 rows
 UPDATE sample_table SET name = 'updated row' WHERE cpu = 21.98 AND temperature = 33.123;
@@ -95,7 +91,6 @@ SELECT count(*) FROM sample_table WHERE name = 'updated row';
  count 
 -------
      4
-(1 row)
 
 ROLLBACK;
 -- get count of affected rows
@@ -103,7 +98,6 @@ SELECT count(*) FROM sample_table WHERE cpu = 21.98 AND temperature = 33.123;
  count 
 -------
      4
-(1 row)
 
 -- do update
 UPDATE sample_table SET name = 'updated row' WHERE cpu = 21.98 AND temperature = 33.123;
@@ -112,7 +106,6 @@ SELECT count(*) FROM sample_table WHERE name = 'updated row';
  count 
 -------
      4
-(1 row)
 
 -- check chunk compression status
 SELECT chunk_status,
@@ -123,7 +116,6 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 --------------+------------------
             1 | _hyper_1_1_chunk
             9 | _hyper_1_2_chunk
-(2 rows)
 
 -- recompress the partial chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
@@ -131,13 +123,11 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_2_chunk
-(1 row)
 
 -- check chunk compression status
 SELECT chunk_status,
@@ -148,14 +138,12 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 --------------+------------------
             1 | _hyper_1_1_chunk
             1 | _hyper_1_2_chunk
-(2 rows)
 
 -- get count of affected rows
 SELECT count(*) FROM sample_table WHERE name = 'updated row';
  count 
 -------
      4
-(1 row)
 
 -- do delete
 DELETE FROM sample_table WHERE name = 'updated row';
@@ -164,7 +152,6 @@ SELECT count(*) FROM sample_table WHERE name = 'updated row';
  count 
 -------
      0
-(1 row)
 
 -- check chunk compression status
 SELECT chunk_status,
@@ -175,7 +162,6 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 --------------+------------------
             1 | _hyper_1_1_chunk
             9 | _hyper_1_2_chunk
-(2 rows)
 
 -- recompress the paritial chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
@@ -183,13 +169,11 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_2_chunk
-(1 row)
 
 -- test for IS NULL checks
 -- should not UPDATE any rows
@@ -203,7 +187,6 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 --------------+------------------
             1 | _hyper_1_1_chunk
             1 | _hyper_1_2_chunk
-(2 rows)
 
 -- test for IS NOT NULL checks
 -- should UPDATE all rows
@@ -217,20 +200,17 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 --------------+------------------
             9 | _hyper_1_1_chunk
             9 | _hyper_1_2_chunk
-(2 rows)
 
 -- recompress the paritial chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_2_chunk
-(1 row)
 
 -- check chunk compression status
 SELECT chunk_status,
@@ -241,14 +221,12 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 --------------+------------------
             1 | _hyper_1_1_chunk
             1 | _hyper_1_2_chunk
-(2 rows)
 
 -- report 0 rows
 SELECT COUNT(*) FROM sample_table WHERE name = 'updated row based on < OR > comparison';
  count 
 -------
      0
-(1 row)
 
 -- get total count of rows which satifies the condition
 SELECT COUNT(*) as "total_affected_rows" FROM sample_table WHERE
@@ -266,14 +244,12 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 --------------+------------------
             9 | _hyper_1_1_chunk
             1 | _hyper_1_2_chunk
-(2 rows)
 
 -- count should be same
 SELECT COUNT(*) = (:total_affected_rows) FROM sample_table WHERE name = 'updated row based on < OR > comparison';
  ?column? 
 ----------
  t
-(1 row)
 
 DROP TABLE sample_table;
 -- test to ensure that only required rows from compressed chunks
@@ -286,7 +262,6 @@ SELECT * FROM create_hypertable('sample_table', 'time', chunk_time_interval => 1
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
              3 | public      | sample_table | t
-(1 row)
 
 ALTER TABLE sample_table SET (
     timescaledb.compress,
@@ -299,7 +274,6 @@ SELECT compress_chunk(show_chunks('sample_table'));
 ----------------------------------------
  _timescaledb_internal._hyper_3_5_chunk
  _timescaledb_internal._hyper_3_6_chunk
-(2 rows)
 
 -- get FIRST compressed chunk
 SELECT ch1.schema_name|| '.' || ch1.table_name AS "COMPRESS_CHUNK_1"
@@ -317,33 +291,28 @@ SELECT * FROM sample_table WHERE  device_id = 3 ORDER BY time, device_id;
 ------+-----------+-----
     3 |         3 |   1
    10 |         3 |   2
-(2 rows)
 
 -- get total rowcount from compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      3
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2;
  count 
 -------
      3
-(1 row)
 
 -- get rowcount from compressed chunks where device_id = 3
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE device_id = 3;
  count 
 -------
      1
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE device_id = 3;
  count 
 -------
      1
-(1 row)
 
 -- delete rows with device_id = 3
 DELETE FROM sample_table WHERE device_id = 3;
@@ -352,32 +321,27 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      2
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2;
  count 
 -------
      2
-(1 row)
 
 -- get rowcount from compressed chunks where device_id = 3
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE device_id = 3;
  count 
 -------
      0
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE device_id = 3;
  count 
 -------
      0
-(1 row)
 
 -- there should be no rows
 SELECT * FROM sample_table WHERE  device_id = 3 ORDER BY time, device_id;
  time | device_id | val 
 ------+-----------+-----
-(0 rows)
 
 -- there should 2 rows matching the conditions coming from 2 chunks
 SELECT val FROM sample_table WHERE  1 = device_id ORDER BY time, device_id;
@@ -385,33 +349,28 @@ SELECT val FROM sample_table WHERE  1 = device_id ORDER BY time, device_id;
 -----
    1
    2
-(2 rows)
 
 -- get total rowcount from compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      2
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2;
  count 
 -------
      2
-(1 row)
 
 -- get rowcount from compressed chunks where device_id = 1
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE 1 = device_id;
  count 
 -------
      1
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE 1 = device_id;
  count 
 -------
      1
-(1 row)
 
 -- update rows with device_id = 1
 UPDATE sample_table SET val = 200 WHERE 1 = device_id;
@@ -420,26 +379,22 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      1
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2;
  count 
 -------
      1
-(1 row)
 
 -- get rowcount from compressed chunks where device_id = 1
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE 1 = device_id;
  count 
 -------
      0
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE 1 = device_id;
  count 
 -------
      0
-(1 row)
 
 -- there should be 2 rows
 SELECT val FROM sample_table WHERE  1 = device_id ORDER BY time, device_id;
@@ -447,7 +402,6 @@ SELECT val FROM sample_table WHERE  1 = device_id ORDER BY time, device_id;
 -----
  200
  200
-(2 rows)
 
 DROP TABLE sample_table;
 CREATE TABLE sample_table(
@@ -458,7 +412,6 @@ SELECT * FROM create_hypertable('sample_table', 'time', chunk_time_interval => 1
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
              5 | public      | sample_table | t
-(1 row)
 
 ALTER TABLE sample_table SET (
     timescaledb.compress,
@@ -470,7 +423,6 @@ SELECT compress_chunk(show_chunks('sample_table'));
 -----------------------------------------
  _timescaledb_internal._hyper_5_9_chunk
  _timescaledb_internal._hyper_5_10_chunk
-(2 rows)
 
 -- get FIRST compressed chunk
 SELECT ch1.schema_name|| '.' || ch1.table_name AS "COMPRESS_CHUNK_1"
@@ -488,45 +440,38 @@ SELECT * FROM sample_table WHERE time = 1 AND val = 2 ORDER BY time, device_id;
 ------+-----------+-----
     1 |         1 |   2
     1 |         3 |   2
-(2 rows)
 
 -- get total rowcount from compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      4
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2;
  count 
 -------
      1
-(1 row)
 
 -- get rowcount from compressed chunks where time = 1 AND val = 2
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE time = 1 AND val = 2;
  count 
 -------
      1
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE time = 1 AND val = 2;
  count 
 -------
      0
-(1 row)
 
 -- delete rows with time = 1 AND val = 2
 EXPLAIN (buffers off, costs off, verbose) DELETE FROM sample_table WHERE time = 1 AND 2 = val;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    ->  Delete on public.sample_table
          Delete on _timescaledb_internal._hyper_5_9_chunk sample_table_1
          ->  Seq Scan on _timescaledb_internal._hyper_5_9_chunk sample_table_1
                Output: sample_table_1.tableoid, sample_table_1.ctid
                Filter: ((sample_table_1."time" = 1) AND (2 = sample_table_1.val))
-(6 rows)
 
 -- should delete rows from 1 of the compressed chunks
 DELETE FROM sample_table WHERE time = 1 AND 2 = val;
@@ -535,32 +480,27 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      3
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2;
  count 
 -------
      1
-(1 row)
 
 -- get rowcount from compressed chunks wheretime = 1 AND val = 2
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE time = 1 AND val = 2;
  count 
 -------
      0
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE time = 1 AND val = 2;
  count 
 -------
      0
-(1 row)
 
 -- there should be no rows
 SELECT * FROM sample_table WHERE time = 1 AND val = 2 ORDER BY time, device_id;
  time | device_id | val 
 ------+-----------+-----
-(0 rows)
 
 DROP TABLE sample_table;
 -- Test chunk compile time startup exclusion
@@ -576,7 +516,6 @@ SELECT create_hypertable('sample_table', 'time', chunk_time_interval => 26280000
      create_hypertable     
 ---------------------------
  (7,public,sample_table,t)
-(1 row)
 
 -- create three chunks
 INSERT INTO sample_table VALUES ('2017-03-22T09:18:22', 23.5, 1, '{"a": 1, "b": 2}'),
@@ -592,7 +531,6 @@ SELECT compress_chunk(show_chunks('sample_table'));
  _timescaledb_internal._hyper_7_13_chunk
  _timescaledb_internal._hyper_7_14_chunk
  _timescaledb_internal._hyper_7_15_chunk
-(3 rows)
 
 -- ensure all chunks are compressed
 SELECT chunk_status,
@@ -604,13 +542,11 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
             1 | _hyper_7_13_chunk
             1 | _hyper_7_14_chunk
             1 | _hyper_7_15_chunk
-(3 rows)
 
 -- report 0 rows
 SELECT * FROM sample_table WHERE time > now_s() + '-1 month' AND colorid = 4;
  time | temp | colorid | attr 
 ------+------+---------+------
-(0 rows)
 
 -- update 1 row
 UPDATE sample_table SET colorid = 4 WHERE time > now_s() + '-1 month';
@@ -619,7 +555,6 @@ SELECT * FROM sample_table WHERE time > now_s() + '-1 month' AND colorid = 4;
              time             | temp | colorid |   attr   
 ------------------------------+------+---------+----------
  Tue Aug 22 09:18:22 2017 PDT | 34.1 |       4 | {"c": 4}
-(1 row)
 
 -- ensure that 1 chunk is partially compressed
 SELECT chunk_status,
@@ -631,7 +566,6 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
             1 | _hyper_7_13_chunk
             1 | _hyper_7_14_chunk
             9 | _hyper_7_15_chunk
-(3 rows)
 
 DROP TABLE sample_table;
 -- test for NULL values in SEGMENTBY column
@@ -643,7 +577,6 @@ SELECT * FROM create_hypertable('sample_table', 'time', chunk_time_interval => 1
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
              9 | public      | sample_table | t
-(1 row)
 
 ALTER TABLE sample_table SET (
     timescaledb.compress,
@@ -656,7 +589,6 @@ SELECT compress_chunk(show_chunks('sample_table'));
 -----------------------------------------
  _timescaledb_internal._hyper_9_19_chunk
  _timescaledb_internal._hyper_9_20_chunk
-(2 rows)
 
 -- get FIRST compressed chunk
 SELECT ch1.schema_name|| '.' || ch1.table_name AS "COMPRESS_CHUNK_1"
@@ -673,33 +605,28 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      2
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2;
  count 
 -------
      2
-(1 row)
 
 -- get rowcount from compressed chunks where device_id IS NULL
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE device_id IS NULL;
  count 
 -------
      1
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE device_id IS NULL;
  count 
 -------
      1
-(1 row)
 
 -- get total count of SEGMENTBY column with NULL values
 SELECT COUNT(*) FROM sample_table WHERE device_id IS NULL;
  count 
 -------
      4
-(1 row)
 
 -- delete NULL values in SEGMENTBY column
 DELETE FROM sample_table WHERE device_id IS NULL;
@@ -709,13 +636,11 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      1
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2;
  count 
 -------
      1
-(1 row)
 
 -- get rowcount from compressed chunks where device_id IS NULL
 -- should report 0 rows
@@ -723,13 +648,11 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE device_id IS NULL;
  count 
 -------
      0
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE device_id IS NULL;
  count 
 -------
      0
-(1 row)
 
 -- check chunk compression status after DELETE
 SELECT chunk_status,
@@ -740,7 +663,6 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 --------------+-------------------
             9 | _hyper_9_19_chunk
             9 | _hyper_9_20_chunk
-(2 rows)
 
 DROP TABLE sample_table;
 -- test for IS NOT NULL values in SEGMENTBY column
@@ -752,7 +674,6 @@ SELECT * FROM create_hypertable('sample_table', 'time', chunk_time_interval => 1
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
             11 | public      | sample_table | t
-(1 row)
 
 ALTER TABLE sample_table SET (
     timescaledb.compress,
@@ -765,7 +686,6 @@ SELECT compress_chunk(show_chunks('sample_table'));
 ------------------------------------------
  _timescaledb_internal._hyper_11_23_chunk
  _timescaledb_internal._hyper_11_24_chunk
-(2 rows)
 
 -- get FIRST compressed chunk
 SELECT ch1.schema_name|| '.' || ch1.table_name AS "COMPRESS_CHUNK_1"
@@ -781,7 +701,6 @@ SELECT COUNT(*) FROM sample_table WHERE val = 1234;
  count 
 -------
      0
-(1 row)
 
 -- UPDATE based on IS NOT NULL condition on SEGMENTBY column
 UPDATE sample_table SET val = 1234 WHERE device_id IS NOT NULL;
@@ -790,7 +709,6 @@ SELECT COUNT(*) FROM sample_table WHERE val = 1234;
  count 
 -------
      3
-(1 row)
 
 -- check chunk compression status after DELETE
 SELECT chunk_status,
@@ -801,7 +719,6 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 --------------+--------------------
             1 | _hyper_11_23_chunk
             9 | _hyper_11_24_chunk
-(2 rows)
 
 DROP TABLE sample_table;
 -- test to for <= AND >= on SEGMENTBY column
@@ -813,7 +730,6 @@ SELECT * FROM create_hypertable('sample_table', 'time', chunk_time_interval => 1
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
             13 | public      | sample_table | t
-(1 row)
 
 ALTER TABLE sample_table SET (
     timescaledb.compress,
@@ -827,7 +743,6 @@ SELECT compress_chunk(show_chunks('sample_table'));
 ------------------------------------------
  _timescaledb_internal._hyper_13_27_chunk
  _timescaledb_internal._hyper_13_28_chunk
-(2 rows)
 
 -- test will multiple NULL/NOT NULL columns
 BEGIN;
@@ -835,7 +750,6 @@ BEGIN;
 SELECT * FROM sample_table WHERE device_id IS NULL AND val = 987;
  time | device_id | val 
 ------+-----------+-----
-(0 rows)
 
 -- these 3 rows will be affected by below UPDATE
 SELECT * FROM sample_table WHERE device_id IS NULL AND val IS NOT NULL ORDER BY 1;
@@ -844,7 +758,6 @@ SELECT * FROM sample_table WHERE device_id IS NULL AND val IS NOT NULL ORDER BY 
     2 |           |   1
    10 |           |   2
    11 |           |   2
-(3 rows)
 
 -- update 3 rows
 UPDATE sample_table SET val = 987 WHERE device_id IS NULL AND val IS NOT NULL;
@@ -855,7 +768,6 @@ SELECT * FROM sample_table WHERE device_id IS NULL AND val = 987;
     2 |           | 987
    10 |           | 987
    11 |           | 987
-(3 rows)
 
 ROLLBACK;
 -- test will multiple columns
@@ -866,7 +778,6 @@ SELECT * FROM sample_table WHERE device_id IS NULL AND val = 2;
 ------+-----------+-----
    10 |           |   2
    11 |           |   2
-(2 rows)
 
 -- delete 2 rows
 DELETE from sample_table WHERE device_id IS NULL AND val = 2;
@@ -874,7 +785,6 @@ DELETE from sample_table WHERE device_id IS NULL AND val = 2;
 SELECT * FROM sample_table WHERE device_id IS NULL AND val = 2;
  time | device_id | val 
 ------+-----------+-----
-(0 rows)
 
 ROLLBACK;
 BEGIN;
@@ -883,7 +793,6 @@ SELECT * FROM sample_table WHERE device_id = 3 AND val IS NULL;
  time | device_id | val 
 ------+-----------+-----
     4 |         3 |    
-(1 row)
 
 -- delete 1 rows
 DELETE from sample_table WHERE device_id = 3 AND val IS NULL;
@@ -891,7 +800,6 @@ DELETE from sample_table WHERE device_id = 3 AND val IS NULL;
 SELECT * FROM sample_table WHERE device_id = 3 AND val IS NULL;
  time | device_id | val 
 ------+-----------+-----
-(0 rows)
 
 ROLLBACK;
 -- get FIRST compressed chunk
@@ -909,33 +817,28 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      5
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2;
  count 
 -------
      5
-(1 row)
 
 -- get rowcount from compressed chunks where device_id >= 4 AND val <= 1
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE device_id >= 4 AND val <= 1;
  count 
 -------
      1
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE device_id >= 4 AND val <= 1;
  count 
 -------
      0
-(1 row)
 
 -- get total count of SEGMENTBY column with device_id >= 4 AND val <= 1
 SELECT COUNT(*) FROM sample_table WHERE device_id >= 4 AND val <= 1;
  count 
 -------
      1
-(1 row)
 
 -- delete NULL values in SEGMENTBY column
 DELETE FROM sample_table WHERE device_id >= 4 AND val <= 1;
@@ -945,13 +848,11 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      4
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2;
  count 
 -------
      5
-(1 row)
 
 -- get rowcount from compressed chunks where device_id IS NULL
 -- should report 0 rows
@@ -959,13 +860,11 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE device_id >= 4 AND val <= 1;
  count 
 -------
      0
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE device_id >= 4 AND val <= 1;
  count 
 -------
      0
-(1 row)
 
 -- check chunk compression status after DELETE
 SELECT chunk_status,
@@ -976,7 +875,6 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 --------------+--------------------
             1 | _hyper_13_27_chunk
             1 | _hyper_13_28_chunk
-(2 rows)
 
 -- added tests for code coverage
 UPDATE sample_table SET time = 21 WHERE (device_id) in ( 30, 51, 72, 53);
@@ -996,7 +894,6 @@ SELECT * FROM create_hypertable('sample_table', 'time', chunk_time_interval => 5
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
             15 | public      | sample_table | t
-(1 row)
 
 INSERT INTO sample_table (time, device_id, d) VALUES (1, 1, 1), (2, NULL, 1), (3, 4, 1), (10, NULL, 2), (11, NULL, 2), (11, 1, 2), (13, 5, 3);
 ALTER TABLE sample_table DROP COLUMN c;
@@ -1009,7 +906,6 @@ SELECT compress_chunk(show_chunks('sample_table'));
 ------------------------------------------
  _timescaledb_internal._hyper_15_31_chunk
  _timescaledb_internal._hyper_15_32_chunk
-(2 rows)
 
 ALTER TABLE sample_table ADD COLUMN c int default 23;
 -- check chunk compression status
@@ -1021,7 +917,6 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 --------------+--------------------
             1 | _hyper_15_31_chunk
             1 | _hyper_15_32_chunk
-(2 rows)
 
 -- get FIRST uncompressed chunk
 SELECT ch1.schema_name|| '.' || ch1.table_name AS "UNCOMPRESS_CHUNK_1"
@@ -1053,7 +948,6 @@ ORDER BY attnum;
 ---------+--------
  d       |      3
  d       |      7
-(2 rows)
 
 SELECT attname, attnum
 FROM pg_attribute
@@ -1063,40 +957,34 @@ ORDER BY attnum;
 ---------+--------
  d       |      3
  d       |      7
-(2 rows)
 
 -- get total rowcount from compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      3
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2;
  count 
 -------
      3
-(1 row)
 
 -- get rowcount from compressed chunks where d = 3
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE d = 3;
  count 
 -------
      0
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE d = 3;
  count 
 -------
      1
-(1 row)
 
 -- get total count of SEGMENTBY column with d = 3
 SELECT COUNT(*) FROM sample_table WHERE d = 3;
  count 
 -------
      1
-(1 row)
 
 -- delete based on SEGMENTBY column
 DELETE FROM sample_table WHERE d = 3;
@@ -1106,26 +994,22 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      3
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2;
  count 
 -------
      2
-(1 row)
 
 -- get rowcount from compressed chunks where d = 3
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE d = 3;
  count 
 -------
      0
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE d = 3;
  count 
 -------
      0
-(1 row)
 
 -- check chunk compression status after DELETE
 SELECT chunk_status,
@@ -1136,27 +1020,23 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 --------------+--------------------
             1 | _hyper_15_31_chunk
             1 | _hyper_15_32_chunk
-(2 rows)
 
 -- get rowcount from compressed chunks where device_id IS NULL
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE device_id IS NULL;
  count 
 -------
      1
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE device_id IS NULL;
  count 
 -------
      1
-(1 row)
 
 BEGIN;
 -- report 0 row
 SELECT * FROM sample_table WHERE a = 247;
  time | device_id | val | a | b | d | e | c 
 ------+-----------+-----+---+---+---+---+---
-(0 rows)
 
 -- delete 1 row
 UPDATE sample_table SET a = 247 WHERE device_id IS NULL;
@@ -1167,7 +1047,6 @@ SELECT * FROM sample_table WHERE a = 247;
     2 |           |   8 | 247 | 11 | 1 | 13 | 23
    11 |           |   8 | 247 | 11 | 2 | 13 | 23
    10 |           |   8 | 247 | 11 | 2 | 13 | 23
-(3 rows)
 
 ROLLBACK;
 -- report 0 rows
@@ -1175,7 +1054,6 @@ SELECT COUNT(*) FROM sample_table WHERE a = 247;
  count 
 -------
      0
-(1 row)
 
 -- UPDATE based on NULL values in SEGMENTBY column
 UPDATE sample_table SET a = 247 WHERE device_id IS NULL;
@@ -1184,7 +1062,6 @@ SELECT COUNT(*) FROM sample_table WHERE a = 247;
  count 
 -------
      3
-(1 row)
 
 -- ensure that not all rows are moved to staging area
 -- should have few compressed rows
@@ -1192,13 +1069,11 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      2
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2;
  count 
 -------
      1
-(1 row)
 
 -- get rowcount from compressed chunks where device_id IS NULL
 -- should report 0 rows
@@ -1206,13 +1081,11 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE device_id IS NULL;
  count 
 -------
      0
-(1 row)
 
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE device_id IS NULL;
  count 
 -------
      0
-(1 row)
 
 DROP TABLE sample_table;
 -- test with different physical layout
@@ -1221,7 +1094,6 @@ SELECT create_hypertable('sample_table','time');
      create_hypertable      
 ----------------------------
  (17,public,sample_table,t)
-(1 row)
 
 INSERT INTO sample_table SELECT '2000-01-01';
 ALTER TABLE sample_table DROP column c3;
@@ -1232,7 +1104,6 @@ SELECT compress_chunk(show_chunks('sample_table'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_17_35_chunk
-(1 row)
 
 BEGIN;
 -- report 1 row
@@ -1240,7 +1111,6 @@ SELECT * FROM sample_table WHERE c4 IS NULL;
              time             | c1 | c2 | c4 
 ------------------------------+----+----+----
  Sat Jan 01 00:00:00 2000 PST |    |    | 
-(1 row)
 
 -- delete 1 row
 DELETE FROM sample_table WHERE c4 IS NULL;
@@ -1248,7 +1118,6 @@ DELETE FROM sample_table WHERE c4 IS NULL;
 SELECT * FROM sample_table WHERE c4 IS NULL;
  time | c1 | c2 | c4 
 ------+----+----+----
-(0 rows)
 
 ROLLBACK;
 -- get FIRST compressed chunk
@@ -1261,21 +1130,18 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      2
-(1 row)
 
 -- report 1 row
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 IS NULL;
  count 
 -------
      1
-(1 row)
 
 -- report 1 row
 SELECT * FROM sample_table WHERE c4 IS NULL;
              time             | c1 | c2 | c4 
 ------------------------------+----+----+----
  Sat Jan 01 00:00:00 2000 PST |    |    | 
-(1 row)
 
 -- delete 1 row
 DELETE FROM sample_table WHERE c4 IS NULL;
@@ -1283,21 +1149,18 @@ DELETE FROM sample_table WHERE c4 IS NULL;
 SELECT * FROM sample_table WHERE c4 IS NULL;
  time | c1 | c2 | c4 
 ------+----+----+----
-(0 rows)
 
 -- report 1 row which ensure that only required row is moved and deleted
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1;
  count 
 -------
      1
-(1 row)
 
 -- report 0 row
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 IS NULL;
  count 
 -------
      0
-(1 row)
 
 DROP TABLE sample_table;
 -- test filtering with ORDER BY columns
@@ -1306,7 +1169,6 @@ SELECT create_hypertable('sample_table','time',chunk_time_interval=>'1 day'::int
      create_hypertable      
 ----------------------------
  (19,public,sample_table,t)
-(1 row)
 
 ALTER TABLE sample_table SET (timescaledb.compress,timescaledb.compress_segmentby='c4', timescaledb.compress_orderby='c1,c2,time');
 INSERT INTO sample_table
@@ -1322,7 +1184,6 @@ SELECT compress_chunk(show_chunks('sample_table'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_19_37_chunk
-(1 row)
 
 -- get FIRST chunk
 SELECT ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_1"
@@ -1342,14 +1203,12 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 = 5;
  count 
 -------
     10
-(1 row)
 
 -- report 10k rows
 SELECT COUNT(*) FROM sample_table WHERE c4 = 5;
  count 
 -------
  10000
-(1 row)
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
@@ -1363,21 +1222,18 @@ SELECT count(*) FROM sample_table WHERE c4 = 5;
  count 
 -------
      0
-(1 row)
 
 -- report 0 rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
  count 
 -------
      0
-(1 row)
 
 -- report 0 rows in compressed chunk
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 = 5;
  count 
 -------
      0
-(1 row)
 
 -- validate correct number of rows was deleted
 -- report true
@@ -1385,7 +1241,6 @@ SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
  ?column? 
 ----------
  t
-(1 row)
 
 ROLLBACK;
 -- check that you uncompress and delete only for less than SEGMENTBY value
@@ -1395,14 +1250,12 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 < 5;
  count 
 -------
     50
-(1 row)
 
 -- report 50k rows
 SELECT COUNT(*) FROM sample_table WHERE c4 < 5;
  count 
 -------
  50000
-(1 row)
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
@@ -1416,21 +1269,18 @@ SELECT count(*) FROM sample_table WHERE c4 < 5;
  count 
 -------
      0
-(1 row)
 
 -- report 0 rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
  count 
 -------
      0
-(1 row)
 
 -- report 0 rows in compressed chunk
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 < 5;
  count 
 -------
      0
-(1 row)
 
 -- validate correct number of rows was deleted
 -- report true
@@ -1438,7 +1288,6 @@ SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
  ?column? 
 ----------
  t
-(1 row)
 
 ROLLBACK;
 -- check that you uncompress and delete only for greater and equal than SEGMENTBY value
@@ -1448,14 +1297,12 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 >= 5;
  count 
 -------
     50
-(1 row)
 
 -- report 50k rows
 SELECT COUNT(*) FROM sample_table WHERE c4 >= 5;
  count 
 -------
  50000
-(1 row)
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
@@ -1469,21 +1316,18 @@ SELECT count(*) FROM sample_table WHERE c4 >= 5;
  count 
 -------
      0
-(1 row)
 
 -- report 0 rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
  count 
 -------
      0
-(1 row)
 
 -- report 0 rows in compressed chunk
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 >= 5;
  count 
 -------
      0
-(1 row)
 
 -- validate correct number of rows was deleted
 -- report true
@@ -1491,7 +1335,6 @@ SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
  ?column? 
 ----------
  t
-(1 row)
 
 ROLLBACK;
 -- check that you uncompress and delete only for exact ORDERBY value
@@ -1502,14 +1345,12 @@ SELECT COUNT(*) FROM sample_table WHERE c2 = 3;
  count 
 -------
  10000
-(1 row)
 
 -- report 100 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_min_2 <= 3 and _ts_meta_max_2 >= 3;
  count 
 -------
    100
-(1 row)
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
@@ -1522,21 +1363,18 @@ SELECT count(*) FROM sample_table WHERE c2 = 3;
  count 
 -------
      0
-(1 row)
 
 -- report 90k rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
  count 
 -------
  90000
-(1 row)
 
 -- report 0 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_min_2 <= 3 and _ts_meta_max_2 >= 3;
  count 
 -------
      0
-(1 row)
 
 -- validate correct number of rows was deleted
 -- report true
@@ -1544,7 +1382,6 @@ SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
  ?column? 
 ----------
  t
-(1 row)
 
 ROLLBACK;
 -- check that you uncompress and delete only for less then ORDERBY value
@@ -1555,14 +1392,12 @@ SELECT COUNT(*) FROM sample_table WHERE c1 < 2;
  count 
 -------
  20000
-(1 row)
 
 -- report 20 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_max_1 < 2;
  count 
 -------
     20
-(1 row)
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
@@ -1575,21 +1410,18 @@ SELECT count(*) FROM sample_table WHERE c1 < 2;
  count 
 -------
      0
-(1 row)
 
 -- report 0 rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
  count 
 -------
      0
-(1 row)
 
 -- report 0 rows in compressed chunk
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_max_1 < 2;
  count 
 -------
      0
-(1 row)
 
 -- validate correct number of rows was deleted
 -- report true
@@ -1597,7 +1429,6 @@ SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
  ?column? 
 ----------
  t
-(1 row)
 
 ROLLBACK;
 -- check that you uncompress and delete only for greater or equal then ORDERBY value
@@ -1608,14 +1439,12 @@ SELECT COUNT(*) FROM sample_table WHERE c1 >= 7;
  count 
 -------
  30000
-(1 row)
 
 -- report 30 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_min_1 >= 7;
  count 
 -------
     30
-(1 row)
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
@@ -1628,21 +1457,18 @@ SELECT count(*) FROM sample_table WHERE c1 >= 7;
  count 
 -------
      0
-(1 row)
 
 -- report 0 rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
  count 
 -------
      0
-(1 row)
 
 -- report 0 rows in compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_min_1 >= 7;
  count 
 -------
      0
-(1 row)
 
 -- validate correct number of rows was deleted
 -- report true
@@ -1650,7 +1476,6 @@ SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
  ?column? 
 ----------
  t
-(1 row)
 
 ROLLBACK;
 -- check that you uncompress and delete only tuples which satisfy SEGMENTBY
@@ -1662,14 +1487,12 @@ SELECT COUNT(*) FROM sample_table WHERE c4 = 5 and c1 = 5;
  count 
 -------
   1000
-(1 row)
 
 -- report 1 row in compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 5 AND _ts_meta_min_1 <= 5 and _ts_meta_max_1 >= 5;
  count 
 -------
      1
-(1 row)
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
@@ -1683,21 +1506,18 @@ SELECT count(*) FROM sample_table WHERE c4 = 5 and c1 = 5;
  count 
 -------
      0
-(1 row)
 
 -- report 0 rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
  count 
 -------
      0
-(1 row)
 
 -- report 0 rows in compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 5 AND _ts_meta_min_1 <= 5 and _ts_meta_max_1 >= 5;
  count 
 -------
      0
-(1 row)
 
 -- validate correct number of rows was deleted
 -- report true
@@ -1705,7 +1525,6 @@ SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
  ?column? 
 ----------
  t
-(1 row)
 
 ROLLBACK;
 -- check that you uncompress and delete only tuples which satisfy SEGMENTBY
@@ -1717,14 +1536,12 @@ SELECT COUNT(*) FROM sample_table WHERE c4 > 5 and c2 = 5;
  count 
 -------
   4000
-(1 row)
 
 -- report 40 rows in compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 > 5 AND _ts_meta_min_2 <= 5 and _ts_meta_max_2 >= 5;
  count 
 -------
     40
-(1 row)
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
@@ -1738,21 +1555,18 @@ SELECT count(*) FROM sample_table WHERE c4 > 5 and c2 = 5;
  count 
 -------
      0
-(1 row)
 
 -- report 36k rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
  count 
 -------
  36000
-(1 row)
 
 -- report 0 rows in compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 > 5 AND _ts_meta_min_2 <= 5 and _ts_meta_max_2 >= 5;
  count 
 -------
      0
-(1 row)
 
 -- validate correct number of rows was deleted
 -- report true
@@ -1760,7 +1574,6 @@ SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
  ?column? 
 ----------
  t
-(1 row)
 
 ROLLBACK;
 -- check that you uncompress and delete only tuples which satisfy SEGMENTBY
@@ -1775,21 +1588,18 @@ SELECT COUNT(*) FROM ONLY :CHUNK_1;
  count 
 -------
      0
-(1 row)
 
 -- report 10 compressed rows for given condition c4 = 4
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4;
  count 
 -------
     10
-(1 row)
 
 -- report 3 compressed rows for given condition c4 = 4 and c1 >= 7
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 AND _ts_meta_max_1 >= 7;
  count 
 -------
      3
-(1 row)
 
 SELECT COUNT(*) AS "total_rows" FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 AND _ts_meta_max_1 >= 7 \gset
@@ -1801,7 +1611,6 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4;
  count 
 -------
      7
-(1 row)
 
 -- ensure correct number of rows are moved from compressed chunk
 -- report true
@@ -1809,7 +1618,6 @@ SELECT COUNT(*) = :total_rows - :total_affected_rows FROM :COMPRESS_CHUNK_1 WHER
  ?column? 
 ----------
  t
-(1 row)
 
 ROLLBACK;
 RESET timescaledb.debug_compression_path_info;
@@ -1821,7 +1629,6 @@ SELECT create_hypertable('tab1','time',create_default_indexes:=false);
  create_hypertable  
 --------------------
  (21,public,tab1,t)
-(1 row)
 
 ALTER TABLE tab1 DROP COLUMN filler_1;
 INSERT INTO tab1(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','57m') gtime(time), generate_series(1,1,1) gdevice(device_id);
@@ -1838,7 +1645,6 @@ SELECT compress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_21_39_chunk
  _timescaledb_internal._hyper_21_40_chunk
  _timescaledb_internal._hyper_21_41_chunk
-(3 rows)
 
 -- ensure there is an index scan generated for below DELETE query
 BEGIN;
@@ -1846,19 +1652,16 @@ SELECT count(*) FROM tab1 WHERE device_id = 1;
  count 
 -------
    472
-(1 row)
 
 INSERT INTO tab1(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 1000, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 SELECT count(*) FROM tab1 WHERE device_id = 1;
  count 
 -------
   4070
-(1 row)
 
 ANALYZE tab1;
 EXPLAIN (buffers off, costs off) DELETE FROM public.tab1 WHERE public.tab1.device_id = 1;
-                                                 QUERY PLAN                                                 
-------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    ->  Delete on tab1
          Delete on _hyper_21_39_chunk tab1_1
@@ -1871,14 +1674,12 @@ EXPLAIN (buffers off, costs off) DELETE FROM public.tab1 WHERE public.tab1.devic
                      Filter: (device_id = 1)
                ->  Seq Scan on _hyper_21_41_chunk tab1_3
                      Filter: (device_id = 1)
-(12 rows)
 
 DELETE FROM tab1 WHERE tab1.device_id = 1;
 SELECT count(*) FROM tab1 WHERE device_id = 1;
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 -- github issue 5658
@@ -1889,21 +1690,18 @@ SELECT count(*) FROM tab1 WHERE device_id = 1;
  count 
 -------
    472
-(1 row)
 
 INSERT INTO tab1(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 1000, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 SELECT count(*) FROM tab1 WHERE device_id = 1;
  count 
 -------
   4070
-(1 row)
 
 ANALYZE tab1;
 SET enable_seqscan = off;
 SET enable_indexscan = off;
 EXPLAIN (buffers off, costs off) DELETE FROM tab1 WHERE tab1.device_id = 1;
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    ->  Delete on tab1
          Delete on _hyper_21_39_chunk tab1_1
@@ -1918,14 +1716,12 @@ EXPLAIN (buffers off, costs off) DELETE FROM tab1 WHERE tab1.device_id = 1;
                      Filter: (device_id = 1)
                ->  Seq Scan on _hyper_21_41_chunk tab1_3
                      Filter: (device_id = 1)
-(14 rows)
 
 DELETE FROM tab1 WHERE tab1.device_id = 1;
 SELECT count(*) FROM tab1 WHERE device_id = 1;
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 -- verify we can work with expression indexes and toastable types
@@ -1944,8 +1740,7 @@ SET v0 = 0 FROM
 	FROM join_table
 	WHERE false group by 1) as devices
 WHERE repeat('t', device_id) = devices.repeat;
-                                         QUERY PLAN                                          
----------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    ->  Update on tab1
          Update on _hyper_21_39_chunk tab1_1
@@ -1966,7 +1761,6 @@ WHERE repeat('t', device_id) = devices.repeat;
                            Filter: (devices.repeat = repeat('t'::text, device_id))
                      ->  Seq Scan on _hyper_21_41_chunk tab1_3
                            Filter: (devices.repeat = repeat('t'::text, device_id))
-(20 rows)
 
 UPDATE tab1
 SET v0 = 0 FROM
@@ -1983,7 +1777,6 @@ SELECT create_hypertable('tab2','time','device_id',3,create_default_indexes:=fal
  create_hypertable  
 --------------------
  (23,public,tab2,t)
-(1 row)
 
 ALTER TABLE tab2 DROP COLUMN filler_1;
 INSERT INTO tab2(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','35m') gtime(time), generate_series(1,1,1) gdevice(device_id);
@@ -2000,7 +1793,6 @@ SELECT compress_chunk(show_chunks('tab2'));
  _timescaledb_internal._hyper_23_45_chunk
  _timescaledb_internal._hyper_23_46_chunk
  _timescaledb_internal._hyper_23_47_chunk
-(3 rows)
 
 -- below test will cause chunks of tab2 to get decompressed
 -- without fix for issue #5460
@@ -2020,13 +1812,11 @@ SELECT table_name FROM create_hypertable('join_test1', 'time');
  table_name 
 ------------
  join_test1
-(1 row)
 
 SELECT table_name FROM create_hypertable('join_test2', 'time');
  table_name 
 ------------
  join_test2
-(1 row)
 
 ALTER TABLE join_test1 SET (timescaledb.compress, timescaledb.compress_segmentby='device');
 ALTER TABLE join_test2 SET (timescaledb.compress, timescaledb.compress_segmentby='device');
@@ -2038,13 +1828,11 @@ SELECT compress_chunk(show_chunks('join_test1'));
  _timescaledb_internal._hyper_25_51_chunk
  _timescaledb_internal._hyper_25_52_chunk
  _timescaledb_internal._hyper_25_53_chunk
-(3 rows)
 
 SELECT compress_chunk(show_chunks('join_test2'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_26_54_chunk
-(1 row)
 
 SELECT * FROM chunk_status;
  hypertable |       chunk        | status 
@@ -2053,7 +1841,6 @@ SELECT * FROM chunk_status;
  join_test1 | _hyper_25_52_chunk |      1
  join_test1 | _hyper_25_53_chunk |      1
  join_test2 | _hyper_26_54_chunk |      1
-(4 rows)
 
 BEGIN;
 DELETE FROM join_test1 USING join_test2;
@@ -2065,7 +1852,6 @@ SELECT * FROM chunk_status;
  join_test1 | _hyper_25_52_chunk |      9
  join_test1 | _hyper_25_53_chunk |      9
  join_test2 | _hyper_26_54_chunk |      1
-(4 rows)
 
 ROLLBACK;
 BEGIN;
@@ -2078,7 +1864,6 @@ SELECT * FROM chunk_status;
  join_test1 | _hyper_25_52_chunk |      1
  join_test1 | _hyper_25_53_chunk |      1
  join_test2 | _hyper_26_54_chunk |      9
-(4 rows)
 
 ROLLBACK;
 BEGIN;
@@ -2091,7 +1876,6 @@ SELECT * FROM chunk_status;
  join_test1 | _hyper_25_52_chunk |      1
  join_test1 | _hyper_25_53_chunk |      1
  join_test2 | _hyper_26_54_chunk |      1
-(4 rows)
 
 ROLLBACK;
 BEGIN;
@@ -2104,7 +1888,6 @@ SELECT * FROM chunk_status;
  join_test1 | _hyper_25_52_chunk |      9
  join_test1 | _hyper_25_53_chunk |      9
  join_test2 | _hyper_26_54_chunk |      1
-(4 rows)
 
 ROLLBACK;
 BEGIN;
@@ -2117,7 +1900,6 @@ SELECT * FROM chunk_status;
  join_test1 | _hyper_25_52_chunk |      9
  join_test1 | _hyper_25_53_chunk |      9
  join_test2 | _hyper_26_54_chunk |      1
-(4 rows)
 
 ROLLBACK;
 BEGIN;
@@ -2130,7 +1912,6 @@ SELECT * FROM chunk_status;
  join_test1 | _hyper_25_52_chunk |      1
  join_test1 | _hyper_25_53_chunk |      1
  join_test2 | _hyper_26_54_chunk |      9
-(4 rows)
 
 ROLLBACK;
 BEGIN;
@@ -2143,7 +1924,6 @@ SELECT * FROM chunk_status;
  join_test1 | _hyper_25_52_chunk |      1
  join_test1 | _hyper_25_53_chunk |      1
  join_test2 | _hyper_26_54_chunk |      1
-(4 rows)
 
 ROLLBACK;
 BEGIN;
@@ -2156,7 +1936,6 @@ SELECT * FROM chunk_status;
  join_test1 | _hyper_25_52_chunk |      9
  join_test1 | _hyper_25_53_chunk |      9
  join_test2 | _hyper_26_54_chunk |      1
-(4 rows)
 
 ROLLBACK;
 DROP TABLE join_test1;
@@ -2167,7 +1946,6 @@ SELECT create_hypertable('index_scan_test','time',create_default_indexes:=false)
        create_hypertable       
 -------------------------------
  (29,public,index_scan_test,t)
-(1 row)
 
 INSERT INTO index_scan_test(time,device_id,value) SELECT time, device_id, device_id + 0.5 FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-01 23:55:00+0','1m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 -- compress chunks
@@ -2176,7 +1954,6 @@ SELECT compress_chunk(show_chunks('index_scan_test'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_29_59_chunk
-(1 row)
 
 ANALYZE index_scan_test;
 SELECT ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_1"
@@ -2197,15 +1974,13 @@ BEGIN;
 SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 \gset
 CREATE INDEX ON index_scan_test(device_id);
 EXPLAIN (buffers off, costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2;
-                                                                 QUERY PLAN                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    ->  Delete on public.index_scan_test
          Delete on _timescaledb_internal._hyper_29_59_chunk index_scan_test_1
          ->  Index Scan using _hyper_29_59_chunk_index_scan_test_device_id_idx on _timescaledb_internal._hyper_29_59_chunk index_scan_test_1
                Output: index_scan_test_1.tableoid, index_scan_test_1.ctid
                Index Cond: (index_scan_test_1.device_id = 2)
-(6 rows)
 
 DELETE FROM index_scan_test WHERE device_id = 2;
 -- everything should be deleted
@@ -2213,21 +1988,18 @@ SELECT count(*) FROM index_scan_test where device_id = 2;
  count 
 -------
      0
-(1 row)
 
 -- there shouldn't be anything in the uncompressed chunk where device_id = 2
 SELECT count(*) = :UNCOMP_LEFTOVER FROM ONLY :CHUNK_1;
  ?column? 
 ----------
  t
-(1 row)
 
 -- there shouldn't be anything in the compressed chunk from device_id = 2
 SELECT count(*) FROM :COMP_CHUNK_1 where device_id = 2;
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 -- test multi column index
@@ -2235,15 +2007,13 @@ BEGIN;
 SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 OR time <= '2000-01-02'::timestamptz \gset
 CREATE INDEX ON index_scan_test(device_id, time);
 EXPLAIN (buffers off, costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
-                                                                       QUERY PLAN                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    ->  Delete on public.index_scan_test
          Delete on _timescaledb_internal._hyper_29_59_chunk index_scan_test_1
          ->  Index Scan using _hyper_29_59_chunk_index_scan_test_device_id_time_idx on _timescaledb_internal._hyper_29_59_chunk index_scan_test_1
                Output: index_scan_test_1.tableoid, index_scan_test_1.ctid
                Index Cond: ((index_scan_test_1.device_id = 2) AND (index_scan_test_1."time" > 'Sun Jan 02 00:00:00 2000 PST'::timestamp with time zone))
-(6 rows)
 
 DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
 -- everything should be deleted
@@ -2251,21 +2021,18 @@ SELECT count(*) FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'
  count 
 -------
      0
-(1 row)
 
 -- there shouldn't be anything in the uncompressed chunk that matches predicates
 SELECT count(*) = :UNCOMP_LEFTOVER FROM ONLY :CHUNK_1;
  ?column? 
 ----------
  t
-(1 row)
 
 -- there shouldn't be anything in the compressed chunk that matches predicates
 SELECT count(*) FROM :COMP_CHUNK_1 WHERE device_id = 2 AND _ts_meta_max_1 >= '2000-01-02'::timestamptz;
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 -- test index with filter condition
@@ -2273,8 +2040,7 @@ BEGIN;
 SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 OR time <= '2000-01-02'::timestamptz \gset
 CREATE INDEX ON index_scan_test(device_id);
 EXPLAIN (buffers off, costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
-                                                                 QUERY PLAN                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    ->  Delete on public.index_scan_test
          Delete on _timescaledb_internal._hyper_29_59_chunk index_scan_test_1
@@ -2282,7 +2048,6 @@ EXPLAIN (buffers off, costs off, verbose) DELETE FROM index_scan_test WHERE devi
                Output: index_scan_test_1.tableoid, index_scan_test_1.ctid
                Index Cond: (index_scan_test_1.device_id = 2)
                Filter: (index_scan_test_1."time" > 'Sun Jan 02 00:00:00 2000 PST'::timestamp with time zone)
-(7 rows)
 
 DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
 -- everything should be deleted
@@ -2290,21 +2055,18 @@ SELECT count(*) FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'
  count 
 -------
      0
-(1 row)
 
 -- there shouldn't be anything in the uncompressed chunk that matches predicates
 SELECT count(*) = :UNCOMP_LEFTOVER FROM ONLY :CHUNK_1;
  ?column? 
 ----------
  t
-(1 row)
 
 -- there shouldn't be anything in the compressed chunk that matches predicates
 SELECT count(*) FROM :COMP_CHUNK_1 WHERE device_id = 2 AND _ts_meta_max_1 >= '2000-01-02'::timestamptz;
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 -- test for disabling DML decompression
@@ -2312,7 +2074,6 @@ SHOW timescaledb.enable_dml_decompression;
  timescaledb.enable_dml_decompression 
 --------------------------------------
  on
-(1 row)
 
 SET timescaledb.enable_dml_decompression = false;
 \set ON_ERROR_STOP 0
@@ -2328,7 +2089,6 @@ SHOW timescaledb.enable_dml_decompression;
  timescaledb.enable_dml_decompression 
 --------------------------------------
  on
-(1 row)
 
 BEGIN;
 -- report 0 rows
@@ -2336,7 +2096,6 @@ SELECT count(*) FROM sample_table WHERE c4 = 5 AND c3 IS NULL;
  count 
 -------
      0
-(1 row)
 
 UPDATE sample_table SET c3 = NULL WHERE c4 = 5;
 -- report 10k rows
@@ -2344,7 +2103,6 @@ SELECT count(*) FROM sample_table WHERE c4 = 5 AND c3 IS NULL;
  count 
 -------
  10000
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -2353,7 +2111,6 @@ SELECT count(*) FROM sample_table WHERE c4 = 5;
  count 
 -------
  10000
-(1 row)
 
 DELETE FROM sample_table WHERE c4 = 5;
 -- report 0 rows
@@ -2361,7 +2118,6 @@ SELECT count(*) FROM sample_table WHERE c4 = 5;
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 -- create new uncompressed chunk
@@ -2379,14 +2135,12 @@ ORDER BY chunk_name;
 --------------------+---------------
  _hyper_19_37_chunk | t
  _hyper_19_61_chunk | f
-(2 rows)
 
 -- test for uncompressed and compressed chunks
 SHOW timescaledb.enable_dml_decompression;
  timescaledb.enable_dml_decompression 
 --------------------------------------
  on
-(1 row)
 
 SET timescaledb.enable_dml_decompression = false;
 BEGIN;
@@ -2395,7 +2149,6 @@ SELECT count(*) FROM sample_table WHERE time >= '2023-05-04 00:00:00-00'::timest
  count 
 -------
      3
-(1 row)
 
 -- delete from uncompressed chunk should work
 DELETE FROM sample_table WHERE time >= '2023-05-04 00:00:00-00'::timestamptz;
@@ -2404,7 +2157,6 @@ SELECT count(*) FROM sample_table WHERE time >= '2023-05-04 00:00:00-00'::timest
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -2413,7 +2165,6 @@ SELECT count(*) FROM sample_table WHERE time >= '2023-05-04 00:00:00-00'::timest
  count 
 -------
      0
-(1 row)
 
 UPDATE sample_table SET c3 = NULL WHERE time >= '2023-05-04 00:00:00-00'::timestamptz;
 -- report 3 rows
@@ -2421,7 +2172,6 @@ SELECT count(*) FROM sample_table WHERE time >= '2023-05-04 00:00:00-00'::timest
  count 
 -------
      3
-(1 row)
 
 ROLLBACK;
 \set ON_ERROR_STOP 0
@@ -2444,7 +2194,6 @@ SELECT create_hypertable('tab1','time',create_default_indexes:=false);
  create_hypertable 
 -------------------
  (1,public,tab1,t)
-(1 row)
 
 INSERT INTO tab1(filler_1, filler_2, filler_3,time,device_id,v0,v1,v2,v3) SELECT device_id, device_id+1,  device_id + 2, time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 ALTER TABLE tab1 SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id, filler_1, filler_2, filler_3');
@@ -2452,7 +2201,6 @@ SELECT compress_chunk(show_chunks('tab1'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2 \gset
 -- create multiple indexes on compressed hypertable
@@ -2472,7 +2220,6 @@ SELECT COUNT(*) FROM tab1 WHERE filler_3 = 5 AND filler_2 = 4;
  count 
 -------
   3598
-(1 row)
 
 UPDATE tab1 SET v0 = v1 + v2 WHERE filler_3 = 5 AND filler_2 = 4;
 INFO:  Index "filler_2_filler_3" is used for scan. 
@@ -2483,7 +2230,6 @@ SELECT COUNT(*) FROM tab1 WHERE filler_1 < 5 AND filler_2 = 4;
  count 
 -------
   3598
-(1 row)
 
 UPDATE tab1 SET v0 = v1 + v2 WHERE filler_1 < 5 AND filler_2 = 4;
 INFO:  Index "filler_1_filler_2" is used for scan. 
@@ -2496,7 +2242,6 @@ SELECT COUNT(*) FROM tab1 WHERE filler_1 < 5;
  count 
 -------
  14392
-(1 row)
 
 UPDATE tab1 SET v0 = v1 + v2 WHERE filler_1 < 5;
 INFO:  Index "compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1_fill_idx" is used for scan. 
@@ -2512,7 +2257,6 @@ SELECT create_hypertable('t', 'a', chunk_time_interval=> 10);
  create_hypertable 
 -------------------
  (31,public,t,t)
-(1 row)
 
 INSERT INTO t values(1, 2);
 ALTER TABLE t SET (timescaledb.compress);
@@ -2520,7 +2264,6 @@ SELECT compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_31_62_chunk
-(1 row)
 
 -- should not crash
 UPDATE t SET b = 2 WHERE tableoid = 0;
@@ -2542,7 +2285,6 @@ SELECT table_name FROM create_hypertable('t6367', 'time');
  table_name 
 ------------
  t6367
-(1 row)
 
 ALTER TABLE t6367 SET(timescaledb.compress, timescaledb.compress_segmentby = 'source_id, label', timescaledb.compress_orderby = 'time');
 INSERT INTO t6367
@@ -2556,7 +2298,6 @@ SELECT compress_chunk(c) FROM show_chunks('t6367') c;
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_2_chunk
-(2 rows)
 
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK1" FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2 ORDER BY id LIMIT 1 \gset
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK2" FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2 ORDER BY id LIMIT 1 OFFSET 1 \gset
@@ -2569,7 +2310,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
  count 
 -------
     10
-(1 row)
 
 UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
 INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
@@ -2578,7 +2318,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 -- test case with an index which has only one
@@ -2590,7 +2329,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
  count 
 -------
     10
-(1 row)
 
 UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
 INFO:  Index "source_id_idx1" is used for scan. 
@@ -2601,7 +2339,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 -- test that we are filtering NULL checks
@@ -2610,7 +2347,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NULL;
  count 
 -------
      0
-(1 row)
 
 UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label IS NULL;
 INFO:  Index "source_id_idx1" is used for scan. 
@@ -2621,7 +2357,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NULL;
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -2629,7 +2364,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NOT NULL;
  count 
 -------
     30
-(1 row)
 
 UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label IS NOT NULL;
 INFO:  Index "source_id_idx1" is used for scan. 
@@ -2640,7 +2374,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NOT NULL;
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 DROP INDEX _timescaledb_internal.source_id_idx1;
@@ -2652,7 +2385,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
  count 
 -------
     10
-(1 row)
 
 UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
 INFO:  Index "source_id_source_id_idx" is used for scan. 
@@ -2662,7 +2394,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 DROP INDEX _timescaledb_internal.source_id_source_id_idx;
@@ -2674,7 +2405,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
  count 
 -------
     10
-(1 row)
 
 UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
 INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
@@ -2683,7 +2413,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 DROP INDEX _timescaledb_internal.brin_source_id_idx;
@@ -2695,7 +2424,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
  count 
 -------
     10
-(1 row)
 
 UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
 INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
@@ -2704,7 +2432,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 DROP INDEX _timescaledb_internal.expr_source_id_idx;
@@ -2717,7 +2444,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
  count 
 -------
     10
-(1 row)
 
 UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
 INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
@@ -2726,7 +2452,6 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
  count 
 -------
      0
-(1 row)
 
 ROLLBACK;
 RESET timescaledb.debug_compression_path_info;
@@ -2742,7 +2467,6 @@ SELECT * FROM create_hypertable('test_limit', 'timestamp', chunk_time_interval=>
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
             33 | public      | test_limit | t
-(1 row)
 
 INSERT INTO test_limit SELECT t, i FROM generate_series(1,10000,1) t CROSS JOIN generate_series(1,3,1) i;
 ALTER TABLE test_limit SET (
@@ -2753,7 +2477,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test_limit') ch;
  count 
 -------
      2
-(1 row)
 
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 5000;
 \set VERBOSITY default
@@ -2779,7 +2502,6 @@ SELECT create_hypertable('test_partials', 'time');
       create_hypertable      
 -----------------------------
  (35,public,test_partials,t)
-(1 row)
 
 INSERT INTO test_partials
 VALUES -- chunk1
@@ -2800,13 +2522,11 @@ SELECT compress_chunk(show_chunks('test_partials'));
  _timescaledb_internal._hyper_35_68_chunk
  _timescaledb_internal._hyper_35_69_chunk
  _timescaledb_internal._hyper_35_70_chunk
-(3 rows)
 
 VACUUM ANALYZE test_partials;
 -- fully compressed
 EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
-                                                  QUERY PLAN                                                  
---------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Custom Scan (ColumnarScan) on _hyper_35_68_chunk
@@ -2821,7 +2541,6 @@ EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
          ->  Sort
                Sort Key: compress_hyper_36_73_chunk._ts_meta_min_1, compress_hyper_36_73_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_73_chunk
-(14 rows)
 
 -- verify correct results
 SELECT * FROM test_partials ORDER BY time;
@@ -2834,13 +2553,11 @@ SELECT * FROM test_partials ORDER BY time;
  Fri Jan 01 00:04:00 2021 PST | 1 | 2
  Sat Jan 01 00:00:00 2022 PST | 1 | 2
  Sat Jan 01 00:04:00 2022 PST | 1 | 2
-(7 rows)
 
 -- check that DML causes transparent decompression and that
 -- data gets shifted to the uncompressed parts
 EXPLAIN (buffers off, costs off) DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
-                                       QUERY PLAN                                       
-----------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    ->  Delete on test_partials
          Delete on _hyper_35_68_chunk test_partials_1
@@ -2865,14 +2582,12 @@ EXPLAIN (buffers off, costs off) DELETE FROM test_partials WHERE time >= ALL(SEL
                      Filter: (SubPlan 1)
                ->  Seq Scan on _hyper_35_70_chunk test_partials_3
                      Filter: (SubPlan 1)
-(24 rows)
 
 DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
 VACUUM ANALYZE test_partials;
 -- All 3 chunks will now become partially compressed chunks
 EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Merge Append
@@ -2896,7 +2611,6 @@ EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
                      Sort Key: compress_hyper_36_73_chunk._ts_meta_min_1, compress_hyper_36_73_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_73_chunk
          ->  Index Scan Backward using _hyper_35_70_chunk_test_partials_time_idx on _hyper_35_70_chunk
-(23 rows)
 
 -- verify correct results
 SELECT * FROM test_partials ORDER BY time;
@@ -2908,7 +2622,6 @@ SELECT * FROM test_partials ORDER BY time;
  Fri Jan 01 00:00:00 2021 PST | 1 | 2
  Fri Jan 01 00:04:00 2021 PST | 1 | 2
  Sat Jan 01 00:00:00 2022 PST | 1 | 2
-(6 rows)
 
 SELECT compress_chunk(show_chunks('test_partials'));
               compress_chunk              
@@ -2916,13 +2629,11 @@ SELECT compress_chunk(show_chunks('test_partials'));
  _timescaledb_internal._hyper_35_68_chunk
  _timescaledb_internal._hyper_35_69_chunk
  _timescaledb_internal._hyper_35_70_chunk
-(3 rows)
 
 VACUUM ANALYZE test_partials;
 -- fully compressed
 EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
-                                                  QUERY PLAN                                                  
---------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Custom Scan (ColumnarScan) on _hyper_35_68_chunk
@@ -2937,7 +2648,6 @@ EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
          ->  Sort
                Sort Key: compress_hyper_36_73_chunk._ts_meta_min_1, compress_hyper_36_73_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_73_chunk
-(14 rows)
 
 DROP TABLE test_partials;
 CREATE TABLE test_meta_filters(time timestamptz NOT NULL, device text, metric text, v1 float, v2 float);
@@ -2946,7 +2656,6 @@ SELECT create_hypertable('test_meta_filters', 'time');
         create_hypertable        
 ---------------------------------
  (37,public,test_meta_filters,t)
-(1 row)
 
 ALTER  TABLE test_meta_filters SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='metric,time');
 INSERT INTO test_meta_filters SELECT '2020-01-01'::timestamptz,'d1','m' || metric::text,v1,v2 FROM generate_series(1,3,1) metric, generate_series(1,1000,1) v1, generate_series(1,10,1) v2 ORDER BY 1,2,3,4,5;
@@ -2954,11 +2663,9 @@ SELECT compress_chunk(show_chunks('test_meta_filters'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_37_74_chunk
-(1 row)
 
 EXPLAIN (analyze, timing off, buffers off, costs off, summary off) DELETE FROM test_meta_filters WHERE device = 'd1' AND metric = 'm1' AND v1 < 100;
-                                                 QUERY PLAN                                                 
-------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 1
    Tuples decompressed: 1000
@@ -2967,7 +2674,6 @@ EXPLAIN (analyze, timing off, buffers off, costs off, summary off) DELETE FROM t
          ->  Seq Scan on _hyper_37_74_chunk test_meta_filters_1 (actual rows=990.00 loops=1)
                Filter: ((v1 < '100'::double precision) AND (device = 'd1'::text) AND (metric = 'm1'::text))
                Rows Removed by Filter: 10
-(8 rows)
 
 -- test expression pushdown in compressed dml constraints
 CREATE TABLE test_pushdown(time timestamptz NOT NULL, device text);
@@ -2975,7 +2681,6 @@ SELECT table_name FROM create_hypertable('test_pushdown', 'time');
   table_name   
 ---------------
  test_pushdown
-(1 row)
 
 INSERT INTO test_pushdown SELECT '2020-01-01', 'a';
 INSERT INTO test_pushdown SELECT '2020-01-01', 'b';
@@ -2991,13 +2696,11 @@ SELECT compress_chunk(show_chunks('test_pushdown'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_39_76_chunk
-(1 row)
 
 -- 3 batch decompressions means pushdown is not working so we expect less than 3 for all these queries
 SET timescaledb.enable_compressed_direct_batch_delete TO false;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'a' = device; ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 1
    Tuples decompressed: 1
@@ -3005,11 +2708,9 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'a' = device; ROLLBACK;
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=1.00 loops=1)
                Filter: ('a'::text = device)
-(7 rows)
 
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device < 'c' ; ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 2
    Tuples decompressed: 2
@@ -3017,11 +2718,9 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device < 'c' ; ROLLBACK;
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=2.00 loops=1)
                Filter: (device < 'c'::text)
-(7 rows)
 
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'c' > device; ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 2
    Tuples decompressed: 2
@@ -3029,11 +2728,9 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'c' > device; ROLLBACK;
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=2.00 loops=1)
                Filter: ('c'::text > device)
-(7 rows)
 
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'c' >= device; ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 3
    Tuples decompressed: 3
@@ -3041,11 +2738,9 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'c' >= device; ROLLBACK;
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=3.00 loops=1)
                Filter: ('c'::text >= device)
-(7 rows)
 
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device > 'b'; ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 1
    Tuples decompressed: 1
@@ -3053,11 +2748,9 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device > 'b'; ROLLBACK;
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=1.00 loops=1)
                Filter: (device > 'b'::text)
-(7 rows)
 
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = CURRENT_USER; ROLLBACK;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on test_pushdown (actual rows=0.00 loops=1)
          Delete on _hyper_39_76_chunk test_pushdown_1
@@ -3065,11 +2758,9 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = CURRENT_USER; ROLLBACK;
                Chunks excluded during startup: 0
                ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
                      Filter: (device = CURRENT_USER)
-(7 rows)
 
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'b' < device; ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 1
    Tuples decompressed: 1
@@ -3077,11 +2768,9 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'b' < device; ROLLBACK;
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=1.00 loops=1)
                Filter: ('b'::text < device)
-(7 rows)
 
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'b' <= device; ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 2
    Tuples decompressed: 2
@@ -3089,13 +2778,11 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'b' <= device; ROLLBACK;
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=2.00 loops=1)
                Filter: ('b'::text <= device)
-(7 rows)
 
 RESET timescaledb.enable_compressed_direct_batch_delete;
 -- cant pushdown OR atm
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = 'a' OR device = 'b'; ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 3
    Tuples decompressed: 3
@@ -3104,24 +2791,20 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = 'a' OR device = 'b'; RO
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=2.00 loops=1)
                Filter: ((device = 'a'::text) OR (device = 'b'::text))
                Rows Removed by Filter: 1
-(8 rows)
 
 -- test stable function
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time = timestamptz('2020-01-01 05:00'); ROLLBACK;
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches deleted: 1
    ->  Delete on test_pushdown (actual rows=0.00 loops=1)
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
                Filter: ("time" = 'Wed Jan 01 05:00:00 2020 PST'::timestamp with time zone)
-(6 rows)
 
 -- test sqlvaluefunction
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = substring(CURRENT_USER,length(CURRENT_USER)+1) || 'c'; ROLLBACK;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 1
    Tuples decompressed: 1
@@ -3131,14 +2814,12 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = substring(CURRENT_USER,
                Chunks excluded during startup: 0
                ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=1.00 loops=1)
                      Filter: (device = ("substring"((CURRENT_USER)::text, (length((CURRENT_USER)::text) + 1)) || 'c'::text))
-(9 rows)
 
 -- JOIN tests
 -- no filtering in decompression
 SET timescaledb.enable_compressed_direct_batch_delete TO false;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices3 d WHERE p.device=d.device; SELECT * FROM test_pushdown p ORDER BY p; ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 3
    Tuples decompressed: 3
@@ -3154,18 +2835,15 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices3 d WHERE p.device=d.de
                      Sort Key: d.device
                      Sort Method: quicksort 
                      ->  Seq Scan on devices3 d (actual rows=3.00 loops=1)
-(15 rows)
 
              time             | device 
 ------------------------------+--------
  Wed Jan 01 00:00:00 2020 PST | a
  Wed Jan 01 05:00:00 2020 PST | c
-(2 rows)
 
 RESET timescaledb.enable_compressed_direct_batch_delete;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices3 d WHERE p.device=d.device; SELECT * FROM test_pushdown p ORDER BY p; ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 3
    Tuples decompressed: 3
@@ -3181,19 +2859,16 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices3 d WHERE p.device=d.de
                      Sort Key: d.device
                      Sort Method: quicksort 
                      ->  Seq Scan on devices3 d (actual rows=3.00 loops=1)
-(15 rows)
 
              time             | device 
 ------------------------------+--------
  Wed Jan 01 00:00:00 2020 PST | a
  Wed Jan 01 05:00:00 2020 PST | c
-(2 rows)
 
 -- can filter in decompression even before executing join
 SET timescaledb.enable_compressed_direct_batch_delete TO false;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device AND d.device ='b'; SELECT * FROM test_pushdown p ORDER BY p; ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 1
    Tuples decompressed: 1
@@ -3206,18 +2881,15 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.dev
                ->  Materialize (actual rows=1.00 loops=1)
                      ->  Seq Scan on _hyper_39_76_chunk p_1 (actual rows=1.00 loops=1)
                            Filter: (device = 'b'::text)
-(12 rows)
 
              time             | device 
 ------------------------------+--------
  Wed Jan 01 00:00:00 2020 PST | a
  Wed Jan 01 05:00:00 2020 PST | c
-(2 rows)
 
 RESET timescaledb.enable_compressed_direct_batch_delete;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device AND d.device ='b'; SELECT * FROM test_pushdown p ORDER BY p; ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 1
    Tuples decompressed: 1
@@ -3230,20 +2902,17 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.dev
                ->  Materialize (actual rows=1.00 loops=1)
                      ->  Seq Scan on _hyper_39_76_chunk p_1 (actual rows=1.00 loops=1)
                            Filter: (device = 'b'::text)
-(12 rows)
 
              time             | device 
 ------------------------------+--------
  Wed Jan 01 00:00:00 2020 PST | a
  Wed Jan 01 05:00:00 2020 PST | c
-(2 rows)
 
 -- test prepared statement
 PREPARE q1(text) AS DELETE FROM test_pushdown WHERE device = $1;
 SET timescaledb.enable_compressed_direct_batch_delete TO false;
 BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 1
    Tuples decompressed: 1
@@ -3251,56 +2920,46 @@ BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=1.00 loops=1)
                Filter: (device = 'a'::text)
-(7 rows)
 
 RESET timescaledb.enable_compressed_direct_batch_delete;
 BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches deleted: 1
    ->  Delete on test_pushdown (actual rows=0.00 loops=1)
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
                Filter: (device = 'a'::text)
-(6 rows)
 
 BEGIN; :EXPLAIN EXECUTE q1('not here'); ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on test_pushdown (actual rows=0.00 loops=1)
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
                Filter: (device = 'not here'::text)
-(5 rows)
 
 -- test arrayop pushdown less than 3 decompressions are expected for successful pushdown
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a','d'); ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches deleted: 1
    ->  Delete on test_pushdown (actual rows=0.00 loops=1)
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
                Filter: (device = ANY ('{a,d}'::text[]))
-(6 rows)
 
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = ANY('{a,d}'); ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches deleted: 1
    ->  Delete on test_pushdown (actual rows=0.00 loops=1)
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
                Filter: (device = ANY ('{a,d}'::text[]))
-(6 rows)
 
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',CURRENT_USER); ROLLBACK;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 1
    Tuples decompressed: 1
@@ -3310,12 +2969,10 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',CURRENT_USER); RO
                Chunks excluded during startup: 0
                ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=1.00 loops=1)
                      Filter: (device = ANY (ARRAY['a'::text, (CURRENT_USER)::text]))
-(9 rows)
 
 -- arroyop pushdown only works for segmentby columns atm so 3 decompressions are expected for now
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time IN ('2020-01-01','2020-01-02'); ROLLBACK;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 3
    Tuples decompressed: 3
@@ -3324,12 +2981,10 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time IN ('2020-01-01','2020-01-0
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=2.00 loops=1)
                Filter: ("time" = ANY ('{"Wed Jan 01 00:00:00 2020 PST","Thu Jan 02 00:00:00 2020 PST"}'::timestamp with time zone[]))
                Rows Removed by Filter: 1
-(8 rows)
 
 -- no pushdown for volatile functions
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = current_query(); ROLLBACK;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 3
    Tuples decompressed: 3
@@ -3340,11 +2995,9 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = current_query(); ROLLBA
                ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
                      Filter: (device = current_query())
                      Rows Removed by Filter: 3
-(10 rows)
 
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',current_query()); ROLLBACK;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 3
    Tuples decompressed: 3
@@ -3355,34 +3008,29 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',current_query());
                ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=1.00 loops=1)
                      Filter: (device = ANY (ARRAY['a'::text, current_query()]))
                      Rows Removed by Filter: 2
-(10 rows)
 
 -- test DELETE optimization without predicates
 -- should delete 3 complete batches without decompression
 BEGIN; :EXPLAIN DELETE FROM test_pushdown; ROLLBACK;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches deleted: 3
    ->  Delete on test_pushdown (actual rows=0.00 loops=1)
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
-(5 rows)
 
 -- test DELETE optimization on non-segmentby columns
 -- this shows optimization can be applied if in-memory filtering is enabled
 \set QUIET off
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
 BEGIN
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches deleted: 3
    ->  Delete on test_pushdown (actual rows=0.00 loops=1)
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
                Filter: ("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone)
-(6 rows)
 
 ROLLBACK
 BEGIN; DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
@@ -3393,8 +3041,7 @@ SET timescaledb.enable_dml_decompression_tuple_filtering TO OFF;
 SET
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
 BEGIN
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 3
    Tuples decompressed: 3
@@ -3402,7 +3049,6 @@ BEGIN
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=3.00 loops=1)
                Filter: ("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone)
-(7 rows)
 
 ROLLBACK
 BEGIN; DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
@@ -3424,7 +3070,6 @@ SELECT create_hypertable('update_trigger_test', 'effective_date_time');
          create_hypertable         
 -----------------------------------
  (41,public,update_trigger_test,t)
-(1 row)
 
 CREATE OR REPLACE FUNCTION update_modified_at_test()
 RETURNS TRIGGER
@@ -3451,7 +3096,6 @@ SELECT compress_chunk(show_chunks('update_trigger_test'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_41_78_chunk
-(1 row)
 
 BEGIN;
 UPDATE update_trigger_test SET measurement = measurement + 2
@@ -3462,14 +3106,12 @@ SELECT decompress_chunk(show_chunks('update_trigger_test'));
              decompress_chunk             
 ------------------------------------------
  _timescaledb_internal._hyper_41_78_chunk
-(1 row)
 
 ALTER TABLE update_trigger_test SET (timescaledb.compress, timescaledb.compress_segmentby='entity_id');
 SELECT compress_chunk(show_chunks('update_trigger_test'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_41_78_chunk
-(1 row)
 
 BEGIN;
 UPDATE update_trigger_test SET measurement = measurement + 2
@@ -3485,15 +3127,13 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('delete_counter') ch;
  count 
 -------
      2
-(1 row)
 
 INSERT INTO delete_counter SELECT '2020-02-01'::timestamptz, 'd' from generate_series(1,123);
 INSERT INTO delete_counter SELECT '2020-03-01'::timestamptz, 'e' from generate_series(1,123);
 \set QUIET off
 BEGIN; :EXPLAIN DELETE FROM delete_counter; ROLLBACK;
 BEGIN
-                                         QUERY PLAN                                          
----------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches deleted: 3
    ->  Delete on delete_counter (actual rows=0.00 loops=1)
@@ -3504,7 +3144,6 @@ BEGIN
                ->  Seq Scan on _hyper_43_81_chunk delete_counter_1 (actual rows=0.00 loops=1)
                ->  Seq Scan on _hyper_43_82_chunk delete_counter_2 (actual rows=123.00 loops=1)
                ->  Seq Scan on _hyper_43_85_chunk delete_counter_3 (actual rows=123.00 loops=1)
-(10 rows)
 
 ROLLBACK
 BEGIN; DELETE FROM delete_counter; ROLLBACK;
@@ -3513,8 +3152,7 @@ DELETE 615
 ROLLBACK
 BEGIN; :EXPLAIN DELETE FROM delete_counter WHERE random() < 1; ROLLBACK;
 BEGIN
-                                         QUERY PLAN                                          
----------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 3
    Tuples decompressed: 369
@@ -3530,10 +3168,62 @@ BEGIN
                      Filter: (random() < '1'::double precision)
                ->  Seq Scan on _hyper_43_85_chunk delete_counter_3 (actual rows=123.00 loops=1)
                      Filter: (random() < '1'::double precision)
-(15 rows)
 
 ROLLBACK
 BEGIN; DELETE FROM delete_counter WHERE random() < 1; ROLLBACK;
 BEGIN
 DELETE 615
 ROLLBACK
+-- test invalidation with direct batch delete optimizations
+CREATE TABLE cagg_inval(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time');
+CREATE TABLE
+INSERT INTO cagg_inval SELECT '2020-01-01'::timestamptz, 'd1', 1.0;
+INSERT 0 1
+INSERT INTO cagg_inval SELECT '2021-01-01'::timestamptz, 'd1', 1.0;
+INSERT 0 1
+SELECT count(compress_chunk(ch)) FROM show_chunks('cagg_inval') ch;
+ count 
+-------
+     2
+
+SET timescaledb.enable_compressed_direct_batch_delete TO on;
+SET
+-- delete without cagg should use optimization
+BEGIN;
+BEGIN
+EXPLAIN (analyze,costs off, timing off,summary off, buffers off) DELETE FROM cagg_inval;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches deleted: 2
+   ->  Delete on cagg_inval (actual rows=0.00 loops=1)
+         Delete on _hyper_45_86_chunk cagg_inval_1
+         Delete on _hyper_45_87_chunk cagg_inval_2
+         ->  Append (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_45_86_chunk cagg_inval_1 (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_45_87_chunk cagg_inval_2 (actual rows=0.00 loops=1)
+
+ROLLBACK;
+ROLLBACK
+CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_bucket('1 day', time) FROM cagg_inval GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "cagg1"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+CREATE MATERIALIZED VIEW
+-- should not use direct batch delete
+EXPLAIN (analyze,costs off, timing off,summary off, buffers off) DELETE FROM cagg_inval;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches decompressed: 2
+   Tuples decompressed: 2
+   ->  Delete on cagg_inval (actual rows=0.00 loops=1)
+         Delete on _hyper_45_86_chunk cagg_inval_1
+         Delete on _hyper_45_87_chunk cagg_inval_2
+         ->  Append (actual rows=2.00 loops=1)
+               ->  Seq Scan on _hyper_45_86_chunk cagg_inval_1 (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_45_87_chunk cagg_inval_2 (actual rows=1.00 loops=1)
+
+-- should have invalidation entry
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ hypertable_id | lowest_modified_value | greatest_modified_value 
+---------------+-----------------------+-------------------------
+            45 |      1577865600000000 |        1609488000000000
+

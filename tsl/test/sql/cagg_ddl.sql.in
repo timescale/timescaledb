@@ -23,7 +23,7 @@ SELECT table_name FROM create_hypertable('conditions', 'timec');
 
 -- schema tests
 
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 
 SET timezone TO 'UTC+8';
 
@@ -745,7 +745,7 @@ ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 \set ON_ERROR_STOP 1
 
 -- Superuser can always change owner
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 
 \x on

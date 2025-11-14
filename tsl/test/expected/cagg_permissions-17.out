@@ -40,14 +40,12 @@ select table_name from create_hypertable( 'conditions', 'timec', chunk_time_inte
  table_name 
 ------------
  conditions
-(1 row)
 
 CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions $$;
 SELECT set_integer_now_func('conditions', 'integer_now_test1');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 CREATE MATERIALIZED VIEW mat_refresh_test
 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
@@ -72,7 +70,6 @@ SELECT add_continuous_aggregate_policy('mat_refresh_test', NULL, -200::integer, 
  add_continuous_aggregate_policy 
 ---------------------------------
                             1000
-(1 row)
 
 insert into conditions
 select generate_series(0, 50, 10), 'NYC', 55, 75, 40, 70, NULL;
@@ -100,14 +97,12 @@ select table_name from create_hypertable('conditions_for_perm_check', 'timec', c
         table_name         
 ---------------------------
  conditions_for_perm_check
-(1 row)
 
 CREATE OR REPLACE FUNCTION integer_now_test2() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions_for_perm_check $$;
 SELECT set_integer_now_func('conditions_for_perm_check', 'integer_now_test2');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 CREATE TABLE conditions_for_perm_check_w_grant (
       timec       INT       NOT NULL,
@@ -122,14 +117,12 @@ select table_name from create_hypertable('conditions_for_perm_check_w_grant', 't
             table_name             
 -----------------------------------
  conditions_for_perm_check_w_grant
-(1 row)
 
 CREATE OR REPLACE FUNCTION integer_now_test3() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0) FROM conditions_for_perm_check_w_grant $$;
 SELECT set_integer_now_func('conditions_for_perm_check_w_grant', 'integer_now_test3');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 GRANT SELECT, TRIGGER ON conditions_for_perm_check_w_grant TO public;
 insert into conditions_for_perm_check_w_grant
@@ -207,7 +200,6 @@ SELECT * FROM mat_perm_view_test;
  location | max 
 ----------+-----
  POR      |  75
-(1 row)
 
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --revoke select permissions from role with mat view
@@ -225,7 +217,6 @@ SELECT * FROM mat_perm_view_test;
  location | max 
 ----------+-----
  POR      |  75
-(1 row)
 
 \set VERBOSITY default
 -- Test that grants and revokes are propagated to the implementation
@@ -241,8 +232,7 @@ CREATE TABLE devices (
 SELECT create_hypertable('devices', 'time');
   create_hypertable   
 ----------------------
- (9,public,devices,t)
-(1 row)
+ (8,public,devices,t)
 
 GRANT SELECT, TRIGGER ON devices TO :ROLE_DEFAULT_PERM_USER_2;
 INSERT INTO devices
@@ -255,14 +245,14 @@ AS SELECT time_bucket('1 day', time) AS bucket, device, MAX(temp)
 FROM devices GROUP BY bucket, device WITH NO DATA;
 \x on
 SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
--[ RECORD 1 ]-----+---------------------------------------
+-[ RECORD 1 ]-----+--------------------------------------
 user_view         | devices_summary
 user_view_perm    | 
-mat_table         | _materialized_hypertable_10
+mat_table         | _materialized_hypertable_9
 mat_table_perm    | 
-direct_view       | _timescaledb_internal._direct_view_10
+direct_view       | _timescaledb_internal._direct_view_9
 direct_view_perm  | 
-partial_view      | _timescaledb_internal._partial_view_10
+partial_view      | _timescaledb_internal._partial_view_9
 partial_view_perm | 
 
 GRANT ALL ON devices_summary TO :ROLE_DEFAULT_PERM_USER;
@@ -270,11 +260,11 @@ SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
 -[ RECORD 1 ]-----+--------------------------------------------------------------------------------------------------
 user_view         | devices_summary
 user_view_perm    | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=arwdDxtm/default_perm_user_2}
-mat_table         | _materialized_hypertable_10
+mat_table         | _materialized_hypertable_9
 mat_table_perm    | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=arwdDxtm/default_perm_user_2}
-direct_view       | _timescaledb_internal._direct_view_10
+direct_view       | _timescaledb_internal._direct_view_9
 direct_view_perm  | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=arwdDxtm/default_perm_user_2}
-partial_view      | _timescaledb_internal._partial_view_10
+partial_view      | _timescaledb_internal._partial_view_9
 partial_view_perm | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=arwdDxtm/default_perm_user_2}
 
 REVOKE SELECT, UPDATE ON devices_summary FROM :ROLE_DEFAULT_PERM_USER;
@@ -282,11 +272,11 @@ SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
 -[ RECORD 1 ]-----+------------------------------------------------------------------------------------------------
 user_view         | devices_summary
 user_view_perm    | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=adDxtm/default_perm_user_2}
-mat_table         | _materialized_hypertable_10
+mat_table         | _materialized_hypertable_9
 mat_table_perm    | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=adDxtm/default_perm_user_2}
-direct_view       | _timescaledb_internal._direct_view_10
+direct_view       | _timescaledb_internal._direct_view_9
 direct_view_perm  | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=adDxtm/default_perm_user_2}
-partial_view      | _timescaledb_internal._partial_view_10
+partial_view      | _timescaledb_internal._partial_view_9
 partial_view_perm | {default_perm_user_2=arwdDxtm/default_perm_user_2,default_perm_user=adDxtm/default_perm_user_2}
 
 \x off
@@ -304,8 +294,7 @@ CREATE TABLE test_default_privileges.devices (
 SELECT create_hypertable('test_default_privileges.devices', 'time');
            create_hypertable            
 ----------------------------------------
- (11,test_default_privileges,devices,t)
-(1 row)
+ (10,test_default_privileges,devices,t)
 
 CREATE MATERIALIZED VIEW test_default_privileges.devices_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
@@ -321,5 +310,4 @@ WHERE user_view = 'test_default_privileges.devices_summary'::regclass;
  ?column? 
 ----------
  t
-(1 row)
 

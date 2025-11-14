@@ -51,8 +51,7 @@ $BODY$;
 EXPLAIN (buffers off, costs off)
 SELECT FROM "one_Partition"
 WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_val());
-                                                                  QUERY PLAN                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Hash Join
    Hash Cond: ("one_Partition".series_1 = "one_Partition_1".series_1)
    ->  Custom Scan (ChunkAppend) on "one_Partition"
@@ -74,15 +73,13 @@ WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_
                            Index Cond: (series_1 > (series_val())::double precision)
                      ->  Index Only Scan using "_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_3_chunk _hyper_1_3_chunk_1
                            Index Cond: (series_1 > (series_val())::double precision)
-(21 rows)
 
 -- ConstraintAwareAppend NOT applied for UPDATE
 EXPLAIN (buffers off, costs off)
 UPDATE "one_Partition"
 SET series_1 = 8
 WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_val());
-                                                                     QUERY PLAN                                                                      
------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    ->  Update on "one_Partition"
          Update on _hyper_1_1_chunk "one_Partition_2"
@@ -104,7 +101,6 @@ WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_
                                        Index Cond: (series_1 > (series_val())::double precision)
                                  ->  Index Scan using "_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_3_chunk "one_Partition_7"
                                        Index Cond: (series_1 > (series_val())::double precision)
-(21 rows)
 
 SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series_1, series_2;
      timeCustom      | device_id | series_0 | series_1 | series_2 | series_bool 
@@ -121,7 +117,6 @@ SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
  1257987600000000000 | dev1      |      1.5 |        1 |          | 
  1257987600000000000 | dev1      |      1.5 |        2 |          | 
-(12 rows)
 
 UPDATE "one_Partition"
 SET series_1 = 8
@@ -141,7 +136,6 @@ SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
  1257987600000000000 | dev1      |      1.5 |        1 |          | 
  1257987600000000000 | dev1      |      1.5 |        2 |          | 
-(12 rows)
 
 UPDATE "one_Partition" SET series_1 = 47;
 UPDATE "one_Partition" SET series_bool = true;
@@ -160,7 +154,6 @@ SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series
  1257897600000000000 | dev1      |      4.5 |       47 |          | t
  1257987600000000000 | dev1      |      1.5 |       47 |          | t
  1257987600000000000 | dev1      |      1.5 |       47 |          | t
-(12 rows)
 
 -- test update on chunks directly
 CREATE TABLE direct_update(time timestamptz) WITH (tsdb.hypertable);
@@ -169,33 +162,27 @@ INSERT INTO direct_update VALUES ('2020-01-01');
 SELECT show_chunks('direct_update') AS "CHUNK" \gset
 --should have ModifyHyperable node
 EXPLAIN (costs off, timing off, summary off) UPDATE :CHUNK SET time = time + INTERVAL '1 minute';
-                QUERY PLAN                
-------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    ->  Update on _hyper_2_4_chunk
          ->  Seq Scan on _hyper_2_4_chunk
-(3 rows)
 
 EXPLAIN (costs off, timing off, summary off) UPDATE ONLY :CHUNK SET time = time + INTERVAL '1 minute';
-                QUERY PLAN                
-------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    ->  Update on _hyper_2_4_chunk
          ->  Seq Scan on _hyper_2_4_chunk
-(3 rows)
 
 -- correct time range should succeed
 UPDATE :CHUNK SET time = time + INTERVAL '1 minute' RETURNING *;
              time             
 ------------------------------
  Wed Jan 01 00:01:00 2020 PST
-(1 row)
 
 UPDATE ONLY :CHUNK SET time = time + INTERVAL '1 minute' RETURNING *;
              time             
 ------------------------------
  Wed Jan 01 00:02:00 2020 PST
-(1 row)
 
 -- crossing chunk boundary should fail
 \set ON_ERROR_STOP 0

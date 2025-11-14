@@ -19,15 +19,15 @@ SET enable_memoize TO on;
 -- LICENSE-TIMESCALE for a copy of the license.
 SHOW enable_memoize;
  enable_memoize 
+----------------
  on
-(1 row)
 
 :PREFIX
 SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
 LEFT JOIN LATERAL (SELECT time FROM :TEST_TABLE m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true
 ORDER BY m1.time;
-QUERY PLAN
+--- QUERY PLAN ---
  Nested Loop Left Join (actual rows=68370.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics m1 (actual rows=68370.00 loops=1)
          Order: m1."time"
@@ -47,7 +47,6 @@ QUERY PLAN
                            Index Cond: ("time" = m1."time")
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (actual rows=1.00 loops=5038)
                            Index Cond: ("time" = m1."time")
-(25 rows)
 
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
@@ -56,15 +55,15 @@ QUERY PLAN
 -- LICENSE-TIMESCALE for a copy of the license.
 SHOW enable_memoize;
  enable_memoize 
+----------------
  on
-(1 row)
 
 :PREFIX
 SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
 LEFT JOIN LATERAL (SELECT time FROM :TEST_TABLE m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true
 ORDER BY m1.time;
-QUERY PLAN
+--- QUERY PLAN ---
  Nested Loop Left Join (actual rows=68370.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space m1 (actual rows=68370.00 loops=1)
          Order: m1."time"
@@ -108,7 +107,6 @@ QUERY PLAN
                            Index Cond: ("time" = m1."time")
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
                            Index Cond: ("time" = m1."time")
-(61 rows)
 
 \set TEST_TABLE 'metrics_compressed'
 \ir :TEST_QUERY_NAME
@@ -117,15 +115,15 @@ QUERY PLAN
 -- LICENSE-TIMESCALE for a copy of the license.
 SHOW enable_memoize;
  enable_memoize 
+----------------
  on
-(1 row)
 
 :PREFIX
 SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
 LEFT JOIN LATERAL (SELECT time FROM :TEST_TABLE m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true
 ORDER BY m1.time;
-QUERY PLAN
+--- QUERY PLAN ---
  Nested Loop Left Join (actual rows=68370.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed m1 (actual rows=68370.00 loops=1)
          Order: m1."time"
@@ -174,7 +172,6 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=1.00 loops=5038)
                                  Filter: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
                                  Rows Removed by Filter: 2
-(50 rows)
 
 \set TEST_TABLE 'metrics_space_compressed'
 \ir :TEST_QUERY_NAME
@@ -183,15 +180,15 @@ QUERY PLAN
 -- LICENSE-TIMESCALE for a copy of the license.
 SHOW enable_memoize;
  enable_memoize 
+----------------
  on
-(1 row)
 
 :PREFIX
 SELECT m1.time, m2.time
 FROM :TEST_TABLE m1
 LEFT JOIN LATERAL (SELECT time FROM :TEST_TABLE m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true
 ORDER BY m1.time;
-QUERY PLAN
+--- QUERY PLAN ---
  Nested Loop Left Join (actual rows=68370.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed m1 (actual rows=68370.00 loops=1)
          Order: m1."time"
@@ -295,7 +292,6 @@ QUERY PLAN
                            Filter: (m1."time" = "time")
                            ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
                                  Filter: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
-(103 rows)
 
 -- get results for all the queries
 -- run queries with and without memoize
@@ -308,7 +304,6 @@ QUERY PLAN
  ----------------
 - off
 + on
- (1 row)
  
               time             |             time             
 @@ -68379,7 +68379,7 @@
@@ -317,7 +312,6 @@ QUERY PLAN
  ----------------
 - off
 + on
- (1 row)
  
               time             |             time             
 @@ -136758,7 +136758,7 @@
@@ -326,7 +320,6 @@ QUERY PLAN
  ----------------
 - off
 + on
- (1 row)
  
               time             |             time             
 @@ -205137,7 +205137,7 @@
@@ -335,6 +328,5 @@ QUERY PLAN
  ----------------
 - off
 + on
- (1 row)
  
               time             |             time             

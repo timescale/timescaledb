@@ -43,13 +43,12 @@ SELECT * FROM my_jobs;
 -------------+------------+--------------
  public      | more_magic | another_user
  public      | some_magic | another_user
-(2 rows)
 
 -- Test that reassigning to another user privileges does not work for
 -- a normal user. We test both users with superuser privileges and
 -- default permissions.
 \set ON_ERROR_STOP 0
-REASSIGN OWNED BY another_user TO :ROLE_CLUSTER_SUPERUSER;
+REASSIGN OWNED BY another_user TO :ROLE_SUPERUSER;
 ERROR:  permission denied to reassign objects
 REASSIGN OWNED BY another_user TO :ROLE_DEFAULT_PERM_USER;
 ERROR:  permission denied to reassign objects
@@ -62,7 +61,6 @@ SELECT * FROM my_jobs;
 -------------+------------+--------------
  public      | more_magic | renamed_user
  public      | some_magic | renamed_user
-(2 rows)
 
 -- Test that renaming the procedure also modifies the entry in the
 -- jobs table.
@@ -72,7 +70,6 @@ SELECT * FROM my_jobs;
 -------------+------------+--------------
  public      | magic      | renamed_user
  public      | some_magic | renamed_user
-(2 rows)
 
 -- Test that modifying the schema also modifies the entry in the jobs
 -- table.
@@ -84,7 +81,6 @@ SELECT * FROM my_jobs;
 -------------+------------+--------------
  frugal      | magic      | renamed_user
  frugal      | some_magic | renamed_user
-(2 rows)
 
 -- Test that renaming the schema will rename the procedure schema
 START TRANSACTION;
@@ -94,7 +90,6 @@ SELECT * FROM my_jobs;
 -------------+------------+--------------
  wicked      | magic      | renamed_user
  wicked      | some_magic | renamed_user
-(2 rows)
 
 ROLLBACK;
 \set VERBOSITY default
@@ -104,7 +99,6 @@ SELECT * FROM my_jobs;
 -------------+------------+--------------
  frugal      | magic      | renamed_user
  frugal      | some_magic | renamed_user
-(2 rows)
 
 -- Test that dropping a user owning a job fails.
 DROP USER renamed_user;
@@ -134,17 +128,15 @@ SELECT * FROM my_jobs;
 -------------+------------+-------------------
  frugal      | magic      | default_perm_user
  frugal      | some_magic | default_perm_user
-(2 rows)
 
 ROLLBACK;
 -- Test that reassigning to postgres works
-REASSIGN OWNED BY renamed_user TO :ROLE_CLUSTER_SUPERUSER;
+REASSIGN OWNED BY renamed_user TO :ROLE_SUPERUSER;
 SELECT * FROM my_jobs;
- proc_schema | proc_name  |       owner        
--------------+------------+--------------------
- frugal      | magic      | cluster_super_user
- frugal      | some_magic | cluster_super_user
-(2 rows)
+ proc_schema | proc_name  |   owner    
+-------------+------------+------------
+ frugal      | magic      | super_user
+ frugal      | some_magic | super_user
 
 -- Dropping the user now should work.
 DROP USER renamed_user;
@@ -152,19 +144,17 @@ DROP USER renamed_user;
 -- entry as well.
 START TRANSACTION;
 SELECT * FROM my_jobs;
- proc_schema | proc_name  |       owner        
--------------+------------+--------------------
- frugal      | magic      | cluster_super_user
- frugal      | some_magic | cluster_super_user
-(2 rows)
+ proc_schema | proc_name  |   owner    
+-------------+------------+------------
+ frugal      | magic      | super_user
+ frugal      | some_magic | super_user
 
 DROP PROCEDURE frugal.magic CASCADE;
 NOTICE:  drop cascades to job 1001
 SELECT * FROM my_jobs;
- proc_schema | proc_name  |       owner        
--------------+------------+--------------------
- frugal      | some_magic | cluster_super_user
-(1 row)
+ proc_schema | proc_name  |   owner    
+-------------+------------+------------
+ frugal      | some_magic | super_user
 
 ROLLBACK;
 DELETE FROM _timescaledb_config.bgw_job WHERE id = :job_id;
@@ -175,10 +165,9 @@ DROP PROCEDURE frugal.magic;
 -- containing a procedure used by a background worker, but this should
 -- remove the job from the background worker table.
 SELECT * FROM my_jobs;
- proc_schema | proc_name  |       owner        
--------------+------------+--------------------
- frugal      | some_magic | cluster_super_user
-(1 row)
+ proc_schema | proc_name  |   owner    
+-------------+------------+------------
+ frugal      | some_magic | super_user
 
 DROP SCHEMA frugal CASCADE;
 NOTICE:  drop cascades to job 1000
@@ -186,5 +175,4 @@ NOTICE:  drop cascades to function frugal.some_magic(integer,jsonb)
 SELECT * FROM my_jobs;
  proc_schema | proc_name | owner 
 -------------+-----------+-------
-(0 rows)
 

@@ -23,7 +23,6 @@ SELECT create_hypertable('t', 'ts', chunk_time_interval => 5000);
  create_hypertable 
 -------------------
  (1,public,t,t)
-(1 row)
 
 -- explicitly disable bool compression so the test
 -- doesn't depend on the default setting
@@ -37,7 +36,6 @@ SELECT max(ts) FROM t;
   max  
 -------
  20000
-(1 row)
 
 ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 SELECT compress_chunk(show_chunks('t'));
@@ -48,7 +46,6 @@ SELECT compress_chunk(show_chunks('t'));
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_1_5_chunk
-(5 rows)
 
 CREATE TABLE chunks_done AS SELECT show_chunks('t') AS chunk_name;
 SELECT * FROM chunks_done;
@@ -59,7 +56,6 @@ SELECT * FROM chunks_done;
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_1_5_chunk
-(5 rows)
 
 SELECT
 	chunk_schema, chunk_name, compression_status,
@@ -75,7 +71,6 @@ FROM
  _timescaledb_internal | _hyper_1_3_chunk | Compressed         |                         65536
  _timescaledb_internal | _hyper_1_4_chunk | Compressed         |                         65536
  _timescaledb_internal | _hyper_1_5_chunk | Compressed         |                         40960
-(5 rows)
 
 -- enable bool compression and add more data, so the two compression
 -- methods will co-exist and we can test both, plus compare the
@@ -91,7 +86,6 @@ SELECT max(ts) FROM t;
   max  
 -------
  40000
-(1 row)
 
 SELECT
 	compress_chunk(c)
@@ -105,7 +99,6 @@ WHERE
  _timescaledb_internal._hyper_1_12_chunk
  _timescaledb_internal._hyper_1_13_chunk
  _timescaledb_internal._hyper_1_14_chunk
-(4 rows)
 
 SELECT
 	chunk_schema, chunk_name, compression_status,
@@ -126,7 +119,6 @@ WHERE
  _timescaledb_internal | _hyper_1_12_chunk | Compressed         |                         40960
  _timescaledb_internal | _hyper_1_13_chunk | Compressed         |                         40960
  _timescaledb_internal | _hyper_1_14_chunk | Compressed         |                         40960
-(4 rows)
 
 -- check the compression algorithm for the compressed chunks
 CREATE TABLE compressed_chunks AS
@@ -191,7 +183,6 @@ ORDER BY
  _timescaledb_internal.compress_hyper_2_16_chunk | (BOOL,f)  |             145 |        5 |                  8192 |                    5000 |                        5
  _timescaledb_internal.compress_hyper_2_17_chunk | (BOOL,f)  |             145 |        5 |                  8192 |                    5000 |                        5
  _timescaledb_internal.compress_hyper_2_18_chunk | (BOOL,f)  |              29 |        1 |                  8192 |                       1 |                        1
-(11 rows)
 
 DROP TABLE t;
 DROP TABLE d;

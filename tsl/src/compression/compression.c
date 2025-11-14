@@ -44,7 +44,7 @@
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
-#include <nodes/decompress_chunk/vector_quals.h>
+#include <nodes/columnar_scan/vector_quals.h>
 
 /*
  * Timing parameters for truncate locking heuristics.
@@ -189,7 +189,6 @@ truncate_relation(Oid table_oid)
 #else
 		RelationSetNewRelfilenumber(rel, rel->rd_rel->relpersistence);
 #endif
-		Assert(rel->rd_rel->relpersistence != RELPERSISTENCE_UNLOGGED);
 		table_close(rel, NoLock);
 	}
 

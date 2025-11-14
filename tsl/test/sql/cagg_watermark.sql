@@ -19,16 +19,8 @@ INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2), (21, 3), (22, 4);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE TABLE continuous_agg_test_mat(time int);
-SELECT create_hypertable('continuous_agg_test_mat', 'time', chunk_time_interval=> 10);
-INSERT INTO _timescaledb_catalog.continuous_agg VALUES (2, 1, NULL, '', '', '', '', '', '');
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-
--- create the trigger
-CREATE TRIGGER continuous_agg_insert_trigger
-    AFTER INSERT ON continuous_agg_test
-    FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger(1);
+CREATE MATERIALIZED VIEW cagg1 WITH (tsdb.continuous, tsdb.materialized_only=false)
+  AS SELECT time_bucket('5', time) FROM continuous_agg_test GROUP BY 1 WITH NO DATA;
 
 -- inserting into the table still doesn't change the watermark since there's no
 -- continuous_aggs_invalidation_threshold. We treat that case as a invalidation_watermark of
@@ -41,7 +33,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
 -- set the continuous_aggs_invalidation_threshold to 15, any insertions below that value need an invalidation
 \c :TEST_DBNAME :ROLE_SUPERUSER
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, 15);
+UPDATE _timescaledb_catalog.continuous_aggs_invalidation_threshold SET watermark = 15 WHERE hypertable_id = 1;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2), (21, 3), (22, 4);
@@ -585,3 +577,11 @@ other AS (
     SELECT * FROM generate_series(1,10)
 )
 SELECT * FROM cagg, other WHERE time_bucket > 10;
+
+-- test error handling
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.cagg_watermark(-1);
+SELECT COALESCE(_timescaledb_functions.cagg_watermark(-1),12);
+SELECT _timescaledb_functions.cagg_watermark_materialized(-1);
+SELECT COALESCE(_timescaledb_functions.cagg_watermark_materialized(-1),12);
+\set ON_ERROR_STOP 1

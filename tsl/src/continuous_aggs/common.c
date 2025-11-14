@@ -6,6 +6,7 @@
 
 #include "common.h"
 
+#include <utils/acl.h>
 #include <utils/date.h>
 #include <utils/timestamp.h>
 
@@ -24,7 +25,7 @@ static void process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunct
 										  AttrNumber htpartcolno);
 static void caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause,
 									List *targetList, List *rtable, bool is_cagg_create);
-static bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
+static bool cagg_query_supported(const Query *query, StringInfoData *hint, StringInfoData *detail,
 								 const bool finalized);
 static Datum get_bucket_width_datum(ContinuousAggTimeBucketInfo bucket_info);
 static int64 get_bucket_width(ContinuousAggTimeBucketInfo bucket_info);
@@ -513,7 +514,8 @@ caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause, 
  *   added.
  */
 static bool
-cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, const bool finalized)
+cagg_query_supported(const Query *query, StringInfoData *hint, StringInfoData *detail,
+					 const bool finalized)
 {
 	if (!finalized)
 	{
@@ -704,19 +706,22 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	ContinuousAggTimeBucketInfo bucket_info_parent = { 0 };
 	Hypertable *ht = NULL, *ht_parent = NULL;
 	RangeTblEntry *rte = NULL;
-	StringInfo hint = makeStringInfo();
-	StringInfo detail = makeStringInfo();
+	StringInfoData hint;
+	StringInfoData detail;
 	bool is_hierarchical = false;
 	Query *prev_query = NULL;
 	ContinuousAgg *cagg_parent = NULL;
 
-	if (!cagg_query_supported(query, hint, detail, finalized))
+	initStringInfo(&hint);
+	initStringInfo(&detail);
+
+	if (!cagg_query_supported(query, &hint, &detail, finalized))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("invalid continuous aggregate query"),
-				 hint->len > 0 ? errhint("%s", hint->data) : 0,
-				 detail->len > 0 ? errdetail("%s", detail->data) : 0));
+				 hint.len > 0 ? errhint("%s", hint.data) : 0,
+				 detail.len > 0 ? errdetail("%s", detail.data) : 0));
 	}
 
 	int num_hypertables = 0;
@@ -836,6 +841,23 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		/* Get the querydef for the source cagg. */
 		is_hierarchical = true;
 		prev_query = ts_continuous_agg_get_query(cagg_parent);
+	}
+
+	/*
+	 * Check if user can refresh continuous aggregate
+	 * We only check for SELECT on the hypertable here but there
+	 * could be other permissions needed depending on the query.
+	 * For WITH DATA this is not a problem since we try a refresh
+	 * immediately but for WITH NO DATA the refresh might still
+	 * fail due to other permissions being needed.
+	 */
+	AclResult aclresult = pg_class_aclcheck(ht->main_table_relid, GetUserId(), ACL_SELECT);
+	if (aclresult != ACLCHECK_OK)
+	{
+		/* User doesn't have permission */
+		aclcheck_error(aclresult,
+					   get_relkind_objtype(get_rel_relkind(ht->main_table_relid)),
+					   get_rel_name(ht->main_table_relid));
 	}
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))

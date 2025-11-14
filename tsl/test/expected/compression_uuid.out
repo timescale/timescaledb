@@ -15,7 +15,6 @@ SELECT create_hypertable('t', 'ts', chunk_time_interval => 500);
  create_hypertable 
 -------------------
  (1,public,t,t)
-(1 row)
 
 ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 INSERT INTO t SELECT g AS ts, NULL AS uuid FROM generate_series(1, 3000) g;
@@ -64,7 +63,6 @@ SELECT compress_chunk(show_chunks('t'));
  _timescaledb_internal._hyper_1_5_chunk
  _timescaledb_internal._hyper_1_6_chunk
  _timescaledb_internal._hyper_1_7_chunk
-(7 rows)
 
 -- decompress the data
 SELECT decompress_chunk(show_chunks('t'));
@@ -77,7 +75,6 @@ SELECT decompress_chunk(show_chunks('t'));
  _timescaledb_internal._hyper_1_5_chunk
  _timescaledb_internal._hyper_1_6_chunk
  _timescaledb_internal._hyper_1_7_chunk
-(7 rows)
 
 -- disable uuid compression and compress the data again
 SET timescaledb.enable_uuid_compression = off;
@@ -91,14 +88,12 @@ SELECT compress_chunk(show_chunks('t'));
  _timescaledb_internal._hyper_1_5_chunk
  _timescaledb_internal._hyper_1_6_chunk
  _timescaledb_internal._hyper_1_7_chunk
-(7 rows)
 
 CREATE TABLE mixed_compressed (ts int, u uuid);
 SELECT create_hypertable('mixed_compressed', 'ts', chunk_time_interval => 500);
        create_hypertable       
 -------------------------------
  (3,public,mixed_compressed,t)
-(1 row)
 
 ALTER TABLE mixed_compressed SET (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 -- the new UUID compression is OFF at this point, so we use the original method
@@ -110,7 +105,6 @@ SELECT compress_chunk(show_chunks('mixed_compressed'));
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_3_22_chunk
-(1 row)
 
 -- enable uuid compression and compress the data again
 -- and add the base uuids to the data again
@@ -124,7 +118,6 @@ NOTICE:  chunk "_hyper_3_22_chunk" is already converted to columnstore
 -----------------------------------------
  _timescaledb_internal._hyper_3_22_chunk
  _timescaledb_internal._hyper_3_24_chunk
-(2 rows)
 
 -- now turn it off again and add the whole data twice
 SET timescaledb.enable_uuid_compression = off;
@@ -140,7 +133,6 @@ NOTICE:  chunk "_hyper_3_24_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_3_22_chunk
  _timescaledb_internal._hyper_3_24_chunk
  _timescaledb_internal._hyper_3_26_chunk
-(3 rows)
 
 -- turn it on again and do the same
 SET timescaledb.enable_uuid_compression = off;
@@ -158,7 +150,6 @@ NOTICE:  chunk "_hyper_3_26_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_3_24_chunk
  _timescaledb_internal._hyper_3_26_chunk
  _timescaledb_internal._hyper_3_28_chunk
-(4 rows)
 
 -- check the compression algorithm for the compressed chunks
 CREATE TABLE compressed_chunks AS
@@ -216,7 +207,6 @@ ORDER BY
  _timescaledb_internal.compress_hyper_4_25_chunk | (UUID,t)       |             976 |        1 |                  8192 |                     200 |                        1
  _timescaledb_internal.compress_hyper_4_27_chunk | (DICTIONARY,t) |            1352 |        1 |                  8192 |                     300 |                        1
  _timescaledb_internal.compress_hyper_4_29_chunk | (DICTIONARY,t) |            1352 |        1 |                  8192 |                     300 |                        1
-(4 rows)
 
 -- -------------------------------
 -- Test the new UUID v7 functions
@@ -243,7 +233,6 @@ ORDER BY 1,2;
  2029-01-02:03:04:05 |            7 |     1
  2059-02-03:04:05:06 |            7 |     1
  2100-07-08:09:10:11 |            7 |     1
-(5 rows)
 
 -- Add some v4 timestamps for sanity check
 BEGIN;
@@ -276,7 +265,6 @@ ORDER BY 1;
  108 |            7
  109 |            7
  110 |            7
-(10 rows)
 
 -- The version numbers should make sense
 SELECT
@@ -296,7 +284,6 @@ ORDER BY 1;
 --------------+-------
             4 |     3
             7 |   107
-(2 rows)
 
 -- Filter UUIDs on timestamp part by using both zeroed UUID and
 -- extracted timestamp. Both methods should yield the same count.
@@ -313,7 +300,6 @@ WHERE
  count_total | count_below_on_uuid | count_below_on_time | count_above_on_uuid | count_above_on_time 
 -------------+---------------------+---------------------+---------------------+---------------------
          107 |                  37 |                  37 |                  70 |                  70
-(1 row)
 
 -- The EXPLAIN shows how the immutable "zeroed" function can be
 -- constified for better performance.
@@ -328,21 +314,18 @@ FROM
   uuids
 WHERE
   uuid_version(u) = 7;
-                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                              
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Aggregate
    Output: count(*), count(*) FILTER (WHERE (u < '0197a7a9-b48c-7000-8000-000000000000'::uuid)), count(*) FILTER (WHERE (uuid_timestamp(u) < 'Wed Jun 25 08:16:46.348 2025 PDT'::timestamp with time zone)), count(*) FILTER (WHERE (u >= '0197a7a9-b48c-7000-8000-000000000000'::uuid)), count(*) FILTER (WHERE (uuid_timestamp(u) >= 'Wed Jun 25 08:16:46.348 2025 PDT'::timestamp with time zone))
    ->  Seq Scan on public.uuids
          Output: i, u
          Filter: (uuid_version(uuids.u) = 7)
-(5 rows)
 
 -- Sub ms timestamp test:
 --   generate all microseconds timestamps between the two dates below and
 --   generate a UUID v7 based on the timestamp and
 --   extract the timestamp from the UUID and
 --   compare the timestamp to the original one
---   1 microsecond difference is allowed due to scaling of decimals to binaries
 --
 CREATE TABLE subms AS SELECT to_uuidv7(x) u, x ts
 FROM
@@ -356,10 +339,9 @@ FROM
       subms
   ) x
 WHERE
-  (x.ts - x.ts2) > '00:00:00.000001' OR (x.ts - x.ts2) < '-00:00:00.000001';
+  x.ts <> x.ts2;
  u | ts | ts2 
 ---+----+-----
-(0 rows)
 
 -- Make sure UUIDv7 compression is enabled
 SET timescaledb.enable_uuid_compression = true;
@@ -369,7 +351,6 @@ SELECT create_hypertable('uuid_part', by_range('id', interval '1 month'));
  create_hypertable 
 -------------------
  (5,t)
-(1 row)
 
 -- Insert the static UUIDs
 INSERT INTO uuid_part SELECT u, i FROM uuids
@@ -387,7 +368,6 @@ SELECT * FROM show_chunks('uuid_part');
  _timescaledb_internal._hyper_5_32_chunk
  _timescaledb_internal._hyper_5_33_chunk
  _timescaledb_internal._hyper_5_34_chunk
-(5 rows)
 
 ALTER TABLE uuid_part SET (timescaledb.compress, timescaledb.compress_orderby = 'id');
 -- Show how data is spread across chunks
@@ -399,7 +379,6 @@ SELECT tableoid::regclass, count(*) FROM uuid_part GROUP BY tableoid ORDER BY ta
  _timescaledb_internal._hyper_5_32_chunk |     1
  _timescaledb_internal._hyper_5_33_chunk |     1
  _timescaledb_internal._hyper_5_34_chunk |     3
-(5 rows)
 
 SELECT count(*) FROM uuid_part
 WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
@@ -407,19 +386,16 @@ WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
  count 
 -------
      3
-(1 row)
 
 EXPLAIN (verbose, buffers off, costs off)
 SELECT count(*) FROM uuid_part
 WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
       id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
-                                                                               QUERY PLAN                                                                               
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Aggregate
    Output: count(*)
    ->  Index Only Scan using _hyper_5_34_chunk_uuid_part_id_idx on _timescaledb_internal._hyper_5_34_chunk
          Index Cond: ((_hyper_5_34_chunk.id >= '0198a23a-8180-7000-8000-000000000000'::uuid) AND (_hyper_5_34_chunk.id < '0198b1ad-9580-7000-8000-000000000000'::uuid))
-(4 rows)
 
 -- Compress
 SELECT compress_chunk(ch) FROM show_chunks('uuid_part') ch;
@@ -430,7 +406,6 @@ SELECT compress_chunk(ch) FROM show_chunks('uuid_part') ch;
  _timescaledb_internal._hyper_5_32_chunk
  _timescaledb_internal._hyper_5_33_chunk
  _timescaledb_internal._hyper_5_34_chunk
-(5 rows)
 
 -- Check that chunk exclusion and filtering works as expected on
 -- compressed UUID data.
@@ -440,7 +415,6 @@ WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
  count 
 -------
      3
-(1 row)
 
 -- Check that chunk exclusion still works and that filters are pushed
 -- down to a min-max scan on the compressed chunk.
@@ -448,8 +422,7 @@ EXPLAIN (verbose, buffers off, costs off)
 SELECT count(*) FROM uuid_part
 WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
       id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
-                                                                                                      QUERY PLAN                                                                                                      
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Aggregate
    Output: count(*)
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_5_34_chunk
@@ -457,7 +430,6 @@ WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
          ->  Index Scan using compress_hyper_6_39_chunk__ts_meta_min_1__ts_meta_max_1_idx on _timescaledb_internal.compress_hyper_6_39_chunk
                Output: compress_hyper_6_39_chunk._ts_meta_count, compress_hyper_6_39_chunk._ts_meta_min_1, compress_hyper_6_39_chunk._ts_meta_max_1, compress_hyper_6_39_chunk.id, compress_hyper_6_39_chunk.value
                Index Cond: ((compress_hyper_6_39_chunk._ts_meta_min_1 < '0198b1ad-9580-7000-8000-000000000000'::uuid) AND (compress_hyper_6_39_chunk._ts_meta_max_1 >= '0198a23a-8180-7000-8000-000000000000'::uuid))
-(7 rows)
 
 -- Cleanup
 DROP TABLE t;

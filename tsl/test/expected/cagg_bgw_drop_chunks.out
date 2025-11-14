@@ -32,7 +32,6 @@ SELECT ts_bgw_params_create();
  ts_bgw_params_create 
 ----------------------
  
-(1 row)
 
 -----------------------------------
 -- test drop chunks policy runs for materialized hypertables created for
@@ -47,7 +46,6 @@ SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test2');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 CREATE MATERIALIZED VIEW drop_chunks_view1 WITH (timescaledb.continuous)
 AS SELECT time_bucket('5', time), max(data)
@@ -59,7 +57,6 @@ SELECT set_chunk_time_interval('_timescaledb_internal._materialized_hypertable_2
  set_chunk_time_interval 
 -------------------------
  
-(1 row)
 
 \set ON_ERROR_STOP 0
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(1, 39) AS i;
@@ -81,7 +78,6 @@ WHERE ht.id = d.hypertable_id;
 ---------------+----------------------------+-------------------
              1 | drop_chunks_table          | integer_now_test2
              2 | _materialized_hypertable_2 | 
-(2 rows)
 
 SELECT chunk_name, range_start_integer, range_end_integer
 FROM timescaledb_information.chunks
@@ -92,32 +88,27 @@ WHERE hypertable_name = '_materialized_hypertable_2' ORDER BY range_start_intege
  _hyper_2_41_chunk |                  10 |                20
  _hyper_2_42_chunk |                  20 |                30
  _hyper_2_43_chunk |                  30 |                40
-(4 rows)
 
 SELECT add_retention_policy( 'drop_chunks_view1', drop_after => 10) as drop_chunks_job_id1 \gset
 SELECT alter_job(:drop_chunks_job_id1, schedule_interval => INTERVAL '1 second');
                                                                                    alter_job                                                                                    
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  (1000,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": 10, ""hypertable_id"": 2}",-infinity,_timescaledb_functions.policy_retention_check,f,,,"Retention Policy [1000]")
-(1 row)
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(2000000);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT count(c) from show_chunks('drop_chunks_view1') as c ;
  count 
 -------
      1
-(1 row)
 
 SELECT remove_retention_policy('drop_chunks_view1');
  remove_retention_policy 
 -------------------------
  
-(1 row)
 
 \set ON_ERROR_STOP 0
 SELECT remove_retention_policy('unknown');

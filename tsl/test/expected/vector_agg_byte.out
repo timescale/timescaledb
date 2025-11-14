@@ -15,7 +15,6 @@ select count(compress_chunk(x)) from show_chunks('groupbyte') x;
  count 
 -------
      1
-(1 row)
 
 alter table groupbyte set (tsdb.compress_segmentby = '');
 insert into groupbyte select 11,
@@ -28,7 +27,6 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
  count 
 -------
      2
-(1 row)
 
 set timescaledb.debug_require_vector_agg = 'require';
 -- Uncomment to generate reference.
@@ -57,7 +55,6 @@ select count(*) from groupbyte;
  count 
 -------
   2000
-(1 row)
 
 select b, count(*) from groupbyte group by b order by count(*), b limit 10;
  b | count 
@@ -65,7 +62,6 @@ select b, count(*) from groupbyte group by b order by count(*), b limit 10;
    |   180
  t |   606
  f |  1214
-(3 rows)
 
 select b, x, count(*) from groupbyte group by b, x order by count(*), b, x limit 10;
  b |  x   | count 
@@ -80,7 +76,6 @@ select b, x, count(*) from groupbyte group by b, x order by count(*), b, x limit
    | tag6 |    24
  t |      |    46
  t | tag1 |    78
-(10 rows)
 
 select x, b, count(*) from groupbyte group by x, b order by count(*), x, b limit 10;
   x   | b | count 
@@ -95,13 +90,11 @@ select x, b, count(*) from groupbyte group by x, b order by count(*), x, b limit
  tag6 |   |    24
       | t |    46
  tag1 | t |    78
-(10 rows)
 
 select count(b) from groupbyte;
  count 
 -------
   1820
-(1 row)
 
 select b, count(b) from groupbyte group by b order by count(b), b limit 10;
  b | count 
@@ -109,7 +102,6 @@ select b, count(b) from groupbyte group by b order by count(b), b limit 10;
    |     0
  t |   606
  f |  1214
-(3 rows)
 
 select b, x, count(b) from groupbyte group by b, x order by count(b), b, x limit 10;
  b |  x   | count 
@@ -124,7 +116,6 @@ select b, x, count(b) from groupbyte group by b, x order by count(b), b, x limit
    |      |     0
  t |      |    46
  t | tag1 |    78
-(10 rows)
 
 select x, b, count(b) from groupbyte group by x, b order by count(b), x, b limit 10;
   x   | b | count 
@@ -139,13 +130,11 @@ select x, b, count(b) from groupbyte group by x, b order by count(b), x, b limit
       |   |     0
       | t |    46
  tag1 | t |    78
-(10 rows)
 
 select sum(i) from groupbyte;
    sum   
 ---------
  1001000
-(1 row)
 
 select b, sum(i) from groupbyte group by b order by sum(i), b limit 10;
  b |  sum   
@@ -153,7 +142,6 @@ select b, sum(i) from groupbyte group by b order by sum(i), b limit 10;
    |  90090
  t | 302976
  f | 607934
-(3 rows)
 
 select b, x, sum(i) from groupbyte group by b, x order by sum(i), b, x limit 10;
  b |  x   |  sum  
@@ -168,7 +156,6 @@ select b, x, sum(i) from groupbyte group by b, x order by sum(i), b, x limit 10;
    | tag3 | 13442
  t |      | 22776
  t | tag3 | 39342
-(10 rows)
 
 select x, b, sum(i) from groupbyte group by x, b order by sum(i), x, b limit 10;
   x   | b |  sum  
@@ -183,6 +170,5 @@ select x, b, sum(i) from groupbyte group by x, b order by sum(i), x, b limit 10;
  tag3 |   | 13442
       | t | 22776
  tag3 | t | 39342
-(10 rows)
 
 reset timescaledb.debug_require_vector_agg;

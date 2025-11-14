@@ -224,34 +224,39 @@ ROLLBACK;
 BEGIN;
 CREATE TABLE t25_policy(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=true);
 SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 't25_policy';
-SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy' AND proc_name = 'policy_compression';
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy' AND proc_name = 'policy_compression';
 ROLLBACK;
 
 -- test compression policy creation with custom chunk interval
 BEGIN;
 CREATE TABLE t25_policy_custom(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval='3 days',tsdb.columnstore=true);
-SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_custom' AND proc_name = 'policy_compression';
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_custom' AND proc_name = 'policy_compression';
 ROLLBACK;
 
 -- test compression policy creation with integer partition column (int2)
 BEGIN;
 CREATE TABLE t25_policy_int2(time int2 NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval=100,tsdb.columnstore=true);
 SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 't25_policy_int2';
-SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int2' AND proc_name = 'policy_compression';
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int2' AND proc_name = 'policy_compression';
 ROLLBACK;
 
 -- test compression policy creation with integer partition column (int4)
 BEGIN;
 CREATE TABLE t25_policy_int4(time int4 NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval=1000,tsdb.columnstore=true);
 SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 't25_policy_int4';
-SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int4' AND proc_name = 'policy_compression';
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int4' AND proc_name = 'policy_compression';
 ROLLBACK;
 
 -- test compression policy creation with integer partition column (int8)
 BEGIN;
 CREATE TABLE t25_policy_int8(time int8 NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval=10000,tsdb.columnstore=true);
 SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 't25_policy_int8';
-SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int8' AND proc_name = 'policy_compression';
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int8' AND proc_name = 'policy_compression';
 ROLLBACK;
 BEGIN;
 -- don't allow empty orderby
@@ -333,8 +338,9 @@ ROLLBACK;
 BEGIN;
 CREATE TABLE t40(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.index='bloom(value)');
 ROLLBACK;
-reset timescaledb.enable_sparse_index_bloom;
 \set ON_ERROR_STOP 1
+
+reset timescaledb.enable_sparse_index_bloom;
 
 -- test UUID partitioning + compression
 BEGIN;
@@ -355,5 +361,6 @@ WITH (
      tsdb.compress=true
 );
 SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 'events';
-SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 'events' AND proc_name = 'policy_compression';
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 'events' AND proc_name = 'policy_compression';
 ROLLBACK;

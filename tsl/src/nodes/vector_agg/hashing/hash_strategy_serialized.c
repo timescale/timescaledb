@@ -13,7 +13,7 @@
 #include <common/hashfn.h>
 
 #include "compression/arrow_c_data_interface.h"
-#include "nodes/decompress_chunk/compressed_batch.h"
+#include "nodes/columnar_scan/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
 #include "nodes/vector_agg/grouping_policy_hash.h"
 #include "template_helper.h"

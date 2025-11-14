@@ -12,7 +12,6 @@ SELECT create_hypertable(
     create_hypertable    
 -------------------------
  (1,public,conditions,t)
-(1 row)
 
 -- Ensure no CAgg using time_bucket_ng can be created
 \set ON_ERROR_STOP 0

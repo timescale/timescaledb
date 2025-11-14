@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 \set TEST_BASE_NAME ordered_append
 SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') AS "TEST_LOAD_NAME",
        format('include/%s.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
@@ -20,7 +20,6 @@ SELECT create_hypertable('metrics','time',create_default_indexes:=false);
   create_hypertable   
 ----------------------
  (1,public,metrics,t)
-(1 row)
 
 ALTER TABLE metrics DROP COLUMN filler_1;
 INSERT INTO metrics(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
@@ -37,7 +36,6 @@ SELECT create_hypertable('metrics_space','time','device_id',3,create_default_ind
      create_hypertable      
 ----------------------------
  (2,public,metrics_space,t)
-(1 row)
 
 ALTER TABLE metrics_space DROP COLUMN filler_1;
 INSERT INTO metrics_space(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
@@ -54,7 +52,6 @@ SELECT create_hypertable('metrics_compressed','time',create_default_indexes:=fal
         create_hypertable        
 ---------------------------------
  (3,public,metrics_compressed,t)
-(1 row)
 
 ALTER TABLE metrics_compressed DROP COLUMN filler_1;
 INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
@@ -73,7 +70,6 @@ SELECT compress_chunk(show_chunks('metrics_compressed'));
  _timescaledb_internal._hyper_3_13_chunk
  _timescaledb_internal._hyper_3_14_chunk
  _timescaledb_internal._hyper_3_15_chunk
-(3 rows)
 
 -- Reindexing compressed hypertable to update statistics
 -- this is for planner tests which depend on them
@@ -85,7 +81,6 @@ SELECT create_hypertable('metrics_space_compressed','time','device_id',3,create_
            create_hypertable           
 ---------------------------------------
  (5,public,metrics_space_compressed,t)
-(1 row)
 
 ALTER TABLE metrics_space_compressed DROP COLUMN filler_1;
 INSERT INTO metrics_space_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
@@ -110,7 +105,6 @@ SELECT compress_chunk(show_chunks('metrics_space_compressed'));
  _timescaledb_internal._hyper_5_25_chunk
  _timescaledb_internal._hyper_5_26_chunk
  _timescaledb_internal._hyper_5_27_chunk
-(9 rows)
 
 -- Reindexing compressed hypertable to update statistics
 -- this is for planner tests which depend on them
@@ -141,15 +135,13 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
          Order: metrics."time"
          ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
          ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
          ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
-(9 rows)
 
 -- test DESC for ordered chunks
 :PREFIX
@@ -157,15 +149,13 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
          Order: metrics."time" DESC
          ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
          ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
          ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (never executed)
-(9 rows)
 
 -- test query with ORDER BY column not in targetlist
 :PREFIX
@@ -174,8 +164,7 @@ SELECT pg_typeof(device_id),
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
@@ -183,7 +172,6 @@ LIMIT 1;
                ->  Index Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                ->  Index Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
                ->  Index Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
-(7 rows)
 
 -- ORDER BY may include other columns after time column
 :PREFIX
@@ -195,8 +183,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
          Order: metrics."time" DESC
@@ -206,7 +193,6 @@ LIMIT 1;
                Index Cond: (device_id = 1)
          ->  Index Scan using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk (never executed)
                Index Cond: (device_id = 1)
-(9 rows)
 
 -- test RECORD in targetlist
 :PREFIX
@@ -218,8 +204,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
@@ -230,7 +215,6 @@ LIMIT 1;
                      Index Cond: (device_id = 1)
                ->  Index Scan using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk (never executed)
                      Index Cond: (device_id = 1)
-(10 rows)
 
 -- test sort column not in targetlist
 :PREFIX
@@ -238,8 +222,7 @@ SELECT time_bucket('1h', time)
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
@@ -247,7 +230,6 @@ LIMIT 1;
                ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
                ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (never executed)
-(10 rows)
 
 -- queries with ORDER BY non-time column shouldn't use ordered append
 :PREFIX
@@ -255,15 +237,13 @@ SELECT device_id
 FROM :TEST_TABLE
 ORDER BY device_id
 LIMIT 1;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: metrics.device_id
          ->  Index Only Scan using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
          ->  Index Only Scan using _hyper_1_2_chunk_metrics_device_id_time_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
          ->  Index Only Scan using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-(9 rows)
 
 -- time column must be primary sort order
 SET enable_seqscan TO false;
@@ -275,8 +255,7 @@ WHERE device_id IN (1, 2)
 ORDER BY device_id,
   time
 LIMIT 1;
-                                                             QUERY PLAN                                                             
-------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Incremental Sort (actual rows=1.00 loops=1)
          Sort Key: metrics.device_id, metrics."time"
@@ -291,7 +270,6 @@ LIMIT 1;
                      Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                ->  Index Only Scan using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk (actual rows=5039.00 loops=1)
                      Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-(17 rows)
 
 RESET enable_seqscan;
 -- test equality constraint on ORDER BY prefix
@@ -306,8 +284,7 @@ WHERE device_id = 1
 ORDER BY device_id,
   time
 LIMIT 10;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=10.00 loops=1)
    ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: metrics."time"
@@ -317,7 +294,6 @@ LIMIT 10;
                Index Cond: (device_id = 1)
          ->  Index Scan Backward using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                Index Cond: (device_id = 1)
-(9 rows)
 
 RESET enable_seqscan;
 RESET enable_indexonlyscan;
@@ -327,8 +303,7 @@ SELECT time
 FROM :TEST_TABLE
 WHERE device_id IN (1, 2) OR time > '2000-01-06'
 ORDER BY time ASC;
-                                                           QUERY PLAN                                                            
----------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics (actual rows=56853.00 loops=1)
    Order: metrics."time"
    ->  Index Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=7196.00 loops=1)
@@ -339,7 +314,6 @@ ORDER BY time ASC;
          Rows Removed by Filter: 723
    ->  Index Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=25190.00 loops=1)
          Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-(10 rows)
 
 -- queries without ORDER BY shouldnt use ordered append
 SET enable_seqscan TO false;
@@ -347,15 +321,13 @@ SET enable_seqscan TO false;
 SELECT pg_typeof(time)
 FROM :TEST_TABLE
 LIMIT 1;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Append (actual rows=1.00 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
                ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
-(9 rows)
 
 RESET enable_seqscan;
 -- test interaction with constraint exclusion
@@ -365,8 +337,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
          Order: metrics."time"
@@ -374,7 +345,6 @@ LIMIT 1;
                Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
                Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(9 rows)
 
 :PREFIX
 SELECT time
@@ -382,8 +352,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time DESC
 LIMIT 1;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
          Order: metrics."time" DESC
@@ -391,7 +360,6 @@ LIMIT 1;
                Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
                Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(9 rows)
 
 -- test interaction with runtime exclusion
 :PREFIX
@@ -400,8 +368,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
          Order: metrics."time"
@@ -410,7 +377,6 @@ LIMIT 1;
                Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
                Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-(10 rows)
 
 :PREFIX
 SELECT time
@@ -418,8 +384,7 @@ FROM :TEST_TABLE
 WHERE time < '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
          Order: metrics."time"
@@ -428,7 +393,6 @@ LIMIT 1;
                Index Cond: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
                Index Cond: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-(10 rows)
 
 -- test constraint exclusion
 :PREFIX
@@ -438,15 +402,13 @@ WHERE time > '2000-01-08'::text::timestamptz
   AND time < '2000-01-10'
 ORDER BY time ASC
 LIMIT 1;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
          Order: metrics."time"
          Chunks excluded during startup: 1
          ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
                Index Cond: (("time" > ('2000-01-08'::cstring)::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
-(7 rows)
 
 :PREFIX
 SELECT time
@@ -455,15 +417,13 @@ WHERE time < '2000-01-08'::text::timestamptz
   AND time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
          Order: metrics."time"
          Chunks excluded during startup: 1
          ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
                Index Cond: (("time" < ('2000-01-08'::cstring)::timestamp with time zone) AND ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone))
-(7 rows)
 
 -- Disable hash aggregation to get a deterministic test output
 SET enable_hashagg = OFF;
@@ -471,8 +431,7 @@ SET enable_hashagg = OFF;
 :PREFIX
 SELECT max(time)
 FROM :TEST_TABLE;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -484,13 +443,11 @@ FROM :TEST_TABLE;
                        Index Cond: ("time" IS NOT NULL)
                  ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (never executed)
                        Index Cond: ("time" IS NOT NULL)
-(14 rows)
 
 :PREFIX
 SELECT min(time)
 FROM :TEST_TABLE;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -502,14 +459,12 @@ FROM :TEST_TABLE;
                        Index Cond: ("time" IS NOT NULL)
                  ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
                        Index Cond: ("time" IS NOT NULL)
-(14 rows)
 
 -- test first/last (doesn't use ordered append yet)
 :PREFIX
 SELECT first(time, time)
 FROM :TEST_TABLE;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -519,13 +474,11 @@ FROM :TEST_TABLE;
                        ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                        ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
                        ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
-(12 rows)
 
 :PREFIX
 SELECT last(time, time)
 FROM :TEST_TABLE;
-                                                          QUERY PLAN                                                           
--------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -538,7 +491,6 @@ FROM :TEST_TABLE;
                              Index Cond: ("time" IS NOT NULL)
                        ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (never executed)
                              Index Cond: ("time" IS NOT NULL)
-(15 rows)
 
 -- test query with time_bucket
 :PREFIX
@@ -546,8 +498,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
@@ -555,7 +506,6 @@ LIMIT 1;
                ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
                ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
-(10 rows)
 
 -- test query with ORDER BY time_bucket
 :PREFIX
@@ -563,8 +513,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
@@ -572,7 +521,6 @@ LIMIT 1;
                ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
                ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
-(10 rows)
 
 -- test query with ORDER BY time_bucket, device_id
 -- must not use ordered append
@@ -585,8 +533,7 @@ WHERE device_id IN (1, 2)
 ORDER BY time_bucket('1d', time),
   device_id
 LIMIT 1;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Sort (actual rows=1.00 loops=1)
          Sort Key: (time_bucket('@ 1 day'::interval, metrics."time")), metrics.device_id
@@ -599,7 +546,6 @@ LIMIT 1;
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Index Scan using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk (actual rows=10076.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-(12 rows)
 
 -- test query with ORDER BY date_trunc
 :PREFIX
@@ -607,8 +553,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY date_trunc('day', time)
 LIMIT 1;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
@@ -616,7 +561,6 @@ LIMIT 1;
                ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
                ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
-(10 rows)
 
 -- test query with ORDER BY date_trunc
 :PREFIX
@@ -624,8 +568,7 @@ SELECT date_trunc('day', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
@@ -633,7 +576,6 @@ LIMIT 1;
                ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
                ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
-(10 rows)
 
 -- test query with ORDER BY date_trunc, device_id
 -- must not use ordered append
@@ -646,8 +588,7 @@ WHERE device_id IN (1, 2)
 ORDER BY 1,
   2
 LIMIT 1;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Sort (actual rows=1.00 loops=1)
          Sort Key: (date_trunc('day'::text, metrics."time")), metrics.device_id
@@ -660,7 +601,6 @@ LIMIT 1;
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Index Scan using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk (actual rows=10076.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-(12 rows)
 
 -- test query with now() should result in ordered ChunkAppend
 :PREFIX
@@ -669,8 +609,7 @@ FROM :TEST_TABLE
 WHERE time < now() + '1 month'
 ORDER BY time DESC
 LIMIT 1;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
          Order: metrics."time" DESC
@@ -681,7 +620,6 @@ LIMIT 1;
                Index Cond: ("time" < (now() + '@ 1 mon'::interval))
          ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (never executed)
                Index Cond: ("time" < (now() + '@ 1 mon'::interval))
-(13 rows)
 
 -- test CTE
 :PREFIX WITH i AS (
@@ -693,8 +631,7 @@ LIMIT 1;
 )
 SELECT *
 FROM i;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time" DESC
@@ -705,7 +642,6 @@ FROM i;
                Index Cond: ("time" < now())
          ->  Index Only Scan using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (never executed)
                Index Cond: ("time" < now())
-(13 rows)
 
 -- test CTE
 -- no chunk exclusion for CTE because cte query is not pulled up
@@ -719,8 +655,7 @@ SET enable_seqscan TO false;
 SELECT *
 FROM cte
 WHERE time < '2000-02-01'::timestamptz;
-                                                           QUERY PLAN                                                            
----------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics (actual rows=13674.00 loops=1)
    Order: metrics."time"
    ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk (actual rows=3598.00 loops=1)
@@ -729,7 +664,6 @@ WHERE time < '2000-02-01'::timestamptz;
          Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
    ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk (actual rows=5038.00 loops=1)
          Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
-(11 rows)
 
 RESET enable_seqscan;
 -- test subquery
@@ -741,8 +675,7 @@ WHERE time = (
     SELECT max(time)
     FROM :TEST_TABLE)
 ORDER BY time;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics (actual rows=5.00 loops=1)
    Chunks excluded during runtime: 2
    InitPlan 2 (returns $1)
@@ -763,7 +696,6 @@ ORDER BY time;
          Index Cond: ("time" = $1)
    ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=5.00 loops=1)
          Index Cond: ("time" = $1)
-(26 rows)
 
 -- test ordered append with limit expression
 :PREFIX
@@ -772,8 +704,7 @@ FROM :TEST_TABLE
 ORDER BY time
 LIMIT (
   SELECT length('four'));
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=4.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Result (actual rows=1.00 loops=1)
@@ -782,7 +713,6 @@ LIMIT (
          ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=4.00 loops=1)
          ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
          ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
-(11 rows)
 
 -- test with ordered guc disabled
 SET timescaledb.enable_ordered_append TO OFF;
@@ -791,15 +721,13 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Merge Append (actual rows=3.00 loops=1)
          Sort Key: metrics."time"
          ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=3.00 loops=1)
          ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
          ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-(9 rows)
 
 RESET timescaledb.enable_ordered_append;
 :PREFIX
@@ -807,15 +735,13 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=3.00 loops=1)
          Order: metrics."time"
          ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=3.00 loops=1)
          ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
          ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
-(9 rows)
 
 -- test with chunk append disabled
 SET timescaledb.enable_chunk_append TO OFF;
@@ -824,15 +750,13 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Merge Append (actual rows=3.00 loops=1)
          Sort Key: metrics."time"
          ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=3.00 loops=1)
          ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
          ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-(9 rows)
 
 RESET timescaledb.enable_chunk_append;
 :PREFIX
@@ -840,15 +764,13 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=3.00 loops=1)
          Order: metrics."time"
          ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_time_idx on _hyper_1_1_chunk (actual rows=3.00 loops=1)
          ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
          ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
-(9 rows)
 
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
@@ -869,8 +791,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
          Order: metrics_space."time"
@@ -889,7 +810,6 @@ LIMIT 1;
                ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
                ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
                ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
-(27 rows)
 
 -- test DESC for ordered chunks
 :PREFIX
@@ -897,8 +817,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
          Order: metrics_space."time" DESC
@@ -917,7 +836,6 @@ LIMIT 1;
                ->  Index Only Scan Backward using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk (never executed)
                ->  Index Only Scan Backward using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk (never executed)
                ->  Index Only Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (never executed)
-(27 rows)
 
 -- test query with ORDER BY column not in targetlist
 :PREFIX
@@ -926,8 +844,7 @@ SELECT pg_typeof(device_id),
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
@@ -947,7 +864,6 @@ LIMIT 1;
                      ->  Index Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
                      ->  Index Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
                      ->  Index Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
-(19 rows)
 
 -- ORDER BY may include other columns after time column
 :PREFIX
@@ -959,8 +875,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
          Order: metrics_space."time" DESC
@@ -970,7 +885,6 @@ LIMIT 1;
                Filter: (device_id = 1)
          ->  Index Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (never executed)
                Filter: (device_id = 1)
-(9 rows)
 
 -- test RECORD in targetlist
 :PREFIX
@@ -982,8 +896,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
@@ -994,7 +907,6 @@ LIMIT 1;
                      Filter: (device_id = 1)
                ->  Index Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (never executed)
                      Filter: (device_id = 1)
-(10 rows)
 
 -- test sort column not in targetlist
 :PREFIX
@@ -1002,8 +914,7 @@ SELECT time_bucket('1h', time)
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                                                  QUERY PLAN                                                                  
-----------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
@@ -1023,7 +934,6 @@ LIMIT 1;
                      ->  Index Only Scan Backward using _hyper_2_6_chunk_metrics_space_time_idx on _hyper_2_6_chunk (never executed)
                      ->  Index Only Scan Backward using _hyper_2_5_chunk_metrics_space_time_idx on _hyper_2_5_chunk (never executed)
                      ->  Index Only Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (never executed)
-(28 rows)
 
 -- queries with ORDER BY non-time column shouldn't use ordered append
 :PREFIX
@@ -1031,8 +941,7 @@ SELECT device_id
 FROM :TEST_TABLE
 ORDER BY device_id
 LIMIT 1;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: metrics_space.device_id
@@ -1045,7 +954,6 @@ LIMIT 1;
          ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk (actual rows=1.00 loops=1)
          ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk (actual rows=1.00 loops=1)
          ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk (actual rows=1.00 loops=1)
-(21 rows)
 
 -- time column must be primary sort order
 SET enable_seqscan TO false;
@@ -1057,8 +965,7 @@ WHERE device_id IN (1, 2)
 ORDER BY device_id,
   time
 LIMIT 1;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: metrics_space.device_id, metrics_space."time"
@@ -1074,7 +981,6 @@ LIMIT 1;
                Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk (actual rows=1.00 loops=1)
                Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-(21 rows)
 
 RESET enable_seqscan;
 -- test equality constraint on ORDER BY prefix
@@ -1089,8 +995,7 @@ WHERE device_id = 1
 ORDER BY device_id,
   time
 LIMIT 10;
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=10.00 loops=1)
    ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: metrics_space."time"
@@ -1100,7 +1005,6 @@ LIMIT 10;
                Filter: (device_id = 1)
          ->  Index Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (actual rows=1.00 loops=1)
                Filter: (device_id = 1)
-(9 rows)
 
 RESET enable_seqscan;
 RESET enable_indexonlyscan;
@@ -1110,8 +1014,7 @@ SELECT time
 FROM :TEST_TABLE
 WHERE device_id IN (1, 2) OR time > '2000-01-06'
 ORDER BY time ASC;
-                                                              QUERY PLAN                                                               
----------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=56853.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=7196.00 loops=1)
@@ -1142,7 +1045,6 @@ ORDER BY time ASC;
                Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
          ->  Index Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=5038.00 loops=1)
                Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-(30 rows)
 
 -- queries without ORDER BY shouldnt use ordered append
 SET enable_seqscan TO false;
@@ -1150,8 +1052,7 @@ SET enable_seqscan TO false;
 SELECT pg_typeof(time)
 FROM :TEST_TABLE
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Append (actual rows=1.00 loops=1)
@@ -1164,7 +1065,6 @@ LIMIT 1;
                ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
                ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
                ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
-(21 rows)
 
 RESET enable_seqscan;
 -- test interaction with constraint exclusion
@@ -1174,8 +1074,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
          Order: metrics_space."time"
@@ -1195,7 +1094,6 @@ LIMIT 1;
                      Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
                      Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(25 rows)
 
 :PREFIX
 SELECT time
@@ -1203,8 +1101,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time DESC
 LIMIT 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
          Order: metrics_space."time" DESC
@@ -1224,7 +1121,6 @@ LIMIT 1;
                      Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Only Scan Backward using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (never executed)
                      Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(25 rows)
 
 -- test interaction with runtime exclusion
 :PREFIX
@@ -1233,8 +1129,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
          Order: metrics_space."time"
@@ -1262,7 +1157,6 @@ LIMIT 1;
                      Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
                      Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-(36 rows)
 
 :PREFIX
 SELECT time
@@ -1270,8 +1164,7 @@ FROM :TEST_TABLE
 WHERE time < '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
          Order: metrics_space."time"
@@ -1299,7 +1192,6 @@ LIMIT 1;
                      Index Cond: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-(36 rows)
 
 -- test constraint exclusion
 :PREFIX
@@ -1309,8 +1201,7 @@ WHERE time > '2000-01-08'::text::timestamptz
   AND time < '2000-01-10'
 ORDER BY time ASC
 LIMIT 1;
-                                                                               QUERY PLAN                                                                               
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
          Order: metrics_space."time"
@@ -1330,7 +1221,6 @@ LIMIT 1;
                      Index Cond: (("time" > ('2000-01-08'::cstring)::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
                ->  Index Only Scan using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (actual rows=1.00 loops=1)
                      Index Cond: (("time" > ('2000-01-08'::cstring)::timestamp with time zone) AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
-(25 rows)
 
 :PREFIX
 SELECT time
@@ -1339,8 +1229,7 @@ WHERE time < '2000-01-08'::text::timestamptz
   AND time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                                               QUERY PLAN                                                                               
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
          Order: metrics_space."time"
@@ -1360,7 +1249,6 @@ LIMIT 1;
                      Index Cond: (("time" < ('2000-01-08'::cstring)::timestamp with time zone) AND ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone))
                ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
                      Index Cond: (("time" < ('2000-01-08'::cstring)::timestamp with time zone) AND ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone))
-(25 rows)
 
 -- Disable hash aggregation to get a deterministic test output
 SET enable_hashagg = OFF;
@@ -1368,8 +1256,7 @@ SET enable_hashagg = OFF;
 :PREFIX
 SELECT max(time)
 FROM :TEST_TABLE;
-                                                                   QUERY PLAN                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -1399,13 +1286,11 @@ FROM :TEST_TABLE;
                              Index Cond: ("time" IS NOT NULL)
                        ->  Index Only Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (never executed)
                              Index Cond: ("time" IS NOT NULL)
-(38 rows)
 
 :PREFIX
 SELECT min(time)
 FROM :TEST_TABLE;
-                                                             QUERY PLAN                                                              
--------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -1435,14 +1320,12 @@ FROM :TEST_TABLE;
                              Index Cond: ("time" IS NOT NULL)
                        ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
                              Index Cond: ("time" IS NOT NULL)
-(38 rows)
 
 -- test first/last (doesn't use ordered append yet)
 :PREFIX
 SELECT first(time, time)
 FROM :TEST_TABLE;
-                                                                QUERY PLAN                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -1464,13 +1347,11 @@ FROM :TEST_TABLE;
                              ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
                              ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
                              ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
-(30 rows)
 
 :PREFIX
 SELECT last(time, time)
 FROM :TEST_TABLE;
-                                                                      QUERY PLAN                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -1501,7 +1382,6 @@ FROM :TEST_TABLE;
                                    Index Cond: ("time" IS NOT NULL)
                              ->  Index Only Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (never executed)
                                    Index Cond: ("time" IS NOT NULL)
-(39 rows)
 
 -- test query with time_bucket
 :PREFIX
@@ -1509,8 +1389,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
@@ -1530,7 +1409,6 @@ LIMIT 1;
                      ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
                      ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
                      ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
-(28 rows)
 
 -- test query with ORDER BY time_bucket
 :PREFIX
@@ -1538,8 +1416,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
@@ -1559,7 +1436,6 @@ LIMIT 1;
                      ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
                      ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
                      ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
-(28 rows)
 
 -- test query with ORDER BY time_bucket, device_id
 -- must not use ordered append
@@ -1572,8 +1448,7 @@ WHERE device_id IN (1, 2)
 ORDER BY time_bucket('1d', time),
   device_id
 LIMIT 1;
-                                                                 QUERY PLAN                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Sort (actual rows=1.00 loops=1)
          Sort Key: (time_bucket('@ 1 day'::interval, metrics_space."time")), metrics_space.device_id
@@ -1592,7 +1467,6 @@ LIMIT 1;
                            Filter: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Index Scan using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk (actual rows=5038.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-(18 rows)
 
 -- test query with ORDER BY date_trunc
 :PREFIX
@@ -1600,8 +1474,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY date_trunc('day', time)
 LIMIT 1;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
@@ -1621,7 +1494,6 @@ LIMIT 1;
                      ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
                      ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
                      ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
-(28 rows)
 
 -- test query with ORDER BY date_trunc
 :PREFIX
@@ -1629,8 +1501,7 @@ SELECT date_trunc('day', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
@@ -1650,7 +1521,6 @@ LIMIT 1;
                      ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
                      ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
                      ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
-(28 rows)
 
 -- test query with ORDER BY date_trunc, device_id
 -- must not use ordered append
@@ -1663,8 +1533,7 @@ WHERE device_id IN (1, 2)
 ORDER BY 1,
   2
 LIMIT 1;
-                                                                 QUERY PLAN                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Sort (actual rows=1.00 loops=1)
          Sort Key: (date_trunc('day'::text, metrics_space."time")), metrics_space.device_id
@@ -1683,7 +1552,6 @@ LIMIT 1;
                            Filter: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Index Scan using _hyper_2_11_chunk_metrics_space_device_id_time_idx on _hyper_2_11_chunk (actual rows=5038.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-(18 rows)
 
 -- test query with now() should result in ordered ChunkAppend
 :PREFIX
@@ -1692,8 +1560,7 @@ FROM :TEST_TABLE
 WHERE time < now() + '1 month'
 ORDER BY time DESC
 LIMIT 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1.00 loops=1)
          Order: metrics_space."time" DESC
@@ -1721,7 +1588,6 @@ LIMIT 1;
                      Index Cond: ("time" < (now() + '@ 1 mon'::interval))
                ->  Index Only Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (never executed)
                      Index Cond: ("time" < (now() + '@ 1 mon'::interval))
-(36 rows)
 
 -- test CTE
 :PREFIX WITH i AS (
@@ -1733,8 +1599,7 @@ LIMIT 1;
 )
 SELECT *
 FROM i;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time" DESC
@@ -1762,7 +1627,6 @@ FROM i;
                      Index Cond: ("time" < now())
                ->  Index Only Scan Backward using _hyper_2_4_chunk_metrics_space_time_idx on _hyper_2_4_chunk (never executed)
                      Index Cond: ("time" < now())
-(36 rows)
 
 -- test CTE
 -- no chunk exclusion for CTE because cte query is not pulled up
@@ -1776,8 +1640,7 @@ SET enable_seqscan TO false;
 SELECT *
 FROM cte
 WHERE time < '2000-02-01'::timestamptz;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=13674.00 loops=1)
    Order: metrics_space."time"
    ->  Index Only Scan using _hyper_2_4_chunk_metrics_space_device_id_time_idx on _hyper_2_4_chunk (actual rows=3598.00 loops=1)
@@ -1786,7 +1649,6 @@ WHERE time < '2000-02-01'::timestamptz;
          Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
    ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_device_id_time_idx on _hyper_2_10_chunk (actual rows=5038.00 loops=1)
          Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
-(11 rows)
 
 RESET enable_seqscan;
 -- test subquery
@@ -1798,8 +1660,7 @@ WHERE time = (
     SELECT max(time)
     FROM :TEST_TABLE)
 ORDER BY time;
-                                                                                 QUERY PLAN                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=5.00 loops=1)
    InitPlan 2 (returns $1)
      ->  Result (actual rows=1.00 loops=1)
@@ -1852,7 +1713,6 @@ ORDER BY time;
                Index Cond: ("time" = $1)
          ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=1.00 loops=1)
                Index Cond: ("time" = $1)
-(70 rows)
 
 -- test ordered append with limit expression
 :PREFIX
@@ -1861,8 +1721,7 @@ FROM :TEST_TABLE
 ORDER BY time
 LIMIT (
   SELECT length('four'));
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=4.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Result (actual rows=1.00 loops=1)
@@ -1883,7 +1742,6 @@ LIMIT (
                ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
                ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
                ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
-(29 rows)
 
 -- test with ordered guc disabled
 SET timescaledb.enable_ordered_append TO OFF;
@@ -1892,8 +1750,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Merge Append (actual rows=3.00 loops=1)
          Sort Key: metrics_space."time"
@@ -1906,7 +1763,6 @@ LIMIT 3;
          ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (actual rows=1.00 loops=1)
          ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (actual rows=1.00 loops=1)
          ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=1.00 loops=1)
-(21 rows)
 
 RESET timescaledb.enable_ordered_append;
 :PREFIX
@@ -1914,8 +1770,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=3.00 loops=1)
          Order: metrics_space."time"
@@ -1934,7 +1789,6 @@ LIMIT 3;
                ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
                ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
                ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
-(27 rows)
 
 -- test with chunk append disabled
 SET timescaledb.enable_chunk_append TO OFF;
@@ -1943,8 +1797,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Merge Append (actual rows=3.00 loops=1)
          Sort Key: metrics_space."time"
@@ -1957,7 +1810,6 @@ LIMIT 3;
          ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (actual rows=1.00 loops=1)
          ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (actual rows=1.00 loops=1)
          ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (actual rows=1.00 loops=1)
-(21 rows)
 
 RESET timescaledb.enable_chunk_append;
 :PREFIX
@@ -1965,8 +1817,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=3.00 loops=1)
          Order: metrics_space."time"
@@ -1985,7 +1836,6 @@ LIMIT 3;
                ->  Index Only Scan using _hyper_2_10_chunk_metrics_space_time_idx on _hyper_2_10_chunk (never executed)
                ->  Index Only Scan using _hyper_2_11_chunk_metrics_space_time_idx on _hyper_2_11_chunk (never executed)
                ->  Index Only Scan using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk (never executed)
-(27 rows)
 
 \set TEST_TABLE 'metrics_compressed'
 \ir :TEST_QUERY_NAME
@@ -2006,8 +1856,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time"
@@ -2024,7 +1873,6 @@ LIMIT 1;
                Sort Key: _hyper_3_15_chunk."time"
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
                      ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-(16 rows)
 
 -- test DESC for ordered chunks
 :PREFIX
@@ -2032,8 +1880,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time" DESC
@@ -2050,7 +1897,6 @@ LIMIT 1;
                Sort Key: _hyper_3_13_chunk."time" DESC
                ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
                      ->  Seq Scan on compress_hyper_4_16_chunk (never executed)
-(16 rows)
 
 -- test query with ORDER BY column not in targetlist
 :PREFIX
@@ -2059,8 +1905,7 @@ SELECT pg_typeof(device_id),
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
@@ -2078,7 +1923,6 @@ LIMIT 1;
                      Sort Key: _hyper_3_15_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
                            ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-(17 rows)
 
 -- ORDER BY may include other columns after time column
 :PREFIX
@@ -2090,8 +1934,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                                       QUERY PLAN                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time" DESC
@@ -2104,7 +1947,6 @@ LIMIT 1;
          ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
                ->  Index Scan using compress_hyper_4_16_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_16_chunk (never executed)
                      Index Cond: (device_id = 1)
-(12 rows)
 
 -- test RECORD in targetlist
 :PREFIX
@@ -2116,8 +1958,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                                          QUERY PLAN                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
@@ -2131,7 +1972,6 @@ LIMIT 1;
                ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
                      ->  Index Scan using compress_hyper_4_16_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_16_chunk (never executed)
                            Index Cond: (device_id = 1)
-(13 rows)
 
 -- test sort column not in targetlist
 :PREFIX
@@ -2139,8 +1979,7 @@ SELECT time_bucket('1h', time)
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
@@ -2158,7 +1997,6 @@ LIMIT 1;
                      Sort Key: _hyper_3_13_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
                            ->  Seq Scan on compress_hyper_4_16_chunk (never executed)
-(17 rows)
 
 -- queries with ORDER BY non-time column shouldn't use ordered append
 :PREFIX
@@ -2166,8 +2004,7 @@ SELECT device_id
 FROM :TEST_TABLE
 ORDER BY device_id
 LIMIT 1;
-                                                                       QUERY PLAN                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: metrics_compressed.device_id
@@ -2177,7 +2014,6 @@ LIMIT 1;
                ->  Index Scan using compress_hyper_4_17_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_17_chunk (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
                ->  Index Scan using compress_hyper_4_18_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
-(9 rows)
 
 -- time column must be primary sort order
 SET enable_seqscan TO false;
@@ -2189,8 +2025,7 @@ WHERE device_id IN (1, 2)
 ORDER BY device_id,
   time
 LIMIT 1;
-                                                                           QUERY PLAN                                                                           
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: metrics_compressed.device_id, metrics_compressed."time"
@@ -2212,7 +2047,6 @@ LIMIT 1;
                      Sort Method: quicksort 
                      ->  Index Scan using compress_hyper_4_18_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_18_chunk (actual rows=12.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-(21 rows)
 
 RESET enable_seqscan;
 -- test equality constraint on ORDER BY prefix
@@ -2227,8 +2061,7 @@ WHERE device_id = 1
 ORDER BY device_id,
   time
 LIMIT 10;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=10.00 loops=1)
    ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: metrics_compressed."time"
@@ -2241,7 +2074,6 @@ LIMIT 10;
          ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
                ->  Index Scan Backward using compress_hyper_4_18_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
                      Index Cond: (device_id = 1)
-(12 rows)
 
 RESET enable_seqscan;
 RESET enable_indexonlyscan;
@@ -2251,8 +2083,7 @@ SELECT time
 FROM :TEST_TABLE
 WHERE device_id IN (1, 2) OR time > '2000-01-06'
 ORDER BY time ASC;
-                                                                     QUERY PLAN                                                                      
------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=56853.00 loops=1)
    Order: metrics_compressed."time"
    ->  Sort (actual rows=7196.00 loops=1)
@@ -2279,7 +2110,6 @@ ORDER BY time ASC;
                Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=30.00 loops=1)
                      Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-(26 rows)
 
 -- queries without ORDER BY shouldnt use ordered append
 SET enable_seqscan TO false;
@@ -2287,8 +2117,7 @@ SET enable_seqscan TO false;
 SELECT pg_typeof(time)
 FROM :TEST_TABLE
 LIMIT 1;
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Append (actual rows=1.00 loops=1)
@@ -2298,7 +2127,6 @@ LIMIT 1;
                      ->  Seq Scan on compress_hyper_4_17_chunk (never executed)
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
                      ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-(9 rows)
 
 RESET enable_seqscan;
 -- test interaction with constraint exclusion
@@ -2308,8 +2136,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time"
@@ -2328,7 +2155,6 @@ LIMIT 1;
                      Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
                            Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(18 rows)
 
 :PREFIX
 SELECT time
@@ -2336,8 +2162,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time DESC
 LIMIT 1;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time" DESC
@@ -2354,7 +2179,6 @@ LIMIT 1;
                      Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_4_17_chunk (never executed)
                            Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(16 rows)
 
 -- test interaction with runtime exclusion
 :PREFIX
@@ -2363,8 +2187,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time"
@@ -2384,7 +2207,6 @@ LIMIT 1;
                      Vectorized Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
                            Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
-(19 rows)
 
 :PREFIX
 SELECT time
@@ -2392,8 +2214,7 @@ FROM :TEST_TABLE
 WHERE time < '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time"
@@ -2411,7 +2232,6 @@ LIMIT 1;
                      Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_4_17_chunk (never executed)
                            Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
-(17 rows)
 
 -- test constraint exclusion
 :PREFIX
@@ -2421,8 +2241,7 @@ WHERE time > '2000-01-08'::text::timestamptz
   AND time < '2000-01-10'
 ORDER BY time ASC
 LIMIT 1;
-                                                                                        QUERY PLAN                                                                                        
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time"
@@ -2436,7 +2255,6 @@ LIMIT 1;
                      ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=15.00 loops=1)
                            Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
                            Rows Removed by Filter: 15
-(13 rows)
 
 :PREFIX
 SELECT time
@@ -2445,8 +2263,7 @@ WHERE time < '2000-01-08'::text::timestamptz
   AND time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                                                        QUERY PLAN                                                                                        
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time"
@@ -2460,7 +2277,6 @@ LIMIT 1;
                      ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=10.00 loops=1)
                            Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
                            Rows Removed by Filter: 20
-(13 rows)
 
 -- Disable hash aggregation to get a deterministic test output
 SET enable_hashagg = OFF;
@@ -2468,8 +2284,7 @@ SET enable_hashagg = OFF;
 :PREFIX
 SELECT max(time)
 FROM :TEST_TABLE;
-                                              QUERY PLAN                                               
--------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -2491,13 +2306,11 @@ FROM :TEST_TABLE;
                        ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
                              Vectorized Filter: ("time" IS NOT NULL)
                              ->  Seq Scan on compress_hyper_4_16_chunk (never executed)
-(21 rows)
 
 :PREFIX
 SELECT min(time)
 FROM :TEST_TABLE;
-                                              QUERY PLAN                                               
--------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -2519,14 +2332,12 @@ FROM :TEST_TABLE;
                        ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
                              Vectorized Filter: ("time" IS NOT NULL)
                              ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-(21 rows)
 
 -- test first/last (doesn't use ordered append yet)
 :PREFIX
 SELECT first(time, time)
 FROM :TEST_TABLE;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -2546,13 +2357,11 @@ FROM :TEST_TABLE;
                              Sort Key: _hyper_3_15_chunk."time"
                              ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
                                    ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-(19 rows)
 
 :PREFIX
 SELECT last(time, time)
 FROM :TEST_TABLE;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -2575,7 +2384,6 @@ FROM :TEST_TABLE;
                              ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
                                    Vectorized Filter: ("time" IS NOT NULL)
                                    ->  Seq Scan on compress_hyper_4_16_chunk (never executed)
-(22 rows)
 
 -- test query with time_bucket
 :PREFIX
@@ -2583,8 +2391,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
@@ -2602,7 +2409,6 @@ LIMIT 1;
                      Sort Key: _hyper_3_15_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
                            ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-(17 rows)
 
 -- test query with ORDER BY time_bucket
 :PREFIX
@@ -2610,8 +2416,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
@@ -2632,7 +2437,6 @@ LIMIT 1;
                      ->  Result (never executed)
                            ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
                                  ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-(20 rows)
 
 -- test query with ORDER BY time_bucket, device_id
 -- must not use ordered append
@@ -2645,8 +2449,7 @@ WHERE device_id IN (1, 2)
 ORDER BY time_bucket('1d', time),
   device_id
 LIMIT 1;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Merge Append (actual rows=1.00 loops=1)
@@ -2675,7 +2478,6 @@ LIMIT 1;
                                  ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=12.00 loops=1)
                                        Filter: (device_id = ANY ('{1,2}'::integer[]))
                                        Rows Removed by Filter: 18
-(28 rows)
 
 -- test query with ORDER BY date_trunc
 :PREFIX
@@ -2683,8 +2485,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY date_trunc('day', time)
 LIMIT 1;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
@@ -2705,7 +2506,6 @@ LIMIT 1;
                      ->  Result (never executed)
                            ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
                                  ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-(20 rows)
 
 -- test query with ORDER BY date_trunc
 :PREFIX
@@ -2713,8 +2513,7 @@ SELECT date_trunc('day', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
@@ -2735,7 +2534,6 @@ LIMIT 1;
                      ->  Result (never executed)
                            ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
                                  ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-(20 rows)
 
 -- test query with ORDER BY date_trunc, device_id
 -- must not use ordered append
@@ -2748,8 +2546,7 @@ WHERE device_id IN (1, 2)
 ORDER BY 1,
   2
 LIMIT 1;
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Merge Append (actual rows=1.00 loops=1)
@@ -2778,7 +2575,6 @@ LIMIT 1;
                                  ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=12.00 loops=1)
                                        Filter: (device_id = ANY ('{1,2}'::integer[]))
                                        Rows Removed by Filter: 18
-(28 rows)
 
 -- test query with now() should result in ordered ChunkAppend
 :PREFIX
@@ -2787,8 +2583,7 @@ FROM :TEST_TABLE
 WHERE time < now() + '1 month'
 ORDER BY time DESC
 LIMIT 1;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time" DESC
@@ -2812,7 +2607,6 @@ LIMIT 1;
                      Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                      ->  Seq Scan on compress_hyper_4_16_chunk (never executed)
                            Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
-(23 rows)
 
 -- test CTE
 :PREFIX WITH i AS (
@@ -2824,8 +2618,7 @@ LIMIT 1;
 )
 SELECT *
 FROM i;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time" DESC
@@ -2849,7 +2642,6 @@ FROM i;
                      Vectorized Filter: ("time" < now())
                      ->  Seq Scan on compress_hyper_4_16_chunk (never executed)
                            Filter: (_ts_meta_min_1 < now())
-(23 rows)
 
 -- test CTE
 -- no chunk exclusion for CTE because cte query is not pulled up
@@ -2863,8 +2655,7 @@ SET enable_seqscan TO false;
 SELECT *
 FROM cte
 WHERE time < '2000-02-01'::timestamptz;
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=13674.00 loops=1)
    Order: metrics_compressed."time"
    ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=3598.00 loops=1)
@@ -2879,7 +2670,6 @@ WHERE time < '2000-02-01'::timestamptz;
          Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Scan Backward using compress_hyper_4_18_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_18_chunk (actual rows=6.00 loops=1)
                Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
-(14 rows)
 
 RESET enable_seqscan;
 -- test subquery
@@ -2891,8 +2681,7 @@ WHERE time = (
     SELECT max(time)
     FROM :TEST_TABLE)
 ORDER BY time;
-                                                             QUERY PLAN                                                             
-------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=5.00 loops=1)
    Chunks excluded during runtime: 2
    InitPlan 2 (returns $1)
@@ -2931,7 +2720,6 @@ ORDER BY time;
          ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=5.00 loops=1)
                Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                Rows Removed by Filter: 25
-(38 rows)
 
 -- test ordered append with limit expression
 :PREFIX
@@ -2940,8 +2728,7 @@ FROM :TEST_TABLE
 ORDER BY time
 LIMIT (
   SELECT length('four'));
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=4.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Result (actual rows=1.00 loops=1)
@@ -2960,7 +2747,6 @@ LIMIT (
                Sort Key: _hyper_3_15_chunk."time"
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
                      ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-(18 rows)
 
 -- test with ordered guc disabled
 SET timescaledb.enable_ordered_append TO OFF;
@@ -2969,8 +2755,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Merge Append (actual rows=3.00 loops=1)
          Sort Key: metrics_compressed."time"
@@ -2989,7 +2774,6 @@ LIMIT 3;
                Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=25190.00 loops=1)
                      ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=30.00 loops=1)
-(18 rows)
 
 RESET timescaledb.enable_ordered_append;
 :PREFIX
@@ -2997,8 +2781,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=3.00 loops=1)
          Order: metrics_compressed."time"
@@ -3015,7 +2798,6 @@ LIMIT 3;
                Sort Key: _hyper_3_15_chunk."time"
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
                      ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-(16 rows)
 
 -- test with chunk append disabled
 SET timescaledb.enable_chunk_append TO OFF;
@@ -3024,8 +2806,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Merge Append (actual rows=3.00 loops=1)
          Sort Key: metrics_compressed."time"
@@ -3044,7 +2825,6 @@ LIMIT 3;
                Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=25190.00 loops=1)
                      ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=30.00 loops=1)
-(18 rows)
 
 RESET timescaledb.enable_chunk_append;
 :PREFIX
@@ -3052,8 +2832,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=3.00 loops=1)
          Order: metrics_compressed."time"
@@ -3070,7 +2849,6 @@ LIMIT 3;
                Sort Key: _hyper_3_15_chunk."time"
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
                      ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-(16 rows)
 
 \set TEST_TABLE 'metrics_space_compressed'
 \ir :TEST_QUERY_NAME
@@ -3091,8 +2869,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -3141,7 +2918,6 @@ LIMIT 1;
                      Sort Key: _hyper_5_27_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                            ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-(48 rows)
 
 -- test DESC for ordered chunks
 :PREFIX
@@ -3149,8 +2925,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
          Order: metrics_space_compressed."time" DESC
@@ -3199,7 +2974,6 @@ LIMIT 1;
                      Sort Key: _hyper_5_19_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (never executed)
                            ->  Seq Scan on compress_hyper_6_28_chunk (never executed)
-(48 rows)
 
 -- test query with ORDER BY column not in targetlist
 :PREFIX
@@ -3208,8 +2982,7 @@ SELECT pg_typeof(device_id),
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
@@ -3259,7 +3032,6 @@ LIMIT 1;
                            Sort Key: _hyper_5_27_chunk."time"
                            ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                                  ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-(49 rows)
 
 -- ORDER BY may include other columns after time column
 :PREFIX
@@ -3271,8 +3043,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                                       QUERY PLAN                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
          Order: metrics_space_compressed."time" DESC
@@ -3285,7 +3056,6 @@ LIMIT 1;
          ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (never executed)
                ->  Index Scan using compress_hyper_6_28_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_28_chunk (never executed)
                      Index Cond: (device_id = 1)
-(12 rows)
 
 -- test RECORD in targetlist
 :PREFIX
@@ -3297,8 +3067,7 @@ WHERE device_id = 1
 ORDER BY time DESC,
   device_id
 LIMIT 1;
-                                                                          QUERY PLAN                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
@@ -3312,7 +3081,6 @@ LIMIT 1;
                ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (never executed)
                      ->  Index Scan using compress_hyper_6_28_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_28_chunk (never executed)
                            Index Cond: (device_id = 1)
-(13 rows)
 
 -- test sort column not in targetlist
 :PREFIX
@@ -3320,8 +3088,7 @@ SELECT time_bucket('1h', time)
 FROM :TEST_TABLE
 ORDER BY time DESC
 LIMIT 1;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
@@ -3371,7 +3138,6 @@ LIMIT 1;
                            Sort Key: _hyper_5_19_chunk."time" DESC
                            ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (never executed)
                                  ->  Seq Scan on compress_hyper_6_28_chunk (never executed)
-(49 rows)
 
 -- queries with ORDER BY non-time column shouldn't use ordered append
 :PREFIX
@@ -3379,8 +3145,7 @@ SELECT device_id
 FROM :TEST_TABLE
 ORDER BY device_id
 LIMIT 1;
-                                                                       QUERY PLAN                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: metrics_space_compressed.device_id
@@ -3402,7 +3167,6 @@ LIMIT 1;
                ->  Index Scan using compress_hyper_6_35_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_35_chunk (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=1.00 loops=1)
                ->  Index Scan using compress_hyper_6_36_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_36_chunk (actual rows=1.00 loops=1)
-(21 rows)
 
 -- time column must be primary sort order
 SET enable_seqscan TO false;
@@ -3414,8 +3178,7 @@ WHERE device_id IN (1, 2)
 ORDER BY device_id,
   time
 LIMIT 1;
-                                                                          QUERY PLAN                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: metrics_space_compressed.device_id, metrics_space_compressed."time"
@@ -3455,7 +3218,6 @@ LIMIT 1;
                      Sort Method: quicksort 
                      ->  Index Scan using compress_hyper_6_35_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_35_chunk (actual rows=6.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
-(39 rows)
 
 RESET enable_seqscan;
 -- test equality constraint on ORDER BY prefix
@@ -3470,8 +3232,7 @@ WHERE device_id = 1
 ORDER BY device_id,
   time
 LIMIT 10;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=10.00 loops=1)
    ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: metrics_space_compressed."time"
@@ -3484,7 +3245,6 @@ LIMIT 10;
          ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=1.00 loops=1)
                ->  Index Scan Backward using compress_hyper_6_34_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_34_chunk (actual rows=1.00 loops=1)
                      Index Cond: (device_id = 1)
-(12 rows)
 
 RESET enable_seqscan;
 RESET enable_indexonlyscan;
@@ -3494,8 +3254,7 @@ SELECT time
 FROM :TEST_TABLE
 WHERE device_id IN (1, 2) OR time > '2000-01-06'
 ORDER BY time ASC;
-                                                                        QUERY PLAN                                                                         
------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=56853.00 loops=1)
    Order: metrics_space_compressed."time"
    ->  Merge Append (actual rows=7196.00 loops=1)
@@ -3573,7 +3332,6 @@ ORDER BY time ASC;
                      Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                      ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=6.00 loops=1)
                            Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-(77 rows)
 
 -- queries without ORDER BY shouldnt use ordered append
 SET enable_seqscan TO false;
@@ -3581,8 +3339,7 @@ SET enable_seqscan TO false;
 SELECT pg_typeof(time)
 FROM :TEST_TABLE
 LIMIT 1;
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Append (actual rows=1.00 loops=1)
@@ -3604,7 +3361,6 @@ LIMIT 1;
                      ->  Seq Scan on compress_hyper_6_35_chunk (never executed)
                ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                      ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-(21 rows)
 
 RESET enable_seqscan;
 -- test interaction with constraint exclusion
@@ -3614,8 +3370,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                     QUERY PLAN                                                      
----------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -3668,7 +3423,6 @@ LIMIT 1;
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
                                  Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(52 rows)
 
 :PREFIX
 SELECT time
@@ -3676,8 +3430,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-07'
 ORDER BY time DESC
 LIMIT 1;
-                                                     QUERY PLAN                                                      
----------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
          Order: metrics_space_compressed."time" DESC
@@ -3724,7 +3477,6 @@ LIMIT 1;
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_31_chunk (never executed)
                                  Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(46 rows)
 
 -- test interaction with runtime exclusion
 :PREFIX
@@ -3733,8 +3485,7 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                                  QUERY PLAN                                                  
---------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -3813,7 +3564,6 @@ LIMIT 1;
                            Vectorized Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
                                  Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
-(78 rows)
 
 :PREFIX
 SELECT time
@@ -3821,8 +3571,7 @@ FROM :TEST_TABLE
 WHERE time < '2000-01-08'::text::timestamptz
 ORDER BY time ASC
 LIMIT 1;
-                                                  QUERY PLAN                                                  
---------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -3889,7 +3638,6 @@ LIMIT 1;
                            Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
-(66 rows)
 
 -- test constraint exclusion
 :PREFIX
@@ -3899,8 +3647,7 @@ WHERE time > '2000-01-08'::text::timestamptz
   AND time < '2000-01-10'
 ORDER BY time ASC
 LIMIT 1;
-                                                                                           QUERY PLAN                                                                                           
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -3959,7 +3706,6 @@ LIMIT 1;
                            ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=3.00 loops=1)
                                  Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 3
-(58 rows)
 
 :PREFIX
 SELECT time
@@ -3968,8 +3714,7 @@ WHERE time < '2000-01-08'::text::timestamptz
   AND time > '2000-01-07'
 ORDER BY time ASC
 LIMIT 1;
-                                                                                           QUERY PLAN                                                                                           
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -4022,7 +3767,6 @@ LIMIT 1;
                            Vectorized Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
                            ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
                                  Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
-(52 rows)
 
 -- Disable hash aggregation to get a deterministic test output
 SET enable_hashagg = OFF;
@@ -4030,8 +3774,7 @@ SET enable_hashagg = OFF;
 :PREFIX
 SELECT max(time)
 FROM :TEST_TABLE;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -4091,13 +3834,11 @@ FROM :TEST_TABLE;
                              ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (never executed)
                                    Vectorized Filter: ("time" IS NOT NULL)
                                    ->  Seq Scan on compress_hyper_6_28_chunk (never executed)
-(59 rows)
 
 :PREFIX
 SELECT min(time)
 FROM :TEST_TABLE;
-                                                 QUERY PLAN                                                  
--------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -4157,14 +3898,12 @@ FROM :TEST_TABLE;
                              ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                                    Vectorized Filter: ("time" IS NOT NULL)
                                    ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-(59 rows)
 
 -- test first/last (doesn't use ordered append yet)
 :PREFIX
 SELECT first(time, time)
 FROM :TEST_TABLE;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -4216,13 +3955,11 @@ FROM :TEST_TABLE;
                                    Sort Key: _hyper_5_27_chunk."time"
                                    ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                                          ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-(51 rows)
 
 :PREFIX
 SELECT last(time, time)
 FROM :TEST_TABLE;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1.00 loops=1)
@@ -4283,7 +4020,6 @@ FROM :TEST_TABLE;
                                    ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (never executed)
                                          Vectorized Filter: ("time" IS NOT NULL)
                                          ->  Seq Scan on compress_hyper_6_28_chunk (never executed)
-(60 rows)
 
 -- test query with time_bucket
 :PREFIX
@@ -4291,8 +4027,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY time ASC
 LIMIT 1;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
@@ -4342,7 +4077,6 @@ LIMIT 1;
                            Sort Key: _hyper_5_27_chunk."time"
                            ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                                  ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-(49 rows)
 
 -- test query with ORDER BY time_bucket
 :PREFIX
@@ -4350,8 +4084,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
@@ -4410,7 +4143,6 @@ LIMIT 1;
                            ->  Result (never executed)
                                  ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                                        ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-(58 rows)
 
 -- test query with ORDER BY time_bucket, device_id
 -- must not use ordered append
@@ -4423,8 +4155,7 @@ WHERE device_id IN (1, 2)
 ORDER BY time_bucket('1d', time),
   device_id
 LIMIT 1;
-                                                           QUERY PLAN                                                            
----------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Merge Append (actual rows=1.00 loops=1)
@@ -4474,7 +4205,6 @@ LIMIT 1;
                                  ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=6.00 loops=1)
                                        Filter: (device_id = ANY ('{1,2}'::integer[]))
                                        Rows Removed by Filter: 12
-(49 rows)
 
 -- test query with ORDER BY date_trunc
 :PREFIX
@@ -4482,8 +4212,7 @@ SELECT time_bucket('1d', time)
 FROM :TEST_TABLE
 ORDER BY date_trunc('day', time)
 LIMIT 1;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
@@ -4542,7 +4271,6 @@ LIMIT 1;
                            ->  Result (never executed)
                                  ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                                        ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-(58 rows)
 
 -- test query with ORDER BY date_trunc
 :PREFIX
@@ -4550,8 +4278,7 @@ SELECT date_trunc('day', time)
 FROM :TEST_TABLE
 ORDER BY 1
 LIMIT 1;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
@@ -4610,7 +4337,6 @@ LIMIT 1;
                            ->  Result (never executed)
                                  ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                                        ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-(58 rows)
 
 -- test query with ORDER BY date_trunc, device_id
 -- must not use ordered append
@@ -4623,8 +4349,7 @@ WHERE device_id IN (1, 2)
 ORDER BY 1,
   2
 LIMIT 1;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Result (actual rows=1.00 loops=1)
          ->  Merge Append (actual rows=1.00 loops=1)
@@ -4674,7 +4399,6 @@ LIMIT 1;
                                  ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=6.00 loops=1)
                                        Filter: (device_id = ANY ('{1,2}'::integer[]))
                                        Rows Removed by Filter: 12
-(49 rows)
 
 -- test query with now() should result in ordered ChunkAppend
 :PREFIX
@@ -4683,8 +4407,7 @@ FROM :TEST_TABLE
 WHERE time < now() + '1 month'
 ORDER BY time DESC
 LIMIT 1;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
          Order: metrics_space_compressed."time" DESC
@@ -4751,7 +4474,6 @@ LIMIT 1;
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_6_28_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
-(66 rows)
 
 -- test CTE
 :PREFIX WITH i AS (
@@ -4763,8 +4485,7 @@ LIMIT 1;
 )
 SELECT *
 FROM i;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time" DESC
@@ -4831,7 +4552,6 @@ FROM i;
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_6_28_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < now())
-(66 rows)
 
 -- test CTE
 -- no chunk exclusion for CTE because cte query is not pulled up
@@ -4845,8 +4565,7 @@ SET enable_seqscan TO false;
 SELECT *
 FROM cte
 WHERE time < '2000-02-01'::timestamptz;
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=13674.00 loops=1)
    Order: metrics_space_compressed."time"
    ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=3598.00 loops=1)
@@ -4861,7 +4580,6 @@ WHERE time < '2000-02-01'::timestamptz;
          Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Scan Backward using compress_hyper_6_34_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_34_chunk (actual rows=6.00 loops=1)
                Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
-(14 rows)
 
 RESET enable_seqscan;
 -- test subquery
@@ -4873,8 +4591,7 @@ WHERE time = (
     SELECT max(time)
     FROM :TEST_TABLE)
 ORDER BY time;
-                                                                QUERY PLAN                                                                
-------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=5.00 loops=1)
    InitPlan 2 (returns $1)
      ->  Result (actual rows=1.00 loops=1)
@@ -4987,7 +4704,6 @@ ORDER BY time;
                ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=1.00 loops=1)
                      Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 5
-(112 rows)
 
 -- test ordered append with limit expression
 :PREFIX
@@ -4996,8 +4712,7 @@ FROM :TEST_TABLE
 ORDER BY time
 LIMIT (
   SELECT length('four'));
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=4.00 loops=1)
    InitPlan 1 (returns $0)
      ->  Result (actual rows=1.00 loops=1)
@@ -5048,7 +4763,6 @@ LIMIT (
                      Sort Key: _hyper_5_27_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                            ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-(50 rows)
 
 -- test with ordered guc disabled
 SET timescaledb.enable_ordered_append TO OFF;
@@ -5057,8 +4771,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Merge Append (actual rows=3.00 loops=1)
          Sort Key: metrics_space_compressed."time"
@@ -5107,7 +4820,6 @@ LIMIT 3;
                Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=5038.00 loops=1)
                      ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=6.00 loops=1)
-(48 rows)
 
 RESET timescaledb.enable_ordered_append;
 :PREFIX
@@ -5115,8 +4827,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=3.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -5165,7 +4876,6 @@ LIMIT 3;
                      Sort Key: _hyper_5_27_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                            ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-(48 rows)
 
 -- test with chunk append disabled
 SET timescaledb.enable_chunk_append TO OFF;
@@ -5174,8 +4884,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Merge Append (actual rows=3.00 loops=1)
          Sort Key: metrics_space_compressed."time"
@@ -5224,7 +4933,6 @@ LIMIT 3;
                Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=5038.00 loops=1)
                      ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=6.00 loops=1)
-(48 rows)
 
 RESET timescaledb.enable_chunk_append;
 :PREFIX
@@ -5232,8 +4940,7 @@ SELECT time
 FROM :TEST_TABLE
 ORDER BY time
 LIMIT 3;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=3.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -5282,7 +4989,6 @@ LIMIT 3;
                      Sort Key: _hyper_5_27_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                            ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-(48 rows)
 
 -- get results for all the queries
 -- run queries on uncompressed hypertable and store result

@@ -305,7 +305,7 @@ SELECT chunk_schema, chunk_name FROM compressed_chunk_info_view WHERE hypertable
 SELECT format('%I.%I', :'chunk_schema', :'chunk_name') AS "RECOMPRESS_CHUNK_NAME"; \gset
 
 -- get size of the chunk that needs recompression
-VACUUM ANALYZE metrics2;
+VACUUM ANALYZE :RECOMPRESS_CHUNK_NAME;
 
 SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') AS "SIZE_BEFORE_REINDEX"; \gset
 
@@ -315,13 +315,12 @@ CALL run_job(:JOB_COMPRESS);
 SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
 
 -- index size should not have decreased
-VACUUM ANALYZE metrics2;
-SELECT
-pg_size_pretty(pg_table_size(:'RECOMPRESS_CHUNK_NAME')) AS table_only,
-pg_size_pretty(pg_indexes_size(:'RECOMPRESS_CHUNK_NAME')) AS indexes,
-pg_size_pretty(pg_total_relation_size(:'RECOMPRESS_CHUNK_NAME')) AS total;
+VACUUM ANALYZE :RECOMPRESS_CHUNK_NAME;
 
-SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') = :SIZE_BEFORE_REINDEX as size_unchanged;
+-- index size can vary, vacuuming can even increase the size of the index
+-- just check that the index size hasn't decreased, this can only happen
+-- when running VACUUM FULL or REINDEX TABLE
+SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') >= :SIZE_BEFORE_REINDEX as size_unchanged;
 
 -- enable reindex in compress job
 SELECT alter_job(id,config:=jsonb_set(config,'{reindex}','true'), next_start => '2000-01-01 00:00:00+00'::timestamptz) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;

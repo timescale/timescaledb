@@ -39,7 +39,6 @@ select table_name from create_hypertable( 'conditions', 'timec', chunk_time_inte
  table_name 
 ------------
  conditions
-(1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'timec');
@@ -69,7 +68,6 @@ select add_compression_policy('conditions', '1day'::interval);
  add_compression_policy 
 ------------------------
                    1000
-(1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 --try dropping policy
@@ -83,14 +81,12 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('conditions') ch;
  count 
 -------
      2
-(1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 select count(*) from conditions;
  count 
 -------
     31
-(1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 GRANT INSERT on conditions to :ROLE_DEFAULT_PERM_USER_2;
@@ -101,7 +97,6 @@ select count(*) from conditions;
  count 
 -------
     32
-(1 row)
 
 update conditions
 set location = 'SFO'
@@ -114,7 +109,6 @@ select location from conditions where timec = '2019-04-01 00:00+0';
  location 
 ----------
  NYC
-(1 row)
 
 --NOTE constraint exclusion excludes the other chunks here
 --otherwise update would fail
@@ -125,7 +119,6 @@ select location from conditions where timec = '2019-04-01 00:00+0';
  location 
 ----------
  SFO
-(1 row)
 
 --update expected to fail as executor touches all chunks
 update conditions
@@ -136,14 +129,12 @@ where timec = '2019-04-01 00:00+0'::timestamp with time zone;
 select location from conditions where timec = '2019-04-01 00:00+0';
  location 
 ----------
-(0 rows)
 
 CREATE VIEW v2 as select * from conditions;
 select count(*) from v2;
  count 
 -------
     31
-(1 row)
 
 --should fail after revoking permissions
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -168,7 +159,6 @@ SELECT table_name FROM create_hypertable( 'conditions', 'timec',
  table_name 
 ------------
  conditions
-(1 row)
 
 ALTER TABLE conditions SET (
       timescaledb.compress,
@@ -185,7 +175,6 @@ SELECT compress_chunk(show_chunks('conditions'));
  _timescaledb_internal._hyper_3_8_chunk
  _timescaledb_internal._hyper_3_9_chunk
  _timescaledb_internal._hyper_3_10_chunk
-(5 rows)
 
 -- Check that ACL propagates to compressed hypertable.  We could prune
 -- the listing by only selecting chunks where the ACL does not match
@@ -349,13 +338,11 @@ SELECT count(*) FROM conditions;
  count 
 -------
     63
-(1 row)
 
 SELECT count(*) FROM ( SELECT show_chunks('conditions'))q;
  count 
 -------
     11
-(1 row)
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 --insert into a compressed chunk --
@@ -364,11 +351,9 @@ SELECT count(*) FROM conditions;
  count 
 -------
     64
-(1 row)
 
 SELECT count(*) FROM ( SELECT show_chunks('conditions'))q;
  count 
 -------
     11
-(1 row)
 

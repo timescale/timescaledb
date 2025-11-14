@@ -333,7 +333,7 @@ static void
 add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 {
 	int res;
-	StringInfo command;
+	StringInfoData command;
 	MemoryContext orig_context = CurrentMemoryContext;
 
 	const char *command_string = "SELECT "
@@ -367,10 +367,10 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 	int save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
 
-	command = makeStringInfo();
+	initStringInfo(&command);
 
-	appendStringInfoString(command, command_string);
-	res = SPI_execute(command->data, true /*read only*/, 0 /* count */);
+	appendStringInfoString(&command, command_string);
+	res = SPI_execute(command.data, true /*read only*/, 0 /* count */);
 	if (res < 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -435,7 +435,7 @@ add_job_stats_internal(JsonbParseState *state, const char *job_type, TelemetryJo
 static void
 add_job_stats_by_job_type(JsonbParseState *parse_state)
 {
-	StringInfo command;
+	StringInfoData command;
 	int res;
 	MemoryContext orig_context = CurrentMemoryContext;
 	SPITupleTable *tuptable = NULL;
@@ -471,10 +471,10 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 	int save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
 
-	command = makeStringInfo();
+	initStringInfo(&command);
 
-	appendStringInfoString(command, command_string);
-	res = SPI_execute(command->data, true /* read_only */, 0 /*count*/);
+	appendStringInfoString(&command, command_string);
+	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 	if (res < 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -561,7 +561,7 @@ add_related_extensions(JsonbParseState *state)
 static char *
 get_pgversion_string()
 {
-	StringInfo buf = makeStringInfo();
+	StringInfoData buf;
 	int major, patch;
 
 	/*
@@ -577,9 +577,10 @@ get_pgversion_string()
 	patch = server_version_num % 100;
 
 	Assert(major >= PG_MAJOR_MIN);
-	appendStringInfo(buf, "%d.%d", major, patch);
+	initStringInfo(&buf);
+	appendStringInfo(&buf, "%d.%d", major, patch);
 
-	return buf->data;
+	return buf.data;
 }
 
 #define ISO8601_FORMAT "YYYY-MM-DD\"T\"HH24:MI:SSOF"

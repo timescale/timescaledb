@@ -55,13 +55,20 @@ CREATE OR REPLACE PROCEDURE @extschema@.convert_to_rowstore(
     if_columnstore BOOLEAN = true
 ) AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C;
 
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.chunk_rewrite_cleanup()
+LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_chunk_rewrite_cleanup';
+
 CREATE OR REPLACE PROCEDURE @extschema@.merge_chunks(
-   chunk1 REGCLASS, chunk2 REGCLASS
+   chunk1 REGCLASS, chunk2 REGCLASS, concurrently BOOLEAN = false
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_merge_two_chunks';
 
 CREATE OR REPLACE PROCEDURE @extschema@.merge_chunks(
     chunks REGCLASS[]
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_merge_chunks';
+
+CREATE OR REPLACE PROCEDURE @extschema@.merge_chunks_concurrently(
+    chunks REGCLASS[]
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_merge_chunks_concurrently';
 
 CREATE OR REPLACE PROCEDURE @extschema@.split_chunk(
     chunk REGCLASS,

@@ -20,7 +20,6 @@ select create_hypertable('t','ts');
  create_hypertable 
 -------------------
  (1,public,t,t)
-(1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
 insert into t (ts,c1) values (6,6);
@@ -28,42 +27,36 @@ select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 alter table t add column a double precision default 7.1;
 select * from t;
  ts | c1 |  a  
 ----+----+-----
   6 |  6 | 7.1
-(1 row)
 
 select compress_chunk(show_chunks('t'));
 NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 select * from t;
  ts | c1 |  a  
 ----+----+-----
   6 |  6 | 7.1
-(1 row)
 
 insert into t (ts,c1) values (7,7);
 select compress_chunk(show_chunks('t'));
-NOTICE:  segmentwise recompression is disabled, performing full recompression on chunk "_timescaledb_internal._hyper_1_1_chunk"
+NOTICE:  in-memory recompression is disabled due to no order by, performing decompress/compress on chunk "_timescaledb_internal._hyper_1_1_chunk"
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 select * from t;
  ts | c1 |  a  
 ----+----+-----
   6 |  6 | 7.1
   7 |  7 | 7.1
-(2 rows)
 
 set timescaledb.enable_segmentwise_recompression to on;
 -- test case #2: altering an uncompressed hypertable by adding a new column
@@ -78,7 +71,6 @@ select create_hypertable('t','ts');
  create_hypertable 
 -------------------
  (3,public,t,t)
-(1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 alter table t add column a double precision default 7.1;
@@ -87,20 +79,17 @@ select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_4_chunk
-(1 row)
 
 update t set a = null;
 select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_4_chunk
-(1 row)
 
 select * from t;
  ts | c1 | a 
 ----+----+---
   6 |  6 |  
-(1 row)
 
 insert into t (ts,c1) values (7,7);
 update t set a = null;
@@ -108,14 +97,12 @@ select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_4_chunk
-(1 row)
 
 select * from t;
  ts | c1 | a 
 ----+----+---
   6 |  6 |  
   7 |  7 |  
-(2 rows)
 
 -- test case #3: altering an uncompressed hypertable by adding a new column
 -- with a default value
@@ -130,7 +117,6 @@ select create_hypertable('t','ts');
  create_hypertable 
 -------------------
  (5,public,t,t)
-(1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
 alter table t add column a double precision default 7.1;
@@ -141,7 +127,6 @@ select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_5_6_chunk
-(1 row)
 
 update t set a = null;
 select * from t;
@@ -150,14 +135,12 @@ select * from t;
   4 |  4 |  
   5 |  5 |  
   6 |  6 |  
-(3 rows)
 
 select compress_chunk(show_chunks('t'));
-NOTICE:  segmentwise recompression is disabled, performing full recompression on chunk "_timescaledb_internal._hyper_5_6_chunk"
+NOTICE:  in-memory recompression is disabled due to no order by, performing decompress/compress on chunk "_timescaledb_internal._hyper_5_6_chunk"
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_5_6_chunk
-(1 row)
 
 select * from t;
  ts | c1 | a 
@@ -165,7 +148,6 @@ select * from t;
   4 |  4 |  
   5 |  5 |  
   6 |  6 |  
-(3 rows)
 
 set timescaledb.enable_segmentwise_recompression to on;
 -- test case #4: altering a compressed hypertable by adding a new column
@@ -180,7 +162,6 @@ select create_hypertable('t','ts');
  create_hypertable 
 -------------------
  (7,public,t,t)
-(1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 alter table t add column a double precision default 7.1;
@@ -189,13 +170,11 @@ select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_7_9_chunk
-(1 row)
 
 select * from t;
  ts | c1 |  a  
 ----+----+-----
   6 |  6 | 7.1
-(1 row)
 
 update t set a = null;
 insert into t (ts,c1) values (7,7);
@@ -204,14 +183,12 @@ select compress_chunk(show_chunks('t'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_7_9_chunk
-(1 row)
 
 select * from t;
  ts | c1 | a 
 ----+----+---
   6 |  6 |  
   7 |  7 |  
-(2 rows)
 
 -- test case #5: altering an uncompressed hypertable by adding a new column
 -- with a default value
@@ -227,7 +204,6 @@ select create_hypertable('t', 'ts');
  create_hypertable 
 -------------------
  (9,public,t,t)
-(1 row)
 
 alter table t set(timescaledb.compress, timescaledb.compress_segmentby = 'ts');
 insert into t (ts) values (1);
@@ -237,19 +213,16 @@ select * from t;
  ts | c1 
 ----+----
   1 |   
-(1 row)
 
 select compress_chunk(show_chunks('t'));
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_11_chunk
-(1 row)
 
 select * from t;
  ts | c1 
 ----+----
   1 |   
-(1 row)
 
 set timescaledb.enable_segmentwise_recompression to on;
 -- test case #6: altering a compressed hypertable by adding a new column
@@ -265,7 +238,6 @@ select create_hypertable('t', 'ts');
  create_hypertable 
 -------------------
  (11,public,t,t)
-(1 row)
 
 insert into t values (1);
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
@@ -273,7 +245,6 @@ select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_13_chunk
-(1 row)
 
 alter table t add column a double precision default 7.987;
 insert into t values (2, null);
@@ -282,20 +253,17 @@ select * from t;
 ----+-------
   1 | 7.987
   2 |      
-(2 rows)
 
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_13_chunk
-(1 row)
 
 select * from t;
  ts |   a   
 ----+-------
   1 | 7.987
   2 |      
-(2 rows)
 
 -- test case #7: a variation of #1 where
 -- the default value is changed after the column is added
@@ -311,7 +279,6 @@ select create_hypertable('t','ts');
  create_hypertable 
 -------------------
  (13,public,t,t)
-(1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
 insert into t (ts,c1) values (6,6);
@@ -319,43 +286,37 @@ select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_13_15_chunk
-(1 row)
 
 alter table t add column a double precision default 7.1;
 select * from t;
  ts | c1 |  a  
 ----+----+-----
   6 |  6 | 7.1
-(1 row)
 
 select compress_chunk(show_chunks('t'));
 NOTICE:  chunk "_hyper_13_15_chunk" is already converted to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_13_15_chunk
-(1 row)
 
 select * from t;
  ts | c1 |  a  
 ----+----+-----
   6 |  6 | 7.1
-(1 row)
 
 alter table t alter column a set default 7.2;
 insert into t (ts,c1) values (7,7);
 select compress_chunk(show_chunks('t'));
-NOTICE:  segmentwise recompression is disabled, performing full recompression on chunk "_timescaledb_internal._hyper_13_15_chunk"
+NOTICE:  in-memory recompression is disabled due to no order by, performing decompress/compress on chunk "_timescaledb_internal._hyper_13_15_chunk"
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_13_15_chunk
-(1 row)
 
 select * from t;
  ts | c1 |  a  
 ----+----+-----
   6 |  6 | 7.1
   7 |  7 | 7.2
-(2 rows)
 
 set timescaledb.enable_segmentwise_recompression to on;
 -- test case #8: a variation of #5 and #7 where
@@ -371,7 +332,6 @@ select create_hypertable('t','ts');
  create_hypertable 
 -------------------
  (15,public,t,t)
-(1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 insert into t (ts,c1) values (6,6);
@@ -379,7 +339,6 @@ select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_15_18_chunk
-(1 row)
 
 alter table t add column a double precision default 7.1;
 alter table t alter column a set default 8.2;
@@ -389,20 +348,17 @@ select * from t;
 ----+----+-----
   6 |  6 | 7.1
   7 |  7 | 8.2
-(2 rows)
 
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_15_18_chunk
-(1 row)
 
 select * from t;
  ts | c1 |  a  
 ----+----+-----
   6 |  6 | 7.1
   7 |  7 | 8.2
-(2 rows)
 
 alter table t alter column a set default 9.3;
 insert into t (ts,c1) values (8,8);
@@ -412,7 +368,6 @@ select * from t;
   6 |  6 | 7.1
   7 |  7 | 8.2
   8 |  8 | 9.3
-(3 rows)
 
 update t set a = null;
 select * from t;
@@ -421,13 +376,11 @@ select * from t;
   8 |  8 |  
   6 |  6 |  
   7 |  7 |  
-(3 rows)
 
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_15_18_chunk
-(1 row)
 
 select * from t;
  ts | c1 | a 
@@ -435,7 +388,6 @@ select * from t;
   6 |  6 |  
   7 |  7 |  
   8 |  8 |  
-(3 rows)
 
 -- test case #9: a variation of the previous ones with the twist
 -- of updating another column which triggers decompression and
@@ -447,7 +399,6 @@ select create_hypertable('t','ts');
  create_hypertable 
 -------------------
  (17,public,t,t)
-(1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 insert into t (ts,c1) values (6,6);
@@ -455,7 +406,6 @@ select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_17_20_chunk
-(1 row)
 
 alter table t add column a double precision default 7.1;
 select compress_chunk(show_chunks('t'));
@@ -463,52 +413,44 @@ NOTICE:  chunk "_hyper_17_20_chunk" is already converted to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_17_20_chunk
-(1 row)
 
 select * from t;
  ts | c1 |  a  
 ----+----+-----
   6 |  6 | 7.1
-(1 row)
 
 update t set a = null;
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_17_20_chunk
-(1 row)
 
 select * from t;
  ts | c1 | a 
 ----+----+---
   6 |  6 |  
-(1 row)
 
 update t set c1 = 99, a = null;
 select * from t;
  ts | c1 | a 
 ----+----+---
   6 | 99 |  
-(1 row)
 
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_17_20_chunk
-(1 row)
 
 select * from t;
  ts | c1 | a 
 ----+----+---
   6 | 99 |  
-(1 row)
 
 update t set c1 = 98;
 select * from t;
  ts | c1 | a 
 ----+----+---
   6 | 98 |  
-(1 row)
 
 -- test case #10: adding a few columns to a compressed hypertable
 -- and then updating them to null and dropping them
@@ -519,7 +461,6 @@ select create_hypertable('t','ts');
  create_hypertable 
 -------------------
  (19,public,t,t)
-(1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 insert into t (ts,c1) values (1,1);
@@ -527,7 +468,6 @@ select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_19_22_chunk
-(1 row)
 
 alter table t add column a double precision default 3.3;
 insert into t (ts,c1) values (2,2);
@@ -535,14 +475,12 @@ select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_19_22_chunk
-(1 row)
 
 select * from t;
  ts | c1 |  a  
 ----+----+-----
   1 |  1 | 3.3
   2 |  2 | 3.3
-(2 rows)
 
 alter table t add column b double precision default 4.4;
 insert into t (ts,c1) values (3,3);
@@ -550,7 +488,6 @@ select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_19_22_chunk
-(1 row)
 
 select * from t;
  ts | c1 |  a  |  b  
@@ -558,14 +495,12 @@ select * from t;
   1 |  1 | 3.3 | 4.4
   2 |  2 | 3.3 | 4.4
   3 |  3 | 3.3 | 4.4
-(3 rows)
 
 update t set a = null;
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_19_22_chunk
-(1 row)
 
 select * from t;
  ts | c1 | a |  b  
@@ -573,7 +508,6 @@ select * from t;
   1 |  1 |   | 4.4
   2 |  2 |   | 4.4
   3 |  3 |   | 4.4
-(3 rows)
 
 alter table t add column c double precision;
 insert into t (ts,c1) values (4,4);
@@ -581,7 +515,6 @@ select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_19_22_chunk
-(1 row)
 
 select * from t;
  ts | c1 |  a  |  b  | c 
@@ -590,14 +523,12 @@ select * from t;
   2 |  2 |     | 4.4 |  
   3 |  3 |     | 4.4 |  
   4 |  4 | 3.3 | 4.4 |  
-(4 rows)
 
 update t set b = null;
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_19_22_chunk
-(1 row)
 
 select * from t;
  ts | c1 |  a  | b | c 
@@ -606,7 +537,6 @@ select * from t;
   2 |  2 |     |   |  
   3 |  3 |     |   |  
   4 |  4 | 3.3 |   |  
-(4 rows)
 
 alter table t drop column a;
 update t set b = null;
@@ -614,7 +544,6 @@ select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_19_22_chunk
-(1 row)
 
 select * from t;
  ts | c1 | b | c 
@@ -623,7 +552,6 @@ select * from t;
   2 |  2 |   |  
   3 |  3 |   |  
   4 |  4 |   |  
-(4 rows)
 
 alter table t drop column b;
 update t set c = null;
@@ -631,7 +559,6 @@ select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_19_22_chunk
-(1 row)
 
 select * from t;
  ts | c1 | c 
@@ -640,7 +567,6 @@ select * from t;
   2 |  2 |  
   3 |  3 |  
   4 |  4 |  
-(4 rows)
 
 -- this is to make codecove happy so we exercise some
 -- code paths that are hard to do through the unit tests
@@ -651,7 +577,6 @@ select create_hypertable('codecov','ts');
    create_hypertable   
 -----------------------
  (21,public,codecov,t)
-(1 row)
 
 alter table codecov set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
 insert into codecov (ts,c1) values (1,NULL);
@@ -659,7 +584,6 @@ select compress_chunk(show_chunks('codecov'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_21_24_chunk
-(1 row)
 
 DO $$
 DECLARE

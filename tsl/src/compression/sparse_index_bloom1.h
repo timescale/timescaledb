@@ -9,4 +9,6 @@
 
 Datum bloom1_contains(PG_FUNCTION_ARGS);
 
+Datum bloom1_contains_any(PG_FUNCTION_ARGS);
+
 PGFunction bloom1_get_hash_function(Oid type, FmgrInfo **finfo);

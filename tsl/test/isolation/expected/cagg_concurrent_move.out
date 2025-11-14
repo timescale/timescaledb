@@ -12,7 +12,6 @@ step s4_show_thresholds:
 hypertable |watermark                   
 -----------+----------------------------
 temperature|Wed Jan 01 00:00:00 2025 PST
-(1 row)
 
 step s4_before: 
     START TRANSACTION;
@@ -27,7 +26,6 @@ step s4_before:
 hypertable |lowest_modified_value       |greatest_modified_value     
 -----------+----------------------------+----------------------------
 temperature|Sat Dec 31 16:00:00 2022 PST|Sun Jan 01 15:59:00 2023 PST
-(1 row)
 
 step s1_refresh: 
    CALL refresh_continuous_aggregate('cagg_1', '2020-01-01 00:00:00', '2025-01-01 00:00:00');
@@ -55,5 +53,4 @@ step s4_after:
 
 hypertable|lowest_modified_value|greatest_modified_value
 ----------+---------------------+-----------------------
-(0 rows)
 

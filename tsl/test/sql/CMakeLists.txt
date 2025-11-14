@@ -27,7 +27,6 @@ set(TEST_FILES
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
-    compress_bloom_sparse.sql
     compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
@@ -36,7 +35,7 @@ set(TEST_FILES
     compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
-    compressed_insert.sql
+    direct_compress_insert.sql
     compression.sql
     compression_allocation.sql
     compression_conflicts.sql
@@ -59,13 +58,11 @@ set(TEST_FILES
     create_table_with.sql
     custom_hashagg.sql
     decompress_index.sql
-    foreign_keys_test.sql
-    merge_chunks.sql
     merge_compress.sql
-    modify_exclusion.sql
     move.sql
     plan_skip_scan_notnull.sql
     policy_generalization.sql
+    recompression_integrity_tests.sql
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql
@@ -83,7 +80,10 @@ set(TEST_TEMPLATES
     cagg_query_using_merge.sql.in
     cagg_union_view.sql.in
     cagg_permissions.sql.in
+    compress_bloom_sparse.sql.in
     compression_permissions.sql.in
+    foreign_keys_test.sql.in
+    modify_exclusion.sql.in
     ordered_append.sql.in
     plan_skip_scan.sql.in
     transparent_decompression.sql.in
@@ -94,7 +94,7 @@ if(USE_TELEMETRY)
 endif()
 
 if(NOT APPLE)
-  list(APPEND TEST_FILES compressed_copy.sql)
+  list(APPEND TEST_FILES direct_compress_copy.sql)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -154,6 +154,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     read_only.sql
     tsl_tables.sql
     license_tsl.sql
+    merge_chunks.sql
     fixed_schedules.sql
     partialize_finalize.sql
     recompress_chunk_segmentwise.sql
@@ -185,8 +186,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES cagg_planning.sql skip_scan_dagg.sql
-       plan_skip_scan_dagg.sql)
+  list(APPEND TEST_FILES cagg_planning.sql skip_scan_dagg.sql)
+  list(APPEND TEST_TEMPLATES plan_skip_scan_dagg.sql.in)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))

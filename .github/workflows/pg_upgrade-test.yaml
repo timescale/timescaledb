@@ -17,8 +17,14 @@ jobs:
             pg_version_new: 16
           - pg_version_old: 15 # 15 to 17
             pg_version_new: 17
+          - pg_version_old: 15 # 15 to 18
+            pg_version_new: 18
           - pg_version_old: 16 # 16 to 17
             pg_version_new: 17
+          - pg_version_old: 16 # 16 to 18
+            pg_version_new: 18
+          - pg_version_old: 17 # 17 to 18
+            pg_version_new: 18
       fail-fast: false
     env:
       OUTPUT_DIR: ${{ github.workspace }}/pg_upgrade_test
@@ -27,7 +33,7 @@ jobs:
       - name: Install Linux Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install pip postgresql-common libkrb5-dev
+          sudo apt-get install pip postgresql-common
 
       - name: Install testgres
         run: |
