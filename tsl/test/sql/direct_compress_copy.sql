@@ -115,7 +115,7 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
 ROLLBACK;
 
--- test caggs prevent direct compress
+-- test caggs with direct compress
 BEGIN;
 SET timescaledb.enable_direct_compress_copy = true;
 CREATE MATERIALIZED VIEW metrics_cagg WITH (tsdb.continuous) AS SELECT time_bucket('1 hour', time) AS bucket, device, avg(value) AS avg_value FROM metrics GROUP BY bucket, device WITH NO DATA;
