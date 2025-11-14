@@ -64,7 +64,7 @@ static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compress
 										 const CompressionInfo *compression_info,
 										 const SortInfo *sort_info);
 
-static DecompressChunkPath *
+static ColumnarScanPath *
 decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path);
 
 static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
@@ -351,13 +351,13 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 	return required_compressed_pathkeys;
 }
 
-DecompressChunkPath *
-copy_decompress_chunk_path(DecompressChunkPath *src)
+ColumnarScanPath *
+copy_decompress_chunk_path(ColumnarScanPath *src)
 {
 	Assert(ts_is_decompress_chunk_path(&src->custom_path.path));
 
-	DecompressChunkPath *dst = palloc(sizeof(DecompressChunkPath));
-	memcpy(dst, src, sizeof(DecompressChunkPath));
+	ColumnarScanPath *dst = palloc(sizeof(ColumnarScanPath));
+	memcpy(dst, src, sizeof(ColumnarScanPath));
 
 	return dst;
 }
@@ -725,7 +725,7 @@ smoothstep(double x, double start, double end)
  */
 static void
 cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_info,
-						DecompressChunkPath *dcpath, Path *compressed_path)
+						ColumnarScanPath *dcpath, Path *compressed_path)
 {
 	Path sort_path; /* dummy for result of cost_sort */
 
@@ -898,7 +898,7 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 	 * chunk path because the original can be recycled in add_path, and our
 	 * sorted path must be independent.
 	 */
-	DecompressChunkPath *path_copy = copy_decompress_chunk_path((DecompressChunkPath *) path);
+	ColumnarScanPath *path_copy = copy_decompress_chunk_path((ColumnarScanPath *) path);
 
 	/*
 	 * Create the Sort path.
@@ -1203,8 +1203,8 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	{
 		Assert(!sort_info->use_compressed_sort);
 
-		DecompressChunkPath *path_copy =
-			copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
+		ColumnarScanPath *path_copy =
+			copy_decompress_chunk_path((ColumnarScanPath *) chunk_path_no_sort);
 
 		path_copy->reverse = sort_info->reverse;
 		path_copy->batch_sorted_merge = true;
@@ -1249,7 +1249,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			 * The compressed path already has the required ordering. Modify
 			 * in place the no-sorting path we just created above.
 			 */
-			DecompressChunkPath *path = (DecompressChunkPath *) chunk_path_no_sort;
+			ColumnarScanPath *path = (ColumnarScanPath *) chunk_path_no_sort;
 			path->reverse = sort_info->reverse;
 			path->needs_sequence_num = sort_info->needs_sequence_num;
 			path->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
@@ -1262,8 +1262,8 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			 * required ordering. Make a copy of no-sorting path and modify
 			 * it accordingly
 			 */
-			DecompressChunkPath *path_copy =
-				copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
+			ColumnarScanPath *path_copy =
+				copy_decompress_chunk_path((ColumnarScanPath *) chunk_path_no_sort);
 			path_copy->reverse = sort_info->reverse;
 			path_copy->needs_sequence_num = sort_info->needs_sequence_num;
 			path_copy->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
@@ -2188,12 +2188,12 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 	}
 }
 
-static DecompressChunkPath *
+static ColumnarScanPath *
 decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path)
 {
-	DecompressChunkPath *path;
+	ColumnarScanPath *path;
 
-	path = (DecompressChunkPath *) newNode(sizeof(DecompressChunkPath), T_CustomPath);
+	path = (ColumnarScanPath *) newNode(sizeof(ColumnarScanPath), T_CustomPath);
 
 	path->info = info;
 

@@ -312,7 +312,7 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 	 */
 	if (ts_is_decompress_chunk_path(subpath))
 	{
-		subpath = (Path *) copy_decompress_chunk_path((DecompressChunkPath *) subpath);
+		subpath = (Path *) copy_decompress_chunk_path((ColumnarScanPath *) subpath);
 		subpath->pathtarget = chunk_target_before_grouping;
 	}
 	else

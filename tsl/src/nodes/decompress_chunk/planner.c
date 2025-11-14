@@ -96,7 +96,7 @@ typedef struct
 {
 	PlannerInfo *root;
 
-	DecompressChunkPath *decompress_path;
+	ColumnarScanPath *decompress_path;
 
 	Bitmapset *uncompressed_attrs_needed;
 
@@ -259,7 +259,7 @@ follow_uncompressed_output_tlist(const DecompressionMapContext *context)
 static void
 build_decompression_map(DecompressionMapContext *context, List *compressed_output_tlist)
 {
-	DecompressChunkPath *path = context->decompress_path;
+	ColumnarScanPath *path = context->decompress_path;
 	const CompressionInfo *info = path->info;
 	/*
 	 * Track which normal and metadata columns we were able to find in the
@@ -958,7 +958,7 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
  * list.
  */
 static void
-find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *path, List *qual_list,
+find_vectorized_quals(DecompressionMapContext *context, ColumnarScanPath *path, List *qual_list,
 					  List **vectorized, List **nonvectorized)
 {
 	VectorQualInfo vqi = {
@@ -1065,7 +1065,7 @@ Plan *
 decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 							 List *output_targetlist, List *clauses, List *custom_plans)
 {
-	DecompressChunkPath *dcpath = (DecompressChunkPath *) path;
+	ColumnarScanPath *dcpath = (ColumnarScanPath *) path;
 	CustomScan *decompress_plan = makeNode(CustomScan);
 	Scan *compressed_scan = linitial(custom_plans);
 	Path *compressed_path = linitial(path->custom_paths);

@@ -884,7 +884,7 @@ check_notnull_skipkey(SkipKeyInfo *skinfo, Path *child_path, IndexPath *index_pa
 }
 
 static IndexPath *
-get_compressed_index_path(DecompressChunkPath *dcpath)
+get_compressed_index_path(ColumnarScanPath *dcpath)
 {
 	Path *compressed_path = linitial(dcpath->custom_path.custom_paths);
 	if (IsA(compressed_path, IndexPath))
@@ -912,7 +912,7 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 		if (!ts_guc_enable_compressed_skip_scan)
 			return NULL;
 
-		DecompressChunkPath *dcpath = (DecompressChunkPath *) child_path;
+		ColumnarScanPath *dcpath = (ColumnarScanPath *) child_path;
 		index_path = get_compressed_index_path(dcpath);
 	}
 	if (!index_path)
@@ -1158,7 +1158,7 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 	if (ts_is_decompress_chunk_path(child_path))
 	{
 		/* distinct column has to be a segmentby column */
-		DecompressChunkPath *dcpath = (DecompressChunkPath *) child_path;
+		ColumnarScanPath *dcpath = (ColumnarScanPath *) child_path;
 		if (!bms_is_member(var->varattno, dcpath->info->chunk_segmentby_attnos))
 		{
 			return NULL;
