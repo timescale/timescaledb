@@ -5,6 +5,20 @@ This page lists all the latest features and updates to TimescaleDB. When
 you use psql to update your database, use the -X flag and prevent any .psqlrc 
 commands from accidentally triggering the load of a previous DB version.**
 
+## 2.23.1 (2025-11-13)
+
+This release contains performance improvements and bug fixes since the 2.23.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#8873](https://github.com/timescale/timescaledb/pull/8873) Don't error on failure to update job stats
+* [#8875](https://github.com/timescale/timescaledb/pull/8875) Fix decoding of UUID v7 timestamp microseconds
+* [#8879](https://github.com/timescale/timescaledb/pull/8879) Fix blocker for multiple hierarchical continuous aggregate policies
+* [#8882](https://github.com/timescale/timescaledb/pull/8882) Fix crash in policy creation
+
+**Thanks**
+* @alexanderlaw for reporting a crash when creating a policy
+* @leppaott for reporting an issue with hierarchical continuous aggregates
+
 ## 2.23.0 (2025-10-29)
 
 This release contains performance improvements and bug fixes since the 2.22.1 release. We recommend that you upgrade at the next available opportunity.
