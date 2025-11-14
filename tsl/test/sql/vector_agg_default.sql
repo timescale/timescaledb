@@ -31,9 +31,8 @@ select sum(c) from dvagg;
 
 
 set timescaledb.debug_require_vector_agg = 'require';
----- Uncomment to generate reference
---set timescaledb.debug_require_vector_agg = 'forbid';
---set timescaledb.enable_vectorized_aggregation to off;
+-- Uncomment to generate reference
+--set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
 
 -- Test vectorized aggregation, filters and expressions with a default column.
 select
@@ -71,8 +70,6 @@ explain (buffers off, costs off) select sum(c) from dvagg where b in (0, 1, 3);
 select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
 
 explain (buffers off, costs off) select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
-
-reset timescaledb.enable_vectorized_aggregation;
 
 
 -- The runtime chunk exclusion should work.

@@ -1870,7 +1870,6 @@ select substr(a || b, 1, 10), sum(t) from long group by a || b order by 1, 2 lim
  short21111 |   2
  short21111 |   3
  short21111 |   4
-(10 rows)
 
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;

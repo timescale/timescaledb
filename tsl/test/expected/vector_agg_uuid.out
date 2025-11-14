@@ -158,21 +158,19 @@ select uuid_version(u), count(*) from uuid_table group by 1 order by 1;
 --------------+-------
             7 |    18
             $ |     3
-(2 rows)
 
 select to_uuidv7_boundary(uuid_ts), count(*)
     from uuid_table group by 1 order by 1;
           to_uuidv7_boundary          | count 
 --------------------------------------+-------
- 01941f29-7c00-7066-8000-000000000000 |     1
- 01941f2a-665f-771e-8000-000000000000 |     1
+ 01941f29-7c00-706a-8000-000000000000 |     1
+ 01941f2a-665f-7722-8000-000000000000 |     1
  0197a7a9-b48b-7c6e-8000-000000000000 |     4
- 0197a7a9-b48b-7c72-8000-000000000000 |     3
+ 0197a7a9-b48b-7c72-8000-000000000000 |     2
  0197a7a9-b48b-7c76-8000-000000000000 |     4
  0197a7a9-b48b-7c7a-8000-000000000000 |     4
- 0197a7a9-b48b-7c7e-8000-000000000000 |     1
+ 0197a7a9-b48b-7c7e-8000-000000000000 |     2
  $                                    |     3
-(8 rows)
 
 select uuid_version(to_uuidv7_boundary(uuid_ts)), count(*)
     from uuid_table group by 1 order by 1;
@@ -180,14 +178,12 @@ select uuid_version(to_uuidv7_boundary(uuid_ts)), count(*)
 --------------+-------
             7 |    18
             $ |     3
-(2 rows)
 
 select uuid_extract_timestamp(u), count(*)
     from uuid_table group by 1 order by 1;
  uuid_extract_timestamp | count 
 ------------------------+-------
  $                      |    21
-(1 row)
 
 select uuid_timestamp(u), count(*)
     from uuid_table group by 1 order by 1;
@@ -197,7 +193,6 @@ select uuid_timestamp(u), count(*)
  Tue Dec 31 16:00:59.999 2024 PST |     1
  Wed Jun 25 08:16:46.347 2025 PDT |    16
  $                                |     3
-(4 rows)
 
 select uuid_timestamp(to_uuidv7_boundary(uuid_ts)), count(*)
     from uuid_table group by 1 order by 1;
@@ -207,6 +202,5 @@ select uuid_timestamp(to_uuidv7_boundary(uuid_ts)), count(*)
  Tue Dec 31 16:00:59.999 2024 PST |     1
  Wed Jun 25 08:16:46.347 2025 PDT |    16
  $                                |     3
-(4 rows)
 
 RESET timescaledb.debug_require_vector_agg;
