@@ -232,12 +232,12 @@ SELECT _timescaledb_functions.cagg_get_groupingcols('metrics_by_month'::regclass
 -----------------------
  {bucket}
 
-CREATE MATERIALIZED VIEW cagg_test_groupingcols 
+CREATE MATERIALIZED VIEW cagg_test_groupingcols
 WITH( timescaledb.continuous ) AS
-SELECT device_id, count(*), max(value), 
+SELECT device_id, count(*), max(value),
        time_bucket('1 day'::interval, time) as bkt,
        min( value)
-FROM 
+FROM
 metrics
 GROUP BY 4, 1 WITH NO DATA;
 SELECT unnest(_timescaledb_functions.cagg_get_groupingcols('cagg_test_groupingcols'::regclass));
