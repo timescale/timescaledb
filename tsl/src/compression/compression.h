@@ -250,12 +250,9 @@ typedef struct RowCompressor
 	 */
 	int16 *uncompressed_col_to_compressed_col;
 	int16 count_metadata_column_offset;
-	int16 sequence_num_metadata_column_offset;
 
 	/* the number of uncompressed rows compressed into the current compressed row */
 	uint32 rows_compressed_into_current_value;
-	/* a unique monotonically increasing (according to order by) id for each compressed row */
-	int32 sequence_num;
 
 	/* cached arrays used to build the HeapTuple */
 	Datum *compressed_values;

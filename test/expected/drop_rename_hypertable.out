@@ -183,6 +183,7 @@ SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_
  _timescaledb_catalog  | chunk
  _timescaledb_catalog  | chunk_column_stats
  _timescaledb_catalog  | chunk_constraint
+ _timescaledb_catalog  | chunk_rewrite
  _timescaledb_catalog  | compression_algorithm
  _timescaledb_catalog  | compression_chunk_size
  _timescaledb_catalog  | compression_settings

@@ -368,8 +368,9 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 {
 	PolicyContinuousAggData policy_data;
 
-	StringInfo str = makeStringInfo();
-	JsonbToCStringIndent(str, &config->root, VARSIZE(config));
+	StringInfoData str;
+	initStringInfo(&str);
+	JsonbToCStringIndent(&str, &config->root, VARSIZE(config));
 
 	policy_refresh_cagg_read_and_validate_config(config, &policy_data);
 	bool extend_last_bucket = !policy_refresh_cagg_check_if_last_policy(&policy_data);
@@ -712,7 +713,7 @@ job_execute(BgwJob *job)
 	Oid proc;
 	FuncExpr *funcexpr;
 	MemoryContext parent_ctx = CurrentMemoryContext;
-	StringInfo query;
+	StringInfoData query;
 	Portal portal = ActivePortal;
 
 	if (job->fd.config)
@@ -787,12 +788,12 @@ job_execute(BgwJob *job)
 	 * any job, not just custom jobs. We just provide more detailed
 	 * information here that we are actually calling a specific custom
 	 * function. */
-	query = makeStringInfo();
-	appendStringInfo(query,
+	initStringInfo(&query);
+	appendStringInfo(&query,
 					 "CALL %s.%s()",
 					 quote_identifier(NameStr(job->fd.proc_schema)),
 					 quote_identifier(NameStr(job->fd.proc_name)));
-	pgstat_report_activity(STATE_RUNNING, query->data);
+	pgstat_report_activity(STATE_RUNNING, query.data);
 
 	switch (prokind)
 	{

@@ -302,3 +302,31 @@ select * from highcard where ts > 500000;
          Filter: (_ts_meta_max_1 > 500000)
          Rows Removed by Filter: 500
 
+-- Test for an OOB write we used to have where the max metadata column is the
+-- last column in the compressed chunk table, as can happen on old versions.
+create table lastmax(ts int) with (tsdb.hypertable, tsdb.partition_column = 'ts',
+    tsdb.compress_orderby = 'ts');
+insert into lastmax select generate_series(1, 1000);
+select count(compress_chunk(x)) from show_chunks('lastmax') x;
+ count 
+-------
+     1
+
+vacuum freeze analyze lastmax;
+select schema_name || '.' || table_name chunk, 'c' column from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'lastmax') limit 1)
+\gset
+set timescaledb.restoring to true;
+alter table :chunk drop column _ts_meta_max_1;
+alter table :chunk add column _ts_meta_max_1 int default 1000;
+reset timescaledb.restoring;
+explain (costs off)
+select * from lastmax where ts = 500;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_7_27_chunk
+   Vectorized Filter: (ts = 500)
+   ->  Seq Scan on compress_hyper_8_28_chunk
+         Filter: ((_ts_meta_min_1 <= 500) AND (_ts_meta_max_1 >= 500))
+

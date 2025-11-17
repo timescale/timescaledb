@@ -2264,7 +2264,7 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 int64
 ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, bool *isnull)
 {
-	StringInfo command;
+	StringInfoData command;
 	const Dimension *dim;
 	int res;
 	bool max_isnull;
@@ -2285,8 +2285,8 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	 * search_path and instead have to fully schema-qualify
 	 * everything.
 	 */
-	command = makeStringInfo();
-	appendStringInfo(command,
+	initStringInfo(&command);
+	appendStringInfo(&command,
 					 "SELECT pg_catalog.max(%s) FROM %s.%s",
 					 quote_identifier(NameStr(dim->fd.column_name)),
 					 quote_identifier(NameStr(ht->fd.schema_name)),
@@ -2295,7 +2295,7 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
 
-	res = SPI_execute(command->data, true /* read_only */, 0 /*count*/);
+	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
 	if (res < 0)
 		ereport(ERROR,

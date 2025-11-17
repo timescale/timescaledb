@@ -340,13 +340,14 @@ inner_agg_deserialize(FACombineFnMeta *combine_meta, bytea *volatile serialized_
 	else if (!serialized_isnull)
 	{
 		int32 typmod = -1;
-		StringInfo string = makeStringInfo();
+		StringInfoData string;
+		initStringInfo(&string);
 		FunctionCallInfo internal_deserialfn_fcinfo = combine_meta->internal_deserialfn_fcinfo;
 
-		appendBinaryStringInfo(string,
+		appendBinaryStringInfo(&string,
 							   VARDATA_ANY(serialized_partial),
 							   VARSIZE_ANY_EXHDR(serialized_partial));
-		FC_SET_ARG(internal_deserialfn_fcinfo, 0, PointerGetDatum(string));
+		FC_SET_ARG(internal_deserialfn_fcinfo, 0, PointerGetDatum(&string));
 		FC_SET_ARG(internal_deserialfn_fcinfo, 1, ObjectIdGetDatum(combine_meta->typIOParam));
 		FC_SET_ARG(internal_deserialfn_fcinfo, 2, Int32GetDatum(typmod));
 
