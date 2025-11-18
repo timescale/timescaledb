@@ -170,10 +170,19 @@ def macos_config(overrides):
             "extra_packages": "",
             "ignored_tests": default_ignored_tests.union(macos_ignored_tests),
             "os": "macos-15",
-            "pg_extra_args": "--enable-debug --with-libraries=/opt/homebrew/opt/openssl@3/lib --with-includes=/opt/homebrew/opt/openssl@3/include --without-icu",
+            "pg_extra_args": (
+                " --enable-debug"
+                " --with-libraries=/opt/homebrew/opt/openssl@3/lib"
+                " --with-includes=/opt/homebrew/opt/openssl@3/include"
+                " --without-icu"
+            ),
             "pg_extensions": "postgres_fdw test_decoding",
             "pginstallcheck": True,
-            "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl@3",
+            "tsdb_build_args": (
+                " -DASSERTIONS=ON"
+                " -DREQUIRE_ALL_TESTS=ON"
+                " -DOPENSSL_ROOT_DIR=/opt/homebrew/opt/openssl@3"
+            ),
         }
     )
     base_config.update(overrides)
