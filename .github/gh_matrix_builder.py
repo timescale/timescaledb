@@ -161,6 +161,7 @@ def macos_config(overrides):
         "compression_bgw",
         "compressed_collation",
     }
+    openssl_path = "/usr/local/opt/openssl@3"
     base_config = dict(
         {
             "cc": "clang",
@@ -172,8 +173,8 @@ def macos_config(overrides):
             "os": "macos-15-intel",
             "pg_extra_args": (
                 " --enable-debug"
-                " --with-libraries=/opt/homebrew/opt/openssl@3/lib"
-                " --with-includes=/opt/homebrew/opt/openssl@3/include"
+                f" --with-libraries={openssl_path}/lib"
+                f" --with-includes={openssl_path}/include"
                 " --without-icu"
             ),
             "pg_extensions": "postgres_fdw test_decoding",
@@ -181,7 +182,7 @@ def macos_config(overrides):
             "tsdb_build_args": (
                 " -DASSERTIONS=ON"
                 " -DREQUIRE_ALL_TESTS=ON"
-                " -DOPENSSL_ROOT_DIR=/opt/homebrew/opt/openssl@3"
+                f" -DOPENSSL_ROOT_DIR={openssl_path}"
             ),
         }
     )
