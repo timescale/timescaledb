@@ -1,0 +1,76 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
+\set PREFIX_NO_ANALYZE 'EXPLAIN (verbose, buffers off, costs off)'
+SET parallel_leader_participation TO off;
+SET min_parallel_table_scan_size TO '0';
+SET enable_incremental_sort TO off;
+-- Test lateral query for partial chunk #8848
+:PREFIX
+SELECT *
+FROM metrics subq_1,
+    LATERAL (
+        SELECT *
+        FROM (
+            SELECT subq_1.*
+            FROM metrics_compressed) AS subq_2
+            RIGHT JOIN sensors ON FALSE) AS lat;
+--- QUERY PLAN ---
+ Nested Loop (actual rows=205110.00 loops=1)
+   ->  Append (actual rows=68370.00 loops=1)
+         ->  Seq Scan on _hyper_X_X_chunk subq_1_1 (actual rows=17990.00 loops=1)
+         ->  Seq Scan on _hyper_X_X_chunk subq_1_2 (actual rows=25190.00 loops=1)
+         ->  Seq Scan on _hyper_X_X_chunk subq_1_3 (actual rows=25190.00 loops=1)
+   ->  Nested Loop Left Join (actual rows=3.00 loops=68370)
+         Join Filter: false
+         ->  Seq Scan on sensors (actual rows=3.00 loops=68370)
+         ->  Result (actual rows=0.00 loops=205110)
+               One-Time Filter: false
+
+-- with parallel
+SET max_parallel_workers_per_gather = 4;
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
+:PREFIX_NO_ANALYZE
+SELECT *
+FROM metrics subq_1,
+    LATERAL (
+        SELECT *
+        FROM (
+            SELECT subq_1.*
+            FROM metrics_compressed) AS subq_2
+            RIGHT JOIN sensors ON FALSE) AS lat;
+--- QUERY PLAN ---
+ Gather
+   Output: subq_1."time", subq_1.device_id, subq_1.v0, subq_1.v1, subq_1.v2, subq_1.v3, (subq_1."time"), (subq_1.device_id), (subq_1.v0), (subq_1.v1), (subq_1.v2), (subq_1.v3), sensors.sensor_id, sensors.name
+   Workers Planned: 4
+   ->  Nested Loop
+         Output: subq_1."time", subq_1.device_id, subq_1.v0, subq_1.v1, subq_1.v2, subq_1.v3, (subq_1."time"), (subq_1.device_id), (subq_1.v0), (subq_1.v1), (subq_1.v2), (subq_1.v3), sensors.sensor_id, sensors.name
+         ->  Parallel Append
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_X_X_chunk subq_1_2
+                     Output: subq_1_2."time", subq_1_2.device_id, subq_1_2.v0, subq_1_2.v1, subq_1_2.v2, subq_1_2.v3
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_X_X_chunk subq_1_3
+                     Output: subq_1_3."time", subq_1_3.device_id, subq_1_3.v0, subq_1_3.v1, subq_1_3.v2, subq_1_3.v3
+               ->  Parallel Seq Scan on _timescaledb_internal._hyper_X_X_chunk subq_1_1
+                     Output: subq_1_1."time", subq_1_1.device_id, subq_1_1.v0, subq_1_1.v1, subq_1_1.v2, subq_1_1.v3
+         ->  Nested Loop Left Join
+               Output: sensors.sensor_id, sensors.name, (subq_1."time"), (subq_1.device_id), (subq_1.v0), (subq_1.v1), (subq_1.v2), (subq_1.v3)
+               Join Filter: false
+               ->  Seq Scan on public.sensors
+                     Output: sensors.sensor_id, sensors.name
+               ->  Result
+                     Output: subq_1."time", subq_1.device_id, subq_1.v0, subq_1.v1, subq_1.v2, subq_1.v3
+                     One-Time Filter: false
+
+--  now run the query to catch any coredump
+\o /dev/null
+SELECT *
+FROM metrics subq_1,
+    LATERAL (
+        SELECT *
+        FROM (
+            SELECT subq_1.*
+            FROM metrics_compressed) AS subq_2
+            RIGHT JOIN sensors ON FALSE) AS lat;
+\o
