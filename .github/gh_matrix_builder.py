@@ -169,7 +169,7 @@ def macos_config(overrides):
             "cxx": "clang++",
             "extra_packages": "",
             "ignored_tests": default_ignored_tests.union(macos_ignored_tests),
-            "os": "macos-15",
+            "os": "macos-15-intel",
             "pg_extra_args": (
                 " --enable-debug"
                 " --with-libraries=/opt/homebrew/opt/openssl@3/lib"
