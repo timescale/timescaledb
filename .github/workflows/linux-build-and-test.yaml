@@ -134,9 +134,9 @@ jobs:
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
           --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
-        make -j $(nproc)
+        make -j $(getconf _NPROCESSORS_ONLN)
         for ext in ${{ matrix.pg_extensions }}; do
-          make -j $(nproc) -C contrib/${ext}
+          make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
 
     - name: Install PostgreSQL ${{ matrix.pg }}
@@ -162,7 +162,7 @@ jobs:
           -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j $(nproc) -C nossl
+        make -j $(getconf _NPROCESSORS_ONLN) -C nossl
         make -C nossl install
         make -C nossl regresscheck TESTS=telemetry
 
@@ -175,7 +175,7 @@ jobs:
           -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j $(nproc) -C build
+        make -j $(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
 
     - name: Upload CMake Logs
@@ -207,7 +207,7 @@ jobs:
 
     - name: coverage
       if: matrix.coverage
-      run: make -j $(nproc) -k -C build coverage
+      run: make -j $(getconf _NPROCESSORS_ONLN) -k -C build coverage
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
