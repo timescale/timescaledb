@@ -161,6 +161,7 @@ def macos_config(overrides):
         "compression_bgw",
         "compressed_collation",
     }
+    openssl_path = "/usr/local/opt/openssl@3"
     base_config = dict(
         {
             "cc": "clang",
@@ -169,11 +170,20 @@ def macos_config(overrides):
             "cxx": "clang++",
             "extra_packages": "",
             "ignored_tests": default_ignored_tests.union(macos_ignored_tests),
-            "os": "macos-13",
-            "pg_extra_args": "--enable-debug --with-libraries=/usr/local/opt/openssl@3/lib --with-includes=/usr/local/opt/openssl@3/include --without-icu",
+            "os": "macos-15-intel",
+            "pg_extra_args": (
+                " --enable-debug"
+                f" --with-libraries={openssl_path}/lib"
+                f" --with-includes={openssl_path}/include"
+                " --without-icu"
+            ),
             "pg_extensions": "postgres_fdw test_decoding",
             "pginstallcheck": True,
-            "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl@3",
+            "tsdb_build_args": (
+                " -DASSERTIONS=ON"
+                " -DREQUIRE_ALL_TESTS=ON"
+                f" -DOPENSSL_ROOT_DIR={openssl_path}"
+            ),
         }
     )
     base_config.update(overrides)
