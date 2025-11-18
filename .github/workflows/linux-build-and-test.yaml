@@ -81,7 +81,8 @@ jobs:
       run: |
         # Disable the automatic dependency upgrade executed by `brew install`
         # https://docs.brew.sh/Manpage#install-options-formulacask-
-        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gawk openssl@3
+        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gawk
+        brew --prefix openssl@3
         # Install perl modules after last Homebew call, since Homebrew can change the perl version
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
