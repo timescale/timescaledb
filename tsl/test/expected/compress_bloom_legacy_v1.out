@@ -47,3 +47,43 @@ select * from test where tag = '1';
          Filter: _timescaledb_functions.bloom1_contains(regresstestbloom_tag, '1'::text)
 
 reset timescaledb.enable_legacy_bloom1_v1;
+-- Test that recompression of a partial chunk with old indexes produces a
+-- sensible result.
+insert into test values (2, '2');
+vacuum analyze test;
+explain (analyze, costs off, buffers off, timing off, summary off)
+select * from test where tag = '2';
+--- QUERY PLAN ---
+ Append (actual rows=1.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+         Vectorized Filter: (tag = '2'::text)
+         Rows Removed by Filter: 1
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+         Filter: (tag = '2'::text)
+
+select compress_chunk(x) from show_chunks('test') x;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+
+vacuum analyze test;
+explain (analyze, costs off, buffers off, timing off, summary off)
+select * from test where tag = '2';
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+   Vectorized Filter: (tag = '2'::text)
+   Rows Removed by Filter: 1
+   ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=2.00 loops=1)
+
+set timescaledb.enable_legacy_bloom1_v1 to on;
+explain (analyze, costs off, buffers off, timing off, summary off)
+select * from test where tag = '2';
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+   Vectorized Filter: (tag = '2'::text)
+   ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=1.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains(regresstestbloom_tag, '2'::text)
+         Rows Removed by Filter: 1
+
+reset timescaledb.enable_legacy_bloom1_v1;

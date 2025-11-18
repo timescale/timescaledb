@@ -38,3 +38,29 @@ explain (analyze, costs off, buffers off, timing off, summary off)
 select * from test where tag = '1';
 
 reset timescaledb.enable_legacy_bloom1_v1;
+
+
+-- Test that recompression of a partial chunk with old indexes produces a
+-- sensible result.
+insert into test values (2, '2');
+
+vacuum analyze test;
+
+explain (analyze, costs off, buffers off, timing off, summary off)
+select * from test where tag = '2';
+
+select compress_chunk(x) from show_chunks('test') x;
+
+vacuum analyze test;
+
+explain (analyze, costs off, buffers off, timing off, summary off)
+select * from test where tag = '2';
+
+set timescaledb.enable_legacy_bloom1_v1 to on;
+
+explain (analyze, costs off, buffers off, timing off, summary off)
+select * from test where tag = '2';
+
+reset timescaledb.enable_legacy_bloom1_v1;
+
+
