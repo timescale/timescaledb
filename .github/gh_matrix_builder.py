@@ -169,7 +169,7 @@ def macos_config(overrides):
             "cxx": "clang++",
             "extra_packages": "",
             "ignored_tests": default_ignored_tests.union(macos_ignored_tests),
-            "os": "macos-13",
+            "os": "macos-15",
             "pg_extra_args": "--enable-debug --with-libraries=/usr/local/opt/openssl@3/lib --with-includes=/usr/local/opt/openssl@3/include --without-icu",
             "pg_extensions": "postgres_fdw test_decoding",
             "pginstallcheck": True,
