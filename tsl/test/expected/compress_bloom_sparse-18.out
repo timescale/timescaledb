@@ -43,24 +43,20 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
         where hypertable_id = (select id from _timescaledb_catalog.hypertable
             where table_name = 'bloom') limit 1)
 \gset
-\d+ :chunk
-                                         Table "_timescaledb_internal.compress_hyper_2_2_chunk"
-         Column         |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
-------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count         | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_min_1         | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_max_1         | integer                               |           |          |         | plain    | 1000         | 
- x                      | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
- regresstestbloom_value | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
- value                  | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
- regresstestbloom_u     | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
- u                      | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
- _ts_meta_v2_min_ts     | timestamp without time zone           |           |          |         | plain    | 1000         | 
- _ts_meta_v2_max_ts     | timestamp without time zone           |           |          |         | plain    | 1000         | 
- ts                     | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
-Indexes:
-    "compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
-Options: toast_tuple_target=128
+select * from test.show_columns_ext(:'chunk'::regclass);
+          Column          |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count           | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_min_1           | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_max_1           | integer                               |           |          |         | plain    |         1000 | 
+ x                        | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ regresstestbloom_value | _timescaledb_internal.bloom1          |           |          |         | external |         1000 | 
+ value                    | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
+ regresstestbloom_u     | _timescaledb_internal.bloom1          |           |          |         | external |         1000 | 
+ u                        | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ _ts_meta_v2_min_ts       | timestamp without time zone           |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_max_ts       | timestamp without time zone           |           |          |         | plain    |         1000 | 
+ ts                       | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
 
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where value = md5(7248::text);
@@ -536,21 +532,17 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
         where hypertable_id = (select id from _timescaledb_catalog.hypertable
             where table_name = 'badtable') limit 1)
 \gset
-\d+ :chunk
-                                       Table "_timescaledb_internal.compress_hyper_6_6_chunk"
+select * from test.show_columns_ext(:'chunk'::regclass);
       Column       |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
 -------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count    | integer                               |           |          |         | plain    | 1000         | 
- s                 | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_min_1    | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_max_1    | integer                               |           |          |         | plain    | 1000         | 
- ts                | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
- _ts_meta_v2_min_b | badint                                |           |          |         | plain    | 1000         | 
- _ts_meta_v2_max_b | badint                                |           |          |         | plain    | 1000         | 
- b                 | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
-Indexes:
-    "compress_hyper_6_6_chunk_s__ts_meta_min_1__ts_meta_max_1_idx" btree (s, _ts_meta_min_1, _ts_meta_max_1)
-Options: toast_tuple_target=128
+ _ts_meta_count    | integer                               |           |          |         | plain    |         1000 | 
+ s                 | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_min_1    | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_max_1    | integer                               |           |          |         | plain    |         1000 | 
+ ts                | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ _ts_meta_v2_min_b | badint                                |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_max_b | badint                                |           |          |         | plain    |         1000 | 
+ b                 | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
 
 select count(decompress_chunk(x)) from show_chunks('badtable') x;
  count 
@@ -596,20 +588,16 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
         where hypertable_id = (select id from _timescaledb_catalog.hypertable
             where table_name = 'badtable') limit 1)
 \gset
-\d+ :chunk
-                                       Table "_timescaledb_internal.compress_hyper_6_7_chunk"
-       Column       |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
---------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count     | integer                               |           |          |         | plain    | 1000         | 
- s                  | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_min_1     | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_max_1     | integer                               |           |          |         | plain    | 1000         | 
- ts                 | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
- regresstestbloom_b | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
- b                  | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
-Indexes:
-    "compress_hyper_6_7_chunk_s__ts_meta_min_1__ts_meta_max_1_idx" btree (s, _ts_meta_min_1, _ts_meta_max_1)
-Options: toast_tuple_target=128
+select * from test.show_columns_ext(:'chunk'::regclass);
+        Column        |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+----------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count       | integer                               |           |          |         | plain    |         1000 | 
+ s                    | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_min_1       | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_max_1       | integer                               |           |          |         | plain    |         1000 | 
+ ts                   | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ regresstestbloom_b | _timescaledb_internal.bloom1          |           |          |         | external |         1000 | 
+ b                    | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
 
 -- Check index pushdown with one value.
 explain (analyze, buffers off, costs off, timing off, summary off)
