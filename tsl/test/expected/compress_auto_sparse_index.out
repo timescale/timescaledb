@@ -133,5 +133,5 @@ explain (buffers off, costs off) select * from sparse where Abcdef012345678_Bbcd
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: (abcdef012345678_bbcdef012345678_cbcdef012345678_dbcdef0 = 1)
    ->  Seq Scan on compress_hyper_2_8_chunk
-         Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloomXXX_9218_abcdef012345678_bbcdef012345678_cbcdef0, 1)
+         Filter: _timescaledb_functions.bloom1_contains(regresstestbloom_9218_abcdef012345678_bbcdef012345678_cbcdef0, 1)
 

@@ -18,7 +18,7 @@ select * from test where tag = '1';
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: (tag = '1'::text)
    ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
-         Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloomXXX_tag, '1'::text)
+         Filter: _timescaledb_functions.bloom1_contains(regresstestbloom_tag, '1'::text)
 
 -- Create a bloom index with the old column name, should be disabled.
 set timescaledb.bloom1_column_prefix = 'bloom1';
@@ -44,6 +44,6 @@ select * from test where tag = '1';
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: (tag = '1'::text)
    ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=1.00 loops=1)
-         Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloomXXX_tag, '1'::text)
+         Filter: _timescaledb_functions.bloom1_contains(regresstestbloom_tag, '1'::text)
 
 reset timescaledb.enable_legacy_bloom1_v1;
