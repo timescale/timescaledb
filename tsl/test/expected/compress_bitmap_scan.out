@@ -51,7 +51,7 @@ select * from bscan where id = 1 or id = 2 or id = 3 or id = 4 or id = 5
          Batches Removed by Filter: 4
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk (actual rows=35.00 loops=1)
-               Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_2, compress_hyper_2_3_chunk._ts_meta_max_2, compress_hyper_2_3_chunk.ts, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.id, compress_hyper_2_3_chunk._ts_meta_v2_bloom1_payload, compress_hyper_2_3_chunk.payload
+               Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_2, compress_hyper_2_3_chunk._ts_meta_max_2, compress_hyper_2_3_chunk.ts, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.id, compress_hyper_2_3_chunk.regresstestbloom_payload, compress_hyper_2_3_chunk.payload
                Filter: (((compress_hyper_2_3_chunk._ts_meta_min_1 <= 1) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 1)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 2) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 2)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 3) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 3)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 4) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 4)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 5) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 5)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 6) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 6)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 7) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 7)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 8) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 8)))
                Rows Removed by Filter: 682
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (actual rows=32.00 loops=1)
@@ -61,7 +61,7 @@ select * from bscan where id = 1 or id = 2 or id = 3 or id = 4 or id = 5
          Batches Removed by Filter: 4
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=29.00 loops=1)
-               Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_2, compress_hyper_2_4_chunk._ts_meta_max_2, compress_hyper_2_4_chunk.ts, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.id, compress_hyper_2_4_chunk._ts_meta_v2_bloom1_payload, compress_hyper_2_4_chunk.payload
+               Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_2, compress_hyper_2_4_chunk._ts_meta_max_2, compress_hyper_2_4_chunk.ts, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.id, compress_hyper_2_4_chunk.regresstestbloom_payload, compress_hyper_2_4_chunk.payload
                Filter: (((compress_hyper_2_4_chunk._ts_meta_min_1 <= 1) AND (compress_hyper_2_4_chunk._ts_meta_max_1 >= 1)) OR ((compress_hyper_2_4_chunk._ts_meta_min_1 <= 2) AND (compress_hyper_2_4_chunk._ts_meta_max_1 >= 2)) OR ((compress_hyper_2_4_chunk._ts_meta_min_1 <= 3) AND (compress_hyper_2_4_chunk._ts_meta_max_1 >= 3)) OR ((compress_hyper_2_4_chunk._ts_meta_min_1 <= 4) AND (compress_hyper_2_4_chunk._ts_meta_max_1 >= 4)) OR ((compress_hyper_2_4_chunk._ts_meta_min_1 <= 5) AND (compress_hyper_2_4_chunk._ts_meta_max_1 >= 5)) OR ((compress_hyper_2_4_chunk._ts_meta_min_1 <= 6) AND (compress_hyper_2_4_chunk._ts_meta_max_1 >= 6)) OR ((compress_hyper_2_4_chunk._ts_meta_min_1 <= 7) AND (compress_hyper_2_4_chunk._ts_meta_max_1 >= 7)) OR ((compress_hyper_2_4_chunk._ts_meta_min_1 <= 8) AND (compress_hyper_2_4_chunk._ts_meta_max_1 >= 8)))
                Rows Removed by Filter: 688
 
@@ -79,7 +79,7 @@ select * from bscan where id = 1 or id = 2
          Batches Removed by Filter: 4
          Bulk Decompression: true
          ->  Bitmap Heap Scan on _timescaledb_internal.compress_hyper_2_3_chunk (actual rows=5.00 loops=1)
-               Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_2, compress_hyper_2_3_chunk._ts_meta_max_2, compress_hyper_2_3_chunk.ts, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.id, compress_hyper_2_3_chunk._ts_meta_v2_bloom1_payload, compress_hyper_2_3_chunk.payload
+               Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_2, compress_hyper_2_3_chunk._ts_meta_max_2, compress_hyper_2_3_chunk.ts, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.id, compress_hyper_2_3_chunk.regresstestbloom_payload, compress_hyper_2_3_chunk.payload
                Recheck Cond: (((compress_hyper_2_3_chunk._ts_meta_min_1 <= 1) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 1)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 2) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 2)))
                Heap Blocks: exact=5
                ->  BitmapOr (actual rows=0.00 loops=1)
@@ -94,7 +94,7 @@ select * from bscan where id = 1 or id = 2
          Batches Removed by Filter: 4
          Bulk Decompression: true
          ->  Bitmap Heap Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=5.00 loops=1)
-               Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_2, compress_hyper_2_4_chunk._ts_meta_max_2, compress_hyper_2_4_chunk.ts, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.id, compress_hyper_2_4_chunk._ts_meta_v2_bloom1_payload, compress_hyper_2_4_chunk.payload
+               Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_2, compress_hyper_2_4_chunk._ts_meta_max_2, compress_hyper_2_4_chunk.ts, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.id, compress_hyper_2_4_chunk.regresstestbloom_payload, compress_hyper_2_4_chunk.payload
                Recheck Cond: (((compress_hyper_2_4_chunk._ts_meta_min_1 <= 1) AND (compress_hyper_2_4_chunk._ts_meta_max_1 >= 1)) OR ((compress_hyper_2_4_chunk._ts_meta_min_1 <= 2) AND (compress_hyper_2_4_chunk._ts_meta_max_1 >= 2)))
                Heap Blocks: exact=5
                ->  BitmapOr (actual rows=0.00 loops=1)
@@ -122,7 +122,7 @@ where (t2.id = 1 or t2.id = 2)
                Batches Removed by Filter: 4
                Bulk Decompression: true
                ->  Bitmap Heap Scan on _timescaledb_internal.compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=5.00 loops=1)
-                     Output: compress_hyper_2_3_chunk_1._ts_meta_count, compress_hyper_2_3_chunk_1.s, compress_hyper_2_3_chunk_1._ts_meta_min_2, compress_hyper_2_3_chunk_1._ts_meta_max_2, compress_hyper_2_3_chunk_1.ts, compress_hyper_2_3_chunk_1._ts_meta_min_1, compress_hyper_2_3_chunk_1._ts_meta_max_1, compress_hyper_2_3_chunk_1.id, compress_hyper_2_3_chunk_1._ts_meta_v2_bloom1_payload, compress_hyper_2_3_chunk_1.payload
+                     Output: compress_hyper_2_3_chunk_1._ts_meta_count, compress_hyper_2_3_chunk_1.s, compress_hyper_2_3_chunk_1._ts_meta_min_2, compress_hyper_2_3_chunk_1._ts_meta_max_2, compress_hyper_2_3_chunk_1.ts, compress_hyper_2_3_chunk_1._ts_meta_min_1, compress_hyper_2_3_chunk_1._ts_meta_max_1, compress_hyper_2_3_chunk_1.id, compress_hyper_2_3_chunk_1.regresstestbloom_payload, compress_hyper_2_3_chunk_1.payload
                      Recheck Cond: (((compress_hyper_2_3_chunk_1._ts_meta_min_1 <= 1) AND (compress_hyper_2_3_chunk_1._ts_meta_max_1 >= 1)) OR ((compress_hyper_2_3_chunk_1._ts_meta_min_1 <= 2) AND (compress_hyper_2_3_chunk_1._ts_meta_max_1 >= 2)))
                      Heap Blocks: exact=5
                      ->  BitmapOr (actual rows=0.00 loops=1)
@@ -137,7 +137,7 @@ where (t2.id = 1 or t2.id = 2)
                Batches Removed by Filter: 4
                Bulk Decompression: true
                ->  Bitmap Heap Scan on _timescaledb_internal.compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=5.00 loops=1)
-                     Output: compress_hyper_2_4_chunk_1._ts_meta_count, compress_hyper_2_4_chunk_1.s, compress_hyper_2_4_chunk_1._ts_meta_min_2, compress_hyper_2_4_chunk_1._ts_meta_max_2, compress_hyper_2_4_chunk_1.ts, compress_hyper_2_4_chunk_1._ts_meta_min_1, compress_hyper_2_4_chunk_1._ts_meta_max_1, compress_hyper_2_4_chunk_1.id, compress_hyper_2_4_chunk_1._ts_meta_v2_bloom1_payload, compress_hyper_2_4_chunk_1.payload
+                     Output: compress_hyper_2_4_chunk_1._ts_meta_count, compress_hyper_2_4_chunk_1.s, compress_hyper_2_4_chunk_1._ts_meta_min_2, compress_hyper_2_4_chunk_1._ts_meta_max_2, compress_hyper_2_4_chunk_1.ts, compress_hyper_2_4_chunk_1._ts_meta_min_1, compress_hyper_2_4_chunk_1._ts_meta_max_1, compress_hyper_2_4_chunk_1.id, compress_hyper_2_4_chunk_1.regresstestbloom_payload, compress_hyper_2_4_chunk_1.payload
                      Recheck Cond: (((compress_hyper_2_4_chunk_1._ts_meta_min_1 <= 1) AND (compress_hyper_2_4_chunk_1._ts_meta_max_1 >= 1)) OR ((compress_hyper_2_4_chunk_1._ts_meta_min_1 <= 2) AND (compress_hyper_2_4_chunk_1._ts_meta_max_1 >= 2)))
                      Heap Blocks: exact=5
                      ->  BitmapOr (actual rows=0.00 loops=1)
@@ -152,9 +152,9 @@ where (t2.id = 1 or t2.id = 2)
                Rows Removed by Filter: 990
                Bulk Decompression: true
                ->  Index Scan using compress_hyper_2_3_chunk_s__ts_meta_min_1__ts_meta_max_1__t_idx on _timescaledb_internal.compress_hyper_2_3_chunk (actual rows=1.00 loops=18)
-                     Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_2, compress_hyper_2_3_chunk._ts_meta_max_2, compress_hyper_2_3_chunk.ts, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.id, compress_hyper_2_3_chunk._ts_meta_v2_bloom1_payload, compress_hyper_2_3_chunk.payload
+                     Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_2, compress_hyper_2_3_chunk._ts_meta_max_2, compress_hyper_2_3_chunk.ts, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.id, compress_hyper_2_3_chunk.regresstestbloom_payload, compress_hyper_2_3_chunk.payload
                      Index Cond: (compress_hyper_2_3_chunk.s = t2.s)
-                     Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_3_chunk._ts_meta_v2_bloom1_payload, '-537'::integer)
+                     Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_3_chunk.regresstestbloom_payload, '-537'::integer)
                      Rows Removed by Filter: 2
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk t1_2 (actual rows=8.00 loops=18)
                Output: t1_2.ts, t1_2.s, t1_2.id, t1_2.payload
@@ -162,9 +162,9 @@ where (t2.id = 1 or t2.id = 2)
                Rows Removed by Filter: 992
                Bulk Decompression: true
                ->  Index Scan using compress_hyper_2_4_chunk_s__ts_meta_min_1__ts_meta_max_1__t_idx on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=1.00 loops=18)
-                     Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_2, compress_hyper_2_4_chunk._ts_meta_max_2, compress_hyper_2_4_chunk.ts, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.id, compress_hyper_2_4_chunk._ts_meta_v2_bloom1_payload, compress_hyper_2_4_chunk.payload
+                     Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_2, compress_hyper_2_4_chunk._ts_meta_max_2, compress_hyper_2_4_chunk.ts, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.id, compress_hyper_2_4_chunk.regresstestbloom_payload, compress_hyper_2_4_chunk.payload
                      Index Cond: (compress_hyper_2_4_chunk.s = t2.s)
-                     Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_4_chunk._ts_meta_v2_bloom1_payload, '-537'::integer)
+                     Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_4_chunk.regresstestbloom_payload, '-537'::integer)
                      Rows Removed by Filter: 2
 
 ;

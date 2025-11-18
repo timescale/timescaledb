@@ -109,7 +109,9 @@ WHERE n.nspname OPERATOR(pg_catalog.~) '^(_timescaledb_internal|_timescaledb_fun
 ORDER BY 1, 2, 4;
 
 \dy
+\a
 \d public.*
+\a
 
 -- Keep the output backward compatible
 \if :PG_UPGRADE_TEST
