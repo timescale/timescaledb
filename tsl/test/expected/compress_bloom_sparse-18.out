@@ -459,8 +459,8 @@ select * from corner where c = any(array['short', 'nonexistent'])
    Batches Removed by Filter: 1
    Bulk Decompression: true
    ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=2.00 loops=1)
-         Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, compress_hyper_4_4_chunk.c
-         Filter: _timescaledb_functions.bloom1_contains_any(compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, '{short,nonexistent}'::text[])
+         Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk._ts_meta_v2_bloomXXX_c, compress_hyper_4_4_chunk.c
+         Filter: _timescaledb_functions.bloom1_contains_any(compress_hyper_4_4_chunk._ts_meta_v2_bloomXXX_c, '{short,nonexistent}'::text[])
          Rows Removed by Filter: 2
 
 -- Test a bad hash function.
