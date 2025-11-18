@@ -69,6 +69,14 @@ select compress_chunk(x) from show_chunks('test') x;
 
 vacuum analyze test;
 explain (analyze, costs off, buffers off, timing off, summary off)
+select * from test where tag = '1';
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+   Vectorized Filter: (tag = '1'::text)
+   Rows Removed by Filter: 1
+   ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=2.00 loops=1)
+
+explain (analyze, costs off, buffers off, timing off, summary off)
 select * from test where tag = '2';
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
@@ -77,6 +85,15 @@ select * from test where tag = '2';
    ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=2.00 loops=1)
 
 set timescaledb.enable_legacy_bloom1_v1 to on;
+explain (analyze, costs off, buffers off, timing off, summary off)
+select * from test where tag = '1';
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+   Vectorized Filter: (tag = '1'::text)
+   Rows Removed by Filter: 1
+   ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=2.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains(regresstestbloom_tag, '1'::text)
+
 explain (analyze, costs off, buffers off, timing off, summary off)
 select * from test where tag = '2';
 --- QUERY PLAN ---
