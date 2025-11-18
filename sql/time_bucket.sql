@@ -15,6 +15,9 @@ CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts TIM
 CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts DATE) RETURNS DATE
 	AS '@MODULE_PATHNAME@', 'ts_date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts UUID) RETURNS TIMESTAMPTZ
+	AS '@MODULE_PATHNAME@', 'ts_uuid_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+
 --bucketing with origin
 CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts TIMESTAMP, origin TIMESTAMP) RETURNS TIMESTAMP
 	AS '@MODULE_PATHNAME@', 'ts_timestamp_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
@@ -22,6 +25,8 @@ CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts TIM
 	AS '@MODULE_PATHNAME@', 'ts_timestamptz_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts DATE, origin DATE) RETURNS DATE
 	AS '@MODULE_PATHNAME@', 'ts_date_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts UUID, origin TIMESTAMPTZ) RETURNS TIMESTAMPTZ
+  AS '@MODULE_PATHNAME@', 'ts_uuid_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
 --bucketing with offset
 CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts TIMESTAMP, "offset" INTERVAL) RETURNS TIMESTAMP
@@ -30,10 +35,14 @@ CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts TIM
 	AS '@MODULE_PATHNAME@', 'ts_timestamptz_offset_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts DATE, "offset" INTERVAL) RETURNS DATE
 	AS '@MODULE_PATHNAME@', 'ts_date_offset_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts UUID, "offset" INTERVAL) RETURNS TIMESTAMPTZ
+	AS '@MODULE_PATHNAME@', 'ts_uuid_offset_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
 -- bucketing with timezone
 CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts TIMESTAMPTZ, timezone TEXT, origin TIMESTAMPTZ DEFAULT NULL, "offset" INTERVAL DEFAULT NULL) RETURNS TIMESTAMPTZ
 	AS '@MODULE_PATHNAME@', 'ts_timestamptz_timezone_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width INTERVAL, ts UUID, timezone TEXT, origin TIMESTAMPTZ DEFAULT NULL, "offset" INTERVAL DEFAULT NULL) RETURNS TIMESTAMPTZ
+	AS '@MODULE_PATHNAME@', 'ts_uuid_timezone_bucket' LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 -- bucketing of int
 CREATE OR REPLACE FUNCTION @extschema@.time_bucket(bucket_width SMALLINT, ts SMALLINT) RETURNS SMALLINT
