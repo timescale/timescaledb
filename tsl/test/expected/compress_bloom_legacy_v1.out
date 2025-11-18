@@ -21,14 +21,14 @@ select * from test where tag = '1';
          Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloomXXX_tag, '1'::text)
 
 -- Create a bloom index with the old column name, should be disabled.
-set timescaledb.debug_bloom1_column_prefix = 'bloom1';
+set timescaledb.bloom1_column_prefix = 'bloom1';
 select compress_chunk(decompress_chunk(x)) from show_chunks('test') x;
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
 
 vacuum analyze test;
-reset timescaledb.debug_bloom1_column_prefix;
+reset timescaledb.bloom1_column_prefix;
 explain (analyze, costs off, buffers off, timing off, summary off)
 select * from test where tag = '1';
 --- QUERY PLAN ---

@@ -227,19 +227,34 @@ ts_module_init(PG_FUNCTION_ARGS)
 	{
 		on_proc_exit(ts_module_cleanup_on_pg_exit, 0);
 
+		/*
+		 * We also register some GUCs here which are impossible to register in
+		 * the Apache module, because the default value is only known in the TSL
+		 * module. It is done in this branch to avoid being called multiple
+		 * times in the parallel workers.
+		 */
+
+		/*
+		 * The read-only GUC to query the current metadata column prefix used
+		 * for bloom filter sparse indexes. It can be different depending on the
+		 * hashing schema we use, that is determined at build time. In debug
+		 * builds, it can be changed for testing.
+		 */
 		bloom1_column_prefix = default_bloom1_column_prefix;
-#ifndef NDEBUG
-		DefineCustomStringVariable(MAKE_EXTOPTION("debug_bloom1_column_prefix"),
+		DefineCustomStringVariable(MAKE_EXTOPTION("bloom1_column_prefix"),
 								   "bloom filter column prefix",
-								   NULL,
+								   "The prefix used for the metadata columns storing the sparse bloom filter indexes.",
 								   (char **) &bloom1_column_prefix,
 								   default_bloom1_column_prefix,
+#ifndef NDEBUG
 								   PGC_USERSET,
+#else
+								   PGC_INTERNAL,
+#endif
 								   0,
 								   NULL,
 								   NULL,
 								   NULL);
-#endif
 	}
 
 	PG_RETURN_BOOL(true);

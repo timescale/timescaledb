@@ -19,13 +19,13 @@ select * from test where tag = '1';
 
 
 -- Create a bloom index with the old column name, should be disabled.
-set timescaledb.debug_bloom1_column_prefix = 'bloom1';
+set timescaledb.bloom1_column_prefix = 'bloom1';
 
 select compress_chunk(decompress_chunk(x)) from show_chunks('test') x;
 
 vacuum analyze test;
 
-reset timescaledb.debug_bloom1_column_prefix;
+reset timescaledb.bloom1_column_prefix;
 
 explain (analyze, costs off, buffers off, timing off, summary off)
 select * from test where tag = '1';
