@@ -16,14 +16,14 @@ PGFunction bloom1_get_hash_function(Oid type, FmgrInfo **finfo);
 extern char const *bloom1_column_prefix;
 
 /*
- * Confusingly, the column name prefix is now "bl2". We had two possible
- * hashes depending on the build configuration, which were incompatible with
- * each other. This led to false negatives if a database was updated to a
- * different build of extension. Now these also have different prefixes.
+ * We used to have two possible hashes depending on the build configuration,
+ * which were incompatible with each other. The both used the "bloom1" column
+ * prefix. This led to false negatives if a database was updated to a different
+ * build of extension. Now these hashing configuration use different prefixes.
  * The bloom filter is still constructed according to the "bloom1" rules.
  */
 #ifdef TS_USE_UMASH
-#define default_bloom1_column_prefix "bl2u"
+#define default_bloom1_column_prefix "bloomh"
 #else
-#define default_bloom1_column_prefix "bl2p"
+#define default_bloom1_column_prefix "bloomg"
 #endif

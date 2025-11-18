@@ -42,7 +42,7 @@ select schema_name || '.' || table_name chunk, 'c' column from _timescaledb_cata
 \gset
 
 with col as (
-    select _ts_meta_count rows, _ts_meta_v2_bl2u_:column f, :column cc
+    select _ts_meta_count rows, _ts_meta_v2_bloomh_:column f, :column cc
     from :chunk),
 blooms as (
     select *, (ts_bloom1_debug_info(f)).*, pg_column_compression(f) filter_column_compression,
@@ -66,7 +66,7 @@ group by 1 order by min(bits_total);
 -- read w/o the index to the sum of bytes read by the bloom filter check
 -- and the actual column check.
 with col as (
-    select _ts_meta_count b, _ts_meta_v2_bl2u_:column f, :column cc
+    select _ts_meta_count b, _ts_meta_v2_bloomh_:column f, :column cc
     from :chunk)
 select
     round(
@@ -78,7 +78,7 @@ from col;
 
 -- Compressed bytes-per-value vs bloom filter bytes-per-value.
 with col as (
-    select _ts_meta_count rows, _ts_meta_v2_bl2u_:column f, :column cc
+    select _ts_meta_count rows, _ts_meta_v2_bloomh_:column f, :column cc
     from :chunk)
 select
     round(sum(pg_column_size(cc))::numeric / sum(rows), 2) compressed_bytes_per_row,

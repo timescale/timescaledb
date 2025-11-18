@@ -243,7 +243,8 @@ ts_module_init(PG_FUNCTION_ARGS)
 		bloom1_column_prefix = default_bloom1_column_prefix;
 		DefineCustomStringVariable(MAKE_EXTOPTION("bloom1_column_prefix"),
 								   "bloom filter column prefix",
-								   "The prefix used for the metadata columns storing the sparse bloom filter indexes.",
+								   "The prefix used for the metadata columns storing the sparse "
+								   "bloom filter indexes.",
 								   (char **) &bloom1_column_prefix,
 								   default_bloom1_column_prefix,
 #ifndef NDEBUG

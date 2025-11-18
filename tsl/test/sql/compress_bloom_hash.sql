@@ -32,4 +32,8 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'hashes') limit 1)
 \gset
 
+\pset format unaligned
+\pset expanded on
 select * from :chunk;
+\pset format aligned
+\pset expanded off

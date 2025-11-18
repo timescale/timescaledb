@@ -58,6 +58,56 @@ BEGIN
 END
 $BODY$;
 
+-- Extended output about columns analogous to \d+
+CREATE OR REPLACE FUNCTION test.show_columns_ext(rel regclass)
+RETURNS TABLE(
+  "Column" name,
+  "Type" text,
+  "Collation" name,
+  "Nullable" text,
+  "Default" text,
+  "Storage" text,
+  "Stats target" integer,
+  "Description" text
+)
+LANGUAGE SQL
+STABLE
+AS
+$BODY$
+  SELECT
+    a.attname AS "Column",
+    pg_catalog.format_type(a.atttypid, a.atttypmod) AS "Type",
+    c.collname AS "Collation",
+    CASE WHEN a.attnotnull THEN 'not null' ELSE '' END AS "Nullable",
+    pg_catalog.pg_get_expr(ad.adbin, ad.adrelid) AS "Default",
+    CASE a.attstorage
+      WHEN 'p' THEN 'plain'
+      WHEN 'm' THEN 'main'
+      WHEN 'e' THEN 'external'
+      WHEN 'x' THEN 'extended'
+      ELSE NULL
+    END AS "Storage",
+    a.attstattarget AS "Stats target",
+    d.description AS "Description"
+  FROM pg_catalog.pg_attribute a
+  JOIN pg_catalog.pg_type t
+    ON t.oid = a.atttypid
+  LEFT JOIN pg_catalog.pg_collation c
+    ON a.attcollation = c.oid
+   AND a.attcollation <> 0
+  LEFT JOIN pg_catalog.pg_attrdef ad
+    ON ad.adrelid = a.attrelid
+   AND ad.adnum = a.attnum
+  LEFT JOIN pg_catalog.pg_description d
+    ON d.objoid = a.attrelid
+   AND d.objsubid = a.attnum
+  WHERE a.attrelid = rel
+    AND a.attnum > 0
+    AND NOT a.attisdropped
+  ORDER BY a.attnum;
+$BODY$;
+
+
 CREATE OR REPLACE FUNCTION test.show_indexes(rel regclass)
 RETURNS TABLE("Index" regclass,
               "Columns" name[],
