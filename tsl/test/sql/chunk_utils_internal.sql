@@ -30,8 +30,6 @@ CREATE OR REPLACE VIEW chunk_view AS
 GRANT SELECT on chunk_view TO PUBLIC;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
--- fake presence of timescaledb_osm
-INSERT INTO pg_extension(oid,extname,extowner,extnamespace,extrelocatable,extversion) SELECT 1,'timescaledb_osm',10,11,false,'1.0';
 
 CREATE SCHEMA test1;
 GRANT CREATE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;

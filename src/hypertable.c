@@ -59,6 +59,7 @@
 #include "indexing.h"
 #include "license_guc.h"
 #include "osm_callbacks.h"
+#include "partition_chunk.h"
 #include "scan_iterator.h"
 #include "scanner.h"
 #include "subspace_store.h"
@@ -1317,7 +1318,8 @@ hypertable_validate_constraints(Oid relid)
 
 		if (form->contype == CONSTRAINT_FOREIGN)
 		{
-			if (ts_hypertable_relid_to_id(form->confrelid) != INVALID_HYPERTABLE_ID)
+			if (ts_hypertable_relid_to_id(form->confrelid) != INVALID_HYPERTABLE_ID &&
+				!is_partitioning_allowed(form->confrelid))
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("hypertables cannot be used as foreign key references of "
@@ -1767,10 +1769,13 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	switch (get_rel_relkind(table_relid))
 	{
 		case RELKIND_PARTITIONED_TABLE:
-			ereport(ERROR,
-					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
-					 errdetail("It is not possible to turn partitioned tables into hypertables.")));
+			if (!ts_guc_enable_partitioned_hypertables)
+				ereport(ERROR,
+						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+						 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
+						 errdetail(
+							 "It is not possible to turn partitioned tables into hypertables.")));
+			break;
 		case RELKIND_MATVIEW:
 		case RELKIND_RELATION:
 			break;
@@ -1794,7 +1799,10 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	/* Check that the table doesn't have any unsupported constraints */
 	hypertable_validate_constraints(table_relid);
 
-	table_has_data = ts_relation_has_tuples(rel);
+	/* No need to check for data in partitioned tables */
+	table_has_data = get_rel_relkind(table_relid) == RELKIND_PARTITIONED_TABLE ?
+						 false :
+						 ts_relation_has_tuples(rel);
 
 	if ((flags & HYPERTABLE_CREATE_MIGRATE_DATA) == 0 && table_has_data)
 		ereport(ERROR,

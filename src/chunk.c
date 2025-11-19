@@ -67,6 +67,7 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "osm_callbacks.h"
+#include "partition_chunk.h"
 #include "process_utility.h"
 #include "scan_iterator.h"
 #include "scanner.h"
@@ -740,14 +741,32 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		.relation = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
 								 (char *) NameStr(chunk->fd.table_name),
 								 0),
-		.inhRelations = list_make1(makeRangeVar((char *) NameStr(ht->fd.schema_name),
-												(char *) NameStr(ht->fd.table_name),
-												0)),
 		.tablespacename = tablespacename ? (char *) tablespacename : NULL,
 		.options =
 			(chunk->relkind == RELKIND_RELATION) ? ts_get_reloptions(ht->main_table_relid) : NIL,
 		.accessMethod = amname,
 	};
+
+	/*
+	 * If partitioned hypertables are enabled, create the chunk as a standalone
+	 * table with the same columns as the hypertable to attach it as a partition
+	 * later. Otherwise, create it as an inherited table.
+	 */
+	if (is_partitioning_allowed(ht->main_table_relid))
+	{
+		List *attlist = NIL;
+		List *constraints = NIL;
+		ts_partition_chunk_prepare_attributes(ht->main_table_relid, &attlist, &constraints);
+		stmt.tableElts = attlist;
+		stmt.constraints = constraints;
+	}
+	else
+	{
+		stmt.inhRelations = list_make1(makeRangeVar((char *) NameStr(ht->fd.schema_name),
+													(char *) NameStr(ht->fd.table_name),
+													0));
+	}
+
 	Oid uid, saved_uid;
 
 	Assert(chunk->hypertable_relid == ht->main_table_relid);
@@ -814,6 +833,10 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 	}
 	else
 		elog(ERROR, "invalid relkind \"%c\" when creating chunk", chunk->relkind);
+
+	/* Insert the table into the cache to attach it as partition later */
+	if (is_partitioning_allowed(ht->main_table_relid))
+		ts_partition_cache_insert_chunk(ht, address.objectId);
 
 	table_close(rel, AccessShareLock);
 
@@ -949,6 +972,10 @@ chunk_set_replica_identity(const Chunk *chunk)
 static void
 chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 {
+	/* Do not create any of these for partitioned hypertables */
+	if (is_partitioning_allowed(ht->main_table_relid))
+		return;
+
 	/* Create the chunk's constraints, triggers, and indexes */
 	ts_chunk_constraints_create(ht, chunk);
 

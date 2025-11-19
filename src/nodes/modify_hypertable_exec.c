@@ -602,7 +602,6 @@ ExecInsert(ModifyTableContext *context,
 	OnConflictAction onconflict = node->onConflictAction;
 	bool skip_generated_column_computations = false;
 
-	Assert(!mtstate->mt_partition_tuple_routing);
 
 	/*
 	 * If the input result relation is a partitioned table, find the leaf
@@ -2183,6 +2182,7 @@ ExecOnConflictUpdate(ModifyTableContext *context,
 
 static void fireASTriggers(ModifyTableState *node);
 static void fireBSTriggers(ModifyTableState *node);
+static void checkDMLOnFrozenChunk(ResultRelInfo *resultRelInfo);
 
 /* ----------------------------------------------------------------
  *	   ExecModifyTable
@@ -2211,7 +2211,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	HeapTuple oldtuple;
 	List *relinfos = NIL;
 	ListCell *lc;
-  ChunkTupleRouting *ctr = ht_state->ctr;
+	ChunkTupleRouting *ctr = ht_state->ctr;
 
 	CHECK_FOR_INTERRUPTS();
 
@@ -2248,6 +2248,13 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	/* Preload local variables */
 	resultRelInfo = node->resultRelInfo + node->mt_lastResultIndex;
 	subplanstate = outerPlanState(node);
+
+	/*
+	 * Check for frozen chunk DML operation.
+	 * INSERTS are blocked in chunk tuple routing.
+	 */
+	if (operation != CMD_INSERT)
+		checkDMLOnFrozenChunk(resultRelInfo);
 
 	/* Set global context */
 	context.ht_state = ht_state;
@@ -2404,7 +2411,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 			/* direct compress */
 			if (operation == CMD_INSERT && ht_state->columnstore_insert)
 			{
-        ctr->cis->columnstore_insert = true;
+				ctr->cis->columnstore_insert = true;
 				/* Flush on chunk change */
 				if (ht_state->compressor && ht_state->compressor_relid != RelationGetRelid(ctr->cis->rel))
 				{
@@ -2477,7 +2484,10 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 			/* If it's not the same as last time, we need to locate the rel */
 			if (resultoid != node->mt_lastResultOid)
+			{
 				resultRelInfo = ExecLookupResultRelByOid(node, resultoid, false, true);
+				checkDMLOnFrozenChunk(resultRelInfo);
+			}
 		}
 
 		/*
@@ -2790,6 +2800,18 @@ fireASTriggers(ModifyTableState *node)
 		default:
 			elog(ERROR, "unknown operation");
 			break;
+	}
+}
+
+static void checkDMLOnFrozenChunk(ResultRelInfo *resultRelInfo)
+{
+	Chunk *chunk = ts_chunk_get_by_relid(resultRelInfo->ri_RelationDesc->rd_id, false);
+	if (chunk && ts_chunk_is_frozen(chunk))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("cannot update/delete rows from chunk \"%s\" as it is frozen",
+						get_rel_name(resultRelInfo->ri_RelationDesc->rd_id))));
 	}
 }
 

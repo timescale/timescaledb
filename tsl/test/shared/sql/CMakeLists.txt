@@ -19,6 +19,7 @@ set(TEST_FILES_SHARED
 
 set(TEST_TEMPLATES_SHARED
     gapfill.sql.in
+    lateral_subquery.sql.in
     ordered_append_join.sql.in
     constify_timestamptz_op_interval.sql.in
     constraint_exclusion_prepared.sql.in
