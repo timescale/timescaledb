@@ -1696,5 +1696,5 @@ CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_buck
 EXPLAIN (analyze,costs off, timing off,summary off, buffers off) DELETE FROM cagg_inval;
 
 -- should have invalidation entry
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2;
 
