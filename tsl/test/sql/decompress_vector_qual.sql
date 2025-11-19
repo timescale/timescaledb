@@ -515,8 +515,8 @@ select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '
 -- We don't vectorize comparison operators with text because they are probably
 -- not very useful.
 set timescaledb.debug_require_vector_qual to 'forbid';
-select count(*), min(ts), max(ts), min(d), max(d) from text_table where a < 'same';
-select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a < 'same' collate c;
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'same' collate c;
 
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
