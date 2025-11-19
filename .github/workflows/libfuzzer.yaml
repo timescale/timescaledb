@@ -5,7 +5,6 @@ name: Libfuzzer
     - cron: '0 1 * * *'
   push:
     branches:
-      - main
       - trigger/libfuzzer
   pull_request:
     paths:
