@@ -37,10 +37,10 @@
  */
 typedef struct ContinuousAggsCacheInvalEntry
 {
+	Oid chunk_relid;
 	int32 hypertable_id;
 	Dimension hypertable_open_dimension;
-	Oid previous_chunk_relid;
-	AttrNumber previous_chunk_open_dimension;
+	AttrNumber open_dimension_attno;
 	bool value_is_set;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
@@ -55,9 +55,7 @@ static MemoryContext continuous_aggs_invalidation_mctx = NULL;
 
 static int64 tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc);
 static inline void cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry,
-										  int32 hypertable_id);
-static inline void cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry,
-											   Oid chunk_reloid);
+										  int32 hypertable_id, Oid chunk_relid);
 static inline void update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval);
 static void cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry);
 static void cache_inval_cleanup(void);
@@ -109,7 +107,8 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 }
 
 static inline void
-cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hypertable_id)
+cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hypertable_id,
+					   Oid chunk_relid)
 {
 	Cache *ht_cache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(ht_cache, hypertable_id);
@@ -118,29 +117,14 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
 	Ensure(open_dim, "hypertable %d has no open partitioning dimension", hypertable_id);
 
+	cache_entry->chunk_relid = chunk_relid;
 	cache_entry->hypertable_id = hypertable_id;
 	cache_entry->hypertable_open_dimension = *open_dim;
-	cache_entry->previous_chunk_relid = InvalidOid;
+	cache_entry->open_dimension_attno = get_attnum(chunk_relid, NameStr(open_dim->fd.column_name));
 	cache_entry->value_is_set = false;
 	cache_entry->lowest_modified_value = INVAL_POS_INFINITY;
 	cache_entry->greatest_modified_value = INVAL_NEG_INFINITY;
 	ts_cache_release(&ht_cache);
-}
-
-static inline void
-cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chunk_reloid)
-{
-	Chunk *modified_tuple_chunk = ts_chunk_get_by_relid(chunk_reloid, false);
-	Ensure(modified_tuple_chunk, "could not find chunk for relid %u", chunk_reloid);
-
-	cache_entry->previous_chunk_relid = modified_tuple_chunk->table_id;
-	cache_entry->previous_chunk_open_dimension =
-		get_attnum(chunk_reloid, NameStr(cache_entry->hypertable_open_dimension.fd.column_name));
-
-	Ensure(cache_entry->previous_chunk_open_dimension != InvalidAttrNumber,
-		   "could not find open dimension column '%s' in chunk %s",
-		   NameStr(cache_entry->hypertable_open_dimension.fd.column_name),
-		   get_rel_name(chunk_reloid));
 }
 
 static inline void
@@ -168,18 +152,14 @@ continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple
 		cache_inval_init();
 
 	cache_entry = (ContinuousAggsCacheInvalEntry *)
-		hash_search(continuous_aggs_cache_inval_htab, &hypertable_id, HASH_ENTER, &found);
+		hash_search(continuous_aggs_cache_inval_htab, &chunk_relid, HASH_ENTER, &found);
 
 	if (!found)
-		cache_inval_entry_init(cache_entry, hypertable_id);
-
-	/* handle the case where we need to repopulate the cached chunk data */
-	if (cache_entry->previous_chunk_relid != chunk_relid)
-		cache_entry_switch_to_chunk(cache_entry, chunk_relid);
+		cache_inval_entry_init(cache_entry, hypertable_id, chunk_relid);
 
 	timeval = tuple_get_time(&cache_entry->hypertable_open_dimension,
 							 chunk_tuple,
-							 cache_entry->previous_chunk_open_dimension,
+							 cache_entry->open_dimension_attno,
 							 RelationGetDescr(chunk_rel));
 
 	update_cache_entry(cache_entry, timeval);
@@ -190,7 +170,7 @@ continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple
 	/* on update we need to invalidate the new time value as well as the old one */
 	timeval = tuple_get_time(&cache_entry->hypertable_open_dimension,
 							 chunk_newtuple,
-							 cache_entry->previous_chunk_open_dimension,
+							 cache_entry->open_dimension_attno,
 							 RelationGetDescr(chunk_rel));
 
 	update_cache_entry(cache_entry, timeval);
