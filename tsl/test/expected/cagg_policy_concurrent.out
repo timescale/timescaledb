@@ -1306,6 +1306,13 @@ SELECT alter_job(:JOB_ID, next_start => '2000-01-01'::timestamptz);
 SELECT add_continuous_aggregate_policy('mat_m1_rollup', '29 days'::interval, NULL, '12 h'::interval);
 ERROR:  multiple refresh policies are not supported for hierarchical continuous aggregates
 \set ON_ERROR_STOP 1
+-- Adding the exact same policy with if_not_exists should succeed (not error)
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, '30 days'::interval, '12 h'::interval, if_not_exists => true);
+NOTICE:  continuous aggregate refresh policy already exists for "mat_m1_rollup", skipping
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+
 -- different hierarchical caggs should be allowed to have their own policies
 SELECT add_continuous_aggregate_policy('mat_m1_rollup2', NULL, '30 days'::interval, '12 h'::interval) AS "JOB_ID2" \gset
 SELECT alter_job(:JOB_ID2, next_start => '2000-01-01'::timestamptz);
