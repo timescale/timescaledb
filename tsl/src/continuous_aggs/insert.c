@@ -5,43 +5,16 @@
  */
 
 #include <postgres.h>
-#include <access/tupconvert.h>
-#include <access/xact.h>
-#include <catalog/pg_type.h>
-#include <commands/dbcommands.h>
-#include <commands/trigger.h>
-#include <executor/spi.h>
-#include <fmgr.h>
-#include <lib/stringinfo.h>
-#include <miscadmin.h>
-#include <storage/lmgr.h>
-#include <utils/builtins.h>
-#include <utils/elog.h>
 #include <utils/hsearch.h>
-#include <utils/rel.h>
-#include <utils/relcache.h>
 #include <utils/snapmgr.h>
-
-#include <scanner.h>
 
 #include "compat/compat.h"
 
-#include "chunk.h"
+#include "continuous_aggs/insert.h"
 #include "debug_point.h"
-#include "dimension.h"
-#include "export.h"
 #include "guc.h"
-#include "hypertable.h"
-#include "hypertable_cache.h"
 #include "invalidation.h"
 #include "partitioning.h"
-#include "time_bucket.h"
-#include "ts_catalog/catalog.h"
-#include "ts_catalog/continuous_agg.h"
-#include "utils.h"
-
-#include "continuous_aggs/common.h"
-#include "continuous_aggs/insert.h"
 
 /*
  * When tuples in a hypertable that has a continuous aggregate are modified, the
@@ -55,11 +28,11 @@
  *
  * We accomplish this at the transaction level by keeping a hash table of each
  * hypertable that has been modified in the transaction and the lowest and
- * greatest modified values. The hashtable will be updated via a trigger that
- * will be called for every row that is inserted, updated or deleted. We use a
- * hashtable because we need to keep track of this on a per hypertable basis and
- * multiple can have tuples modified during a single transaction. (And if we
- * move to per-chunk cache-invalidation it makes it even easier).
+ * greatest modified values. The hashtable will be updated via ModifyHypertable
+ * for every row that is inserted, updated or deleted.
+ * We use a hashtable because we need to keep track of this on a per hypertable
+ * basis and multiple can have tuples modified during a single transaction.
+ * (And if we move to per-chunk cache-invalidation it makes it even easier).
  *
  */
 typedef struct ContinuousAggsCacheInvalEntry
@@ -79,7 +52,7 @@ static int64 get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid);
 #define CA_CACHE_INVAL_INIT_HTAB_SIZE 64
 
 static HTAB *continuous_aggs_cache_inval_htab = NULL;
-static MemoryContext continuous_aggs_trigger_mctx = NULL;
+static MemoryContext continuous_aggs_invalidation_mctx = NULL;
 
 static int64 tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc);
 static inline void cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry,
@@ -98,16 +71,16 @@ cache_inval_init()
 {
 	HASHCTL ctl;
 
-	Assert(continuous_aggs_trigger_mctx == NULL);
+	Assert(continuous_aggs_invalidation_mctx == NULL);
 
-	continuous_aggs_trigger_mctx = AllocSetContextCreate(TopTransactionContext,
-														 "ContinuousAggsTriggerCtx",
-														 ALLOCSET_DEFAULT_SIZES);
+	continuous_aggs_invalidation_mctx = AllocSetContextCreate(TopTransactionContext,
+															  "ContinuousAggsInvalidationCtx",
+															  ALLOCSET_DEFAULT_SIZES);
 
 	memset(&ctl, 0, sizeof(ctl));
 	ctl.keysize = sizeof(int32);
 	ctl.entrysize = sizeof(ContinuousAggsCacheInvalEntry);
-	ctl.hcxt = continuous_aggs_trigger_mctx;
+	ctl.hcxt = continuous_aggs_invalidation_mctx;
 
 	continuous_aggs_cache_inval_htab = hash_create("TS Continuous Aggs Cache Inval",
 												   CA_CACHE_INVAL_INIT_HTAB_SIZE,
@@ -128,12 +101,6 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 	 * partitioning columns to be NOT NULL we should never see a NULL here.
 	 */
 	Ensure(!isnull, "primary partition column cannot be NULL");
-
-	if (NULL != d->partitioning)
-	{
-		Oid collation = TupleDescAttr(tupdesc, col)->attcollation;
-		datum = ts_partitioning_func_apply(d->partitioning, collation, datum);
-	}
 
 	Assert(d->type == DIMENSION_TYPE_OPEN);
 
@@ -166,7 +133,7 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	if (cache_entry->hypertable_open_dimension.partitioning != NULL)
 	{
 		PartitioningInfo *open_dim_part_info =
-			MemoryContextAllocZero(continuous_aggs_trigger_mctx, sizeof(*open_dim_part_info));
+			MemoryContextAllocZero(continuous_aggs_invalidation_mctx, sizeof(*open_dim_part_info));
 		*open_dim_part_info = *cache_entry->hypertable_open_dimension.partitioning;
 		cache_entry->hypertable_open_dimension.partitioning = open_dim_part_info;
 	}
@@ -181,26 +148,16 @@ static inline void
 cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chunk_reloid)
 {
 	Chunk *modified_tuple_chunk = ts_chunk_get_by_relid(chunk_reloid, false);
-	if (modified_tuple_chunk == NULL)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("continuous agg trigger function must be called on hypertable chunks only"),
-				 errdetail("Called on '%s'.", get_rel_name(chunk_reloid))));
-	}
+	Ensure(modified_tuple_chunk, "could not find chunk for relid %u", chunk_reloid);
 
 	cache_entry->previous_chunk_relid = modified_tuple_chunk->table_id;
 	cache_entry->previous_chunk_open_dimension =
 		get_attnum(chunk_reloid, NameStr(cache_entry->hypertable_open_dimension.fd.column_name));
 
-	if (cache_entry->previous_chunk_open_dimension == InvalidAttrNumber)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("open dimension '%s' not found in chunk %s",
-						NameStr(cache_entry->hypertable_open_dimension.fd.column_name),
-						get_rel_name(chunk_reloid))));
-	}
+	Ensure(cache_entry->previous_chunk_open_dimension != InvalidAttrNumber,
+		   "could not find open dimension column '%s' in chunk %s",
+		   NameStr(cache_entry->hypertable_open_dimension.fd.column_name),
+		   get_rel_name(chunk_reloid));
 }
 
 static inline void
@@ -292,10 +249,10 @@ cache_inval_cleanup(void)
 {
 	Assert(continuous_aggs_cache_inval_htab != NULL);
 	hash_destroy(continuous_aggs_cache_inval_htab);
-	MemoryContextDelete(continuous_aggs_trigger_mctx);
+	MemoryContextDelete(continuous_aggs_invalidation_mctx);
 
 	continuous_aggs_cache_inval_htab = NULL;
-	continuous_aggs_trigger_mctx = NULL;
+	continuous_aggs_invalidation_mctx = NULL;
 };
 
 static void
