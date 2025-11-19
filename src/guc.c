@@ -145,6 +145,8 @@ bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 
+bool ts_guc_enable_partitioned_hypertables = false;
+
 /* default value of ts_guc_max_open_chunks_per_insert and
  * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
  * GUC mechanism starts up */
@@ -1206,6 +1208,20 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+#ifdef TS_DEBUG
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_partitioned_hypertables"),
+							 "Enable hypertables using declarative partitioning",
+							 "Enable experimental support for creating hypertables using "
+							 "PostgreSQL's native declarative partitioning",
+							 &ts_guc_enable_partitioned_hypertables,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
 
 #ifdef USE_TELEMETRY
 	DefineCustomEnumVariable(MAKE_EXTOPTION("telemetry_level"),

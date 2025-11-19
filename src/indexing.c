@@ -25,6 +25,7 @@
 #include "annotations.h"
 #include "dimension.h"
 #include "errors.h"
+#include "guc.h"
 #include "hypertable_cache.h"
 #include "indexing.h"
 #include "partitioning.h"
@@ -357,7 +358,8 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 			char relkind = get_rel_relkind(lfirst_oid(lc));
 
 			if (relkind != RELKIND_RELATION && relkind != RELKIND_MATVIEW &&
-				relkind != RELKIND_FOREIGN_TABLE)
+				relkind != RELKIND_FOREIGN_TABLE &&
+				!(relkind == RELKIND_PARTITIONED_TABLE && ts_guc_enable_partitioned_hypertables))
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
 						 errmsg("cannot create index on hypertable \"%s\"",
