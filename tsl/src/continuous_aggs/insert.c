@@ -38,7 +38,6 @@
 typedef struct ContinuousAggsCacheInvalEntry
 {
 	int32 hypertable_id;
-	Oid hypertable_relid;
 	Dimension hypertable_open_dimension;
 	Oid previous_chunk_relid;
 	AttrNumber previous_chunk_open_dimension;
@@ -47,7 +46,7 @@ typedef struct ContinuousAggsCacheInvalEntry
 	int64 greatest_modified_value;
 } ContinuousAggsCacheInvalEntry;
 
-static int64 get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid);
+static int64 get_lowest_invalidated_time_for_hypertable(int32 hypertable_id);
 
 #define CA_CACHE_INVAL_INIT_HTAB_SIZE 64
 
@@ -113,30 +112,14 @@ static inline void
 cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hypertable_id)
 {
 	Cache *ht_cache = ts_hypertable_cache_pin();
-	/* NOTE: we can remove the id=>relid scan, if it becomes an issue, by getting the
-	 * hypertable_relid directly from the Chunk*/
 	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(ht_cache, hypertable_id);
-	if (ht == NULL)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("unable to determine relid for hypertable %d", hypertable_id)));
-	}
-
-	cache_entry->hypertable_id = hypertable_id;
-	cache_entry->hypertable_relid = ht->main_table_relid;
+	Ensure(ht, "could not find hypertable with id %d", hypertable_id);
 
 	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
-	Ensure(open_dim != NULL, "hypertable %d has no open partitioning dimension", hypertable_id);
+	Ensure(open_dim, "hypertable %d has no open partitioning dimension", hypertable_id);
 
+	cache_entry->hypertable_id = hypertable_id;
 	cache_entry->hypertable_open_dimension = *open_dim;
-	if (cache_entry->hypertable_open_dimension.partitioning != NULL)
-	{
-		PartitioningInfo *open_dim_part_info =
-			MemoryContextAllocZero(continuous_aggs_invalidation_mctx, sizeof(*open_dim_part_info));
-		*open_dim_part_info = *cache_entry->hypertable_open_dimension.partitioning;
-		cache_entry->hypertable_open_dimension.partitioning = open_dim_part_info;
-	}
 	cache_entry->previous_chunk_relid = InvalidOid;
 	cache_entry->value_is_set = false;
 	cache_entry->lowest_modified_value = INVAL_POS_INFINITY;
@@ -236,7 +219,7 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 		return;
 	}
 
-	liv = get_lowest_invalidated_time_for_hypertable(entry->hypertable_relid);
+	liv = get_lowest_invalidated_time_for_hypertable(entry->hypertable_id);
 
 	if (entry->lowest_modified_value < liv)
 		invalidation_hyper_log_add_entry(entry->hypertable_id,
@@ -367,7 +350,7 @@ invalidation_tuple_found(TupleInfo *ti, void *min)
 }
 
 static int64
-get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
+get_lowest_invalidated_time_for_hypertable(int32 hypertable_id)
 {
 	int64 min_val = INVAL_POS_INFINITY;
 	Catalog *catalog = ts_catalog_get();
@@ -379,7 +362,7 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 				Anum_continuous_aggs_invalidation_threshold_pkey_hypertable_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(ts_hypertable_relid_to_id(hypertable_relid)));
+				Int32GetDatum(hypertable_id));
 	scanctx = (ScannerCtx){
 		.table = catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 		.index = catalog_get_index(catalog,
