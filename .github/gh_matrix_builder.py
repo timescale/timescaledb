@@ -41,7 +41,6 @@ from ci_settings import (
 # github event type which is either push, pull_request or schedule
 event_type = sys.argv[1]
 pull_request = event_type == "pull_request"
-scheduled = event_type == "scheduled"
 
 m = {
     "include": [],
@@ -209,11 +208,15 @@ m["include"].append(
 )
 
 # test timescaledb with release config on latest postgres release in MacOS
-# we only run tests on scheduled runs, rest only do compilation tests
+# we only run compilation tests in pull requests.
 m["include"].append(
     build_release_config(
         macos_config(
-            {"pg": PG18_LATEST, "installcheck": scheduled, "pginstallcheck": scheduled}
+            {
+                "pg": PG18_LATEST,
+                "installcheck": not pull_request,
+                "pginstallcheck": not pull_request,
+            }
         )
     )
 )
