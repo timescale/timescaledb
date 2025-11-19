@@ -52,7 +52,7 @@ jobs:
     - name: Build TimescaleDB
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DWARNINGS_AS_ERRORS=OFF
-        make -j$(nproc) -C build
+        make -j$(getconf _NPROCESSORS_ONLN) -C build
         sudo make -C build install
 
     - name: Checkout sqlsmith
@@ -67,7 +67,7 @@ jobs:
         cd sqlsmith
         autoreconf -i
         ./configure
-        make -j$(nproc)
+        make -j$(getconf _NPROCESSORS_ONLN)
 
     - name: Setup test environment
       run: |
