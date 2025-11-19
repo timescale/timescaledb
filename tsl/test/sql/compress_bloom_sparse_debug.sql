@@ -144,8 +144,12 @@ select max(chunk) filter (where index = 1) chunk1,
 from chunks
 \gset
 
-create view v(f) as (select _ts_meta_v2_bloom1_tag from :chunk1
-    union all select _ts_meta_v2_bloom1_tag from :chunk2);
+select attname column from pg_attribute where attrelid = :'chunk1'::regclass
+  and attname like '_ts_meta_v2_bl%_tag'
+\gset
+
+create view v(f) as (select :column from :chunk1
+    union all select :column from :chunk2);
 
 select
     _timescaledb_functions.bloom1_contains(f, '1'::text),

@@ -27,6 +27,7 @@ set(TEST_FILES
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
+    compress_bloom_hash.sql
     compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
