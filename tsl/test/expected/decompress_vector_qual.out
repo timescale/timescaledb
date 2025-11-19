@@ -1354,12 +1354,12 @@ ERROR:  LIKE pattern must not end with escape character
 -- We don't vectorize comparison operators with text because they are probably
 -- not very useful.
 set timescaledb.debug_require_vector_qual to 'forbid';
-select count(*), min(ts), max(ts), min(d), max(d) from text_table where a < 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a < 'same' collate "C";
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   3900 |   1 | 1000 |   0 |   8
 
-select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'same' collate "C";
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   2500 |   1 | 1000 |   4 |   7
