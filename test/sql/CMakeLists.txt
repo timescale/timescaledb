@@ -112,6 +112,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     metadata.sql
     multi_transaction_index.sql
     net.sql
+    partitioned_hypertable.sql
     pg_dump.sql
     symbol_conflict.sql
     test_tss_callbacks.sql
