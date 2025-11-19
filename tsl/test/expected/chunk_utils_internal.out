@@ -26,8 +26,6 @@ CREATE OR REPLACE VIEW chunk_view AS
       AND chcons.dimension_slice_id = dimsl.id;
 GRANT SELECT on chunk_view TO PUBLIC;
 \c :TEST_DBNAME :ROLE_SUPERUSER
--- fake presence of timescaledb_osm
-INSERT INTO pg_extension(oid,extname,extowner,extnamespace,extrelocatable,extversion) SELECT 1,'timescaledb_osm',10,11,false,'1.0';
 CREATE SCHEMA test1;
 GRANT CREATE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
 GRANT USAGE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
@@ -270,7 +268,7 @@ INSERT INTO public.table_to_compress VALUES ('2020-01-01 10:00', 12, 77);
 ERROR:  cannot INSERT into frozen chunk "_hyper_2_3_chunk"
 --touches all chunks
 UPDATE public.table_to_compress SET value = 3;
-ERROR:  cannot modify frozen chunk status
+ERROR:  cannot update/delete rows from chunk "_hyper_2_3_chunk" as it is frozen
 --touches only frozen chunk
 DELETE FROM public.table_to_compress WHERE time < '2020-01-02';
 ERROR:  cannot update/delete rows from chunk "_hyper_2_3_chunk" as it is frozen
@@ -1742,7 +1740,7 @@ SELECT format('%I.%I', schema_name, table_name) AS "COMPRESSED_CHUNK" FROM _time
 INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
 ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
 UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
-ERROR:  cannot modify frozen chunk status
+ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
 DELETE FROM dml_blocks WHERE device = 'dev2';
 ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
 COPY dml_blocks FROM STDIN;
@@ -1753,7 +1751,7 @@ ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
 INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
 ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
 UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
-ERROR:  cannot modify frozen chunk status
+ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
 DELETE FROM :CHUNK WHERE device = 'dev2';
 ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
 COPY :CHUNK FROM STDIN;
