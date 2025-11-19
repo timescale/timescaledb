@@ -65,7 +65,7 @@ jobs:
           --without-readline --without-zlib --without-libxml --enable-cassert \
           --enable-debug CC=clang \
           CFLAGS="-fuse-ld=lld -ggdb3 -O2 -fno-omit-frame-pointer"
-        make -j$(nproc)
+        make -j$(getconf _NPROCESSORS_ONLN)
 
     - name: Install PostgreSQL
       run: |
@@ -94,7 +94,7 @@ jobs:
             -DCMAKE_C_FLAGS="-fsanitize=fuzzer-no-link -lstdc++ -L$LIBFUZZER_PATH -l:libclang_rt.fuzzer_no_main-x86_64.a -static-libsan" \
             -DCOMPRESSION_FUZZING=1 -DPG_PATH=$HOME/$PG_INSTALL_DIR
 
-        make -C build -j$(nproc) install
+        make -C build -j$(getconf _NPROCESSORS_ONLN) install
 
     # Incredibly, the upload-artifact action can't preserve executable permissions:
     # https://github.com/actions/upload-artifact/issues/38
@@ -232,7 +232,7 @@ jobs:
 
         # Start more fuzzing processes in the background. We won't even monitor
         # their progress, because the server will panic if they find an error.
-        for x in {2..$(nproc)}
+        for x in {2..$(getconf _NPROCESSORS_ONLN)}
         do
           psql -v ON_ERROR_STOP=1 -c "select fuzz('${{ matrix.case.algo }}',
             '${{ matrix.case.pgtype }}', '${{ matrix.case.bulk }}', ${{ matrix.case.runs }});" &

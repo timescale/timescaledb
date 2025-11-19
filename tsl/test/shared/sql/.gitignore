@@ -1,5 +1,6 @@
 /continuous_aggs_compression-*.sql
 /gapfill-*.sql
+/lateral_subquery-*.sql
 /ordered_append_join-*.sql
 /remote-copy-escapes.*sv
 /transparent_decompress_chunk-*.sql

@@ -1,0 +1,1 @@
+Fixes: #8942 Fix lateral join handling for compressed chunks
