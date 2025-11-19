@@ -2212,7 +2212,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	HeapTuple oldtuple;
 	List *relinfos = NIL;
 	ListCell *lc;
-  ChunkTupleRouting *ctr = ht_state->ctr;
+	ChunkTupleRouting *ctr = ht_state->ctr;
 
 	CHECK_FOR_INTERRUPTS();
 
@@ -2412,7 +2412,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 			/* direct compress */
 			if (operation == CMD_INSERT && ht_state->columnstore_insert)
 			{
-        ctr->cis->columnstore_insert = true;
+				ctr->cis->columnstore_insert = true;
 				/* Flush on chunk change */
 				if (ht_state->compressor && ht_state->compressor_relid != RelationGetRelid(ctr->cis->rel))
 				{
