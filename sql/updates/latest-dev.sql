@@ -16,3 +16,22 @@ CREATE TABLE _timescaledb_catalog.chunk_rewrite (
 GRANT SELECT ON _timescaledb_catalog.chunk_rewrite TO PUBLIC;
 DROP PROCEDURE IF EXISTS @extschema@.merge_chunks(REGCLASS, REGCLASS);
 
+
+-- Check whether the database has the sparse bloom filter indexes on compressed
+-- chunks, which will require manual action to re-enable.
+DO $$
+DECLARE
+    num_chunks_with_bloom int;
+BEGIN
+
+    SELECT count(*) INTO num_chunks_with_bloom
+    FROM pg_attribute WHERE attname LIKE '_ts_meta_v2_bloom1_%';
+
+    IF num_null_chunk_ids > 0 THEN
+       RAISE WARNING 'bloom filter sparse indexes require action to re-enable'
+              USING HINT = 'See the changelog for details.';
+    ELSE
+        RAISE WARNING 'this is just for testing!';
+    END IF;
+END
+$$;
