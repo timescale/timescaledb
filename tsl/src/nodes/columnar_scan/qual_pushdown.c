@@ -375,7 +375,7 @@ expr_fetch_bloom1_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 													 context->compressed_rte->relid,
 													 bloom1_column_prefix);
 
-	if (*bloom1_attno == InvalidAttrNumber && ts_guc_enable_legacy_bloom1_v1)
+	if (*bloom1_attno == InvalidAttrNumber && ts_guc_read_legacy_bloom1_v1)
 	{
 		/*
 		 * The version 1 of bloom1 indexes is disabled by default because its

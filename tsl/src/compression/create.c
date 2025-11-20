@@ -78,7 +78,7 @@ is_sparse_index_type(const char *type)
 		return true;
 	}
 
-	if (ts_guc_enable_legacy_bloom1_v1 && strcmp("bloom1", type) == 0)
+	if (ts_guc_read_legacy_bloom1_v1 && strcmp("bloom1", type) == 0)
 	{
 		return true;
 	}

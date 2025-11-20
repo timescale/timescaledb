@@ -32,12 +32,12 @@ select * from test where tag = '1';
 
 
 -- Try to enable it with the GUC.
-set timescaledb.enable_legacy_bloom1_v1 to on;
+set timescaledb.read_legacy_bloom1_v1 to on;
 
 explain (analyze, costs off, buffers off, timing off, summary off)
 select * from test where tag = '1';
 
-reset timescaledb.enable_legacy_bloom1_v1;
+reset timescaledb.read_legacy_bloom1_v1;
 
 
 -- Test that recompression of a partial chunk with old indexes produces a
@@ -59,7 +59,7 @@ select * from test where tag = '1';
 explain (analyze, costs off, buffers off, timing off, summary off)
 select * from test where tag = '2';
 
-set timescaledb.enable_legacy_bloom1_v1 to on;
+set timescaledb.read_legacy_bloom1_v1 to on;
 
 explain (analyze, costs off, buffers off, timing off, summary off)
 select * from test where tag = '1';
@@ -67,6 +67,6 @@ select * from test where tag = '1';
 explain (analyze, costs off, buffers off, timing off, summary off)
 select * from test where tag = '2';
 
-reset timescaledb.enable_legacy_bloom1_v1;
+reset timescaledb.read_legacy_bloom1_v1;
 
 

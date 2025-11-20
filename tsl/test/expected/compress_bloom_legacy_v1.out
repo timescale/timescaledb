@@ -37,7 +37,7 @@ select * from test where tag = '1';
    ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=1.00 loops=1)
 
 -- Try to enable it with the GUC.
-set timescaledb.enable_legacy_bloom1_v1 to on;
+set timescaledb.read_legacy_bloom1_v1 to on;
 explain (analyze, costs off, buffers off, timing off, summary off)
 select * from test where tag = '1';
 --- QUERY PLAN ---
@@ -46,7 +46,7 @@ select * from test where tag = '1';
    ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=1.00 loops=1)
          Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_tag, '1'::text)
 
-reset timescaledb.enable_legacy_bloom1_v1;
+reset timescaledb.read_legacy_bloom1_v1;
 -- Test that recompression of a partial chunk with old indexes produces a
 -- sensible result.
 insert into test values (2, '2');
@@ -84,7 +84,7 @@ select * from test where tag = '2';
    Rows Removed by Filter: 1
    ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=2.00 loops=1)
 
-set timescaledb.enable_legacy_bloom1_v1 to on;
+set timescaledb.read_legacy_bloom1_v1 to on;
 explain (analyze, costs off, buffers off, timing off, summary off)
 select * from test where tag = '1';
 --- QUERY PLAN ---
@@ -103,4 +103,4 @@ select * from test where tag = '2';
          Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_tag, '2'::text)
          Rows Removed by Filter: 1
 
-reset timescaledb.enable_legacy_bloom1_v1;
+reset timescaledb.read_legacy_bloom1_v1;

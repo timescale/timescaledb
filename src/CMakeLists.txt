@@ -114,6 +114,16 @@ set(TSL_CAGG_INVALIDATION_PLUGIN_NAME
     "${PROJECT_NAME}-invalidations-${PROJECT_VERSION_MOD}"
     CACHE STRING "Continuous aggregates invalidation plugin name")
 
+option(
+  READ_LEGACY_BLOOM1_INDEX
+  "Enable by default reading the legacy bloom1 version 1 sparse bloom filter indexes on compressed tables"
+  OFF)
+
+if(READ_LEGACY_BLOOM1_INDEX)
+  target_compile_definitions(${TS_LIBRARY_NAME}
+                             PUBLIC TS_READ_LEGACY_BLOOM1_INDEX)
+endif()
+
 configure_file(config.h.in config.h)
 add_dependencies(${PROJECT_NAME} gitcheck)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
