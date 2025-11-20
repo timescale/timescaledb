@@ -270,7 +270,6 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(fd->materialized_only);
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_finalized)] = BoolGetDatum(fd->finalized);
 
 	return heap_form_tuple(desc, values, nulls);
 }
@@ -320,8 +319,6 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 
 	fd->materialized_only =
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)]);
-	fd->finalized = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_finalized)]);
-
 	if (should_free)
 		heap_freetuple(tuple);
 }
@@ -550,33 +547,6 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id)
 	}
 
 	return status;
-}
-
-TSDLLEXPORT bool
-ts_continuous_agg_hypertable_all_finalized(int32 raw_hypertable_id)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	bool all_finalized = true;
-
-	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
-	ts_scanner_foreach(&iterator)
-	{
-		FormData_continuous_agg data;
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-
-		continuous_agg_formdata_fill(&data, ti);
-
-		if (!data.finalized)
-		{
-			all_finalized = false;
-			break;
-		}
-	}
-
-	ts_scan_iterator_close(&iterator);
-
-	return all_finalized;
 }
 
 TSDLLEXPORT List *
@@ -1564,18 +1534,9 @@ ts_continuous_agg_get_query(ContinuousAgg *cagg)
 	RewriteRule *rule;
 	Query *cagg_view_query;
 
-	/*
-	 * Get the partial_view definition for the finalized version because
-	 * the user view doesn't have the "GROUP BY" clause anymore.
-	 */
-	if (ContinuousAggIsFinalized(cagg))
-		cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.partial_view_schema),
-											  NameStr(cagg->data.partial_view_name),
-											  false);
-	else
-		cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.user_view_schema),
-											  NameStr(cagg->data.user_view_name),
-											  false);
+	cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.partial_view_schema),
+										  NameStr(cagg->data.partial_view_name),
+										  false);
 
 	cagg_view_rel = table_open(cagg_view_oid, AccessShareLock);
 	cagg_view_rules = cagg_view_rel->rd_rules;

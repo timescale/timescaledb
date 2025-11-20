@@ -26,19 +26,6 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	ListCell *lc1, *lc2;
 	int sec_ctx;
 	Oid uid, saved_uid;
-	bool finalized = ContinuousAggIsFinalized(agg);
-
-	if (!finalized)
-	{
-		ereport(WARNING,
-				(errmsg("repairing Continuous Aggregates with partials are not supported anymore."),
-				 errdetail("Migrate the Continuous Aggregates to finalized form to rebuild."),
-				 errhint("Run \"CALL cagg_migrate('%s.%s');\" to migrate to the new "
-						 "format.",
-						 schema,
-						 relname)));
-		return;
-	}
 
 	/* Cagg view created by the user. */
 	Oid user_view_oid = ts_get_relation_relid(NameStr(agg->data.user_view_schema),
@@ -53,7 +40,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	Query *final_query = copyObject(user_query);
 	RemoveRangeTableEntries(final_query);
 
-	if (finalized && !force_rebuild)
+	if (!force_rebuild)
 	{
 		/* This continuous aggregate does not have partials, do not check for defects. */
 		elog(DEBUG1,
@@ -108,7 +95,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 		}
 	}
 
-	if (!rebuild_cagg_with_joins && finalized)
+	if (!rebuild_cagg_with_joins)
 	{
 		/* There's nothing to fix, so no need to rebuild */
 		elog(DEBUG1,
@@ -130,13 +117,11 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 
 	ContinuousAggTimeBucketInfo timebucket_exprinfo =
 		cagg_validate_query(direct_query,
-							finalized,
 							NameStr(agg->data.user_view_schema),
 							NameStr(agg->data.user_view_name),
 							false);
 
 	mattablecolumninfo_init(&mattblinfo, copyObject(direct_query->groupClause));
-	fqi.finalized = finalized;
 	finalizequery_init(&fqi, direct_query, &mattblinfo);
 
 	Query *view_query = finalizequery_get_select_query(&fqi,

@@ -128,13 +128,6 @@ FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_m1'
 \gset
--- Change `finalized` option is forbiden
-\set ON_ERROR_STOP 0
-ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.finalized=false);
-ERROR:  cannot alter finalized option for continuous aggregates
-ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.finalized=true);
-ERROR:  cannot alter finalized option for continuous aggregates
-\set ON_ERROR_STOP 1
 -- Materialized hypertable for mat_m1 should not be visible in the
 -- hypertables view:
 SELECT hypertable_schema, hypertable_name
@@ -2034,13 +2027,6 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
  Sun Oct 28 17:00:00 2018 PDT |     3 | 115
  Sun Nov 04 16:00:00 2018 PST |     2 | 410
 
---
--- Testing the coexistence of both types of supported CAggs
--- over the same raw hypertable.
---
---  . finalized = true:  without chunk_id and partials
---  . finalized = false: with chunk_id and partials
---
 DROP TABLE conditions CASCADE;
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
@@ -2088,7 +2074,6 @@ view_definition                   |  SELECT time_bucket('@ 1 day'::interval, con
                                   |     sum(conditions.humidity) AS sumh                                +
                                   |    FROM conditions                                                  +
                                   |   GROUP BY (time_bucket('@ 1 day'::interval, conditions.timec));
-finalized                         | t
 
 \x OFF
 CALL refresh_continuous_aggregate('conditions_summary_new', NULL, NULL);

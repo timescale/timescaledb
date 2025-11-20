@@ -25,8 +25,7 @@ static void process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunct
 										  AttrNumber htpartcolno);
 static void caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause,
 									List *targetList, List *rtable, bool is_cagg_create);
-static bool cagg_query_supported(const Query *query, StringInfoData *hint, StringInfoData *detail,
-								 const bool finalized);
+static bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail);
 static Datum get_bucket_width_datum(ContinuousAggTimeBucketInfo bucket_info);
 static int64 get_bucket_width(ContinuousAggTimeBucketInfo bucket_info);
 static FuncExpr *build_conversion_call(Oid type, FuncExpr *boundary);
@@ -514,19 +513,8 @@ caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause, 
  *   added.
  */
 static bool
-cagg_query_supported(const Query *query, StringInfoData *hint, StringInfoData *detail,
-					 const bool finalized)
+cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail)
 {
-	if (!finalized)
-	{
-		/* continuous aggregates with old format will not be allowed */
-		appendStringInfoString(detail,
-							   "Continuous Aggregates with partials is not supported anymore.");
-		appendStringInfoString(hint,
-							   "Define the Continuous Aggregate with \"finalized\" parameter set "
-							   "to true.");
-		return false;
-	}
 	if (!query->jointree->fromlist)
 	{
 		appendStringInfoString(hint, "FROM clause missing in the query");
@@ -699,8 +687,8 @@ get_bucket_width(ContinuousAggTimeBucketInfo bucket_info)
 }
 
 ContinuousAggTimeBucketInfo
-cagg_validate_query(const Query *query, const bool finalized, const char *cagg_schema,
-					const char *cagg_name, const bool is_cagg_create)
+cagg_validate_query(const Query *query, const char *cagg_schema, const char *cagg_name,
+					const bool is_cagg_create)
 {
 	ContinuousAggTimeBucketInfo bucket_info = { 0 };
 	ContinuousAggTimeBucketInfo bucket_info_parent = { 0 };
@@ -715,7 +703,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	initStringInfo(&hint);
 	initStringInfo(&detail);
 
-	if (!cagg_query_supported(query, &hint, &detail, finalized))
+	if (!cagg_query_supported(query, &hint, &detail))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -813,18 +801,6 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 					 errmsg("invalid continuous aggregate query"),
 					 errhint("Continuous aggregate needs to query hypertable or another "
 							 "continuous aggregate.")));
-		}
-
-		if (!ContinuousAggIsFinalized(cagg_parent))
-		{
-			ts_cache_release(&hcache);
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("old format of continuous aggregate is not supported"),
-					 errhint("Run \"CALL cagg_migrate('%s.%s');\" to migrate to the new "
-							 "format.",
-							 NameStr(cagg_parent->data.user_view_schema),
-							 NameStr(cagg_parent->data.user_view_name))));
 		}
 
 		parent_mat_hypertable_id = cagg_parent->data.mat_hypertable_id;
@@ -1592,30 +1568,15 @@ ts_cagg_get_bucket_function_info(Oid view_oid)
  * GROUP BY clause of the cagg query. It behaves a bit different depending
  * of the type of the Continuous Aggregate.
  *
- * 1) Partials form (finalized=false)
+ * Retrieve the "direct view query" and find the GROUP BY clause and
+ * "time_bucket" clause. We use the "direct view query" because in the
+ * "user view query" we removed the re-aggregation in the part that query
+ * the materialization hypertable so we don't have a GROUP BY clause
+ * anymore.
  *
- *    Retrieve the "user view query" and find the GROUP BY clause and
- *    "time_bucket" clause. Map them to the column names (of mat.hypertable)
- *
- *    Note that the "user view query" has 2 forms:
- *    - with UNION
- *    - without UNION
- *
- *    We have to extract the part of the query that has "finalize_agg" on
- *    the materialized hypertable to find the GROUP BY clauses.
- *    (see continuous_aggs/create.c for more info on the query structure)
- *
- * 2) Finals form (finalized=true) (>= 2.7)
- *
- *    Retrieve the "direct view query" and find the GROUP BY clause and
- *    "time_bucket" clause. We use the "direct view query" because in the
- *    "user view query" we removed the re-aggregation in the part that query
- *    the materialization hypertable so we don't have a GROUP BY clause
- *    anymore.
- *
- *    Get the column name from the GROUP BY clause because all the column
- *    names are the same in all underlying objects (user view, direct view,
- *    partial view and materialization hypertable).
+ * Get the column name from the GROUP BY clause because all the column
+ * names are the same in all underlying objects (user view, direct view,
+ * partial view and materialization hypertable).
  */
 List *
 cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
@@ -1660,18 +1621,9 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 		SortGroupClause *cagg_gc = (SortGroupClause *) lfirst(lc);
 		TargetEntry *cagg_tle = get_sortgroupclause_tle(cagg_gc, finalize_query->targetList);
 
-		if (ContinuousAggIsFinalized(agg))
-		{
-			/* "resname" is the same as "mat column names" in the finalized version */
-			if (!cagg_tle->resjunk && cagg_tle->resname)
-				retlist = lappend(retlist, get_attname(mat_relid, cagg_tle->resno, false));
-		}
-		else
-		{
-			/* groupby clauses are columns from the mat hypertable */
-			Var *mat_var = castNode(Var, cagg_tle->expr);
-			retlist = lappend(retlist, get_attname(mat_relid, mat_var->varattno, false));
-		}
+		/* "resname" is the same as "mat column names" */
+		if (!cagg_tle->resjunk && cagg_tle->resname)
+			retlist = lappend(retlist, get_attname(mat_relid, cagg_tle->resno, false));
 	}
 	return retlist;
 }

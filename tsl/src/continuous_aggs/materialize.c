@@ -27,8 +27,6 @@
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 
-#define CONTINUOUS_AGG_CHUNK_ID_COL_NAME "chunk_id"
-
 /*********************
  * utility functions *
  *********************/
@@ -65,7 +63,6 @@ typedef struct MaterializationContext
 	NameData *time_column_name;
 	TimeRange materialization_range;
 	InternalTimeRange internal_materialization_range;
-	char *chunk_condition;
 	ItemPointer tupleid;
 	int nargs;
 } MaterializationContext;
@@ -164,7 +161,7 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 									  SchemaAndName partial_view,
 									  SchemaAndName materialization_table,
 									  const NameData *time_column_name,
-									  InternalTimeRange materialization_range, int32 chunk_id)
+									  InternalTimeRange materialization_range)
 {
 	MaterializationContext context = {
 		.mat_ht = mat_ht,
@@ -174,16 +171,6 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 		.time_column_name = (NameData *) time_column_name,
 		.materialization_range = internal_time_range_to_time_range(materialization_range),
 		.internal_materialization_range = materialization_range,
-		/*
-		 * chunk_id is valid if the materializaion update should be done only on the given chunk.
-		 * This is used currently for refresh on chunk drop only. In other cases, manual
-		 * call to refresh_continuous_aggregate or call from a refresh policy, chunk_id is
-		 * not provided, i.e., invalid. Also the chunk_id is used only on the old format.
-		 */
-		.chunk_condition =
-			chunk_id != INVALID_CHUNK_ID && !ContinuousAggIsFinalized(cagg) ?
-				psprintf(" AND %s = %d", CONTINUOUS_AGG_CHUNK_ID_COL_NAME, chunk_id) :
-				"",
 	};
 
 	/* Lock down search_path */
@@ -404,14 +391,13 @@ create_materialization_insert_statement(MaterializationContext *context)
 	initStringInfo(&query);
 	appendStringInfo(&query,
 					 "INSERT INTO %s.%s SELECT * FROM %s.%s AS I "
-					 "WHERE I.%s >= $1 AND I.%s < $2 %s;",
+					 "WHERE I.%s >= $1 AND I.%s < $2;",
 					 quote_identifier(NameStr(*context->materialization_table.schema)),
 					 quote_identifier(NameStr(*context->materialization_table.name)),
 					 quote_identifier(NameStr(*context->partial_view.schema)),
 					 quote_identifier(NameStr(*context->partial_view.name)),
 					 quote_identifier(NameStr(*context->time_column_name)),
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 context->chunk_condition);
+					 quote_identifier(NameStr(*context->time_column_name)));
 	return query.data;
 }
 
@@ -423,12 +409,11 @@ create_materialization_delete_statement(MaterializationContext *context)
 	initStringInfo(&query);
 	appendStringInfo(&query,
 					 "DELETE FROM %s.%s AS D "
-					 "WHERE D.%s >= $1 AND D.%s < $2 %s;",
+					 "WHERE D.%s >= $1 AND D.%s < $2;",
 					 quote_identifier(NameStr(*context->materialization_table.schema)),
 					 quote_identifier(NameStr(*context->materialization_table.name)),
 					 quote_identifier(NameStr(*context->time_column_name)),
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 context->chunk_condition);
+					 quote_identifier(NameStr(*context->time_column_name)));
 	return query.data;
 }
 
@@ -824,13 +809,12 @@ update_watermark(MaterializationContext *context)
 	initStringInfo(&command);
 	appendStringInfo(&command,
 					 "SELECT %s FROM %s.%s AS I "
-					 "WHERE I.%s >= $1 %s "
+					 "WHERE I.%s >= $1 "
 					 "ORDER BY 1 DESC LIMIT 1;",
 					 quote_identifier(NameStr(*context->time_column_name)),
 					 quote_identifier(NameStr(*context->materialization_table.schema)),
 					 quote_identifier(NameStr(*context->materialization_table.name)),
-					 quote_identifier(NameStr(*context->time_column_name)),
-					 context->chunk_condition);
+					 quote_identifier(NameStr(*context->time_column_name)));
 
 	elog(DEBUG2, "%s: %s", __func__, command.data);
 	res = SPI_execute_with_args(command.data,
@@ -872,9 +856,8 @@ execute_materializations(MaterializationContext *context)
 	{
 		while (execute_materialization_plan(context, PLAN_TYPE_RANGES_SELECT) > 0)
 		{
-			/* MERGE statement is supported only in the new format of CAggs and for non-compressed
-			 * hypertables */
-			if (ts_guc_enable_merge_on_cagg_refresh && ContinuousAggIsFinalized(context->cagg) &&
+			/* MERGE statement is supported only for non-compressed CAggs */
+			if (ts_guc_enable_merge_on_cagg_refresh &&
 				!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht))
 			{
 				/* Fallback to INSERT materializations if there are no rows to change on it */

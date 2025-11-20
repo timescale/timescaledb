@@ -9,15 +9,6 @@ ERROR:  job 0 not found
 SELECT _timescaledb_internal.attach_osm_table_chunk(0,0);
 WARNING:  function _timescaledb_internal.attach_osm_table_chunk(regclass,regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
-SELECT _timescaledb_internal.cagg_migrate_plan_exists(0);
-WARNING:  function _timescaledb_internal.cagg_migrate_plan_exists(integer) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- cagg_migrate_plan_exists 
---------------------------
- f
-
-SELECT _timescaledb_internal.cagg_migrate_pre_validation(NULL,NULL,NULL);
-WARNING:  function _timescaledb_internal.cagg_migrate_pre_validation(text,text,text) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  continuous aggregate "<NULL>.<NULL>" does not exist
 SELECT _timescaledb_internal.cagg_watermark(0);
 WARNING:  function _timescaledb_internal.cagg_watermark(integer) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid materialized hypertable ID: 0
@@ -213,31 +204,6 @@ WARNING:  function _timescaledb_internal.tsl_loaded() is deprecated and has been
 SELECT _timescaledb_internal.unfreeze_chunk(0);
 WARNING:  function _timescaledb_internal.unfreeze_chunk(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
-CALL _timescaledb_internal.cagg_migrate_create_plan(NULL,NULL,true,true);
-WARNING:  procedure _timescaledb_internal.cagg_migrate_create_plan(_timescaledb_catalog.continuous_agg,text,boolean,boolean) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  permission denied for table continuous_agg_migrate_plan
-CALL _timescaledb_internal.cagg_migrate_execute_copy_data(NULL,NULL);
-WARNING:  procedure _timescaledb_internal.cagg_migrate_execute_copy_data(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  null values cannot be formatted as an SQL identifier
-CALL _timescaledb_internal.cagg_migrate_execute_copy_policies(NULL,NULL);
-WARNING:  procedure _timescaledb_internal.cagg_migrate_execute_copy_policies(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-CALL _timescaledb_internal.cagg_migrate_execute_create_new_cagg(NULL,NULL);
-WARNING:  procedure _timescaledb_internal.cagg_migrate_execute_create_new_cagg(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  null values cannot be formatted as an SQL identifier
-CALL _timescaledb_internal.cagg_migrate_execute_disable_policies(NULL,NULL);
-WARNING:  procedure _timescaledb_internal.cagg_migrate_execute_disable_policies(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-CALL _timescaledb_internal.cagg_migrate_execute_drop_old_cagg(NULL,NULL);
-WARNING:  procedure _timescaledb_internal.cagg_migrate_execute_drop_old_cagg(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-CALL _timescaledb_internal.cagg_migrate_execute_enable_policies(NULL,NULL);
-WARNING:  procedure _timescaledb_internal.cagg_migrate_execute_enable_policies(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-CALL _timescaledb_internal.cagg_migrate_execute_override_cagg(NULL,NULL);
-WARNING:  procedure _timescaledb_internal.cagg_migrate_execute_override_cagg(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  null values cannot be formatted as an SQL identifier
-CALL _timescaledb_internal.cagg_migrate_execute_plan(NULL);
-WARNING:  procedure _timescaledb_internal.cagg_migrate_execute_plan(_timescaledb_catalog.continuous_agg) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-CALL _timescaledb_internal.cagg_migrate_execute_refresh_new_cagg(NULL,NULL);
-WARNING:  procedure _timescaledb_internal.cagg_migrate_execute_refresh_new_cagg(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  null value in column "mat_hypertable_id" of relation "continuous_aggs_watermark" violates not-null constraint
 CALL _timescaledb_internal.policy_compression(0,NULL);
 WARNING:  procedure _timescaledb_internal.policy_compression(integer,jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  job 0 has null config
