@@ -696,6 +696,16 @@ if(TAP_CHECKS)
   endif()
 endif()
 
+option(
+  READ_LEGACY_BLOOM1_INDEX
+  "Enable by default reading the legacy bloom1 version 1 sparse bloom filter indexes on compressed tables"
+  OFF)
+
+if(READ_LEGACY_BLOOM1_INDEX)
+  target_compile_definitions(${TS_LIBRARY_NAME}
+                             PUBLIC TS_READ_LEGACY_BLOOM1_INDEX)
+endif()
+
 if(UNIX)
   add_subdirectory(scripts)
 endif(UNIX)

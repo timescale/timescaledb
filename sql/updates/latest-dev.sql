@@ -23,6 +23,11 @@ DO $$
 DECLARE
     num_chunks_with_bloom int;
 BEGIN
+    IF @READ_LEGACY_BLOOM1_INDEX@ IS TRUE THEN
+        RETURN;
+    ELSE
+        RAISE WARNING 'FIXME it is false';
+    END IF;
 
     SELECT count(*) INTO num_chunks_with_bloom
     FROM pg_attribute WHERE attname LIKE '_ts_meta_v2_bloom1_%';
