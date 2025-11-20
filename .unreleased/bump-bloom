@@ -1,1 +1,1 @@
-Backward-Incompatible Change: #8761 Bump the bloom filter version to 2 and make it depend on the actual hashing functions used.
+Backward-Incompatible Change: #8761 Change the version of the bloom filter sparse indexes. The existing indexes will stop working and will require action to re-enable. See the changelog for details.

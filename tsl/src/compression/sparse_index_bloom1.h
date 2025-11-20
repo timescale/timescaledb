@@ -17,10 +17,11 @@ extern char const *bloom1_column_prefix;
 
 /*
  * We used to have two possible hashes depending on the build configuration,
- * which were incompatible with each other. The both used the "bloom1" column
- * prefix. This led to false negatives if a database was updated to a different
- * build of extension. Now these hashing configuration use different prefixes.
- * The bloom filter is still constructed according to the "bloom1" rules.
+ * which were incompatible with each other. They both used the "bloom1" column
+ * prefix. This could lead to false negatives if a database was updated to a
+ * different build of the TimescaleDB extension. Now these hashing configuration
+ * use different prefixes. The bloom filter is still constructed according to
+ * the "bloom1" rules.
  */
 #ifdef TS_USE_UMASH
 #define default_bloom1_column_prefix "bloomh"
