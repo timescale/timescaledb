@@ -56,8 +56,8 @@ static MemoryContext continuous_aggs_invalidation_mctx = NULL;
 static int64 tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc);
 static inline void cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry,
 										  int32 hypertable_id);
-static inline void cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry,
-											   Oid chunk_reloid);
+static void cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry,
+										Oid chunk_reloid);
 static inline void update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval);
 static void cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry);
 static void cache_inval_cleanup(void);
@@ -151,6 +151,35 @@ update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval)
 		cache_entry->lowest_modified_value = timeval;
 	if (timeval > cache_entry->greatest_modified_value)
 		cache_entry->greatest_modified_value = timeval;
+}
+
+/*
+ * Used by direct compress invalidation
+ */
+void
+continuous_agg_invalidate_range(int32 hypertable_id, Oid chunk_relid, int64 start, int64 end)
+{
+	ContinuousAggsCacheInvalEntry *cache_entry;
+	bool found;
+
+	if (!continuous_aggs_cache_inval_htab)
+		cache_inval_init();
+
+	cache_entry = (ContinuousAggsCacheInvalEntry *)
+		hash_search(continuous_aggs_cache_inval_htab, &hypertable_id, HASH_ENTER, &found);
+
+	if (!found)
+		cache_inval_entry_init(cache_entry, hypertable_id);
+
+	/* handle the case where we need to repopulate the cached chunk data */
+	if (cache_entry->previous_chunk_relid != chunk_relid)
+		cache_entry_switch_to_chunk(cache_entry, chunk_relid);
+
+	cache_entry->value_is_set = true;
+	if (start < cache_entry->lowest_modified_value)
+		cache_entry->lowest_modified_value = start;
+	if (end > cache_entry->greatest_modified_value)
+		cache_entry->greatest_modified_value = end;
 }
 
 void
