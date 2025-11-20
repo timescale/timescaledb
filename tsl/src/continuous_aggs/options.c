@@ -214,11 +214,4 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot alter create_group_indexes option for continuous aggregates")));
 	}
-
-	if (!with_clause_options[CreateMaterializedViewFlagFinalized].is_default)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot alter finalized option for continuous aggregates")));
-	}
 }

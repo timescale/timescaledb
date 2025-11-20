@@ -306,9 +306,6 @@ FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
 
--- all caggs in the new format (finalized=true)
-SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
-
 -- dropping chunk should also remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-01 00:00:00-02'::timestamptz);
 
@@ -320,15 +317,6 @@ FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id AND h.table_name = 'metrics'
 ORDER BY 1;
 
--- let's update the catalog to fake an old format cagg (finalized=false)
-\c :TEST_DBNAME :ROLE_SUPERUSER
-UPDATE _timescaledb_catalog.continuous_agg SET finalized=FALSE WHERE user_view_name = 'cagg1';
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-
--- cagg1 now is a fake old format (finalized=false)
-SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
-
--- cagg1 now is in the old format (finalized=false)
 -- dropping chunk should NOT remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-13 00:00:00-02'::timestamptz);
 
@@ -342,9 +330,6 @@ ORDER BY 1;
 
 -- remove the fake old format cagg
 DROP MATERIALIZED VIEW cagg1;
-
--- no more old format caggs (finalized=false)
-SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
 
 -- dropping chunk should remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-25 00:00:00-02'::timestamptz);

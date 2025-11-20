@@ -127,8 +127,7 @@ SELECT ht.schema_name AS hypertable_schema,
   END AS compression_enabled,
   mat_ht.schema_name AS materialization_hypertable_schema,
   mat_ht.table_name AS materialization_hypertable_name,
-  directview.viewdefinition AS view_definition,
-  cagg.finalized
+  directview.viewdefinition AS view_definition
 FROM _timescaledb_catalog.continuous_agg cagg,
   _timescaledb_catalog.hypertable ht,
   LATERAL (
