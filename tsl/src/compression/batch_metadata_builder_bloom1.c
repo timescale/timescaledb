@@ -854,3 +854,5 @@ ts_bloom1_debug_hash(PG_FUNCTION_ARGS)
 }
 
 #endif // #ifndef NDEBUG
+
+char const *bloom1_column_prefix = NULL;

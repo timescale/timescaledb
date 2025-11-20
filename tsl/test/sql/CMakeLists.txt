@@ -114,6 +114,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     scheduler_fixed.sql
     cagg_policy_incremental.sql
     compress_bgw_reorder_drop_chunks.sql
+    compress_bloom_legacy_v1.sql
     chunk_api.sql
     chunk_merge.sql
     chunk_utils_compression.sql
