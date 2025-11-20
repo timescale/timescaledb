@@ -23,7 +23,8 @@ DO $$
 DECLARE
     num_chunks_with_bloom int;
 BEGIN
-    IF @READ_LEGACY_BLOOM1_INDEX@ IS TRUE THEN
+    IF '@READ_LEGACY_BLOOM1_INDEX@'::bool THEN
+        RAISE WARNING 'FIXME it is true';
         RETURN;
     ELSE
         RAISE WARNING 'FIXME it is false';
