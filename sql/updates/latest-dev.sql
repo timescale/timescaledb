@@ -27,7 +27,7 @@ BEGIN
     SELECT count(*) INTO num_chunks_with_bloom
     FROM pg_attribute WHERE attname LIKE '_ts_meta_v2_bloom1_%';
 
-    IF num_null_chunk_ids > 0 THEN
+    IF num_chunks_with_bloom > 0 THEN
        RAISE WARNING 'bloom filter sparse indexes require action to re-enable'
               USING HINT = 'See the changelog for details.';
     ELSE
