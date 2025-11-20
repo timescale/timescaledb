@@ -113,12 +113,7 @@ TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom = true;
 
-TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1 =
-#ifdef TS_READ_LEGACY_BLOOM1_INDEX
-	true;
-#else
-	false;
-#endif
+TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1 = false;
 
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
@@ -1135,11 +1130,7 @@ _guc_init(void)
 							 "These legacy indexes might give false negatives if they were built "
 							 "by the TimescaleDB extension compiled with different build options.",
 							 &ts_guc_read_legacy_bloom1_v1,
-#ifdef TS_READ_LEGACY_BLOOM1_INDEX
-							 true,
-#else
 							 false,
-#endif
 							 PGC_USERSET,
 							 0,
 							 NULL,
