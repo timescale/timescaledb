@@ -93,7 +93,7 @@ jobs:
         path: coredumps
 
     - name: Upload Artifacts
-      if: failure()
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: Update test PG${{ matrix.pg }}
