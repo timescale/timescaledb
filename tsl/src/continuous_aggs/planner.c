@@ -403,7 +403,7 @@ cagg_sort_pushdown(Query *parse, int *cursor_opts)
 		/*
 		 * This optimization only applies to realtime caggs.
 		 */
-		if (!cagg || !cagg->data.finalized || cagg->data.materialized_only)
+		if (!cagg || cagg->data.materialized_only)
 			continue;
 
 		Hypertable *ht = ts_hypertable_cache_get_entry_by_id(cache, cagg->data.mat_hypertable_id);
