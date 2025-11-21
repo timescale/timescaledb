@@ -108,6 +108,11 @@ if(USE_UMASH)
   add_compile_definitions(TS_USE_UMASH)
 endif()
 
+if(READ_LEGACY_BLOOM1_INDEX)
+  target_compile_definitions(${TSL_LIBRARY_NAME}
+                             PUBLIC TS_READ_LEGACY_BLOOM1_INDEX)
+endif()
+
 add_subdirectory(bgw_policy)
 add_subdirectory(compression)
 add_subdirectory(continuous_aggs)
