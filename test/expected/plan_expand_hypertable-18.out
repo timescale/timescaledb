@@ -1821,44 +1821,44 @@ DEALLOCATE P8;
    Sort Key: hyper."time"
    ->  Append
          ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_3_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_4_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_5_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_6_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_7_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_8_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_9_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_10_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
 
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) > 10 AND time_bucket(10, time) < 20 ORDER BY time;
 --- QUERY PLAN ---
  Sort
    Sort Key: _hyper_1_2_chunk."time"
    ->  Seq Scan on _hyper_1_2_chunk
-         Filter: (("time" > 10) AND ("time" < '20'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 20))
+         Filter: (("time" > '10'::bigint) AND ("time" < '20'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 20))
 
 :PREFIX SELECT * FROM hyper WHERE time_bucket(1, time) > 11 AND time_bucket(1, time) < 19 ORDER BY time;
 --- QUERY PLAN ---
  Sort
    Sort Key: _hyper_1_2_chunk."time"
    ->  Seq Scan on _hyper_1_2_chunk
-         Filter: (("time" > 11) AND ("time" < '19'::bigint) AND (time_bucket('1'::bigint, "time") > 11) AND (time_bucket('1'::bigint, "time") < 19))
+         Filter: (("time" > '11'::bigint) AND ("time" < '19'::bigint) AND (time_bucket('1'::bigint, "time") > 11) AND (time_bucket('1'::bigint, "time") < 19))
 
 :PREFIX SELECT * FROM hyper WHERE 10 < time_bucket(10, time) AND 20 > time_bucket(10,time) ORDER BY time;
 --- QUERY PLAN ---
  Sort
    Sort Key: _hyper_1_2_chunk."time"
    ->  Seq Scan on _hyper_1_2_chunk
-         Filter: (("time" > 10) AND ("time" < '20'::bigint) AND (10 < time_bucket('10'::bigint, "time")) AND (20 > time_bucket('10'::bigint, "time")))
+         Filter: (("time" > '10'::bigint) AND ("time" < '20'::bigint) AND (10 < time_bucket('10'::bigint, "time")) AND (20 > time_bucket('10'::bigint, "time")))
 
 \qecho time_bucket exclusion with date
 time_bucket exclusion with date
