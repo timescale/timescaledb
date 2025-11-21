@@ -657,6 +657,8 @@ SELECT alter_job(:JOB_ID, next_start => '2000-01-01'::timestamptz);
 -- Multiple policies on hierarchical cagg should not be allowed
 SELECT add_continuous_aggregate_policy('mat_m1_rollup', '29 days'::interval, NULL, '12 h'::interval);
 \set ON_ERROR_STOP 1
+-- Adding the exact same policy with if_not_exists should succeed (not error)
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, '30 days'::interval, '12 h'::interval, if_not_exists => true);
 -- different hierarchical caggs should be allowed to have their own policies
 SELECT add_continuous_aggregate_policy('mat_m1_rollup2', NULL, '30 days'::interval, '12 h'::interval) AS "JOB_ID2" \gset
 SELECT alter_job(:JOB_ID2, next_start => '2000-01-01'::timestamptz);

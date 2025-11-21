@@ -1,0 +1,1 @@
+Fixes: #8958 Fix if_not_exists behaviour when adding refresh policy
