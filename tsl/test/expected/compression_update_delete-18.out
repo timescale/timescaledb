@@ -3225,5 +3225,6 @@ EXPLAIN (analyze,costs off, timing off,summary off, buffers off) DELETE FROM cag
 SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
-            45 |      1577865600000000 |        1609488000000000
+            45 |      1577865600000000 |        1577865600000000
+            45 |      1609488000000000 |        1609488000000000
 

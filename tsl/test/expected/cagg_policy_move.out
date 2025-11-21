@@ -110,9 +110,11 @@ SELECT hypertable, lowest_modified_value, greatest_modified_value
 --------------+-----------------------+-------------------------
  conditions   |                    10 |                      10
  conditions   |                    10 |                      19
- conditions   |                    60 |                      70
+ conditions   |                    60 |                      60
+ conditions   |                    70 |                      70
  measurements |                    20 |                      20
- measurements |                    30 |                      80
+ measurements |                    30 |                      30
+ measurements |                    80 |                      80
 
 \set ON_ERROR_STOP 0
 CALL add_process_hypertable_invalidations_policy('conditions_10',
@@ -215,9 +217,11 @@ SELECT hypertable, lowest_modified_value, greatest_modified_value
 --------------+-----------------------+-------------------------
  conditions   |                    10 |                      10
  conditions   |                    10 |                      19
- conditions   |                    60 |                      70
+ conditions   |                    60 |                      60
+ conditions   |                    70 |                      70
  measurements |                    20 |                      20
- measurements |                    30 |                      80
+ measurements |                    30 |                      30
+ measurements |                    80 |                      80
 
 CALL run_job(get_job_id_for('conditions'));
 SELECT hypertable, lowest_modified_value, greatest_modified_value
@@ -225,7 +229,8 @@ SELECT hypertable, lowest_modified_value, greatest_modified_value
   hypertable  | lowest_modified_value | greatest_modified_value 
 --------------+-----------------------+-------------------------
  measurements |                    20 |                      20
- measurements |                    30 |                      80
+ measurements |                    30 |                      30
+ measurements |                    80 |                      80
 
 -- Running it twice should work and not change anything.
 CALL run_job(get_job_id_for('conditions'));
@@ -234,7 +239,8 @@ SELECT hypertable, lowest_modified_value, greatest_modified_value
   hypertable  | lowest_modified_value | greatest_modified_value 
 --------------+-----------------------+-------------------------
  measurements |                    20 |                      20
- measurements |                    30 |                      80
+ measurements |                    30 |                      30
+ measurements |                    80 |                      80
 
 CALL run_job(get_job_id_for('measurements'));
 SELECT hypertable, lowest_modified_value, greatest_modified_value
