@@ -5,6 +5,9 @@
  */
 #include <postgres.h>
 
+#undef OPENSSL_API_COMPAT
+#define OPENSSL_API_COMPAT 10100000L
+
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
