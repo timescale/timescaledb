@@ -329,7 +329,7 @@ jobs:
     - name: Upload test results to the database
       # Don't upload the results of the flaky check, because the db schema only
       # supports running one test once per job.
-      if: always() && (! contains(matrix.name, 'Flaky'))
+      if: always() && matrix.installcheck && (! contains(matrix.name, 'Flaky'))
       env:
         # GitHub Actions allow you neither to use the env context for the job name,
         # nor to access the job name from the step context, so we have to
