@@ -161,5 +161,74 @@ CREATE TABLE t14("TiMe" timestamptz, device text, value float) WITH (tsdb.hypert
 SELECT hypertable_name, column_name FROM timescaledb_information.dimensions WHERE hypertable_name IN ('t13','t14') ORDER BY 1;
 ROLLBACK;
 
+-- Test default_chunk_time_interval GUC interaction with CREATE TABLE WITH
+-- Tests that the GUC correctly sets the default chunk interval when using
+-- CREATE TABLE WITH syntax instead of create_hypertable().
 
+-- GUC set to '1 week' should be used by CREATE TABLE WITH
+BEGIN;
+SET timescaledb.default_chunk_time_interval = '1 week';
+CREATE TABLE t_guc_week(time timestamptz NOT NULL, device text, value float)
+  WITH (tsdb.hypertable, tsdb.partition_column='time');
+SELECT hypertable_name, time_interval
+  FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 't_guc_week';
+ROLLBACK;
 
+-- GUC set to '1 day' with different time types
+BEGIN;
+SET timescaledb.default_chunk_time_interval = '1 day';
+CREATE TABLE t_guc_timestamptz(time timestamptz NOT NULL, device text, value float)
+  WITH (tsdb.hypertable, tsdb.partition_column='time');
+CREATE TABLE t_guc_timestamp(time timestamp NOT NULL, device text, value float)
+  WITH (tsdb.hypertable, tsdb.partition_column='time');
+CREATE TABLE t_guc_date(time date NOT NULL, device text, value float)
+  WITH (tsdb.hypertable, tsdb.partition_column='time');
+SELECT hypertable_name, time_interval
+  FROM timescaledb_information.dimensions
+  WHERE hypertable_name LIKE 't_guc_%'
+  ORDER BY hypertable_name;
+ROLLBACK;
+
+-- Explicit tsdb.chunk_interval should override the GUC
+BEGIN;
+SET timescaledb.default_chunk_time_interval = '1 week';
+CREATE TABLE t_guc_override(time timestamptz NOT NULL, device text, value float)
+  WITH (tsdb.hypertable, tsdb.partition_column='time', tsdb.chunk_interval='2 days');
+SELECT hypertable_name, time_interval
+  FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 't_guc_override';
+ROLLBACK;
+
+-- Integer partition types have their own default and do not use the GUC
+BEGIN;
+SET timescaledb.default_chunk_time_interval = '1 week';
+CREATE TABLE t_guc_int(time int8 NOT NULL, device text, value float)
+  WITH (tsdb.hypertable, tsdb.partition_column='time');
+SELECT hypertable_name, integer_interval
+  FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 't_guc_int';
+ROLLBACK;
+
+-- No GUC set (NULL) should use legacy defaults
+BEGIN;
+RESET timescaledb.default_chunk_time_interval;
+CREATE TABLE t_no_guc(time timestamptz NOT NULL, device text, value float)
+  WITH (tsdb.hypertable, tsdb.partition_column='time');
+SELECT hypertable_name, time_interval
+  FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 't_no_guc';
+ROLLBACK;
+
+-- GUC with UUID partition type
+BEGIN;
+SET timescaledb.default_chunk_time_interval = '12 hours';
+CREATE TABLE t_guc_uuid(time uuid NOT NULL, device text, value float)
+  WITH (tsdb.hypertable, tsdb.partition_column='time');
+SELECT hypertable_name, time_interval
+  FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 't_guc_uuid';
+ROLLBACK;
+
+-- Cleanup
+RESET timescaledb.default_chunk_time_interval;
