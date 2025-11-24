@@ -267,7 +267,8 @@ typedef struct RowCompressor
 	void (*on_flush)(struct RowCompressor *rowcompress, uint64 ntuples);
 
 	Tuplesortstate *sort_state;
-	int64 tuples_to_sort; /* number of tuples to sort with tuplesort */
+	int64 tuples_to_sort;	/* number of tuples to sort with tuplesort */
+	int64 tuple_sort_limit; /* number of tuples to flush the compressor on */
 } RowCompressor;
 
 /*
@@ -372,7 +373,8 @@ extern void row_compressor_init(RowCompressor *row_compressor, const Compression
 								const TupleDesc compressed_tupdesc);
 
 RowCompressor *row_compressor_alloc(void);
-extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort);
+extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort,
+										  int tuple_sort_limit);
 extern void tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer,
 									TupleTableSlot *slot);
 extern void tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer);

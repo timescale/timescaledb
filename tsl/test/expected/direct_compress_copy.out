@@ -322,3 +322,23 @@ SELECT _timescaledb_functions.chunk_status_text(:'CHUNK'::regclass);
  {COMPRESSED}
 
 ROLLBACK;
+-- simple test with compressed copy enabled and sorting limited to 500
+-- batches should be limited to that amount so we have more compressed batches
+BEGIN;
+SET timescaledb.enable_direct_compress_copy = true;
+SET timescaledb.direct_compress_copy_tuple_sort_limit = 500;
+COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+--- QUERY PLAN ---
+ Append (actual rows=3000.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_37_chunk (actual rows=959.00 loops=1)
+         ->  Seq Scan on compress_hyper_2_38_chunk (actual rows=2.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_39_chunk (actual rows=2041.00 loops=1)
+         ->  Seq Scan on compress_hyper_2_40_chunk (actual rows=5.00 loops=1)
+
+SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
+            first             |             last             
+------------------------------+------------------------------
+ Wed Jan 01 00:01:00 2025 PST | Fri Jan 03 02:00:00 2025 PST
+
+ROLLBACK;
