@@ -651,3 +651,120 @@ select * from chunk_settings;
  test_table |      1 |           | uuid,ts DESC | [{"type": "minmax", "column": "uuid", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
 
 DROP TABLE test_table;
+-- test that date/time columns (category 'D') are not selected as segmentby
+-- even when they appear in indexes
+DROP TABLE IF EXISTS test_exclude_datetype;
+NOTICE:  table "test_exclude_datetype" does not exist, skipping
+CREATE TABLE test_exclude_datetype (
+    ts            TIMESTAMPTZ     NOT NULL,
+    event_date    DATE            NOT NULL,
+    event_time    TIME            NOT NULL,
+    device_id     TEXT            NOT NULL,
+    sensor_id     INT             NOT NULL,
+    value         FLOAT
+) WITH (autovacuum_enabled=0, tsdb.hypertable);
+NOTICE:  using column "ts" as partitioning column
+INSERT INTO test_exclude_datetype
+SELECT t, t::date, t::time, 'device_' || (i % 10), (i % 5), random() * 100
+FROM generate_series('2025-01-01'::timestamptz, '2025-03-01'::timestamptz, '1 minute'::interval) WITH ORDINALITY AS g(t, i);
+-- test deafults, should not select date and time columns
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+                                                                                                           get_segmentby_defaults                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
+
+CREATE UNIQUE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_date, device_id, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+                                                            get_segmentby_defaults                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE UNIQUE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_time, device_id, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+                                                            get_segmentby_defaults                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_date, device_id, sensor_id);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+                                                            get_segmentby_defaults                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_time, sensor_id);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+                                                            get_segmentby_defaults                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": ["sensor_id"], "message": "Please make sure sensor_id is not a unique column and appropriate for a segment by", "confidence": 5}
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_date, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+                                                                                                           get_segmentby_defaults                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE UNIQUE INDEX test_exclude_datetype_idx ON test_exclude_datetype(device_id, event_date, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+                                                            get_segmentby_defaults                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
+
+-- after pg_stats
+ANALYZE test_exclude_datetype;
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+            get_segmentby_defaults            
+----------------------------------------------
+ {"columns": ["device_id"], "confidence": 10}
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE UNIQUE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_date, device_id, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+            get_segmentby_defaults            
+----------------------------------------------
+ {"columns": ["device_id"], "confidence": 10}
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE UNIQUE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_time, device_id, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+            get_segmentby_defaults            
+----------------------------------------------
+ {"columns": ["device_id"], "confidence": 10}
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_date, device_id, sensor_id);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+           get_segmentby_defaults            
+---------------------------------------------
+ {"columns": ["device_id"], "confidence": 8}
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_time, sensor_id);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+           get_segmentby_defaults            
+---------------------------------------------
+ {"columns": ["sensor_id"], "confidence": 8}
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE UNIQUE INDEX test_exclude_datetype_idx ON test_exclude_datetype(device_id, event_date, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+            get_segmentby_defaults            
+----------------------------------------------
+ {"columns": ["device_id"], "confidence": 10}
+
+ALTER TABLE test_exclude_datetype SET (timescaledb.compress = true);
+SELECT count(compress_chunk(x)) FROM show_chunks('test_exclude_datetype') x;
+ count 
+-------
+    10
+
+SELECT * FROM timescaledb_information.chunk_compression_settings WHERE hypertable = 'test_exclude_datetype'::regclass ORDER BY chunk LIMIT 1;
+      hypertable       |                   chunk                   | segmentby |      orderby       |                                                           index                                                            
+-----------------------+-------------------------------------------+-----------+--------------------+----------------------------------------------------------------------------------------------------------------------------
+ test_exclude_datetype | _timescaledb_internal._hyper_28_279_chunk | device_id | event_date,ts DESC | [{"type": "minmax", "column": "event_date", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+
+DROP TABLE test_exclude_datetype;

@@ -51,6 +51,7 @@ BEGIN
         ROUND(stddev_pop(freqs)::numeric, 5) as freq_stddev
       FROM index_attr i
       INNER JOIN pg_attribute a ON a.attnum = i.attnum AND a.attrelid = relation
+      INNER JOIN pg_type t ON t.oid = a.atttypid
       INNER JOIN pg_stats s ON s.attname = a.attname
                             AND s.schemaname = _schema_name
                             AND s.tablename = _table_name
@@ -62,6 +63,8 @@ BEGIN
         WHERE d.hypertable_id = _hypertable_row.id
       )
       AND s.n_distinct > 1
+      -- exclude date/time type category
+      AND t.typcategory NOT IN ('D')
       GROUP BY a.attname, i.pos
     )
     SELECT attname
@@ -95,6 +98,7 @@ BEGIN
         ROUND(stddev_pop(freqs)::numeric, 5) as freq_stddev
       FROM index_attr i
       INNER JOIN pg_attribute a ON a.attnum = i.attnum AND a.attrelid = relation
+      INNER JOIN pg_type t ON t.oid = a.atttypid
       INNER JOIN pg_stats s ON s.attname = a.attname
                             AND s.schemaname = _schema_name
                             AND s.tablename = _table_name
@@ -106,6 +110,7 @@ BEGIN
         WHERE d.hypertable_id = _hypertable_row.id
       )
       AND s.n_distinct > 1
+      AND t.typcategory NOT IN ('D')
       GROUP BY a.attname, i.pos
     )
     SELECT attname
@@ -125,6 +130,7 @@ BEGIN
         a.attname,
         ROUND(stddev_pop(freqs)::numeric, 5) as freq_stddev
       FROM pg_attribute a
+      INNER JOIN pg_type t ON t.oid = a.atttypid
       INNER JOIN pg_stats s ON s.attname = a.attname
                             AND s.schemaname = _schema_name
                             AND s.tablename = _table_name
@@ -137,6 +143,7 @@ BEGIN
           WHERE d.hypertable_id = _hypertable_row.id
         )
       AND s.n_distinct > 1
+      AND t.typcategory NOT IN ('D')
       GROUP BY a.attname
     )
     SELECT attname
@@ -166,6 +173,8 @@ BEGIN
       index_attr i
     INNER JOIN
       pg_attribute a on (a.attnum = i.attnum AND a.attrelid = relation)
+    INNER JOIN
+      pg_type t ON t.oid = a.atttypid
     LEFT JOIN
       pg_catalog.pg_attrdef ad ON (ad.adrelid = relation AND ad.adnum = a.attnum)
     LEFT JOIN pg_stats s ON s.attname = a.attname
@@ -176,6 +185,7 @@ BEGIN
       a.attname NOT IN (SELECT column_name FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = _hypertable_row.id)
       AND s.n_distinct is null
       AND a.attidentity = '' AND (ad.adbin IS NULL OR pg_get_expr(adbin, adrelid) not like 'nextval%')
+      AND t.typcategory NOT IN ('D')
     ORDER BY i.pos
     LIMIT 1;
 
@@ -203,6 +213,8 @@ BEGIN
       index_attr i
     INNER JOIN
       pg_attribute a on (a.attnum = i.attnum AND a.attrelid = relation)
+    INNER JOIN
+      pg_type t ON t.oid = a.atttypid
     LEFT JOIN
       pg_catalog.pg_attrdef ad ON (ad.adrelid = relation AND ad.adnum = a.attnum)
     LEFT JOIN pg_stats s ON s.attname = a.attname
@@ -213,6 +225,7 @@ BEGIN
       a.attname NOT IN (SELECT column_name FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = _hypertable_row.id)
       AND s.n_distinct is null
       AND a.attidentity = '' AND (ad.adbin IS NULL OR pg_get_expr(adbin, adrelid) not like 'nextval%')
+      AND t.typcategory NOT IN ('D')
     ORDER BY i.pos
     LIMIT 1;
 
@@ -241,11 +254,14 @@ BEGIN
       index_attr i
     INNER JOIN
       pg_attribute a on (a.attnum = i.attnum AND a.attrelid = relation)
+    INNER JOIN
+      pg_type t ON t.oid = a.atttypid
     LEFT JOIN
       pg_catalog.pg_attrdef ad ON (ad.adrelid = relation AND ad.adnum = a.attnum)
     WHERE
       a.attname NOT IN (SELECT column_name FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = _hypertable_row.id)
-      AND a.attidentity = '' AND (ad.adbin IS NULL OR pg_get_expr(adbin, adrelid) not like 'nextval%');
+      AND a.attidentity = '' AND (ad.adbin IS NULL OR pg_get_expr(adbin, adrelid) not like 'nextval%')
+      AND t.typcategory NOT IN ('D');
 
     IF _cnt > 0 THEN
         --there are many potential candidates. We do not have enough information to choose one.
