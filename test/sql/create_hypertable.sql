@@ -727,3 +727,267 @@ SELECT create_hypertable('test', 'timestamp');
 DROP PUBLICATION publication_test;
 DROP TABLE test;
 RESET client_min_messages;
+
+-- Test default_chunk_interval GUC
+-- Tests that the GUC correctly sets the default chunk interval for hypertables
+-- with different time column types (timestamp, timestamptz, date) and integer types.
+
+-- Show initial state (should be NULL meaning legacy defaults)
+SHOW timescaledb.default_chunk_interval;
+
+--
+-- Test 1: No default_chunk_interval set (NULL) - uses legacy defaults
+--
+CREATE TABLE test_no_guc_timestamptz(time TIMESTAMPTZ NOT NULL, val INT);
+SELECT create_hypertable('test_no_guc_timestamptz', 'time');
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_no_guc_timestamptz';
+DROP TABLE test_no_guc_timestamptz;
+
+CREATE TABLE test_no_guc_timestamp(time TIMESTAMP NOT NULL, val INT);
+SELECT create_hypertable('test_no_guc_timestamp', 'time');
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_no_guc_timestamp';
+DROP TABLE test_no_guc_timestamp;
+
+CREATE TABLE test_no_guc_date(time DATE NOT NULL, val INT);
+SELECT create_hypertable('test_no_guc_date', 'time');
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_no_guc_date';
+DROP TABLE test_no_guc_date;
+
+CREATE TABLE test_no_guc_uuid(time UUID NOT NULL, val INT);
+SELECT create_hypertable('test_no_guc_uuid', 'time');
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_no_guc_uuid';
+DROP TABLE test_no_guc_uuid;
+
+--
+-- Test 2: Set default_chunk_interval to '1 week' and create hypertables
+--
+SET timescaledb.default_chunk_interval = '1 week';
+SHOW timescaledb.default_chunk_interval;
+
+CREATE TABLE test_guc_timestamptz(time TIMESTAMPTZ NOT NULL, val INT);
+SELECT create_hypertable('test_guc_timestamptz', 'time');
+-- 1 week = 7 days * 24 hours * 60 min * 60 sec * 1000000 usec = 604800000000
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_guc_timestamptz';
+DROP TABLE test_guc_timestamptz;
+
+CREATE TABLE test_guc_timestamp(time TIMESTAMP NOT NULL, val INT);
+SELECT create_hypertable('test_guc_timestamp', 'time');
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_guc_timestamp';
+DROP TABLE test_guc_timestamp;
+
+CREATE TABLE test_guc_date(time DATE NOT NULL, val INT);
+SELECT create_hypertable('test_guc_date', 'time');
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_guc_date';
+DROP TABLE test_guc_date;
+
+CREATE TABLE test_guc_uuid(time UUID NOT NULL, val INT);
+SELECT create_hypertable('test_guc_uuid', 'time');
+-- UUID uses same interval as timestamp types
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_guc_uuid';
+DROP TABLE test_guc_uuid;
+
+--
+-- Test 3: Set default_chunk_interval to '1 day'
+--
+SET timescaledb.default_chunk_interval = '1 day';
+SHOW timescaledb.default_chunk_interval;
+
+CREATE TABLE test_guc_1day_timestamptz(time TIMESTAMPTZ NOT NULL, val INT);
+SELECT create_hypertable('test_guc_1day_timestamptz', 'time');
+-- 1 day = 24 hours * 60 min * 60 sec * 1000000 usec = 86400000000
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_guc_1day_timestamptz';
+DROP TABLE test_guc_1day_timestamptz;
+
+--
+-- Test 4: Set default_chunk_interval to '1 month'
+--
+SET timescaledb.default_chunk_interval = '1 month';
+SHOW timescaledb.default_chunk_interval;
+
+CREATE TABLE test_guc_1month_timestamptz(time TIMESTAMPTZ NOT NULL, val INT);
+SELECT create_hypertable('test_guc_1month_timestamptz', 'time');
+-- 1 month = 30 days * 24 hours * 60 min * 60 sec * 1000000 usec = 2592000000000
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_guc_1month_timestamptz';
+DROP TABLE test_guc_1month_timestamptz;
+
+--
+-- Test 5: Integer partition types should NOT use the GUC (use legacy defaults)
+--
+SET timescaledb.default_chunk_interval = '1 week';
+
+CREATE TABLE test_guc_bigint(time BIGINT NOT NULL, val INT);
+\set ON_ERROR_STOP 0
+-- This should fail because BIGINT requires an explicit integer interval
+SELECT create_hypertable('test_guc_bigint', 'time');
+\set ON_ERROR_STOP 1
+DROP TABLE test_guc_bigint;
+
+-- Explicit integer interval should work
+CREATE TABLE test_guc_bigint(time BIGINT NOT NULL, val INT);
+SELECT create_hypertable('test_guc_bigint', 'time', chunk_time_interval => 1000000);
+SELECT integer_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_guc_bigint';
+DROP TABLE test_guc_bigint;
+
+CREATE TABLE test_guc_int(time INT NOT NULL, val INT);
+SELECT create_hypertable('test_guc_int', 'time', chunk_time_interval => 100000);
+SELECT integer_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_guc_int';
+DROP TABLE test_guc_int;
+
+CREATE TABLE test_guc_smallint(time SMALLINT NOT NULL, val INT);
+SELECT create_hypertable('test_guc_smallint', 'time', chunk_time_interval => 1000);
+SELECT integer_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_guc_smallint';
+DROP TABLE test_guc_smallint;
+
+--
+-- Test 6: Explicit chunk_time_interval should override the GUC
+--
+SET timescaledb.default_chunk_interval = '1 week';
+
+CREATE TABLE test_override_timestamptz(time TIMESTAMPTZ NOT NULL, val INT);
+SELECT create_hypertable('test_override_timestamptz', 'time', chunk_time_interval => INTERVAL '2 days');
+-- 2 days = 2 * 24 hours * 60 min * 60 sec * 1000000 usec = 172800000000
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_override_timestamptz';
+DROP TABLE test_override_timestamptz;
+
+--
+-- Test 7: Reset GUC to NULL (legacy behavior)
+--
+RESET timescaledb.default_chunk_interval;
+SHOW timescaledb.default_chunk_interval;
+
+CREATE TABLE test_reset_timestamptz(time TIMESTAMPTZ NOT NULL, val INT);
+SELECT create_hypertable('test_reset_timestamptz', 'time');
+-- Should use legacy default (604800000000 = 1 week for non-adaptive)
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_reset_timestamptz';
+DROP TABLE test_reset_timestamptz;
+
+--
+-- Test 8: Invalid interval should fail
+--
+\set ON_ERROR_STOP 0
+SET timescaledb.default_chunk_interval = 'not_an_interval';
+SET timescaledb.default_chunk_interval = '123abc';
+\set ON_ERROR_STOP 1
+
+--
+-- Test 9: Test with add_dimension using GUC
+--
+RESET timescaledb.default_chunk_interval;
+SET timescaledb.default_chunk_interval = '3 days';
+
+CREATE TABLE test_add_dim(time TIMESTAMPTZ NOT NULL, time2 TIMESTAMPTZ NOT NULL, val INT);
+SELECT create_hypertable('test_add_dim', 'time');
+-- First dimension uses GUC: 3 days = 259200000000
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_add_dim';
+
+-- Add second time dimension - should also use GUC
+SELECT add_dimension('test_add_dim', 'time2', chunk_time_interval => INTERVAL '1 day');
+SELECT column_name, time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_add_dim'
+  ORDER BY dimension_number;
+DROP TABLE test_add_dim;
+
+--
+-- Test 10: Session-level GUC changes
+--
+RESET timescaledb.default_chunk_interval;
+SET timescaledb.default_chunk_interval = '5 days';
+
+CREATE TABLE test_session_1(time TIMESTAMPTZ NOT NULL, val INT);
+SELECT create_hypertable('test_session_1', 'time');
+-- 5 days = 432000000000
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_session_1';
+
+-- Change GUC mid-session
+SET timescaledb.default_chunk_interval = '10 days';
+
+CREATE TABLE test_session_2(time TIMESTAMPTZ NOT NULL, val INT);
+SELECT create_hypertable('test_session_2', 'time');
+-- 10 days = 864000000000
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_session_2';
+
+DROP TABLE test_session_1;
+DROP TABLE test_session_2;
+
+--
+-- Test 11: Transaction-level GUC with SET LOCAL
+--
+RESET timescaledb.default_chunk_interval;
+SET timescaledb.default_chunk_interval = '1 week';
+
+BEGIN;
+SET LOCAL timescaledb.default_chunk_interval = '2 weeks';
+
+CREATE TABLE test_local_guc(time TIMESTAMPTZ NOT NULL, val INT);
+SELECT create_hypertable('test_local_guc', 'time');
+-- 2 weeks = 1209600000000
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_local_guc';
+COMMIT;
+
+-- After commit, GUC should be back to session level (1 week)
+SHOW timescaledb.default_chunk_interval;
+
+DROP TABLE test_local_guc;
+
+--
+-- Test 12: UUID partition type with various intervals
+--
+RESET timescaledb.default_chunk_interval;
+
+-- UUID with 1 day interval
+SET timescaledb.default_chunk_interval = '1 day';
+CREATE TABLE test_uuid_1day(time UUID NOT NULL, val INT);
+SELECT create_hypertable('test_uuid_1day', 'time');
+-- 1 day = 86400000000
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_uuid_1day';
+DROP TABLE test_uuid_1day;
+
+-- UUID with 1 hour interval
+SET timescaledb.default_chunk_interval = '1 hour';
+CREATE TABLE test_uuid_1hour(time UUID NOT NULL, val INT);
+SELECT create_hypertable('test_uuid_1hour', 'time');
+-- 1 hour = 3600000000
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_uuid_1hour';
+DROP TABLE test_uuid_1hour;
+
+-- UUID with explicit override should work
+SET timescaledb.default_chunk_interval = '1 week';
+CREATE TABLE test_uuid_override(time UUID NOT NULL, val INT);
+SELECT create_hypertable('test_uuid_override', 'time', chunk_time_interval => INTERVAL '12 hours');
+-- 12 hours = 43200000000
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_uuid_override';
+DROP TABLE test_uuid_override;
+
+-- UUID with no GUC set (legacy default)
+RESET timescaledb.default_chunk_interval;
+CREATE TABLE test_uuid_legacy(time UUID NOT NULL, val INT);
+SELECT create_hypertable('test_uuid_legacy', 'time');
+-- Should use legacy default (604800000000 = 1 week)
+SELECT time_interval FROM timescaledb_information.dimensions
+  WHERE hypertable_name = 'test_uuid_legacy';
+DROP TABLE test_uuid_legacy;
+
+-- Cleanup
+RESET timescaledb.default_chunk_interval;

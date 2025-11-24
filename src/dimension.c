@@ -1020,30 +1020,54 @@ get_validated_integer_interval(Oid dimtype, int64 value)
 }
 
 /*
+ * The default chunk interval to use by hypertables. This value is set via the
+ * corresponding GUC in the assign hook, so do not assign a value here.
+ */
+extern Interval *default_chunk_interval;
+
+/*
  * Get the default chunk interval based on dimension type.
  */
-static int64
+static ChunkInterval
 get_default_interval(Oid dimtype, bool adaptive_chunking)
 {
-	int64 interval;
+	ChunkInterval chunk_interval = {
+		.type = InvalidOid,
+		.value = UnassignedDatum,
+	};
 
 	switch (dimtype)
 	{
 		case INT2OID:
-			interval = DEFAULT_SMALLINT_INTERVAL;
+			chunk_interval.type = INT2OID;
+			chunk_interval.value = Int16GetDatum(DEFAULT_SMALLINT_INTERVAL);
 			break;
 		case INT4OID:
-			interval = DEFAULT_INT_INTERVAL;
+			chunk_interval.type = INT4OID;
+			chunk_interval.value = Int32GetDatum(DEFAULT_INT_INTERVAL);
 			break;
 		case INT8OID:
-			interval = DEFAULT_BIGINT_INTERVAL;
+			chunk_interval.type = INT8OID;
+			chunk_interval.value = Int64GetDatum(DEFAULT_BIGINT_INTERVAL);
 			break;
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
 		case DATEOID:
 		case UUIDOID:
-			interval = adaptive_chunking ? DEFAULT_CHUNK_TIME_INTERVAL_ADAPTIVE :
-										   DEFAULT_CHUNK_TIME_INTERVAL;
+			if (default_chunk_interval != NULL)
+			{
+				chunk_interval.type = INTERVALOID;
+				chunk_interval.value = IntervalPGetDatum(default_chunk_interval);
+			}
+			else
+			{
+				chunk_interval.type = INT8OID;
+
+				if (adaptive_chunking)
+					chunk_interval.value = Int64GetDatum(DEFAULT_CHUNK_TIME_INTERVAL_ADAPTIVE);
+				else
+					chunk_interval.value = Int64GetDatum(DEFAULT_CHUNK_TIME_INTERVAL);
+			}
 			break;
 		default:
 			ereport(ERROR,
@@ -1053,14 +1077,16 @@ get_default_interval(Oid dimtype, bool adaptive_chunking)
 					 errhint("Use a valid dimension type.")));
 	}
 
-	return interval;
+	return chunk_interval;
 }
 
 static int64
-dimension_interval_to_internal(const char *colname, Oid dimtype, Oid valuetype, Datum value,
-							   bool adaptive_chunking)
+dimension_interval_to_internal(const char *colname, Oid dimtype,
+							   const ChunkInterval *chunk_interval, bool adaptive_chunking)
 {
 	int64 interval;
+
+	Assert(chunk_interval != NULL);
 
 	if (!IS_VALID_OPEN_DIM_TYPE(dimtype))
 		ereport(ERROR,
@@ -1068,22 +1094,19 @@ dimension_interval_to_internal(const char *colname, Oid dimtype, Oid valuetype, 
 				 errmsg("invalid type for dimension \"%s\"", colname),
 				 errhint("Use an integer, timestamp, or date type.")));
 
-	if (!OidIsValid(valuetype))
-	{
-		value = Int64GetDatum(get_default_interval(dimtype, adaptive_chunking));
-		valuetype = INT8OID;
-	}
-
-	switch (valuetype)
+	switch (chunk_interval->type)
 	{
 		case INT2OID:
-			interval = get_validated_integer_interval(dimtype, DatumGetInt16(value));
+			interval =
+				get_validated_integer_interval(dimtype, DatumGetInt16(chunk_interval->value));
 			break;
 		case INT4OID:
-			interval = get_validated_integer_interval(dimtype, DatumGetInt32(value));
+			interval =
+				get_validated_integer_interval(dimtype, DatumGetInt32(chunk_interval->value));
 			break;
 		case INT8OID:
-			interval = get_validated_integer_interval(dimtype, DatumGetInt64(value));
+			interval =
+				get_validated_integer_interval(dimtype, DatumGetInt64(chunk_interval->value));
 			break;
 		case INTERVALOID:
 			if (!IS_TIMESTAMP_TYPE(dimtype) && !IS_UUID_TYPE(dimtype))
@@ -1092,7 +1115,7 @@ dimension_interval_to_internal(const char *colname, Oid dimtype, Oid valuetype, 
 						 errmsg("invalid interval type for %s dimension", format_type_be(dimtype)),
 						 errhint("Use an interval of type integer.")));
 
-			interval = interval_to_usec(DatumGetIntervalP(value));
+			interval = interval_to_usec(DatumGetIntervalP(chunk_interval->value));
 			break;
 		default:
 			ereport(ERROR,
@@ -1121,10 +1144,12 @@ Datum
 ts_dimension_interval_to_internal_test(PG_FUNCTION_ARGS)
 {
 	Oid dimtype = PG_GETARG_OID(0);
-	Datum value = PG_GETARG_DATUM(1);
-	Oid valuetype = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+	ChunkInterval chunk_interval = {
+		.type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1),
+		.value = PG_GETARG_DATUM(1),
+	};
 
-	PG_RETURN_INT64(dimension_interval_to_internal("testcol", dimtype, valuetype, value, false));
+	PG_RETURN_INT64(dimension_interval_to_internal("testcol", dimtype, &chunk_interval, false));
 }
 
 static void
@@ -1183,15 +1208,17 @@ ts_dimension_update(const Hypertable *ht, const NameData *dimname, DimensionType
 	if (interval)
 	{
 		Oid dimtype = ts_dimension_get_partition_type(dim);
-		Assert(intervaltype);
+		ChunkInterval chunk_interval = {
+			.type = *intervaltype,
+			.value = *interval,
+		};
 
 		Assert(IS_OPEN_DIMENSION(dim));
 
 		dim->fd.interval_length =
 			dimension_interval_to_internal(NameStr(dim->fd.column_name),
 										   dimtype,
-										   *intervaltype,
-										   *interval,
+										   &chunk_interval,
 										   hypertable_adaptive_chunking_enabled(ht));
 	}
 
@@ -1303,8 +1330,8 @@ ts_dimension_info_create_open(Oid table_relid, Name column_name, Datum interval,
 	*info = (DimensionInfo){
 		.type = DIMENSION_TYPE_OPEN,
 		.table_relid = table_relid,
-		.interval_datum = interval,
-		.interval_type = interval_type,
+		.chunk_interval.value = interval,
+		.chunk_interval.type = interval_type,
 		.partitioning_func = partitioning_func,
 	};
 	namestrcpy(&info->colname, NameStr(*column_name));
@@ -1349,10 +1376,12 @@ dimension_info_validate_open(DimensionInfo *info)
 		dimtype = get_func_rettype(info->partitioning_func);
 	}
 
+	if (!OidIsValid(info->chunk_interval.type))
+		info->chunk_interval = get_default_interval(dimtype, info->adaptive_chunking);
+
 	info->interval = dimension_interval_to_internal(NameStr(info->colname),
 													dimtype,
-													info->interval_type,
-													info->interval_datum,
+													&info->chunk_interval,
 													info->adaptive_chunking);
 }
 
@@ -1394,7 +1423,7 @@ ts_dimension_info_validate(DimensionInfo *info)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid dimension info")));
 
-	if (info->num_slices_is_set && OidIsValid(info->interval_type))
+	if (info->num_slices_is_set && OidIsValid(info->chunk_interval.type))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot specify both the number of partitions and an interval")));
@@ -1577,12 +1606,12 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 
 	info->ht = ts_hypertable_cache_get_cache_and_entry(info->table_relid, CACHE_FLAG_NONE, &hcache);
 
-	if (info->num_slices_is_set && OidIsValid(info->interval_type))
+	if (info->num_slices_is_set && OidIsValid(info->chunk_interval.type))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot specify both the number of partitions and an interval")));
 
-	if (!info->num_slices_is_set && !OidIsValid(info->interval_type))
+	if (!info->num_slices_is_set && !OidIsValid(info->chunk_interval.type))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot omit both the number of partitions and the interval")));
@@ -1661,8 +1690,9 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		.table_relid = PG_GETARG_OID(0),
 		.num_slices = PG_ARGISNULL(2) ? DatumGetInt32(-1) : PG_GETARG_INT32(2),
 		.num_slices_is_set = !PG_ARGISNULL(2),
-		.interval_datum = PG_ARGISNULL(3) ? Int32GetDatum(-1) : PG_GETARG_DATUM(3),
-		.interval_type = PG_ARGISNULL(3) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3),
+		.chunk_interval.value = PG_ARGISNULL(3) ? Int32GetDatum(-1) : PG_GETARG_DATUM(3),
+		.chunk_interval.type =
+			PG_ARGISNULL(3) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3),
 		.partitioning_func = PG_ARGISNULL(4) ? InvalidOid : PG_GETARG_OID(4),
 		.if_not_exists = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5),
 	};
@@ -1713,9 +1743,10 @@ ts_dimension_info_out(PG_FUNCTION_ARGS)
 		{
 			const char *argvalstr = "-";
 
-			if (OidIsValid(info->interval_type))
+			if (OidIsValid(info->chunk_interval.type))
 			{
-				argvalstr = ts_datum_to_string(info->interval_datum, info->interval_type);
+				argvalstr =
+					ts_datum_to_string(info->chunk_interval.value, info->chunk_interval.type);
 			}
 
 			appendStringInfo(&str,
@@ -1781,8 +1812,9 @@ ts_range_dimension(PG_FUNCTION_ARGS)
 	Name column_name;
 	GETARG_NOTNULL_NULLABLE(column_name, 0, "column_name", NAME);
 	DimensionInfo *info = make_dimension_info(column_name, DIMENSION_TYPE_OPEN);
-	info->interval_datum = PG_ARGISNULL(1) ? Int32GetDatum(-1) : PG_GETARG_DATUM(1);
-	info->interval_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+	info->chunk_interval.value = PG_ARGISNULL(1) ? Int32GetDatum(-1) : PG_GETARG_DATUM(1);
+	info->chunk_interval.type =
+		PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	info->partitioning_func = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2);
 	PG_RETURN_POINTER(info);
 }

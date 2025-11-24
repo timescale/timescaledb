@@ -19,6 +19,17 @@ typedef struct PartitioningInfo PartitioningInfo;
 typedef struct DimensionSlice DimensionSlice;
 typedef struct DimensionVec DimensionVec;
 
+/*
+ * The chunk interval of an open partitioning dimension.
+ *
+ * The type can either be INTERVALOID or an INT(2|4|8)OID.
+ */
+typedef struct ChunkInterval
+{
+	Oid type;
+	Datum value;
+} ChunkInterval;
+
 typedef enum DimensionType
 {
 	DIMENSION_TYPE_OPEN,
@@ -105,8 +116,7 @@ typedef struct DimensionInfo
 	NameData colname;
 	Oid coltype;
 	DimensionType type;
-	Datum interval_datum;
-	Oid interval_type; /* Type of the interval datum */
+	ChunkInterval chunk_interval;
 	int64 interval;
 	int32 num_slices;
 	regproc partitioning_func;
@@ -119,7 +129,8 @@ typedef struct DimensionInfo
 } DimensionInfo;
 
 #define DIMENSION_INFO_IS_SET(di) (di != NULL && OidIsValid((di)->table_relid))
-#define DIMENSION_INFO_IS_VALID(di) (info->num_slices_is_set || OidIsValid(info->interval_type))
+#define DIMENSION_INFO_IS_VALID(di)                                                                \
+	(info->num_slices_is_set || OidIsValid(info->chunk_interval.type))
 
 extern Hyperspace *ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension,
 									 MemoryContext mctx);
