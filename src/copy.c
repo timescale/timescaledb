@@ -274,7 +274,10 @@ TSCopyMultiInsertBufferInit(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis
 			bool sort = ts_guc_enable_direct_compress_copy_sort_batches &&
 						!ts_guc_enable_direct_compress_copy_client_sorted;
 			buffer->compressor =
-				ts_cm_functions->compressor_init(cis->rel, &buffer->bulk_writer, sort);
+				ts_cm_functions->compressor_init(cis->rel,
+												 &buffer->bulk_writer,
+												 sort,
+												 ts_guc_direct_compress_copy_tuple_sort_limit);
 
 			/*
 			 * The sorting done in the compressor is only a local sort for the

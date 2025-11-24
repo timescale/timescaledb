@@ -888,6 +888,10 @@ tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer, Tupl
 	{
 		tuplesort_puttupleslot(compressor->sort_state, slot);
 		compressor->tuples_to_sort++;
+
+		if (compressor->tuple_sort_limit &&
+			compressor->tuples_to_sort > compressor->tuple_sort_limit)
+			tsl_compressor_flush(compressor, bulk_writer);
 	}
 	else
 	{
@@ -946,7 +950,7 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
  * Tuplesortstate and sort them before flushing to the output relation.
  */
 RowCompressor *
-tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort)
+tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int sort_limit)
 {
 	RowCompressor *compressor = palloc0(sizeof(RowCompressor));
 	CompressionSettings *settings = ts_compression_settings_get(in_rel->rd_id);
@@ -955,7 +959,10 @@ tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort)
 	row_compressor_init(compressor, settings, RelationGetDescr(in_rel), RelationGetDescr(out_rel));
 
 	if (sort)
+	{
 		compressor->sort_state = compression_create_tuplesort_state(settings, in_rel);
+		compressor->tuple_sort_limit = sort_limit;
+	}
 
 	return compressor;
 }

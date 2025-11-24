@@ -601,3 +601,29 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
  {COMPRESSED,PARTIAL}
 
 ROLLBACK;
+-- simple test with compressed insert enabled and sorting limited to 500
+-- batches should be limited to that amount so we have more compressed batches
+BEGIN;
+SET timescaledb.enable_direct_compress_insert = true;
+SET timescaledb.direct_compress_insert_tuple_sort_limit = 500;
+INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+--- QUERY PLAN ---
+ Append (actual rows=3001.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_58_chunk (actual rows=960.00 loops=1)
+         ->  Seq Scan on compress_hyper_2_59_chunk (actual rows=2.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_60_chunk (actual rows=2041.00 loops=1)
+         ->  Seq Scan on compress_hyper_2_61_chunk (actual rows=5.00 loops=1)
+
+SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
+            first             |             last             
+------------------------------+------------------------------
+ Wed Jan 01 00:00:00 2025 PST | Fri Jan 03 02:00:00 2025 PST
+
+-- since the chunks are new status should be COMPRESSED, UNORDERED
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
+   chunk_status_text    
+------------------------
+ {COMPRESSED,UNORDERED}
+
+ROLLBACK;
