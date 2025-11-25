@@ -55,11 +55,12 @@ set(MOD_FILES
     updates/2.21.4--2.22.0.sql
     updates/2.22.0--2.22.1.sql
     updates/2.22.1--2.23.0.sql
-    updates/2.23.0--2.23.1.sql)
+    updates/2.23.0--2.23.1.sql
+    updates/2.23.1--2.24.0.sql)
 
 # The downgrade file to generate a downgrade script for the current version, as
 # specified in version.config
-set(CURRENT_REV_FILE reverse-dev.sql)
+set(CURRENT_REV_FILE 2.24.0--2.23.1.sql)
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
 set(LOADER_PATHNAME "$libdir/timescaledb")
