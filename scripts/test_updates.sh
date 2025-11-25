@@ -54,6 +54,10 @@ for version in ${ALL_VERSIONS}; do
     if [ "${PG_MAJOR_VERSION}" -le 16 ]; then
         VERSIONS="${VERSIONS} ${version}"
     fi
+  elif [ "${minor_version}" -le 22 ]; then
+    if [ "${PG_MAJOR_VERSION}" -le 17 ]; then
+        VERSIONS="${VERSIONS} ${version}"
+    fi
   else
     VERSIONS="${VERSIONS} ${version}"
   fi
