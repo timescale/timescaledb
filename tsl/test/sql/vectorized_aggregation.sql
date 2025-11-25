@@ -133,7 +133,7 @@ SELECT sum(int_value) FROM testtable;
 SELECT sum(int_value) FROM testtable;
 
 
---Vectorized aggregation not possible for expression
+--Vectorized aggregation possible for some expressions
 SELECT sum(abs(int_value)) FROM testtable;
 
 :EXPLAIN
