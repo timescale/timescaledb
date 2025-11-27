@@ -237,6 +237,6 @@ SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1515628
 SELECT show_chunks('chunkapi') AS chunk LIMIT 1 \gset
 BEGIN;
 SELECT txid_current_if_assigned() IS NULL;
-SELECT COUNT(*) FROM :chunk LIMIT 1;
+SELECT COUNT(*) FROM :chunk;
 SELECT txid_current_if_assigned() IS NULL;
 COMMIT;

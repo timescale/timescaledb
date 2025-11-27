@@ -1254,7 +1254,7 @@ SELECT compress_chunk(show_chunks('test_xid_compressed'));
 SELECT show_chunks('test_xid_compressed') AS chunk LIMIT 1 \gset
 BEGIN;
 SELECT txid_current_if_assigned() IS NULL;
-SELECT COUNT(*) FROM :chunk LIMIT 1;
+SELECT COUNT(*) FROM :chunk;
 SELECT txid_current_if_assigned() IS NULL;
 COMMIT;
 
