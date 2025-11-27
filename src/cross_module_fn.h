@@ -80,6 +80,8 @@ typedef struct CrossModuleFunctions
 	void (*set_rel_pathlist_dml)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *, Hypertable *);
 	void (*set_rel_pathlist_query)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
 								   Hypertable *);
+	void (*sort_transform_replace_pathkeys)(void *path, List *transformed_pathkeys,
+											List *original_pathkeys);
 
 	/* gapfill */
 	PGFunction gapfill_marker;

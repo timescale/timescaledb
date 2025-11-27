@@ -557,13 +557,18 @@ ts_sort_transform_replace_pathkeys(void *node, List *transformed_pathkeys, List 
 
 	if (IsA(path, CustomPath))
 	{
-		/*
-		 * We should only see ChunkAppend here.
-		 */
 		CustomPath *custom = castNode(CustomPath, path);
 		ts_sort_transform_replace_pathkeys(custom->custom_paths,
 										   transformed_pathkeys,
 										   original_pathkeys);
+
+		/* Need to handle tsl-specific custom path types */
+		if (ts_cm_functions->sort_transform_replace_pathkeys != NULL)
+		{
+			ts_cm_functions->sort_transform_replace_pathkeys(path,
+															 transformed_pathkeys,
+															 original_pathkeys);
+		}
 	}
 	else if (IsA(path, MergeAppendPath))
 	{

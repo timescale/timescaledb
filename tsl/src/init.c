@@ -77,6 +77,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,
 	.set_rel_pathlist_query = tsl_set_rel_pathlist_query,
+	.sort_transform_replace_pathkeys = tsl_sort_transform_replace_pathkeys,
 
 	/* bgw policies */
 	.policy_compression_add = policy_compression_add,
