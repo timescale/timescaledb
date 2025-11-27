@@ -15,8 +15,9 @@ This release contains performance improvements and bug fixes since the 2.23.1 re
 **Bloom version2**
 announcement pending
 
-**Deprecation**
-Removal of partial continuous aggregates format. Run `cagg_migrate`
+**Deprecations**
+* The next release of TimescaleDB will remove the deprecated partial continuous aggregates format. The new format was introduced in [`2.7.0`](https://github.com/timescale/timescaledb/releases/tag/2.7.0), and provides significant improvements in terms of performance and storage efficiency. Please use [`cagg_migrate(<CONTINUOUS_AGGREGATE_NAME>)`](https://www.tigerdata.com/docs/use-timescale/latest/continuous-aggregates/migrate) to migrate to the new format. Tiger Cloud users are migrated automatically.
+* In future releases the deprecated view `timescaledb_information.compression_settings` will be removed. Please use [timescaledb_information.hypertable_columnstore_settings](https://www.tigerdata.com/docs/api/latest/hypercore/hypertable_columnstore_settings) as a replacement.
 
 **Backward-Incompatible Changes**
 * [#8761](https://github.com/timescale/timescaledb/pull/8761) Change the version of the bloom filter sparse indexes. The existing indexes will stop working and will require action to re-enable. See the changelog for details.
@@ -28,7 +29,6 @@ Removal of partial continuous aggregates format. Run `cagg_migrate`
 * [#8786](https://github.com/timescale/timescaledb/pull/8786) Display chunks view range as timestamps for UUIDv7
 * [#8819](https://github.com/timescale/timescaledb/pull/8819) Refactor chunk compression logic
 * [#8840](https://github.com/timescale/timescaledb/pull/8840) Allow `ALTER COLUMN TYPE` when compression enabled but no compressed chunks exist
-* [#8890](https://github.com/timescale/timescaledb/pull/8890) Declarative Partitioning for Hypertables
 * [#8908](https://github.com/timescale/timescaledb/pull/8908) Add time bucketing support for UUIDv7
 * [#8909](https://github.com/timescale/timescaledb/pull/8909) Support direct compress on hypertables with continuous aggregates
 * [#8939](https://github.com/timescale/timescaledb/pull/8939) Support continuous aggregates on UUIDv7-partitioned hypertables
@@ -46,7 +46,6 @@ Removal of partial continuous aggregates format. Run `cagg_migrate`
 **GUCs**
 * `direct_compress_copy_tuple_sort_limit`: Number of tuples that can be sorted at once in a `COPY` operation.
 * `direct_compress_insert_tuple_sort_limit`: Number of tuples that can be sorted at once in an `INSERT` operation.
-* `enable_partitioned_hypertables`: Enable experimental support for creating hypertables using PostgreSQL's native declarative partitioning. Only available in debug builds.
 * `read_legacy_bloom1_v1`: Enable reading the legacy `bloom1` version 1 sparse indexes for `SELECT` queries.
 
 **Thanks**
