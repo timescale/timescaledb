@@ -2743,7 +2743,7 @@ SELECT COUNT(*) FROM :chunk LIMIT 1;
 SELECT txid_current_if_assigned() IS NULL;
  ?column? 
 ----------
- f
+ t
 
 COMMIT;
 DROP TABLE test_xid_compressed;
