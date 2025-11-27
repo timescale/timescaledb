@@ -1,0 +1,1 @@
+Fixes: #8990 Fix EquivalenceClass index update for RelOptInfo

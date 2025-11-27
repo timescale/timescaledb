@@ -3476,16 +3476,28 @@ stable expression in targetlist on skip_scan_htc
          Sort Key: ((skip_scan_htc.dev + 1))
          ->  Result (actual rows=2505.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=2505.00 loops=1)
-                     ->  Seq Scan on compress_hyper_4_26_chunk (actual rows=11.00 loops=1)
+                     ->  Sort (actual rows=11.00 loops=1)
+                           Sort Key: compress_hyper_4_26_chunk.dev
+                           Sort Method: quicksort 
+                           ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11.00 loops=1)
          ->  Result (actual rows=2505.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=2505.00 loops=1)
-                     ->  Seq Scan on compress_hyper_4_27_chunk (actual rows=11.00 loops=1)
+                     ->  Sort (actual rows=11.00 loops=1)
+                           Sort Key: compress_hyper_4_27_chunk.dev
+                           Sort Method: quicksort 
+                           ->  Index Scan using compress_hyper_4_27_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_27_chunk (actual rows=11.00 loops=1)
          ->  Result (actual rows=2505.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=2505.00 loops=1)
-                     ->  Seq Scan on compress_hyper_4_28_chunk (actual rows=11.00 loops=1)
+                     ->  Sort (actual rows=11.00 loops=1)
+                           Sort Key: compress_hyper_4_28_chunk.dev
+                           Sort Method: quicksort 
+                           ->  Index Scan using compress_hyper_4_28_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_28_chunk (actual rows=11.00 loops=1)
          ->  Result (actual rows=2505.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=2505.00 loops=1)
-                     ->  Seq Scan on compress_hyper_4_29_chunk (actual rows=11.00 loops=1)
+                     ->  Sort (actual rows=11.00 loops=1)
+                           Sort Key: compress_hyper_4_29_chunk.dev
+                           Sort Method: quicksort 
+                           ->  Index Scan using compress_hyper_4_29_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_29_chunk (actual rows=11.00 loops=1)
 
 -- But expressions over distinct aggregates are supported
 :PREFIX SELECT count(DISTINCT dev) + 1, sum(DISTINCT dev)/count(DISTINCT dev), 'q1_15' FROM :TABLE;
