@@ -864,6 +864,11 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 			return result;
 		}
 	}
+	else
+	{
+		//		fprintf(stderr, "other node:\n");
+		//		my_print(node);
+	}
 
 	return expression_tree_walker(node, collect_quals_walker, ctx);
 }
@@ -945,7 +950,62 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 	 * infrastructure to deduce the appropriate chunks using our range
 	 * exclusion
 	 */
-	ts_hypertable_restrict_info_add(hri, root, ctx->restrictions);
+	List *restrictions = rel->baserestrictinfo;
+//	mybt();
+//	fprintf(stderr, "restrictions:\n");
+//	my_print(restrictions);
+
+	List *extras = NIL;
+	ListCell *lc;
+	foreach (lc, restrictions)
+	{
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc));
+		Expr *qual = ri->clause;
+		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
+		{
+			OpExpr *op = castNode(OpExpr, qual);
+			Expr *left = linitial(op->args);
+			Expr *right = lsecond(op->args);
+
+			if ((IsA(left, Var) && is_timestamptz_op_interval(right)) ||
+				(IsA(right, Var) && is_timestamptz_op_interval(left)))
+			{
+				/*
+				 * check for constraints with TIMESTAMPTZ OP INTERVAL calculations
+				 */
+				Expr *constified = (Expr *) constify_timestamptz_op_interval(root, op);
+				if (constified != (Expr *) op)
+				{
+					RestrictInfo *ri_copy = copyObject(ri);
+					ri_copy->clause = constified;
+					extras = lappend(extras, ri_copy);
+				}
+			}
+			else
+			{
+				/*
+				 * check for time_bucket comparisons
+				 * time_bucket(Const, time_colum) > Const
+				 */
+				Expr *transformed = ts_transform_time_bucket_comparison(qual);
+				if (transformed != NULL)
+				{
+					/*
+					 * Also use the transformed qual for chunk exclusion.
+					 */
+					RestrictInfo *ri_copy = copyObject(ri);
+					ri_copy->clause = transformed;
+					extras = lappend(extras, ri_copy);
+				}
+			}
+		}
+	}
+
+//	fprintf(stderr, "extras:\n");
+//	my_print(extras);
+
+	ts_hypertable_restrict_info_add(hri, root, restrictions);
+	ts_hypertable_restrict_info_add(hri, root, extras);
 
 	/*
 	 * If fdw_private has not been setup by caller there is no point checking
