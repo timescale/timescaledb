@@ -1,0 +1,1 @@
+Fixes: #8986 Add pathkey replacement for ColumnarScanPath
