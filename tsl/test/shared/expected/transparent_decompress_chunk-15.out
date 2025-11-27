@@ -112,8 +112,9 @@ ORDER BY time, device_id;
  Append (actual rows=0.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=0.00 loops=1)
          Filter: (device_id < 0)
-         ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=0.00 loops=1)
-               Index Cond: (device_id < 0)
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0.00 loops=1)
+               Filter: (device_id < 0)
+               Rows Removed by Filter: 18
    ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk (actual rows=0.00 loops=1)
          Index Cond: (device_id < 0)
 
@@ -232,8 +233,9 @@ ORDER BY time, device_id;
          ->  Append (actual rows=0.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=0.00 loops=1)
                      Filter: (device_id IS NULL)
-                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=0.00 loops=1)
-                           Index Cond: (device_id IS NULL)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0.00 loops=1)
+                           Filter: (device_id IS NULL)
+                           Rows Removed by Filter: 18
                ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk (actual rows=0.00 loops=1)
                      Index Cond: (device_id IS NULL)
 
@@ -694,9 +696,9 @@ SET enable_seqscan TO FALSE;
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=2.00 loops=1)
                      Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1, compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_count
                      Index Cond: (compress_hyper_X_X_chunk.device_id = 1)
-         ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _timescaledb_internal._hyper_X_X_chunk (actual rows=1598.00 loops=1)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_X_X_chunk (actual rows=1598.00 loops=1)
                Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
-               Index Cond: (_hyper_X_X_chunk.device_id = 1)
+               Filter: (_hyper_X_X_chunk.device_id = 1)
 
 -- globs should not plan IndexOnlyScans
 :PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY device_id, time;
@@ -1229,8 +1231,9 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-02-01'::timestamptz, '1d':
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1 (actual rows=0.00 loops=32)
                      Filter: (("time" = g."time") AND (device_id = $1))
                      Rows Removed by Filter: 50
-                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=0.00 loops=32)
-                           Index Cond: ((device_id = $1) AND (_ts_meta_min_1 <= g."time") AND (_ts_meta_max_1 >= g."time"))
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0.00 loops=32)
+                           Filter: ((_ts_meta_min_1 <= g."time") AND (_ts_meta_max_1 >= g."time") AND (device_id = $1))
+                           Rows Removed by Filter: 16
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m1 (actual rows=0.00 loops=29)
                      Index Cond: ((device_id = $1) AND ("time" = g."time"))
 
@@ -1243,8 +1246,9 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-02-01'::timestamptz, '1d':
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1 (actual rows=0.00 loops=32)
                      Filter: (("time" = g."time") AND (device_id = $1))
                      Rows Removed by Filter: 81
-                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=0.00 loops=32)
-                           Index Cond: ((device_id = $1) AND (_ts_meta_min_1 <= g."time") AND (_ts_meta_max_1 >= g."time"))
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0.00 loops=32)
+                           Filter: ((_ts_meta_min_1 <= g."time") AND (_ts_meta_max_1 >= g."time") AND (device_id = $1))
+                           Rows Removed by Filter: 16
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m1 (actual rows=0.00 loops=27)
                      Index Cond: ((device_id = $1) AND ("time" = g."time"))
 

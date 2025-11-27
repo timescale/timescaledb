@@ -1,0 +1,1 @@
+Fixes: #8988 Don't ignore additional filters on same column when building scankeys
