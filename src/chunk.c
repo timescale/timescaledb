@@ -2701,15 +2701,11 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 }
 
 Chunk *
-ts_chunk_get_by_relid_locked(Oid relid, LOCKMODE chunk_lockmode, bool fail_if_not_found)
+ts_chunk_get_by_relid_locked(Oid relid, LOCKMODE chunk_lockmode, const ScanTupLock *slice_lock,
+							 bool fail_if_not_found)
 {
 	char *schema;
 	char *table;
-	ScanTupLock slice_lock = {
-		.lockmode = LockTupleKeyShare,
-		.waitpolicy = LockWaitBlock,
-		.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
-	};
 
 	if (!OidIsValid(relid))
 	{
@@ -2721,13 +2717,18 @@ ts_chunk_get_by_relid_locked(Oid relid, LOCKMODE chunk_lockmode, bool fail_if_no
 
 	schema = get_namespace_name(get_rel_namespace(relid));
 	table = get_rel_name(relid);
-	return chunk_get_by_name(schema, table, chunk_lockmode, &slice_lock, fail_if_not_found);
+	return chunk_get_by_name(schema, table, chunk_lockmode, slice_lock, fail_if_not_found);
 }
 
 Chunk *
 ts_chunk_get_by_relid(Oid relid, bool fail_if_not_found)
 {
-	return ts_chunk_get_by_relid_locked(relid, NoLock, fail_if_not_found);
+	ScanTupLock slice_lock = {
+		.lockmode = LockTupleKeyShare,
+		.waitpolicy = LockWaitBlock,
+		.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
+	};
+	return ts_chunk_get_by_relid_locked(relid, NoLock, &slice_lock, fail_if_not_found);
 }
 
 void
