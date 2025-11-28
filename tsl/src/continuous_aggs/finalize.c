@@ -254,7 +254,8 @@ mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *inpu
 			bool timebkt_chk = false;
 
 			if (IsA(tle->expr, FuncExpr))
-				timebkt_chk = function_allowed_in_cagg_definition(((FuncExpr *) tle->expr)->funcid);
+				timebkt_chk =
+					ts_function_allowed_in_cagg_definition(((FuncExpr *) tle->expr)->funcid);
 
 #if PG18_GE
 			/* PG18 introduced RTEs for group clauses so
@@ -280,7 +281,8 @@ mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *inpu
 										"inconsistent results on rematerialization")));
 					}
 					FuncExpr *expr = (FuncExpr *) node;
-					timebkt_chk = function_allowed_in_cagg_definition(((FuncExpr *) expr)->funcid);
+					timebkt_chk =
+						ts_function_allowed_in_cagg_definition(((FuncExpr *) expr)->funcid);
 				}
 			}
 #endif
