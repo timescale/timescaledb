@@ -394,3 +394,13 @@ ROLLBACK;
 DEALLOCATE prep;
 DROP TABLE t8241 cascade;
 RESET plan_cache_mode;
+
+-- test multiple constraints on same column
+BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE FROM metrics_compressed where device_id IS NOT NULL AND device_id = 1;ROLLBACK;
+BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE FROM metrics_compressed where device_id <> 1 AND device_id <> 2;ROLLBACK;
+BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE FROM metrics_compressed where device_id > 1 AND device_id < 3;ROLLBACK;
+BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE FROM metrics_compressed where v3 IS NOT NULL AND device_id IS NOT NULL AND device_id = 1;ROLLBACK;
+
+-- clean up dml artefacts to prevent plan switches on subsequent tests
+VACUUM FULL ANALYZE metrics_compressed;
+
