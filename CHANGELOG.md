@@ -5,6 +5,52 @@ This page lists all the latest features and updates to TimescaleDB. When
 you use psql to update your database, use the -X flag and prevent any .psqlrc 
 commands from accidentally triggering the load of a previous DB version.**
 
+## 2.24.0 (2025-12-02)
+
+This release contains performance improvements and bug fixes since the 2.23.1 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.24.0**
+* 
+
+**Bloom version2**
+announcement pending
+
+**Deprecations**
+* The next release of TimescaleDB will remove the deprecated partial continuous aggregates format. The new format was introduced in [`2.7.0`](https://github.com/timescale/timescaledb/releases/tag/2.7.0), and provides significant improvements in terms of performance and storage efficiency. Please use [`cagg_migrate(<CONTINUOUS_AGGREGATE_NAME>)`](https://www.tigerdata.com/docs/use-timescale/latest/continuous-aggregates/migrate) to migrate to the new format. Tiger Cloud users are migrated automatically.
+* In future releases the deprecated view `timescaledb_information.compression_settings` will be removed. Please use [timescaledb_information.hypertable_columnstore_settings](https://www.tigerdata.com/docs/api/latest/hypercore/hypertable_columnstore_settings) as a replacement.
+
+**Backward-Incompatible Changes**
+* [#8761](https://github.com/timescale/timescaledb/pull/8761) Change the version of the bloom filter sparse indexes. The existing indexes will stop working and will require action to re-enable. See the changelog for details.
+
+**Features**
+* [#8465](https://github.com/timescale/timescaledb/pull/8465) Speed up the filters like `x = any(array[...])` using bloom filter sparse indexes.
+* [#8569](https://github.com/timescale/timescaledb/pull/8569) In-memory recompression
+* [#8754](https://github.com/timescale/timescaledb/pull/8754) Add concurrent mode for merging chunks
+* [#8786](https://github.com/timescale/timescaledb/pull/8786) Display chunks view range as timestamps for UUIDv7
+* [#8819](https://github.com/timescale/timescaledb/pull/8819) Refactor chunk compression logic
+* [#8840](https://github.com/timescale/timescaledb/pull/8840) Allow `ALTER COLUMN TYPE` when compression enabled but no compressed chunks exist
+* [#8908](https://github.com/timescale/timescaledb/pull/8908) Add time bucketing support for UUIDv7
+* [#8909](https://github.com/timescale/timescaledb/pull/8909) Support direct compress on hypertables with continuous aggregates
+* [#8939](https://github.com/timescale/timescaledb/pull/8939) Support continuous aggregates on UUIDv7-partitioned hypertables
+* [#8959](https://github.com/timescale/timescaledb/pull/8959) Cap continuous aggregate invalidation interval range at chunk boundary
+* [#8975](https://github.com/timescale/timescaledb/pull/8975) Exclude date/time columns from default segmentby
+
+**Bugfixes**
+* [#8839](https://github.com/timescale/timescaledb/pull/8839) Improve `_timescaledb_functions.cagg_watermark` error handling
+* [#8853](https://github.com/timescale/timescaledb/pull/8853) Change log level of continuous aggregate refresh messages to `DEBUG1`
+* [#8933](https://github.com/timescale/timescaledb/pull/8933) Potential crash or seemingly random errors when querying the compressed chunks created on releases before 2.15 and using the minmax sparse indexes.
+* [#8942](https://github.com/timescale/timescaledb/pull/8942) Fix lateral join handling for compressed chunks
+* [#8958](https://github.com/timescale/timescaledb/pull/8958) Fix if_not_exists behaviour when adding refresh policy
+* [#8969](https://github.com/timescale/timescaledb/pull/8969) Gracefully handle missing job stat in background worker
+
+**GUCs**
+* `direct_compress_copy_tuple_sort_limit`: Number of tuples that can be sorted at once in a `COPY` operation.
+* `direct_compress_insert_tuple_sort_limit`: Number of tuples that can be sorted at once in an `INSERT` operation.
+* `read_legacy_bloom1_v1`: Enable reading the legacy `bloom1` version 1 sparse indexes for `SELECT` queries.
+
+**Thanks**
+* @bezpechno for implementing ALTER COLUMN TYPE for hypertable with columnstore when no compressed chunks exist
+
 ## 2.23.1 (2025-11-13)
 
 This release contains performance improvements and bug fixes since the 2.23.0 release. We recommend that you upgrade at the next available opportunity.
