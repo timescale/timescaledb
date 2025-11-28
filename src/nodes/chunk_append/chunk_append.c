@@ -569,12 +569,12 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 		 */
 		join_conditions = list_concat(join_conditions, rel->joininfo);
 
-//		mybt();
-//		fprintf(stderr, "generated clauses:\n");
-//		my_print(join_conditions);
+		//		mybt();
+		//		fprintf(stderr, "generated clauses:\n");
+		//		my_print(join_conditions);
 
-//		fprintf(stderr, "passed clauses:\n");
-//		my_print(join_conditions_);
+		//		fprintf(stderr, "passed clauses:\n");
+		//		my_print(join_conditions_);
 
 		if (join_conditions == NIL)
 			return false;
@@ -622,25 +622,34 @@ find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr, List *join_con
 
 		OpExpr *op = castNode(OpExpr, qual);
 
-		if (op->opno == eq_opr)
+		if (op->opno != eq_opr)
 		{
-			Var *left = linitial(op->args);
-			Var *right = lsecond(op->args);
+			continue;
+		}
 
-			Assert(IsA(left, Var) && IsA(right, Var));
+		if (!IsA(linitial(op->args), Var))
+		{
+			continue;
+		}
+		Var *left = castNode(Var, linitial(op->args));
 
-			/* Is this a join condition referencing our hypertable */
-			if (((Index) left->varno == sort_relid && (Index) right->varno == ht_relid &&
-				 left->varattno == sort_var->varattno))
-			{
-				return right;
-			}
+		if (!IsA(lsecond(op->args), Var))
+		{
+			continue;
+		}
+		Var *right = castNode(Var, lsecond(op->args));
 
-			if (((Index) left->varno == ht_relid && (Index) right->varno == sort_relid &&
-				 right->varattno == sort_var->varattno))
-			{
-				return left;
-			}
+		/* Is this a join condition referencing our hypertable */
+		if (((Index) left->varno == sort_relid && (Index) right->varno == ht_relid &&
+			 left->varattno == sort_var->varattno))
+		{
+			return right;
+		}
+
+		if (((Index) left->varno == ht_relid && (Index) right->varno == sort_relid &&
+			 right->varattno == sort_var->varattno))
+		{
+			return left;
 		}
 	}
 
