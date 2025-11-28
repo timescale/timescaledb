@@ -310,6 +310,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.create_upper_paths_hook = NULL,
 	.set_rel_pathlist_dml = NULL,
 	.set_rel_pathlist_query = NULL,
+	.sort_transform_replace_pathkeys = NULL,
 	.process_altertable_cmd = NULL,
 	.process_rename_cmd = NULL,
 
