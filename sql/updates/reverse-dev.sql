@@ -2,6 +2,7 @@ DROP FUNCTION _timescaledb_functions.bloom1_contains_any(_timescaledb_internal.b
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.policy_job_stat_history_retention;
 DROP VIEW IF EXISTS timescaledb_information.chunks;
+DROP VIEW IF EXISTS timescaledb_information.dimensions;
 
 -- Revert support for concurrent merge chunks()
 DROP PROCEDURE IF EXISTS _timescaledb_functions.chunk_rewrite_cleanup();
