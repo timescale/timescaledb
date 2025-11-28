@@ -448,8 +448,10 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
  */
 bool
 ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-								  List *join_conditions, int *order_attno, bool *reverse)
+								  List *join_conditions_, int *order_attno, bool *reverse)
 {
+	//	mybt();
+
 	SortGroupClause *sort = linitial(root->parse->sortClause);
 	TargetEntry *tle = get_sortgroupref_tle(sort->tleSortGroupRef, root->parse->targetList);
 	RangeTblEntry *rte = root->simple_rte_array[rel->relid];
@@ -545,11 +547,35 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	else
 	{
 		/*
-		 * If the ORDER BY does not match our hypertable but we are joining
-		 * against another hypertable on the time column doing an ordered
-		 * append here is still beneficial because we can skip the sort
-		 * step for the MergeJoin
+		 * If the ORDER BY does not match our hypertable, but we are joining
+		 * against another hypertable on the time column, then doing an ordered
+		 * append here is still beneficial, because we can skip the sort
+		 * step for the MergeJoin.
 		 */
+		Bitmapset *outer_relids = root->simple_rel_array[sort_relid]->relids;
+		Bitmapset *inner_relids = root->simple_rel_array[ht_relid]->relids;
+		List *join_conditions =
+			generate_join_implied_equalities(root,
+											 bms_union(outer_relids, inner_relids),
+											 outer_relids,
+											 rel,
+											 /* sjinfo = */ NULL);
+
+		/*
+		 * The outer join clauses don't form ECs and stay in joininfo, and we
+		 * want to check them too.
+		 * There are also non-equality join conditions in joininfo, but they're
+		 * not relevant for MergeJoin anyway and will be skipped.
+		 */
+		join_conditions = list_concat(join_conditions, rel->joininfo);
+
+//		mybt();
+//		fprintf(stderr, "generated clauses:\n");
+//		my_print(join_conditions);
+
+//		fprintf(stderr, "passed clauses:\n");
+//		my_print(join_conditions_);
+
 		if (join_conditions == NIL)
 			return false;
 
@@ -583,7 +609,18 @@ find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr, List *join_con
 
 	foreach (lc, join_conditions)
 	{
-		OpExpr *op = lfirst(lc);
+		Node *qual = lfirst(lc);
+		if (IsA(qual, RestrictInfo))
+		{
+			qual = (Node *) castNode(RestrictInfo, qual)->clause;
+		}
+
+		if (!IsA(qual, OpExpr))
+		{
+			continue;
+		}
+
+		OpExpr *op = castNode(OpExpr, qual);
 
 		if (op->opno == eq_opr)
 		{
