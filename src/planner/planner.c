@@ -461,7 +461,8 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 						 * We want to distinguish between the two cases here by
 						 * marking the chunk when rte->inh is true.
 						 */
-						Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
+						Chunk *chunk =
+							ts_chunk_get_by_relid_locked(rte->relid, NoLock, NULL, false);
 						if (chunk && rte->inh)
 							rte_mark_for_expansion(rte);
 					}
