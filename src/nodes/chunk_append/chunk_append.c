@@ -17,8 +17,7 @@
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner/planner.h"
 
-static Var *find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr,
-								   List *join_conditions);
+static Var *find_equality_join_var(Var *sort_var, Index ht_relid, List *join_conditions);
 
 static CustomPathMethods chunk_append_path_methods = {
 	.CustomName = "ChunkAppend",
@@ -574,7 +573,7 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 		if (join_conditions == NIL)
 			return false;
 
-		ht_var = find_equality_join_var(sort_var, ht_relid, tce->eq_opr, join_conditions);
+		ht_var = find_equality_join_var(sort_var, ht_relid, join_conditions);
 
 		if (ht_var == NULL)
 			return false;
@@ -597,30 +596,32 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
  * with relid ht_relid
  */
 static Var *
-find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr, List *join_conditions)
+find_equality_join_var(Var *sort_var, Index ht_relid, List *join_conditions)
 {
 	ListCell *lc;
 	Index sort_relid = sort_var->varno;
 
 	foreach (lc, join_conditions)
 	{
-		Node *qual = lfirst(lc);
-		if (IsA(qual, RestrictInfo))
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc));
+
+		/*
+		 * Only interested in join clauses here.
+		 */
+		if (!ri->can_join)
 		{
-			qual = (Node *) castNode(RestrictInfo, qual)->clause;
+			continue;
 		}
 
-		if (!IsA(qual, OpExpr))
+		/*
+		 * The clause must be a mergejoinable equality operator.
+		 */
+		if (ri->mergeopfamilies == NIL)
 		{
 			continue;
 		}
 
-		OpExpr *op = castNode(OpExpr, qual);
-
-		if (op->opno != eq_opr)
-		{
-			continue;
-		}
+		OpExpr *op = castNode(OpExpr, ri->clause);
 
 		if (!IsA(linitial(op->args), Var))
 		{
