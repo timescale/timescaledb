@@ -252,7 +252,7 @@ ts_partitioning_func_apply(PartitioningInfo *pinfo, Oid collation, Datum value)
 				 errmsg("partitioning function \"%s.%s\" returned NULL",
 						NameStr(pinfo->partfunc.schema),
 						NameStr(pinfo->partfunc.name))));
-    }
+	}
 
 	return result;
 }
