@@ -448,10 +448,8 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
  */
 bool
 ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-								  List *join_conditions_, int *order_attno, bool *reverse)
+								  int *order_attno, bool *reverse)
 {
-	//	mybt();
-
 	SortGroupClause *sort = linitial(root->parse->sortClause);
 	TargetEntry *tle = get_sortgroupref_tle(sort->tleSortGroupRef, root->parse->targetList);
 	RangeTblEntry *rte = root->simple_rte_array[rel->relid];
@@ -560,9 +558,10 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 											 outer_relids,
 											 rel
 #ifdef PG16_GE
-											 , /* sjinfo = */ NULL
+											 ,
+											 /* sjinfo = */ NULL
 #endif
-											 );
+			);
 
 		/*
 		 * The outer join clauses don't form ECs and stay in joininfo, and we
@@ -571,13 +570,6 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 		 * not relevant for MergeJoin anyway and will be skipped.
 		 */
 		join_conditions = list_concat(join_conditions, rel->joininfo);
-
-		//		mybt();
-		//		fprintf(stderr, "generated clauses:\n");
-		//		my_print(join_conditions);
-
-		//		fprintf(stderr, "passed clauses:\n");
-		//		my_print(join_conditions_);
 
 		if (join_conditions == NIL)
 			return false;

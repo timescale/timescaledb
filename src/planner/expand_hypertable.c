@@ -904,8 +904,8 @@ find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, bool include_o
 }
 
 static bool
-should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *join_conditions,
-					int *order_attno, bool *reverse)
+should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, int *order_attno,
+					bool *reverse)
 {
 	/* check if optimizations are enabled */
 	if (!ts_guc_enable_optimizations || !ts_guc_enable_ordered_append ||
@@ -919,7 +919,7 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
 	if (root->parse->sortClause == NIL)
 		return false;
 
-	return ts_ordered_append_should_optimize(root, rel, ht, join_conditions, order_attno, reverse);
+	return ts_ordered_append_should_optimize(root, rel, ht, order_attno, reverse);
 }
 
 /**
@@ -953,8 +953,7 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 	 * to signal that this is safe to transform in ordered append plan in
 	 * set_rel_pathlist.
 	 */
-	if (rel->fdw_private != NULL &&
-		should_order_append(root, rel, ht, ctx->join_conditions, &order_attno, &reverse))
+	if (rel->fdw_private != NULL && should_order_append(root, rel, ht, &order_attno, &reverse))
 	{
 		TimescaleDBPrivate *priv = ts_get_private_reloptinfo(rel);
 		List **nested_oids = NULL;
