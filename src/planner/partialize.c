@@ -59,7 +59,11 @@ check_for_partialize_function_call(Node *node, PartializeWalkerState *state)
 	 * we're partializing
 	 */
 	if (state->looking_for_agg && !IsA(node, Aggref))
-		elog(ERROR, "the input to partialize must be an aggregate");
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_DATA_EXCEPTION),
+				 errmsg("the input to partialize must be an aggregate")));
+	}
 
 	if (IsA(node, Aggref))
 	{

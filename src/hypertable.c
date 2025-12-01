@@ -318,7 +318,7 @@ ts_resolve_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_ma
 
 		if (!ht)
 			ereport(ERROR,
-					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("no materialized table for continuous aggregate"),
 					 errdetail("Continuous aggregate \"%s\" had a materialized hypertable"
 							   " with id %d but it was not found in the hypertable "
@@ -1616,9 +1616,12 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 	 * earlier "ts_hypertable_create" implementation.
 	 */
 	if (IS_CLOSED_DIMENSION(dim_info))
+	{
 		ereport(ERROR,
-				(errmsg("cannot partition using a closed dimension on primary column"),
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("cannot partition using a closed dimension on primary column"),
 				 errhint("Use range partitioning on the primary column.")));
+	}
 
 	/*
 	 * Current implementation requires to provide a valid chunk sizing function
@@ -2487,10 +2490,11 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 
 	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 	if (osm_chunk_id == INVALID_CHUNK_ID)
-		elog(ERROR,
-			 "no OSM chunk found for hypertable %s.%s",
-			 quote_identifier(NameStr(ht->fd.schema_name)),
-			 quote_identifier(NameStr(ht->fd.table_name)));
+		ereport(ERROR,
+				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				errmsg("no OSM chunk found for hypertable %s.%s",
+					   quote_identifier(NameStr(ht->fd.schema_name)),
+					   quote_identifier(NameStr(ht->fd.table_name))));
 	/*
 	 * range_start, range_end arguments must be converted to internal representation
 	 * a NULL start value is interpreted as INT64_MAX - 1 and a NULL end value is
@@ -2499,7 +2503,9 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	 * OSM chunk is given upon creation, which is [INT64_MAX - 1, INT64_MAX]
 	 */
 	if ((PG_ARGISNULL(1) && !PG_ARGISNULL(2)) || (!PG_ARGISNULL(1) && PG_ARGISNULL(2)))
-		elog(ERROR, "range_start and range_end parameters must be both NULL or both non-NULL");
+		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("range_start and range_end parameters must be both NULL or both non-NULL"));
 
 	Oid argtypes[2];
 	for (int i = 0; i < 2; i++)
@@ -2555,6 +2561,7 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	 */
 	if (overlap)
 		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				errmsg("attempting to set overlapping range for tiered chunk of %s.%s",
 					   NameStr(ht->fd.schema_name),
 					   NameStr(ht->fd.table_name)),

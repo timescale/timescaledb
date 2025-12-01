@@ -201,7 +201,9 @@ ts_test_check_version_response(PG_FUNCTION_ARGS)
 		 * throw an error, so we capture the error here. The error message
 		 * contains the function pointer, which will vary between test runs,
 		 * so we do not re-throw the error here and instead print our own. */
-		ereport(ERROR, (errmsg("malformed telemetry response body")));
+		ereport(ERROR,
+				(errcode(ERRCODE_DIAGNOSTIC_EXCEPTION),
+				 errmsg("malformed telemetry response body")));
 	}
 	PG_END_TRY();
 	PG_RETURN_VOID();

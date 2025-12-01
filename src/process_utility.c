@@ -2140,7 +2140,8 @@ process_reindex(ProcessUtilityArgs *args)
 				ts_hypertable_permissions_check_by_id(ht->fd.id);
 				if (get_reindex_options(stmt) & REINDEXOPT_CONCURRENTLY)
 					ereport(ERROR,
-							(errmsg("concurrent index creation on hypertables is not supported")));
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("concurrent index creation on hypertables is not supported")));
 
 				if (foreach_chunk(ht, reindex_chunk, args) >= 0)
 					result = DDL_DONE;

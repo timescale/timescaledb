@@ -371,12 +371,18 @@ get_input_types(ArrayType *input_types, size_t *number_types)
 	int type_index = 0;
 
 	if (input_types == NULL)
-		elog(ERROR, "cannot pass null input_type with FINALFUNC_EXTRA aggregates");
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+				 errmsg("cannot pass null input_type with FINALFUNC_EXTRA aggregates")));
 
 	get_typlenbyvalalign(meta.element_type, &meta.typlen, &meta.typbyval, &meta.typalign);
 
 	if (ARR_NDIM(input_types) != 2)
-		elog(ERROR, "invalid input type array: wrong number of dimensions");
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_DATA_EXCEPTION),
+				 errmsg("invalid input type array: wrong number of dimensions")));
+	}
 
 	*number_types = ARR_DIMS(input_types)[0];
 	type_oids = palloc0(sizeof(*type_oids) * (*number_types));
@@ -393,7 +399,11 @@ get_input_types(ArrayType *input_types, size_t *number_types)
 		Oid type_oid;
 		ArrayType *slice_array = DatumGetArrayTypeP(slice_datum);
 		if (slice_null)
-			elog(ERROR, "invalid input type array slice: cannot be null");
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_EXCEPTION),
+					 errmsg("invalid input type array slice: cannot be null")));
+		}
 		deconstruct_array(slice_array,
 						  meta.element_type,
 						  meta.typlen,
@@ -403,7 +413,11 @@ get_input_types(ArrayType *input_types, size_t *number_types)
 						  NULL,
 						  &slice_elems);
 		if (slice_elems != 2)
-			elog(ERROR, "invalid input type array: expecting slices of size 2");
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_EXCEPTION),
+					 errmsg("invalid input type array: expecting slices of size 2")));
+		}
 
 		schema = DatumGetName(slice_fields[0]);
 		type_name = DatumGetName(slice_fields[1]);
@@ -414,7 +428,11 @@ get_input_types(ArrayType *input_types, size_t *number_types)
 								   PointerGetDatum(NameStr(*type_name)),
 								   ObjectIdGetDatum(schema_oid));
 		if (!OidIsValid(type_oid))
-			elog(ERROR, "invalid input type: %s.%s", NameStr(*schema), NameStr(*type_name));
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_EXCEPTION),
+					 errmsg("invalid input type: %s.%s", NameStr(*schema), NameStr(*type_name))));
+		}
 
 		type_oids[type_index++] = type_oid;
 	}
