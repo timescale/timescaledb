@@ -558,8 +558,11 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 			generate_join_implied_equalities(root,
 											 bms_union(outer_relids, inner_relids),
 											 outer_relids,
-											 rel,
-											 /* sjinfo = */ NULL);
+											 rel
+#ifdef PG16_GE
+											 , /* sjinfo = */ NULL
+#endif
+											 );
 
 		/*
 		 * The outer join clauses don't form ECs and stay in joininfo, and we
