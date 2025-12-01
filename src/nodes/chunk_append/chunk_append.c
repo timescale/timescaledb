@@ -557,7 +557,7 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 											 bms_union(outer_relids, inner_relids),
 											 outer_relids,
 											 rel
-#ifdef PG16_GE
+#if PG16_GE
 											 ,
 											 /* sjinfo = */ NULL
 #endif
