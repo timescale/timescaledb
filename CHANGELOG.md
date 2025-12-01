@@ -10,17 +10,29 @@ commands from accidentally triggering the load of a previous DB version.**
 This release contains performance improvements and bug fixes since the 2.23.1 release. We recommend that you upgrade at the next available opportunity.
 
 **Highlighted features in TimescaleDB v2.24.0**
-* 
+* Direct Compress now works with hypertables that have continuous aggregates by calculating invalidation ranges from batch min/max values in memory and writing them to the invalidation ranges table upon transaction completion.
+* Continuous aggregates now support UUIDv7 partitioned hypertables through the extended `time_bucket` function, which can accept UUIDv7 input and output timestamps with timezone.
+* The new `recompress := true` option on `compress_chunk` API enables in-memory recompression that is 4-5x faster than the previous disk-based approach.
 
-**Bloom version2**
-announcement pending
+**ARM support for bloom filters**
+The [sparse bloom filter indexes](https://www.tigerdata.com/blog/blocked-bloom-filters-speeding-up-point-lookups-in-tiger-postgres-native-columnstore) will stop working after upgrade to 2.24. If you are affected by this problem, the warning "bloom filter sparse indexes require action to re-enable" will appear in the Postgres log during upgrade.
+
+In versions before 2.24, the hashing scheme of the bloom filter sparse indexes used to depend on the build options of the TimescaleDB executables. These options are set by the package publishers and might differ between different package sources or even versions. After upgrading to a version with different options, the queries that use the bloom filter lookups could erroneously stop returning the rows that should in fact match the query conditions. The 2.24 release fixes this by using distinct column names for each hashing scheme.
+
+The bloom filter sparse indexes will be disabled on the compressed chunks created before upgrading to 2.24. To re-enable them, you have to decompress and then compress the affected chunks.
+
+If you were running the official APT package on AMD64 architecture, the hashing scheme did not change, and it is safe to use the existing bloom filter sparse indexes. To enable this, set the GUC `timescaledb.read_legacy_bloom1_v1 = on` in the server configuration.
+
+The chunks compressed after upgrade to 2.24 will use the new index format, and the bloom filter sparse indexes will continue working as usual for these chunks without any intervention.
+
+For more details, refer to the pull request https://github.com/timescale/timescaledb/pull/8761
 
 **Deprecations**
 * The next release of TimescaleDB will remove the deprecated partial continuous aggregates format. The new format was introduced in [`2.7.0`](https://github.com/timescale/timescaledb/releases/tag/2.7.0), and provides significant improvements in terms of performance and storage efficiency. Please use [`cagg_migrate(<CONTINUOUS_AGGREGATE_NAME>)`](https://www.tigerdata.com/docs/use-timescale/latest/continuous-aggregates/migrate) to migrate to the new format. Tiger Cloud users are migrated automatically.
 * In future releases the deprecated view `timescaledb_information.compression_settings` will be removed. Please use [timescaledb_information.hypertable_columnstore_settings](https://www.tigerdata.com/docs/api/latest/hypercore/hypertable_columnstore_settings) as a replacement.
 
 **Backward-Incompatible Changes**
-* [#8761](https://github.com/timescale/timescaledb/pull/8761) Change the version of the bloom filter sparse indexes. The existing indexes will stop working and will require action to re-enable. See the changelog for details.
+* [#8761](https://github.com/timescale/timescaledb/pull/8761) Fix matching rows in queries using the bloom filter sparse indexes potentially not returned after extension upgrade. The version of the bloom filter sparse indexes is changed. The existing indexes will stop working and will require action to re-enable. See the section below for details.
 
 **Features**
 * [#8465](https://github.com/timescale/timescaledb/pull/8465) Speed up the filters like `x = any(array[...])` using bloom filter sparse indexes.
