@@ -311,9 +311,9 @@ ORDER BY 1;
 
 -- drop 1 chunk
 \if :IS_TIME_DIMENSION
-    SELECT drop_chunks('conditions', older_than => CAST('2022-01-08 00:00:00-00' AS :TIME_DIMENSION_DATATYPE));
+    SELECT drop_chunks('conditions', older_than => CAST('2022-01-08 00:00:00-00' AS :TIME_DIMENSION_DATATYPE), force=>true);
 \else
-    SELECT drop_chunks('conditions', older_than => 10);
+    SELECT drop_chunks('conditions', older_than => 10, force=>true);
 \endif
 
 -- now he have one chunk marked as dropped
