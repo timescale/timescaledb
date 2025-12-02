@@ -12,7 +12,7 @@ This release contains performance improvements and bug fixes since the 2.23.1 re
 **Highlighted features in TimescaleDB v2.24.0**
 * **Direct Compress just got smarter and faster**: it now works seamlessly with hypertables generating continuous aggregates. Invalidation ranges are computed directly in-memory based on the ingested batches and written efficiently at transaction commit. This change reduces the IO footprint drastically by removing the write amplification of the invalidation logs.
 * **Continuous aggregates now speak UUIDv7**: hypertables partitioned by UUIDv7 are fully supported through an enhanced `time_bucket` that accepts UUIDv7 values and returns precise, timezone-aware timestamps — unlocking powerful time-series analytics on modern UUID-driven table schemas.
-* **Lightning-fast recompression**: the new `recompress := true` option on the `compress_chunk` API enables pure in-memory recompression, delivering a **4–5× speed boost** over the previous disk-based process.
+* **Lightning-fast recompression**: the new `recompress := true` option on the `convert_to_columnstore` API enables pure in-memory recompression, delivering a **4–5× speed boost** over the previous disk-based process.
 
 **ARM support for bloom filters**
 The [sparse bloom filter indexes](https://www.tigerdata.com/blog/blocked-bloom-filters-speeding-up-point-lookups-in-tiger-postgres-native-columnstore) will stop working after upgrade to 2.24. If you are affected by this problem, the warning "bloom filter sparse indexes require action to re-enable" will appear in the Postgres log during upgrade.
