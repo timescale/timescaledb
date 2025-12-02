@@ -216,9 +216,9 @@ SET timescaledb.enable_in_memory_recompression = off;
 -- Insert test data
 INSERT INTO recomp_guc_test VALUES ('2000-01-01 00:00:00', 'device1', 20.5);
 
--- Compress all chunks
-SELECT compress_chunk(ch) FROM show_chunks('recomp_guc_test') ch;
-SELECT compress_chunk(ch, recompress := true) FROM show_chunks('recomp_guc_test') ch LIMIT 1;
+SELECT ch AS chunk FROM show_chunks('recomp_guc_test') ch ORDER BY ch LIMIT 1 \gset
+CALL convert_to_columnstore(:'chunk');
+CALL convert_to_columnstore(:'chunk', recompress := true);
 
 -- Verify data integrity after fallback recompression
 SELECT COUNT(*) FROM recomp_guc_test;
