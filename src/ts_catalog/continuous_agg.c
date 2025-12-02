@@ -1621,3 +1621,25 @@ ts_continuous_agg_bucket_width(const ContinuousAggBucketFunction *bucket_functio
 
 	return bucket_width;
 }
+
+int64
+ts_get_earliest_watermark_on_hypertable(int32 hypertable_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+
+	init_scan_by_raw_hypertable_id(&iterator, hypertable_id);
+	/* cagg watermark is stored as int64, so we know it's an INT8OID */
+	int64 earliest_watermark = ts_time_get_max(INT8OID);
+
+	ts_scanner_foreach(&iterator)
+	{
+		FormData_continuous_agg data;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
+		continuous_agg_formdata_fill(&data, ti);
+		int64 watermark = ts_cagg_watermark_get(data.mat_hypertable_id);
+		earliest_watermark = MIN(earliest_watermark, watermark);
+	}
+	return earliest_watermark;
+}

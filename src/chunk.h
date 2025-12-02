@@ -21,7 +21,7 @@
 
 /* Should match definitions in ddl_api.sql */
 #define DROP_CHUNKS_FUNCNAME "drop_chunks"
-#define DROP_CHUNKS_NARGS 6
+#define DROP_CHUNKS_NARGS 7
 #define COMPRESS_CHUNK_FUNCNAME "compress_chunk"
 #define COMPRESS_CHUNK_NARGS 2
 #define DECOMPRESS_CHUNK_FUNCNAME "decompress_chunk"
@@ -218,7 +218,7 @@ extern TSDLLEXPORT void ts_chunk_drop_preserve_catalog_row(const Chunk *chunk,
 														   DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than,
 												 int32 log_level, Oid time_type, Oid arg_type,
-												 bool older_newer);
+												 bool older_newer, bool force);
 extern TSDLLEXPORT Chunk *
 ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const char *schema_name,
 									 const char *table_name, Oid chunk_table_relid, bool *created);

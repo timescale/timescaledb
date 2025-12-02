@@ -43,6 +43,7 @@
 #include <utils/hsearch.h>
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
+#include <utils/multirangetypes.h>
 #include <utils/palloc.h>
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
@@ -4057,8 +4058,7 @@ lock_referenced_tables(Oid table_relid)
 
 List *
 ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int32 log_level,
-						Oid time_type, Oid arg_type, bool older_newer)
-
+						Oid time_type, Oid arg_type, bool older_newer, bool force)
 {
 	uint64 num_chunks = 0;
 	Chunk *chunks;
@@ -4157,8 +4157,16 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	DEBUG_WAITPOINT("drop_chunks_chunks_found");
 
 	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
+
+	int64 earliest_watermark = older_than;
+
 	if (has_continuous_aggs)
 	{
+		/* If the hypertable has a continuous aggregate on it, we need to make sure that it has been
+		 * updated with the data in the chunk being dropped. Otherwise we block the chunk being
+		 * dropped. We do this by considering the earliest hypertable watermark across all
+		 * continuous aggregates on the hypertable. */
+		earliest_watermark = ts_get_earliest_watermark_on_hypertable(hypertable_id);
 		/* Exclusively lock all chunks, and invalidate the continuous
 		 * aggregates in the regions covered by the chunks. We do this in two
 		 * steps: first lock all the chunks and then invalidate the
@@ -4194,6 +4202,13 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			int64 start = ts_chunk_primary_dimension_start(&chunks[i]);
 			int64 end = ts_chunk_primary_dimension_end(&chunks[i]);
 
+			/* Chunks containing data after the watermark will not be dropped
+			 * unless force is specified so no need to invalidate the range
+			 */
+			if (!force && (start >= earliest_watermark || end > earliest_watermark))
+			{
+				continue;
+			}
 			ts_cm_functions->continuous_agg_invalidate_raw_ht(ht, start, end);
 		}
 	}
@@ -4218,11 +4233,39 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		schema_name = quote_identifier(NameStr(chunks[i].fd.schema_name));
 		table_name = quote_identifier(NameStr(chunks[i].fd.table_name));
 		chunk_name = psprintf("%s.%s", schema_name, table_name);
+
+		int64 start = ts_chunk_primary_dimension_start(&chunks[i]);
+		int64 end = ts_chunk_primary_dimension_end(&chunks[i]);
+		if (has_continuous_aggs && (start >= earliest_watermark || end > earliest_watermark))
+		{
+			// If force parameter is not specified or false, skip dropping the chunk and show a
+			// notice. If force is true, print a WARNING and drop it anyway
+			if (!force)
+			{
+				ereport(NOTICE,
+						(errmsg("skipping %s, chunk contains data required for a continuous "
+								"aggregate refresh",
+								chunk_name),
+						 errhint("To drop this chunk, refresh all continuous aggregates on this "
+								 "hypertable till %s, or specify force=>true",
+								 ts_internal_to_time_string(end,
+															ht->space->dimensions[0]
+																.fd.column_type))));
+				continue;
+			}
+			ereport(WARNING,
+					(errmsg("%s contained data required for continuous "
+							"aggregate refresh",
+							chunk_name)));
+		}
+
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
 		ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
 	}
 	// if we have tiered chunks cascade drop to tiering layer as well
+	// Since we can only drop chunks up until the earliest_watermark, we can modify the call to the
+	// OSM hook to cap the range at earliest_watermark
 	if (osm_chunk_id != INVALID_CHUNK_ID)
 	{
 		Chunk *osm_chunk = ts_chunk_get_by_id(osm_chunk_id, true);
@@ -4243,17 +4286,24 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		{
 			ListCell *lc;
 			Dimension *dim = &ht->space->dimensions[0];
-			/* convert to PG timestamp from timescaledb internal format */
-			int64 range_start = ts_internal_to_time_int64(newer_than, dim->fd.column_type);
-			int64 range_end = ts_internal_to_time_int64(older_than, dim->fd.column_type);
-			List *osm_dropped_names = osm_drop_chunks_hook(osm_chunk->table_id,
-														   NameStr(ht->fd.schema_name),
-														   NameStr(ht->fd.table_name),
-														   range_start,
-														   range_end);
-			foreach (lc, osm_dropped_names)
+			/* Check if any chunks need to be dropped based on earliest_watermark*/
+			if (newer_than <= earliest_watermark)
 			{
-				dropped_chunk_names = lappend(dropped_chunk_names, lfirst(lc));
+				/* convert to PG timestamp from timescaledb internal format */
+				int64 range_start = ts_internal_to_time_int64(newer_than, dim->fd.column_type);
+				/* Cap the range at earliest_watermark since we don't drop any chunks after that
+				 * anyway */
+				int64 range_end = ts_internal_to_time_int64(MIN(older_than, earliest_watermark),
+															dim->fd.column_type);
+				List *osm_dropped_names = osm_drop_chunks_hook(osm_chunk->table_id,
+															   NameStr(ht->fd.schema_name),
+															   NameStr(ht->fd.table_name),
+															   range_start,
+															   range_end);
+				foreach (lc, osm_dropped_names)
+				{
+					dropped_chunk_names = lappend(dropped_chunk_names, lfirst(lc));
+				}
 			}
 		}
 	}
@@ -4347,6 +4397,9 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(true);
 }
 
+/*
+ * drop_chunks(relation, older_than, newer_than, verbose, created_before, created_after, force)
+ */
 Datum
 ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 {
@@ -4367,6 +4420,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	volatile int64 created_after = PG_INT64_MIN;
 	volatile bool older_newer = false;
 	volatile bool before_after = false;
+	volatile bool force = false;
 
 	bool verbose;
 	int elevel;
@@ -4511,6 +4565,8 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	verbose = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
 	elevel = verbose ? INFO : DEBUG2;
 
+	force = PG_ARGISNULL(6) ? false : PG_GETARG_BOOL(6);
+
 	/* Initial multi function call setup */
 	funcctx = SRF_FIRSTCALL_INIT();
 
@@ -4525,7 +4581,8 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 										  elevel,
 										  time_type,
 										  arg_type,
-										  older_newer);
+										  older_newer,
+										  force);
 	}
 	PG_CATCH();
 	{

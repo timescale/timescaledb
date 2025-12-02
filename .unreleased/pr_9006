@@ -1,0 +1,1 @@
+Implements: #9006 Prevent drop_chunks from dropping CAgg-dependent chunks
