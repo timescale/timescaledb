@@ -118,3 +118,7 @@ select * from dates join times on times.ts = dates.ts where times.ts > '2021-01-
 explain (analyze, costs off, buffers off, summary off, timing off)
 select * from dates join times on times.ts = dates.ts where times.ts > '2021-01-01' order by dates.ts limit 1;
 
+drop table dates;
+
+drop table times;
+

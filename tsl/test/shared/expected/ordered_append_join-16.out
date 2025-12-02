@@ -4240,3 +4240,5 @@ select * from dates join times on times.ts = dates.ts where times.ts > '2021-01-
                      ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                      ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (never executed)
 
+drop table dates;
+drop table times;
