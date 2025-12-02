@@ -904,7 +904,7 @@ tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer, Tupl
 		compressor->tuples_to_sort++;
 
 		if (compressor->tuple_sort_limit &&
-			compressor->tuples_to_sort > compressor->tuple_sort_limit)
+			compressor->tuples_to_sort >= compressor->tuple_sort_limit)
 			tsl_compressor_flush(compressor, bulk_writer);
 	}
 	else
