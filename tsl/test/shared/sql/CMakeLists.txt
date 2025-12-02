@@ -1,11 +1,9 @@
 set(TEST_FILES_SHARED
-    cagg_compression.sql
     chunkwise_agg_gather_sort.sql
     classify_relation.sql
     compat.sql
     compress_bloom_sparse_compat.sql
     compress_unique_index.sql
-    compression_dml.sql
     compression_nulls_not_distinct.sql
     constraint_aware_append.sql
     decompress_join.sql
@@ -26,7 +24,7 @@ set(TEST_TEMPLATES_SHARED
     space_constraint.sql.in
     transparent_decompress_chunk.sql.in)
 
-set(SOLO_TESTS merge_dml.sql)
+set(SOLO_TESTS cagg_compression.sql compression_dml.sql merge_dml.sql)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES_SHARED extension.sql timestamp_limits.sql
@@ -78,9 +76,7 @@ file(APPEND ${TEST_SCHEDULE_SHARED} "\n")
 set(GROUP_MEMBERS 0)
 foreach(TEST_FILE ${SOLO_TESTS})
   string(REGEX REPLACE "(.+)\.sql" "\\1" TESTS_TO_RUN ${TEST_FILE})
-  if(GROUP_MEMBERS EQUAL 0)
-    file(APPEND ${TEST_SCHEDULE_SHARED} "\ntest: ")
-  endif()
+  file(APPEND ${TEST_SCHEDULE_SHARED} "\ntest: ")
   file(APPEND ${TEST_SCHEDULE_SHARED} "${TESTS_TO_RUN} ")
   math(EXPR GROUP_MEMBERS "(${GROUP_MEMBERS}+1)%${PARALLEL_GROUP_SIZE}")
 endforeach(TEST_FILE)
