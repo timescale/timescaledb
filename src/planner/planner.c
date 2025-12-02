@@ -26,6 +26,8 @@
 #include <parser/parse_param.h>
 #include <parser/parse_relation.h>
 #include <parser/parsetree.h>
+#include <rewrite/rewriteHandler.h>
+#include <utils/date.h>
 #include <utils/elog.h>
 #include <utils/fmgroids.h>
 #include <utils/guc.h>
@@ -54,9 +56,11 @@
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "nodes/modify_hypertable.h"
 #include "partitioning.h"
+#include "planner/continuous_agg_rewrites.h"
 #include "planner/partialize.h"
 #include "planner/planner.h"
 #include "sort_transform.h"
+#include "timezones.h"
 #include "utils.h"
 
 #include "compat/compat.h"
@@ -291,6 +295,8 @@ typedef struct
 	Query *rootquery;
 	Query *current_query;
 	PlannerInfo *root;
+	bool enable_cagg_rewrites;
+	bool cagg_rewrites_debug_info;
 } PreprocessQueryContext;
 
 static void preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *context);
@@ -396,7 +402,41 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 			}
 		}
 	}
-
+	/* FROM subquery can be a Cagg (user or internal) view: don't rewrite it with Caggs in this case
+	 */
+	else if (IsA(node, RangeTblEntry) && ts_guc_enable_optimizations &&
+			 (ts_guc_enable_cagg_rewrites || ts_guc_cagg_rewrites_debug_info))
+	{
+		RangeTblEntry *rte = castNode(RangeTblEntry, node);
+		if (rte->rtekind == RTE_SUBQUERY)
+		{
+			Query *prev_query = context->current_query;
+			bool prev_enable_cagg_rewrites = context->enable_cagg_rewrites;
+			bool prev_cagg_rewrites_debug_info = context->cagg_rewrites_debug_info;
+			context->current_query = rte->subquery;
+			if (rte->relkind == RELKIND_VIEW)
+			{
+				const char *view_name = get_rel_name(rte->relid);
+				const char *view_schema = get_namespace_name(get_rel_namespace(rte->relid));
+				ContinuousAgg *cagg = ts_continuous_agg_find_by_view_name(view_schema,
+																		  view_name,
+																		  ContinuousAggAnyView);
+				if (cagg)
+				{
+					context->enable_cagg_rewrites = false;
+					context->cagg_rewrites_debug_info = false;
+				}
+			}
+			bool ret = query_tree_walker(rte->subquery, preprocess_query, context, 0);
+			context->current_query = prev_query;
+			context->enable_cagg_rewrites = prev_enable_cagg_rewrites;
+			context->cagg_rewrites_debug_info = prev_cagg_rewrites_debug_info;
+			return ret;
+		}
+		/* Stop recursion if not a subquery */
+		else
+			return false;
+	}
 	else if (IsA(node, Query))
 	{
 		Query *query = castNode(Query, node);
@@ -411,10 +451,22 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 			preprocess_fk_checks(query, hcache, context);
 		}
 
+		CaggRewriteContext cagg_rewrite_ctx = { 0 };
+		cagg_rewrite_ctx.eligible =
+			context->enable_cagg_rewrites || context->cagg_rewrites_debug_info;
+		if (context->cagg_rewrites_debug_info)
+			cagg_rewrite_ctx.msg = makeStringInfo();
+
+		if (cagg_rewrite_ctx.eligible)
+			check_query_for_cagg_rewrites(&cagg_rewrite_ctx, query);
+
 		foreach (lc, query->rtable)
 		{
 			RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
 			Hypertable *ht;
+
+			if (cagg_rewrite_ctx.eligible)
+				check_query_rtes_for_cagg_rewrites(&cagg_rewrite_ctx, rte);
 
 			switch (rte->rtekind)
 			{
@@ -439,6 +491,9 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 							!IS_UPDL_CMD(context->rootquery) && query->resultRelation == 0 &&
 							query->rowMarks == NIL && rte->inh)
 							rte_mark_for_expansion(rte);
+
+						/* Record hypertable in case query will be eligible for Cagg rewrites */
+						cagg_rewrite_ctx.ht = ht;
 
 						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 						{
@@ -471,10 +526,64 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 			}
 			rti++;
 		}
+
+		if (cagg_rewrite_ctx.eligible && !cagg_rewrite_ctx.ht_rte)
+		{
+			cagg_rewrite_ctx.eligible = false;
+			if (context->cagg_rewrites_debug_info)
+				appendStringInfoString(cagg_rewrite_ctx.msg,
+									   "at least one hypertable should be used in the query");
+		}
+
+		/* Found a hypertable, check that time bucket is valid and on hypertable time dimension */
+		if (cagg_rewrite_ctx.eligible
+			/* TBD: address hierarchical Caggs which obtain "ht" differently */
+			&& cagg_rewrite_ctx.ht)
+		{
+			check_timebucket_for_cagg_rewrites(&cagg_rewrite_ctx, query);
+		}
+		/* Validated all we could before retrieving CAggs for the hypertable,
+		 * now we'll try to match available CAggs to the query.
+		 * If CAgg rewrites are disabled we will do match without rewriting, for debug info.
+		 */
+		if (cagg_rewrite_ctx.eligible)
+			match_query_to_cagg(&cagg_rewrite_ctx, query, context->enable_cagg_rewrites);
+
+		if (context->cagg_rewrites_debug_info)
+		{
+			if (cagg_rewrite_ctx.cagg)
+			{
+				if (context->enable_cagg_rewrites)
+					elog(INFO,
+						 "Query was rewritten with Cagg %s.%s",
+						 cagg_rewrite_ctx.cagg->data.user_view_schema.data,
+						 cagg_rewrite_ctx.cagg->data.user_view_name.data);
+				else
+					elog(INFO,
+						 "Query can be rewritten with Cagg %s.%s",
+						 cagg_rewrite_ctx.cagg->data.user_view_schema.data,
+						 cagg_rewrite_ctx.cagg->data.user_view_name.data);
+			}
+			else
+				elog(INFO, "Query cannot be rewritten with CAggs: %s", cagg_rewrite_ctx.msg->data);
+		}
+
 		prev_query = context->current_query;
 		context->current_query = query;
+		bool prev_enable_cagg_rewrites = context->enable_cagg_rewrites;
+		bool prev_cagg_rewrites_debug_info = context->cagg_rewrites_debug_info;
+
+		/* We've just rewritten this query with Caggs: don't rewrite it again
+		 * and don't validate it for Caggs either */
+		if (cagg_rewrite_ctx.cagg)
+		{
+			context->enable_cagg_rewrites = false;
+			context->cagg_rewrites_debug_info = false;
+		}
 		ret = query_tree_walker(query, preprocess_query, context, 0);
 		context->current_query = prev_query;
+		context->cagg_rewrites_debug_info = prev_cagg_rewrites_debug_info;
+		context->enable_cagg_rewrites = prev_enable_cagg_rewrites;
 		return ret;
 	}
 
@@ -646,6 +755,13 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 	PG_TRY();
 	{
 		PreprocessQueryContext context = { 0 };
+
+#if PG16_GE
+		/* Support Cagg rewrites from PG16
+		 * as PG15 has dummy RTEs in view queries adding unnecessary rewrite complications */
+		context.enable_cagg_rewrites = ts_guc_enable_cagg_rewrites;
+		context.cagg_rewrites_debug_info = ts_guc_cagg_rewrites_debug_info;
+#endif
 		PlannerGlobal glob = {
 			.boundParams = bound_params,
 		};
