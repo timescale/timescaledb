@@ -228,10 +228,11 @@ ROLLBACK;
 
 -- simple test with compressed copy enabled and sorting limited to 500
 -- batches should be limited to that amount so we have more compressed batches
+-- dataset is tweaked to fall into a single chunk with exactly 3 batches
 BEGIN;
 SET timescaledb.enable_direct_compress_copy = true;
-SET timescaledb.direct_compress_copy_tuple_sort_limit = 500;
-COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
+SET timescaledb.direct_compress_copy_tuple_sort_limit = 1000;
+COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-02 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
 ROLLBACK;
