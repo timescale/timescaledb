@@ -236,7 +236,7 @@ process_additional_timebucket_parameter(ContinuousAggBucketFunction *bf, Const *
 			break;
 		default:
 			ereport(ERROR,
-					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("unable to handle time_bucket parameter of type: %s",
 							format_type_be(exprType((Node *) arg)))));
 			pg_unreachable();
@@ -1170,7 +1170,7 @@ cagg_get_boundary_converter_funcoid(Oid typoid)
 			 * should be caught at much earlier stages.
 			 */
 			ereport(ERROR,
-					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("no converter function defined for datatype: %s",
 							format_type_be(typoid))));
 			pg_unreachable();
@@ -1233,7 +1233,7 @@ build_conversion_call(Oid type, FuncExpr *boundary)
 			 * should catch this.
 			 */
 			ereport(ERROR,
-					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("unsupported datatype for continuous aggregates: %s",
 							format_type_be(type))));
 			pg_unreachable();

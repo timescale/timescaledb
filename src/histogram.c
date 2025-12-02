@@ -61,13 +61,15 @@ ts_hist_sfunc(PG_FUNCTION_ARGS)
 	if (!AggCheckCallContext(fcinfo, &aggcontext))
 	{
 		/* cannot be called directly because of internal-type argument */
-		elog(ERROR, "ts_hist_sfunc called in non-aggregate context");
+		ereport(ERROR, (errmsg("ts_hist_sfunc called in non-aggregate context")));
 	}
 
 	if (min > max)
 	{
 		/* cannot generate a histogram with incompatible bounds */
-		elog(ERROR, "lower bound cannot exceed upper bound");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("lower bound cannot exceed upper bound")));
 	}
 
 	if (state == NULL)
@@ -84,7 +86,9 @@ ts_hist_sfunc(PG_FUNCTION_ARGS)
 	 */
 	nbuckets = state->nbuckets - 2;
 	if (nbuckets != PG_GETARG_INT32(4))
-		elog(ERROR, "number of buckets must not change between calls");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("number of buckets must not change between calls")));
 
 	int32 bucket = DatumGetInt32(DirectFunctionCall4(width_bucket_float8,
 													 val_datum,
@@ -94,12 +98,17 @@ ts_hist_sfunc(PG_FUNCTION_ARGS)
 
 	/* Increment the proper histogram bucket */
 	if (bucket < 0 || bucket >= state->nbuckets)
+	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
 				 errmsg("index %d from \"width_bucket\" out of range", bucket),
 				 errhint("You probably have a floating point overflow.")));
+	}
+
 	if (DatumGetInt32(state->buckets[bucket]) >= PG_INT32_MAX - 1)
+	{
 		elog(ERROR, "overflow in histogram");
+	}
 
 	state->buckets[bucket] = Int32GetDatum(DatumGetInt32(state->buckets[bucket]) + 1);
 
