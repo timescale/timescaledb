@@ -864,11 +864,6 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 			return result;
 		}
 	}
-	else
-	{
-		//		fprintf(stderr, "other node:\n");
-		//		my_print(node);
-	}
 
 	return expression_tree_walker(node, collect_quals_walker, ctx);
 }
@@ -948,14 +943,17 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 	/*
 	 * This is where the magic happens: use our HypertableRestrictInfo
 	 * infrastructure to deduce the appropriate chunks using our range
-	 * exclusion
+	 * exclusion.
 	 */
 	List *restrictions = rel->baserestrictinfo;
-//	mybt();
-//	fprintf(stderr, "restrictions:\n");
-//	my_print(restrictions);
 
-	List *extras = NIL;
+	/*
+	 * Some time conditions that are not directly applicable for the chunk
+	 * exclusion, but imply a simpler time comparison condition which can be
+	 * used for chunk expansion. Go over the original list of restrictions on
+	 * the table and collect a list of simplified conditions.
+	 */
+	List *simplified_conditions = NIL;
 	ListCell *lc;
 	foreach (lc, restrictions)
 	{
@@ -971,14 +969,14 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 				(IsA(right, Var) && is_timestamptz_op_interval(left)))
 			{
 				/*
-				 * check for constraints with TIMESTAMPTZ OP INTERVAL calculations
+				 * Check for constraints with TIMESTAMPTZ OP INTERVAL calculations.
 				 */
-				Expr *constified = (Expr *) constify_timestamptz_op_interval(root, op);
-				if (constified != (Expr *) op)
+				Expr *transformed = (Expr *) constify_timestamptz_op_interval(root, op);
+				if (transformed != (Expr *) op)
 				{
 					RestrictInfo *ri_copy = copyObject(ri);
-					ri_copy->clause = constified;
-					extras = lappend(extras, ri_copy);
+					ri_copy->clause = transformed;
+					simplified_conditions = lappend(simplified_conditions, ri_copy);
 				}
 			}
 			else
@@ -995,17 +993,14 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 					 */
 					RestrictInfo *ri_copy = copyObject(ri);
 					ri_copy->clause = transformed;
-					extras = lappend(extras, ri_copy);
+					simplified_conditions = lappend(simplified_conditions, ri_copy);
 				}
 			}
 		}
 	}
 
-//	fprintf(stderr, "extras:\n");
-//	my_print(extras);
-
 	ts_hypertable_restrict_info_add(hri, root, restrictions);
-	ts_hypertable_restrict_info_add(hri, root, extras);
+	ts_hypertable_restrict_info_add(hri, root, simplified_conditions);
 
 	/*
 	 * If fdw_private has not been setup by caller there is no point checking
