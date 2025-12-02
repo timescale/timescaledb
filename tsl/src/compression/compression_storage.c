@@ -167,10 +167,17 @@ set_toast_tuple_target_on_chunk(Oid compressed_table_id)
 		.defaction = DEFELEM_SET,
 		.location = -1,
 	};
+	DefElem def_elem2 = {
+		.type = T_DefElem,
+		.defname = "parallel_workers",
+		.arg = (Node *) makeInteger(12),
+		.defaction = DEFELEM_SET,
+		.location = -1,
+	};
 	AlterTableCmd cmd = {
 		.type = T_AlterTableCmd,
 		.subtype = AT_SetRelOptions,
-		.def = (Node *) list_make1(&def_elem),
+		.def = (Node *) list_make2(&def_elem, &def_elem2),
 	};
 
 	AlterTableInternal(compressed_table_id, list_make1(&cmd), true);
