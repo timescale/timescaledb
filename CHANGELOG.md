@@ -10,9 +10,9 @@ commands from accidentally triggering the load of a previous DB version.**
 This release contains performance improvements and bug fixes since the 2.23.1 release. We recommend that you upgrade at the next available opportunity.
 
 **Highlighted features in TimescaleDB v2.24.0**
-* Direct Compress now works with hypertables that have continuous aggregates by calculating invalidation ranges from batch min/max values in memory and writing them to the invalidation ranges table upon transaction completion.
-* Continuous aggregates now support UUIDv7 partitioned hypertables through the extended `time_bucket` function, which can accept UUIDv7 input and output timestamps with timezone.
-* The new `recompress := true` option on `compress_chunk` API enables in-memory recompression that is 4-5x faster than the previous disk-based approach.
+* **Direct Compress just got smarter and faster**: it now works seamlessly with hypertables generating continuous aggregates. Invalidation ranges are computed directly in-memory based on the ingested batches and written efficiently at transaction commit - this change reduces IO footprint drasticly by removing the write amplication of the invalidation logs.
+* **Continuous aggregates now speak UUIDv7**: hypertables partitioned by UUIDv7 are fully supported through an enhanced `time_bucket` that accepts UUIDv7 values and returns precise, timezone-aware timestamps — unlocking powerful time-series analytics on modern UUID-driven table schemas.
+* **Lightning-fast recompression**: the new `recompress := true` option on the `compress_chunk` API enables pure in-memory recompression, delivering a **4–5× speed boost** over the previous disk-based process.
 
 **ARM support for bloom filters**
 The [sparse bloom filter indexes](https://www.tigerdata.com/blog/blocked-bloom-filters-speeding-up-point-lookups-in-tiger-postgres-native-columnstore) will stop working after upgrade to 2.24. If you are affected by this problem, the warning "bloom filter sparse indexes require action to re-enable" will appear in the Postgres log during upgrade.
@@ -25,7 +25,7 @@ If you were running the official APT package on AMD64 architecture, the hashing 
 
 The chunks compressed after upgrade to 2.24 will use the new index format, and the bloom filter sparse indexes will continue working as usual for these chunks without any intervention.
 
-For more details, refer to the pull request https://github.com/timescale/timescaledb/pull/8761
+For more details, refer to the pull request [#8761](https://github.com/timescale/timescaledb/pull/8761).
 
 **Deprecations**
 * The next release of TimescaleDB will remove the deprecated partial continuous aggregates format. The new format was introduced in [`2.7.0`](https://github.com/timescale/timescaledb/releases/tag/2.7.0), and provides significant improvements in terms of performance and storage efficiency. Please use [`cagg_migrate(<CONTINUOUS_AGGREGATE_NAME>)`](https://www.tigerdata.com/docs/use-timescale/latest/continuous-aggregates/migrate) to migrate to the new format. Tiger Cloud users are migrated automatically.
@@ -47,6 +47,7 @@ For more details, refer to the pull request https://github.com/timescale/timesca
 * [#8939](https://github.com/timescale/timescaledb/pull/8939) Support continuous aggregates on UUIDv7-partitioned hypertables
 * [#8959](https://github.com/timescale/timescaledb/pull/8959) Cap continuous aggregate invalidation interval range at chunk boundary
 * [#8975](https://github.com/timescale/timescaledb/pull/8975) Exclude date/time columns from default segmentby
+* [#8993](https://github.com/timescale/timescaledb/pull/8993) Add GUC for in-memory recompression
 
 **Bugfixes**
 * [#8839](https://github.com/timescale/timescaledb/pull/8839) Improve `_timescaledb_functions.cagg_watermark` error handling
@@ -55,14 +56,16 @@ For more details, refer to the pull request https://github.com/timescale/timesca
 * [#8942](https://github.com/timescale/timescaledb/pull/8942) Fix lateral join handling for compressed chunks
 * [#8958](https://github.com/timescale/timescaledb/pull/8958) Fix if_not_exists behaviour when adding refresh policy
 * [#8969](https://github.com/timescale/timescaledb/pull/8969) Gracefully handle missing job stat in background worker
+* [#8988](https://github.com/timescale/timescaledb/pull/8988) Don't ignore additional filters on same column when building scankeys
 
 **GUCs**
 * `direct_compress_copy_tuple_sort_limit`: Number of tuples that can be sorted at once in a `COPY` operation.
 * `direct_compress_insert_tuple_sort_limit`: Number of tuples that can be sorted at once in an `INSERT` operation.
 * `read_legacy_bloom1_v1`: Enable reading the legacy `bloom1` version 1 sparse indexes for `SELECT` queries.
+* `enable_in_memory_recompression`: Enable in-memory recompression functionality.
 
 **Thanks**
-* @bezpechno for implementing ALTER COLUMN TYPE for hypertable with columnstore when no compressed chunks exist
+* @bezpechno for implementing `ALTER COLUMN TYPE` for hypertable with columnstore when no compressed chunks exist
 
 ## 2.23.1 (2025-11-13)
 
