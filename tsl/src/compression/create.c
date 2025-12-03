@@ -115,6 +115,28 @@ compression_column_segment_metadata_name(const char *type, int16 column_index)
 	return buf;
 }
 
+/*
+ * Validate that compression settings don't exceed PostgreSQL's INDEX_MAX_KEYS limit.
+ *
+ * Compression creates an implicit index on the compressed chunk with:
+ * - 1 index key per segmentby column
+ * - 2 index keys per orderby column (for min/max metadata)
+ */
+static void
+validate_compression_index_key_limit(CompressionSettings *settings)
+{
+	int num_segmentby_keys = ts_array_length(settings->fd.segmentby);
+	int num_orderby_keys = 2 * ts_array_length(settings->fd.orderby);
+	if ((num_segmentby_keys + num_orderby_keys) > INDEX_MAX_KEYS)
+		ereport(ERROR,
+				(errcode(ERRCODE_TOO_MANY_COLUMNS),
+				 errmsg("too many segmentby and orderby columns"),
+				 errdetail("Combined segmentby keys (%d) and orderby keys (%d) cannot exceed %d",
+						   num_segmentby_keys,
+						   num_orderby_keys,
+						   INDEX_MAX_KEYS)));
+}
+
 char *
 column_segment_min_name(int16 column_index)
 {
@@ -1431,6 +1453,9 @@ compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 	{
 		settings->fd.index = ts_add_orderby_sparse_index(settings);
 	}
+
+	/* should always be valid, but call as a sanity check */
+	validate_compression_index_key_limit(settings);
 }
 
 static void
@@ -1486,6 +1511,8 @@ compression_settings_set_manually_for_alter(Hypertable *ht, CompressionSettings 
 		settings->fd.index = ts_add_orderby_sparse_index(settings);
 	}
 
+	validate_compression_index_key_limit(settings);
+
 	/* update manual settings */
 	ts_compression_settings_update(settings);
 }
@@ -1537,6 +1564,8 @@ compression_settings_set_manually_for_create(Hypertable *ht, CompressionSettings
 	{
 		settings->fd.index = ts_add_orderby_sparse_index(settings);
 	}
+
+	validate_compression_index_key_limit(settings);
 
 	/* update manual settings */
 	ts_compression_settings_update(settings);
