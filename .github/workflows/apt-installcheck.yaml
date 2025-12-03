@@ -109,7 +109,7 @@ jobs:
         sudo -u postgres cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         set -o pipefail
-        sudo -u postgres make -k -C build installcheck | tee installcheck.log
+        sudo -u postgres LANG=C.UTF-8 make -k -C build installcheck | tee installcheck.log
 
     - name: Collect the logs
       if: always()
