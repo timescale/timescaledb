@@ -67,7 +67,6 @@ typedef struct CollectQualCtx
 	PlannerInfo *root;
 	RelOptInfo *rel;
 	List *restrictions;
-	List *join_conditions;
 	List *propagate_conditions;
 	List *all_quals;
 	int join_level;
@@ -787,13 +786,7 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 /*
  * collect JOIN information
  *
- * This function adds information to two lists in the CollectQualCtx
- *
- * join_conditions
- *
- * This list contains all equality join conditions and is used by
- * ChunkAppend to decide whether the ordered append optimization
- * can be applied.
+ * This function adds information to the CollectQualCtx
  *
  * propagate_conditions
  *
@@ -838,8 +831,6 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool can_propagate)
 
 				if (op->opno == tce->eq_opr)
 				{
-					ctx->join_conditions = lappend(ctx->join_conditions, op);
-
 					if (can_propagate)
 						ctx->propagate_conditions = lappend(ctx->propagate_conditions, op);
 				}
@@ -916,8 +907,8 @@ find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, bool include_o
 }
 
 static bool
-should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *join_conditions,
-					int *order_attno, bool *reverse)
+should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, int *order_attno,
+					bool *reverse)
 {
 	/* check if optimizations are enabled */
 	if (!ts_guc_enable_optimizations || !ts_guc_enable_ordered_append ||
@@ -931,7 +922,7 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
 	if (root->parse->sortClause == NIL)
 		return false;
 
-	return ts_ordered_append_should_optimize(root, rel, ht, join_conditions, order_attno, reverse);
+	return ts_ordered_append_should_optimize(root, rel, ht, order_attno, reverse);
 }
 
 /**
@@ -965,8 +956,7 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 	 * to signal that this is safe to transform in ordered append plan in
 	 * set_rel_pathlist.
 	 */
-	if (rel->fdw_private != NULL &&
-		should_order_append(root, rel, ht, ctx->join_conditions, &order_attno, &reverse))
+	if (rel->fdw_private != NULL && should_order_append(root, rel, ht, &order_attno, &reverse))
 	{
 		TimescaleDBPrivate *priv = ts_get_private_reloptinfo(rel);
 		List **nested_oids = NULL;
@@ -1021,7 +1011,6 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 		.rel = rel,
 		.restrictions = NIL,
 		.all_quals = NIL,
-		.join_conditions = NIL,
 		.propagate_conditions = NIL,
 	};
 
@@ -1049,7 +1038,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		.rel = rel,
 		.restrictions = NIL,
 		.all_quals = NIL,
-		.join_conditions = NIL,
 		.propagate_conditions = NIL,
 		.join_level = 0,
 	};
@@ -1227,7 +1215,7 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 		Var *rel_var, *other_var;
 
 		/*
-		 * join_conditions only has OpExpr with 2 Var as arguments
+		 * propagate_conditions only has OpExpr with 2 Var as arguments
 		 * this is enforced in process_quals
 		 */
 		Assert(IsA(op, OpExpr) && list_length(castNode(OpExpr, op)->args) == 2);
