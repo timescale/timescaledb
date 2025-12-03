@@ -61,6 +61,8 @@ ts_invalidation_plugin_name(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(cstring_to_text(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_PLUGIN_NAME));
 }
 
+static ObjectAddress get_and_lock_rel_by_name(const Name schema, const Name name, LOCKMODE mode);
+
 static void
 init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertable_id)
 {
@@ -68,21 +70,6 @@ init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertabl
 
 	ts_scan_iterator_scan_key_init(iterator,
 								   Anum_continuous_agg_pkey_mat_hypertable_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(mat_hypertable_id));
-}
-
-static void
-init_scan_cagg_bucket_function_by_mat_hypertable_id(ScanIterator *iterator,
-													const int32 mat_hypertable_id)
-{
-	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
-											CONTINUOUS_AGGS_BUCKET_FUNCTION,
-											CONTINUOUS_AGGS_BUCKET_FUNCTION_PKEY_IDX);
-
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_continuous_aggs_bucket_function_pkey_mat_hypertable_id,
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(mat_hypertable_id));
@@ -168,22 +155,6 @@ invalidation_threshold_delete(int32 raw_hypertable_id)
 													CurrentMemoryContext);
 
 	init_invalidation_threshold_scan_by_hypertable_id(&iterator, raw_hypertable_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	}
-}
-
-static void
-cagg_bucket_function_delete(int32 mat_hypertable_id)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_BUCKET_FUNCTION,
-													RowExclusiveLock,
-													CurrentMemoryContext);
-
-	init_scan_cagg_bucket_function_by_mat_hypertable_id(&iterator, mat_hypertable_id);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -326,156 +297,6 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 		heap_freetuple(tuple);
 }
 
-/*
- * Fill the fields of a integer based bucketing function
- */
-static void
-cagg_fill_bucket_function_integer_based(ContinuousAggBucketFunction *bf, bool *isnull,
-										Datum *values)
-{
-	/* Bucket width */
-	Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
-	const char *bucket_width_str = TextDatumGetCString(
-		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
-	Assert(strlen(bucket_width_str) > 0);
-	bf->bucket_integer_width = pg_strtoint64(bucket_width_str);
-
-	/* Bucket origin cannot be used with integer based buckets */
-	Assert(isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] ==
-		   true);
-
-	/* Bucket offset */
-	if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)])
-	{
-		const char *offset_str = TextDatumGetCString(
-			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)]);
-		bf->bucket_integer_offset = pg_strtoint64(offset_str);
-	}
-
-	/* Timezones cannot be used with integer based buckets */
-	Assert(isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)] ==
-		   true);
-}
-
-/*
- * Fill the fields of a time based bucketing function
- */
-static void
-cagg_fill_bucket_function_time_based(ContinuousAggBucketFunction *bf, bool *isnull, Datum *values)
-{
-	/*
-	 * bucket_width
-	 *
-	 * The value is stored as TEXT since we have to store the interval value of time
-	 * buckets and also the number value of integer based buckets.
-	 */
-	Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
-	const char *bucket_width_str = TextDatumGetCString(
-		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
-	Assert(strlen(bucket_width_str) > 0);
-	bf->bucket_time_width = DatumGetIntervalP(
-		DirectFunctionCall3(interval_in, CStringGetDatum(bucket_width_str), InvalidOid, -1));
-
-	/* Bucket origin */
-	if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)])
-	{
-		const char *origin_str = TextDatumGetCString(
-			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)]);
-		bf->bucket_time_origin = DatumGetTimestamp(DirectFunctionCall3(timestamptz_in,
-																	   CStringGetDatum(origin_str),
-																	   ObjectIdGetDatum(InvalidOid),
-																	   Int32GetDatum(-1)));
-	}
-	else
-	{
-		TIMESTAMP_NOBEGIN(bf->bucket_time_origin);
-	}
-
-	/* Bucket offset */
-	if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)])
-	{
-		const char *offset_str = TextDatumGetCString(
-			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)]);
-		bf->bucket_time_offset = DatumGetIntervalP(
-			DirectFunctionCall3(interval_in, CStringGetDatum(offset_str), InvalidOid, -1));
-	}
-
-	/* Bucket timezone */
-	if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)])
-	{
-		bf->bucket_time_timezone = TextDatumGetCString(
-			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)]);
-	}
-}
-
-static void
-continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggBucketFunction *bf)
-{
-	ScanIterator iterator;
-	int count = 0;
-
-	iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_BUCKET_FUNCTION,
-									   AccessShareLock,
-									   CurrentMemoryContext);
-	init_scan_cagg_bucket_function_by_mat_hypertable_id(&iterator, mat_hypertable_id);
-	ts_scanner_foreach(&iterator)
-	{
-		Datum values[Natts_continuous_aggs_bucket_function];
-		bool isnull[Natts_continuous_aggs_bucket_function];
-		bool should_free;
-
-		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
-
-		/*
-		 * Our usual GETSTRUCT() approach doesn't work when TEXT fields are involved,
-		 * thus a more robust approach with heap_deform_tuple() is used here.
-		 */
-		heap_deform_tuple(tuple, ts_scan_iterator_tupledesc(&iterator), values, isnull);
-
-		/* Bucket function */
-		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)]);
-		const char *bucket_function_str = TextDatumGetCString(
-			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)]);
-		bf->bucket_function = DatumGetObjectId(
-			DirectFunctionCall1(regprocedurein, CStringGetDatum(bucket_function_str)));
-
-		bf->bucket_time_based = ts_continuous_agg_bucket_on_interval(bf->bucket_function);
-
-		if (bf->bucket_time_based)
-		{
-			cagg_fill_bucket_function_time_based(bf, isnull, values);
-		}
-		else
-		{
-			cagg_fill_bucket_function_integer_based(bf, isnull, values);
-		}
-
-		/* Bucket fixed width */
-		Assert(!isnull[AttrNumberGetAttrOffset(
-			Anum_continuous_aggs_bucket_function_bucket_fixed_width)]);
-		bf->bucket_fixed_interval = DatumGetBool(values[AttrNumberGetAttrOffset(
-			Anum_continuous_aggs_bucket_function_bucket_fixed_width)]);
-
-		count++;
-
-		if (should_free)
-			heap_freetuple(tuple);
-	}
-
-	/*
-	 * This function should never be called unless we know that the corresponding
-	 * cagg exists and uses a variable-sized bucket. There should be exactly one
-	 * entry in .continuous_aggs_bucket_function catalog table for such a cagg.
-	 */
-	if (count != 1)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_OBJECT),
-				 errmsg("invalid or missing information about the bucketing function for cagg"),
-				 errdetail("%d", mat_hypertable_id)));
-	}
-}
-
 static void
 continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 {
@@ -494,7 +315,12 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 	Assert(OidIsValid(cagg->partition_type));
 
 	cagg->bucket_function = palloc0(sizeof(ContinuousAggBucketFunction));
-	continuous_agg_fill_bucket_function(cagg->data.mat_hypertable_id, cagg->bucket_function);
+	ObjectAddress partial_view =
+		get_and_lock_rel_by_name(&fd->partial_view_schema, &fd->partial_view_name, AccessShareLock);
+	Assert(OidIsValid(partial_view.objectId));
+
+	cagg->bucket_function =
+		ts_cm_functions->continuous_agg_get_bucket_function_info_internal(partial_view.objectId);
 }
 
 TSDLLEXPORT ContinuousAggInfo
@@ -923,8 +749,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		ts_cagg_watermark_delete_by_mat_hypertable_id(form.mat_hypertable_id);
 	}
 
-	cagg_bucket_function_delete(cadata->mat_hypertable_id);
-
 	/* Perform actual deletions now */
 	if (OidIsValid(user_view.objectId))
 		performDeletion(&user_view, DROP_RESTRICT, 0);
@@ -1309,7 +1133,7 @@ ts_continuous_agg_bucket_on_interval(Oid bucket_function)
 
 	/* The function has to be a currently allowed function or one of the deprecated bucketing
 	 * functions */
-	Assert(func_info->allowed_in_cagg_definition || IS_DEPRECATED_TIME_BUCKET_NG_FUNC(func_info));
+	Assert(func_info->allowed_in_cagg_definition);
 
 	Oid first_bucket_arg = func_info->arg_types[0];
 
@@ -1326,85 +1150,42 @@ generic_time_bucket(const ContinuousAggBucketFunction *bf, Datum timestamp)
 {
 	FuncInfo *func_info = ts_func_cache_get_bucketing_func(bf->bucket_function);
 	Ensure(func_info != NULL, "unable to get bucket function for Oid %d", bf->bucket_function);
-	bool is_experimental = func_info->origin == ORIGIN_TIMESCALE_EXPERIMENTAL;
 
-	if (!is_experimental)
+	if (bf->bucket_time_timezone != NULL)
 	{
-		if (bf->bucket_time_timezone != NULL)
-		{
-			if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
-			{
-				/* using default origin */
-				return DirectFunctionCall3(ts_timestamptz_timezone_bucket,
-										   IntervalPGetDatum(bf->bucket_time_width),
-										   timestamp,
-										   CStringGetTextDatum(bf->bucket_time_timezone));
-			}
-			else
-			{
-				/* custom origin specified */
-				return DirectFunctionCall4(ts_timestamptz_timezone_bucket,
-										   IntervalPGetDatum(bf->bucket_time_width),
-										   timestamp,
-										   CStringGetTextDatum(bf->bucket_time_timezone),
-										   TimestampTzGetDatum(bf->bucket_time_origin));
-			}
-		}
-
 		if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
 		{
 			/* using default origin */
-			return DirectFunctionCall2(ts_timestamp_bucket,
+			return DirectFunctionCall3(ts_timestamptz_timezone_bucket,
 									   IntervalPGetDatum(bf->bucket_time_width),
-									   timestamp);
+									   timestamp,
+									   CStringGetTextDatum(bf->bucket_time_timezone));
 		}
 		else
 		{
 			/* custom origin specified */
-			return DirectFunctionCall3(ts_timestamp_bucket,
+			return DirectFunctionCall4(ts_timestamptz_timezone_bucket,
 									   IntervalPGetDatum(bf->bucket_time_width),
 									   timestamp,
+									   CStringGetTextDatum(bf->bucket_time_timezone),
 									   TimestampTzGetDatum(bf->bucket_time_origin));
 		}
 	}
+
+	if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
+	{
+		/* using default origin */
+		return DirectFunctionCall2(ts_timestamp_bucket,
+								   IntervalPGetDatum(bf->bucket_time_width),
+								   timestamp);
+	}
 	else
 	{
-		if (bf->bucket_time_timezone != NULL)
-		{
-			if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
-			{
-				/* using default origin */
-				return DirectFunctionCall3(ts_time_bucket_ng_timezone,
-										   IntervalPGetDatum(bf->bucket_time_width),
-										   timestamp,
-										   CStringGetTextDatum(bf->bucket_time_timezone));
-			}
-			else
-			{
-				/* custom origin specified */
-				return DirectFunctionCall4(ts_time_bucket_ng_timezone_origin,
-										   IntervalPGetDatum(bf->bucket_time_width),
-										   timestamp,
-										   TimestampTzGetDatum(bf->bucket_time_origin),
-										   CStringGetTextDatum(bf->bucket_time_timezone));
-			}
-		}
-
-		if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
-		{
-			/* using default origin */
-			return DirectFunctionCall2(ts_time_bucket_ng_timestamp,
-									   IntervalPGetDatum(bf->bucket_time_width),
-									   timestamp);
-		}
-		else
-		{
-			/* custom origin specified */
-			return DirectFunctionCall3(ts_time_bucket_ng_timestamp,
-									   IntervalPGetDatum(bf->bucket_time_width),
-									   timestamp,
-									   TimestampTzGetDatum(bf->bucket_time_origin));
-		}
+		/* custom origin specified */
+		return DirectFunctionCall3(ts_timestamp_bucket,
+								   IntervalPGetDatum(bf->bucket_time_width),
+								   timestamp,
+								   TimestampTzGetDatum(bf->bucket_time_origin));
 	}
 }
 

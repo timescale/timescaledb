@@ -8,14 +8,20 @@ SELECT mat_hypertable_id,
   FROM _timescaledb_catalog.continuous_agg where user_view_name = :'CAGG_NAME'
   \gset
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function WHERE mat_hypertable_id = :mat_hypertable_id;
+SELECT mat_hypertable_id, bf.*
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
+WHERE mat_hypertable_id = :mat_hypertable_id;
+
 SELECT pg_get_viewdef(:'partial_view', true);
 SELECT pg_get_viewdef(:'direct_view', true);
 SELECT pg_get_viewdef(:'CAGG_NAME', true);
 
 CALL _timescaledb_functions.cagg_migrate_to_time_bucket(:'CAGG_NAME');
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function WHERE mat_hypertable_id = :mat_hypertable_id;
+SELECT mat_hypertable_id, bf.*
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
+WHERE mat_hypertable_id = :mat_hypertable_id;
+
 SELECT pg_get_viewdef(:'partial_view', true);
 SELECT pg_get_viewdef(:'direct_view', true);
 SELECT pg_get_viewdef(:'CAGG_NAME', true);

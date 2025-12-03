@@ -78,6 +78,8 @@ WHERE user_view_name = 'conditions_summary'
 \pset null <NULL>
 SELECT *
 FROM _timescaledb_catalog.continuous_aggs_bucket_function
+SELECT mat_hypertable_id, bf.*
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE mat_hypertable_id = :cagg_id;
 \pset null ""
 
@@ -117,6 +119,8 @@ INSERT INTO _timescaledb_catalog.continuous_aggs_bucket_function SELECT * FROM r
 DROP TABLE restore_table;
 -- should execute successfully
 CALL refresh_continuous_aggregate('conditions_summary', '2021-06-01', '2021-07-01');
+=======
+>>>>>>> a6faabc07 (Remove time bucket function metadata table)
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- Check the invalidation threshold
@@ -167,6 +171,11 @@ SELECT count(*) FROM _timescaledb_catalog.continuous_agg
 WHERE mat_hypertable_id = :cagg_id;
 
 SELECT count(*) FROM _timescaledb_catalog.continuous_aggs_bucket_function
+SELECT * FROM _timescaledb_catalog.continuous_agg
+WHERE mat_hypertable_id = :cagg_id;
+
+SELECT mat_hypertable_id, bf.*
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE mat_hypertable_id = :cagg_id;
 
 -- Re-create cagg, this time WITH DATA

@@ -51,7 +51,6 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
 	COMPRESSION_SETTINGS,
 	COMPRESSION_CHUNK_SIZE,
-	CONTINUOUS_AGGS_BUCKET_FUNCTION,
 	CONTINUOUS_AGGS_WATERMARK,
 	TELEMETRY_EVENT,
 	CHUNK_COLUMN_STATS,
@@ -961,6 +960,7 @@ typedef enum Anum_continuous_aggs_bucket_function_pkey
  * The definition of CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_PLUGIN_NAME is
  * generated from config.h.in and can be found in the generated file.
  */
+/****** CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE definitions*/
 #define CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE_NAME                                     \
 	"continuous_aggs_hypertable_invalidation_log"
 
