@@ -97,7 +97,6 @@ CROSSMODULE_WRAPPER(continuous_agg_process_hypertable_invalidations);
 CROSSMODULE_WRAPPER(continuous_agg_validate_query);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function_info);
-CROSSMODULE_WRAPPER(continuous_agg_migrate_to_time_bucket);
 CROSSMODULE_WRAPPER(continuous_agg_read_invalidation_record);
 CROSSMODULE_WRAPPER(cagg_try_repair);
 
@@ -377,7 +376,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function_info = error_no_default_fn_pg_community,
-	.continuous_agg_migrate_to_time_bucket = error_no_default_fn_pg_community,
 	.continuous_agg_read_invalidation_record = error_no_default_fn_pg_community,
 	.cagg_try_repair = process_cagg_try_repair,
 
