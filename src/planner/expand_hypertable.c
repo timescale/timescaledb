@@ -922,6 +922,64 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
 	return ts_ordered_append_should_optimize(root, rel, ht, join_conditions, order_attno, reverse);
 }
 
+/*
+ * Some time conditions are not directly applicable for the chunk exclusion, but
+ * imply a simpler time comparison condition which can be used for hypertable
+ * expansion. Return a list of any simplified restrictions we could build for
+ * the restrictions in the given list.
+ */
+static List *
+get_simplified_restrictions(PlannerInfo *root, List *restrictions)
+{
+	List *simplified_restrictions = NIL;
+	ListCell *lc;
+	foreach (lc, restrictions)
+	{
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc));
+		Expr *qual = ri->clause;
+		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
+		{
+			OpExpr *op = castNode(OpExpr, qual);
+			Expr *left = linitial(op->args);
+			Expr *right = lsecond(op->args);
+
+			if ((IsA(left, Var) && is_timestamptz_op_interval(right)) ||
+				(IsA(right, Var) && is_timestamptz_op_interval(left)))
+			{
+				/*
+				 * Check for constraints with TIMESTAMPTZ OP INTERVAL calculations.
+				 */
+				Expr *transformed = (Expr *) constify_timestamptz_op_interval(root, op);
+				if (transformed != (Expr *) op)
+				{
+					RestrictInfo *ri_copy = copyObject(ri);
+					ri_copy->clause = transformed;
+					simplified_restrictions = lappend(simplified_restrictions, ri_copy);
+				}
+			}
+			else
+			{
+				/*
+				 * check for time_bucket comparisons
+				 * time_bucket(Const, time_colum) > Const
+				 */
+				Expr *transformed = ts_transform_time_bucket_comparison(qual);
+				if (transformed != NULL)
+				{
+					/*
+					 * Also use the transformed qual for chunk exclusion.
+					 */
+					RestrictInfo *ri_copy = copyObject(ri);
+					ri_copy->clause = transformed;
+					simplified_restrictions = lappend(simplified_restrictions, ri_copy);
+				}
+			}
+		}
+	}
+
+	return simplified_restrictions;
+}
+
 /**
  * Get chunks from restrict info.
  *
@@ -945,62 +1003,10 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 	 * infrastructure to deduce the appropriate chunks using our range
 	 * exclusion.
 	 */
-	List *restrictions = rel->baserestrictinfo;
+	ts_hypertable_restrict_info_add(hri, root, rel->baserestrictinfo);
 
-	/*
-	 * Some time conditions that are not directly applicable for the chunk
-	 * exclusion, but imply a simpler time comparison condition which can be
-	 * used for chunk expansion. Go over the original list of restrictions on
-	 * the table and collect a list of simplified conditions.
-	 */
-	List *simplified_conditions = NIL;
-	ListCell *lc;
-	foreach (lc, restrictions)
-	{
-		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc));
-		Expr *qual = ri->clause;
-		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
-		{
-			OpExpr *op = castNode(OpExpr, qual);
-			Expr *left = linitial(op->args);
-			Expr *right = lsecond(op->args);
-
-			if ((IsA(left, Var) && is_timestamptz_op_interval(right)) ||
-				(IsA(right, Var) && is_timestamptz_op_interval(left)))
-			{
-				/*
-				 * Check for constraints with TIMESTAMPTZ OP INTERVAL calculations.
-				 */
-				Expr *transformed = (Expr *) constify_timestamptz_op_interval(root, op);
-				if (transformed != (Expr *) op)
-				{
-					RestrictInfo *ri_copy = copyObject(ri);
-					ri_copy->clause = transformed;
-					simplified_conditions = lappend(simplified_conditions, ri_copy);
-				}
-			}
-			else
-			{
-				/*
-				 * check for time_bucket comparisons
-				 * time_bucket(Const, time_colum) > Const
-				 */
-				Expr *transformed = ts_transform_time_bucket_comparison(qual);
-				if (transformed != NULL)
-				{
-					/*
-					 * Also use the transformed qual for chunk exclusion.
-					 */
-					RestrictInfo *ri_copy = copyObject(ri);
-					ri_copy->clause = transformed;
-					simplified_conditions = lappend(simplified_conditions, ri_copy);
-				}
-			}
-		}
-	}
-
-	ts_hypertable_restrict_info_add(hri, root, restrictions);
-	ts_hypertable_restrict_info_add(hri, root, simplified_conditions);
+	List *simplified_restrictions = get_simplified_restrictions(root, rel->baserestrictinfo);
+	ts_hypertable_restrict_info_add(hri, root, simplified_restrictions);
 
 	/*
 	 * If fdw_private has not been setup by caller there is no point checking
