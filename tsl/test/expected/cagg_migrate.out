@@ -757,9 +757,10 @@ ORDER BY 1;
 
 -- drop 1 chunk
 \if :IS_TIME_DIMENSION
-    SELECT drop_chunks('conditions', older_than => CAST('2022-01-08 00:00:00-00' AS :TIME_DIMENSION_DATATYPE));
+    SELECT drop_chunks('conditions', older_than => CAST('2022-01-08 00:00:00-00' AS :TIME_DIMENSION_DATATYPE), force=>true);
 \else
-    SELECT drop_chunks('conditions', older_than => 10);
+    SELECT drop_chunks('conditions', older_than => 10, force=>true);
+psql:include/cagg_migrate_common.sql:316: WARNING:  _timescaledb_internal._hyper_1_1_chunk contained data required for continuous aggregate refresh
               drop_chunks               
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -1655,13 +1656,14 @@ ORDER BY 1;
 
 -- drop 1 chunk
 \if :IS_TIME_DIMENSION
-    SELECT drop_chunks('conditions', older_than => CAST('2022-01-08 00:00:00-00' AS :TIME_DIMENSION_DATATYPE));
+    SELECT drop_chunks('conditions', older_than => CAST('2022-01-08 00:00:00-00' AS :TIME_DIMENSION_DATATYPE), force=>true);
+psql:include/cagg_migrate_common.sql:314: WARNING:  _timescaledb_internal._hyper_5_190_chunk contained data required for continuous aggregate refresh
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_5_190_chunk
 
 \else
-    SELECT drop_chunks('conditions', older_than => 10);
+    SELECT drop_chunks('conditions', older_than => 10, force=>true);
 \endif
 -- now he have one chunk marked as dropped
 SELECT
@@ -2548,13 +2550,14 @@ ORDER BY 1;
 
 -- drop 1 chunk
 \if :IS_TIME_DIMENSION
-    SELECT drop_chunks('conditions', older_than => CAST('2022-01-08 00:00:00-00' AS :TIME_DIMENSION_DATATYPE));
+    SELECT drop_chunks('conditions', older_than => CAST('2022-01-08 00:00:00-00' AS :TIME_DIMENSION_DATATYPE), force=>true);
+psql:include/cagg_migrate_common.sql:314: WARNING:  _timescaledb_internal._hyper_9_303_chunk contained data required for continuous aggregate refresh
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_9_303_chunk
 
 \else
-    SELECT drop_chunks('conditions', older_than => 10);
+    SELECT drop_chunks('conditions', older_than => 10, force=>true);
 \endif
 -- now he have one chunk marked as dropped
 SELECT

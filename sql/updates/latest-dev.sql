@@ -11,7 +11,6 @@ CREATE TABLE _timescaledb_catalog.chunk_rewrite (
 GRANT SELECT ON _timescaledb_catalog.chunk_rewrite TO PUBLIC;
 DROP PROCEDURE IF EXISTS @extschema@.merge_chunks(REGCLASS, REGCLASS);
 
-
 -- Check whether the database has the sparse bloom filter indexes on compressed
 -- chunks, which will require manual action to re-enable.
 DO $$
@@ -27,3 +26,16 @@ BEGIN
     END IF;
 END
 $$;
+
+-- Update drop_chunks API
+DROP FUNCTION IF EXISTS @extschema@.drop_chunks;
+CREATE OR REPLACE FUNCTION @extschema@.drop_chunks(
+    relation               REGCLASS,
+    older_than             "any" = NULL,
+    newer_than             "any" = NULL,
+    verbose                BOOLEAN = FALSE,
+    created_before         "any" = NULL,
+    created_after          "any" = NULL,
+    force                   BOOLEAN = FALSE
+) RETURNS SETOF TEXT AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
+LANGUAGE C VOLATILE PARALLEL UNSAFE;

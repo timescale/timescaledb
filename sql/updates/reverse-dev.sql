@@ -15,3 +15,14 @@ DROP FUNCTION IF EXISTS @extschema@.time_bucket(INTERVAL, UUID, TIMESTAMPTZ);
 DROP FUNCTION IF EXISTS @extschema@.time_bucket(INTERVAL, UUID, INTERVAL);
 DROP FUNCTION IF EXISTS @extschema@.time_bucket(INTERVAL, UUID, TEXT, TIMESTAMPTZ, INTERVAL);
 
+DROP FUNCTION IF EXISTS @extschema@.drop_chunks;
+
+CREATE FUNCTION @extschema@.drop_chunks(
+    relation               REGCLASS,
+    older_than             "any" = NULL,
+    newer_than             "any" = NULL,
+    verbose                BOOLEAN = FALSE,
+    created_before         "any" = NULL,
+    created_after          "any" = NULL,
+) RETURNS SETOF TEXT AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
+LANGUAGE C VOLATILE PARALLEL UNSAFE;

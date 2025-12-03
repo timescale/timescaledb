@@ -104,7 +104,8 @@ CREATE OR REPLACE FUNCTION @extschema@.drop_chunks(
     newer_than             "any" = NULL,
     verbose                BOOLEAN = FALSE,
     created_before         "any" = NULL,
-    created_after          "any" = NULL
+    created_after          "any" = NULL,
+    force                   BOOLEAN = FALSE
 ) RETURNS SETOF TEXT AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
 LANGUAGE C VOLATILE PARALLEL UNSAFE;
 
