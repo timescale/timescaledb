@@ -677,6 +677,12 @@ ts_transform_time_bucket_comparison(Expr *node)
  * will just result in more chunks being included) so this does not need
  * to be as comprehensive as the PG native derivation. This is inspired
  * by the derivation in `deconstruct_recurse` in PG
+ *
+ * TODO: as of 2025, the baserestrictinfo and joininfo is already set when the
+ * hypertable expansion code is called, so this does duplicate work. If any bugs
+ * are found in this code, it should be switched to use the RelOptInfos and
+ * equivalence classes instead of the parse tree. The chunk exclusion code for
+ * the non-join clauses was already changed to use the former.
  */
 static Node *
 process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
