@@ -993,7 +993,7 @@ get_simplified_restrictions(PlannerInfo *root, List *restrictions)
  * on rel->fdw_private when appends are ordered.
  */
 static Chunk **
-get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
+get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 		   bool include_osm, unsigned int *num_chunks)
 {
 	bool reverse;
@@ -1118,7 +1118,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	Chunk **chunks = NULL;
 	unsigned int num_chunks = 0;
 
-	chunks = get_chunks(&ctx, root, rel, ht, include_osm, &num_chunks);
+	chunks = get_chunks(root, rel, ht, include_osm, &num_chunks);
 	/* Can have zero chunks. */
 	Assert(num_chunks == 0 || chunks != NULL);
 
