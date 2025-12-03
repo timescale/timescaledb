@@ -2619,34 +2619,16 @@ LIMIT 100;
                            ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=5.00 loops=1)
                ->  Hash (actual rows=1728.00 loops=1)
                      ->  Append (actual rows=1728.00 loops=1)
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_4_chunk m2_1 (actual rows=0.00 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=0.00 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 1
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk m2_2 (actual rows=720.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk m2_1 (actual rows=720.00 loops=1)
                                  ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=1.00 loops=1)
                                        Filter: (device_id = 2)
                                        Rows Removed by Filter: 2
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk m2_3 (actual rows=0.00 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=0.00 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 1
-                           ->  Index Scan using _hyper_2_7_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_7_chunk m2_4 (actual rows=0.00 loops=1)
+                           ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk m2_2 (actual rows=672.00 loops=1)
                                  Index Cond: (device_id = 2)
-                           ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk m2_5 (actual rows=672.00 loops=1)
-                                 Index Cond: (device_id = 2)
-                           ->  Index Scan using _hyper_2_9_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_9_chunk m2_6 (actual rows=0.00 loops=1)
-                                 Index Cond: (device_id = 2)
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_10_chunk m2_7 (actual rows=0.00 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=0.00 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 1
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk m2_8 (actual rows=336.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk m2_3 (actual rows=336.00 loops=1)
                                  ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=1.00 loops=1)
                                        Filter: (device_id = 2)
                                        Rows Removed by Filter: 2
-                           ->  Index Scan using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _hyper_2_12_chunk m2_9 (actual rows=0.00 loops=1)
-                                 Index Cond: (device_id = 2)
 
 -- test implicit self-join
 :PREFIX
@@ -6807,34 +6789,16 @@ LIMIT 100;
                      ->  Seq Scan on _hyper_2_12_chunk m1_9 (actual rows=336.00 loops=1)
                ->  Hash (actual rows=1728.00 loops=1)
                      ->  Append (actual rows=1728.00 loops=1)
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_4_chunk m2_1 (actual rows=0.00 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_17_chunk compress_hyper_6_17_chunk_1 (actual rows=0.00 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 1
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk m2_2 (actual rows=720.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk m2_1 (actual rows=720.00 loops=1)
                                  ->  Seq Scan on compress_hyper_6_18_chunk compress_hyper_6_18_chunk_1 (actual rows=1.00 loops=1)
                                        Filter: (device_id = 2)
                                        Rows Removed by Filter: 2
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk m2_3 (actual rows=0.00 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_19_chunk compress_hyper_6_19_chunk_1 (actual rows=0.00 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 1
-                           ->  Index Scan using _hyper_2_7_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_7_chunk m2_4 (actual rows=0.00 loops=1)
+                           ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk m2_2 (actual rows=672.00 loops=1)
                                  Index Cond: (device_id = 2)
-                           ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk m2_5 (actual rows=672.00 loops=1)
-                                 Index Cond: (device_id = 2)
-                           ->  Index Scan using _hyper_2_9_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_9_chunk m2_6 (actual rows=0.00 loops=1)
-                                 Index Cond: (device_id = 2)
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_10_chunk m2_7 (actual rows=0.00 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_20_chunk compress_hyper_6_20_chunk_1 (actual rows=0.00 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 1
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk m2_8 (actual rows=336.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk m2_3 (actual rows=336.00 loops=1)
                                  ->  Seq Scan on compress_hyper_6_21_chunk compress_hyper_6_21_chunk_1 (actual rows=1.00 loops=1)
                                        Filter: (device_id = 2)
                                        Rows Removed by Filter: 2
-                           ->  Index Scan using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _hyper_2_12_chunk m2_9 (actual rows=0.00 loops=1)
-                                 Index Cond: (device_id = 2)
 
 :PREFIX
 SELECT *
@@ -6864,34 +6828,16 @@ LIMIT 100;
                            ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=5.00 loops=1)
                ->  Hash (actual rows=1728.00 loops=1)
                      ->  Append (actual rows=1728.00 loops=1)
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_4_chunk m2_1 (actual rows=0.00 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=0.00 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 1
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk m2_2 (actual rows=720.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk m2_1 (actual rows=720.00 loops=1)
                                  ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=1.00 loops=1)
                                        Filter: (device_id = 2)
                                        Rows Removed by Filter: 2
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk m2_3 (actual rows=0.00 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=0.00 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 1
-                           ->  Index Scan using _hyper_2_7_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_7_chunk m2_4 (actual rows=0.00 loops=1)
+                           ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk m2_2 (actual rows=672.00 loops=1)
                                  Index Cond: (device_id = 2)
-                           ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk m2_5 (actual rows=672.00 loops=1)
-                                 Index Cond: (device_id = 2)
-                           ->  Index Scan using _hyper_2_9_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_9_chunk m2_6 (actual rows=0.00 loops=1)
-                                 Index Cond: (device_id = 2)
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_10_chunk m2_7 (actual rows=0.00 loops=1)
-                                 ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=0.00 loops=1)
-                                       Filter: (device_id = 2)
-                                       Rows Removed by Filter: 1
-                           ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk m2_8 (actual rows=336.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk m2_3 (actual rows=336.00 loops=1)
                                  ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=1.00 loops=1)
                                        Filter: (device_id = 2)
                                        Rows Removed by Filter: 2
-                           ->  Index Scan using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _hyper_2_12_chunk m2_9 (actual rows=0.00 loops=1)
-                                 Index Cond: (device_id = 2)
 
 -- test implicit self-join
 :PREFIX

@@ -119,12 +119,6 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_m1'
 \gset
 
--- Change `finalized` option is forbiden
-\set ON_ERROR_STOP 0
-ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.finalized=false);
-ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.finalized=true);
-\set ON_ERROR_STOP 1
-
 -- Materialized hypertable for mat_m1 should not be visible in the
 -- hypertables view:
 SELECT hypertable_schema, hypertable_name
@@ -1458,13 +1452,6 @@ SELECT * FROM mat_m1;
 -- produce ordered records
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
 
---
--- Testing the coexistence of both types of supported CAggs
--- over the same raw hypertable.
---
---  . finalized = true:  without chunk_id and partials
---  . finalized = false: with chunk_id and partials
---
 DROP TABLE conditions CASCADE;
 
 CREATE TABLE conditions (

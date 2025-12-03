@@ -677,6 +677,12 @@ ts_transform_time_bucket_comparison(Expr *node)
  * will just result in more chunks being included) so this does not need
  * to be as comprehensive as the PG native derivation. This is inspired
  * by the derivation in `deconstruct_recurse` in PG
+ *
+ * TODO: as of 2025, the baserestrictinfo and joininfo is already set when the
+ * hypertable expansion code is called, so this does duplicate work. If any bugs
+ * are found in this code, it should be switched to use the RelOptInfos and
+ * equivalence classes instead of the parse tree. The chunk exclusion code for
+ * the non-join clauses was already changed to use the former.
  */
 static Node *
 process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
@@ -925,6 +931,64 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, int *ord
 	return ts_ordered_append_should_optimize(root, rel, ht, order_attno, reverse);
 }
 
+/*
+ * Some time conditions are not directly applicable for the chunk exclusion, but
+ * imply a simpler time comparison condition which can be used for hypertable
+ * expansion. Return a list of any simplified restrictions we could build for
+ * the restrictions in the given list.
+ */
+static List *
+get_simplified_restrictions(PlannerInfo *root, List *restrictions)
+{
+	List *simplified_restrictions = NIL;
+	ListCell *lc;
+	foreach (lc, restrictions)
+	{
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc));
+		Expr *qual = ri->clause;
+		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
+		{
+			OpExpr *op = castNode(OpExpr, qual);
+			Expr *left = linitial(op->args);
+			Expr *right = lsecond(op->args);
+
+			if ((IsA(left, Var) && is_timestamptz_op_interval(right)) ||
+				(IsA(right, Var) && is_timestamptz_op_interval(left)))
+			{
+				/*
+				 * Check for constraints with TIMESTAMPTZ OP INTERVAL calculations.
+				 */
+				Expr *transformed = (Expr *) constify_timestamptz_op_interval(root, op);
+				if (transformed != (Expr *) op)
+				{
+					RestrictInfo *ri_copy = copyObject(ri);
+					ri_copy->clause = transformed;
+					simplified_restrictions = lappend(simplified_restrictions, ri_copy);
+				}
+			}
+			else
+			{
+				/*
+				 * check for time_bucket comparisons
+				 * time_bucket(Const, time_colum) > Const
+				 */
+				Expr *transformed = ts_transform_time_bucket_comparison(qual);
+				if (transformed != NULL)
+				{
+					/*
+					 * Also use the transformed qual for chunk exclusion.
+					 */
+					RestrictInfo *ri_copy = copyObject(ri);
+					ri_copy->clause = transformed;
+					simplified_restrictions = lappend(simplified_restrictions, ri_copy);
+				}
+			}
+		}
+	}
+
+	return simplified_restrictions;
+}
+
 /**
  * Get chunks from restrict info.
  *
@@ -935,8 +999,8 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, int *ord
  * on rel->fdw_private when appends are ordered.
  */
 static Chunk **
-get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-		   bool include_osm, unsigned int *num_chunks)
+get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
+		   unsigned int *num_chunks)
 {
 	bool reverse;
 	int order_attno;
@@ -946,9 +1010,12 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 	/*
 	 * This is where the magic happens: use our HypertableRestrictInfo
 	 * infrastructure to deduce the appropriate chunks using our range
-	 * exclusion
+	 * exclusion.
 	 */
-	ts_hypertable_restrict_info_add(hri, root, ctx->restrictions);
+	ts_hypertable_restrict_info_add(hri, root, rel->baserestrictinfo);
+
+	List *simplified_restrictions = get_simplified_restrictions(root, rel->baserestrictinfo);
+	ts_hypertable_restrict_info_add(hri, root, simplified_restrictions);
 
 	/*
 	 * If fdw_private has not been setup by caller there is no point checking
@@ -1057,7 +1124,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	Chunk **chunks = NULL;
 	unsigned int num_chunks = 0;
 
-	chunks = get_chunks(&ctx, root, rel, ht, include_osm, &num_chunks);
+	chunks = get_chunks(root, rel, ht, include_osm, &num_chunks);
 	/* Can have zero chunks. */
 	Assert(num_chunks == 0 || chunks != NULL);
 
