@@ -316,10 +316,11 @@ ROLLBACK;
 
 -- simple test with compressed insert enabled and sorting limited to 500
 -- batches should be limited to that amount so we have more compressed batches
+-- dataset is tweaked to fall into single chunk with exactly 3 batches
 BEGIN;
 SET timescaledb.enable_direct_compress_insert = true;
-SET timescaledb.direct_compress_insert_tuple_sort_limit = 500;
-INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
+SET timescaledb.direct_compress_insert_tuple_sort_limit = 1000;
+INSERT INTO metrics SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(1,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
 -- since the chunks are new status should be COMPRESSED, UNORDERED
