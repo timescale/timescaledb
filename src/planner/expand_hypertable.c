@@ -993,8 +993,8 @@ get_simplified_restrictions(PlannerInfo *root, List *restrictions)
  * on rel->fdw_private when appends are ordered.
  */
 static Chunk **
-get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-		   bool include_osm, unsigned int *num_chunks)
+get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
+		   unsigned int *num_chunks)
 {
 	bool reverse;
 	int order_attno;
