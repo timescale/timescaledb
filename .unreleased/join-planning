@@ -1,0 +1,2 @@
+Fixes: #8706 Fix planning performance regression on PG16 and later on some join queries.
+Thanks: @t-aistleitner for reporting the planning performance regression on PG16 and later on some join queries.
