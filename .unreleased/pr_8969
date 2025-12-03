@@ -1,0 +1,1 @@
+Fixes: #8969 Gracefully handle missing job stat in background worker

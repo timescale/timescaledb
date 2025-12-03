@@ -301,7 +301,6 @@ build_index_scankeys(Relation index_rel, List *index_filters, int *num_scankeys)
 									   filter->collation,
 									   filter->opcode,
 									   filter->value ? filter->value->constvalue : 0);
-				break;
 			}
 		}
 	}

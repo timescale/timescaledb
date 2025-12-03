@@ -80,6 +80,8 @@ typedef struct CrossModuleFunctions
 	void (*set_rel_pathlist_dml)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *, Hypertable *);
 	void (*set_rel_pathlist_query)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
 								   Hypertable *);
+	void (*sort_transform_replace_pathkeys)(void *path, List *transformed_pathkeys,
+											List *original_pathkeys);
 
 	/* gapfill */
 	PGFunction gapfill_marker;
@@ -137,7 +139,9 @@ typedef struct CrossModuleFunctions
 	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);
 
 	void (*columnstore_setup)(Hypertable *ht, WithClauseResult *with_clause_options);
-	RowCompressor *(*compressor_init)(Relation in_rel, BulkWriter **bulk_writer, bool sort);
+	RowCompressor *(*compressor_init)(Relation in_rel, BulkWriter **bulk_writer, bool sort,
+									  int tuple_sort_limit);
+	void (*compressor_set_invalidation)(RowCompressor *compressor, Hypertable *ht, Oid chunk_relid);
 	void (*compressor_add_slot)(RowCompressor *compressor, BulkWriter *bulk_writer,
 								TupleTableSlot *slot);
 	void (*compressor_flush)(RowCompressor *compressor, BulkWriter *bulk_writer);

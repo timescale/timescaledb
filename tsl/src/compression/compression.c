@@ -36,6 +36,7 @@
 #include "chunk_insert_state.h"
 #include "compression.h"
 #include "compression/sparse_index_bloom1.h"
+#include "continuous_aggs/insert.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
@@ -882,12 +883,29 @@ check_for_limited_size_compressors(PerColumn *pcolumns, int16 natts)
 }
 
 void
+tsl_compressor_set_invalidation(RowCompressor *compressor, Hypertable *ht, Oid chunk_relid)
+{
+	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Ensure(time_dim, "Hypertable must have an open dimension");
+	AttrNumber attnum = get_attnum(chunk_relid, NameStr(time_dim->fd.column_name));
+
+	compressor->invalidation = palloc0(sizeof(InvalidationSettings));
+	compressor->invalidation->hypertable_id = ht->fd.id;
+	compressor->invalidation->chunk_relid = chunk_relid;
+	compressor->invalidation->invalidation_column_offset = AttrNumberGetAttrOffset(attnum);
+}
+
+void
 tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer, TupleTableSlot *slot)
 {
 	if (compressor->sort_state)
 	{
 		tuplesort_puttupleslot(compressor->sort_state, slot);
 		compressor->tuples_to_sort++;
+
+		if (compressor->tuple_sort_limit &&
+			compressor->tuples_to_sort >= compressor->tuple_sort_limit)
+			tsl_compressor_flush(compressor, bulk_writer);
 	}
 	else
 	{
@@ -933,6 +951,8 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
 {
 	if (compressor->sort_state)
 		tuplesort_end(compressor->sort_state);
+	if (compressor->invalidation)
+		pfree(compressor->invalidation);
 	tsl_compressor_flush(compressor, bulk_writer);
 	row_compressor_close(compressor);
 	bulk_writer_close(bulk_writer);
@@ -946,7 +966,7 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
  * Tuplesortstate and sort them before flushing to the output relation.
  */
 RowCompressor *
-tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort)
+tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int sort_limit)
 {
 	RowCompressor *compressor = palloc0(sizeof(RowCompressor));
 	CompressionSettings *settings = ts_compression_settings_get(in_rel->rd_id);
@@ -955,7 +975,10 @@ tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort)
 	row_compressor_init(compressor, settings, RelationGetDescr(in_rel), RelationGetDescr(out_rel));
 
 	if (sort)
+	{
 		compressor->sort_state = compression_create_tuplesort_state(settings, in_rel);
+		compressor->tuple_sort_limit = sort_limit;
+	}
 
 	return compressor;
 }
@@ -1331,6 +1354,20 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 {
 	HeapTuple compressed_tuple = row_compressor_build_tuple(row_compressor);
 	MemoryContext old_cxt = MemoryContextSwitchTo(row_compressor->per_row_ctx);
+
+	/* invalidate continuous aggregate range */
+	if (row_compressor->invalidation)
+	{
+		InvalidationSettings *settings = row_compressor->invalidation;
+		PerColumn *dim_col = &row_compressor->per_column[settings->invalidation_column_offset];
+		BatchMetadataBuilderMinMax *builder =
+			(BatchMetadataBuilderMinMax *) dim_col->metadata_builder;
+		Datum min = row_compressor->compressed_values[builder->min_metadata_attr_offset];
+		Datum max = row_compressor->compressed_values[builder->max_metadata_attr_offset];
+		int64 start = ts_time_value_to_internal(min, builder->type_oid);
+		int64 end = ts_time_value_to_internal(max, builder->type_oid);
+		continuous_agg_invalidate_range(settings->hypertable_id, settings->chunk_relid, start, end);
+	}
 
 	Assert(writer->bistate != NULL);
 	heap_insert(writer->out_rel,

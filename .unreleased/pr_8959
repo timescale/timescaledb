@@ -1,0 +1,1 @@
+Implements: #8959 Cap continuous aggregate invalidation interval range at chunk boundary

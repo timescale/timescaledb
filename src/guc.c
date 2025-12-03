@@ -71,9 +71,11 @@ static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
+int ts_guc_direct_compress_copy_tuple_sort_limit = 100000;
 bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
 bool ts_guc_enable_direct_compress_insert_client_sorted = false;
+int ts_guc_direct_compress_insert_tuple_sort_limit = 10000;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -117,6 +119,7 @@ TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1 = false;
 
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
+TSDLLEXPORT bool ts_guc_enable_in_memory_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT bool ts_guc_enable_uuid_compression = true;
@@ -480,6 +483,21 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomIntVariable(MAKE_EXTOPTION("direct_compress_copy_tuple_sort_limit"),
+							"Number of tuples that can be sorted at once in a COPY operation",
+							"This is mainly used to keep the memory footprint down for "
+							"operations like importing large amounts of data in "
+							"single transaction. Setting this to 0 would make it unlimited.",
+							&ts_guc_direct_compress_copy_tuple_sort_limit,
+							100000,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_insert"),
 							 "Enable direct compression during INSERT",
 							 "Enable experimental support for direct compression during INSERT",
@@ -513,6 +531,21 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("direct_compress_insert_tuple_sort_limit"),
+							"Number of tuples that can be sorted at once in an INSERT operation",
+							"This is mainly used to keep the memory footprint down for "
+							"operations like importing large amounts of data in "
+							"single transaction. Setting this to 0 would make it unlimited.",
+							&ts_guc_direct_compress_insert_tuple_sort_limit,
+							10000,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_optimizations"),
 							 "Enable TimescaleDB query optimizations",
@@ -868,6 +901,16 @@ _guc_init(void)
 							 "Enable segmentwise recompression functionality",
 							 "Enable segmentwise recompression",
 							 &ts_guc_enable_segmentwise_recompression,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_in_memory_recompression"),
+							 "Enable in-memory recompression functionality",
+							 "Enable in-memory recompression",
+							 &ts_guc_enable_in_memory_recompression,
 							 true,
 							 PGC_USERSET,
 							 0,

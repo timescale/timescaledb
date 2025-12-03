@@ -376,15 +376,14 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig, Relids child_relids
 			else
 				newec->ec_members = lappend(newec->ec_members, em);
 
+#endif
 			int i = -1;
 			while ((i = bms_next_member(em->em_relids, i)) >= 0)
 			{
-				RelOptInfo *child_rel = root->simple_rel_array[i];
+				RelOptInfo *rel = root->simple_rel_array[i];
 
-				child_rel->eclass_indexes =
-					bms_add_member(child_rel->eclass_indexes, root->eq_classes->length);
+				rel->eclass_indexes = bms_add_member(rel->eclass_indexes, root->eq_classes->length);
 			}
-#endif
 		}
 	}
 	/* if any transforms were found return new ec */
@@ -558,13 +557,18 @@ ts_sort_transform_replace_pathkeys(void *node, List *transformed_pathkeys, List 
 
 	if (IsA(path, CustomPath))
 	{
-		/*
-		 * We should only see ChunkAppend here.
-		 */
 		CustomPath *custom = castNode(CustomPath, path);
 		ts_sort_transform_replace_pathkeys(custom->custom_paths,
 										   transformed_pathkeys,
 										   original_pathkeys);
+
+		/* Need to handle tsl-specific custom path types */
+		if (ts_cm_functions->sort_transform_replace_pathkeys != NULL)
+		{
+			ts_cm_functions->sort_transform_replace_pathkeys(path,
+															 transformed_pathkeys,
+															 original_pathkeys);
+		}
 	}
 	else if (IsA(path, MergeAppendPath))
 	{

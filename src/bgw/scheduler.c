@@ -248,9 +248,7 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 
 		job_stat = ts_bgw_job_stat_find(sjob->job.fd.id);
 
-		Assert(job_stat != NULL);
-
-		if (!ts_bgw_job_stat_end_was_marked(job_stat))
+		if (job_stat && !ts_bgw_job_stat_end_was_marked(job_stat))
 		{
 			/*
 			 * Usually the job process will mark the end, but if the job gets

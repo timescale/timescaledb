@@ -10,14 +10,14 @@ CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE a
 SELECT set_integer_now_func('continuous_agg_test', 'integer_now_test1');
 
 -- watermark tabels start out empty
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 -- inserting into a table that does not have continuous_agg_insert_trigger doesn't change the watermark
 INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2), (21, 3), (22, 4);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 CREATE MATERIALIZED VIEW cagg1 WITH (tsdb.continuous, tsdb.materialized_only=false)
   AS SELECT time_bucket('5', time) FROM continuous_agg_test GROUP BY 1 WITH NO DATA;
@@ -28,8 +28,8 @@ CREATE MATERIALIZED VIEW cagg1 WITH (tsdb.continuous, tsdb.materialized_only=fal
 -- entire table anyway.
 INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2), (21, 3), (22, 4);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 -- set the continuous_aggs_invalidation_threshold to 15, any insertions below that value need an invalidation
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -38,52 +38,52 @@ UPDATE _timescaledb_catalog.continuous_aggs_invalidation_threshold SET watermark
 
 INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2), (21, 3), (22, 4);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 -- INSERTs only above the continuous_aggs_invalidation_threshold won't change the continuous_aggs_hypertable_invalidation_log
 INSERT INTO continuous_agg_test VALUES (21, 3), (22, 4);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 -- INSERTs only below the continuous_aggs_invalidation_threshold will change the continuous_aggs_hypertable_invalidation_log
 INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 -- test INSERTing other values
 INSERT INTO continuous_agg_test VALUES (1, 7), (12, 6), (24, 5), (51, 4);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 -- INSERT after dropping a COLUMN
 ALTER TABLE continuous_agg_test DROP COLUMN data;
 
 INSERT INTO continuous_agg_test VALUES (-1), (-2), (-3), (-4);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 INSERT INTO continuous_agg_test VALUES (100);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 -- INSERT after adding a COLUMN
 ALTER TABLE continuous_agg_test ADD COLUMN d BOOLEAN;
 
 INSERT INTO continuous_agg_test VALUES (-6, true), (-7, false), (-3, true), (-4, false);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 INSERT INTO continuous_agg_test VALUES (120, false), (200, true);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DELETE FROM _timescaledb_catalog.continuous_agg where mat_hypertable_id =  2;
@@ -110,8 +110,8 @@ CREATE MATERIALIZED VIEW cit_view
 
 INSERT INTO ca_inval_test SELECT generate_series(0, 5);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 UPDATE _timescaledb_catalog.continuous_aggs_invalidation_threshold
@@ -121,13 +121,13 @@ WHERE hypertable_id = 3;
 
 INSERT INTO ca_inval_test SELECT generate_series(5, 15);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 INSERT INTO ca_inval_test SELECT generate_series(16, 20);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
@@ -143,8 +143,8 @@ UPDATE ca_inval_test SET time = 12 WHERE time = 16;
 UPDATE ca_inval_test SET time = 19 WHERE time = 18;
 UPDATE ca_inval_test SET time = 17 WHERE time = 19;
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 DROP TABLE ca_inval_test CASCADE;
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -166,8 +166,8 @@ CREATE MATERIALIZED VIEW continuous_view
         FROM ts_continuous_test
         GROUP BY 1 WITH NO DATA;
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 UPDATE _timescaledb_catalog.continuous_aggs_invalidation_threshold
@@ -177,16 +177,16 @@ WHERE hypertable_id = 5;
 
 INSERT INTO ts_continuous_test VALUES (1, 1);
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 -- aborts don't get written
 BEGIN;
     INSERT INTO ts_continuous_test VALUES (-20, -20);
 ABORT;
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
-SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold ORDER BY 1,2;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2,3;
 
 DROP TABLE ts_continuous_test CASCADE;
 

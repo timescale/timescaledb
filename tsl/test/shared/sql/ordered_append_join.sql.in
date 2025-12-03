@@ -68,6 +68,8 @@ SET client_min_messages TO error;
 -- diff compressed and uncompressed results
 :DIFF_CMD
 
+\set ECHO all
+
 -- #4418
 -- test ordered append planning when inner join 2 hypertables on time column
 CREATE table i4418_1(time timestamptz, device text);
@@ -87,3 +89,36 @@ DROP TABLE i4418_1;
 DROP TABLE i4418_2;
 
 reset enable_nestloop;
+
+
+-- Ordered append with cross-type mergejoinable equality operator.
+create table dates(ts date) with (timescaledb.hypertable, timescaledb.partition_column = ts);
+
+insert into dates values ('2021-01-01'), ('2022-02-02'), ('2023-03-03');
+
+create table times(ts timestamp) with (timescaledb.hypertable, timescaledb.partition_column = ts);
+
+insert into times values ('2021-01-01 00:00:01'), ('2022-02-02 00:00:00'), ('2023-03-03 00:00:00');
+
+explain (analyze, costs off, buffers off, summary off, timing off)
+select * from dates natural join times where ts > '2021-01-01';
+
+explain (analyze, costs off, buffers off, summary off, timing off)
+select * from dates natural join times where ts > '2021-01-01' order by ts;
+
+explain (analyze, costs off, buffers off, summary off, timing off)
+select * from dates natural join times where ts > '2021-01-01' order by ts limit 1;
+
+explain (analyze, costs off, buffers off, summary off, timing off)
+select * from dates natural join times where ts > '2021-01-01' order by ts desc limit 1;
+
+explain (analyze, costs off, buffers off, summary off, timing off)
+select * from dates join times on times.ts = dates.ts where times.ts > '2021-01-01' order by times.ts desc limit 1;
+
+explain (analyze, costs off, buffers off, summary off, timing off)
+select * from dates join times on times.ts = dates.ts where times.ts > '2021-01-01' order by dates.ts limit 1;
+
+drop table dates;
+
+drop table times;
+

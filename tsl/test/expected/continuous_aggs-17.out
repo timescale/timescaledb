@@ -723,7 +723,7 @@ select count(*) from _timescaledb_catalog.continuous_aggs_invalidation_threshold
 select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  count 
 -------
-     1
+     8
 
 DROP TABLE conditions CASCADE;
 NOTICE:  drop cascades to 2 other objects

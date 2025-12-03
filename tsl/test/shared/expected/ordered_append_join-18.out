@@ -4044,14 +4044,27 @@ SET timescaledb.enable_chunkwise_aggregation = OFF;
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
 \set ECHO none
+-- #4418
+-- test ordered append planning when inner join 2 hypertables on time column
+CREATE table i4418_1(time timestamptz, device text);
+CREATE table i4418_2(time timestamptz, device text);
+SELECT table_name FROM create_hypertable('i4418_1','time');
  table_name 
 ------------
  i4418_1
 
+SELECT table_name FROM create_hypertable('i4418_2','time');
  table_name 
 ------------
  i4418_2
 
+INSERT INTO i4418_1 SELECT time, 'device 1' FROM generate_series('2022-08-01'::timestamptz, '2022-08-20'::timestamptz,'3min'::interval) g(time);
+INSERT INTO i4418_2 SELECT * FROM i4418_1;
+EXPLAIN (analyze,buffers off, costs off,timing off,summary off) SELECT time_bucket('1d', tbl1.time), count(*)
+FROM i4418_1 tbl1
+INNER JOIN i4418_2 tbl2
+ON tbl1.device = tbl2.device AND tbl1.time = tbl2.time
+GROUP BY 1 ORDER BY 1;
 --- QUERY PLAN ---
  Sort (actual rows=20.00 loops=1)
    Sort Key: (time_bucket('@ 1 day'::interval, tbl1."time"))
@@ -4077,3 +4090,137 @@ SET timescaledb.enable_chunkwise_aggregation = OFF;
                            ->  Seq Scan on _hyper_X_X_chunk tbl2_3 (actual rows=3360.00 loops=1)
                            ->  Seq Scan on _hyper_X_X_chunk tbl2_4 (actual rows=1101.00 loops=1)
 
+DROP TABLE i4418_1;
+DROP TABLE i4418_2;
+reset enable_nestloop;
+-- Ordered append with cross-type mergejoinable equality operator.
+create table dates(ts date) with (timescaledb.hypertable, timescaledb.partition_column = ts);
+insert into dates values ('2021-01-01'), ('2022-02-02'), ('2023-03-03');
+create table times(ts timestamp) with (timescaledb.hypertable, timescaledb.partition_column = ts);
+insert into times values ('2021-01-01 00:00:01'), ('2022-02-02 00:00:00'), ('2023-03-03 00:00:00');
+explain (analyze, costs off, buffers off, summary off, timing off)
+select * from dates natural join times where ts > '2021-01-01';
+--- QUERY PLAN ---
+ Merge Join (actual rows=2.00 loops=1)
+   Merge Cond: (times.ts = dates.ts)
+   ->  Merge Append (actual rows=3.00 loops=1)
+         Sort Key: times.ts
+         ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+               Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+         ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+               Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+         ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+               Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+   ->  Materialize (actual rows=3.00 loops=1)
+         ->  Merge Append (actual rows=3.00 loops=1)
+               Sort Key: dates.ts
+               ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+
+explain (analyze, costs off, buffers off, summary off, timing off)
+select * from dates natural join times where ts > '2021-01-01' order by ts;
+--- QUERY PLAN ---
+ Merge Join (actual rows=2.00 loops=1)
+   Merge Cond: (times.ts = dates.ts)
+   ->  Custom Scan (ChunkAppend) on times (actual rows=3.00 loops=1)
+         Order: times.ts
+         ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+               Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+         ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+               Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+         ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+               Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+   ->  Materialize (actual rows=3.00 loops=1)
+         ->  Custom Scan (ChunkAppend) on dates (actual rows=3.00 loops=1)
+               Order: dates.ts
+               ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+
+explain (analyze, costs off, buffers off, summary off, timing off)
+select * from dates natural join times where ts > '2021-01-01' order by ts limit 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Merge Join (actual rows=1.00 loops=1)
+         Merge Cond: (times.ts = dates.ts)
+         ->  Custom Scan (ChunkAppend) on times (actual rows=2.00 loops=1)
+               Order: times.ts
+               ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+               ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+               ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (never executed)
+                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+         ->  Materialize (actual rows=2.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on dates (actual rows=2.00 loops=1)
+                     Order: dates.ts
+                     ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (never executed)
+
+explain (analyze, costs off, buffers off, summary off, timing off)
+select * from dates natural join times where ts > '2021-01-01' order by ts desc limit 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Merge Join (actual rows=1.00 loops=1)
+         Merge Cond: (times.ts = dates.ts)
+         ->  Custom Scan (ChunkAppend) on times (actual rows=1.00 loops=1)
+               Order: times.ts DESC
+               ->  Index Scan using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+               ->  Index Scan using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (never executed)
+                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+               ->  Index Scan using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (never executed)
+                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+         ->  Materialize (actual rows=1.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on dates (actual rows=1.00 loops=1)
+                     Order: dates.ts DESC
+                     ->  Index Scan using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (never executed)
+                     ->  Index Scan using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (never executed)
+
+explain (analyze, costs off, buffers off, summary off, timing off)
+select * from dates join times on times.ts = dates.ts where times.ts > '2021-01-01' order by times.ts desc limit 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Merge Join (actual rows=1.00 loops=1)
+         Merge Cond: (times.ts = dates.ts)
+         ->  Custom Scan (ChunkAppend) on times (actual rows=1.00 loops=1)
+               Order: times.ts DESC
+               ->  Index Scan using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+               ->  Index Scan using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (never executed)
+                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+               ->  Index Scan using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (never executed)
+                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+         ->  Materialize (actual rows=1.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on dates (actual rows=1.00 loops=1)
+                     Order: dates.ts DESC
+                     ->  Index Scan using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (never executed)
+                     ->  Index Scan using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (never executed)
+
+explain (analyze, costs off, buffers off, summary off, timing off)
+select * from dates join times on times.ts = dates.ts where times.ts > '2021-01-01' order by dates.ts limit 1;
+--- QUERY PLAN ---
+ Limit (actual rows=1.00 loops=1)
+   ->  Merge Join (actual rows=1.00 loops=1)
+         Merge Cond: (times.ts = dates.ts)
+         ->  Custom Scan (ChunkAppend) on times (actual rows=2.00 loops=1)
+               Order: times.ts
+               ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+               ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+               ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (never executed)
+                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
+         ->  Materialize (actual rows=2.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on dates (actual rows=2.00 loops=1)
+                     Order: dates.ts
+                     ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan Backward using _hyper_X_X_chunk_dates_ts_idx on _hyper_X_X_chunk (never executed)
+
+drop table dates;
+drop table times;

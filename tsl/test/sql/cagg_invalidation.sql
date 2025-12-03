@@ -852,3 +852,64 @@ SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 CALL _timescaledb_functions.process_hypertable_invalidations('measurements');
 \set ON_ERROR_STOP 1
 
+-- test direct compress insert invalidation
+CREATE TABLE direct_compress_insert(time timestamptz) WITH (tsdb.hypertable);
+INSERT INTO direct_compress_insert SELECT '2025-01-01';
+CREATE MATERIALIZED VIEW cagg_insert WITH (tsdb.continuous) AS SELECT time_bucket('1day', time) FROM direct_compress_insert GROUP BY 1;
+
+SET timescaledb.enable_direct_compress_insert = true;
+EXPLAIN (analyze,buffers off,costs off,timing off,summary off) INSERT INTO direct_compress_insert SELECT '2024-01-01'::timestamptz + format('%sm',i)::interval FROM generate_series(1,1000) g(i);
+EXPLAIN (analyze,buffers off,costs off,timing off,summary off) INSERT INTO direct_compress_insert SELECT '2024-01-01'::timestamptz - format('%sm',i)::interval FROM generate_series(1,1000) g(i);
+
+-- should have 2 entries
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 18 ORDER BY 1,2;
+
+EXPLAIN (analyze,buffers off,costs off,timing off,summary off) INSERT INTO direct_compress_insert SELECT '2023-12-31'::timestamptz + format('%sm',i)::interval FROM generate_series(1,2000) g(i);
+
+-- should have 3 entries
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 18 ORDER BY 1,2;
+
+-- should have 1 uncompressed and 1 compressed chunk
+EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_insert;
+
+-- test direct compress copy invalidation
+CREATE TABLE direct_compress_copy(time timestamptz) WITH (tsdb.hypertable);
+INSERT INTO direct_compress_copy SELECT '2025-01-01';
+CREATE MATERIALIZED VIEW cagg_copy WITH (tsdb.continuous) AS SELECT time_bucket('1day', time) FROM direct_compress_copy GROUP BY 1;
+SET timescaledb.enable_direct_compress_copy = true;
+COPY direct_compress_copy FROM STDIN;
+2023-01-01
+2023-01-03
+\.
+
+-- should have 1 entries now
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 21 ORDER BY 1,2;
+
+COPY direct_compress_copy FROM STDIN;
+2023-01-03
+2022-12-31
+\.
+
+-- should have 2 entries now
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 21 ORDER BY 1,2;
+
+-- range spanning multiple chunks
+COPY direct_compress_copy FROM STDIN;
+2022-01-01
+2022-02-28
+\.
+
+-- should have 3 entries now
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 21 ORDER BY 1,2;
+
+-- should have 1 uncompressed and 3 compressed chunk
+EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_copy;
+
+-- test direct compress invalidation with custom partitioning function (not supported atm)
+CREATE OR REPLACE FUNCTION f_month(timestamptz) returns int language sql AS $$ SELECT 12 * extract(year from $1) + extract(month from $1);$$ immutable;
+CREATE TABLE part_cagg (time timestamptz);
+SELECT create_hypertable('part_cagg', 'time', time_partitioning_func => 'f_month', chunk_time_interval => 1);
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW part_cagg1 WITH (tsdb.continuous) AS SELECT time_bucket('1day', time) FROM part_cagg GROUP BY 1;
+\set ON_ERROR_STOP 1
+

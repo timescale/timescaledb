@@ -5048,7 +5048,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 
 	if (!dimension_slice_found)
 		ereport(ERROR,
-				(errmsg("cannot find slice for merging dimension"),
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("cannot find slice for merging dimension"),
 				 errhint("chunk 1: \"%s\", chunk 2: \"%s\", dimension ID %d",
 						 get_rel_name(chunk->table_id),
 						 get_rel_name(merge_chunk->table_id),
@@ -5056,7 +5057,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 
 	if (slice->fd.range_end != merge_slice->fd.range_start)
 		ereport(ERROR,
-				(errmsg("cannot merge non-adjacent chunks over supplied dimension"),
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("cannot merge non-adjacent chunks over supplied dimension"),
 				 errhint("chunk 1: \"%s\", chunk 2: \"%s\", dimension ID %d",
 						 get_rel_name(chunk->table_id),
 						 get_rel_name(merge_chunk->table_id),
@@ -5070,7 +5072,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 	 */
 	if (num_ccs <= 0)
 		ereport(ERROR,
-				(errmsg("missing chunk constraint for dimension slice"),
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("missing chunk constraint for dimension slice"),
 				 errhint("chunk: \"%s\", slice ID %d",
 						 get_rel_name(chunk->table_id),
 						 slice->fd.id)));
@@ -5117,7 +5120,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 
 	if (num_ccs <= 0)
 		ereport(ERROR,
-				(errmsg("missing chunk constraint for merged dimension slice"),
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("missing chunk constraint for merged dimension slice"),
 				 errhint("chunk: \"%s\", slice ID %d",
 						 get_rel_name(chunk->table_id),
 						 new_slice->fd.id)));
@@ -5259,7 +5263,7 @@ ts_chunk_get_osm_chunk_id(int hypertable_id)
 	if (num_found > 1)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_TS_INTERNAL_ERROR),
+				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("More than 1 OSM chunk found for hypertable (%d)", hypertable_id)));
 	}
 
