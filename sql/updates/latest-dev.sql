@@ -152,3 +152,37 @@ DROP SCHEMA IF EXISTS _timescaledb_debug;
 ALTER TABLE _timescaledb_config.bgw_job SET SCHEMA _timescaledb_catalog;
 DROP SCHEMA IF EXISTS _timescaledb_config;
 
+-- Remove legacy partialize/finalize aggregate functions. It should be
+-- conditional because on 2.12.0 we moved from internal to functions schema
+DO
+$$
+DECLARE
+    foid regprocedure;
+    fkind text;
+    fargs text;
+    funcs text[] = '{finalize_agg, finalize_agg_sfunc, finalize_agg_ffunc, partialize_agg}';
+BEGIN
+    FOR foid, fkind, fargs IN
+        SELECT
+            p.oid,
+            CASE
+                WHEN p.prokind = 'f' THEN 'FUNCTION'
+                WHEN p.prokind = 'a' THEN 'AGGREGATE'
+                ELSE 'PROCEDURE'
+            END,
+            pg_catalog.pg_get_function_arguments(p.oid)
+        FROM
+            pg_catalog.pg_proc AS p
+        WHERE
+            p.proname = ANY(funcs)
+            AND p.pronamespace IN ('_timescaledb_internal'::regnamespace, '_timescaledb_functions'::regnamespace)
+        ORDER BY
+            p.proname
+    LOOP
+        EXECUTE format('ALTER EXTENSION timescaledb DROP %s %s (%s);', fkind, foid::regproc, fargs);
+        EXECUTE format('DROP %s %s (%s);', fkind, foid::regproc, fargs);
+    END LOOP;
+END;
+$$
+LANGUAGE plpgsql;
+

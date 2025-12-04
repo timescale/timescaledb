@@ -619,10 +619,6 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 		return;
 	}
 
-	/* Skip partial aggregations already created by _timescaledb_functions.partialize_agg */
-	if (existing_agg_path->aggsplit == AGGSPLIT_INITIAL_SERIAL)
-		return;
-
 	/* Don't replan aggregation if it contains already partials or non-serializable aggregates */
 	if (root->hasNonPartialAggs || root->hasNonSerialAggs)
 		return;

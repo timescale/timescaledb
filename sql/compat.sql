@@ -146,31 +146,6 @@ BEGIN
 END$$
 SET search_path TO pg_catalog,pg_temp;
 
-
--- We cannot create a wrapper function in plpgsql for the aggregate transition
--- functions because plpgsql cannot deal with datatype internal but since these
--- are used in an aggregation context and cannot be called directly and will
--- be used in conjunction with partialize_agg it is sufficient to have the
--- warning there.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.finalize_agg_ffunc(
-tstate internal, aggfn TEXT, inner_agg_collation_schema NAME, inner_agg_collation_name NAME, inner_agg_input_types NAME[][], inner_agg_serialized_state BYTEA, return_type_dummy_val ANYELEMENT)
-RETURNS anyelement
-AS '@MODULE_PATHNAME@', 'ts_finalize_agg_ffunc'
-LANGUAGE C IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.finalize_agg_sfunc(
-tstate internal, aggfn TEXT, inner_agg_collation_schema NAME, inner_agg_collation_name NAME, inner_agg_input_types NAME[][], inner_agg_serialized_state BYTEA, return_type_dummy_val ANYELEMENT)
-RETURNS internal
-AS '@MODULE_PATHNAME@', 'ts_finalize_agg_sfunc'
-LANGUAGE C IMMUTABLE;
-
-CREATE OR REPLACE AGGREGATE _timescaledb_internal.finalize_agg(agg_name TEXT, inner_agg_collation_schema NAME, inner_agg_collation_name NAME, inner_agg_input_types NAME[][], inner_agg_serialized_state BYTEA, return_type_dummy_val anyelement) (
-    SFUNC = _timescaledb_functions.finalize_agg_sfunc,
-    STYPE = internal,
-    FINALFUNC = _timescaledb_functions.finalize_agg_ffunc,
-    FINALFUNC_EXTRA
-);
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.freeze_chunk(chunk regclass) RETURNS boolean LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
@@ -277,16 +252,6 @@ BEGIN
     RAISE WARNING 'function _timescaledb_internal.interval_to_usec(interval) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
   END IF;
   RETURN _timescaledb_functions.interval_to_usec($1);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.partialize_agg(arg anyelement) RETURNS bytea LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.partialize_agg(anyelement) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN _timescaledb_functions.partialize_agg($1);
 END$$
 SET search_path TO pg_catalog,pg_temp;
 

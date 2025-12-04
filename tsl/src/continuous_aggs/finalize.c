@@ -4,17 +4,12 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-/*
- * This file contains the code related to the *NOT* finalized version of
- * Continuous Aggregates (with partials)
- */
 #include "finalize.h"
 
 #include <parser/parse_relation.h>
 
 #include "common.h"
 #include "create.h"
-#include <partialize_finalize.h>
 
 /* Static function prototypes */
 static Var *mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *input,
@@ -207,10 +202,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 
 /*
  * Add Information required to create and populate the materialization table columns
- * a) create a columndef for the materialization table
- * b) create the corresponding expr to populate the column of the materialization table (e..g for a
- *    column that is an aggref, we create a partialize_agg expr to populate the column Returns: the
- *    Var corresponding to the newly created column of the materialization table
+ * creating a columndef for the materialization table.
  *
  * Notes: make sure the materialization table columns do not save
  *        values computed by mutable function.

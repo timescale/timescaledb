@@ -21,8 +21,6 @@
 #include "common.h"
 #include "ts_catalog/catalog.h"
 
-#define FINALFN "finalize_agg"
-
 extern Query *finalize_query_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 											  ObjectAddress *mattbladdress);
 extern void finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,

@@ -46,7 +46,6 @@ set(SOURCE_FILES
     views_experimental.sql
     gapfill.sql
     maintenance_utils.sql
-    partialize_finalize.sql
     restoring.sql
     job_api.sql
     policy_api.sql

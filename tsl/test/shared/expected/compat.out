@@ -105,12 +105,6 @@ WARNING:  function _timescaledb_internal.interval_to_usec(interval) is deprecate
 ------------------
                  
 
-SELECT _timescaledb_internal.partialize_agg(NULL::text);
-WARNING:  function _timescaledb_internal.partialize_agg(anyelement) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- partialize_agg 
-----------------
- 
-
 SELECT _timescaledb_internal.policy_compression_check(NULL);
 WARNING:  function _timescaledb_internal.policy_compression_check(jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  config must not be NULL

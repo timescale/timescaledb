@@ -100,9 +100,6 @@ typedef struct CrossModuleFunctions
 	void (*tsl_postprocess_plan)(PlannedStmt *stmt);
 
 	/* Continuous Aggregates */
-	PGFunction partialize_agg;
-	PGFunction finalize_agg_sfunc;
-	PGFunction finalize_agg_ffunc;
 	DDLResult (*process_cagg_viewstmt)(Node *stmt, const char *query_string, void *pstmt,
 									   WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_refresh;
