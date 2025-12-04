@@ -87,7 +87,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log O
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DELETE FROM _timescaledb_catalog.continuous_agg where mat_hypertable_id =  2;
-DELETE FROM _timescaledb_config.bgw_job WHERE id = 2;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE id = 2;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 DROP TABLE continuous_agg_test CASCADE;

@@ -29,7 +29,6 @@ typedef enum TsExtensionSchemas
 	TS_FUNCTIONS_SCHEMA,
 	TS_INTERNAL_SCHEMA,
 	TS_CACHE_SCHEMA,
-	TS_CONFIG_SCHEMA,
 	TS_EXPERIMENTAL_SCHEMA,
 	TS_INFORMATION_SCHEMA,
 	_TS_MAX_SCHEMA,
@@ -41,7 +40,6 @@ typedef enum TsExtensionSchemas
 #define FUNCTIONS_SCHEMA_NAME "_timescaledb_functions"
 #define INTERNAL_SCHEMA_NAME "_timescaledb_internal"
 #define CACHE_SCHEMA_NAME "_timescaledb_cache"
-#define CONFIG_SCHEMA_NAME "_timescaledb_config"
 #define EXPERIMENTAL_SCHEMA_NAME "timescaledb_experimental"
 #define INFORMATION_SCHEMA_NAME "timescaledb_information"
 

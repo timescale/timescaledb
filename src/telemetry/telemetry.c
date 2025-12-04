@@ -460,7 +460,7 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		"	MAX(consecutive_crashes) AS max_consecutive_crashes "
 		"FROM "
 		"	_timescaledb_internal.bgw_job_stat s "
-		"	JOIN _timescaledb_config.bgw_job j on j.id = s.job_id "
+		"	JOIN _timescaledb_catalog.bgw_job j on j.id = s.job_id "
 		"GROUP BY job_type "
 		"ORDER BY job_type";
 

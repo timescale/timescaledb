@@ -276,7 +276,7 @@ SELECT add_continuous_aggregate_policy('mat_m1', NULL, 3000::bigint, '12 h'::int
 ---------------------------------
                             1022
 
-SELECT id AS job_id, config AS config FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
+SELECT id AS job_id, config AS config FROM _timescaledb_catalog.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
 SELECT add_continuous_aggregate_policy('mat_m1', 2000::bigint, NULL, '12 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
@@ -313,7 +313,7 @@ SELECT add_continuous_aggregate_policy('mat_m1', 2000::bigint, NULL, '12 h'::int
 ---------------------------------
                             1024
 
-SELECT id AS job_id, config AS config FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
+SELECT id AS job_id, config AS config FROM _timescaledb_catalog.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
 SELECT add_continuous_aggregate_policy('mat_m1', NULL, 3000::bigint, '12 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
@@ -727,7 +727,7 @@ SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 months'::interval, '12
 ---------------------------------
                             1060
 
-SELECT id AS job_id, config AS config FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
+SELECT id AS job_id, config AS config FROM _timescaledb_catalog.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
 SELECT add_continuous_aggregate_policy('mat_m1', '2 weeks'::interval, NULL, '12 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
@@ -764,7 +764,7 @@ SELECT add_continuous_aggregate_policy('mat_m1', '2 weeks'::interval, NULL, '12 
 ---------------------------------
                             1062
 
-SELECT id AS job_id, config AS config FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
+SELECT id AS job_id, config AS config FROM _timescaledb_catalog.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
 SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 months'::interval, '12 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
@@ -1164,7 +1164,7 @@ SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 months'::interval, '12
 ---------------------------------
                             1098
 
-SELECT id AS job_id, config AS config FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
+SELECT id AS job_id, config AS config FROM _timescaledb_catalog.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
 SELECT add_continuous_aggregate_policy('mat_m1', '2 weeks'::interval, NULL, '12 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
@@ -1201,7 +1201,7 @@ SELECT add_continuous_aggregate_policy('mat_m1', '2 weeks'::interval, NULL, '12 
 ---------------------------------
                             1100
 
-SELECT id AS job_id, config AS config FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
+SELECT id AS job_id, config AS config FROM _timescaledb_catalog.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
 SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 months'::interval, '12 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------

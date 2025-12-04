@@ -196,7 +196,7 @@ SELECT _timescaledb_functions.stop_background_workers();
 -- Test bgw_job_stat_history retention job
 
 -- Alter the drop_after interval to be fixed (30 days) to ensure tests are deterministic
-SELECT config AS config FROM _timescaledb_config.bgw_job WHERE id = 3 \gset
+SELECT config AS config FROM _timescaledb_catalog.bgw_job WHERE id = 3 \gset
 SELECT config FROM alter_job(3, config => jsonb_set(:'config', '{drop_after}', '"30 days"'));
 
 -- These configuration should fail since they are not valid.
@@ -351,7 +351,7 @@ TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 
 -- Test 8: No records older than retention period and not more than
 -- the expected number of successes and failures per job.
-SELECT config AS config FROM _timescaledb_config.bgw_job WHERE id = 3 \gset
+SELECT config AS config FROM _timescaledb_catalog.bgw_job WHERE id = 3 \gset
 SELECT config FROM alter_job(3,
     config => jsonb_set(jsonb_set(:'config', '{max_failures_per_job}', '15'), '{max_successes_per_job}', '10'));
 INSERT INTO _timescaledb_internal.bgw_job_stat_history

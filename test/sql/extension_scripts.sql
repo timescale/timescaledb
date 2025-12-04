@@ -22,11 +22,6 @@ CREATE EXTENSION timescaledb;
 DROP SCHEMA _timescaledb_cache;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE SCHEMA _timescaledb_config;
-CREATE EXTENSION timescaledb;
-DROP SCHEMA _timescaledb_config;
-
-\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA timescaledb_experimental;
 CREATE EXTENSION timescaledb;
 DROP SCHEMA timescaledb_experimental;

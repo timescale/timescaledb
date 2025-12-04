@@ -11,7 +11,7 @@ SELECT ca.user_view_name AS relation_name,
   j.config,
   ht.schema_name AS hypertable_schema,
   ht.table_name AS hypertable_name
-FROM _timescaledb_config.bgw_job j
+FROM _timescaledb_catalog.bgw_job j
   JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = j.hypertable_id
   JOIN _timescaledb_catalog.hypertable ht ON ht.id = ca.mat_hypertable_id;
 

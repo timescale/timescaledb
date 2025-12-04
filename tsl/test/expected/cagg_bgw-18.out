@@ -31,7 +31,7 @@ REVOKE EXECUTE ON FUNCTION get_constant_no_perms() FROM PUBLIC;
 CREATE OR REPLACE FUNCTION ts_bgw_params_mock_wait_returns_immediately(new_val INTEGER) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 -- Remove any default jobs, e.g., telemetry
-DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE public.bgw_log(
@@ -55,7 +55,7 @@ SELECT ts_bgw_params_create();
 ----------------------
  
 
-SELECT * FROM _timescaledb_config.bgw_job;
+SELECT * FROM _timescaledb_catalog.bgw_job;
  id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
 
@@ -106,9 +106,9 @@ SELECT mat_hypertable_id, bucket_width FROM _timescaledb_catalog.continuous_aggs
                  2 | 2
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
-SELECT id AS job_id FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id \gset
+SELECT id AS job_id FROM _timescaledb_catalog.bgw_job where hypertable_id=:mat_hypertable_id \gset
 -- job was created
-SELECT * FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id;
+SELECT * FROM _timescaledb_catalog.bgw_job where hypertable_id=:mat_hypertable_id;
   id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                             config                              |      check_schema      |                check_name                 | timezone 
 ------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+-------------------+-----------+----------------+---------------+---------------+-----------------------------------------------------------------+------------------------+-------------------------------------------+----------
  1000 | Refresh Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_functions | policy_refresh_continuous_aggregate | default_perm_user | t         | f              |               |             2 | {"end_offset": 4, "start_offset": null, "mat_hypertable_id": 2} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
@@ -150,7 +150,7 @@ SELECT * FROM sorted_bgw_log;
       7 |         0 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
       8 |         0 | Refresh Continuous Aggregate Policy [1000] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
-SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
+SELECT * FROM _timescaledb_catalog.bgw_job where id=:job_id;
   id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                             config                              |      check_schema      |                check_name                 | timezone 
 ------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+-------------------+-----------+----------------+---------------+---------------+-----------------------------------------------------------------+------------------------+-------------------------------------------+----------
  1000 | Refresh Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_functions | policy_refresh_continuous_aggregate | default_perm_user | t         | f              |               |             2 | {"end_offset": 4, "start_offset": null, "mat_hypertable_id": 2} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
@@ -325,7 +325,7 @@ SELECT add_continuous_aggregate_policy('test_continuous_agg_view', 100::integer,
                             1001
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
-SELECT id AS job_id FROM _timescaledb_config.bgw_job WHERE hypertable_id=:mat_hypertable_id \gset
+SELECT id AS job_id FROM _timescaledb_catalog.bgw_job WHERE hypertable_id=:mat_hypertable_id \gset
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
@@ -543,7 +543,7 @@ SELECT add_continuous_aggregate_policy('test_continuous_agg_view', 100::integer,
 ---------------------------------
                             1002
 
-SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
+SELECT id AS job_id FROM _timescaledb_catalog.bgw_job ORDER BY id desc limit 1 \gset
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
@@ -612,13 +612,13 @@ SELECT add_continuous_aggregate_policy('test_continuous_agg_view_user_2', NULL, 
 ---------------------------------
                             1003
 
-SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
+SELECT id AS job_id FROM _timescaledb_catalog.bgw_job ORDER BY id desc limit 1 \gset
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
 
-SELECT id, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id ;
+SELECT id, owner FROM _timescaledb_catalog.bgw_job WHERE id = :job_id ;
   id  |        owner        
 ------+---------------------
  1003 | default_perm_user_2
@@ -683,7 +683,7 @@ SELECT * from sorted_bgw_log;
       1 | 43200000000 | Refresh Continuous Aggregate Policy [1003] | permission denied for table test_continuous_agg_table_w_grant
 
 -- Count the number of continuous aggregate policies
-SELECT count(*) FROM _timescaledb_config.bgw_job
+SELECT count(*) FROM _timescaledb_catalog.bgw_job
  WHERE proc_schema = '_timescaledb_functions'
    AND proc_name = 'policy_refresh_continuous_aggregate';
  count 

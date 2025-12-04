@@ -151,7 +151,7 @@ BEGIN
 END
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
-INSERT INTO _timescaledb_config.bgw_job (
+INSERT INTO _timescaledb_catalog.bgw_job (
     id,
     application_name,
     schedule_interval,

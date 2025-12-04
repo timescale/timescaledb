@@ -749,7 +749,7 @@ BEGIN
 		include_tiered_data => include_tiered_data
 	);
 
-	cfg := config FROM _timescaledb_config.bgw_job WHERE id = job_id;
+	cfg := config FROM _timescaledb_catalog.bgw_job WHERE id = job_id;
 	RAISE NOTICE 'config: %', jsonb_pretty(cfg);
 
 	RETURN job_id;

@@ -149,4 +149,6 @@ ANALYZE _timescaledb_catalog.continuous_agg;
 DROP FUNCTION IF EXISTS _timescaledb_debug.extension_state();
 DROP SCHEMA IF EXISTS _timescaledb_debug;
 
+ALTER TABLE _timescaledb_config.bgw_job SET SCHEMA _timescaledb_catalog;
+DROP SCHEMA IF EXISTS _timescaledb_config;
 

@@ -150,11 +150,11 @@ select add_compression_policy('hyper', interval '3 weeks', initial_start => now(
 select r->'num_user_defined_actions_fixed' as UDA_fixed, r->'num_user_defined_actions' AS UDA_drifting FROM get_telemetry_report() r;
 select r->'num_continuous_aggs_policies_fixed' as contagg_fixed, r->'num_continuous_aggs_policies' as contagg_drifting FROM get_telemetry_report() r;
 select r->'num_compression_policies_fixed' as compress_fixed, r->'num_retention_policies_fixed' as retention_fixed FROM get_telemetry_report() r;
-DELETE FROM _timescaledb_config.bgw_job WHERE id = 2;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE id = 2;
 TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 -- create some "errors" for testing
 INSERT INTO
-_timescaledb_config.bgw_job(id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name)
+_timescaledb_catalog.bgw_job(id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name)
 VALUES (2000, 'User-Defined Action [2000]', interval '3 days', interval '1 hour', 5, interval '5 min', 'public', 'custom_action_1'),
 (2001, 'User-Defined Action [2001]', interval '3 days', interval '1 hour', 5, interval '5 min', 'public', 'custom_action_2'),
 (2002, 'Compression Policy [2002]', interval '3 days', interval '1 hour', 5, interval '5 min', '_timescaledb_functions', 'policy_compression'),

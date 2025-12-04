@@ -39,7 +39,7 @@ CREATE VIEW cleaned_bgw_log AS
       FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
 
 -- Remove all default jobs
-DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 
 --
@@ -55,7 +55,7 @@ SELECT pg_reload_conf();
 
 RESET ROLE;
 SELECT ts_bgw_params_reset_time(0, false);
-INSERT INTO _timescaledb_config.bgw_job(
+INSERT INTO _timescaledb_catalog.bgw_job(
        application_name,
        schedule_interval,
        max_runtime,
