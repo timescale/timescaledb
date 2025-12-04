@@ -51,17 +51,12 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Read versions
+    - name: Get version of latest release
       id: versions
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        # read expected version from version.config
-        # version will only be a proper version in a release branch so we use previous_version
-        # as fallback for main
-        if grep '^version = [0-9.]\+$' version.config; then
-          version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
-        else
-          version=$(grep '^previous_version = ' version.config | sed -e 's!^previous_version = !!')
-        fi
+        version=$(gh release list --json tagName,isLatest --jq '.[] | select(.isLatest) | .tagName')
         echo "version=${version}" >>$GITHUB_OUTPUT
 
     - name: Wait for services to start
