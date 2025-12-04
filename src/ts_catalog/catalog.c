@@ -54,7 +54,7 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.table_name = TABLESPACE_TABLE_NAME,
 	},
 	[BGW_JOB] = {
-		.schema_name = CONFIG_SCHEMA_NAME,
+		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = BGW_JOB_TABLE_NAME,
 	},
 	[BGW_JOB_STAT] = {
@@ -282,7 +282,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[CHUNK_CONSTRAINT] = CATALOG_SCHEMA_NAME ".chunk_constraint_name",
 	[CHUNK_REWRITE] = NULL,
 	[TABLESPACE] = CATALOG_SCHEMA_NAME ".tablespace_id_seq",
-	[BGW_JOB] = CONFIG_SCHEMA_NAME ".bgw_job_id_seq",
+	[BGW_JOB] = CATALOG_SCHEMA_NAME ".bgw_job_id_seq",
 	[BGW_JOB_STAT] = NULL,
 	[BGW_JOB_STAT_HISTORY] = INTERNAL_SCHEMA_NAME ".bgw_job_stat_history_id_seq",
 	[CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG] = NULL,

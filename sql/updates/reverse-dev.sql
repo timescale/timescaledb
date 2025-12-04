@@ -99,3 +99,8 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.extension_state();
 CREATE SCHEMA _timescaledb_debug;
 GRANT USAGE ON SCHEMA _timescaledb_debug TO PUBLIC;
 
+CREATE SCHEMA _timescaledb_config;
+GRANT USAGE ON SCHEMA _timescaledb_config TO PUBLIC;
+
+ALTER TABLE _timescaledb_catalog.bgw_job SET SCHEMA _timescaledb_config;
+

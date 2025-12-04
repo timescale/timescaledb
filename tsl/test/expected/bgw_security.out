@@ -14,7 +14,7 @@ $$ LANGUAGE SQL;
 SET ROLE :ROLE_ADMIN;
 SELECT add_job('custom_job', '1h') AS job_id \gset
 RESET ROLE;
-SELECT id, proc_name, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+SELECT id, proc_name, owner FROM _timescaledb_catalog.bgw_job WHERE id = :job_id;
   id  | proc_name  |         owner         
 ------+------------+-----------------------
  1000 | custom_job | db_bgw_security_admin

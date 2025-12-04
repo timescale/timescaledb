@@ -13,15 +13,20 @@
 -- placed in the _timescaledb_internal schema.
 
 GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_catalog TO tsdbadmin;
-GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_config TO tsdbadmin;
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_catalog TO tsdbadmin;
-GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_config TO tsdbadmin;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA _timescaledb_catalog
       GRANT SELECT ON TABLES TO tsdbadmin;
-ALTER DEFAULT PRIVILEGES IN SCHEMA _timescaledb_config
-      GRANT SELECT ON TABLES TO tsdbadmin;
 ALTER DEFAULT PRIVILEGES IN SCHEMA _timescaledb_catalog
     GRANT SELECT ON SEQUENCES TO tsdbadmin;
-ALTER DEFAULT PRIVILEGES IN SCHEMA _timescaledb_config
-    GRANT SELECT ON SEQUENCES TO tsdbadmin;
+
+DO $$
+BEGIN
+  IF EXISTS(SELECT FROM pg_namespace WHERE nspname = '_timescaledb_config') THEN
+    GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_config TO tsdbadmin;
+    GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_config TO tsdbadmin;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA _timescaledb_config GRANT SELECT ON TABLES TO tsdbadmin;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA _timescaledb_config GRANT SELECT ON SEQUENCES TO tsdbadmin;
+  END IF;
+END
+$$;

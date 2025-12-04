@@ -93,7 +93,7 @@ view_definition                   |  SELECT time_bucket('@ 1 hour'::interval, de
 --
 -- The refresh interval determines how often the background worker
 -- for automatic materialization will run. The default is (2 x bucket_width)
-SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
+SELECT schedule_interval FROM _timescaledb_catalog.bgw_job WHERE id = 1000;
  schedule_interval 
 -------------------
  @ 2 hours
@@ -104,7 +104,7 @@ SELECT alter_job(1000, schedule_interval := '1h');
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  (1000,"@ 1 hour","@ 0",-1,"@ 2 hours",t,"{""end_offset"": ""@ 2 hours"", ""start_offset"": null, ""mat_hypertable_id"": 2}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1000]")
 
-SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
+SELECT schedule_interval FROM _timescaledb_catalog.bgw_job WHERE id = 1000;
  schedule_interval 
 -------------------
  @ 1 hour

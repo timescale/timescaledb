@@ -235,17 +235,17 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 -- Default jobs are given the id space [1,1000). User-installed jobs and any jobs created inside tests
 -- are given the id space [1000, INT_MAX). That way, we do not pg_dump jobs that are always default-installed
 -- inside other .sql scripts. This avoids insertion conflicts during pg_restore.
-CREATE SEQUENCE _timescaledb_config.bgw_job_id_seq
+CREATE SEQUENCE _timescaledb_catalog.bgw_job_id_seq
 MINVALUE 1000;
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job_id_seq', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.bgw_job_id_seq', '');
 
   -- We put columns that can be null or have variable length
   -- last. This allow us to read the important fields above in the
   -- scheduler without materializing these fields below, which the
   -- scheduler does not neeed.
-CREATE TABLE _timescaledb_config.bgw_job (
-  id integer NOT NULL DEFAULT nextval('_timescaledb_config.bgw_job_id_seq'),
+CREATE TABLE _timescaledb_catalog.bgw_job (
+  id integer NOT NULL DEFAULT nextval('_timescaledb_catalog.bgw_job_id_seq'),
   application_name name NOT NULL,
   schedule_interval interval NOT NULL,
   max_runtime interval NOT NULL,
@@ -267,11 +267,11 @@ CREATE TABLE _timescaledb_config.bgw_job (
   CONSTRAINT bgw_job_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
 );
 
-ALTER SEQUENCE _timescaledb_config.bgw_job_id_seq OWNED BY _timescaledb_config.bgw_job.id;
+ALTER SEQUENCE _timescaledb_catalog.bgw_job_id_seq OWNED BY _timescaledb_catalog.bgw_job.id;
 
-CREATE INDEX bgw_job_proc_hypertable_id_idx ON _timescaledb_config.bgw_job (proc_schema, proc_name, hypertable_id);
+CREATE INDEX bgw_job_proc_hypertable_id_idx ON _timescaledb_catalog.bgw_job (proc_schema, proc_name, hypertable_id);
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_config.bgw_job', 'WHERE id >= 1000');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.bgw_job', 'WHERE id >= 1000');
 
 CREATE TABLE _timescaledb_internal.bgw_job_stat (
   job_id integer NOT NULL,
@@ -291,7 +291,7 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat (
   flags int NOT NULL DEFAULT 0,
   -- table constraints
   CONSTRAINT bgw_job_stat_pkey PRIMARY KEY (job_id),
-  CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE
+  CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_catalog.bgw_job (id) ON DELETE CASCADE
 );
 
 CREATE SEQUENCE _timescaledb_internal.bgw_job_stat_history_id_seq MINVALUE 1;
@@ -324,7 +324,7 @@ CREATE TABLE _timescaledb_internal.bgw_policy_chunk_stats (
   -- table constraints
   CONSTRAINT bgw_policy_chunk_stats_job_id_chunk_id_key UNIQUE (job_id, chunk_id),
   CONSTRAINT bgw_policy_chunk_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
-  CONSTRAINT bgw_policy_chunk_stats_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE
+  CONSTRAINT bgw_policy_chunk_stats_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_catalog.bgw_job (id) ON DELETE CASCADE
 );
 
 CREATE TABLE _timescaledb_catalog.metadata (
@@ -551,13 +551,9 @@ CREATE TABLE _timescaledb_catalog.chunk_rewrite (
 -- which objects actually need to be dumped.
 GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_catalog TO PUBLIC;
 
-GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_config TO PUBLIC;
-
 GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_internal TO PUBLIC;
 
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_catalog TO PUBLIC;
-
-GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_config TO PUBLIC;
 
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_internal TO PUBLIC;
 

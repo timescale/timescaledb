@@ -34,9 +34,9 @@ FROM int_tab
 GROUP BY time_bucket(1, a), a WITH NO DATA;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timezone TO PST8PDT;
-DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT count(*) FROM _timescaledb_config.bgw_job;
+SELECT count(*) FROM _timescaledb_catalog.bgw_job;
  count 
 -------
      0
@@ -221,21 +221,21 @@ DETAIL:  A refresh policy with the same start and end offset already exists for 
                               -1
 
 -- modify config and try to add, should error out
-SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
+SELECT config FROM _timescaledb_catalog.bgw_job where id = :job_id;
                              config                             
 ----------------------------------------------------------------
  {"end_offset": 10, "start_offset": 20, "mat_hypertable_id": 2}
 
-SELECT hypertable_id as mat_id FROM _timescaledb_config.bgw_job where id = :job_id \gset
+SELECT hypertable_id as mat_id FROM _timescaledb_catalog.bgw_job where id = :job_id \gset
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timezone TO PST8PDT;
-UPDATE _timescaledb_config.bgw_job
+UPDATE _timescaledb_catalog.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
+SELECT config FROM _timescaledb_catalog.bgw_job where id = :job_id;
           config          
 --------------------------
  {"mat_hypertable_id": 2}
@@ -645,7 +645,7 @@ SELECT remove_continuous_aggregate_policy('max_mat_view_date');
  
 
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '15 days', '1 day', '1 day'::interval) as job_id \gset
-SELECT config FROM _timescaledb_config.bgw_job
+SELECT config FROM _timescaledb_catalog.bgw_job
 WHERE id = :job_id;
                                      config                                     
 --------------------------------------------------------------------------------
@@ -699,7 +699,7 @@ SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '15 days', '1 h
 SET client_min_messages TO warning;
 CALL run_job(:job_id);
 RESET client_min_messages ;
-SELECT config FROM _timescaledb_config.bgw_job
+SELECT config FROM _timescaledb_catalog.bgw_job
 WHERE id = :job_id;
                                      config                                      
 ---------------------------------------------------------------------------------
@@ -707,11 +707,11 @@ WHERE id = :job_id;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timezone TO PST8PDT;
-UPDATE _timescaledb_config.bgw_job
+UPDATE _timescaledb_catalog.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
+SELECT config FROM _timescaledb_catalog.bgw_job where id = :job_id;
           config          
 --------------------------
  {"mat_hypertable_id": 2}

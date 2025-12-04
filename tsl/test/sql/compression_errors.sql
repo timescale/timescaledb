@@ -303,10 +303,10 @@ SELECT add_compression_policy('test_table_int', 2::int) AS compressjob_id
 \gset
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-UPDATE _timescaledb_config.bgw_job
+UPDATE _timescaledb_catalog.bgw_job
 SET config = config - 'compress_after'
 WHERE id = :compressjob_id;
-SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+SELECT config FROM _timescaledb_catalog.bgw_job WHERE id = :compressjob_id;
 --should fail
 CALL run_job(:compressjob_id);
 
@@ -315,18 +315,18 @@ SELECT remove_compression_policy('test_table_int');
 --again add a new policy that we'll tamper with
 SELECT add_compression_policy('test_table_int', 2::int) AS compressjob_id
 \gset
-UPDATE _timescaledb_config.bgw_job
+UPDATE _timescaledb_catalog.bgw_job
 SET config = config - 'hypertable_id'
 WHERE id = :compressjob_id;
-SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+SELECT config FROM _timescaledb_catalog.bgw_job WHERE id = :compressjob_id;
 
 --should fail
 CALL run_job(:compressjob_id);
 
-UPDATE _timescaledb_config.bgw_job
+UPDATE _timescaledb_catalog.bgw_job
 SET config = NULL
 WHERE id = :compressjob_id;
-SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+SELECT config FROM _timescaledb_catalog.bgw_job WHERE id = :compressjob_id;
 
 --should fail
 CALL run_job(:compressjob_id);

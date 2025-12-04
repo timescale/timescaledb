@@ -407,7 +407,7 @@ SELECT add_continuous_aggregate_policy('measurements_summary', NULL, NULL, '1 h'
 \gset
 
 \x on
-SELECT * FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+SELECT * FROM _timescaledb_catalog.bgw_job WHERE id = :job_id;
 \x off
 
 -- These are all weird values for the parameters for the continuous

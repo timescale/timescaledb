@@ -180,6 +180,7 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_catalog', '_timescaledb_internal');
         schema         |                       name                       
 -----------------------+--------------------------------------------------
+ _timescaledb_catalog  | bgw_job
  _timescaledb_catalog  | chunk
  _timescaledb_catalog  | chunk_column_stats
  _timescaledb_catalog  | chunk_constraint

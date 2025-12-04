@@ -8,14 +8,12 @@ CREATE SCHEMA _timescaledb_catalog;
 CREATE SCHEMA _timescaledb_functions;
 CREATE SCHEMA _timescaledb_internal;
 CREATE SCHEMA _timescaledb_cache;
-CREATE SCHEMA _timescaledb_config;
 CREATE SCHEMA timescaledb_experimental;
 CREATE SCHEMA timescaledb_information;
 
 GRANT USAGE ON SCHEMA
       _timescaledb_cache,
       _timescaledb_catalog,
-      _timescaledb_config,
       _timescaledb_functions,
       _timescaledb_internal,
       timescaledb_experimental,

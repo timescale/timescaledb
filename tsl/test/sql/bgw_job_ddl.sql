@@ -6,7 +6,7 @@
 
 CREATE VIEW my_jobs AS
 SELECT proc_schema, proc_name, owner
-  FROM _timescaledb_config.bgw_job
+  FROM _timescaledb_catalog.bgw_job
  WHERE id >= 1000
 ORDER BY proc_schema, proc_name, owner;
 
@@ -24,7 +24,7 @@ CREATE OR REPLACE FUNCTION insert_job(
        fixed_schedule BOOL DEFAULT false
 ) RETURNS INT LANGUAGE SQL SECURITY DEFINER AS
 $$
-  INSERT INTO _timescaledb_config.bgw_job(application_name,schedule_interval,max_runtime,max_retries,
+  INSERT INTO _timescaledb_catalog.bgw_job(application_name,schedule_interval,max_runtime,max_retries,
   retry_period,proc_name,proc_schema,owner,scheduled,fixed_schedule)
   VALUES($1,$3,$4,5,$5,$2,'public',$6,$7,$8) RETURNING id;
 $$;
@@ -123,7 +123,7 @@ DROP PROCEDURE frugal.magic CASCADE;
 SELECT * FROM my_jobs;
 ROLLBACK;
 
-DELETE FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE id = :job_id;
 
 -- We should be able to drop the procedure without CASCADE now since
 -- it is not used by any job.

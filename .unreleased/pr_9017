@@ -1,0 +1,1 @@
+Implements: #9017 move bgw_job table into schema _timescaledb_catalog
