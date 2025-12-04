@@ -174,8 +174,6 @@ like creating hypertable, catalog_entry, view, etc.</dd>
 <dt>`materialize.c`</dt>
 <dd>This file contains the functions directly dealing with the materialization of the continuous aggregates.</dd>
 
-<dt>`repair.c`</dt>
-<dd>The repair and rebuilding related functions are put together in this file.</dd>
 </dl>
 
 <dt>`invalidation.c`</dt>

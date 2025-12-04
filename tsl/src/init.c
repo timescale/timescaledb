@@ -35,7 +35,6 @@
 #include "continuous_aggs/invalidation_record.h"
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
-#include "continuous_aggs/repair.h"
 #include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
 #include "export.h"
@@ -143,7 +142,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
 	.continuous_agg_migrate_to_time_bucket = continuous_agg_migrate_to_time_bucket,
 	.continuous_agg_read_invalidation_record = ts_invalidation_read_record,
-	.cagg_try_repair = tsl_cagg_try_repair,
 
 	/* Compression */
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,

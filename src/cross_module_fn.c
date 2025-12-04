@@ -94,7 +94,6 @@ CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function_info);
 CROSSMODULE_WRAPPER(continuous_agg_migrate_to_time_bucket);
 CROSSMODULE_WRAPPER(continuous_agg_read_invalidation_record);
-CROSSMODULE_WRAPPER(cagg_try_repair);
 
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
 CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
@@ -206,33 +205,6 @@ process_compressed_data_out(PG_FUNCTION_ARGS)
 
 	if (ts_cm_functions->compressed_data_out != process_compressed_data_out)
 		return ts_cm_functions->compressed_data_out(fcinfo);
-
-	error_no_default_fn_pg_community(fcinfo);
-	pg_unreachable();
-}
-
-/*
- * This function ensures that the TSL library is loaded and the call to
- * post_update_cagg_try_repair is dispatched to the correct
- * function.
- *
- * The TSL library might not be loaded when post_update_cagg_try_repair is
- * called during a database upgrade, resulting in an error message about
- * improper licensing:
- *
- * "[..] is not supported under the current "timescale" license
- *  INT:  Upgrade your license to 'timescale'""
- *
- * See also the comment about this problem in the function
- * process_compressed_data_in.
- */
-static Datum
-process_cagg_try_repair(PG_FUNCTION_ARGS)
-{
-	ts_license_enable_module_loading();
-
-	if (ts_cm_functions->cagg_try_repair != process_cagg_try_repair)
-		return ts_cm_functions->cagg_try_repair(fcinfo);
 
 	error_no_default_fn_pg_community(fcinfo);
 	pg_unreachable();
@@ -371,7 +343,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_get_bucket_function_info = error_no_default_fn_pg_community,
 	.continuous_agg_migrate_to_time_bucket = error_no_default_fn_pg_community,
 	.continuous_agg_read_invalidation_record = error_no_default_fn_pg_community,
-	.cagg_try_repair = process_cagg_try_repair,
 
 	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,

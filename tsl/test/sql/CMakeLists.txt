@@ -174,7 +174,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_bgw.sql.in
     cagg_ddl.sql.in
     cagg_migrate_function.sql.in
-    cagg_repair.sql.in
     cagg_usage.sql.in
     compression_update_delete.sql.in
     continuous_aggs.sql.in
