@@ -24,7 +24,6 @@
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/vector_agg/plan.h"
 #include "planner.h"
-#include "planner/partialize.h"
 
 #include <math.h>
 

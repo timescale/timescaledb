@@ -157,7 +157,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     license_tsl.sql
     merge_chunks.sql
     fixed_schedules.sql
-    partialize_finalize.sql
     recompress_chunk_segmentwise.sql
     feature_flags.sql
     vector_agg_byte.sql

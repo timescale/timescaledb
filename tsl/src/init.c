@@ -45,7 +45,6 @@
 #include "nodes/gapfill/gapfill_functions.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/vector_agg/plan.h"
-#include "partialize_finalize.h"
 #include "planner.h"
 #include "process_utility.h"
 #include "reorder.h"
@@ -131,9 +130,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.tsl_postprocess_plan = tsl_postprocess_plan,
 
 	/* Continuous Aggregates */
-	.partialize_agg = tsl_partialize_agg,
-	.finalize_agg_sfunc = tsl_finalize_agg_sfunc,
-	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
 	.continuous_agg_refresh = continuous_agg_refresh,
 	.continuous_agg_process_hypertable_invalidations =

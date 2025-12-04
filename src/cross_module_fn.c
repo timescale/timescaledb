@@ -59,11 +59,6 @@ CROSSMODULE_WRAPPER(policies_remove_all);
 CROSSMODULE_WRAPPER(policies_alter);
 CROSSMODULE_WRAPPER(policies_show);
 
-/* partialize/finalize aggregate */
-CROSSMODULE_WRAPPER(partialize_agg);
-CROSSMODULE_WRAPPER(finalize_agg_sfunc);
-CROSSMODULE_WRAPPER(finalize_agg_ffunc);
-
 /* compression functions */
 CROSSMODULE_WRAPPER(compressed_data_decompress_forward);
 CROSSMODULE_WRAPPER(compressed_data_decompress_reverse);
@@ -364,9 +359,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 
 	.tsl_postprocess_plan = tsl_postprocess_plan_stub,
 
-	.partialize_agg = error_no_default_fn_pg_community,
-	.finalize_agg_sfunc = error_no_default_fn_pg_community,
-	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
 	.continuous_agg_process_hypertable_invalidations = error_no_default_fn_pg_community,
