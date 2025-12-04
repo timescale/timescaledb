@@ -6,6 +6,6 @@
 -- debugging in release builds. These are all placed in the schema
 -- _timescaledb_debug.
 
-CREATE OR REPLACE FUNCTION _timescaledb_debug.extension_state() RETURNS TEXT
+CREATE OR REPLACE FUNCTION _timescaledb_functions.extension_state() RETURNS TEXT
 AS '@MODULE_PATHNAME@', 'ts_extension_get_state' LANGUAGE C;
 
