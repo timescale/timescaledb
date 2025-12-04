@@ -1,6 +1,9 @@
 # Test running make installcheck on our APT packages.
 name: "Packaging tests: Installcheck for APT"
 "on":
+  schedule:
+    # run daily 0:00 on main branch
+    - cron: '0 0 * * *'
   pull_request:
     paths: .github/workflows/apt-installcheck.yaml
   push:
@@ -103,7 +106,7 @@ jobs:
         sudo -u postgres cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         set -o pipefail
-        sudo -u postgres make -k -C build installcheck | tee installcheck.log
+        sudo -u postgres LANG=C.UTF-8 make -k -C build installcheck | tee installcheck.log
 
     - name: Collect the logs
       if: always()
