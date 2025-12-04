@@ -145,3 +145,8 @@ ANALYZE _timescaledb_catalog.continuous_agg;
 --
 -- END Rebuild the catalog table `_timescaledb_catalog.continuous_agg`
 --
+
+DROP FUNCTION IF EXISTS _timescaledb_debug.extension_state();
+DROP SCHEMA IF EXISTS _timescaledb_debug;
+
+
