@@ -186,3 +186,6 @@ END;
 $$
 LANGUAGE plpgsql;
 
+-- Remove orphaned entries in materialization ranges table
+DELETE FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
+WHERE NOT EXISTS (SELECT FROM _timescaledb_catalog.continuous_agg WHERE mat_hypertable_id = materialization_id);
