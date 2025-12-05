@@ -7,18 +7,13 @@ set(TEST_FILES
     bgw_job_ddl.sql
     bgw_policy.sql
     bgw_security.sql
-    cagg_api.sql
-    cagg_config.sql
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
-    cagg_invalidation_multi.sql
     cagg_policy.sql
     cagg_policy_move.sql
     cagg_policy_concurrent.sql
-    cagg_plugin.sql
     cagg_refresh_using_trigger.sql
-    cagg_refresh_using_wal.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
     cagg_watermark.sql
@@ -216,15 +211,7 @@ set(SOLO_TESTS
     move
     reorder
     split_chunk
-    telemetry_stats
-    # These are solo tests because of a bug in PostgreSQL 17.5. A fix for it
-    # seems to be scheduled for release with 17.6.
-    #
-    # See
-    # https://github.com/postgres/postgres/commit/d87d07b7ad3b782cb74566cd771ecdb2823adf6a
-    cagg_invalidation
-    cagg_invalidation_multi
-    cagg_plugin)
+    telemetry_stats)
 
 # Check if PostgreSQL was compiled with JIT support
 set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")

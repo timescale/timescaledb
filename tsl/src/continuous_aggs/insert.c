@@ -167,7 +167,6 @@ void
 continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tuple,
 							  HeapTuple chunk_newtuple, bool update)
 {
-	Assert(!ts_guc_enable_cagg_wal_based_invalidation);
 	ContinuousAggsCacheInvalEntry *cache_entry;
 	bool found;
 	int64 timeval;

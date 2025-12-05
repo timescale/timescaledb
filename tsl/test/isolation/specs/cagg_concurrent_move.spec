@@ -69,17 +69,9 @@ step "s2_refresh" {
 }
 
 session "S3"
-# This will generate an error since the refreshes above already
-# processed the hypertable invalidation log. This can happen also for
-# two concurrent refreshes.
-step "s3_process" {
-   CALL _timescaledb_functions.process_hypertable_invalidations('temperature');
-}
-
-session "S4"
 
 # Show thresholds just so that we know that they are correctly set.
-step s4_show_thresholds {
+step s3_show_thresholds {
     SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
            _timescaledb_functions.to_timestamp(watermark) AS watermark
       FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
@@ -88,7 +80,7 @@ step s4_show_thresholds {
     ORDER BY 1;
 }
 
-step s4_before
+step s3_before
 {
     START TRANSACTION;
     SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
@@ -100,12 +92,12 @@ step s4_before
     ORDER BY 1, 2, 3 FOR UPDATE;
 }
 
-step s4_release
+step s3_release
 {
     ROLLBACK;
 }
 
-step "s4_after" {
+step "s3_after" {
     SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
 	   _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest_modified_value,
 	   _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest_modified_value
@@ -117,4 +109,4 @@ step "s4_after" {
 
 # Check that processing the hypertable and refreshing the associated
 # continuous aggerates do not lead to deadlock.
-permutation s4_show_thresholds s4_before s1_refresh s2_refresh s3_process s4_release s4_after
+permutation s3_show_thresholds s3_before s1_refresh s2_refresh s3_release s3_after
