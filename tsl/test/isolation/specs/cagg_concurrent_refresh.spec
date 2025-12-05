@@ -138,7 +138,7 @@ setup
         m.greatest_modified_value
     FROM
         _timescaledb_catalog.continuous_aggs_materialization_ranges m
-        JOIN _timescaledb_catalog.continuous_agg c on c.mat_hypertable_id = m.materialization_id
+        LEFT JOIN _timescaledb_catalog.continuous_agg c on c.mat_hypertable_id = m.materialization_id
     ORDER BY
         1, 2, 3;
 
@@ -226,6 +226,11 @@ step "R1_refresh"
 step "R1_refresh2"
 {
     CALL refresh_continuous_aggregate('cond_10', 30, 120);
+}
+
+step "R1_drop"
+{
+    DROP MATERIALIZED VIEW cond_10;
 }
 
 session "R12"
@@ -327,6 +332,10 @@ session "R6"
 step "R6_pending_materialization_ranges"
 {
     SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+}
+step "R6_pending_materialization_ranges_orphan"
+{
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name IS NULL;
 }
 
 # Define a number of lock sessions to simulate concurrent refreshes
@@ -478,6 +487,8 @@ permutation "WP_after_enable" "R6_pending_materialization_ranges" "R1_refresh"("
 
 permutation "WP_after_enable" "R6_pending_materialization_ranges" "R1_refresh2"("WP_after_enable") "R3_refresh"("WP_after_enable") "K1_cancelpid"("R1_refresh2") "R6_pending_materialization_ranges" "WP_after_release" "R13_refresh3"("K1_cancelpid") "R6_pending_materialization_ranges" "R13_refresh5" "R6_pending_materialization_ranges" "R13_refresh4" "R6_pending_materialization_ranges"
 
+# When dropping a CAgg pending ranges left behind should be removed
+permutation "WP_after_enable" "R6_pending_materialization_ranges" "R1_refresh"("WP_after_enable") "K1_cancelpid"("R1_refresh") "R6_pending_materialization_ranges" "WP_after_release" "R1_drop" "R6_pending_materialization_ranges_orphan"
 
 # R3 should wait for R1 to finish because there are cagg invalidation rows locked
 permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "R3_refresh" "WP_before_release"
