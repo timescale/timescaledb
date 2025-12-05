@@ -31,8 +31,6 @@
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/invalidation.h"
-#include "continuous_aggs/invalidation_multi.h"
-#include "continuous_aggs/invalidation_record.h"
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
 #include "continuous_aggs/utils.h"
@@ -131,8 +129,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	/* Continuous Aggregates */
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
 	.continuous_agg_refresh = continuous_agg_refresh,
-	.continuous_agg_process_hypertable_invalidations =
-		continuous_agg_process_hypertable_invalidations,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
@@ -141,7 +137,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
 	.continuous_agg_migrate_to_time_bucket = continuous_agg_migrate_to_time_bucket,
-	.continuous_agg_read_invalidation_record = ts_invalidation_read_record,
 
 	/* Compression */
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,

@@ -103,7 +103,6 @@ typedef struct CrossModuleFunctions
 	DDLResult (*process_cagg_viewstmt)(Node *stmt, const char *query_string, void *pstmt,
 									   WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_refresh;
-	PGFunction continuous_agg_process_hypertable_invalidations;
 	void (*continuous_agg_invalidate_raw_ht)(const Hypertable *raw_ht, int64 start, int64 end);
 	void (*continuous_agg_invalidate_mat_ht)(const Hypertable *raw_ht, const Hypertable *mat_ht,
 											 int64 start, int64 end);
@@ -116,7 +115,6 @@ typedef struct CrossModuleFunctions
 	PGFunction continuous_agg_get_bucket_function;
 	PGFunction continuous_agg_get_bucket_function_info;
 	PGFunction continuous_agg_migrate_to_time_bucket;
-	PGFunction continuous_agg_read_invalidation_record;
 
 	PGFunction compressed_data_send;
 	PGFunction compressed_data_recv;
