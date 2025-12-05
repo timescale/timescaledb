@@ -809,49 +809,6 @@ INSERT INTO conditions VALUES (160, 13, 23.7), (170, 4, 23.7);
 INSERT INTO measurements VALUES (120, 14, 23.7);
 INSERT INTO measurements VALUES (130, 15, 23.8), (180, 3, 23.6);
 
--- Move hypertable invalidations one hypertable at a time and see that
--- they are moved and that attached continuous aggregates are not
--- updated.
-SELECT * FROM hyper_invals;
-CALL _timescaledb_functions.process_hypertable_invalidations('measurements');
-SELECT * FROM measure_10
-    FULL JOIN saved_measure_10
-           ON row(measure_10.*) = row(saved_measure_10.*)
-        WHERE measure_10.bucket IS NULL OR saved_measure_10.bucket IS NULL
-     ORDER BY 1, 2;
-SELECT * FROM hyper_invals;
-CALL _timescaledb_functions.process_hypertable_invalidations('conditions');
-SELECT * FROM cond_10
-    FULL JOIN saved_cond_10
-           ON row(cond_10.*) = row(saved_cond_10.*)
-        WHERE cond_10.bucket IS NULL OR saved_cond_10.bucket IS NULL
-     ORDER BY 1, 2;
-SELECT * FROM hyper_invals;
-
--- Check that once we refresh the continuous aggregates, the changes
--- are there.
-CALL refresh_continuous_aggregate('measure_10', NULL, NULL);
-SELECT * FROM measure_10
-    FULL JOIN saved_measure_10
-           ON row(measure_10.*) = row(saved_measure_10.*)
-        WHERE measure_10.bucket IS NULL OR saved_measure_10.bucket IS NULL
-     ORDER BY 1, 2;
-CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
-SELECT * FROM cond_10
-    FULL JOIN saved_cond_10
-           ON row(cond_10.*) = row(saved_cond_10.*)
-        WHERE cond_10.bucket IS NULL OR saved_cond_10.bucket IS NULL
-     ORDER BY 1, 2;
-
--- These should fail for different reasons
-\set ON_ERROR_STOP 0
-CALL _timescaledb_functions.process_hypertable_invalidations(NULL);
-CALL _timescaledb_functions.process_hypertable_invalidations(0);
-CALL _timescaledb_functions.process_hypertable_invalidations('measure_10');
-SET ROLE :ROLE_DEFAULT_PERM_USER_2;
-CALL _timescaledb_functions.process_hypertable_invalidations('measurements');
-\set ON_ERROR_STOP 1
-
 -- test direct compress insert invalidation
 CREATE TABLE direct_compress_insert(time timestamptz) WITH (tsdb.hypertable);
 INSERT INTO direct_compress_insert SELECT '2025-01-01';

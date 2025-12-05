@@ -493,7 +493,7 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 								 NULL /* transition capture */);
 		}
 
-		if (miinfo->has_continuous_aggregate && !ts_guc_enable_cagg_wal_based_invalidation)
+		if (miinfo->has_continuous_aggregate)
 		{
 			bool should_free;
 			HeapTuple tuple = ExecFetchSlotHeapTuple(slots[i], false, &should_free);

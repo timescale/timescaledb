@@ -50,7 +50,6 @@ set(SOURCE_FILES
     job_api.sql
     policy_api.sql
     policy_internal.sql
-    cagg_api.sql
     cagg_utils.sql
     cagg_migrate.sql
     job_stat_history_log_retention.sql
