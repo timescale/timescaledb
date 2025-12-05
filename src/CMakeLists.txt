@@ -110,10 +110,6 @@ if(USE_OPENSSL)
   endif(MSVC)
 endif(USE_OPENSSL)
 
-set(TSL_CAGG_INVALIDATION_PLUGIN_NAME
-    "${PROJECT_NAME}-invalidations-${PROJECT_VERSION_MOD}"
-    CACHE STRING "Continuous aggregates invalidation plugin name")
-
 configure_file(config.h.in config.h)
 add_dependencies(${PROJECT_NAME} gitcheck)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})

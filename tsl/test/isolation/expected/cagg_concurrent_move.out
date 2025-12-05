@@ -1,7 +1,7 @@
-Parsed test spec with 4 sessions
+Parsed test spec with 3 sessions
 
-starting permutation: s4_show_thresholds s4_before s1_refresh s2_refresh s3_process s4_release s4_after
-step s4_show_thresholds: 
+starting permutation: s3_show_thresholds s3_before s1_refresh s2_refresh s3_release s3_after
+step s3_show_thresholds: 
     SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
            _timescaledb_functions.to_timestamp(watermark) AS watermark
       FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
@@ -13,7 +13,7 @@ hypertable |watermark
 -----------+----------------------------
 temperature|Wed Jan 01 00:00:00 2025 PST
 
-step s4_before: 
+step s3_before: 
     START TRANSACTION;
     SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
 	   _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest_modified_value,
@@ -33,16 +33,12 @@ step s1_refresh:
 step s2_refresh: 
    CALL refresh_continuous_aggregate('cagg_2', '2020-01-01 00:00:00', '2025-01-01 00:00:00');
  <waiting ...>
-step s3_process: 
-   CALL _timescaledb_functions.process_hypertable_invalidations('temperature');
- <waiting ...>
-step s4_release: 
+step s3_release: 
     ROLLBACK;
 
 step s1_refresh: <... completed>
 step s2_refresh: <... completed>
-step s3_process: <... completed>
-step s4_after: 
+step s3_after: 
     SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
 	   _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest_modified_value,
 	   _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest_modified_value
