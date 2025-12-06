@@ -987,9 +987,64 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 
 typedef struct VacuumCtx
 {
+	bool is_vacuumfull;
 	VacuumRelation *ht_vacuum_rel;
 	List *chunk_rels;
+	List *rebuild_columnstore_chunk_oids;
 } VacuumCtx;
+
+static bool
+chunk_has_missing_attrs(Chunk *chunk)
+{
+	bool has_missing_attrs = false;
+	Relation ht_rel = relation_open(chunk->hypertable_relid, AccessShareLock);
+	Relation chunk_rel = relation_open(chunk->table_id, AccessShareLock);
+	TupleDesc tupdesc = RelationGetDescr(chunk_rel);
+
+	for (int i = 0; i < tupdesc->natts; i++)
+	{
+		Form_pg_attribute att = TupleDescAttr(tupdesc, i);
+
+		if (att->atthasmissing)
+		{
+			has_missing_attrs = true;
+			break;
+		}
+	}
+
+	relation_close(chunk_rel, AccessShareLock);
+	relation_close(ht_rel, AccessShareLock);
+	return has_missing_attrs;
+}
+
+static void
+register_chunk_for_rebuild_if_needed(Oid chunk_relid, VacuumCtx *ctx)
+{
+	/* Only VACUUM FULL does a complete table rewrite */
+	if (!ctx->is_vacuumfull)
+		return;
+
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, false);
+	if (!chunk)
+		return;
+
+	/*
+	 * VACUUM FULL will materialize missing attributes. Propagate
+	 * these changes to columnstore data by rebuilding it.
+	 */
+	if (chunk_has_missing_attrs(chunk))
+	{
+		/*
+		 * Frozen chunks are not allowed to add columns with defaults
+		 */
+		Ensure(!ts_chunk_is_frozen(chunk),
+			   "chunk \"%s.%s\" was altered unsafely after it was frozen",
+			   NameStr(chunk->fd.schema_name),
+			   NameStr(chunk->fd.table_name));
+		ctx->rebuild_columnstore_chunk_oids =
+			lappend_oid(ctx->rebuild_columnstore_chunk_oids, chunk_relid);
+	}
+}
 
 /* Adds a chunk to the list of tables to be vacuumed */
 static void
@@ -1018,6 +1073,8 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 			ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
 		}
 	}
+
+	register_chunk_for_rebuild_if_needed(chunk_relid, ctx);
 }
 
 /*
@@ -1026,7 +1083,7 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
  * from vacuum.c.
  */
 static List *
-ts_get_all_vacuum_rels(bool is_vacuumcmd)
+ts_get_all_vacuum_rels(bool is_vacuumcmd, VacuumCtx *ctx)
 {
 	List *vacrels = NIL;
 	Relation pgclass;
@@ -1066,6 +1123,8 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 		 * about failure to open one of these relations later.
 		 */
 		vacrels = lappend(vacrels, makeVacuumRelation(NULL, relid, NIL));
+
+		register_chunk_for_rebuild_if_needed(relid, ctx);
 	}
 
 	table_endscan(scan);
@@ -1082,8 +1141,10 @@ process_vacuum(ProcessUtilityArgs *args)
 	VacuumStmt *stmt = (VacuumStmt *) args->parsetree;
 	bool is_toplevel = (args->context == PROCESS_UTILITY_TOPLEVEL);
 	VacuumCtx ctx = {
+		.is_vacuumfull = false,
 		.ht_vacuum_rel = NULL,
 		.chunk_rels = NIL,
+		.rebuild_columnstore_chunk_oids = NIL,
 	};
 	ListCell *lc;
 	Hypertable *ht;
@@ -1094,24 +1155,22 @@ process_vacuum(ProcessUtilityArgs *args)
 
 	is_vacuumcmd = stmt->is_vacuumcmd;
 
-#if PG16_GE
-	if (is_vacuumcmd)
+	/* Look for new option ONLY_DATABASE_STATS and FULL */
+	foreach (lc, stmt->options)
 	{
-		/* Look for new option ONLY_DATABASE_STATS */
-		foreach (lc, stmt->options)
-		{
-			DefElem *opt = (DefElem *) lfirst(lc);
-
-			/* if "only_database_stats" is defined then don't execute our custom code and return to
-			 * the postgres execution for the proper validations */
-			if (strcmp(opt->defname, "only_database_stats") == 0)
-				return DDL_CONTINUE;
-		}
-	}
+		DefElem *opt = (DefElem *) lfirst(lc);
+#if PG16_GE
+		/* if "only_database_stats" is defined then don't execute our custom code and return to
+		 * the postgres execution for the proper validations */
+		if (is_vacuumcmd && strcmp(opt->defname, "only_database_stats") == 0)
+			return DDL_CONTINUE;
 #endif
+		if (strcmp(opt->defname, "full") == 0)
+			ctx.is_vacuumfull = defGetBoolean(opt);
+	}
 
 	if (stmt->rels == NIL)
-		vacuum_rels = ts_get_all_vacuum_rels(is_vacuumcmd);
+		vacuum_rels = ts_get_all_vacuum_rels(is_vacuumcmd, &ctx);
 	else
 	{
 		Cache *hcache = ts_hypertable_cache_pin();
@@ -1147,6 +1206,17 @@ process_vacuum(ProcessUtilityArgs *args)
 	{
 		PreventCommandDuringRecovery(is_vacuumcmd ? "VACUUM" : "ANALYZE");
 
+		if (list_length(ctx.rebuild_columnstore_chunk_oids) > 0)
+		{
+			/* there are chunks that need rebuilding */
+			ListCell *lc;
+			foreach (lc, ctx.rebuild_columnstore_chunk_oids)
+			{
+				Oid chunk_relid = lfirst_oid(lc);
+				(void) DirectFunctionCall1(ts_cm_functions->rebuild_columnstore,
+										   ObjectIdGetDatum(chunk_relid));
+			}
+		}
 		/* ACL permission checks inside vacuum_rel and analyze_rel called by this ExecVacuum */
 		ExecVacuum(args->parse_state, stmt, is_toplevel);
 	}
