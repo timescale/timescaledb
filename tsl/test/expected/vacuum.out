@@ -1,0 +1,213 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- Test VACUUM FULL with compressed chunks and missing attributes
+CREATE TABLE vacuum_missing_test(ts int, c1 int);
+SELECT create_hypertable('vacuum_missing_test', 'ts', chunk_time_interval => 1000);
+        create_hypertable         
+----------------------------------
+ (1,public,vacuum_missing_test,t)
+
+INSERT INTO vacuum_missing_test VALUES (0, 1);
+ALTER TABLE vacuum_missing_test SET (timescaledb.compress, timescaledb.compress_segmentby = '');
+SELECT compress_chunk(show_chunks('vacuum_missing_test'), true);
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+
+ALTER TABLE vacuum_missing_test ADD COLUMN c2 int DEFAULT 7;
+VACUUM FULL ANALYZE vacuum_missing_test;
+SELECT * FROM vacuum_missing_test;
+ ts | c1 | c2 
+----+----+----
+  0 |  1 |  7
+
+DROP TABLE vacuum_missing_test;
+-- Test VACUUM FULL with partially compressed chunks
+SET timescaledb.enable_direct_compress_insert = true;
+CREATE TABLE vacuum_partial_test (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+WITH (tsdb.hypertable, tsdb.orderby='time');
+NOTICE:  using column "time" as partitioning column
+INSERT INTO vacuum_partial_test
+SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float
+FROM generate_series(0,100) i;
+INSERT INTO vacuum_partial_test
+SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd2', i::float
+FROM generate_series(101,105) i;
+WARNING:  disabling direct compress because of too small batch size
+ALTER TABLE vacuum_partial_test ADD COLUMN c2 int DEFAULT 10;
+SELECT chunk FROM show_chunks('vacuum_partial_test') AS chunk LIMIT 1 \gset
+SELECT _timescaledb_functions.chunk_status_text(:'chunk'::regclass) AS status_before;
+         status_before          
+--------------------------------
+ {COMPRESSED,UNORDERED,PARTIAL}
+
+SELECT attname, atthasmissing, attmissingval
+FROM pg_attribute
+WHERE attrelid = :'chunk'::regclass
+  AND attnum > 0 AND NOT attisdropped
+ORDER BY attnum;
+ attname | atthasmissing | attmissingval 
+---------+---------------+---------------
+ time    | f             | 
+ device  | f             | 
+ value   | f             | 
+ c2      | t             | {10}
+
+SELECT COUNT(c2) FROM vacuum_partial_test;
+ count 
+-------
+   106
+
+VACUUM FULL ANALYZE vacuum_partial_test;
+SELECT COUNT(c2) FROM vacuum_partial_test; -- should be the same
+ count 
+-------
+   106
+
+SELECT _timescaledb_functions.chunk_status_text(:'chunk'::regclass) AS status_after;
+     status_after     
+----------------------
+ {COMPRESSED,PARTIAL}
+
+SELECT attname, atthasmissing, attmissingval
+FROM pg_attribute
+WHERE attrelid = :'chunk'::regclass
+  AND attnum > 0 AND NOT attisdropped
+ORDER BY attnum;
+ attname | atthasmissing | attmissingval 
+---------+---------------+---------------
+ time    | f             | 
+ device  | f             | 
+ value   | f             | 
+ c2      | f             | 
+
+DROP TABLE vacuum_partial_test;
+RESET timescaledb.enable_direct_compress_insert_client_sorted;
+RESET timescaledb.enable_direct_compress_insert;
+-- Test VACUUM FULL with unordered compressed chunks
+SET timescaledb.enable_direct_compress_insert = true;
+CREATE TABLE vacuum_unordered_test (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+WITH (tsdb.hypertable, tsdb.orderby='time');
+NOTICE:  using column "time" as partitioning column
+INSERT INTO vacuum_unordered_test
+SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float
+FROM generate_series(0,50) i;
+INSERT INTO vacuum_unordered_test
+SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float
+FROM generate_series(40,150) i;
+ALTER TABLE vacuum_unordered_test ADD COLUMN c2 int DEFAULT 20;
+SELECT chunk FROM show_chunks('vacuum_unordered_test') AS chunk LIMIT 1 \gset
+SELECT _timescaledb_functions.chunk_status_text(:'chunk'::regclass) AS status_before;
+     status_before      
+------------------------
+ {COMPRESSED,UNORDERED}
+
+SELECT attname, atthasmissing, attmissingval
+FROM pg_attribute
+WHERE attrelid = :'chunk'::regclass
+  AND attnum > 0 AND NOT attisdropped
+ORDER BY attnum;
+ attname | atthasmissing | attmissingval 
+---------+---------------+---------------
+ time    | f             | 
+ device  | f             | 
+ value   | f             | 
+ c2      | t             | {20}
+
+SELECT COUNT(c2) FROM vacuum_unordered_test;
+ count 
+-------
+   162
+
+VACUUM FULL ANALYZE vacuum_unordered_test;
+SELECT COUNT(c2) FROM vacuum_unordered_test; -- should be the same
+ count 
+-------
+   162
+
+SELECT _timescaledb_functions.chunk_status_text(:'chunk'::regclass) AS status_after;
+ status_after 
+--------------
+ {COMPRESSED}
+
+SELECT attname, atthasmissing, attmissingval
+FROM pg_attribute
+WHERE attrelid = :'chunk'::regclass
+  AND attnum > 0 AND NOT attisdropped
+ORDER BY attnum;
+ attname | atthasmissing | attmissingval 
+---------+---------------+---------------
+ time    | f             | 
+ device  | f             | 
+ value   | f             | 
+ c2      | f             | 
+
+DROP TABLE vacuum_unordered_test;
+RESET timescaledb.enable_direct_compress_insert;
+-- Test VACUUM FULL with changed compression settings (fallsback to internal decompress/compress)
+SET timescaledb.enable_direct_compress_insert = true;
+CREATE TABLE vacuum_settings_test (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+WITH (tsdb.hypertable, tsdb.orderby='time');
+NOTICE:  using column "time" as partitioning column
+INSERT INTO vacuum_settings_test
+SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float
+FROM generate_series(0,50) i;
+INSERT INTO vacuum_settings_test
+SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float
+FROM generate_series(40,150) i;
+INSERT INTO vacuum_settings_test
+SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd2', i::float
+FROM generate_series(101,105) i;
+WARNING:  disabling direct compress because of too small batch size
+ALTER TABLE vacuum_settings_test SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+ALTER TABLE vacuum_settings_test ADD COLUMN c2 int DEFAULT 20;
+SELECT chunk FROM show_chunks('vacuum_settings_test') AS chunk LIMIT 1 \gset
+SELECT _timescaledb_functions.chunk_status_text(:'chunk'::regclass) AS status_before;
+         status_before          
+--------------------------------
+ {COMPRESSED,UNORDERED,PARTIAL}
+
+SELECT attname, atthasmissing, attmissingval
+FROM pg_attribute
+WHERE attrelid = :'chunk'::regclass
+  AND attnum > 0 AND NOT attisdropped
+ORDER BY attnum;
+ attname | atthasmissing | attmissingval 
+---------+---------------+---------------
+ time    | f             | 
+ device  | f             | 
+ value   | f             | 
+ c2      | t             | {20}
+
+SELECT COUNT(c2) FROM vacuum_settings_test;
+ count 
+-------
+   167
+
+VACUUM FULL ANALYZE vacuum_settings_test;
+SELECT COUNT(c2) FROM vacuum_settings_test; -- should be the same
+ count 
+-------
+   167
+
+SELECT _timescaledb_functions.chunk_status_text(:'chunk'::regclass) AS status_after;
+ status_after 
+--------------
+ {COMPRESSED}
+
+SELECT attname, atthasmissing, attmissingval
+FROM pg_attribute
+WHERE attrelid = :'chunk'::regclass
+  AND attnum > 0 AND NOT attisdropped
+ORDER BY attnum;
+ attname | atthasmissing | attmissingval 
+---------+---------------+---------------
+ time    | f             | 
+ device  | f             | 
+ value   | f             | 
+ c2      | f             | 
+
+DROP TABLE vacuum_settings_test;
+RESET timescaledb.enable_direct_compress_insert;
