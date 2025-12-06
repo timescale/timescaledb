@@ -1,0 +1,1 @@
+Fixes: #9024 Recompress some chunks on VACUUM FULL
