@@ -88,7 +88,7 @@ SET timescaledb.enable_direct_compress_insert = on;
 INSERT INTO sensor_data (time, sensor_id, temperature, humidity, pressure)
 SELECT
     time,
-    'sensor_' || ((random() * 10)::int + 1),
+    'sensor_' || ((random() * 9)::int + 1),
     20 + (random() * 15),
     40 + (random() * 30),
     1000 + (random() * 50)
@@ -99,8 +99,7 @@ FROM generate_series(
 ) AS time;
 ```
 
-This generates ~7,776,001 readings across 10 sensors over the past 180 days.
-TODO: Explain columnstore (expand below) 
+This generates ~7,776,001 readings across 10 sensors over the past 90 days.
 
 Verify the data was inserted:
 
