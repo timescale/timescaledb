@@ -1,0 +1,3 @@
+time,device_id,temperature,humidity,pressure,battery_level,cpu_usage,memory_usage,location,status
+# Placeholder: This file will contain ~1500 rows of sample IoT sensor data
+# Format: timestamp, device_id, temperature, humidity, pressure, battery_level, cpu_usage, memory_usage, location, status

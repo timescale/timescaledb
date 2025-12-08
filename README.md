@@ -14,7 +14,7 @@
 [![SLACK](https://img.shields.io/badge/Ask_the_TigerData_community-black?style=for-the-badge&logo=slack&logoColor=white)](https://timescaledb.slack.com/archives/C4GT3N90X)
 [![Try TimescaleDB for free](https://img.shields.io/badge/Try_Tiger_Cloud_for_free-black?style=for-the-badge&logo=timescale&logoColor=white)](https://console.cloud.timescale.com/signup)
 
-</div>
+</div> 
 
 ## Install TimescaleDB
 
@@ -34,6 +34,31 @@ Install from a Docker container:
 
 See [other installation options](https://docs.tigerdata.com/self-hosted/latest/install/) or try [Tiger Cloud](https://docs.tigerdata.com/getting-started/latest/) for free.
 
+## Quick Start
+
+Get started with TimescaleDB in under 10 minutes. Follow our [Quick Start Guide](getting-started/quickstart.md) to:
+
+- Create your first hypertable with columnstore enabled
+- Insert and query time-series data
+- See instant analytical query performance
+
+```sql
+-- Create a hypertable with columnstore for fast analytics
+CREATE TABLE sensor_data (
+    time TIMESTAMPTZ NOT NULL,
+    sensor_id TEXT NOT NULL,
+    temperature DOUBLE PRECISION,
+    humidity DOUBLE PRECISION
+) WITH (
+    tsdb.hypertable,
+    tsdb.partition_column='time',
+    tsdb.enable_columnstore=true,
+    tsdb.segmentby='sensor_id'
+);
+```
+
+See the [Quick Start Guide](getting-started/quickstart.md) for the complete walkthrough.
+
 ## Create a hypertable
 
 TimescaleDB's hypercore is a hybrid row-columnar store that boosts analytical query performance on your time-series and event data, while reducing data size by more than 90%. This keeps your analytics operating at lightning speed and ensures low storage costs as you scale. Data is inserted in row format in the rowstore and converted to columnar format in the columnstore based on your configuration.
@@ -48,9 +73,10 @@ CREATE TABLE conditions (
   humidity    DOUBLE PRECISION  NULL
 )
 WITH (
-  timescaledb.hypertable,
-  timescaledb.partition_column='time',
-  timescaledb.segmentby='location'
+  tsdb.hypertable,
+  tsdb.partition_column='time',
+  tsdb.enable_columnstore=true,
+  tsdb.segmentby='location'
 );
 ```
 
@@ -156,6 +182,18 @@ See more:
 
 - [About continuous aggregates](https://docs.tigerdata.com/use-timescale/latest/continuous-aggregates/)
 - [API reference](https://docs.tigerdata.com/api/latest/continuous-aggregates/create_materialized_view/)
+
+## Examples
+
+Learn TimescaleDB with complete, standalone examples using real-world datasets. Each example includes sample data, optimized schemas, and analytical queries.
+
+- **[IoT Sensors](getting-started/examples/iot-sensors/)** - Device monitoring and analytics patterns
+- **[NYC Taxi Data](getting-started/examples/nyc-taxi/)** - Transportation and location-based analytics
+- **[Financial Market Data](getting-started/examples/financial-ticks/)** - Trading and market data analysis
+- **[Application Events](getting-started/examples/events-uuidv7/)** - Event logging with UUIDv7
+- **[Cryptocurrency](getting-started/examples/crypto/)** - Crypto market data analysis
+
+See all examples at [getting-started/examples](getting-started/examples/).
 
 ## Want TimescaleDB hosted and managed for you? Try Tiger Cloud
 
