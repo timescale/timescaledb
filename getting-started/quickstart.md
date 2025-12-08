@@ -1,13 +1,13 @@
 # TimescaleDB Quick Start Guide
 
-Get started with TimescaleDB in under 20 minutes. This guide will help you run TimescaleDB locally, create your first hypertable with columnstore enabled, and see instant analytical query performance.
+Get started with TimescaleDB in under 20 minutes. This guide will help you run TimescaleDB locally, create your first hypertable with columnstore enabled, write data to the columnstore, and see instant analytical query performance.
 
 ## What You'll Learn
 
 - How to run TimescaleDB with a single Docker command
 - How to create a hypertable with columnstore enabled
-- How to insert and query time-series data
-- How to leverage TimescaleDB's analytical performance
+- How to insert data directly to the columnstore 
+- How to query time-series data
 
 ## Prerequisites
 
@@ -73,11 +73,7 @@ CREATE TABLE sensor_data (
 );
 ```
 
-What just happened? (TODO: explain optional arguments)
-- `tsdb.hypertable` - Converts this into a TimescaleDB hypertable
-- `tsdb.partition_column='time'` - Automatically partitions data by time
-- `tsdb.enable_columnstore=true` - Enables hybrid row-columnar storage for fast analytics
-- `tsdb.segmentby='sensor_id'` - Organizes data by sensor for optimal compression
+`tsdb.hypertable` - Converts this into a TimescaleDB hypertable
 
 ## Step 4: Insert Sample Data (5 minutes)
 
@@ -155,13 +151,13 @@ ORDER BY day DESC
 LIMIT 10;
 ```
 
-Notice how fast these analytical queries run, even with aggregations across thousands of rows. This is the power of TimescaleDB's columnstore.
+Notice how fast these analytical queries run, even with aggregations across millions of rows. This is the power of TimescaleDB's columnstore.
 
 ## What's Happening Behind the Scenes?
 
 TimescaleDB automatically:
 - **Partitions your data** into time-based chunks for efficient querying
-- **Compresses data** using columnar storage (90%+ compression typical)
+- **Write directly to columnstore** using columnar storage (90%+ compression typical) and faster vectorized queries
 - **Optimizes queries** by only scanning relevant time ranges and columns
 - **Enables time_bucket()** - a powerful function for time-series aggregation
 
