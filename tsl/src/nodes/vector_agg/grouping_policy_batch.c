@@ -117,12 +117,16 @@ static void
 compute_single_aggregate(GroupingPolicyBatch *policy, TupleTableSlot *vector_slot,
 						 VectorAggDef *agg_def, void *agg_state, MemoryContext agg_extra_mctx)
 {
+	/*
+	 * We have functions with one argument, and one function with no arguments
+	 * (count(*)). Collect the arguments.
+	 */
 	const ArrowArray *arg_arrow = NULL;
 	const uint64 *arg_validity_bitmap = NULL;
 	Datum arg_datum = 0;
 	bool arg_isnull = true;
 	uint16 total_batch_rows = 0;
-	const uint64 *vector_qual_result = vector_slot_get_qual_result(vector_slot, &total_batch_rows);
+	vector_slot_get_qual_result(vector_slot, &total_batch_rows);
 
 	/*
 	 * We have functions with one argument, and one function with no arguments
@@ -153,14 +157,15 @@ compute_single_aggregate(GroupingPolicyBatch *policy, TupleTableSlot *vector_slo
 	}
 
 	/*
-	 * Compute the unified validity bitmap.
+	 * Compute the combined validity bitmap that includes the argument validity.
 	 */
-	const size_t num_words = (total_batch_rows + 63) / 64;
-	const uint64 *filter = arrow_combine_validity(num_words,
-												  policy->tmp_filter,
-												  vector_qual_result,
-												  agg_def->filter_result,
-												  arg_validity_bitmap);
+	DecompressBatchState *batch_state = (DecompressBatchState *) vector_slot;
+	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+	const uint64 *combined_validity = arrow_combine_validity(num_words,
+															 policy->tmp_filter,
+															 agg_def->effective_batch_filter,
+															 arg_validity_bitmap,
+															 NULL);
 
 	/*
 	 * Now call the function.
@@ -168,7 +173,7 @@ compute_single_aggregate(GroupingPolicyBatch *policy, TupleTableSlot *vector_slo
 	if (arg_arrow != NULL)
 	{
 		/* Arrow argument. */
-		agg_def->func.agg_vector(agg_state, arg_arrow, filter, agg_extra_mctx);
+		agg_def->func.agg_vector(agg_state, arg_arrow, combined_validity, agg_extra_mctx);
 	}
 	else
 	{
@@ -180,7 +185,7 @@ compute_single_aggregate(GroupingPolicyBatch *policy, TupleTableSlot *vector_slo
 		 * have been skipped by the caller, but we also have to check for the
 		 * case when no rows match the aggregate FILTER clause.
 		 */
-		const int n = arrow_num_valid(filter, total_batch_rows);
+		const int n = arrow_num_valid(combined_validity, batch_state->total_batch_rows);
 		if (n > 0)
 		{
 			agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
