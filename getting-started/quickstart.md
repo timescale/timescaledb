@@ -56,6 +56,8 @@ Expected output:
  timescaledb | 2.x.x
 ```
 
+**Prefer a GUI?** If you'd rather use a graphical tool instead of the command line, you can download [pgAdmin](https://www.pgadmin.org/download/) and connect to TimescaleDB using the same connection details (host: `localhost`, port: `5432`, user: `postgres`, password: `password`).
+
 ## Step 3: Create Your First Hypertable (1 minutes)
 
 Let's create a hypertable for IoT sensor data with columnstore enabled:
@@ -149,6 +151,16 @@ FROM sensor_data
 GROUP BY day
 ORDER BY day DESC
 LIMIT 10;
+
+-- Query 4: Latest reading for each sensor
+SELECT DISTINCT ON (sensor_id)
+    sensor_id,
+    time,
+    ROUND(temperature::numeric, 2) as temperature,
+    ROUND(humidity::numeric, 2) as humidity,
+    ROUND(pressure::numeric, 2) as pressure
+FROM sensor_data
+ORDER BY sensor_id, time DESC;
 ```
 
 Notice how fast these analytical queries run, even with aggregations across millions of rows. This is the power of TimescaleDB's columnstore.
@@ -161,7 +173,6 @@ TimescaleDB automatically:
 - **Optimizes queries** by only scanning relevant time ranges and columns
 - **Enables time_bucket()** - a powerful function for time-series aggregation
 
-Explain the query performance and space savings
 
 ## Next Steps
 
