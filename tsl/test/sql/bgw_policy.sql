@@ -25,7 +25,7 @@ SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
 -- by starting with oldest chunks
 select add_reorder_policy('test_table', 'test_table_time_idx') as reorder_job_id \gset
 
-select * from _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
+select * from _timescaledb_catalog.bgw_job WHERE id >= 1000 ORDER BY id;
 select job_id, chunk_id, num_times_job_run from _timescaledb_internal.bgw_policy_chunk_stats;
 
 -- Make a manual calls to reorder: make sure the correct chunk is called
@@ -327,7 +327,7 @@ select add_retention_policy('test_strict', drop_after => NULL);
 
 -- Check the number of non-internal policies
 SELECT proc_name, count(*)
-FROM _timescaledb_config.bgw_job
+FROM _timescaledb_catalog.bgw_job
 WHERE id >= 1000
 GROUP BY proc_name;
 
@@ -359,7 +359,7 @@ select create_hypertable('test_missing_schedint_integer', 'time', chunk_time_int
 alter table test_missing_schedint_integer set (timescaledb.compress);
 select add_compression_policy('test_missing_schedint_integer', BIGINT '600000') as compression_id_integer \gset
 
-select * from _timescaledb_config.bgw_job where id in (:retenion_id_missing_schedint, :compression_id_missing_schedint, :compression_id_integer);
+select * from _timescaledb_catalog.bgw_job where id in (:retenion_id_missing_schedint, :compression_id_missing_schedint, :compression_id_integer);
 
 -- test policy check functions with NULL args
 \set ON_ERROR_STOP 0

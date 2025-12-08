@@ -79,9 +79,9 @@ jobs:
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
           --without-readline --without-zlib --without-libxml --without-llvm
-        make -j $(nproc)
+        make -j $(getconf _NPROCESSORS_ONLN)
         for ext in $PG_EXTENSIONS; do
-          make -j $(nproc) -C contrib/${ext}
+          make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
 
     - name: Install postgresql ${{ matrix.pg }}
@@ -99,7 +99,7 @@ jobs:
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
           -DWARNINGS_AS_ERRORS=OFF -DREQUIRE_ALL_TESTS=ON \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j $(nproc) -C build
+        make -j $(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
         mkdir -p build/install_ext build/install_lib
         cp `pg_config --sharedir`/extension/timescaledb*.{control,sql} build/install_ext
@@ -114,9 +114,9 @@ jobs:
         cd ~/$PG_SRC_DIR-snapshot
         ./configure --prefix=$HOME/$PG_INSTALL_DIR-snapshot --with-openssl \
           --without-readline --without-zlib --without-libxml --without-llvm
-        make -j $(nproc)
+        make -j $(getconf _NPROCESSORS_ONLN)
         for ext in $PG_EXTENSIONS; do
-          make -j $(nproc) -C contrib/${ext}
+          make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
 
     - name: Install PostgreSQL ${{ matrix.pg }}-snapshot

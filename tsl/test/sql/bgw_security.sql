@@ -22,7 +22,7 @@ SELECT add_job('custom_job', '1h') AS job_id \gset
 
 RESET ROLE;
 
-SELECT id, proc_name, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+SELECT id, proc_name, owner FROM _timescaledb_catalog.bgw_job WHERE id = :job_id;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 

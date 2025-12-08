@@ -54,7 +54,6 @@
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "nodes/modify_hypertable.h"
 #include "partitioning.h"
-#include "planner/partialize.h"
 #include "planner/planner.h"
 #include "sort_transform.h"
 #include "utils.h"
@@ -164,7 +163,12 @@ rte_mark_for_expansion(RangeTblEntry *rte)
 	Assert(rte->rtekind == RTE_RELATION);
 	Assert(rte->ctename == NULL);
 	rte->ctename = (char *) TS_CTE_EXPAND;
-	rte->inh = false;
+	/*
+	 * Do not mark partitioned hypertables for inheritance, as Postgres
+	 * is supposed to expand them.
+	 */
+	if (rte->relkind != RELKIND_PARTITIONED_TABLE)
+		rte->inh = false;
 }
 
 static void
@@ -693,25 +697,6 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 					ts_modify_hypertable_fixup_tlist(subplan);
 			}
 
-			if (IsA(stmt->planTree, Agg))
-			{
-				Agg *agg = castNode(Agg, stmt->planTree);
-
-				/* If top-level plan is the finalize step of a partial
-				 * aggregation, and it is wrapped in the partialize_agg()
-				 * function, we want to do the combine step but skip
-				 * finalization (e.g., for avg(), add up individual
-				 * sum+counts, but don't compute the final average). */
-				if (agg->aggsplit == AGGSPLIT_FINAL_DESERIAL &&
-					has_partialize_function((Node *) agg->plan.targetlist, TS_FIX_AGGSPLIT_FINAL))
-				{
-					/* Deserialize input -> combine -> skip the final step ->
-					 * serialize again */
-					agg->aggsplit = AGGSPLITOP_COMBINE | AGGSPLITOP_DESERIALIZE |
-									AGGSPLITOP_SERIALIZE | AGGSPLITOP_SKIPFINAL;
-				}
-			}
-
 			ts_cm_functions->tsl_postprocess_plan(stmt);
 		}
 
@@ -1103,7 +1088,8 @@ rte_should_expand(const RangeTblEntry *rte)
 {
 	bool is_hypertable = ts_rte_is_hypertable(rte);
 
-	return is_hypertable && !rte->inh && ts_rte_is_marked_for_expansion(rte);
+	return is_hypertable && !rte->inh && ts_rte_is_marked_for_expansion(rte) &&
+		   rte->relkind != RELKIND_PARTITIONED_TABLE;
 }
 
 static void
@@ -1690,7 +1676,6 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 									RelOptInfo *input_rel, RelOptInfo *output_rel, void *extra)
 {
 	Query *parse = root->parse;
-	bool partials_found = false;
 	TsRelType reltype = TS_REL_OTHER;
 	Hypertable *ht = NULL;
 
@@ -1709,14 +1694,6 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 		if (output_rel->pathlist != NIL)
 			output_rel->pathlist =
 				replace_modify_hypertable_paths(root, output_rel->pathlist, input_rel);
-
-		if (parse->hasAggs && stage == UPPERREL_GROUP_AGG)
-		{
-			/* Existing AggPaths are modified here.
-			 * No new AggPaths should be added after this if there
-			 * are partials. */
-			partials_found = ts_plan_process_partialize_agg(root, output_rel);
-		}
 	}
 
 	if (stage == UPPERREL_GROUP_AGG && output_rel != NULL && ts_guc_enable_optimizations &&
@@ -1725,8 +1702,7 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 		if (parse->hasAggs)
 			ts_preprocess_first_last_aggregates(root, root->processed_tlist);
 
-		if (!partials_found)
-			ts_plan_add_hashagg(root, input_rel, output_rel);
+		ts_plan_add_hashagg(root, input_rel, output_rel);
 	}
 
 	if (ts_cm_functions->create_upper_paths_hook != NULL)

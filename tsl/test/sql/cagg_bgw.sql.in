@@ -43,7 +43,7 @@ CREATE OR REPLACE FUNCTION ts_bgw_params_mock_wait_returns_immediately(new_val I
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 -- Remove any default jobs, e.g., telemetry
-DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -69,7 +69,7 @@ CREATE TABLE public.bgw_dsm_handle_store(
 INSERT INTO public.bgw_dsm_handle_store VALUES (0);
 SELECT ts_bgw_params_create();
 
-SELECT * FROM _timescaledb_config.bgw_job;
+SELECT * FROM _timescaledb_catalog.bgw_job;
 SELECT * FROM timescaledb_information.job_stats;
 SELECT * FROM _timescaledb_catalog.continuous_agg;
 -- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
@@ -98,10 +98,10 @@ SELECT mat_hypertable_id, user_view_schema, user_view_name FROM _timescaledb_cat
 SELECT mat_hypertable_id, bucket_width FROM _timescaledb_catalog.continuous_aggs_bucket_function;
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
-SELECT id AS job_id FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id \gset
+SELECT id AS job_id FROM _timescaledb_catalog.bgw_job where hypertable_id=:mat_hypertable_id \gset
 
 -- job was created
-SELECT * FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id;
+SELECT * FROM _timescaledb_catalog.bgw_job where hypertable_id=:mat_hypertable_id;
 
 -- create 10 time buckets
 INSERT INTO test_continuous_agg_table
@@ -121,7 +121,7 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 
 SELECT * FROM sorted_bgw_log;
 
-SELECT * FROM _timescaledb_config.bgw_job where id=:job_id;
+SELECT * FROM _timescaledb_catalog.bgw_job where id=:job_id;
 
 -- job ran once, successfully
 SELECT job_id, next_start-last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
@@ -219,7 +219,7 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
 SELECT add_continuous_aggregate_policy('test_continuous_agg_view', 100::integer, -2::integer, '12 h'::interval);
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
-SELECT id AS job_id FROM _timescaledb_config.bgw_job WHERE hypertable_id=:mat_hypertable_id \gset
+SELECT id AS job_id FROM _timescaledb_catalog.bgw_job WHERE hypertable_id=:mat_hypertable_id \gset
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 
@@ -289,7 +289,7 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view
 
 SELECT add_continuous_aggregate_policy('test_continuous_agg_view', 100::integer, -2::integer, '12 h'::interval);
 
-SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
+SELECT id AS job_id FROM _timescaledb_catalog.bgw_job ORDER BY id desc limit 1 \gset
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 
@@ -334,11 +334,11 @@ CREATE MATERIALIZED VIEW test_continuous_agg_view_user_2
 
 SELECT add_continuous_aggregate_policy('test_continuous_agg_view_user_2', NULL, -2::integer, '12 h'::interval);
 
-SELECT id AS job_id FROM _timescaledb_config.bgw_job ORDER BY id desc limit 1 \gset
+SELECT id AS job_id FROM _timescaledb_catalog.bgw_job ORDER BY id desc limit 1 \gset
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 
-SELECT id, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id ;
+SELECT id, owner FROM _timescaledb_catalog.bgw_job WHERE id = :job_id ;
 SELECT job_id, next_start - last_finish as until_next, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
     where job_id=:job_id;
@@ -372,6 +372,6 @@ SELECT * FROM test_continuous_agg_view_user_2;
 SELECT * from sorted_bgw_log;
 
 -- Count the number of continuous aggregate policies
-SELECT count(*) FROM _timescaledb_config.bgw_job
+SELECT count(*) FROM _timescaledb_catalog.bgw_job
  WHERE proc_schema = '_timescaledb_functions'
    AND proc_name = 'policy_refresh_continuous_aggregate';

@@ -199,7 +199,7 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
 ROLLBACK;
 
--- test caggs prevent direct compress
+-- test caggs with direct compress
 BEGIN;
 SET timescaledb.enable_direct_compress_insert = true;
 CREATE MATERIALIZED VIEW metrics_cagg WITH (tsdb.continuous) AS SELECT time_bucket('1 hour', time) AS bucket, device, avg(value) AS avg_value FROM metrics GROUP BY bucket, device WITH NO DATA;
@@ -314,3 +314,15 @@ INSERT INTO :CHUNK SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval
 SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_chunk') chunk;
 ROLLBACK;
 
+-- simple test with compressed insert enabled and sorting limited to 500
+-- batches should be limited to that amount so we have more compressed batches
+-- dataset is tweaked to fall into single chunk with exactly 3 batches
+BEGIN;
+SET timescaledb.enable_direct_compress_insert = true;
+SET timescaledb.direct_compress_insert_tuple_sort_limit = 1000;
+INSERT INTO metrics SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(1,3000) i;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
+-- since the chunks are new status should be COMPRESSED, UNORDERED
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
+ROLLBACK;

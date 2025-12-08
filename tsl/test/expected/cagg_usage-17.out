@@ -87,14 +87,13 @@ view_definition                   |  SELECT time_bucket('@ 1 hour'::interval, ob
                                   |     (max(metric) - min(metric)) AS metric_spread                            +
                                   |    FROM device_readings                                                     +
                                   |   GROUP BY (time_bucket('@ 1 hour'::interval, observation_time)), device_id;
-finalized                         | t
 
 \x
 -- Refresh interval
 --
 -- The refresh interval determines how often the background worker
 -- for automatic materialization will run. The default is (2 x bucket_width)
-SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
+SELECT schedule_interval FROM _timescaledb_catalog.bgw_job WHERE id = 1000;
  schedule_interval 
 -------------------
  @ 2 hours
@@ -105,7 +104,7 @@ SELECT alter_job(1000, schedule_interval := '1h');
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  (1000,"@ 1 hour","@ 0",-1,"@ 2 hours",t,"{""end_offset"": ""@ 2 hours"", ""start_offset"": null, ""mat_hypertable_id"": 2}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1000]")
 
-SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
+SELECT schedule_interval FROM _timescaledb_catalog.bgw_job WHERE id = 1000;
  schedule_interval 
 -------------------
  @ 1 hour
@@ -448,15 +447,6 @@ ORDER BY 1;
  _hyper_11_18_chunk |            0 | f       |        
  _hyper_11_19_chunk |            0 | f       |        
 
--- all caggs in the new format (finalized=true)
-SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
- user_view_name | finalized 
-----------------+-----------
- cagg1          | t
- cagg2          | t
- cagg3          | t
- cagg4          | t
-
 -- dropping chunk should also remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-01 00:00:00-02'::timestamptz);
                drop_chunks                
@@ -476,20 +466,6 @@ ORDER BY 1;
  _hyper_11_18_chunk |            0 | f       |        
  _hyper_11_19_chunk |            0 | f       |        
 
--- let's update the catalog to fake an old format cagg (finalized=false)
-\c :TEST_DBNAME :ROLE_SUPERUSER
-UPDATE _timescaledb_catalog.continuous_agg SET finalized=FALSE WHERE user_view_name = 'cagg1';
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
--- cagg1 now is a fake old format (finalized=false)
-SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
- user_view_name | finalized 
-----------------+-----------
- cagg1          | f
- cagg2          | t
- cagg3          | t
- cagg4          | t
-
--- cagg1 now is in the old format (finalized=false)
 -- dropping chunk should NOT remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-13 00:00:00-02'::timestamptz);
                drop_chunks                
@@ -505,21 +481,12 @@ WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
      chunk_name     | chunk_status | dropped | comp_id 
 --------------------+--------------+---------+---------
- _hyper_11_17_chunk |            0 | t       |        
  _hyper_11_18_chunk |            0 | f       |        
  _hyper_11_19_chunk |            0 | f       |        
 
 -- remove the fake old format cagg
 DROP MATERIALIZED VIEW cagg1;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_20_chunk
--- no more old format caggs (finalized=false)
-SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
- user_view_name | finalized 
-----------------+-----------
- cagg2          | t
- cagg3          | t
- cagg4          | t
-
 -- dropping chunk should remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-25 00:00:00-02'::timestamptz);
                drop_chunks                
@@ -536,7 +503,6 @@ WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
      chunk_name     | chunk_status | dropped | comp_id 
 --------------------+--------------+---------+---------
- _hyper_11_17_chunk |            0 | t       |        
  _hyper_11_19_chunk |            0 | f       |        
 
 \set ON_ERROR_STOP 1

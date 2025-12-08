@@ -5,43 +5,16 @@
  */
 
 #include <postgres.h>
-#include <access/tupconvert.h>
-#include <access/xact.h>
-#include <catalog/pg_type.h>
-#include <commands/dbcommands.h>
-#include <commands/trigger.h>
-#include <executor/spi.h>
-#include <fmgr.h>
-#include <lib/stringinfo.h>
-#include <miscadmin.h>
-#include <storage/lmgr.h>
-#include <utils/builtins.h>
-#include <utils/elog.h>
 #include <utils/hsearch.h>
-#include <utils/rel.h>
-#include <utils/relcache.h>
 #include <utils/snapmgr.h>
-
-#include <scanner.h>
 
 #include "compat/compat.h"
 
-#include "chunk.h"
+#include "continuous_aggs/insert.h"
 #include "debug_point.h"
-#include "dimension.h"
-#include "export.h"
 #include "guc.h"
-#include "hypertable.h"
-#include "hypertable_cache.h"
 #include "invalidation.h"
 #include "partitioning.h"
-#include "time_bucket.h"
-#include "ts_catalog/catalog.h"
-#include "ts_catalog/continuous_agg.h"
-#include "utils.h"
-
-#include "continuous_aggs/common.h"
-#include "continuous_aggs/insert.h"
 
 /*
  * When tuples in a hypertable that has a continuous aggregate are modified, the
@@ -55,37 +28,34 @@
  *
  * We accomplish this at the transaction level by keeping a hash table of each
  * hypertable that has been modified in the transaction and the lowest and
- * greatest modified values. The hashtable will be updated via a trigger that
- * will be called for every row that is inserted, updated or deleted. We use a
- * hashtable because we need to keep track of this on a per hypertable basis and
- * multiple can have tuples modified during a single transaction. (And if we
- * move to per-chunk cache-invalidation it makes it even easier).
+ * greatest modified values. The hashtable will be updated via ModifyHypertable
+ * for every row that is inserted, updated or deleted.
+ * We use a hashtable because we need to keep track of this on a per hypertable
+ * basis and multiple can have tuples modified during a single transaction.
+ * (And if we move to per-chunk cache-invalidation it makes it even easier).
  *
  */
 typedef struct ContinuousAggsCacheInvalEntry
 {
+	Oid chunk_relid;
 	int32 hypertable_id;
-	Oid hypertable_relid;
 	Dimension hypertable_open_dimension;
-	Oid previous_chunk_relid;
-	AttrNumber previous_chunk_open_dimension;
+	AttrNumber open_dimension_attno;
 	bool value_is_set;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
 } ContinuousAggsCacheInvalEntry;
 
-static int64 get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid);
+static int64 get_lowest_invalidated_time_for_hypertable(int32 hypertable_id);
 
 #define CA_CACHE_INVAL_INIT_HTAB_SIZE 64
 
 static HTAB *continuous_aggs_cache_inval_htab = NULL;
-static MemoryContext continuous_aggs_trigger_mctx = NULL;
+static MemoryContext continuous_aggs_invalidation_mctx = NULL;
 
 static int64 tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc);
 static inline void cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry,
-										  int32 hypertable_id);
-static inline void cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry,
-											   Oid chunk_reloid);
+										  int32 hypertable_id, Oid chunk_relid);
 static inline void update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval);
 static void cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry);
 static void cache_inval_cleanup(void);
@@ -98,16 +68,16 @@ cache_inval_init()
 {
 	HASHCTL ctl;
 
-	Assert(continuous_aggs_trigger_mctx == NULL);
+	Assert(continuous_aggs_invalidation_mctx == NULL);
 
-	continuous_aggs_trigger_mctx = AllocSetContextCreate(TopTransactionContext,
-														 "ContinuousAggsTriggerCtx",
-														 ALLOCSET_DEFAULT_SIZES);
+	continuous_aggs_invalidation_mctx = AllocSetContextCreate(TopTransactionContext,
+															  "ContinuousAggsInvalidationCtx",
+															  ALLOCSET_DEFAULT_SIZES);
 
 	memset(&ctl, 0, sizeof(ctl));
 	ctl.keysize = sizeof(int32);
 	ctl.entrysize = sizeof(ContinuousAggsCacheInvalEntry);
-	ctl.hcxt = continuous_aggs_trigger_mctx;
+	ctl.hcxt = continuous_aggs_invalidation_mctx;
 
 	continuous_aggs_cache_inval_htab = hash_create("TS Continuous Aggs Cache Inval",
 												   CA_CACHE_INVAL_INIT_HTAB_SIZE,
@@ -129,12 +99,6 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 	 */
 	Ensure(!isnull, "primary partition column cannot be NULL");
 
-	if (NULL != d->partitioning)
-	{
-		Oid collation = TupleDescAttr(tupdesc, col)->attcollation;
-		datum = ts_partitioning_func_apply(d->partitioning, collation, datum);
-	}
-
 	Assert(d->type == DIMENSION_TYPE_OPEN);
 
 	dimtype = ts_dimension_get_partition_type(d);
@@ -143,64 +107,24 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 }
 
 static inline void
-cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hypertable_id)
+cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hypertable_id,
+					   Oid chunk_relid)
 {
 	Cache *ht_cache = ts_hypertable_cache_pin();
-	/* NOTE: we can remove the id=>relid scan, if it becomes an issue, by getting the
-	 * hypertable_relid directly from the Chunk*/
 	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(ht_cache, hypertable_id);
-	if (ht == NULL)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("unable to determine relid for hypertable %d", hypertable_id)));
-	}
-
-	cache_entry->hypertable_id = hypertable_id;
-	cache_entry->hypertable_relid = ht->main_table_relid;
+	Ensure(ht, "could not find hypertable with id %d", hypertable_id);
 
 	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
-	Ensure(open_dim != NULL, "hypertable %d has no open partitioning dimension", hypertable_id);
+	Ensure(open_dim, "hypertable %d has no open partitioning dimension", hypertable_id);
 
+	cache_entry->chunk_relid = chunk_relid;
+	cache_entry->hypertable_id = hypertable_id;
 	cache_entry->hypertable_open_dimension = *open_dim;
-	if (cache_entry->hypertable_open_dimension.partitioning != NULL)
-	{
-		PartitioningInfo *open_dim_part_info =
-			MemoryContextAllocZero(continuous_aggs_trigger_mctx, sizeof(*open_dim_part_info));
-		*open_dim_part_info = *cache_entry->hypertable_open_dimension.partitioning;
-		cache_entry->hypertable_open_dimension.partitioning = open_dim_part_info;
-	}
-	cache_entry->previous_chunk_relid = InvalidOid;
+	cache_entry->open_dimension_attno = get_attnum(chunk_relid, NameStr(open_dim->fd.column_name));
 	cache_entry->value_is_set = false;
 	cache_entry->lowest_modified_value = INVAL_POS_INFINITY;
 	cache_entry->greatest_modified_value = INVAL_NEG_INFINITY;
 	ts_cache_release(&ht_cache);
-}
-
-static inline void
-cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chunk_reloid)
-{
-	Chunk *modified_tuple_chunk = ts_chunk_get_by_relid(chunk_reloid, false);
-	if (modified_tuple_chunk == NULL)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("continuous agg trigger function must be called on hypertable chunks only"),
-				 errdetail("Called on '%s'.", get_rel_name(chunk_reloid))));
-	}
-
-	cache_entry->previous_chunk_relid = modified_tuple_chunk->table_id;
-	cache_entry->previous_chunk_open_dimension =
-		get_attnum(chunk_reloid, NameStr(cache_entry->hypertable_open_dimension.fd.column_name));
-
-	if (cache_entry->previous_chunk_open_dimension == InvalidAttrNumber)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("open dimension '%s' not found in chunk %s",
-						NameStr(cache_entry->hypertable_open_dimension.fd.column_name),
-						get_rel_name(chunk_reloid))));
-	}
 }
 
 static inline void
@@ -211,6 +135,32 @@ update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval)
 		cache_entry->lowest_modified_value = timeval;
 	if (timeval > cache_entry->greatest_modified_value)
 		cache_entry->greatest_modified_value = timeval;
+}
+
+/*
+ * Used by direct compress invalidation
+ */
+void
+continuous_agg_invalidate_range(int32 hypertable_id, Oid chunk_relid, int64 start, int64 end)
+{
+	ContinuousAggsCacheInvalEntry *cache_entry;
+	bool found;
+
+	if (!continuous_aggs_cache_inval_htab)
+		cache_inval_init();
+
+	cache_entry = (ContinuousAggsCacheInvalEntry *)
+		hash_search(continuous_aggs_cache_inval_htab, &hypertable_id, HASH_ENTER, &found);
+
+	if (!found)
+		cache_inval_entry_init(cache_entry, hypertable_id, chunk_relid);
+
+	cache_entry->value_is_set = true;
+	Assert(start <= end);
+	if (start < cache_entry->lowest_modified_value)
+		cache_entry->lowest_modified_value = start;
+	if (end > cache_entry->greatest_modified_value)
+		cache_entry->greatest_modified_value = end;
 }
 
 void
@@ -228,18 +178,14 @@ continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple
 		cache_inval_init();
 
 	cache_entry = (ContinuousAggsCacheInvalEntry *)
-		hash_search(continuous_aggs_cache_inval_htab, &hypertable_id, HASH_ENTER, &found);
+		hash_search(continuous_aggs_cache_inval_htab, &chunk_relid, HASH_ENTER, &found);
 
 	if (!found)
-		cache_inval_entry_init(cache_entry, hypertable_id);
-
-	/* handle the case where we need to repopulate the cached chunk data */
-	if (cache_entry->previous_chunk_relid != chunk_relid)
-		cache_entry_switch_to_chunk(cache_entry, chunk_relid);
+		cache_inval_entry_init(cache_entry, hypertable_id, chunk_relid);
 
 	timeval = tuple_get_time(&cache_entry->hypertable_open_dimension,
 							 chunk_tuple,
-							 cache_entry->previous_chunk_open_dimension,
+							 cache_entry->open_dimension_attno,
 							 RelationGetDescr(chunk_rel));
 
 	update_cache_entry(cache_entry, timeval);
@@ -250,7 +196,7 @@ continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple
 	/* on update we need to invalidate the new time value as well as the old one */
 	timeval = tuple_get_time(&cache_entry->hypertable_open_dimension,
 							 chunk_newtuple,
-							 cache_entry->previous_chunk_open_dimension,
+							 cache_entry->open_dimension_attno,
 							 RelationGetDescr(chunk_rel));
 
 	update_cache_entry(cache_entry, timeval);
@@ -279,7 +225,7 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 		return;
 	}
 
-	liv = get_lowest_invalidated_time_for_hypertable(entry->hypertable_relid);
+	liv = get_lowest_invalidated_time_for_hypertable(entry->hypertable_id);
 
 	if (entry->lowest_modified_value < liv)
 		invalidation_hyper_log_add_entry(entry->hypertable_id,
@@ -292,10 +238,10 @@ cache_inval_cleanup(void)
 {
 	Assert(continuous_aggs_cache_inval_htab != NULL);
 	hash_destroy(continuous_aggs_cache_inval_htab);
-	MemoryContextDelete(continuous_aggs_trigger_mctx);
+	MemoryContextDelete(continuous_aggs_invalidation_mctx);
 
 	continuous_aggs_cache_inval_htab = NULL;
-	continuous_aggs_trigger_mctx = NULL;
+	continuous_aggs_invalidation_mctx = NULL;
 };
 
 static void
@@ -410,7 +356,7 @@ invalidation_tuple_found(TupleInfo *ti, void *min)
 }
 
 static int64
-get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
+get_lowest_invalidated_time_for_hypertable(int32 hypertable_id)
 {
 	int64 min_val = INVAL_POS_INFINITY;
 	Catalog *catalog = ts_catalog_get();
@@ -422,7 +368,7 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 				Anum_continuous_aggs_invalidation_threshold_pkey_hypertable_id,
 				BTEqualStrategyNumber,
 				F_INT4EQ,
-				Int32GetDatum(ts_hypertable_relid_to_id(hypertable_relid)));
+				Int32GetDatum(hypertable_id));
 	scanctx = (ScannerCtx){
 		.table = catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 		.index = catalog_get_index(catalog,

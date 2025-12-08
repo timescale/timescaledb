@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ "15", "16", "17" ]
+        pg: [ "15", "16", "17", "18" ]
     env:
       # PostgreSQL configuration
       PGPORT: 6543
@@ -34,16 +34,10 @@ jobs:
 
     - name: Get version
       id: version
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        # version will only be a proper version in a release branch so we use previous_version
-        # as fallback for main
-        if (grep '^version = [0-9.]\+$' version.config)
-        {
-          $version=sed -n 's!^version = !!p' version.config
-        } else {
-          $version=sed -n 's!^previous_version = !!p' version.config
-        }
-        cat version.config
+        $version=gh release list --json tagName,isLatest --jq '.[] | select(.isLatest) | .tagName'
         echo "Determined version: "
         echo "version=$version"
         echo "version=$version" >>$env:GITHUB_OUTPUT

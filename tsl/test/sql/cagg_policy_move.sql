@@ -23,7 +23,7 @@ ORDER BY 1, 2, 3;
 CREATE FUNCTION get_job_id_for(REGCLASS) RETURNS INTEGER AS $$
 SELECT DISTINCT job.id AS job_id
   FROM _timescaledb_catalog.hypertable AS ht
-  JOIN _timescaledb_config.bgw_job AS job
+  JOIN _timescaledb_catalog.bgw_job AS job
     ON hypertable_id = ht.id
  WHERE format('%I.%I', schema_name, table_name)::regclass = $1
 $$ LANGUAGE SQL;
@@ -129,7 +129,7 @@ SELECT application_name, owner,
        schedule_interval, fixed_schedule, initial_start,
        next_start,		-- to check initial start
        hypertable_id, config
-  FROM _timescaledb_config.bgw_job
+  FROM _timescaledb_catalog.bgw_job
   LEFT JOIN _timescaledb_internal.bgw_job_stat
     ON id = job_id
  WHERE application_name LIKE '%Move Hypertables Invalidation Policy%';
@@ -138,7 +138,7 @@ SELECT application_name, owner,
 -- Get a job id and a valid configuration for testing below.
 SELECT id AS job_id,
        config AS config
-  FROM _timescaledb_config.bgw_job
+  FROM _timescaledb_catalog.bgw_job
  WHERE application_name LIKE '%Move Hypertables Invalidation Policy%'
    AND hypertable_id = 1 \gset
 
@@ -231,7 +231,7 @@ CALL remove_process_hypertable_invalidations_policy('conditions', if_exists => t
 -- and check that it does not move invalidations.
 SELECT add_continuous_aggregate_policy('measure_10', 100::int, 10::int, '1h'::interval) as job_id \gset
 SELECT jsonb_set(config, '{process_hypertable_invalidations}', 'false') AS config
-  FROM _timescaledb_config.bgw_job WHERE id = :job_id \gset
+  FROM _timescaledb_catalog.bgw_job WHERE id = :job_id \gset
 SELECT jsonb_pretty(config)
   FROM alter_job(:job_id, config := :'config');
 INSERT INTO measurements VALUES (70, 19, 12.3), (71, 20, 34.5);

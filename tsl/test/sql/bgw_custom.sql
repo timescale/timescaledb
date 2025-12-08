@@ -57,7 +57,7 @@ SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb
 -- exclude internal jobs
 SELECT * FROM timescaledb_information.jobs WHERE job_id >= 1000 ORDER BY 1;
 
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE config->>'type' IN ('procedure', 'function');
+SELECT count(*) FROM _timescaledb_catalog.bgw_job WHERE config->>'type' IN ('procedure', 'function');
 
 \set ON_ERROR_STOP 0
 -- test bad input
@@ -91,8 +91,8 @@ SELECT count(*) FROM timescaledb_information.jobs WHERE job_id >= 1002;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 -- create a new job with longer id
-SELECT nextval('_timescaledb_config.bgw_job_id_seq') as nextval \gset
-SELECT setval('_timescaledb_config.bgw_job_id_seq', 2147483647, false);
+SELECT nextval('_timescaledb_catalog.bgw_job_id_seq') as nextval \gset
+SELECT setval('_timescaledb_catalog.bgw_job_id_seq', 2147483647, false);
 SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb, job_name := 'custom_job_name');
 
 \set ON_ERROR_STOP 0
@@ -129,7 +129,7 @@ SELECT delete_job(1001);
 SELECT delete_job(2147483647);
 
 -- reset the sequence to its previous value
-SELECT setval('_timescaledb_config.bgw_job_id_seq', :nextval, false);
+SELECT setval('_timescaledb_catalog.bgw_job_id_seq', :nextval, false);
 
 --test for #2793
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -190,7 +190,7 @@ $$;
 
 -- Remove any default jobs, e.g., telemetry
 \c :TEST_DBNAME :ROLE_SUPERUSER
-TRUNCATE _timescaledb_config.bgw_job RESTART IDENTITY CASCADE;
+TRUNCATE _timescaledb_catalog.bgw_job RESTART IDENTITY CASCADE;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -301,7 +301,7 @@ SELECT count(*) FROM conditions_summary_daily;
 
 SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id_5, NULL);
 SELECT id, proc_name, hypertable_id
-FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
+FROM _timescaledb_catalog.bgw_job WHERE id = :job_id_5;
 
 -- error case, try to associate with a PG relation
 \set ON_ERROR_STOP 0
@@ -312,13 +312,13 @@ SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id_5, 'custom_lo
 SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id_5, 'conditions_summary_daily'::regclass);
 
 SELECT id, proc_name, hypertable_id
-FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
+FROM _timescaledb_catalog.bgw_job WHERE id = :job_id_5;
 
 --verify that job is dropped when cagg is dropped
 DROP MATERIALIZED VIEW conditions_summary_daily;
 
 SELECT id, proc_name, hypertable_id
-FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
+FROM _timescaledb_catalog.bgw_job WHERE id = :job_id_5;
 
 -- Cleanup
 DROP TABLE conditions;
@@ -530,7 +530,7 @@ select * from alter_job(:job_id_owner, check_config => 'test_schema.test_config_
 DROP SCHEMA test_schema CASCADE;
 
 -- Delete all jobs with that owner before we can drop the user.
-DELETE FROM _timescaledb_config.bgw_job WHERE owner = 'user_noexec'::regrole;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE owner = 'user_noexec'::regrole;
 DROP ROLE user_noexec;
 
 -- test with aggregate check proc
@@ -552,7 +552,7 @@ CREATE AGGREGATE sum_jsb (jsonb)
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'sum_jsb'::regproc);
 
 -- Cleanup jobs
-TRUNCATE _timescaledb_config.bgw_job CASCADE;
+TRUNCATE _timescaledb_catalog.bgw_job CASCADE;
 
 -- github issue 4610
 CREATE TABLE sensor_data
@@ -604,7 +604,7 @@ update _timescaledb_catalog.chunk set status=3 where table_name = :'new_uncompre
 -- add new compression policy job
 SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
 -- set recompress to true
-SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_catalog.bgw_job WHERE id = :compressjob_id;
 
 -- verify that there are other uncompressed new chunks that need to be compressed
 SELECT count(*) > 1

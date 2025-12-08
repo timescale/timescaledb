@@ -5,6 +5,68 @@ This page lists all the latest features and updates to TimescaleDB. When
 you use psql to update your database, use the -X flag and prevent any .psqlrc 
 commands from accidentally triggering the load of a previous DB version.**
 
+## 2.24.0 (2025-12-03)
+
+This release contains performance improvements and bug fixes since the 2.23.1 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.24.0**
+* **Direct Compress just got smarter and faster**: it now works seamlessly with hypertables generating continuous aggregates. Invalidation ranges are computed directly in-memory based on the ingested batches and written efficiently at transaction commit. This change reduces the IO footprint drastically by removing the write amplification of the invalidation logs.
+* **Continuous aggregates now speak UUIDv7**: hypertables partitioned by UUIDv7 are fully supported through an enhanced `time_bucket` that accepts UUIDv7 values and returns precise, timezone-aware timestamps — unlocking powerful time-series analytics on modern UUID-driven table schemas.
+* **Lightning-fast recompression**: the new `recompress := true` option on the `convert_to_columnstore` API enables pure in-memory recompression, delivering a **4–5× speed boost** over the previous disk-based process.
+
+**ARM support for bloom filters**
+The [sparse bloom filter indexes](https://www.tigerdata.com/blog/blocked-bloom-filters-speeding-up-point-lookups-in-tiger-postgres-native-columnstore) will stop working after upgrade to 2.24. If you are affected by this problem, the warning "bloom filter sparse indexes require action to re-enable" will appear in the Postgres log during upgrade.
+
+In versions before 2.24, the hashing scheme of the bloom filter sparse indexes used to depend on the build options of the TimescaleDB executables. These options are set by the package publishers and might differ between different package sources or even versions. After upgrading to a version with different options, the queries that use the bloom filter lookups could erroneously stop returning the rows that should in fact match the query conditions. The 2.24 release fixes this by using distinct column names for each hashing scheme.
+
+The bloom filter sparse indexes will be disabled on the compressed chunks created before upgrading to 2.24. To re-enable them, you have to decompress and then compress the affected chunks.
+
+If you were running the official APT package on AMD64 architecture, the hashing scheme did not change, and it is safe to use the existing bloom filter sparse indexes. To enable this, set the GUC `timescaledb.read_legacy_bloom1_v1 = on` in the server configuration.
+
+The chunks compressed after upgrade to 2.24 will use the new index format, and the bloom filter sparse indexes will continue working as usual for these chunks without any intervention.
+
+For more details, refer to the pull request [#8761](https://github.com/timescale/timescaledb/pull/8761).
+
+**Deprecations**
+* The next release of TimescaleDB will remove the deprecated partial continuous aggregates format. The new format was introduced in [`2.7.0`](https://github.com/timescale/timescaledb/releases/tag/2.7.0) and provides significant improvements in terms of performance and storage efficiency. Please use [`cagg_migrate(<CONTINUOUS_AGGREGATE_NAME>)`](https://www.tigerdata.com/docs/use-timescale/latest/continuous-aggregates/migrate) to migrate to the new format. Tiger Cloud users are migrated automatically.
+* In future releases the deprecated view `timescaledb_information.compression_settings` will be removed. Please use [`timescaledb_information.hypertable_columnstore_settings`](https://www.tigerdata.com/docs/api/latest/hypercore/hypertable_columnstore_settings) as a replacement.
+* The experimental view [`timescaledb_experimental.policies`](https://www.tigerdata.com/docs/api/latest/informational-views/policies) and the adjacent experimental functions [`add_policies`](https://www.tigerdata.com/docs/api/latest/continuous-aggregates/add_policies), [`alter_policies`](https://www.tigerdata.com/docs/api/latest/continuous-aggregates/alter_policies), [`show_policies`](https://www.tigerdata.com/docs/api/latest/continuous-aggregates/show_policies), [`remove_policies`](https://www.tigerdata.com/docs/api/latest/continuous-aggregates/remove_policies), and [`remove_all_policies`](https://www.tigerdata.com/docs/api/latest/continuous-aggregates/remove_all_policies) to manage continuous aggregates will be removed in an upcoming release. For replacements, please use the [Jobs API](https://www.tigerdata.com/docs/api/latest/jobs-automation).
+
+**Backward-Incompatible Changes**
+* [#8761](https://github.com/timescale/timescaledb/pull/8761) Fix matching rows in queries using the bloom filter sparse indexes potentially not returned after extension upgrade. The version of the bloom filter sparse indexes is changed. The existing indexes will stop working and will require action to re-enable. See the section above for details.
+
+**Features**
+* [#8465](https://github.com/timescale/timescaledb/pull/8465) Speed up the filters like `x = any(array[...])` using bloom filter sparse indexes.
+* [#8569](https://github.com/timescale/timescaledb/pull/8569) In-memory recompression
+* [#8754](https://github.com/timescale/timescaledb/pull/8754) Add concurrent mode for merging chunks
+* [#8786](https://github.com/timescale/timescaledb/pull/8786) Display chunks view range as timestamps for UUIDv7
+* [#8819](https://github.com/timescale/timescaledb/pull/8819) Refactor chunk compression logic
+* [#8840](https://github.com/timescale/timescaledb/pull/8840) Allow `ALTER COLUMN TYPE` when compression is enabled but no compressed chunks exist
+* [#8908](https://github.com/timescale/timescaledb/pull/8908) Add time bucketing support for UUIDv7
+* [#8909](https://github.com/timescale/timescaledb/pull/8909) Support direct compress on hypertables with continuous aggregates
+* [#8939](https://github.com/timescale/timescaledb/pull/8939) Support continuous aggregates on UUIDv7-partitioned hypertables
+* [#8959](https://github.com/timescale/timescaledb/pull/8959) Cap continuous aggregate invalidation interval range at chunk boundary
+* [#8975](https://github.com/timescale/timescaledb/pull/8975) Exclude date/time columns from default segmentby
+* [#8993](https://github.com/timescale/timescaledb/pull/8993) Add GUC for in-memory recompression
+
+**Bugfixes**
+* [#8839](https://github.com/timescale/timescaledb/pull/8839) Improve `_timescaledb_functions.cagg_watermark` error handling
+* [#8853](https://github.com/timescale/timescaledb/pull/8853) Change log level of continuous aggregate refresh messages to `DEBUG1`
+* [#8933](https://github.com/timescale/timescaledb/pull/8933) Potential crash or seemingly random errors when querying the compressed chunks created on releases before 2.15 and using the minmax sparse indexes.
+* [#8942](https://github.com/timescale/timescaledb/pull/8942) Fix lateral join handling for compressed chunks
+* [#8958](https://github.com/timescale/timescaledb/pull/8958) Fix `if_not_exists` behaviour when adding refresh policy
+* [#8969](https://github.com/timescale/timescaledb/pull/8969) Gracefully handle missing job stat in background worker
+* [#8988](https://github.com/timescale/timescaledb/pull/8988) Don't ignore additional filters on same column when building scankeys
+
+**GUCs**
+* `direct_compress_copy_tuple_sort_limit`: Number of tuples that can be sorted at once in a `COPY` operation.
+* `direct_compress_insert_tuple_sort_limit`: Number of tuples that can be sorted at once in an `INSERT` operation.
+* `read_legacy_bloom1_v1`: Enable reading the legacy `bloom1` version 1 sparse indexes for `SELECT` queries.
+* `enable_in_memory_recompression`: Enable in-memory recompression functionality.
+
+**Thanks**
+* @bezpechno for implementing `ALTER COLUMN TYPE` for hypertable with columnstore when no compressed chunks exist
+
 ## 2.23.1 (2025-11-13)
 
 This release contains performance improvements and bug fixes since the 2.23.0 release. We recommend that you upgrade at the next available opportunity.

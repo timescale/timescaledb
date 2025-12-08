@@ -456,7 +456,7 @@ select add_compression_policy(:'UNCOMPRESSED_HYPER_NAME', interval '1 day');
 ------------------------
                    1000
 
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
+SELECT count(*) FROM _timescaledb_catalog.bgw_job WHERE id >= 1000;
  count 
 -------
      1
@@ -469,7 +469,7 @@ SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
      0
 
 --verify that the policy is gone
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
+SELECT count(*) FROM _timescaledb_catalog.bgw_job WHERE id >= 1000;
  count 
 -------
      0

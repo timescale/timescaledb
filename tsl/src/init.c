@@ -35,7 +35,6 @@
 #include "continuous_aggs/invalidation_record.h"
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
-#include "continuous_aggs/repair.h"
 #include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
 #include "export.h"
@@ -45,7 +44,6 @@
 #include "nodes/gapfill/gapfill_functions.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/vector_agg/plan.h"
-#include "partialize_finalize.h"
 #include "planner.h"
 #include "process_utility.h"
 #include "reorder.h"
@@ -77,6 +75,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,
 	.set_rel_pathlist_query = tsl_set_rel_pathlist_query,
+	.sort_transform_replace_pathkeys = tsl_sort_transform_replace_pathkeys,
 
 	/* bgw policies */
 	.policy_compression_add = policy_compression_add,
@@ -130,9 +129,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.tsl_postprocess_plan = tsl_postprocess_plan,
 
 	/* Continuous Aggregates */
-	.partialize_agg = tsl_partialize_agg,
-	.finalize_agg_sfunc = tsl_finalize_agg_sfunc,
-	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
 	.continuous_agg_refresh = continuous_agg_refresh,
 	.continuous_agg_process_hypertable_invalidations =
@@ -146,7 +142,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
 	.continuous_agg_migrate_to_time_bucket = continuous_agg_migrate_to_time_bucket,
 	.continuous_agg_read_invalidation_record = ts_invalidation_read_record,
-	.cagg_try_repair = tsl_cagg_try_repair,
 
 	/* Compression */
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,
@@ -182,6 +177,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_target_segments = decompress_target_segments,
 	.columnstore_setup = tsl_columnstore_setup,
 	.compressor_init = tsl_compressor_init,
+	.compressor_set_invalidation = tsl_compressor_set_invalidation,
 	.compressor_add_slot = tsl_compressor_add_slot,
 	.compressor_flush = tsl_compressor_flush,
 	.compressor_free = tsl_compressor_free,
@@ -224,7 +220,39 @@ ts_module_init(PG_FUNCTION_ARGS)
 
 	/* Register a cleanup function to be called when the backend exits */
 	if (register_proc_exit)
+	{
 		on_proc_exit(ts_module_cleanup_on_pg_exit, 0);
+
+		/*
+		 * We also register some GUCs here which are impossible to register in
+		 * the Apache module, because the default value is only known in the TSL
+		 * module. It is done in this branch to avoid being called multiple
+		 * times in the parallel workers.
+		 */
+
+		/*
+		 * The read-only GUC to query the current metadata column prefix used
+		 * for bloom filter sparse indexes. It can be different depending on the
+		 * hashing schema we use, that is determined at build time. In debug
+		 * builds, it can be changed for testing.
+		 */
+		bloom1_column_prefix = default_bloom1_column_prefix;
+		DefineCustomStringVariable(MAKE_EXTOPTION("bloom1_column_prefix"),
+								   "bloom filter column prefix",
+								   "The prefix used for the metadata columns storing the sparse "
+								   "bloom filter indexes.",
+								   (char **) &bloom1_column_prefix,
+								   default_bloom1_column_prefix,
+#ifndef NDEBUG
+								   PGC_USERSET,
+#else
+								   PGC_INTERNAL,
+#endif
+								   0,
+								   NULL,
+								   NULL,
+								   NULL);
+	}
 
 	PG_RETURN_BOOL(true);
 }

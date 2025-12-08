@@ -88,7 +88,7 @@ static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char
 									  const char *user_view, const char *partial_schema,
 									  const char *partial_view, bool materialized_only,
 									  const char *direct_schema, const char *direct_view,
-									  const bool finalized, const int32 parent_mat_hypertable_id);
+									  const int32 parent_mat_hypertable_id);
 static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function,
 												 const char *bucket_width, const char *origin,
 												 const char *offset, const char *timezone,
@@ -123,7 +123,7 @@ static int32 mattablecolumninfo_create_materialization_table(
 	char *table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress);
 static Query *
 mattablecolumninfo_get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo,
-											Query *userview_query, bool finalized);
+											Query *userview_query);
 
 /*
  * Create a entry for the materialization table in table CONTINUOUS_AGGS.
@@ -132,7 +132,7 @@ static void
 create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 						  const char *user_view, const char *partial_schema,
 						  const char *partial_view, bool materialized_only,
-						  const char *direct_schema, const char *direct_view, const bool finalized,
+						  const char *direct_schema, const char *direct_view,
 						  const int32 parent_mat_hypertable_id)
 {
 	Catalog *catalog = ts_catalog_get();
@@ -178,7 +178,6 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 		NameGetDatum(&direct_viewnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(materialized_only);
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_finalized)] = BoolGetDatum(finalized);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -541,30 +540,14 @@ mattablecolumninfo_create_materialization_table(
  */
 static Query *
 mattablecolumninfo_get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo,
-											Query *userview_query, bool finalized)
+											Query *userview_query)
 {
 	Query *partial_selquery = NULL;
 
-	if (!finalized)
-	{
-		CAGG_MAKEQUERY(partial_selquery, userview_query);
-		partial_selquery->rtable = copyObject(userview_query->rtable);
-		partial_selquery->jointree = copyObject(userview_query->jointree);
-#if PG16_GE
-		partial_selquery->rteperminfos = copyObject(userview_query->rteperminfos);
-#endif
-		partial_selquery->targetList = mattblinfo->partial_seltlist;
-		partial_selquery->groupClause = mattblinfo->partial_grouplist;
-		partial_selquery->havingQual = NULL;
-		partial_selquery->sortClause = NULL;
-	}
-	else
-	{
-		partial_selquery = copyObject(userview_query);
-		/* Partial view should always include the time dimension column */
-		partial_selquery->targetList = mattblinfo->partial_seltlist;
-		partial_selquery->groupClause = mattblinfo->partial_grouplist;
-	}
+	partial_selquery = copyObject(userview_query);
+	/* Partial view should always include the time dimension column */
+	partial_selquery->targetList = mattblinfo->partial_seltlist;
+	partial_selquery->groupClause = mattblinfo->partial_grouplist;
 
 	return partial_selquery;
 }
@@ -722,7 +705,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	int32 materialize_hypertable_id;
 	bool materialized_only =
 		DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
-	bool finalized = DatumGetBool(with_clause_options[CreateMaterializedViewFlagFinalized].parsed);
 	bool slot_prepared = false;
 
 	int64 matpartcol_interval = 0;
@@ -739,8 +721,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
 			matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;
 	}
-
-	finalqinfo.finalized = finalized;
 
 	/*
 	 * Assign the column_name aliases in CREATE VIEW to the query.
@@ -816,8 +796,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	/*
 	 * Step 3: create the internal view with select partialize(..).
 	 */
-	partial_selquery =
-		mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery, finalqinfo.finalized);
+	partial_selquery = mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery);
 
 	makeMaterializedTableName(relnamebuf, "_partial_view_%d", materialize_hypertable_id);
 	part_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
@@ -849,7 +828,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 							  materialized_only,
 							  dum_rel->schemaname,
 							  dum_rel->relname,
-							  finalized,
 							  bucket_info->parent_mat_hypertable_id);
 
 	char *bucket_origin = NULL;
@@ -914,7 +892,6 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	const CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, node);
 	ContinuousAggTimeBucketInfo timebucket_exprinfo;
 	Oid nspid;
-	bool finalized = with_clause_options[CreateMaterializedViewFlagFinalized].parsed;
 	ViewStmt viewstmt = {
 		.type = T_ViewStmt,
 		.view = stmt->into->rel,
@@ -962,7 +939,6 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 
 	schema_name = get_namespace_name(nspid);
 	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery,
-											  finalized,
 											  schema_name,
 											  stmt->into->rel->relname,
 											  true);
@@ -1068,7 +1044,6 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 
 	ContinuousAggTimeBucketInfo timebucket_exprinfo =
 		cagg_validate_query(direct_query,
-							agg->data.finalized,
 							NameStr(agg->data.user_view_schema),
 							NameStr(agg->data.user_view_name),
 							false);

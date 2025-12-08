@@ -25,7 +25,7 @@ select location , min(temperature)
 from conditions
 group by time_bucket('1d', timec), location WITH NO DATA;
 ERROR:  unrecognized parameter "timescaledb.myfill"
-HINT:  Valid timescaledb parameters are: continuous, create_group_indexes, materialized_only, columnstore, finalized, chunk_interval, segmentby, orderby, compress_chunk_interval
+HINT:  Valid timescaledb parameters are: continuous, create_group_indexes, materialized_only, columnstore, chunk_interval, segmentby, orderby, compress_chunk_interval
 --valid PG option
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false, check_option = LOCAL )
 as
@@ -447,7 +447,7 @@ ERROR:  invalid input syntax for type interval: "chicken"
 SELECT add_continuous_aggregate_policy('measurements_summary', NULL, NULL, '1 h'::interval) AS job_id
 \gset
 \x on
-SELECT * FROM _timescaledb_config.bgw_job WHERE id = :job_id;
+SELECT * FROM _timescaledb_catalog.bgw_job WHERE id = :job_id;
 -[ RECORD 1 ]-----+--------------------------------------------------------------------
 id                | 1000
 application_name  | Refresh Continuous Aggregate Policy [1000]

@@ -27,6 +27,7 @@ set(TEST_FILES
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
+    compress_bloom_hash.sql
     compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
@@ -114,6 +115,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     scheduler_fixed.sql
     cagg_policy_incremental.sql
     compress_bgw_reorder_drop_chunks.sql
+    compress_bloom_legacy_v1.sql
     chunk_api.sql
     chunk_merge.sql
     chunk_utils_compression.sql
@@ -135,12 +137,12 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_drop_chunks.sql
     cagg_dump.sql
     cagg_joins.sql
-    cagg_migrate.sql
     cagg_multi.sql
     cagg_on_cagg.sql
     cagg_on_cagg_joins.sql
     cagg_tableam.sql
     cagg_policy_run.sql
+    cagg_uuid.sql
     decompress_memory.sql
     decompress_vector_qual.sql
     detach_chunk.sql
@@ -156,7 +158,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     license_tsl.sql
     merge_chunks.sql
     fixed_schedules.sql
-    partialize_finalize.sql
     recompress_chunk_segmentwise.sql
     feature_flags.sql
     vector_agg_byte.sql
@@ -174,7 +175,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_bgw.sql.in
     cagg_ddl.sql.in
     cagg_migrate_function.sql.in
-    cagg_repair.sql.in
     cagg_usage.sql.in
     compression_update_delete.sql.in
     continuous_aggs.sql.in

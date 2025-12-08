@@ -59,11 +59,6 @@ CROSSMODULE_WRAPPER(policies_remove_all);
 CROSSMODULE_WRAPPER(policies_alter);
 CROSSMODULE_WRAPPER(policies_show);
 
-/* partialize/finalize aggregate */
-CROSSMODULE_WRAPPER(partialize_agg);
-CROSSMODULE_WRAPPER(finalize_agg_sfunc);
-CROSSMODULE_WRAPPER(finalize_agg_ffunc);
-
 /* compression functions */
 CROSSMODULE_WRAPPER(compressed_data_decompress_forward);
 CROSSMODULE_WRAPPER(compressed_data_decompress_reverse);
@@ -99,7 +94,6 @@ CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function_info);
 CROSSMODULE_WRAPPER(continuous_agg_migrate_to_time_bucket);
 CROSSMODULE_WRAPPER(continuous_agg_read_invalidation_record);
-CROSSMODULE_WRAPPER(cagg_try_repair);
 
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
 CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
@@ -216,33 +210,6 @@ process_compressed_data_out(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
-/*
- * This function ensures that the TSL library is loaded and the call to
- * post_update_cagg_try_repair is dispatched to the correct
- * function.
- *
- * The TSL library might not be loaded when post_update_cagg_try_repair is
- * called during a database upgrade, resulting in an error message about
- * improper licensing:
- *
- * "[..] is not supported under the current "timescale" license
- *  INT:  Upgrade your license to 'timescale'""
- *
- * See also the comment about this problem in the function
- * process_compressed_data_in.
- */
-static Datum
-process_cagg_try_repair(PG_FUNCTION_ARGS)
-{
-	ts_license_enable_module_loading();
-
-	if (ts_cm_functions->cagg_try_repair != process_cagg_try_repair)
-		return ts_cm_functions->cagg_try_repair(fcinfo);
-
-	error_no_default_fn_pg_community(fcinfo);
-	pg_unreachable();
-}
-
 static DDLResult
 process_cagg_viewstmt_default(Node *stmt, const char *query_string, void *pstmt,
 							  WithClauseResult *with_clause_options)
@@ -310,6 +277,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.create_upper_paths_hook = NULL,
 	.set_rel_pathlist_dml = NULL,
 	.set_rel_pathlist_query = NULL,
+	.sort_transform_replace_pathkeys = NULL,
 	.process_altertable_cmd = NULL,
 	.process_rename_cmd = NULL,
 
@@ -363,9 +331,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 
 	.tsl_postprocess_plan = tsl_postprocess_plan_stub,
 
-	.partialize_agg = error_no_default_fn_pg_community,
-	.finalize_agg_sfunc = error_no_default_fn_pg_community,
-	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
 	.continuous_agg_process_hypertable_invalidations = error_no_default_fn_pg_community,
@@ -378,7 +343,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_get_bucket_function_info = error_no_default_fn_pg_community,
 	.continuous_agg_migrate_to_time_bucket = error_no_default_fn_pg_community,
 	.continuous_agg_read_invalidation_record = error_no_default_fn_pg_community,
-	.cagg_try_repair = process_cagg_try_repair,
 
 	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,

@@ -3222,8 +3222,9 @@ EXPLAIN (analyze,costs off, timing off,summary off, buffers off) DELETE FROM cag
                ->  Seq Scan on _hyper_45_87_chunk cagg_inval_2 (actual rows=1.00 loops=1)
 
 -- should have invalidation entry
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
-            45 |      1577865600000000 |        1609488000000000
+            45 |      1577865600000000 |        1577865600000000
+            45 |      1609488000000000 |        1609488000000000
 

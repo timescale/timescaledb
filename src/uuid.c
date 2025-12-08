@@ -179,16 +179,14 @@ ts_uuid_v7_extract_unixtime(const pg_uuid_t *uuid, uint64 *unixtime_ms, uint16 *
 	return is_uuidv7;
 }
 
-TS_FUNCTION_INFO_V1(ts_timestamptz_from_uuid_v7);
-
-Datum
-ts_timestamptz_from_uuid_v7(PG_FUNCTION_ARGS)
+bool
+ts_uuid_v7_extract_timestamptz(const pg_uuid_t *uuid, TimestampTz *timestamp, bool with_micros)
 {
-	pg_uuid_t *uuid = PG_GETARG_UUID_P(0);
 	uint64 unixtime_millis = 0;
+	uint16 extra_micros = 0;
 
-	if (!ts_uuid_v7_extract_unixtime(uuid, &unixtime_millis, NULL))
-		PG_RETURN_NULL();
+	if (!ts_uuid_v7_extract_unixtime(uuid, &unixtime_millis, &extra_micros))
+		return false;
 
 	/* Milliseconds timestamp from PG Epoch (2000-01-01) */
 	uint64 timestamp_millis =
@@ -196,7 +194,25 @@ ts_timestamptz_from_uuid_v7(PG_FUNCTION_ARGS)
 		 ((uint64) (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY) * 1000ULL);
 
 	/* Convert to microseconds */
-	TimestampTz ts = timestamp_millis * 1000;
+	*timestamp = timestamp_millis * 1000;
+
+	/* Add extra microseconds if requested */
+	if (with_micros)
+		*timestamp += extra_micros;
+
+	return true;
+}
+
+TS_FUNCTION_INFO_V1(ts_timestamptz_from_uuid_v7);
+
+Datum
+ts_timestamptz_from_uuid_v7(PG_FUNCTION_ARGS)
+{
+	pg_uuid_t *uuid = PG_GETARG_UUID_P(0);
+	TimestampTz ts = 0;
+
+	if (!ts_uuid_v7_extract_timestamptz(uuid, &ts, false))
+		PG_RETURN_NULL();
 
 	PG_RETURN_TIMESTAMPTZ(ts);
 }
@@ -207,19 +223,10 @@ Datum
 ts_timestamptz_from_uuid_v7_with_microseconds(PG_FUNCTION_ARGS)
 {
 	pg_uuid_t *uuid = PG_GETARG_UUID_P(0);
-	uint64 unixtime_millis = 0;
-	uint16 extra_micros = 0;
+	TimestampTz ts = 0;
 
-	if (!ts_uuid_v7_extract_unixtime(uuid, &unixtime_millis, &extra_micros))
+	if (!ts_uuid_v7_extract_timestamptz(uuid, &ts, true))
 		PG_RETURN_NULL();
-
-	/* Milliseconds timestamp from PG Epoch (2000-01-01) */
-	uint64 timestamp_millis =
-		(unixtime_millis -
-		 ((uint64) (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY) * 1000ULL);
-
-	/* Add up the whole to get microseconds */
-	TimestampTz ts = timestamp_millis * 1000 + extra_micros;
 
 	PG_RETURN_TIMESTAMPTZ(ts);
 }

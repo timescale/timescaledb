@@ -1227,6 +1227,8 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	foreach (compressed_cell, compressed_rel->partial_pathlist)
 	{
 		Path *compressed_path = lfirst(compressed_cell);
+		/* Partial parameterized paths are not supported */
+		Assert(bms_is_empty(PATH_REQ_OUTER(compressed_path)));
 		List *decompressed_paths = build_on_single_compressed_path(root,
 																   chunk,
 																   chunk_rel,
@@ -2271,6 +2273,7 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	 */
 	Assert(info->single_chunk || chunk_rel->top_parent_relids != NULL);
 	compressed_rel->top_parent_relids = bms_copy(chunk_rel->top_parent_relids);
+	compressed_rel->lateral_relids = bms_copy(chunk_rel->lateral_relids);
 
 	root->simple_rel_array[compressed_index] = compressed_rel;
 	info->compressed_rel = compressed_rel;
@@ -2314,7 +2317,6 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 		 */
 		root->append_rel_array[compressed_rel->relid] = makeNode(AppendRelInfo);
 		root->append_rel_array[compressed_rel->relid]->parent_relid = info->ht_rel->relid;
-		compressed_rel->top_parent_relids = chunk_rel->top_parent_relids;
 	}
 }
 
@@ -2383,6 +2385,10 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 							 const CompressionInfo *compression_info, const SortInfo *sort_info)
 {
 	Path *compressed_path;
+	Relids required_outer = compressed_rel->lateral_relids;
+
+	/* Must have same lateral relids as the chunk hypertable */
+	Assert(bms_equal(required_outer, compression_info->chunk_rel->lateral_relids));
 
 	/* clamp total_table_pages to 10 pages since this is the
 	 * minimum estimate for number of pages.
@@ -2391,7 +2397,7 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	root->total_table_pages += Max(compressed_rel->pages, 10);
 
 	/* create non parallel scan path */
-	compressed_path = create_seqscan_path(root, compressed_rel, NULL, 0);
+	compressed_path = create_seqscan_path(root, compressed_rel, required_outer, 0);
 	add_path(compressed_rel, compressed_path);
 
 	/*
@@ -2401,8 +2407,11 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	 * tables, so that they don't prevent parallelism in the entire append plan.
 	 * See compute_parallel_workers(). This also applies to the creation of
 	 * index paths below.
+	 *
+	 * Parameterized rels that depend on an outer rel are not allowed to form partial
+	 * sequential scan paths
 	 */
-	if (compressed_rel->consider_parallel)
+	if (compressed_rel->consider_parallel && required_outer == NULL)
 	{
 		int parallel_workers = compute_parallel_worker(compressed_rel,
 													   compressed_rel->pages,

@@ -4,22 +4,16 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-/*
- * This file contains the code related to the *NOT* finalized version of
- * Continuous Aggregates (with partials)
- */
 #include "finalize.h"
 
 #include <parser/parse_relation.h>
 
 #include "common.h"
 #include "create.h"
-#include <partialize_finalize.h>
 
 /* Static function prototypes */
 static Var *mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *input,
-										List *rtable, int original_query_resno, bool finalized,
-										bool *skip_adding);
+										List *rtable, int original_query_resno, bool *skip_adding);
 static inline void makeMaterializeColumnName(char *colbuf, const char *type,
 											 int original_query_resno, int colno);
 
@@ -83,7 +77,6 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,
 											  (Node *) tle,
 											  orig_query->rtable,
 											  resno,
-											  inp->finalized,
 											  &skip_adding);
 
 			/* Skip adding this column for finalized form. */
@@ -111,7 +104,7 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,
 		 * final_selquery and origquery. So tleSortGroupReffor the targetentry
 		 * can be reused, only table info needs to be modified.
 		 */
-		Assert(inp->finalized && modte->resno >= resno);
+		Assert(modte->resno >= resno);
 		resno++;
 		if (IsA(modte->expr, Var))
 		{
@@ -138,7 +131,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	Query *final_selquery = NULL;
 
 	CAGG_MAKEQUERY(final_selquery, inp->final_userquery);
-	final_selquery->hasAggs = !inp->finalized;
+	final_selquery->hasAggs = false;
 
 	/* New RangeTblEntry for the materialization hypertable */
 	RangeTblEntry *rte = makeNode(RangeTblEntry);
@@ -209,10 +202,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 
 /*
  * Add Information required to create and populate the materialization table columns
- * a) create a columndef for the materialization table
- * b) create the corresponding expr to populate the column of the materialization table (e..g for a
- *    column that is an aggref, we create a partialize_agg expr to populate the column Returns: the
- *    Var corresponding to the newly created column of the materialization table
+ * creating a columndef for the materialization table.
  *
  * Notes: make sure the materialization table columns do not save
  *        values computed by mutable function.
@@ -226,7 +216,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
  */
 static Var *
 mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *input, List *rtable,
-							int original_query_resno, bool finalized, bool *skip_adding)
+							int original_query_resno, bool *skip_adding)
 {
 	int matcolno = list_length(out->matcollist) + 1;
 	char colbuf[NAMEDATALEN];
@@ -297,7 +287,7 @@ mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *inpu
 					colname = colbuf;
 
 					/* For finalized form we skip adding extra group by columns. */
-					*skip_adding = finalized;
+					*skip_adding = true;
 				}
 			}
 
@@ -371,7 +361,7 @@ mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *inpu
 			elog(ERROR, "invalid node type %d", nodeTag(input));
 			break;
 	}
-	Assert(finalized && list_length(out->matcollist) <= list_length(out->partial_seltlist));
+	Assert(list_length(out->matcollist) <= list_length(out->partial_seltlist));
 	Assert(col != NULL);
 	Assert(part_te != NULL);
 

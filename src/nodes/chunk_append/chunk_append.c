@@ -17,8 +17,7 @@
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner/planner.h"
 
-static Var *find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr,
-								   List *join_conditions);
+static Var *find_equality_join_var(Var *sort_var, Index ht_relid, List *join_conditions);
 
 static CustomPathMethods chunk_append_path_methods = {
 	.CustomName = "ChunkAppend",
@@ -448,7 +447,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
  */
 bool
 ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-								  List *join_conditions, int *order_attno, bool *reverse)
+								  int *order_attno, bool *reverse)
 {
 	SortGroupClause *sort = linitial(root->parse->sortClause);
 	TargetEntry *tle = get_sortgroupref_tle(sort->tleSortGroupRef, root->parse->targetList);
@@ -545,15 +544,36 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 	else
 	{
 		/*
-		 * If the ORDER BY does not match our hypertable but we are joining
-		 * against another hypertable on the time column doing an ordered
-		 * append here is still beneficial because we can skip the sort
-		 * step for the MergeJoin
+		 * If the ORDER BY does not match our hypertable, but we are joining
+		 * against another hypertable on the time column, then doing an ordered
+		 * append here is still beneficial, because we can skip the sort
+		 * step for the MergeJoin.
 		 */
+		Bitmapset *outer_relids = root->simple_rel_array[sort_relid]->relids;
+		Bitmapset *inner_relids = root->simple_rel_array[ht_relid]->relids;
+		List *join_conditions =
+			generate_join_implied_equalities(root,
+											 bms_union(outer_relids, inner_relids),
+											 outer_relids,
+											 rel
+#if PG16_GE
+											 ,
+											 /* sjinfo = */ NULL
+#endif
+			);
+
+		/*
+		 * The outer join clauses don't form ECs and stay in joininfo, and we
+		 * want to check them too.
+		 * There are also non-equality join conditions in joininfo, but they're
+		 * not relevant for MergeJoin anyway and will be skipped.
+		 */
+		join_conditions = list_concat(join_conditions, rel->joininfo);
+
 		if (join_conditions == NIL)
 			return false;
 
-		ht_var = find_equality_join_var(sort_var, ht_relid, tce->eq_opr, join_conditions);
+		ht_var = find_equality_join_var(sort_var, ht_relid, join_conditions);
 
 		if (ht_var == NULL)
 			return false;
@@ -576,34 +596,56 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
  * with relid ht_relid
  */
 static Var *
-find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr, List *join_conditions)
+find_equality_join_var(Var *sort_var, Index ht_relid, List *join_conditions)
 {
 	ListCell *lc;
 	Index sort_relid = sort_var->varno;
 
 	foreach (lc, join_conditions)
 	{
-		OpExpr *op = lfirst(lc);
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc));
 
-		if (op->opno == eq_opr)
+		/*
+		 * Only interested in join clauses here.
+		 */
+		if (!ri->can_join)
 		{
-			Var *left = linitial(op->args);
-			Var *right = lsecond(op->args);
+			continue;
+		}
 
-			Assert(IsA(left, Var) && IsA(right, Var));
+		/*
+		 * The clause must be a mergejoinable equality operator.
+		 */
+		if (ri->mergeopfamilies == NIL)
+		{
+			continue;
+		}
 
-			/* Is this a join condition referencing our hypertable */
-			if (((Index) left->varno == sort_relid && (Index) right->varno == ht_relid &&
-				 left->varattno == sort_var->varattno))
-			{
-				return right;
-			}
+		OpExpr *op = castNode(OpExpr, ri->clause);
 
-			if (((Index) left->varno == ht_relid && (Index) right->varno == sort_relid &&
-				 right->varattno == sort_var->varattno))
-			{
-				return left;
-			}
+		if (!IsA(linitial(op->args), Var))
+		{
+			continue;
+		}
+		Var *left = castNode(Var, linitial(op->args));
+
+		if (!IsA(lsecond(op->args), Var))
+		{
+			continue;
+		}
+		Var *right = castNode(Var, lsecond(op->args));
+
+		/* Is this a join condition referencing our hypertable */
+		if (((Index) left->varno == sort_relid && (Index) right->varno == ht_relid &&
+			 left->varattno == sort_var->varattno))
+		{
+			return right;
+		}
+
+		if (((Index) left->varno == ht_relid && (Index) right->varno == sort_relid &&
+			 right->varattno == sort_var->varattno))
+		{
+			return left;
 		}
 	}
 

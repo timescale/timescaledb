@@ -71,9 +71,11 @@ static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
+int ts_guc_direct_compress_copy_tuple_sort_limit = 100000;
 bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
 bool ts_guc_enable_direct_compress_insert_client_sorted = false;
+int ts_guc_direct_compress_insert_tuple_sort_limit = 10000;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -112,8 +114,12 @@ TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom = true;
+
+TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1 = false;
+
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
+TSDLLEXPORT bool ts_guc_enable_in_memory_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT bool ts_guc_enable_uuid_compression = true;
@@ -144,6 +150,8 @@ TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
+
+bool ts_guc_enable_partitioned_hypertables = false;
 
 /* default value of ts_guc_max_open_chunks_per_insert and
  * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
@@ -475,6 +483,21 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomIntVariable(MAKE_EXTOPTION("direct_compress_copy_tuple_sort_limit"),
+							"Number of tuples that can be sorted at once in a COPY operation",
+							"This is mainly used to keep the memory footprint down for "
+							"operations like importing large amounts of data in "
+							"single transaction. Setting this to 0 would make it unlimited.",
+							&ts_guc_direct_compress_copy_tuple_sort_limit,
+							100000,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_insert"),
 							 "Enable direct compression during INSERT",
 							 "Enable experimental support for direct compression during INSERT",
@@ -508,6 +531,21 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("direct_compress_insert_tuple_sort_limit"),
+							"Number of tuples that can be sorted at once in an INSERT operation",
+							"This is mainly used to keep the memory footprint down for "
+							"operations like importing large amounts of data in "
+							"single transaction. Setting this to 0 would make it unlimited.",
+							&ts_guc_direct_compress_insert_tuple_sort_limit,
+							10000,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_optimizations"),
 							 "Enable TimescaleDB query optimizations",
@@ -869,6 +907,16 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_in_memory_recompression"),
+							 "Enable in-memory recompression functionality",
+							 "Enable in-memory recompression",
+							 &ts_guc_enable_in_memory_recompression,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_exclusive_locking_recompression"),
 							 "Enable exclusive locking recompression",
 							 "Enable getting exclusive lock on chunk during segmentwise "
@@ -1118,6 +1166,20 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("read_legacy_bloom1_v1"),
+							 "Enable reading the legacy bloom1 version 1 sparse indexes for SELECT "
+							 "queries",
+							 "These legacy indexes might give false negatives if they were built "
+							 "by the TimescaleDB extension compiled with different build options.",
+							 &ts_guc_read_legacy_bloom1_v1,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan"),
 							 "Enable columnar-optimized scans for supported access methods",
 							 "A columnar scan replaces sequence scans for columnar-oriented "
@@ -1206,6 +1268,20 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+#ifdef TS_DEBUG
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_partitioned_hypertables"),
+							 "Enable hypertables using declarative partitioning",
+							 "Enable experimental support for creating hypertables using "
+							 "PostgreSQL's native declarative partitioning",
+							 &ts_guc_enable_partitioned_hypertables,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
 
 #ifdef USE_TELEMETRY
 	DefineCustomEnumVariable(MAKE_EXTOPTION("telemetry_level"),

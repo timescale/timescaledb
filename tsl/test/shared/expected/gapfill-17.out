@@ -220,14 +220,13 @@ LIMIT 1;
 FROM gapfill_plan_test
 ORDER BY 1;
 --- QUERY PLAN ---
- Sort
-   Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
-   ->  Result
-         ->  Append
-               ->  Seq Scan on _hyper_X_X_chunk
-               ->  Seq Scan on _hyper_X_X_chunk
-               ->  Seq Scan on _hyper_X_X_chunk
-               ->  Seq Scan on _hyper_X_X_chunk
+ Result
+   ->  Custom Scan (ChunkAppend) on gapfill_plan_test
+         Order: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", NULL::timestamp with time zone, NULL::timestamp with time zone)
+         ->  Index Scan Backward using _hyper_X_X_chunk_gapfill_plan_test_time_idx on _hyper_X_X_chunk
+         ->  Index Scan Backward using _hyper_X_X_chunk_gapfill_plan_test_time_idx on _hyper_X_X_chunk
+         ->  Index Scan Backward using _hyper_X_X_chunk_gapfill_plan_test_time_idx on _hyper_X_X_chunk
+         ->  Index Scan Backward using _hyper_X_X_chunk_gapfill_plan_test_time_idx on _hyper_X_X_chunk
 
 SET max_parallel_workers_per_gather TO 0;
 -- test sort optimizations with locf
@@ -289,16 +288,13 @@ ORDER BY 1,2;
 FROM gapfill_plan_test
 ORDER BY 2,1;
 --- QUERY PLAN ---
- Incremental Sort
-   Sort Key: gapfill_plan_test.value, (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
-   Presorted Key: gapfill_plan_test.value
-   ->  Result
-         ->  Merge Append
-               Sort Key: gapfill_plan_test.value
-               ->  Index Only Scan using _hyper_X_X_chunk_gapfill_plan_test_indx on _hyper_X_X_chunk
-               ->  Index Only Scan using _hyper_X_X_chunk_gapfill_plan_test_indx on _hyper_X_X_chunk
-               ->  Index Only Scan using _hyper_X_X_chunk_gapfill_plan_test_indx on _hyper_X_X_chunk
-               ->  Index Only Scan using _hyper_X_X_chunk_gapfill_plan_test_indx on _hyper_X_X_chunk
+ Result
+   ->  Merge Append
+         Sort Key: gapfill_plan_test.value, (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+         ->  Index Only Scan using _hyper_X_X_chunk_gapfill_plan_test_indx on _hyper_X_X_chunk
+         ->  Index Only Scan using _hyper_X_X_chunk_gapfill_plan_test_indx on _hyper_X_X_chunk
+         ->  Index Only Scan using _hyper_X_X_chunk_gapfill_plan_test_indx on _hyper_X_X_chunk
+         ->  Index Only Scan using _hyper_X_X_chunk_gapfill_plan_test_indx on _hyper_X_X_chunk
 
 DROP TABLE gapfill_plan_test;
 \set METRICS metrics_int
@@ -3017,15 +3013,14 @@ FROM metrics
 GROUP BY 1;
 --- QUERY PLAN ---
  Custom Scan (GapFill)
-   ->  Sort
-         Sort Key: (time_bucket_gapfill('@ 364 days'::interval, metrics."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
-         ->  HashAggregate
-               Group Key: time_bucket_gapfill('@ 364 days'::interval, metrics."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Result
-                     ->  Append
-                           ->  Seq Scan on _hyper_X_X_chunk
-                           ->  Seq Scan on _hyper_X_X_chunk
-                           ->  Seq Scan on _hyper_X_X_chunk
+   ->  GroupAggregate
+         Group Key: (time_bucket_gapfill('@ 364 days'::interval, metrics."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Result
+               ->  Merge Append
+                     Sort Key: (time_bucket_gapfill('@ 364 days'::interval, metrics."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
+                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
+                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk
 
 -- issue #3834
 -- test projection handling in gapfill

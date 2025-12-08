@@ -160,13 +160,6 @@ BEGIN
         WHERE tables.table_schema = chunk.schema_name
         AND tables.table_name = chunk.table_name
     )
-    AND NOT EXISTS (
-        SELECT FROM _timescaledb_catalog.hypertable
-        JOIN _timescaledb_catalog.continuous_agg ON continuous_agg.raw_hypertable_id = hypertable.id
-        WHERE hypertable.id = chunk.hypertable_id
-        -- for the old caggs format we need to keep chunk metadata for dropped chunks
-        AND continuous_agg.finalized IS FALSE
-    )
   LOOP
     _removed := _removed + 1;
     RAISE INFO 'Removing metadata of chunk % from hypertable %', _chunk_id, _hypertable_id;

@@ -3,5 +3,6 @@
 -- LICENSE-APACHE for a copy of the license.
 
 -- SELECT * FROM _timescaledb_config.bgw_job WHERE id <> 1 ORDER BY id;
-SELECT id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, scheduled, hypertable_id, config FROM _timescaledb_config.bgw_job WHERE id <> 1 ORDER BY id;
+SELECT relnamespace::regnamespace "JOB_SCHEMA" FROM pg_class WHERE relname='bgw_job' \gset
+SELECT id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name, owner, scheduled, hypertable_id, config FROM :JOB_SCHEMA.bgw_job WHERE id <> 1 ORDER BY id;
 

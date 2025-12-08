@@ -11,6 +11,7 @@ sed  -E -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' \
      -e 's! Memory Usage: [0-9]+kB!!' \
      -e 's! Average  Peak Memory: [0-9]+kB!!' \
      -e 's!ERROR:  permission denied for materialized view!ERROR:  permission denied for view!' \
+     -e 's!"*_ts_meta_v2_bl[0-9A-Za-z]+_([_0-9A-Za-z]+)"*!regress-test-bloom_\1!g' \
 	 -e 's/(actual rows=[0-9]+) /\1.00 /' \
 	 -e '/^ ?\([0-9]+ row[s]?\)$/d' \
 	 -e '/ +QUERY PLAN +/{N;s/ +QUERY PLAN +\n-+/--- QUERY PLAN ---/;}' \

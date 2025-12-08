@@ -536,18 +536,6 @@ policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config
 	if (jobs == NIL)
 		return overlap_result;
 
-	if (ContinuousAggIsHierarchical(cagg))
-	{
-		/* if this is an existing job, it will also be in the list of jobs */
-		int max_concurrent = existing_job_id ? 1 : 0;
-
-		if (list_length(jobs) > max_concurrent)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("multiple refresh policies are not supported for hierarchical "
-							"continuous aggregates")));
-	}
-
 	Hypertable *mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 	const Dimension *dim = get_open_dimension_for_hypertable(mat_ht, true);
 
@@ -638,6 +626,22 @@ policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config
 		{
 			overlap_result = POLICY_REFRESH_OFFSET_OVERLAP;
 		}
+	}
+
+	/* We cannot check if the CAgg is hierarchical first and abort early since
+	 * we need to respect the if_not_exists parameter that is passed in.
+	 * So we check for overlap first, and only if there is no exact match, we block multiple
+	 * policies on hierarchical caggs */
+	if (ContinuousAggIsHierarchical(cagg))
+	{
+		/* if this is an existing job, it will also be in the list of jobs */
+		int max_concurrent = existing_job_id ? 1 : 0;
+
+		if (list_length(jobs) > max_concurrent)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("multiple refresh policies are not supported for hierarchical "
+							"continuous aggregates")));
 	}
 
 	return overlap_result;

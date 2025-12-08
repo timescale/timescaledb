@@ -1033,7 +1033,7 @@ ROLLBACK;
 -- Tests on a larger relation
 ------
 set timescaledb.debug_require_batch_sorted_merge to 'allow';
-CREATE TABLE sensor_data (
+CREATE UNLOGGED TABLE sensor_data (
 time timestamptz NOT NULL,
 sensor_id integer NOT NULL,
 cpu double precision NULL,
@@ -1143,15 +1143,13 @@ CREATE PROCEDURE order_test(query text) LANGUAGE plpgsql AS $$
         BEGIN
 
         SET timescaledb.enable_decompression_sorted_merge = 0;
-        EXECUTE format('CREATE TABLE temp_data1 AS %s;', query);
-        ALTER TABLE temp_data1 ADD COLUMN new_id SERIAL PRIMARY KEY;
+        EXECUTE format('CREATE TEMP TABLE temp_data1 AS %s;', query);
 
         SET timescaledb.enable_decompression_sorted_merge = 1;
-        EXECUTE format('CREATE TABLE temp_data2 AS %s;', query);
-        ALTER TABLE temp_data2 ADD COLUMN new_id SERIAL PRIMARY KEY;
+        EXECUTE format('CREATE TEMP TABLE temp_data2 AS %s;', query);
 
         CREATE TEMP TABLE temp_data3 AS (
-            SELECT * FROM temp_data1 UNION ALL SELECT * FROM temp_data2
+            SELECT ctid as new_id, * FROM temp_data1 UNION ALL SELECT ctid as new_id, * FROM temp_data2
         );
 
         count := (SELECT COUNT(*) FROM (SELECT COUNT(*) FROM temp_data3 GROUP BY time, new_id HAVING COUNT(*) != 2) AS s);

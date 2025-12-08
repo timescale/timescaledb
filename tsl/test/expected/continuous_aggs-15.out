@@ -11,9 +11,9 @@ AS :TSL_MODULE_PATHNAME, 'ts_test_continuous_agg_find_by_view_name' LANGUAGE C;
 \set IMMEDIATELY_SET_UNTIL 1
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
 -- remove any default jobs, e.g., telemetry so bgw_job isn't polluted
-DELETE FROM _timescaledb_config.bgw_job;
+DELETE FROM _timescaledb_catalog.bgw_job;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT * FROM _timescaledb_config.bgw_job;
+SELECT * FROM _timescaledb_catalog.bgw_job;
  id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
 
@@ -48,7 +48,7 @@ from foo
 group by time_bucket(1, a), a WITH NO DATA;
 SELECT add_continuous_aggregate_policy('mat_m1', NULL, 2::integer, '12 h'::interval) AS job_id
 \gset
-SELECT * FROM _timescaledb_config.bgw_job;
+SELECT * FROM _timescaledb_catalog.bgw_job;
   id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                             config                              |      check_schema      |                check_name                 | timezone 
 ------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+-------------------+-----------+----------------+---------------+---------------+-----------------------------------------------------------------+------------------------+-------------------------------------------+----------
  1000 | Refresh Continuous Aggregate Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | _timescaledb_functions | policy_refresh_continuous_aggregate | default_perm_user | t         | f              |               |             2 | {"end_offset": 2, "start_offset": null, "mat_hypertable_id": 2} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
@@ -92,7 +92,7 @@ SHOW enable_partitionwise_aggregate;
  off
 
 SET enable_partitionwise_aggregate = on;
-SELECT * FROM _timescaledb_config.bgw_job;
+SELECT * FROM _timescaledb_catalog.bgw_job;
  id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
 
@@ -128,13 +128,6 @@ FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_m1'
 \gset
--- Change `finalized` option is forbiden
-\set ON_ERROR_STOP 0
-ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.finalized=false);
-ERROR:  cannot alter finalized option for continuous aggregates
-ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.finalized=true);
-ERROR:  cannot alter finalized option for continuous aggregates
-\set ON_ERROR_STOP 1
 -- Materialized hypertable for mat_m1 should not be visible in the
 -- hypertables view:
 SELECT hypertable_schema, hypertable_name
@@ -723,7 +716,7 @@ select count(*) from _timescaledb_catalog.continuous_aggs_invalidation_threshold
 select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  count 
 -------
-     1
+     8
 
 DROP TABLE conditions CASCADE;
 NOTICE:  drop cascades to 2 other objects
@@ -751,7 +744,7 @@ select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invali
 -------
      0
 
-SELECT * FROM _timescaledb_config.bgw_job;
+SELECT * FROM _timescaledb_catalog.bgw_job;
  id | application_name | schedule_interval | max_runtime | max_retries | retry_period | proc_schema | proc_name | owner | scheduled | fixed_schedule | initial_start | hypertable_id | config | check_schema | check_name | timezone 
 ----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
 
@@ -798,22 +791,22 @@ SELECT add_continuous_aggregate_policy('mat_with_test', NULL, '5 h'::interval, '
 ---------------------------------
                             1001
 
-SELECT alter_job(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
+SELECT alter_job(id, schedule_interval => '1h') FROM _timescaledb_catalog.bgw_job;
                                                                                                                          alter_job                                                                                                                          
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  (1001,"@ 1 hour","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 5 hours"", ""start_offset"": null, ""mat_hypertable_id"": 20}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1001]")
 
-SELECT schedule_interval FROM _timescaledb_config.bgw_job;
+SELECT schedule_interval FROM _timescaledb_catalog.bgw_job;
  schedule_interval 
 -------------------
  @ 1 hour
 
-SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
+SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_catalog.bgw_job;
                                                                                                                           alter_job                                                                                                                          
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  (1001,"@ 2 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 5 hours"", ""start_offset"": null, ""mat_hypertable_id"": 20}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1001]")
 
-SELECT schedule_interval FROM _timescaledb_config.bgw_job;
+SELECT schedule_interval FROM _timescaledb_catalog.bgw_job;
  schedule_interval 
 -------------------
  @ 2 hours
@@ -882,12 +875,12 @@ SELECT add_continuous_aggregate_policy('mat_with_test', NULL, 500::integer, '12 
 ---------------------------------
                             1002
 
-SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
+SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_catalog.bgw_job;
                                                                                                                      alter_job                                                                                                                     
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  (1002,"@ 2 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": 500, ""start_offset"": null, ""mat_hypertable_id"": 23}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1002]")
 
-SELECT schedule_interval FROM _timescaledb_config.bgw_job;
+SELECT schedule_interval FROM _timescaledb_catalog.bgw_job;
  schedule_interval 
 -------------------
  @ 2 hours
@@ -2034,13 +2027,6 @@ SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
  Sun Oct 28 17:00:00 2018 PDT |     3 | 115
  Sun Nov 04 16:00:00 2018 PST |     2 | 410
 
---
--- Testing the coexistence of both types of supported CAggs
--- over the same raw hypertable.
---
---  . finalized = true:  without chunk_id and partials
---  . finalized = false: with chunk_id and partials
---
 DROP TABLE conditions CASCADE;
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
@@ -2088,7 +2074,6 @@ view_definition                   |  SELECT time_bucket('@ 1 day'::interval, con
                                   |     sum(conditions.humidity) AS sumh                                +
                                   |    FROM conditions                                                  +
                                   |   GROUP BY (time_bucket('@ 1 day'::interval, conditions.timec));
-finalized                         | t
 
 \x OFF
 CALL refresh_continuous_aggregate('conditions_summary_new', NULL, NULL);

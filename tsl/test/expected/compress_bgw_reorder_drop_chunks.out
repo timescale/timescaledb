@@ -13,7 +13,7 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 \set IMMEDIATELY_SET_UNTIL 1
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
 -- Remove any default jobs, e.g., telemetry
-DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE public.bgw_log(
@@ -62,13 +62,13 @@ SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hyper
 -------
      5
 
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_functions' AND proc_name = 'policy_retention';
+SELECT count(*) FROM _timescaledb_catalog.bgw_job WHERE proc_schema = '_timescaledb_functions' AND proc_name = 'policy_retention';
  count 
 -------
      0
 
 SELECT add_retention_policy('test_retention_table', INTERVAL '4 months') as retention_job_id \gset
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_functions' AND proc_name = 'policy_retention';
+SELECT count(*) FROM _timescaledb_catalog.bgw_job WHERE proc_schema = '_timescaledb_functions' AND proc_name = 'policy_retention';
  count 
 -------
      1
@@ -78,7 +78,7 @@ SELECT alter_job(:retention_job_id, schedule_interval => INTERVAL '1 second');
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  (1000,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""hypertable_id"": 1}",-infinity,_timescaledb_functions.policy_retention_check,f,,,"Retention Policy [1000]")
 
-SELECT * FROM _timescaledb_config.bgw_job where id=:retention_job_id;
+SELECT * FROM _timescaledb_catalog.bgw_job where id=:retention_job_id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                     config                     |      check_schema      |       check_name       | timezone 
 ------+-------------------------+-------------------+-------------+-------------+--------------+------------------------+------------------+-------------------+-----------+----------------+---------------+---------------+------------------------------------------------+------------------------+------------------------+----------
  1000 | Retention Policy [1000] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention | default_perm_user | t         | f              |               |             1 | {"drop_after": "@ 4 mons", "hypertable_id": 1} | _timescaledb_functions | policy_retention_check | 

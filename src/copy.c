@@ -274,7 +274,17 @@ TSCopyMultiInsertBufferInit(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis
 			bool sort = ts_guc_enable_direct_compress_copy_sort_batches &&
 						!ts_guc_enable_direct_compress_copy_client_sorted;
 			buffer->compressor =
-				ts_cm_functions->compressor_init(cis->rel, &buffer->bulk_writer, sort);
+				ts_cm_functions->compressor_init(cis->rel,
+												 &buffer->bulk_writer,
+												 sort,
+												 ts_guc_direct_compress_copy_tuple_sort_limit);
+
+			if (miinfo->has_continuous_aggregate)
+			{
+				ts_cm_functions->compressor_set_invalidation(buffer->compressor,
+															 miinfo->ht,
+															 RelationGetRelid(cis->rel));
+			}
 
 			/*
 			 * The sorting done in the compressor is only a local sort for the
@@ -793,14 +803,7 @@ choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resul
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) && ts_guc_enable_direct_compress_copy)
 	{
-		if (ts_hypertable_has_continuous_aggregates(ccstate->ctr->hypertable->fd.id))
-		{
-			ereport(WARNING,
-					(errmsg(
-						"disabling direct compress because the destination table has continuous "
-						"aggregates")));
-		}
-		else if (ts_indexing_relation_has_primary_or_unique_index(ccstate->rel))
+		if (ts_indexing_relation_has_primary_or_unique_index(ccstate->rel))
 		{
 			ereport(WARNING,
 					(errmsg("disabling direct compress because the destination table has unique "

@@ -132,9 +132,9 @@ jobs:
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
           --with-openssl --without-readline --without-zlib --without-libxml
-        make -j$(nproc)
+        make -j$(getconf _NPROCESSORS_ONLN)
         for ext in ${EXTENSIONS}; do
-          make -j$(nproc) -C contrib/${ext}
+          make -j$(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
 
     - name: Upload config.log
@@ -158,7 +158,7 @@ jobs:
         ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
           -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON \
           -DTEST_GROUP_SIZE=5 -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)" -DTEST_TIMEOUT=240
-        make -j$(nproc) -C build
+        make -j$(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
 
     - name: make installcheck

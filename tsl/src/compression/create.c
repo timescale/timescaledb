@@ -59,7 +59,7 @@
 
 #include "bgw_policy/compression_api.h"
 
-static const char *sparse_index_types[] = { "min", "max", "bloom1" };
+static const char *sparse_index_types[] = { "min", "max" };
 
 #ifdef USE_ASSERT_CHECKING
 static bool
@@ -71,6 +71,16 @@ is_sparse_index_type(const char *type)
 		{
 			return true;
 		}
+	}
+
+	if (strcmp(bloom1_column_prefix, type) == 0)
+	{
+		return true;
+	}
+
+	if (ts_guc_read_legacy_bloom1_v1 && strcmp("bloom1", type) == 0)
+	{
+		return true;
 	}
 
 	return false;
@@ -103,6 +113,28 @@ compression_column_segment_metadata_name(const char *type, int16 column_index)
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("bad segment metadata column name")));
 	}
 	return buf;
+}
+
+/*
+ * Validate that compression settings don't exceed PostgreSQL's INDEX_MAX_KEYS limit.
+ *
+ * Compression creates an implicit index on the compressed chunk with:
+ * - 1 index key per segmentby column
+ * - 2 index keys per orderby column (for min/max metadata)
+ */
+static void
+validate_compression_index_key_limit(CompressionSettings *settings)
+{
+	int num_segmentby_keys = ts_array_length(settings->fd.segmentby);
+	int num_orderby_keys = 2 * ts_array_length(settings->fd.orderby);
+	if ((num_segmentby_keys + num_orderby_keys) > INDEX_MAX_KEYS)
+		ereport(ERROR,
+				(errcode(ERRCODE_TOO_MANY_COLUMNS),
+				 errmsg("too many segmentby and orderby columns"),
+				 errdetail("Combined segmentby keys (%d) and orderby keys (%d) cannot exceed %d",
+						   num_segmentby_keys,
+						   num_orderby_keys,
+						   INDEX_MAX_KEYS)));
 }
 
 char *
@@ -157,7 +189,8 @@ compressed_column_metadata_name_v2(const char *metadata_type, const char *column
 
 int
 compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_reloid,
-								 AttrNumber chunk_attno, Oid compressed_reloid, char *metadata_type)
+								 AttrNumber chunk_attno, Oid compressed_reloid,
+								 char const *metadata_type)
 {
 	Assert(is_sparse_index_type(metadata_type));
 
@@ -237,10 +270,9 @@ static ColumnDef *
 create_sparse_index_column_def(Form_pg_attribute attr, const char *metadata_type)
 {
 	Assert(is_sparse_index_type(metadata_type));
-	Assert(strlen(metadata_type) <= 6);
 	ColumnDef *column_def = NULL;
 
-	const bool is_bloom = strcmp(metadata_type, "bloom1") == 0;
+	const bool is_bloom = strcmp(metadata_type, bloom1_column_prefix) == 0;
 
 	if (is_bloom)
 	{
@@ -411,7 +443,8 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 				/*
 				 * Add bloom filter sparse index for this column.
 				 */
-				ColumnDef *bloom_column_def = create_sparse_index_column_def(attr, "bloom1");
+				ColumnDef *bloom_column_def =
+					create_sparse_index_column_def(attr, bloom1_column_prefix);
 
 				compressed_column_defs = lappend(compressed_column_defs, bloom_column_def);
 			}
@@ -1420,6 +1453,9 @@ compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 	{
 		settings->fd.index = ts_add_orderby_sparse_index(settings);
 	}
+
+	/* should always be valid, but call as a sanity check */
+	validate_compression_index_key_limit(settings);
 }
 
 static void
@@ -1475,6 +1511,8 @@ compression_settings_set_manually_for_alter(Hypertable *ht, CompressionSettings 
 		settings->fd.index = ts_add_orderby_sparse_index(settings);
 	}
 
+	validate_compression_index_key_limit(settings);
+
 	/* update manual settings */
 	ts_compression_settings_update(settings);
 }
@@ -1526,6 +1564,8 @@ compression_settings_set_manually_for_create(Hypertable *ht, CompressionSettings
 	{
 		settings->fd.index = ts_add_orderby_sparse_index(settings);
 	}
+
+	validate_compression_index_key_limit(settings);
 
 	/* update manual settings */
 	ts_compression_settings_update(settings);

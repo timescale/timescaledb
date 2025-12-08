@@ -38,11 +38,6 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
         .arg_names = {"columnstore", "enable_columnstore", "compress", NULL},
         .type_id = BOOLOID,
     },
-    [CreateMaterializedViewFlagFinalized] = {
-        .arg_names = {"finalized", NULL},
-        .type_id = BOOLOID,
-        .default_val = (Datum)true,
-    },
     [CreateMaterializedViewFlagChunkTimeInterval] = {
         .arg_names = {"chunk_interval", NULL},
          .type_id = INTERVALOID,

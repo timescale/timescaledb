@@ -16,11 +16,11 @@ AS :TSL_MODULE_PATHNAME, 'ts_test_continuous_agg_find_by_view_name' LANGUAGE C;
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
 
 -- remove any default jobs, e.g., telemetry so bgw_job isn't polluted
-DELETE FROM _timescaledb_config.bgw_job;
+DELETE FROM _timescaledb_catalog.bgw_job;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
-SELECT * FROM _timescaledb_config.bgw_job;
+SELECT * FROM _timescaledb_catalog.bgw_job;
 
 --TEST1 ---
 --basic test with count
@@ -50,7 +50,7 @@ group by time_bucket(1, a), a WITH NO DATA;
 
 SELECT add_continuous_aggregate_policy('mat_m1', NULL, 2::integer, '12 h'::interval) AS job_id
 \gset
-SELECT * FROM _timescaledb_config.bgw_job;
+SELECT * FROM _timescaledb_catalog.bgw_job;
 
 SELECT ca.raw_hypertable_id as "RAW_HYPERTABLE_ID",
        h.schema_name AS "MAT_SCHEMA_NAME",
@@ -84,7 +84,7 @@ DROP MATERIALIZED VIEW mat_m1;
 SHOW enable_partitionwise_aggregate;
 SET enable_partitionwise_aggregate = on;
 
-SELECT * FROM _timescaledb_config.bgw_job;
+SELECT * FROM _timescaledb_catalog.bgw_job;
 
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
@@ -118,12 +118,6 @@ FROM _timescaledb_catalog.continuous_agg ca
 INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_m1'
 \gset
-
--- Change `finalized` option is forbiden
-\set ON_ERROR_STOP 0
-ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.finalized=false);
-ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.finalized=true);
-\set ON_ERROR_STOP 1
 
 -- Materialized hypertable for mat_m1 should not be visible in the
 -- hypertables view:
@@ -626,7 +620,7 @@ select count(*) from _timescaledb_catalog.continuous_aggs_invalidation_threshold
 select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 select count(*) from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
 
-SELECT * FROM _timescaledb_config.bgw_job;
+SELECT * FROM _timescaledb_catalog.bgw_job;
 
 --mat table, user_view, and partial view all gone
 select count(*) from pg_class where relname = :'PART_VIEW_NAME';
@@ -656,11 +650,11 @@ from conditions
 group by time_bucket('1day', timec), location, humidity, temperature WITH NO DATA;
 
 SELECT add_continuous_aggregate_policy('mat_with_test', NULL, '5 h'::interval, '12 h'::interval);
-SELECT alter_job(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
-SELECT schedule_interval FROM _timescaledb_config.bgw_job;
+SELECT alter_job(id, schedule_interval => '1h') FROM _timescaledb_catalog.bgw_job;
+SELECT schedule_interval FROM _timescaledb_catalog.bgw_job;
 
-SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
-SELECT schedule_interval FROM _timescaledb_config.bgw_job;
+SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_catalog.bgw_job;
+SELECT schedule_interval FROM _timescaledb_catalog.bgw_job;
 
 select indexname, indexdef from pg_indexes where tablename =
 (SELECT h.table_name
@@ -713,9 +707,9 @@ from conditions
 group by time_bucket(100, timec) WITH NO DATA;
 
 SELECT add_continuous_aggregate_policy('mat_with_test', NULL, 500::integer, '12 h'::interval);
-SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
+SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_catalog.bgw_job;
 
-SELECT schedule_interval FROM _timescaledb_config.bgw_job;
+SELECT schedule_interval FROM _timescaledb_catalog.bgw_job;
 
 DROP TABLE conditions CASCADE;
 
@@ -1458,13 +1452,6 @@ SELECT * FROM mat_m1;
 -- produce ordered records
 SELECT * FROM :"MAT_SCHEMA_NAME".:"MAT_TABLE_NAME";
 
---
--- Testing the coexistence of both types of supported CAggs
--- over the same raw hypertable.
---
---  . finalized = true:  without chunk_id and partials
---  . finalized = false: with chunk_id and partials
---
 DROP TABLE conditions CASCADE;
 
 CREATE TABLE conditions (

@@ -13,7 +13,7 @@ RETURNS TIMESTAMPTZ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 -- follow exactly cagg_bgw_drop_chunks
 
 -- Remove any default jobs, e.g., telemetry
-DELETE FROM _timescaledb_config.bgw_job;
+DELETE FROM _timescaledb_catalog.bgw_job;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 
 create or replace procedure job_20(jobid int, config jsonb) language plpgsql as $$

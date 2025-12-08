@@ -5,7 +5,6 @@ set(SOURCES
     chunk_split.c
     chunkwise_agg.c
     init.c
-    partialize_finalize.c
     planner.c
     process_utility.c
     reorder.c)

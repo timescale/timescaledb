@@ -80,7 +80,7 @@ SELECT ht.schema_name AS hypertable_schema,
   js.total_runs,
   js.total_successes,
   js.total_failures
-FROM _timescaledb_config.bgw_job j
+FROM _timescaledb_catalog.bgw_job j
   LEFT JOIN _timescaledb_internal.bgw_job_stat js ON j.id = js.job_id
   LEFT JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id
   LEFT JOIN pg_stat_activity pgs ON pgs.datname = current_database()
@@ -108,7 +108,7 @@ SELECT j.id AS job_id,
   COALESCE(ca.user_view_name, ht.table_name) AS hypertable_name,
   j.check_schema,
   j.check_name
-FROM _timescaledb_config.bgw_job j
+FROM _timescaledb_catalog.bgw_job j
   LEFT JOIN _timescaledb_catalog.hypertable ht ON ht.id = j.hypertable_id
   LEFT JOIN _timescaledb_internal.bgw_job_stat js ON js.job_id = j.id
   LEFT JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = j.hypertable_id;
@@ -127,8 +127,7 @@ SELECT ht.schema_name AS hypertable_schema,
   END AS compression_enabled,
   mat_ht.schema_name AS materialization_hypertable_schema,
   mat_ht.table_name AS materialization_hypertable_name,
-  directview.viewdefinition AS view_definition,
-  cagg.finalized
+  directview.viewdefinition AS view_definition
 FROM _timescaledb_catalog.continuous_agg cagg,
   _timescaledb_catalog.hypertable ht,
   LATERAL (
@@ -323,7 +322,7 @@ SELECT
 FROM
     _timescaledb_internal.bgw_job_stat_history h
 LEFT JOIN
-    _timescaledb_config.bgw_job j ON (j.id = h.job_id)
+    _timescaledb_catalog.bgw_job j ON (j.id = h.job_id)
 WHERE
     h.succeeded IS FALSE
     OR h.succeeded IS NULL
@@ -364,7 +363,7 @@ SELECT
 FROM
     _timescaledb_internal.bgw_job_stat_history h
 LEFT JOIN
-    _timescaledb_config.bgw_job j ON (j.id = h.job_id)
+    _timescaledb_catalog.bgw_job j ON (j.id = h.job_id)
 WHERE (pg_catalog.pg_has_role(current_user,
 			   (SELECT pg_catalog.pg_get_userbyid(datdba)
 			      FROM pg_catalog.pg_database

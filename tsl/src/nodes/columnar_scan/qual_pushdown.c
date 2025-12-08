@@ -15,6 +15,7 @@
 
 #include "columnar_scan.h"
 #include "compression/create.h"
+#include "compression/sparse_index_bloom1.h"
 #include "custom_type_cache.h"
 #include "guc.h"
 #include "ts_catalog/array_utils.h"
@@ -372,7 +373,21 @@ expr_fetch_bloom1_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 													 context->chunk_rte->relid,
 													 var->varattno,
 													 context->compressed_rte->relid,
-													 "bloom1");
+													 bloom1_column_prefix);
+
+	if (*bloom1_attno == InvalidAttrNumber && ts_guc_read_legacy_bloom1_v1)
+	{
+		/*
+		 * The version 1 of bloom1 indexes is disabled by default because its
+		 * hashing was dependent on build options leading to corrupt indexes,
+		 * but can be enabled manually.
+		 */
+		*bloom1_attno = compressed_column_metadata_attno(context->settings,
+														 context->chunk_rte->relid,
+														 var->varattno,
+														 context->compressed_rte->relid,
+														 "bloom1");
+	}
 }
 
 static void *

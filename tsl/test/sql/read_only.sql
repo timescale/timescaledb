@@ -236,7 +236,7 @@ ALTER TABLE test_table_int SET (timescaledb.compress);
 INSERT INTO test_table_int VALUES (0, 1), (10,10);
 SELECT add_compression_policy('test_table_int', '1'::integer) as comp_job_id \gset
 SELECT config as comp_job_config
-FROM _timescaledb_config.bgw_job WHERE id = :comp_job_id \gset
+FROM _timescaledb_catalog.bgw_job WHERE id = :comp_job_id \gset
 SET default_transaction_read_only TO on;
 CALL _timescaledb_functions.policy_compression(:comp_job_id, :'comp_job_config');
 SET default_transaction_read_only TO off;

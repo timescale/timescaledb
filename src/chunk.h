@@ -279,9 +279,7 @@ extern TSDLLEXPORT void ts_chunk_detach_by_relid(Oid relid);
 		Assert((chunk)->fd.hypertable_id > 0);                                                     \
 		Assert(OidIsValid((chunk)->table_id));                                                     \
 		Assert(OidIsValid((chunk)->hypertable_relid));                                             \
-		Assert((chunk)->constraints);                                                              \
 		Assert((chunk)->cube);                                                                     \
-		Assert((chunk)->cube->num_slices == (chunk)->constraints->num_dimension_constraints);      \
 		Assert((chunk)->relkind == RELKIND_RELATION || (chunk)->relkind == RELKIND_FOREIGN_TABLE); \
 	} while (0)
 

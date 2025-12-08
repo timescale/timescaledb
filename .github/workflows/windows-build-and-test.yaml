@@ -58,7 +58,7 @@ jobs:
           - { pg: 15, pg_version: "${{ needs.config.outputs.pg15_latest }}" }
           - { pg: 16, pg_version: "${{ needs.config.outputs.pg16_latest }}" }
           - { pg: 17, pg_version: "${{ needs.config.outputs.pg17_latest }}" }
-#          - { pg: 18, pg_version: "${{ needs.config.outputs.pg18_latest }}" }
+          - { pg: 18, pg_version: "${{ needs.config.outputs.pg18_latest }}" }
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         event_name: ["${{ github.event_name }}"]

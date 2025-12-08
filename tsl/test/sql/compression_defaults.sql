@@ -412,3 +412,76 @@ SELECT count(compress_chunk(x)) FROM show_chunks('test_table') x;
 select * from chunk_settings;
 
 DROP TABLE test_table;
+
+-- test that date/time columns (category 'D') are not selected as segmentby
+-- even when they appear in indexes
+DROP TABLE IF EXISTS test_exclude_datetype;
+CREATE TABLE test_exclude_datetype (
+    ts            TIMESTAMPTZ     NOT NULL,
+    event_date    DATE            NOT NULL,
+    event_time    TIME            NOT NULL,
+    device_id     TEXT            NOT NULL,
+    sensor_id     INT             NOT NULL,
+    value         FLOAT
+) WITH (autovacuum_enabled=0, tsdb.hypertable);
+
+INSERT INTO test_exclude_datetype
+SELECT t, t::date, t::time, 'device_' || (i % 10), (i % 5), random() * 100
+FROM generate_series('2025-01-01'::timestamptz, '2025-03-01'::timestamptz, '1 minute'::interval) WITH ORDINALITY AS g(t, i);
+
+-- test deafults, should not select date and time columns
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+
+CREATE UNIQUE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_date, device_id, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE UNIQUE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_time, device_id, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_date, device_id, sensor_id);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_time, sensor_id);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_date, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE UNIQUE INDEX test_exclude_datetype_idx ON test_exclude_datetype(device_id, event_date, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+
+-- after pg_stats
+ANALYZE test_exclude_datetype;
+
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE UNIQUE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_date, device_id, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE UNIQUE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_time, device_id, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_date, device_id, sensor_id);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE INDEX test_exclude_datetype_idx ON test_exclude_datetype(event_time, sensor_id);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+
+DROP INDEX test_exclude_datetype_idx;
+CREATE UNIQUE INDEX test_exclude_datetype_idx ON test_exclude_datetype(device_id, event_date, ts);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datetype');
+
+ALTER TABLE test_exclude_datetype SET (timescaledb.compress = true);
+SELECT count(compress_chunk(x)) FROM show_chunks('test_exclude_datetype') x;
+SELECT * FROM timescaledb_information.chunk_compression_settings WHERE hypertable = 'test_exclude_datetype'::regclass ORDER BY chunk LIMIT 1;
+
+DROP TABLE test_exclude_datetype;

@@ -44,9 +44,11 @@ extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
 extern bool ts_guc_enable_direct_compress_copy;
 extern bool ts_guc_enable_direct_compress_copy_sort_batches;
 extern bool ts_guc_enable_direct_compress_copy_client_sorted;
+extern int ts_guc_direct_compress_copy_tuple_sort_limit;
 extern bool ts_guc_enable_direct_compress_insert;
 extern bool ts_guc_enable_direct_compress_insert_sort_batches;
 extern bool ts_guc_enable_direct_compress_insert_client_sorted;
+extern int ts_guc_direct_compress_insert_tuple_sort_limit;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
 extern TSDLLEXPORT bool ts_guc_enable_transparent_decompression;
@@ -65,6 +67,7 @@ extern TSDLLEXPORT bool ts_guc_enable_delete_after_compression;
 extern TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh;
 extern bool ts_guc_enable_chunk_skipping;
 extern TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression;
+extern TSDLLEXPORT bool ts_guc_enable_in_memory_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_bool_compression;
 extern TSDLLEXPORT bool ts_guc_enable_uuid_compression;
@@ -111,6 +114,7 @@ extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 extern TSDLLEXPORT bool ts_guc_enable_bulk_decompression;
 extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
 extern TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom;
+extern TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1;
 extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
 
@@ -150,6 +154,8 @@ extern TSDLLEXPORT bool ts_guc_enable_rowlevel_compression_locking;
 extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_batch_sorted_merge;
 
 extern TSDLLEXPORT bool ts_guc_debug_allow_cagg_with_deprecated_funcs;
+
+extern bool ts_guc_enable_partitioned_hypertables;
 
 void _guc_init(void);
 
