@@ -98,6 +98,7 @@ SELECT count(*) FROM (SELECT device, field FROM plan_plus GROUP BY device, field
 -------
   1000
 
+drop table plan_plus;
 -- UUID grouping
 create table uuid_table(ts int, u uuid);
 select count(*) from create_hypertable('uuid_table', 'ts', chunk_time_interval => 6);
@@ -204,3 +205,4 @@ select uuid_timestamp(to_uuidv7_boundary(uuid_ts)), count(*)
  $                                |     3
 
 RESET timescaledb.debug_require_vector_agg;
+drop table uuid_table;

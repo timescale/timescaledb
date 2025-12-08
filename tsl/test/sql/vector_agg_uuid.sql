@@ -91,6 +91,8 @@ SELECT count(*) FROM (SELECT device FROM plan_plus GROUP BY device) t;
 
 SELECT count(*) FROM (SELECT device, field FROM plan_plus GROUP BY device, field) t;
 
+drop table plan_plus;
+
 
 -- UUID grouping
 create table uuid_table(ts int, u uuid);
@@ -147,3 +149,5 @@ select uuid_timestamp(to_uuidv7_boundary(uuid_ts)), count(*)
     from uuid_table group by 1 order by 1;
 
 RESET timescaledb.debug_require_vector_agg;
+
+drop table uuid_table;
