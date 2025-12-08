@@ -61,17 +61,27 @@ CREATE TABLE metrics (
 ) WITH (
     tsdb.hypertable,
     tsdb.partition_column='time',
-    tsdb.enable_columnstore=true,
     tsdb.segmentby='device_id'
 );
 ```
 
 ### 2. Direct to Columnstore
-Load data with instant analytical performance:
+Load data with instant analytical performance using COPY:
 
 ```sql
 SET timescaledb.enable_direct_compress_copy = on;
 COPY metrics FROM 'data.csv' WITH (FORMAT csv, HEADER true);
+```
+
+Or insert data directly to the columnstore:
+
+```sql
+SET timescaledb.enable_direct_compress_insert = on;
+INSERT INTO metrics (time, device_id, value)
+VALUES
+    (NOW(), 'device_1', 23.5),
+    (NOW(), 'device_2', 24.1),
+    (NOW(), 'device_3', 22.8);
 ```
 
 ### 3. time_bucket() Aggregations

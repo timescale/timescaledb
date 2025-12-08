@@ -72,6 +72,8 @@ CREATE TABLE sensor_data (
     pressure DOUBLE PRECISION
 ) WITH (
     tsdb.hypertable
+    --,tsdb.segmentby='sensor_id' TODO: I want to be able to remove these and be smart about the default settings
+	--,tsdb.orderby   = 'time DESC'
 );
 ```
 
@@ -97,6 +99,15 @@ FROM generate_series(
     NOW(),
     INTERVAL '1 seconds'
 ) AS time;
+
+-- re-sort data (TODO: Understand if we can optimize this from the start)
+DO $$
+DECLARE ch TEXT;
+BEGIN
+    FOR ch IN SELECT show_chunks('sensor_data') LOOP
+        CALL convert_to_columnstore(ch, recompress := true);
+    END LOOP;
+END $$;
 ```
 
 This generates ~7,776,001 readings across 10 sensors over the past 90 days.
