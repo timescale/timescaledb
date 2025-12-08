@@ -1,3 +1,3 @@
-pickup_datetime,dropoff_datetime,passenger_count,trip_distance,pickup_location_id,dropoff_location_id,fare_amount,tip_amount,total_amount,payment_type,cab_type
+vendor_id,pickup_boroname,pickup_datetime,dropoff_datetime,passenger_count,trip_distance,pickup_longitude,pickup_latitude,rate_code,dropoff_longitude,dropoff_latitude,payment_type,fare_amount,extra,mta_tax,tip_amount,tolls_amount,improvement_surcharge,total_amount
 # Placeholder: This file will contain ~1000 rows of NYC taxi trip data
-# Sample row format: 2024-01-15 08:30:00+00,2024-01-15 08:45:00+00,1,2.5,161,230,12.50,2.50,15.00,card,yellow
+# Sample row format: CMT,Manhattan,2024-01-15 08:30:00,2024-01-15 08:45:00,1,2.5,-73.9812,40.7685,1,-73.9580,40.7784,1,12.50,0.50,0.50,2.50,0.00,0.30,16.30

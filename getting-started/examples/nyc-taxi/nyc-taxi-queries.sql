@@ -13,17 +13,17 @@ SELECT
     AVG(trip_distance) as avg_distance
 FROM trips;
 
--- Query 2: Trips by cab type
+-- Query 2: Trips by vendor
 \echo ''
-\echo 'Query 2: Breakdown by cab type'
+\echo 'Query 2: Breakdown by vendor'
 SELECT
-    cab_type,
+    vendor_id,
     COUNT(*) as trips,
     AVG(fare_amount) as avg_fare,
     AVG(tip_amount) as avg_tip,
     AVG(passenger_count) as avg_passengers
 FROM trips
-GROUP BY cab_type
+GROUP BY vendor_id
 ORDER BY trips DESC;
 
 -- Query 3: Hourly patterns using time_bucket
@@ -39,32 +39,31 @@ GROUP BY hour
 ORDER BY hour DESC
 LIMIT 24;
 
--- Query 4: Top pickup locations by revenue
+-- Query 4: Payment type analysis
 \echo ''
-\echo 'Query 4: Top pickup locations by revenue'
+\echo 'Query 4: Payment type analysis'
 SELECT
-    pickup_location_id,
+    payment_type,
     COUNT(*) as trip_count,
     SUM(fare_amount) as total_revenue,
     AVG(trip_distance) as avg_distance,
     AVG(tip_amount) as avg_tip
 FROM trips
-GROUP BY pickup_location_id
-ORDER BY total_revenue DESC
-LIMIT 10;
+GROUP BY payment_type
+ORDER BY total_revenue DESC;
 
 -- Query 5: Daily aggregation with time_bucket
 \echo ''
-\echo 'Query 5: Daily statistics by cab type'
+\echo 'Query 5: Daily statistics by borough'
 SELECT
     time_bucket('1 day', pickup_datetime) AS day,
-    cab_type,
+    pickup_boroname,
     COUNT(*) as trips,
     AVG(fare_amount) as avg_fare,
     MAX(fare_amount) as max_fare
 FROM trips
-GROUP BY day, cab_type
-ORDER BY day DESC, cab_type
+GROUP BY day, pickup_boroname
+ORDER BY day DESC, pickup_boroname
 LIMIT 20;
 
 -- Query 6: Distance-based analysis

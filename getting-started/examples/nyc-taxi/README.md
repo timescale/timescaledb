@@ -4,7 +4,7 @@ Get started with TimescaleDB using New York City taxi trip data. This example de
 
 ## What You'll Learn
 
-- How to model high-cardinality transportation data (locations, cab types)
+- How to model high-volume transportation data with lat/lon coordinates
 - Time-series aggregations with `time_bucket()`
 - Optimal segmentation strategies for compression
 - Revenue and usage pattern analysis
@@ -48,8 +48,8 @@ Or copy-paste the contents of [`nyc-taxi-schema.sql`](nyc-taxi-schema.sql) direc
 This creates a `trips` table with:
 - Automatic time-based partitioning on `pickup_datetime`
 - Columnstore enabled for fast analytical queries
-- Segmentation by `cab_type` for optimal compression
-- Indexes for common query patterns
+- Segmentation by `pickup_boroname` for optimal compression (6 boroughs)
+- Full trip details including fares, distances, and coordinates
 
 ### Step 3: Load Sample Data
 
@@ -172,10 +172,11 @@ When you use `SET timescaledb.enable_direct_compress_copy = on`:
 - Perfect for bulk data loads and migrations
 
 ### Segmentation
-The `tsdb.segmentby='cab_type'` setting:
-- Groups data by cab type within each chunk
+The `tsdb.segmentby='pickup_boroname'` setting:
+- Groups data by pickup borough within each chunk (6 unique values: Manhattan, Brooklyn, Queens, Bronx, Staten Island, EWR)
 - Improves compression ratios (similar data together)
-- Speeds up queries that filter by cab_type
+- Speeds up queries that filter by pickup_boroname
+- Better cardinality than vendor_id (6 values vs 2) for optimal compression
 - Automatically optimized without manual tuning
 
 ### time_bucket() Function
@@ -190,10 +191,10 @@ TimescaleDB's `time_bucket()` is like PostgreSQL's `date_trunc()` but more power
 See [`nyc-taxi-queries.sql`](nyc-taxi-queries.sql) for the complete set of queries. Each query demonstrates:
 
 1. **Total trips and revenue** - Simple aggregations across all data
-2. **Breakdown by cab type** - Segmentation analysis
+2. **Breakdown by vendor** - Segmentation analysis by taxi vendor
 3. **Hourly patterns** - Using `time_bucket()` for time-based aggregation
-4. **Top pickup locations** - High-cardinality group by analysis
-5. **Daily statistics** - Multi-dimensional aggregation (time + cab type)
+4. **Payment type analysis** - Analyzing payment methods
+5. **Daily statistics** - Multi-dimensional aggregation (time + borough)
 6. **Distance categories** - CASE statement with aggregations
 
 ## Schema Design Choices
@@ -205,23 +206,16 @@ See [`nyc-taxi-queries.sql`](nyc-taxi-queries.sql) for the complete set of queri
 - Enables automatic chunk pruning for time-range queries
 - Default chunk interval (7 days) works well for taxi data
 
-**segmentby='cab_type'**
-- Low to medium cardinality (yellow, green, uber, etc.)
-- Frequently used in WHERE clauses and GROUP BY
-- Improves compression by grouping similar trips
+**segmentby='pickup_boroname'**
+- Optimal cardinality with 6 borough values (Manhattan, Brooklyn, Queens, Bronx, Staten Island, EWR)
+- Frequently used in WHERE clauses and GROUP BY for location-based analytics
+- Improves compression by grouping geographically similar trips
+- Better than vendor_id (only 2 values) for compression efficiency
 
 **orderby='pickup_datetime DESC'**
 - Most queries want recent data first
 - Optimizes for "latest trips" queries
 - Improves query performance for time-range scans
-
-### Index Strategy
-
-We created two indexes:
-1. `(pickup_location_id, pickup_datetime DESC)` - For location-based queries
-2. `(cab_type, pickup_datetime DESC)` - For cab-type filtered queries
-
-These cover the most common query patterns while keeping index overhead minimal.
 
 ## Common Query Patterns
 
@@ -245,15 +239,15 @@ GROUP BY bucket
 ORDER BY bucket DESC;
 ```
 
-### Location-based analysis
+### Borough-based analysis
 ```sql
--- Trips from a specific pickup location
+-- Trips from a specific borough
 SELECT
     COUNT(*) as trips,
     AVG(fare_amount) as avg_fare,
     AVG(trip_distance) as avg_distance
 FROM trips
-WHERE pickup_location_id = 161
+WHERE pickup_boroname = 'Manhattan'
     AND pickup_datetime > NOW() - INTERVAL '7 days';
 ```
 
@@ -262,18 +256,18 @@ WHERE pickup_location_id = 161
 For real-time dashboards, you can create continuous aggregates that automatically update:
 
 ```sql
--- Create a continuous aggregate for hourly statistics
+-- Create a continuous aggregate for hourly statistics by borough
 CREATE MATERIALIZED VIEW trips_hourly
 WITH (timescaledb.continuous) AS
 SELECT
     time_bucket('1 hour', pickup_datetime) AS hour,
-    cab_type,
+    pickup_boroname,
     COUNT(*) as trip_count,
     AVG(fare_amount) as avg_fare,
     SUM(fare_amount) as total_revenue,
     AVG(trip_distance) as avg_distance
 FROM trips
-GROUP BY hour, cab_type;
+GROUP BY hour, pickup_boroname;
 
 -- Add a refresh policy to keep it updated
 SELECT add_continuous_aggregate_policy('trips_hourly',
