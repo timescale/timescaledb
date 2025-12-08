@@ -198,11 +198,6 @@ Check out our complete examples with real-world datasets:
 - **[Events with UUIDv7](examples/events-uuidv7/)** - Application event logging
 - **[Cryptocurrency](examples/crypto/)** - Crypto market data analysis
 
-### Bring Your Own Data
-
-Ready to try TimescaleDB with your data? See our guide:
-- [Your Own Data Guide](your-own-data/)
-
 ### Learn More
 
 - [TimescaleDB Documentation](https://docs.timescale.com)
