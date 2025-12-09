@@ -17,7 +17,7 @@
 typedef struct VectorAggDef
 {
 	VectorAggFunctions func;
-	int input_offset;
+	Expr *argument;
 	int output_offset;
 	List *filter_clauses;
 
@@ -30,7 +30,8 @@ typedef struct VectorAggDef
 
 typedef struct GroupingColumn
 {
-	int input_offset;
+	Expr *expr;
+
 	int output_offset;
 
 	int16 value_bytes;

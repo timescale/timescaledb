@@ -114,8 +114,9 @@ gp_batch_reset(GroupingPolicy *obj)
 }
 
 static void
-compute_single_aggregate(GroupingPolicyBatch *policy, TupleTableSlot *vector_slot,
-						 VectorAggDef *agg_def, void *agg_state, MemoryContext agg_extra_mctx)
+compute_single_aggregate(GroupingPolicyBatch *policy, DecompressContext *dcontext,
+						 TupleTableSlot *vector_slot, VectorAggDef *agg_def, void *agg_state,
+						 MemoryContext agg_extra_mctx)
 {
 	/*
 	 * We have functions with one argument, and one function with no arguments
@@ -125,34 +126,30 @@ compute_single_aggregate(GroupingPolicyBatch *policy, TupleTableSlot *vector_slo
 	const uint64 *arg_validity_bitmap = NULL;
 	Datum arg_datum = 0;
 	bool arg_isnull = true;
-	uint16 total_batch_rows = 0;
-	vector_slot_get_qual_result(vector_slot, &total_batch_rows);
-
-	/*
-	 * We have functions with one argument, and one function with no arguments
-	 * (count(*)). Collect the arguments.
-	 */
-	if (agg_def->input_offset >= 0)
+	if (agg_def->argument != NULL)
 	{
-		const AttrNumber attnum = AttrOffsetGetAttrNumber(agg_def->input_offset);
-		const CompressedColumnValues *values =
-			vector_slot_get_compressed_column_values(vector_slot, attnum);
+		const CompressedColumnValues values =
+			vector_slot_get_compressed_column_values(dcontext,
+													 vector_slot,
+													 agg_def->effective_batch_filter,
+													 agg_def->argument);
 
-		Assert(values->decompression_type != DT_Invalid);
-		Ensure(values->decompression_type != DT_Iterator,
-			   "expected arrow array but got iterator for attnum %d",
-			   attnum);
+		Assert(values.decompression_type != DT_Invalid);
+		Ensure(values.decompression_type != DT_Iterator, "expected arrow array but got iterator");
 
-		if (values->arrow != NULL)
+		if (values.arrow != NULL)
 		{
-			arg_arrow = values->arrow;
-			arg_validity_bitmap = values->buffers[0];
+			arg_arrow = values.arrow;
+			arg_validity_bitmap = values.buffers[0];
 		}
 		else
 		{
-			Assert(values->decompression_type == DT_Scalar);
-			arg_datum = *values->output_value;
-			arg_isnull = *values->output_isnull;
+			Assert(values.decompression_type == DT_Scalar);
+			arg_isnull = *values.output_isnull;
+			if (!arg_isnull)
+			{
+				arg_datum = *values.output_value;
+			}
 		}
 	}
 
@@ -194,11 +191,11 @@ compute_single_aggregate(GroupingPolicyBatch *policy, TupleTableSlot *vector_slo
 }
 
 static void
-gp_batch_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
+gp_batch_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlot *vector_slot)
 {
 	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
 	uint16 total_batch_rows = 0;
-	vector_slot_get_qual_result(vector_slot, &total_batch_rows);
+	const uint64 *vector_qual_result = vector_slot_get_qual_result(vector_slot, &total_batch_rows);
 
 	/*
 	 * Allocate the temporary filter array for computing the combined results of
@@ -225,7 +222,12 @@ gp_batch_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 	{
 		VectorAggDef *agg_def = &policy->agg_defs[i];
 		void *agg_state = policy->agg_states[i];
-		compute_single_aggregate(policy, vector_slot, agg_def, agg_state, policy->agg_extra_mctx);
+		compute_single_aggregate(policy,
+								 dcontext,
+								 vector_slot,
+								 agg_def,
+								 agg_state,
+								 policy->agg_extra_mctx);
 	}
 
 	/*
@@ -235,13 +237,14 @@ gp_batch_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 	for (int i = 0; i < ngrp; i++)
 	{
 		GroupingColumn *col = &policy->grouping_columns[i];
-		const AttrNumber attnum = AttrOffsetGetAttrNumber(col->input_offset);
-		Assert(col->input_offset >= 0);
 		Assert(col->output_offset >= 0);
 
-		const CompressedColumnValues *values =
-			vector_slot_get_compressed_column_values(vector_slot, attnum);
-		Assert(values->decompression_type == DT_Scalar);
+		const CompressedColumnValues values =
+			vector_slot_get_compressed_column_values(dcontext,
+													 vector_slot,
+													 vector_qual_result,
+													 col->expr);
+		Assert(values.decompression_type == DT_Scalar);
 
 		/*
 		 * By sheer luck, we can avoid generically copying the Datum here,
@@ -249,8 +252,8 @@ gp_batch_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 		 * means we're grouping by segmentby, and these values will be valid
 		 * until the next call to the vector agg node.
 		 */
-		policy->output_grouping_values[i] = *values->output_value;
-		policy->output_grouping_isnull[i] = *values->output_isnull;
+		policy->output_grouping_values[i] = *values.output_value;
+		policy->output_grouping_isnull[i] = *values.output_isnull;
 	}
 
 	policy->have_results = true;
@@ -292,7 +295,6 @@ gp_batch_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	for (int i = 0; i < ngrp; i++)
 	{
 		GroupingColumn *col = &policy->grouping_columns[i];
-		Assert(col->input_offset >= 0);
 		Assert(col->output_offset >= 0);
 
 		aggregated_slot->tts_values[col->output_offset] = policy->output_grouping_values[i];
