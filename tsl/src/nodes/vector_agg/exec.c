@@ -71,10 +71,9 @@ vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTable
 			const Var *var = (const Var *) argument;
 			const uint16 offset = get_input_offset(dcontext, var);
 			const CompressedColumnValues *values = &batch_state->compressed_columns[offset];
-			if (values->decompression_type == DT_Invalid)
-			{
-				elog(ERROR, "got invalid decompression type at offset %d for var ^^^\n", offset);
-			}
+			Ensure(values->decompression_type != DT_Invalid,
+				   "got DT_Invalid decompression type at offset %d",
+				   offset);
 			return *values;
 		}
 		default:
