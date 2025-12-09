@@ -56,6 +56,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.dimension_info_out(_timescaledb_internal.dimension_info)
  _timescaledb_functions.drop_chunk(regclass)
  _timescaledb_functions.drop_osm_chunk(regclass)
+ _timescaledb_functions.estimate_compressed_batch_size(regclass)
  _timescaledb_functions.extension_state()
  _timescaledb_functions.first_combinefunc(internal,internal)
  _timescaledb_functions.first_sfunc(internal,anyelement,"any")
