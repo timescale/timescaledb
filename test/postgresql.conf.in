@@ -25,3 +25,6 @@ extra_float_digits=0
 
 timescaledb.license='apache'
 timescaledb.enable_compression_ratio_warnings=false
+
+# Some tests use logical entries in WAL
+wal_level = logical
