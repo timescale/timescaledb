@@ -19,7 +19,6 @@
 #include <utils/snapmgr.h>
 
 #include "bgw_policy/policies_v2.h"
-#include "continuous_aggs/invalidation_multi.h"
 #include "debug_point.h"
 #include "dimension.h"
 #include "dimension_slice.h"
@@ -83,33 +82,6 @@ static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 static void fill_bucket_offset_origin(const ContinuousAgg *cagg,
 									  const InternalTimeRange *const refresh_window,
 									  NullableDatum *offset, NullableDatum *origin);
-
-/*
- * Get all hypertables that are using WAL-invalidations.
- */
-static List *
-get_all_wal_using_hypertables(void)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	List *hypertables = NIL;
-
-	/* Collect OID of all tables using continuous aggregates */
-	ts_scanner_foreach(&iterator)
-	{
-		bool isnull;
-		Datum datum = slot_getattr(ts_scan_iterator_slot(&iterator),
-								   Anum_continuous_agg_raw_hypertable_id,
-								   &isnull);
-
-		Assert(!isnull);
-		int32 hypertable_id = DatumGetInt32(datum);
-		hypertables = list_append_unique_int(hypertables, hypertable_id);
-	}
-	ts_scan_iterator_close(&iterator);
-
-	return hypertables;
-}
 
 static Hypertable *
 cagg_get_hypertable_or_fail(int32 hypertable_id)
@@ -905,10 +877,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		 * lock, so we need to add a separate lock to ensure a blocking
 		 * behaviour.
 		 */
-		if (!ts_guc_enable_cagg_wal_based_invalidation)
-			invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
-		else
-			multi_invalidation_process_hypertable_log(get_all_wal_using_hypertables());
+		invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
 	}
 
 	/* Commit and Start a new transaction */

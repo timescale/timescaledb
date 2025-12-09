@@ -881,7 +881,7 @@ ExecInsert(ModifyTableContext *context,
 		}
 	}
 
-	if (context->ht_state->has_continuous_aggregate && !ts_guc_enable_cagg_wal_based_invalidation)
+	if (context->ht_state->has_continuous_aggregate)
 	{
 		bool should_free;
 		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
@@ -1382,7 +1382,7 @@ ldelete:
 		 */
 	}
 
-	if (context->ht_state->has_continuous_aggregate && !ts_guc_enable_cagg_wal_based_invalidation)
+	if (context->ht_state->has_continuous_aggregate)
 	{
 		bool should_free;
 		TupleTableSlot *cagg_slot = table_slot_create(resultRelationDesc, NULL);
@@ -1922,7 +1922,7 @@ redo_act:
 	ExecUpdateEpilogue(context, &updateCxt, resultRelInfo, tupleid, oldtuple,
 					   slot);
 
-	if (context->ht_state->has_continuous_aggregate && !ts_guc_enable_cagg_wal_based_invalidation)
+	if (context->ht_state->has_continuous_aggregate)
 	{
 		TupleTableSlot *invalidation_slot = NULL;
 		bool should_free_old = false, should_free_new = false;
