@@ -104,6 +104,8 @@ CROSSMODULE_WRAPPER(split_chunk);
 CROSSMODULE_WRAPPER(detach_chunk);
 CROSSMODULE_WRAPPER(attach_chunk);
 
+CROSSMODULE_WRAPPER(estimate_compressed_batch_size);
+
 /*
  * casting a function pointer to a pointer of another type is undefined
  * behavior, so we need one of these for every function type we have

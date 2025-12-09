@@ -47,6 +47,7 @@
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "nodes/columnar_scan/columnar_scan.h"
 #include "recompress.h"
 #include "scan_iterator.h"
 #include "scanner.h"
@@ -945,4 +946,16 @@ tsl_compression_chunk_create(Hypertable *compressed_ht, Chunk *src_chunk)
 {
 	/* Create a new compressed chunk */
 	return create_compress_chunk(compressed_ht, src_chunk, InvalidOid);
+}
+
+Datum
+tsl_estimate_compressed_batch_size(PG_FUNCTION_ARGS)
+{
+	Oid relid = PG_GETARG_OID(0);
+
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
+
+	float8 approx_batch_size = (float8) ts_columnar_estimate_compressed_batch_size(relid);
+
+	PG_RETURN_FLOAT8(approx_batch_size);
 }

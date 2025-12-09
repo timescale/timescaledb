@@ -190,6 +190,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.split_chunk = chunk_split_chunk,
 	.detach_chunk = chunk_detach,
 	.attach_chunk = chunk_attach,
+	.estimate_compressed_batch_size = tsl_estimate_compressed_batch_size,
 };
 
 static void

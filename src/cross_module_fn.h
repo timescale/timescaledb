@@ -179,6 +179,8 @@ typedef struct CrossModuleFunctions
 
 	PGFunction detach_chunk;
 	PGFunction attach_chunk;
+
+	PGFunction estimate_compressed_batch_size;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;
