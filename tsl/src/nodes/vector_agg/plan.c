@@ -181,6 +181,9 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 	return (Plan *) vector_agg;
 }
 
+/*
+ * Whether we have an in-memory columnar representation for a given type.
+ */
 static bool
 is_vector_type(Oid typeoid)
 {
