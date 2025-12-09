@@ -29,8 +29,7 @@ docker run -d --name timescaledb \
 This command:
 - Downloads and starts TimescaleDB (if not already downloaded)
 - Exposes PostgreSQL on port 5432
-- Sets the password to `password` (change this for production!)
-- Automatically tunes settings for your environment
+- Automatically tunes settings for your environment using timescaledb-tune
 
 Wait about 10-15 seconds for TimescaleDB to initialize.
 
@@ -58,7 +57,7 @@ Expected output:
 
 **Prefer a GUI?** If you'd rather use a graphical tool instead of the command line, you can download [pgAdmin](https://www.pgadmin.org/download/) and connect to TimescaleDB using the same connection details (host: `localhost`, port: `5432`, user: `postgres`, password: `password`).
 
-## Step 3: Create Your First Hypertable (1 minutes)
+## Step 3: Create Your First Hypertable (1 minute)
 
 Let's create a hypertable for IoT sensor data with columnstore enabled:
 
@@ -75,6 +74,9 @@ CREATE TABLE sensor_data (
     --,tsdb.segmentby='sensor_id' TODO: I want to be able to remove these and be smart about the default settings
 	--,tsdb.orderby   = 'time DESC'
 );
+
+-- create index
+CREATE INDEX idx_sensor_id_time ON sensor_data(sensor_id, time DESC);
 ```
 
 `tsdb.hypertable` - Converts this into a TimescaleDB hypertable
