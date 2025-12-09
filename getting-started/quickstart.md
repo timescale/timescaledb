@@ -235,13 +235,6 @@ docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=password time
 
 The `timescale/timescaledb-ha:pg17` image has TimescaleDB pre-installed and pre-loaded. If you see errors, ensure you're using the correct image.
 
-### Query performance seems slow
-
-For this small sample dataset, queries should be very fast (milliseconds). If you load larger datasets:
-- Ensure columnstore is enabled: `tsdb.enable_columnstore=true`
-- Check if data is compressed: `SELECT * FROM timescaledb_information.chunks;`
-- For instant performance with bulk loads, use direct to columnstore (covered in the examples)
-
 ## Clean Up
 
 When you're done experimenting:
