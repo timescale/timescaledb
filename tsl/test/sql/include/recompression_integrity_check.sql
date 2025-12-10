@@ -2,16 +2,11 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set TEST_BASE_NAME recompression_intergrity_check
 SELECT format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COMPRESS",
        format('%s/results/%s_results_recompressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_RECOMPRESS"
 \gset
 SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed result" %s %s', :'TEST_RESULTS_COMPRESS', :'TEST_RESULTS_RECOMPRESS') as "DIFF_CMD"
 \gset
-
--- Compress all uncompressed chunks
-SELECT compress_chunk(ch)
-FROM show_chunks(:'TEST_TABLE_NAME') ch;
 
 -- Store initial compressed chunk info before recompression
 SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
@@ -31,8 +26,7 @@ LIMIT 1 \gset
 :BATCH_METADATA_QUERY
 
 \set QUERY1 'SELECT COUNT(*) FROM ' :OLD_CHUNK_NAME ';'
-\set QUERY2 'SELECT * FROM ' :OLD_CHUNK_NAME ';'
-
+\set QUERY2 'SELECT * FROM ' :OLD_CHUNK_NAME :ORDER_BY_CLAUSE ';'
 \o :TEST_RESULTS_COMPRESS
 :QUERY1
 :QUERY2
