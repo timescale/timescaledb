@@ -779,11 +779,10 @@ ORDER BY
 
 ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby='sensor_id' ,timescaledb.compress_orderby = 'time DESC');
 
-SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
 VACUUM ANALYZE f_sensor_data;
 
 -- Encourage use of parallel plans
-SET max_parallel_workers_per_gather = 4;
+SET max_parallel_workers_per_gather = 8;
 SET min_parallel_index_scan_size = 0;
 SET min_parallel_table_scan_size = 0;
 SET parallel_setup_cost = 0;
@@ -795,6 +794,15 @@ SHOW max_parallel_workers;
 -- We disable enable_parallel_append here to ensure
 -- that we create the same query plan in all PG 14.X versions
 SET enable_parallel_append = false;
+
+-- First we run uncompressed to show the amount of workers we would get
+-- without compression. We should be getting similar amount of workers
+-- whether the chunk is compressed or not.
+:explain
+SELECT sum(cpu) FROM f_sensor_data;
+
+SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
+VACUUM ANALYZE f_sensor_data;
 
 :explain
 SELECT sum(cpu) FROM f_sensor_data;

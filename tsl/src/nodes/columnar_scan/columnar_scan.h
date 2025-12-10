@@ -13,6 +13,11 @@
 #include "hypertable.h"
 #include "ts_catalog/compression_settings.h"
 
+/* Factor for using estimate calculation of compressed
+ * relation heap pages for calculating parallel workers.
+ */
+#define ESTIMATE_HEAP_COMPRESSION_FACTOR 10
+
 typedef struct CompressionInfo
 {
 	RelOptInfo *chunk_rel;

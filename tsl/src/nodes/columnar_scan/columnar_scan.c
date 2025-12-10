@@ -2413,10 +2413,11 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	 */
 	if (compressed_rel->consider_parallel && required_outer == NULL)
 	{
-		int parallel_workers = compute_parallel_worker(compressed_rel,
-													   compressed_rel->pages,
-													   -1,
-													   max_parallel_workers_per_gather);
+		int parallel_workers =
+			compute_parallel_worker(compressed_rel,
+									compressed_rel->pages * ESTIMATE_HEAP_COMPRESSION_FACTOR,
+									-1,
+									max_parallel_workers_per_gather);
 
 		if (parallel_workers > 0)
 		{

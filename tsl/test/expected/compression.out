@@ -1577,14 +1577,9 @@ FROM
 ORDER BY
     time;
 ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby='sensor_id' ,timescaledb.compress_orderby = 'time DESC');
-SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_37_73_chunk
-
 VACUUM ANALYZE f_sensor_data;
 -- Encourage use of parallel plans
-SET max_parallel_workers_per_gather = 4;
+SET max_parallel_workers_per_gather = 8;
 SET min_parallel_index_scan_size = 0;
 SET min_parallel_table_scan_size = 0;
 SET parallel_setup_cost = 0;
@@ -1598,6 +1593,29 @@ SHOW max_parallel_workers;
 -- We disable enable_parallel_append here to ensure
 -- that we create the same query plan in all PG 14.X versions
 SET enable_parallel_append = false;
+-- First we run uncompressed to show the amount of workers we would get
+-- without compression. We should be getting similar amount of workers
+-- whether the chunk is compressed or not.
+:explain
+SELECT sum(cpu) FROM f_sensor_data;
+--- QUERY PLAN ---
+ Finalize Aggregate
+   Output: sum(f_sensor_data.cpu)
+   ->  Gather
+         Output: (PARTIAL sum(f_sensor_data.cpu))
+         Workers Planned: 7
+         ->  Partial Aggregate
+               Output: PARTIAL sum(f_sensor_data.cpu)
+               ->  Append
+                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_37_73_chunk
+                           Output: _hyper_37_73_chunk.cpu
+
+SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_37_73_chunk
+
+VACUUM ANALYZE f_sensor_data;
 :explain
 SELECT sum(cpu) FROM f_sensor_data;
 --- QUERY PLAN ---
@@ -1605,7 +1623,7 @@ SELECT sum(cpu) FROM f_sensor_data;
    Output: sum(_hyper_37_73_chunk.cpu)
    ->  Gather
          Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
-         Workers Planned: 4
+         Workers Planned: 6
          ->  Custom Scan (VectorAgg)
                Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
                Grouping Policy: all compressed batches
@@ -1648,7 +1666,7 @@ SELECT sum(cpu) FROM f_sensor_data;
    Output: sum(f_sensor_data.cpu)
    ->  Gather
          Output: (PARTIAL sum(f_sensor_data.cpu))
-         Workers Planned: 4
+         Workers Planned: 6
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
                      Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
