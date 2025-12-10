@@ -227,5 +227,31 @@ SELECT * FROM recomp_guc_test ORDER BY time, device;
 RESET timescaledb.enable_in_memory_recompression;
 DROP TABLE recomp_guc_test CASCADE;
 
+-- Test Case 8: Recompression for partial chunks. Should only recompress the columnstore part
+SET timescaledb.enable_direct_compress_insert = true;
+SET timescaledb.enable_direct_compress_insert_client_sorted = true;
 
+DROP TABLE IF EXISTS recomp_partial CASCADE;
+
+CREATE TABLE recomp_partial (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.orderby='time');
+INSERT INTO recomp_partial SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,100) i;
+INSERT INTO recomp_partial SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(101,750) i;
+-- less than 10 tuples will not undergo direct compression
+INSERT INTO recomp_partial SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(751,755) i;
+
+-- status should be compressed, partial.
+SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('recomp_partial') chunk;
+
+\set TEST_TABLE_NAME 'recomp_partial'
+\ir :RECOMPRESSION_INTEGRITY_CHECK_RELPATH
+-- extra checks
+SELECT chunk FROM show_chunks('recomp_partial') AS chunk LIMIT 1 \gset
+SELECT _timescaledb_functions.chunk_status_text(:'chunk'::regclass); -- should be compressed, partial
+SELECT COUNT(*) FROM ONLY :chunk; -- should be 5
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
+
+DROP TABLE IF EXISTS recomp_partial CASCADE;
+
+RESET timescaledb.enable_direct_compress_insert;
+RESET timescaledb.enable_direct_compress_insert_client_sorted;
 

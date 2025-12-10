@@ -693,7 +693,7 @@ recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
 	 * 3. Fallback to decompress/compress: When neither strategy is applicable
 	 */
 
-	if (ts_chunk_is_partial(chunk))
+	if (ts_chunk_is_partial(chunk) && !recompress)
 	{
 		if (!ts_guc_enable_segmentwise_recompression)
 		{
