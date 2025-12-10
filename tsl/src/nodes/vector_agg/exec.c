@@ -34,6 +34,9 @@
 #include "commands/explain_state.h"
 #endif
 
+static CompressedBatchVectorQualState
+compressed_batch_init_vector_quals(DecompressContext *dcontext, List *quals, TupleTableSlot *slot);
+
 static int
 get_input_offset(const DecompressContext *dcontext, const Var *var)
 {
@@ -222,8 +225,8 @@ arrow_from_constant(MemoryContext mcxt, int nrows, const Const *c)
 }
 
 static CompressedColumnValues
-evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 const *filter,
-				  List *args, Oid funcoid, Oid inputcollid)
+vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
+							  uint64 const *filter, List *args, Oid funcoid, Oid inputcollid)
 {
 	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
 
@@ -242,8 +245,7 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 	foreach (lc, args)
 	{
 		const int i = foreach_current_index(lc);
-		arg_values[i] =
-			vector_slot_get_compressed_column_values(dcontext, slot, filter, lfirst(lc));
+		arg_values[i] = vector_slot_evaluate_expression(dcontext, slot, filter, lfirst(lc));
 		//		fprintf(stderr, "column %d decompression type %d\n", i,
 		// arg_values[i].decompression_type);
 
@@ -516,13 +518,310 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 	return result;
 }
 
+static CompressedColumnValues
+vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
+						  uint64 const *top_filter, CaseExpr const *case_expr)
+{
+	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
+	const int nrows = batch_state->total_batch_rows;
+	const int num_validity_words = (nrows + 63) / 64;
+	Ensure(case_expr->arg == NULL,
+		   "The CASE with explicit argument is not supported by vectorized aggregation");
+
+	uint64 const *branch_filters[5] = { 0 };
+	CompressedColumnValues branch_values[5] = { 0 };
+	//	Datum branch_data[5] = { 0 };
+	//	bool branch_isnulls[5] = { 0 };
+	Datum tmp_branch_datum;
+	bool tmp_branch_isnull;
+	bool tmp_branch_null_storage = false;
+
+	for (int i = 0; i < list_length(case_expr->args) + 1; i++)
+	{
+		(void) branch_filters;
+		(void) branch_values;
+		(void) i;
+		(void) batch_state;
+
+		Expr *condition_expression;
+		Expr *value_expression;
+		if (i < list_length(case_expr->args))
+		{
+			CaseWhen const *when = castNode(CaseWhen, list_nth(case_expr->args, i));
+			condition_expression = when->expr;
+			value_expression = when->result;
+		}
+		else
+		{
+			condition_expression = NULL;
+			value_expression = case_expr->defresult;
+		}
+
+		uint64 const *branch_filter = top_filter;
+		if (condition_expression != NULL)
+		{
+			CompressedBatchVectorQualState vqstate =
+				compressed_batch_init_vector_quals(dcontext,
+												   list_make1(condition_expression),
+												   slot);
+			vector_qual_compute(&vqstate.vqstate);
+			uint64 const *qual_result = vqstate.vqstate.vector_qual_result;
+			if (qual_result != NULL)
+			{
+				arrow_validity_and(num_validity_words, (uint64 *) qual_result, top_filter);
+				branch_filter = qual_result;
+			}
+		}
+
+		branch_filters[i] = branch_filter;
+
+		if (value_expression != NULL)
+		{
+			branch_values[i] =
+				vector_slot_evaluate_expression(dcontext, slot, branch_filter, value_expression);
+		}
+		else
+		{
+			branch_values[i] = (CompressedColumnValues){ .decompression_type = DT_Scalar };
+			branch_values[i].output_isnull = &tmp_branch_null_storage;
+		}
+
+		if (branch_values[i].decompression_type == DT_Invalid)
+		{
+			//			my_print(lfirst(lc));
+			elog(ERROR, "got DT_Invalid for argument %d ^^^", i);
+		}
+
+		if (branch_values[i].decompression_type != DT_Scalar)
+		{
+			branch_values[i].output_value = &tmp_branch_datum;
+			branch_values[i].output_isnull = &tmp_branch_isnull;
+
+			if (branch_values[i].decompression_type == DT_ArrowText ||
+				branch_values[i].decompression_type == DT_ArrowTextDict)
+			{
+				const int maxbytes =
+					VARHDRSZ + (branch_values[i].arrow->dictionary ?
+									get_max_text_datum_size(branch_values[i].arrow->dictionary) :
+									get_max_text_datum_size(branch_values[i].arrow));
+
+				*branch_values[i].output_value =
+					PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+			}
+		}
+	}
+
+	Oid rettype;
+	TupleDesc tdesc = NULL;
+	TypeFuncClass type_class = get_expr_result_type((Node *) case_expr, &rettype, &tdesc);
+	Ensure(type_class == TYPEFUNC_SCALAR,
+		   "unexpected type class %d for case expression",
+		   type_class);
+	int16 rettyplen;
+	bool rettypbyval;
+	get_typlenbyval(rettype, &rettyplen, &rettypbyval);
+
+	DecompressionType arrow_result_type = DT_Invalid;
+	if (rettype == BOOLOID)
+	{
+		arrow_result_type = DT_ArrowBits;
+	}
+	else if (rettyplen == -1)
+	{
+		arrow_result_type = DT_ArrowText;
+	}
+	else
+	{
+		Assert(rettyplen > 0);
+		arrow_result_type = rettyplen;
+	}
+
+	uint64 *restrict result_validity = NULL;
+	void *restrict result_buffer_1 = NULL;
+	uint8 *restrict body_buffer = NULL;
+	uint32 *restrict offset_buffer = NULL;
+	uint32 current_offset = 0;
+	int allocated_body_bytes = pad_to_multiple(64, 10);
+	if (arrow_result_type == DT_ArrowBits)
+	{
+		result_buffer_1 = MemoryContextAllocZero(batch_state->per_batch_context,
+												 sizeof(uint64) * num_validity_words);
+	}
+	else if (arrow_result_type == DT_ArrowText)
+	{
+		offset_buffer = MemoryContextAllocZero(batch_state->per_batch_context,
+											   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1)));
+		body_buffer = MemoryContextAllocZero(batch_state->per_batch_context, allocated_body_bytes);
+	}
+	else
+	{
+		Assert(arrow_result_type > 0);
+		result_buffer_1 = MemoryContextAllocZero(batch_state->per_batch_context,
+												 pad_to_multiple(64, arrow_result_type * nrows));
+	}
+
+	for (int row = 0; row < nrows; row++)
+	{
+		if (!arrow_row_is_valid(top_filter, row))
+		{
+			continue;
+		}
+
+		int branch_index;
+		for (branch_index = 0;
+			 branch_index < (int) (sizeof(branch_values) / sizeof(branch_values[0]));
+			 branch_index++)
+		{
+			if (arrow_row_is_valid(branch_filters[branch_index], row))
+			{
+				break;
+			}
+		}
+
+		compressed_columns_to_postgres_data(&branch_values[branch_index], 1, row);
+
+		Datum result = *branch_values[branch_index].output_value;
+		bool isnull = *branch_values[branch_index].output_isnull;
+
+		fprintf(stderr, "[%d]: %ld %d\n", row, result, isnull);
+
+		if (isnull)
+		{
+			/*
+			 * A strict function can still return a null for a non-null
+			 * argument.
+			 */
+			if (result_validity == NULL)
+			{
+				result_validity = MemoryContextAlloc(batch_state->per_batch_context,
+													 num_validity_words * sizeof(*result_validity));
+				memset(result_validity, -1, num_validity_words * sizeof(*result_validity));
+				const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
+				result_validity[nrows / 64] &= tail_mask;
+			}
+
+			arrow_set_row_validity(result_validity, row, false);
+
+			continue;
+		}
+
+		switch ((int) arrow_result_type)
+		{
+			case DT_ArrowBits:
+			{
+				arrow_set_row_validity(result_buffer_1, row, DatumGetBool(result));
+				break;
+			}
+			case DT_ArrowText:
+			{
+				const int result_bytes = VARSIZE_ANY_EXHDR(result);
+				const int required_body_bytes = pad_to_multiple(64, current_offset + result_bytes);
+				if (required_body_bytes > allocated_body_bytes)
+				{
+					const int new_body_bytes =
+						required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) row + 1))) +
+						1;
+					//				fprintf(stderr,
+					//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
+					//						new_body_bytes,
+					//						new_body_bytes / (float) required_body_bytes,
+					//						i,
+					//						nrows);
+					Assert(new_body_bytes >= required_body_bytes);
+					body_buffer = repalloc(body_buffer, new_body_bytes);
+					allocated_body_bytes = new_body_bytes;
+				}
+
+				offset_buffer[row] = current_offset;
+				memcpy(&body_buffer[current_offset], VARDATA_ANY(result), result_bytes);
+				current_offset += result_bytes;
+				break;
+			}
+			case 2:
+			case 4:
+#ifdef USE_FLOAT8_BYVAL
+			case 8:
+#endif
+				memcpy(row * arrow_result_type + (uint8 *restrict) result_buffer_1,
+					   &result,
+					   sizeof(Datum));
+				break;
+#ifndef USE_FLOAT8_BYVAL
+			case 8:
+#endif
+			case 16:
+				Assert(!rettypbyval);
+				memcpy(row * arrow_result_type + (uint8 *restrict) result_buffer_1,
+					   DatumGetPointer(result),
+					   arrow_result_type);
+				break;
+			default:
+				elog(ERROR, "wrong arrow result type %d", arrow_result_type);
+		}
+	}
+
+	ArrowArray *arrow_result = NULL;
+	if (arrow_result_type == DT_ArrowBits)
+	{
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 2 * sizeof(void *));
+		arrow_result->buffers = (void *) &arrow_result[1];
+		arrow_result->buffers[1] = result_buffer_1;
+	}
+	else if (arrow_result_type == DT_ArrowText)
+	{
+		offset_buffer[nrows] = current_offset;
+
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 3 * sizeof(void *));
+		arrow_result->buffers = (void *) &arrow_result[1];
+		arrow_result->buffers[1] = offset_buffer;
+		arrow_result->buffers[2] = body_buffer;
+	}
+	else
+	{
+		Assert(arrow_result_type > 0);
+
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 2 * sizeof(void *));
+		arrow_result->buffers = (void *) &arrow_result[1];
+		arrow_result->buffers[1] = result_buffer_1;
+	}
+	arrow_result->length = nrows;
+
+	if (result_validity != NULL)
+	{
+		arrow_validity_and(num_validity_words, result_validity, top_filter);
+		arrow_result->buffers[0] = result_validity;
+	}
+	else
+	{
+		arrow_result->buffers[0] = top_filter;
+	}
+
+	arrow_result->null_count =
+		arrow_result->length - arrow_num_valid(arrow_result->buffers[0], nrows);
+
+	//	fprintf(stderr, "length %ld, null count %ld\n", arrow_result->length,
+	// arrow_result->null_count);
+
+	CompressedColumnValues result = {
+		.decompression_type = arrow_result_type,
+		.buffers = { arrow_result->buffers[0],
+					 arrow_result->buffers[1],
+					 arrow_result_type == DT_ArrowText ? arrow_result->buffers[2] : NULL },
+		.arrow = arrow_result,
+	};
+	return result;
+}
+
 /*
  * Return the arrow array or the datum (in case of single scalar value) for a
  * given attribute as a CompressedColumnValues struct.
  */
 CompressedColumnValues
-vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTableSlot *slot,
-										 uint64 const *filter, const Expr *argument)
+vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slot,
+								uint64 const *filter, const Expr *argument)
 {
 	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
 	switch (((Node *) argument)->type)
@@ -551,12 +850,27 @@ vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTable
 		case T_OpExpr:
 		{
 			const OpExpr *o = (const OpExpr *) argument;
-			return evaluate_function(dcontext, slot, filter, o->args, o->opfuncid, o->inputcollid);
+			return vector_slot_evaluate_function(dcontext,
+												 slot,
+												 filter,
+												 o->args,
+												 o->opfuncid,
+												 o->inputcollid);
 		}
 		case T_FuncExpr:
 		{
 			const FuncExpr *f = (const FuncExpr *) argument;
-			return evaluate_function(dcontext, slot, filter, f->args, f->funcid, f->inputcollid);
+			return vector_slot_evaluate_function(dcontext,
+												 slot,
+												 filter,
+												 f->args,
+												 f->funcid,
+												 f->inputcollid);
+		}
+		case T_CaseExpr:
+		{
+			CaseExpr const *c = (CaseExpr const *) argument;
+			return vector_slot_evaluate_case(dcontext, slot, filter, c);
 		}
 		default:
 			fprintf(stderr, "%s\n", ts_get_node_name((Node *) argument));
@@ -839,28 +1153,22 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
  *
  * Used to implement vectorized aggregate function filter clause.
  */
-static VectorQualState *
-compressed_batch_init_vector_quals(VectorAggState *agg_state, VectorAggDef *agg_def,
-								   TupleTableSlot *slot)
+static CompressedBatchVectorQualState
+compressed_batch_init_vector_quals(DecompressContext *dcontext, List *quals, TupleTableSlot *slot)
 {
-	ColumnarScanState *decompress_state =
-		(ColumnarScanState *) linitial(agg_state->custom.custom_ps);
-	DecompressContext *dcontext = &decompress_state->decompress_context;
 	DecompressBatchState *batch_state = (DecompressBatchState *) slot;
 
-	agg_state->vqual_state = (CompressedBatchVectorQualState) {
+	return (CompressedBatchVectorQualState) {
 				.vqstate = {
-					.vectorized_quals_constified = agg_def->filter_clauses,
+					.vectorized_quals_constified = quals,
 					.num_results = batch_state->total_batch_rows,
 					.per_vector_mcxt = batch_state->per_batch_context,
-					.slot = decompress_state->csstate.ss.ss_ScanTupleSlot,
+					.slot = slot,
 					.get_arrow_array = compressed_batch_get_arrow_array,
 				},
 				.batch_state = batch_state,
 				.dcontext = dcontext,
 			};
-
-	return &agg_state->vqual_state.vqstate;
 }
 
 static TupleTableSlot *
@@ -940,11 +1248,11 @@ vector_agg_exec(CustomScanState *node)
 			uint64 *filter_clause_result = NULL;
 			if (agg_def->filter_clauses != NIL)
 			{
-				VectorQualState *vqstate =
-					vector_agg_state->init_vector_quals(vector_agg_state, agg_def, slot);
-				if (vector_qual_compute(vqstate) != AllRowsPass)
+				CompressedBatchVectorQualState vqstate =
+					compressed_batch_init_vector_quals(dcontext, agg_def->filter_clauses, slot);
+				if (vector_qual_compute(&vqstate.vqstate) != AllRowsPass)
 				{
-					filter_clause_result = vqstate->vector_qual_result;
+					filter_clause_result = vqstate.vqstate.vector_qual_result;
 				}
 			}
 
@@ -1042,7 +1350,6 @@ vector_agg_state_create(CustomScan *cscan)
 	 * compressed batches, respectively.
 	 */
 	state->get_next_slot = compressed_batch_get_next_slot;
-	state->init_vector_quals = compressed_batch_init_vector_quals;
 
 	return (Node *) state;
 }

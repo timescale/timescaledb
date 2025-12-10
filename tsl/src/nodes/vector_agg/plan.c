@@ -212,11 +212,13 @@ is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid re
 {
 	if (list_length(args) > 5)
 	{
+		fprintf(stderr, "args\n");
 		return false;
 	}
 
 	if (!is_vector_type(resulttype))
 	{
+		fprintf(stderr, "nonvector result\n");
 		return false;
 	}
 
@@ -225,17 +227,20 @@ is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid re
 	{
 		if (!is_vector_var(vqinfo, (Expr *) lfirst(lc)))
 		{
+			fprintf(stderr, "nonvector arg\n");
 			return false;
 		}
 	}
 
 	if (!func_strict(funcoid))
 	{
+		fprintf(stderr, "not strict\n");
 		return false;
 	}
 
 	if (func_volatile(funcoid) == PROVOLATILE_VOLATILE)
 	{
+		fprintf(stderr, "volatile\n");
 		return false;
 	}
 
@@ -249,6 +254,11 @@ is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid re
 static bool
 is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 {
+	if (expr == NULL)
+	{
+		return true;
+	}
+
 	switch (((Node *) expr)->type)
 	{
 		case T_Const:
@@ -299,7 +309,64 @@ is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 
 			return is_vector;
 		}
+
+		case T_CaseExpr:
+		{
+			//			return false;
+			CaseExpr *c = castNode(CaseExpr, expr);
+			if (c->arg != NULL)
+			{
+				/*
+				 * We don't handle the "CASE testexpr WHEN comexpr ..." form at
+				 * the moment.
+				 */
+			}
+
+			if (list_length(c->args) >= 5)
+			{
+				/* FIXME */
+				return false;
+			}
+
+			ListCell *lc;
+			foreach (lc, c->args)
+			{
+				Node *when = lfirst(lc);
+				if (!is_vector_var(vqinfo, (Expr *) when))
+				{
+					return false;
+				}
+			}
+
+			if (!is_vector_var(vqinfo, c->defresult))
+			{
+				return false;
+			}
+
+			return true;
+		}
+
+		case T_CaseWhen:
+		{
+			CaseWhen *when = castNode(CaseWhen, expr);
+
+			if (!is_vector_var(vqinfo, when->result))
+			{
+				return false;
+			}
+
+			Node *condition_vectorized = vector_qual_make((Node *) when->expr, vqinfo);
+			if (condition_vectorized == NULL)
+			{
+				return false;
+			}
+			when->expr = (Expr *) condition_vectorized;
+			return true;
+		}
+
 		default:
+			fprintf(stderr, "this node is not handled:\n");
+			// my_print(expr);
 			return false;
 	}
 }
@@ -390,10 +457,16 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 			continue;
 		}
 
+		fprintf(stderr, "considering grouping column:\n");
+		// my_print(target_entry);
+
 		num_grouping_columns++;
 
 		if (!is_vector_var(vqinfo, target_entry->expr))
+		{
+			fprintf(stderr, "ewww\n");
 			return VAGT_Invalid;
+		}
 
 		/*
 		 * Detect whether we're only grouping by segmentby columns, in which
@@ -425,6 +498,7 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 			get_expr_result_type((Node *) target_entry->expr, &single_grouping_var_type, &tdesc);
 		if (type_class != TYPEFUNC_SCALAR)
 		{
+			fprintf(stderr, "not scalar?\n");
 			continue;
 		}
 

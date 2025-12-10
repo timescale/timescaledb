@@ -129,10 +129,10 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressContext *dcontex
 	if (agg_def->argument != NULL)
 	{
 		const CompressedColumnValues values =
-			vector_slot_get_compressed_column_values(dcontext,
-													 vector_slot,
-													 agg_def->effective_batch_filter,
-													 agg_def->argument);
+			vector_slot_evaluate_expression(dcontext,
+											vector_slot,
+											agg_def->effective_batch_filter,
+											agg_def->argument);
 
 		Assert(values.decompression_type != DT_Invalid);
 		Ensure(values.decompression_type != DT_Iterator, "expected arrow array but got iterator");
@@ -240,10 +240,7 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSl
 		Assert(col->output_offset >= 0);
 
 		const CompressedColumnValues values =
-			vector_slot_get_compressed_column_values(dcontext,
-													 vector_slot,
-													 vector_qual_result,
-													 col->expr);
+			vector_slot_evaluate_expression(dcontext, vector_slot, vector_qual_result, col->expr);
 		Assert(values.decompression_type == DT_Scalar);
 
 		/*
