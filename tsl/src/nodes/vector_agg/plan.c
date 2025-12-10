@@ -212,13 +212,11 @@ is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid re
 {
 	if (list_length(args) > 5)
 	{
-		fprintf(stderr, "args\n");
 		return false;
 	}
 
 	if (!is_vector_type(resulttype))
 	{
-		fprintf(stderr, "nonvector result\n");
 		return false;
 	}
 
@@ -227,20 +225,17 @@ is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid re
 	{
 		if (!is_vector_var(vqinfo, (Expr *) lfirst(lc)))
 		{
-			fprintf(stderr, "nonvector arg\n");
 			return false;
 		}
 	}
 
 	if (!func_strict(funcoid))
 	{
-		fprintf(stderr, "not strict\n");
 		return false;
 	}
 
 	if (func_volatile(funcoid) == PROVOLATILE_VOLATILE)
 	{
-		fprintf(stderr, "volatile\n");
 		return false;
 	}
 
@@ -312,7 +307,7 @@ is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 
 		case T_CaseExpr:
 		{
-			//			return false;
+						return false;
 			CaseExpr *c = castNode(CaseExpr, expr);
 			if (c->arg != NULL)
 			{
@@ -365,7 +360,6 @@ is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 		}
 
 		default:
-			fprintf(stderr, "this node is not handled:\n");
 			// my_print(expr);
 			return false;
 	}
@@ -457,14 +451,13 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 			continue;
 		}
 
-		fprintf(stderr, "considering grouping column:\n");
+//		fprintf(stderr, "considering grouping column:\n");
 		// my_print(target_entry);
 
 		num_grouping_columns++;
 
 		if (!is_vector_var(vqinfo, target_entry->expr))
 		{
-			fprintf(stderr, "ewww\n");
 			return VAGT_Invalid;
 		}
 
@@ -498,7 +491,6 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 			get_expr_result_type((Node *) target_entry->expr, &single_grouping_var_type, &tdesc);
 		if (type_class != TYPEFUNC_SCALAR)
 		{
-			fprintf(stderr, "not scalar?\n");
 			continue;
 		}
 

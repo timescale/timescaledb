@@ -683,7 +683,7 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 		Datum result = *branch_values[branch_index].output_value;
 		bool isnull = *branch_values[branch_index].output_isnull;
 
-		fprintf(stderr, "[%d]: %ld %d\n", row, result, isnull);
+//		fprintf(stderr, "[%d]: %ld %d\n", row, result, isnull);
 
 		if (isnull)
 		{
@@ -873,7 +873,6 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 			return vector_slot_evaluate_case(dcontext, slot, filter, c);
 		}
 		default:
-			fprintf(stderr, "%s\n", ts_get_node_name((Node *) argument));
 			Ensure(false,
 				   "wrong node type %s for vector expression",
 				   ts_get_node_name((Node *) argument));
