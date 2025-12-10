@@ -1,13 +1,13 @@
 # TimescaleDB Quick Start Guide
 
-Get started with TimescaleDB in under 20 minutes. This guide will help you run TimescaleDB locally, create your first hypertable with columnstore enabled, write data to the columnstore, and see instant analytical query performance.
+Get started with TimescaleDB in under 10 minutes. This guide will help you run TimescaleDB locally, create your first hypertable with columnstore enabled, write data to the columnstore, and see instant analytical query performance.
 
 ## What You'll Learn
 
 - How to run TimescaleDB with a single Docker command
 - How to create a hypertable with columnstore enabled
 - How to insert data directly to the columnstore 
-- How to query time-series data
+- How to execute analytical queries
 
 ## Prerequisites
 
@@ -15,7 +15,7 @@ Get started with TimescaleDB in under 20 minutes. This guide will help you run T
 - 8GB RAM recommended
 - `psql` client (included with PostgreSQL) or any PostgreSQL client like [pgAdmin](https://www.pgadmin.org/download/)
 
-## Step 1: Start TimescaleDB (5 minutes)
+## Step 1: Start TimescaleDB
 
 Run TimescaleDB using Docker with a single command:
 
@@ -23,7 +23,7 @@ Run TimescaleDB using Docker with a single command:
 docker run -d --name timescaledb \
     -p 5432:5432 \
     -e POSTGRES_PASSWORD=password \
-    timescale/timescaledb-ha:pg17
+    timescale/timescaledb-ha:pg18
 ```
 
 This command:
@@ -33,7 +33,7 @@ This command:
 
 Wait about 10-15 seconds for TimescaleDB to initialize.
 
-## Step 2: Connect to TimescaleDB (1 minute)
+## Step 2: Connect to TimescaleDB
 
 Connect using `psql`:
 
@@ -57,7 +57,7 @@ Expected output:
 
 **Prefer a GUI?** If you'd rather use a graphical tool instead of the command line, you can download [pgAdmin](https://www.pgadmin.org/download/) and connect to TimescaleDB using the same connection details (host: `localhost`, port: `5432`, user: `postgres`, password: `password`).
 
-## Step 3: Create Your First Hypertable (1 minute)
+## Step 3: Create Your First Hypertable
 
 Let's create a hypertable for IoT sensor data with columnstore enabled:
 
@@ -81,7 +81,7 @@ CREATE INDEX idx_sensor_id_time ON sensor_data(sensor_id, time DESC);
 
 `tsdb.hypertable` - Converts this into a TimescaleDB hypertable
 
-## Step 4: Insert Sample Data (5 minutes)
+## Step 4: Insert Sample Data
 
 Let's add some sample sensor readings:
 
@@ -120,7 +120,7 @@ Verify the data was inserted:
 SELECT COUNT(*) FROM sensor_data;
 ```
 
-## Step 5: Run Your First Analytical Queries(5 minutes)
+## Step 5: Run Your First Analytical Queries
 
 Now let's run some analytical queries that showcase TimescaleDB's performance:
 
