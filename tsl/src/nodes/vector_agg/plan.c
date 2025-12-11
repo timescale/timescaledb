@@ -204,7 +204,7 @@ is_vector_type(Oid typeoid)
 	}
 }
 
-static bool is_vector_var(const VectorQualInfo *vqinfo, Expr *expr);
+static bool is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr);
 
 static bool
 is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid resulttype,
@@ -223,7 +223,7 @@ is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid re
 	ListCell *lc;
 	foreach (lc, args)
 	{
-		if (!is_vector_var(vqinfo, (Expr *) lfirst(lc)))
+		if (!is_vector_expr(vqinfo, (Expr *) lfirst(lc)))
 		{
 			return false;
 		}
@@ -247,7 +247,7 @@ is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid re
  * that refers to either a bulk-decompressed or a segmentby column.
  */
 static bool
-is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
+is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 {
 	if (expr == NULL)
 	{
@@ -307,7 +307,7 @@ is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 
 		case T_CaseExpr:
 		{
-						return false;
+			//						return false;
 			CaseExpr *c = castNode(CaseExpr, expr);
 			if (c->arg != NULL)
 			{
@@ -327,13 +327,13 @@ is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 			foreach (lc, c->args)
 			{
 				Node *when = lfirst(lc);
-				if (!is_vector_var(vqinfo, (Expr *) when))
+				if (!is_vector_expr(vqinfo, (Expr *) when))
 				{
 					return false;
 				}
 			}
 
-			if (!is_vector_var(vqinfo, c->defresult))
+			if (!is_vector_expr(vqinfo, c->defresult))
 			{
 				return false;
 			}
@@ -345,7 +345,7 @@ is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 		{
 			CaseWhen *when = castNode(CaseWhen, expr);
 
-			if (!is_vector_var(vqinfo, when->result))
+			if (!is_vector_expr(vqinfo, when->result))
 			{
 				return false;
 			}
@@ -419,7 +419,7 @@ can_vectorize_aggref(const VectorQualInfo *vqi, Aggref *aggref)
 	Assert(list_length(aggref->args) == 1);
 	TargetEntry *argument = castNode(TargetEntry, linitial(aggref->args));
 
-	return is_vector_var(vqi, argument->expr);
+	return is_vector_expr(vqi, argument->expr);
 }
 
 /*
@@ -451,12 +451,12 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 			continue;
 		}
 
-//		fprintf(stderr, "considering grouping column:\n");
+		//		fprintf(stderr, "considering grouping column:\n");
 		// my_print(target_entry);
 
 		num_grouping_columns++;
 
-		if (!is_vector_var(vqinfo, target_entry->expr))
+		if (!is_vector_expr(vqinfo, target_entry->expr))
 		{
 			return VAGT_Invalid;
 		}

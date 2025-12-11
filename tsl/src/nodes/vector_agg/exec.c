@@ -373,14 +373,19 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 												 pad_to_multiple(64, arrow_result_type * nrows));
 	}
 
-	for (int i = 0; i < nrows; i++)
+	for (int row = 0; row < nrows; row++)
 	{
-		if (!arrow_row_is_valid(input_validity, i))
+		if (arrow_result_type == DT_ArrowText)
+		{
+			offset_buffer[row] = current_offset;
+		}
+
+		if (!arrow_row_is_valid(input_validity, row))
 		{
 			continue;
 		}
 
-		compressed_columns_to_postgres_data(arg_values, nargs, i);
+		compressed_columns_to_postgres_data(arg_values, nargs, row);
 
 		Datum result = FunctionCallInvoke(fcinfo);
 
@@ -401,7 +406,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 				result_validity[nrows / 64] &= tail_mask;
 			}
 
-			arrow_set_row_validity(result_validity, i, false);
+			arrow_set_row_validity(result_validity, row, false);
 
 			continue;
 		}
@@ -410,7 +415,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 		{
 			case DT_ArrowBits:
 			{
-				arrow_set_row_validity(result_buffer_1, i, DatumGetBool(result));
+				arrow_set_row_validity(result_buffer_1, row, DatumGetBool(result));
 				break;
 			}
 			case DT_ArrowText:
@@ -420,7 +425,8 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 				if (required_body_bytes > allocated_body_bytes)
 				{
 					const int new_body_bytes =
-						required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) i + 1))) + 1;
+						required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) row + 1))) +
+						1;
 					//				fprintf(stderr,
 					//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
 					//						new_body_bytes,
@@ -432,7 +438,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 					allocated_body_bytes = new_body_bytes;
 				}
 
-				offset_buffer[i] = current_offset;
+				offset_buffer[row] = current_offset;
 				memcpy(&body_buffer[current_offset], VARDATA_ANY(result), result_bytes);
 				current_offset += result_bytes;
 				break;
@@ -442,7 +448,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 #ifdef USE_FLOAT8_BYVAL
 			case 8:
 #endif
-				memcpy(i * arrow_result_type + (uint8 *restrict) result_buffer_1,
+				memcpy(row * arrow_result_type + (uint8 *restrict) result_buffer_1,
 					   &result,
 					   sizeof(Datum));
 				break;
@@ -451,7 +457,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 #endif
 			case 16:
 				Assert(!rettypbyval);
-				memcpy(i * arrow_result_type + (uint8 *restrict) result_buffer_1,
+				memcpy(row * arrow_result_type + (uint8 *restrict) result_buffer_1,
 					   DatumGetPointer(result),
 					   arrow_result_type);
 				break;
@@ -662,6 +668,11 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 
 	for (int row = 0; row < nrows; row++)
 	{
+		if (arrow_result_type == DT_ArrowText)
+		{
+			offset_buffer[row] = current_offset;
+		}
+
 		if (!arrow_row_is_valid(top_filter, row))
 		{
 			continue;
@@ -683,7 +694,7 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 		Datum result = *branch_values[branch_index].output_value;
 		bool isnull = *branch_values[branch_index].output_isnull;
 
-//		fprintf(stderr, "[%d]: %ld %d\n", row, result, isnull);
+		//		fprintf(stderr, "[%d]: %ld %d\n", row, result, isnull);
 
 		if (isnull)
 		{

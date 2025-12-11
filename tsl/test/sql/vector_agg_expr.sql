@@ -64,10 +64,12 @@ from
     unnest(array[
         null
         , 'length(x)'
+        , 'lower(x)'
         , 'i % 2'
         , 'ts'
         , 'b'
         ]) with ordinality as grouping(grouping, n)
+order by grouping.n, condition.n, function
 \gexec
 
 reset timescaledb.debug_require_vector_agg;
