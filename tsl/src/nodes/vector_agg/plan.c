@@ -181,6 +181,9 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 	return (Plan *) vector_agg;
 }
 
+/*
+ * Whether we have an in-memory columnar representation for a given type.
+ */
 static bool
 is_vector_type(Oid typeoid)
 {
@@ -299,7 +302,9 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 
 			if (is_vector)
 			{
-				Assert(is_vector_type(var->vartype));
+				Ensure(is_vector_type(var->vartype),
+					   "a variable with non-vectorizable type %s is marked as vectorized",
+					   format_type_be(var->vartype));
 			}
 
 			return is_vector;
