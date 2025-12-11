@@ -759,9 +759,6 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 
 /*
  * Perform per segment in-memory recompression of a compressed chunk.
- *
- * Note: This function will early return if the chunk is not suitable for
- * recompression (e.g., partial, frozen).
  */
 bool
 recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
@@ -771,8 +768,7 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 
 	Ensure(ts_guc_enable_in_memory_recompression, "in-memory recompression functionality disabled");
 
-	if (!ts_chunk_is_compressed(uncompressed_chunk) || ts_chunk_is_partial(uncompressed_chunk) ||
-		ts_chunk_is_frozen(uncompressed_chunk))
+	if (!ts_chunk_is_compressed(uncompressed_chunk) || ts_chunk_is_frozen(uncompressed_chunk))
 		return false;
 
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);

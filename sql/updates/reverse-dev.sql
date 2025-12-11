@@ -105,3 +105,5 @@ GRANT USAGE ON SCHEMA _timescaledb_config TO PUBLIC;
 ALTER TABLE _timescaledb_catalog.bgw_job SET SCHEMA _timescaledb_config;
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_compressed_batch_size(REGCLASS);
+-- remove rebuild_columnstore
+DROP PROCEDURE IF EXISTS _timescaledb_functions.rebuild_columnstore(REGCLASS);
