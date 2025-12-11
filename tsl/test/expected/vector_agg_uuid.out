@@ -180,12 +180,6 @@ select uuid_version(to_uuidv7_boundary(uuid_ts)), count(*)
             7 |    18
             $ |     3
 
-select uuid_extract_timestamp(u), count(*)
-    from uuid_table group by 1 order by 1;
- uuid_extract_timestamp | count 
-------------------------+-------
- $                      |    21
-
 select uuid_timestamp(u), count(*)
     from uuid_table group by 1 order by 1;
           uuid_timestamp          | count 

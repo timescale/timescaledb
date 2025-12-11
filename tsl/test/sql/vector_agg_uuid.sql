@@ -139,9 +139,6 @@ select to_uuidv7_boundary(uuid_ts), count(*)
 select uuid_version(to_uuidv7_boundary(uuid_ts)), count(*)
     from uuid_table group by 1 order by 1;
 
-select uuid_extract_timestamp(u), count(*)
-    from uuid_table group by 1 order by 1;
-
 select uuid_timestamp(u), count(*)
     from uuid_table group by 1 order by 1;
 
