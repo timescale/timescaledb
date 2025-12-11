@@ -58,6 +58,7 @@ set(TEST_FILES
     move.sql
     plan_skip_scan_notnull.sql
     policy_generalization.sql
+    rebuild_columnstore_tests.sql
     recompression_integrity_tests.sql
     recompression_integrity_unordered.sql
     reorder.sql

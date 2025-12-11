@@ -167,6 +167,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.process_rename_cmd = tsl_process_rename_cmd,
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
+	.rebuild_columnstore = tsl_rebuild_columnstore,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,

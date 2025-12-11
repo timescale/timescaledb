@@ -901,6 +901,70 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
 
+static bool
+can_use_in_memory_rebuild(Chunk *chunk)
+{
+	CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
+
+	/* check if we can allow in-memory recompression to rebuild columnstore */
+	if (!chunk_settings || !chunk_settings->fd.orderby)
+	{
+		elog(DEBUG1, "in-memory rebuild columnstore is disabled due to no order by");
+		return false;
+	}
+	if (!get_compressed_chunk_index_for_recompression(chunk))
+	{
+		elog(DEBUG1, "in-memory rebuild columnstore is disabled due to no compressed chunk index.");
+		return false;
+	}
+	if (!ts_guc_enable_in_memory_recompression)
+	{
+		elog(DEBUG1, "timescaledb.enable_in_memory_recompression is disabled");
+		return false;
+	}
+
+	return true;
+}
+
+Datum
+tsl_rebuild_columnstore(PG_FUNCTION_ARGS)
+{
+	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (!OidIsValid(chunk_relid))
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk OID")));
+
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+
+	if (!ts_chunk_is_compressed(chunk) || ts_chunk_is_frozen(chunk))
+	{
+		ereport(NOTICE,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("chunk \"%s.%s\" is uncompressed or frozen, skipping",
+						NameStr(chunk->fd.schema_name),
+						NameStr(chunk->fd.table_name))));
+		PG_RETURN_VOID();
+	}
+
+	/* Try rebuild with in-memory recompression, fall back to decompress/compress if needed */
+	if (!can_use_in_memory_rebuild(chunk) || !recompress_chunk_in_memory_impl(chunk))
+	{
+		elog(DEBUG1,
+			 "falling back to decompress/compress, performing full "
+			 "rebuild on chunk \"%s.%s\"",
+			 NameStr(chunk->fd.schema_name),
+			 NameStr(chunk->fd.table_name));
+		decompress_chunk_impl(chunk, false);
+		compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
+	}
+
+	PG_RETURN_VOID();
+}
+
 /*
  * This is hacky but it doesn't matter. We just want to check for the existence of such an index
  * on the compressed chunk.
