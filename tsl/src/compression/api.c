@@ -689,7 +689,7 @@ recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
 	/*
 	 * Choose recompression strategy based on chunk state and settings:
 	 * 1. Segmentwise recompression: For partial chunks
-	 * 2. In-memory recompression: For fully compressed chunks with matching settings
+	 * 2. In-memory recompression: For other compressed chunks with matching settings
 	 * 3. Fallback to decompress/compress: When neither strategy is applicable
 	 */
 
@@ -708,7 +708,7 @@ recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
 		recompressed = true;
 	}
 	/* TODO: optimize cases where settings differ but recompression is still possible */
-	else if (recompress && ts_compression_settings_equal_with_defaults(ht_settings, chunk_settings))
+	else if (ts_compression_settings_equal_with_defaults(ht_settings, chunk_settings))
 	{
 		if (!ts_guc_enable_in_memory_recompression)
 		{

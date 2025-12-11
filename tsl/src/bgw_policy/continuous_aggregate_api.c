@@ -33,7 +33,7 @@
 #define DEFAULT_MAX_RUNTIME                                                                        \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
 /* Default buckets per batch is 1, which means that the job will refresh 1 bucket at a time */
-#define DEFAULT_BUCKETS_PER_BATCH 1
+#define DEFAULT_BUCKETS_PER_BATCH 10
 /* Default max batches per execution is 0, which means no limit */
 #define DEFAULT_MAX_BATCHES_PER_EXECUTION 0
 /* Default refresh newest first is true, which means from newest data to the oldest */
