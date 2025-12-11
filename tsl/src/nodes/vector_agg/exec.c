@@ -60,8 +60,8 @@ get_input_offset(const DecompressContext *dcontext, const Var *var)
  * given attribute as a CompressedColumnValues struct.
  */
 CompressedColumnValues
-vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTableSlot *slot,
-										 uint64 const *filter, const Expr *argument)
+vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slot,
+								uint64 const *filter, const Expr *argument)
 {
 	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
 	switch (((Node *) argument)->type)
