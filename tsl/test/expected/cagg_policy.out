@@ -45,8 +45,7 @@ SELECT count(*) FROM _timescaledb_catalog.bgw_job;
 \set VERBOSITY default
 -- Test 1 step policy for integer type buckets
 ALTER materialized view mat_m1 set (timescaledb.compress = true);
-NOTICE:  defaulting compress_segmentby to a
-NOTICE:  defaulting compress_orderby to time_partition_col
+NOTICE:  defaulting compress_orderby to time_partition_col,a
 -- No policy is added if one errors out
 SELECT timescaledb_experimental.add_policies('mat_m1', refresh_start_offset => 1, refresh_end_offset => 10, compress_after => 11, drop_after => 20);
 ERROR:  policy refresh window too small
@@ -1103,8 +1102,7 @@ SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
 ERROR:  columnstore not enabled on continuous aggregate "metrics_cagg"
 ALTER MATERIALIZED VIEW metrics_cagg SET (timescaledb.compress);
-NOTICE:  defaulting compress_segmentby to device_id
-NOTICE:  defaulting compress_orderby to dayb
+NOTICE:  defaulting compress_orderby to dayb,device_id
 --cannot use compress_created_before with cagg
 SELECT add_compression_policy('metrics_cagg', compress_created_before => '8 day'::interval) AS "COMP_JOB" ;
 ERROR:  cannot use "compress_created_before" with continuous aggregate "metrics_cagg" 
