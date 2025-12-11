@@ -212,7 +212,7 @@ is_vector_type(Oid typeoid)
  * that refers to either a bulk-decompressed or a segmentby column.
  */
 static bool
-is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
+is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 {
 	switch (((Node *) expr)->type)
 	{
@@ -298,7 +298,7 @@ can_vectorize_aggref(const VectorQualInfo *vqi, Aggref *aggref)
 	Assert(list_length(aggref->args) == 1);
 	TargetEntry *argument = castNode(TargetEntry, linitial(aggref->args));
 
-	return is_vector_var(vqi, argument->expr);
+	return is_vector_expr(vqi, argument->expr);
 }
 
 /*
@@ -332,8 +332,10 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 
 		num_grouping_columns++;
 
-		if (!is_vector_var(vqinfo, target_entry->expr))
+		if (!is_vector_expr(vqinfo, target_entry->expr))
+		{
 			return VAGT_Invalid;
+		}
 
 		/*
 		 * Detect whether we're only grouping by segmentby columns, in which
@@ -694,7 +696,7 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 		}
 		else if (IsA(target_entry->expr, Var))
 		{
-			if (!is_vector_var(&vqi, target_entry->expr))
+			if (!is_vector_expr(&vqi, target_entry->expr))
 			{
 				/* Variable not vectorizable. */
 				return plan;
