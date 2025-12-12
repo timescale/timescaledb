@@ -1036,6 +1036,11 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		RelationMergeInfo *relinfo = &relinfos[i];
 		Chunk *chunk;
 		Relation rel;
+		ScanTupLock slice_lock = {
+			.lockmode = LockTupleKeyShare,
+			.waitpolicy = LockWaitBlock,
+			.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
+		};
 
 		if (nulls[i] || !OidIsValid(relid))
 			ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid relation")));
@@ -1064,7 +1069,7 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		 * pg_depends and concurrent operations will probably fail anyway if
 		 * we remove the objects. We might as well fail with a deadlock.
 		 */
-		chunk = ts_chunk_get_by_relid_locked(relid, lockmode, false);
+		chunk = ts_chunk_get_by_relid_locked(relid, lockmode, &slice_lock, false);
 
 		if (chunk == NULL)
 		{

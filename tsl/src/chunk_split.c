@@ -12,6 +12,7 @@
 #include <catalog/pg_collation.h>
 #include <catalog/pg_constraint.h>
 #include <commands/tablecmds.h>
+#include <nodes/lockoptions.h>
 #include <storage/bufmgr.h>
 #include <storage/lockdefs.h>
 #include <utils/acl.h>
@@ -887,8 +888,13 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	const Chunk *chunk;
 	Relation srcrel;
+	ScanTupLock slice_lock = {
+		.lockmode = LockTupleNoKeyExclusive,
+		.waitpolicy = LockWaitBlock,
+		.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
+	};
 
-	chunk = ts_chunk_get_by_relid_locked(relid, AccessExclusiveLock, true);
+	chunk = ts_chunk_get_by_relid_locked(relid, AccessExclusiveLock, &slice_lock, true);
 
 	/* Chunk already locked, so use NoLock */
 	srcrel = table_open(relid, NoLock);
