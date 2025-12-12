@@ -467,7 +467,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 		 * already initialized.
 		 *
 		 * In the other cases, they serve as a space for materialization of the
-		 * Postgres datum for a given row, so we have to initalize them now.
+		 * Postgres datum for a given row, so we have to initialize them now.
 		 */
 		if (arg_values[i].decompression_type == DT_Scalar)
 		{
@@ -658,7 +658,7 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 		 * already initialized.
 		 *
 		 * In the other cases, they serve as a space for materialization of the
-		 * Postgres datum for a given row, so we have to initalize them now.
+		 * Postgres datum for a given row, so we have to initialize them now.
 		 */
 		if (branch_values[i].decompression_type != DT_Scalar)
 		{
