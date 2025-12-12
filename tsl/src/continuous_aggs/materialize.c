@@ -131,7 +131,7 @@ static MaterializationPlan materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPES
 									  create_materialization_ranges_delete_statement,
 								  .error_message = "could not delete invalidation entries for "
 												   "materialization table \"%s.%s\"" },
-	[PLAN_TYPE_RANGES_PENDING] = { .read_only = true,
+	[PLAN_TYPE_RANGES_PENDING] = { .catalog_security_context = true,
 								   .nargs = 3,
 								   .create_statement =
 									   create_materialization_ranges_pending_statement,
@@ -210,6 +210,8 @@ continuous_agg_has_pending_materializations(const ContinuousAgg *cagg,
 
 	bool has_pending_materializations =
 		(execute_materialization_plan(&context, PLAN_TYPE_RANGES_PENDING) > 0);
+
+	free_materialization_plan(&context, PLAN_TYPE_RANGES_PENDING);
 
 	/* Restore search_path */
 	AtEOXact_GUC(false, save_nestlevel);
@@ -593,7 +595,9 @@ create_materialization_ranges_pending_statement(MaterializationContext *context)
 					 "AND greatest_modified_value <= $3 "
 					 "AND pg_catalog.int8range(lowest_modified_value, greatest_modified_value) && "
 					 "pg_catalog.int8range($2, $3) "
-					 "LIMIT 1 ");
+					 "ORDER BY lowest_modified_value ASC "
+					 "LIMIT 1 "
+					 "FOR UPDATE SKIP LOCKED ");
 
 	return query.data;
 }
