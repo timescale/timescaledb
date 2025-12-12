@@ -356,8 +356,6 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 			arrow_validity_and(num_validity_words, combined_validity, arg_values[i].buffers[0]);
 		}
 		input_validity = combined_validity;
-
-		fprintf(stderr, "have input validity for some reason\n");
 	}
 
 	ColumnarResult columnar_result = { 0 };
