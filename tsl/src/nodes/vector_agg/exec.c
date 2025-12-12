@@ -224,6 +224,212 @@ arrow_from_constant(MemoryContext mcxt, int nrows, const Const *c)
 	}
 }
 
+/*
+ * Workspace for converting the results of a Postgres function into a columnar
+ * format.
+ */
+typedef struct
+{
+	DecompressionType type;
+
+	uint64 *restrict validity;
+
+	int allocated_body_bytes;
+	uint8 *restrict body_buffer;
+
+	uint32 *restrict offset_buffer;
+	uint32 current_offset;
+} ColumnarResult;
+
+static void
+columnar_result_init_for_type(ColumnarResult *columnar_result,
+							  DecompressBatchState const *batch_state, Oid typeoid)
+{
+	int16 typlen;
+	bool typbyval;
+	get_typlenbyval(typeoid, &typlen, &typbyval);
+	if (typeoid == BOOLOID)
+	{
+		columnar_result->type = DT_ArrowBits;
+	}
+	else if (typlen == -1)
+	{
+		columnar_result->type = DT_ArrowText;
+	}
+	else
+	{
+		Assert(typlen > 0);
+		columnar_result->type = typlen;
+	}
+
+	const int nrows = batch_state->total_batch_rows;
+	const size_t num_validity_words = (nrows + 63) / 64;
+	if (columnar_result->type == DT_ArrowBits)
+	{
+		columnar_result->body_buffer = MemoryContextAllocZero(batch_state->per_batch_context,
+															  sizeof(uint64) * num_validity_words);
+	}
+	else if (columnar_result->type == DT_ArrowText)
+	{
+		columnar_result->offset_buffer =
+			MemoryContextAllocZero(batch_state->per_batch_context,
+								   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1)));
+		columnar_result->allocated_body_bytes = pad_to_multiple(64, 10);
+		columnar_result->body_buffer =
+			MemoryContextAllocZero(batch_state->per_batch_context,
+								   columnar_result->allocated_body_bytes);
+	}
+	else
+	{
+		Assert(columnar_result->type > 0);
+		columnar_result->body_buffer =
+			MemoryContextAllocZero(batch_state->per_batch_context,
+								   pad_to_multiple(64, columnar_result->type * nrows));
+	}
+}
+
+static void
+columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState const *batch_state,
+						int row, Datum datum, bool isnull)
+{
+	const int nrows = batch_state->total_batch_rows;
+	const int num_validity_words = (nrows + 63) / 64;
+
+	if (isnull)
+	{
+		/*
+		 * A strict function can still return a null for a non-null
+		 * argument.
+		 */
+		if (columnar_result->validity == NULL)
+		{
+			columnar_result->validity =
+				MemoryContextAlloc(batch_state->per_batch_context,
+								   num_validity_words * sizeof(*columnar_result->validity));
+			memset(columnar_result->validity,
+				   -1,
+				   num_validity_words * sizeof(*columnar_result->validity));
+			const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
+			columnar_result->validity[nrows / 64] &= tail_mask;
+		}
+
+		arrow_set_row_validity(columnar_result->validity, row, false);
+
+		return;
+	}
+
+	switch ((int) columnar_result->type)
+	{
+		case DT_ArrowBits:
+		{
+			arrow_set_row_validity((uint64 *restrict) columnar_result->body_buffer,
+								   row,
+								   DatumGetBool(datum));
+			break;
+		}
+		case DT_ArrowText:
+		{
+			const int result_bytes = VARSIZE_ANY_EXHDR(datum);
+			const int required_body_bytes =
+				pad_to_multiple(64, columnar_result->current_offset + result_bytes);
+			if (required_body_bytes > columnar_result->allocated_body_bytes)
+			{
+				const int new_body_bytes =
+					required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) row + 1))) + 1;
+				//				fprintf(stderr,
+				//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
+				//						new_body_bytes,
+				//						new_body_bytes / (float) required_body_bytes,
+				//						i,
+				//						nrows);
+				Assert(new_body_bytes >= required_body_bytes);
+				columnar_result->body_buffer =
+					repalloc(columnar_result->body_buffer, new_body_bytes);
+				columnar_result->allocated_body_bytes = new_body_bytes;
+			}
+
+			columnar_result->offset_buffer[row] = columnar_result->current_offset;
+			memcpy(&columnar_result->body_buffer[columnar_result->current_offset],
+				   VARDATA_ANY(datum),
+				   result_bytes);
+			columnar_result->current_offset += result_bytes;
+			break;
+		}
+		case 2:
+		case 4:
+#ifdef USE_FLOAT8_BYVAL
+		case 8:
+#endif
+			memcpy(row * columnar_result->type + (uint8 *restrict) columnar_result->body_buffer,
+				   &datum,
+				   sizeof(Datum));
+			break;
+#ifndef USE_FLOAT8_BYVAL
+		case 8:
+#endif
+		case 16:
+			memcpy(row * columnar_result->type + (uint8 *restrict) columnar_result->body_buffer,
+				   DatumGetPointer(datum),
+				   columnar_result->type);
+			break;
+		default:
+			elog(ERROR, "wrong arrow result type %d", columnar_result->type);
+	}
+}
+
+static CompressedColumnValues
+columnar_result_return(ColumnarResult *columnar_result, DecompressBatchState const *batch_state)
+{
+	const int nrows = batch_state->total_batch_rows;
+
+	ArrowArray *arrow_result = NULL;
+	if (columnar_result->type == DT_ArrowBits)
+	{
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 2 * sizeof(void *));
+		arrow_result->buffers = (void *) &arrow_result[1];
+		arrow_result->buffers[1] = columnar_result->body_buffer;
+	}
+	else if (columnar_result->type == DT_ArrowText)
+	{
+		columnar_result->offset_buffer[nrows] = columnar_result->current_offset;
+
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 3 * sizeof(void *));
+		arrow_result->buffers = (void *) &arrow_result[1];
+		arrow_result->buffers[1] = columnar_result->offset_buffer;
+		arrow_result->buffers[2] = columnar_result->body_buffer;
+	}
+	else
+	{
+		Assert(columnar_result->type > 0);
+
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 2 * sizeof(void *));
+		arrow_result->buffers = (void *) &arrow_result[1];
+		arrow_result->buffers[1] = columnar_result->body_buffer;
+	}
+	arrow_result->length = nrows;
+
+	arrow_result->buffers[0] = columnar_result->validity;
+	arrow_result->null_count =
+		arrow_result->length - arrow_num_valid(arrow_result->buffers[0], nrows);
+
+	//	fprintf(stderr, "length %ld, null count %ld\n", arrow_result->length,
+	// arrow_result->null_count);
+
+	(void) columnar_result_return;
+
+	CompressedColumnValues result = {
+		.decompression_type = columnar_result->type,
+		.buffers = { arrow_result->buffers[0],
+					 arrow_result->buffers[1],
+					 columnar_result->type == DT_ArrowText ? arrow_result->buffers[2] : NULL },
+		.arrow = arrow_result,
+	};
+	return result;
+}
+
 static CompressedColumnValues
 vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 							  uint64 const *filter, List *args, Oid funcoid, Oid inputcollid)
@@ -318,7 +524,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	 * Our functions are strict so we handle validity separately.
 	 */
 	const size_t num_validity_words = (nrows + 63) / 64;
-	uint64 const *input_validity = NULL;
+	uint64 *input_validity = NULL;
 	if (have_null_bitmap || filter != NULL)
 	{
 		uint64 *restrict combined_validity =
@@ -333,55 +539,16 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 		input_validity = combined_validity;
 	}
 
-	uint64 *restrict result_validity = NULL;
+	ColumnarResult columnar_result_storage = { 0 };
+	ColumnarResult *columnar_result = &columnar_result_storage;
 
-	Oid rettype = get_func_rettype(funcoid);
-	int16 rettyplen;
-	bool rettypbyval;
-	get_typlenbyval(rettype, &rettyplen, &rettypbyval);
-	DecompressionType arrow_result_type = DT_Invalid;
-	if (rettype == BOOLOID)
-	{
-		arrow_result_type = DT_ArrowBits;
-	}
-	else if (rettyplen == -1)
-	{
-		arrow_result_type = DT_ArrowText;
-	}
-	else
-	{
-		Assert(rettyplen > 0);
-		arrow_result_type = rettyplen;
-	}
-
-	void *restrict result_buffer_1 = NULL;
-	uint8 *restrict body_buffer = NULL;
-	uint32 *restrict offset_buffer = NULL;
-	uint32 current_offset = 0;
-	int allocated_body_bytes = pad_to_multiple(64, 10);
-	if (arrow_result_type == DT_ArrowBits)
-	{
-		result_buffer_1 = MemoryContextAllocZero(batch_state->per_batch_context,
-												 sizeof(uint64) * num_validity_words);
-	}
-	else if (arrow_result_type == DT_ArrowText)
-	{
-		offset_buffer = MemoryContextAllocZero(batch_state->per_batch_context,
-											   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1)));
-		body_buffer = MemoryContextAllocZero(batch_state->per_batch_context, allocated_body_bytes);
-	}
-	else
-	{
-		Assert(arrow_result_type > 0);
-		result_buffer_1 = MemoryContextAllocZero(batch_state->per_batch_context,
-												 pad_to_multiple(64, arrow_result_type * nrows));
-	}
+	columnar_result_init_for_type(columnar_result, batch_state, get_func_rettype(funcoid));
 
 	for (int row = 0; row < nrows; row++)
 	{
-		if (arrow_result_type == DT_ArrowText)
+		if (columnar_result->type == DT_ArrowText)
 		{
-			offset_buffer[row] = current_offset;
+			columnar_result->offset_buffer[row] = columnar_result->current_offset;
 		}
 
 		if (!arrow_row_is_valid(input_validity, row))
@@ -391,141 +558,28 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 
 		compressed_columns_to_postgres_data(arg_values, nargs, row);
 
-		Datum result = FunctionCallInvoke(fcinfo);
+		Datum datum = FunctionCallInvoke(fcinfo);
+		bool isnull = fcinfo->isnull;
+
+		columnar_result_set_row(columnar_result, batch_state, row, datum, isnull);
 
 		//		fprintf(stderr, "[%d]: %ld %d\n", i, result, fcinfo->isnull);
-
-		if (fcinfo->isnull)
-		{
-			/*
-			 * A strict function can still return a null for a non-null
-			 * argument.
-			 */
-			if (result_validity == NULL)
-			{
-				result_validity = MemoryContextAlloc(batch_state->per_batch_context,
-													 num_validity_words * sizeof(*result_validity));
-				memset(result_validity, -1, num_validity_words * sizeof(*result_validity));
-				const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
-				result_validity[nrows / 64] &= tail_mask;
-			}
-
-			arrow_set_row_validity(result_validity, row, false);
-
-			continue;
-		}
-
-		switch ((int) arrow_result_type)
-		{
-			case DT_ArrowBits:
-			{
-				arrow_set_row_validity(result_buffer_1, row, DatumGetBool(result));
-				break;
-			}
-			case DT_ArrowText:
-			{
-				const int result_bytes = VARSIZE_ANY_EXHDR(result);
-				const int required_body_bytes = pad_to_multiple(64, current_offset + result_bytes);
-				if (required_body_bytes > allocated_body_bytes)
-				{
-					const int new_body_bytes =
-						required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) row + 1))) +
-						1;
-					//				fprintf(stderr,
-					//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
-					//						new_body_bytes,
-					//						new_body_bytes / (float) required_body_bytes,
-					//						i,
-					//						nrows);
-					Assert(new_body_bytes >= required_body_bytes);
-					body_buffer = repalloc(body_buffer, new_body_bytes);
-					allocated_body_bytes = new_body_bytes;
-				}
-
-				offset_buffer[row] = current_offset;
-				memcpy(&body_buffer[current_offset], VARDATA_ANY(result), result_bytes);
-				current_offset += result_bytes;
-				break;
-			}
-			case 2:
-			case 4:
-#ifdef USE_FLOAT8_BYVAL
-			case 8:
-#endif
-				memcpy(row * arrow_result_type + (uint8 *restrict) result_buffer_1,
-					   &result,
-					   sizeof(Datum));
-				break;
-#ifndef USE_FLOAT8_BYVAL
-			case 8:
-#endif
-			case 16:
-				Assert(!rettypbyval);
-				memcpy(row * arrow_result_type + (uint8 *restrict) result_buffer_1,
-					   DatumGetPointer(result),
-					   arrow_result_type);
-				break;
-			default:
-				elog(ERROR, "wrong arrow result type %d", arrow_result_type);
-		}
 	}
-
-	ArrowArray *arrow_result = NULL;
-	if (arrow_result_type == DT_ArrowBits)
-	{
-		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
-											  sizeof(ArrowArray) + 2 * sizeof(void *));
-		arrow_result->buffers = (void *) &arrow_result[1];
-		arrow_result->buffers[1] = result_buffer_1;
-	}
-	else if (arrow_result_type == DT_ArrowText)
-	{
-		offset_buffer[nrows] = current_offset;
-
-		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
-											  sizeof(ArrowArray) + 3 * sizeof(void *));
-		arrow_result->buffers = (void *) &arrow_result[1];
-		arrow_result->buffers[1] = offset_buffer;
-		arrow_result->buffers[2] = body_buffer;
-	}
-	else
-	{
-		Assert(arrow_result_type > 0);
-
-		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
-											  sizeof(ArrowArray) + 2 * sizeof(void *));
-		arrow_result->buffers = (void *) &arrow_result[1];
-		arrow_result->buffers[1] = result_buffer_1;
-	}
-	arrow_result->length = nrows;
 
 	/*
 	 * Figure out the nullability of the result. Besides the null inputs, we
 	 * have to AND a separate bitmap if the function returned nulls for some rows.
 	 */
-	if (result_validity != NULL)
+	if (columnar_result->validity != NULL)
 	{
-		arrow_result->buffers[0] = result_validity;
-		arrow_validity_and(num_validity_words, result_validity, input_validity);
+		arrow_validity_and(num_validity_words, columnar_result->validity, input_validity);
 	}
 	else
 	{
-		arrow_result->buffers[0] = input_validity;
+		columnar_result->validity = (uint64 *) input_validity;
 	}
-	arrow_result->null_count =
-		arrow_result->length - arrow_num_valid(arrow_result->buffers[0], nrows);
 
-	//	fprintf(stderr, "length %ld, null count %ld\n", arrow_result->length,
-	// arrow_result->null_count);
-
-	CompressedColumnValues result = {
-		.decompression_type = arrow_result_type,
-		.buffers = { arrow_result->buffers[0],
-					 arrow_result->buffers[1],
-					 arrow_result_type == DT_ArrowText ? arrow_result->buffers[2] : NULL },
-		.arrow = arrow_result,
-	};
-	return result;
+	return columnar_result_return(columnar_result, batch_state);
 }
 
 static CompressedColumnValues
@@ -587,8 +641,9 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 		}
 		else
 		{
-			branch_values[i] = (CompressedColumnValues){ .decompression_type = DT_Scalar };
-			branch_values[i].output_isnull = &tmp_branch_null_storage;
+			branch_values[i] =
+				(CompressedColumnValues){ .decompression_type = DT_Scalar,
+										  .output_isnull = &tmp_branch_null_storage };
 		}
 
 		if (branch_values[i].decompression_type == DT_Invalid)
@@ -628,54 +683,15 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 	Ensure(type_class == TYPEFUNC_SCALAR,
 		   "unexpected type class %d for case expression",
 		   type_class);
-	int16 rettyplen;
-	bool rettypbyval;
-	get_typlenbyval(rettype, &rettyplen, &rettypbyval);
 
-	DecompressionType arrow_result_type = DT_Invalid;
-	if (rettype == BOOLOID)
-	{
-		arrow_result_type = DT_ArrowBits;
-	}
-	else if (rettyplen == -1)
-	{
-		arrow_result_type = DT_ArrowText;
-	}
-	else
-	{
-		Assert(rettyplen > 0);
-		arrow_result_type = rettyplen;
-	}
-
-	uint64 *restrict result_validity = NULL;
-	void *restrict result_buffer_1 = NULL;
-	uint8 *restrict body_buffer = NULL;
-	uint32 *restrict offset_buffer = NULL;
-	uint32 current_offset = 0;
-	int allocated_body_bytes = pad_to_multiple(64, 10);
-	if (arrow_result_type == DT_ArrowBits)
-	{
-		result_buffer_1 = MemoryContextAllocZero(batch_state->per_batch_context,
-												 sizeof(uint64) * num_validity_words);
-	}
-	else if (arrow_result_type == DT_ArrowText)
-	{
-		offset_buffer = MemoryContextAllocZero(batch_state->per_batch_context,
-											   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1)));
-		body_buffer = MemoryContextAllocZero(batch_state->per_batch_context, allocated_body_bytes);
-	}
-	else
-	{
-		Assert(arrow_result_type > 0);
-		result_buffer_1 = MemoryContextAllocZero(batch_state->per_batch_context,
-												 pad_to_multiple(64, arrow_result_type * nrows));
-	}
+	ColumnarResult columnar_result = { 0 };
+	columnar_result_init_for_type(&columnar_result, batch_state, rettype);
 
 	for (int row = 0; row < nrows; row++)
 	{
-		if (arrow_result_type == DT_ArrowText)
+		if (columnar_result.type == DT_ArrowText)
 		{
-			offset_buffer[row] = current_offset;
+			columnar_result.offset_buffer[row] = columnar_result.current_offset;
 		}
 
 		if (!arrow_row_is_valid(top_filter, row))
@@ -699,136 +715,19 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 		Datum result = *branch_values[branch_index].output_value;
 		bool isnull = *branch_values[branch_index].output_isnull;
 
-		//		fprintf(stderr, "[%d]: %ld %d\n", row, result, isnull);
-
-		if (isnull)
-		{
-			/*
-			 * A strict function can still return a null for a non-null
-			 * argument.
-			 */
-			if (result_validity == NULL)
-			{
-				result_validity = MemoryContextAlloc(batch_state->per_batch_context,
-													 num_validity_words * sizeof(*result_validity));
-				memset(result_validity, -1, num_validity_words * sizeof(*result_validity));
-				const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
-				result_validity[nrows / 64] &= tail_mask;
-			}
-
-			arrow_set_row_validity(result_validity, row, false);
-
-			continue;
-		}
-
-		switch ((int) arrow_result_type)
-		{
-			case DT_ArrowBits:
-			{
-				arrow_set_row_validity(result_buffer_1, row, DatumGetBool(result));
-				break;
-			}
-			case DT_ArrowText:
-			{
-				const int result_bytes = VARSIZE_ANY_EXHDR(result);
-				const int required_body_bytes = pad_to_multiple(64, current_offset + result_bytes);
-				if (required_body_bytes > allocated_body_bytes)
-				{
-					const int new_body_bytes =
-						required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) row + 1))) +
-						1;
-					//				fprintf(stderr,
-					//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
-					//						new_body_bytes,
-					//						new_body_bytes / (float) required_body_bytes,
-					//						i,
-					//						nrows);
-					Assert(new_body_bytes >= required_body_bytes);
-					body_buffer = repalloc(body_buffer, new_body_bytes);
-					allocated_body_bytes = new_body_bytes;
-				}
-
-				offset_buffer[row] = current_offset;
-				memcpy(&body_buffer[current_offset], VARDATA_ANY(result), result_bytes);
-				current_offset += result_bytes;
-				break;
-			}
-			case 2:
-			case 4:
-#ifdef USE_FLOAT8_BYVAL
-			case 8:
-#endif
-				memcpy(row * arrow_result_type + (uint8 *restrict) result_buffer_1,
-					   &result,
-					   sizeof(Datum));
-				break;
-#ifndef USE_FLOAT8_BYVAL
-			case 8:
-#endif
-			case 16:
-				Assert(!rettypbyval);
-				memcpy(row * arrow_result_type + (uint8 *restrict) result_buffer_1,
-					   DatumGetPointer(result),
-					   arrow_result_type);
-				break;
-			default:
-				elog(ERROR, "wrong arrow result type %d", arrow_result_type);
-		}
+		columnar_result_set_row(&columnar_result, batch_state, row, result, isnull);
 	}
 
-	ArrowArray *arrow_result = NULL;
-	if (arrow_result_type == DT_ArrowBits)
+	if (columnar_result.validity != NULL)
 	{
-		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
-											  sizeof(ArrowArray) + 2 * sizeof(void *));
-		arrow_result->buffers = (void *) &arrow_result[1];
-		arrow_result->buffers[1] = result_buffer_1;
-	}
-	else if (arrow_result_type == DT_ArrowText)
-	{
-		offset_buffer[nrows] = current_offset;
-
-		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
-											  sizeof(ArrowArray) + 3 * sizeof(void *));
-		arrow_result->buffers = (void *) &arrow_result[1];
-		arrow_result->buffers[1] = offset_buffer;
-		arrow_result->buffers[2] = body_buffer;
+		arrow_validity_and(num_validity_words, columnar_result.validity, top_filter);
 	}
 	else
 	{
-		Assert(arrow_result_type > 0);
-
-		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
-											  sizeof(ArrowArray) + 2 * sizeof(void *));
-		arrow_result->buffers = (void *) &arrow_result[1];
-		arrow_result->buffers[1] = result_buffer_1;
-	}
-	arrow_result->length = nrows;
-
-	if (result_validity != NULL)
-	{
-		arrow_validity_and(num_validity_words, result_validity, top_filter);
-		arrow_result->buffers[0] = result_validity;
-	}
-	else
-	{
-		arrow_result->buffers[0] = top_filter;
+		columnar_result.validity = (uint64 *) top_filter;
 	}
 
-	arrow_result->null_count =
-		arrow_result->length - arrow_num_valid(arrow_result->buffers[0], nrows);
-
-	//	fprintf(stderr, "length %ld, null count %ld\n", arrow_result->length,
-	// arrow_result->null_count);
-
-	CompressedColumnValues result = {
-		.decompression_type = arrow_result_type,
-		.buffers = { arrow_result->buffers[0],
-					 arrow_result->buffers[1],
-					 arrow_result_type == DT_ArrowText ? arrow_result->buffers[2] : NULL },
-		.arrow = arrow_result,
-	};
-	return result;
+	return columnar_result_return(&columnar_result, batch_state);
 }
 
 /*
