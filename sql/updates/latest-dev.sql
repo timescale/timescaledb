@@ -206,3 +206,5 @@ DROP PROCEDURE IF EXISTS _timescaledb_functions.process_hypertable_invalidations
 -- Remove orphaned entries in materialization ranges table
 DELETE FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
 WHERE NOT EXISTS (SELECT FROM _timescaledb_catalog.continuous_agg WHERE mat_hypertable_id = materialization_id);
+
+DROP FUNCTION IF EXISTS @extschema@.drop_chunks;

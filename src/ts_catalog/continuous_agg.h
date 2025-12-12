@@ -198,3 +198,4 @@ ts_continuous_agg_fixed_bucket_width(const ContinuousAggBucketFunction *bucket_f
 extern TSDLLEXPORT int64
 ts_continuous_agg_bucket_width(const ContinuousAggBucketFunction *bucket_function);
 extern TSDLLEXPORT void ts_get_invalidation_replication_slot_name(char *slotname, Size szslot);
+extern TSDLLEXPORT int64 ts_get_earliest_watermark_on_hypertable(int32 hypertable_id);

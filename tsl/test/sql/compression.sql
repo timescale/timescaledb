@@ -681,7 +681,7 @@ DROP TABLE approx_count;
 --TEST drop_chunks from a compressed hypertable (that has caggs defined).
 -- chunk metadata is still retained. verify correct status for chunk
 SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
-SELECT drop_chunks('metrics', older_than=>'1 day'::interval);
+SELECT drop_chunks('metrics', older_than=>'1 day'::interval, force=>true);
 SELECT
    c.table_name as chunk_name,
    c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id

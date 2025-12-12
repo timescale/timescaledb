@@ -130,8 +130,11 @@ chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type, boo
 										 TypeNullCons,
 										 castNode(Const, makeBoolConst(false, true)),
 										 TypeNullCons,
-										 TypeNullCons };
-	Oid type_id[DROP_CHUNKS_NARGS] = { REGCLASSOID, ANYOID, ANYOID, BOOLOID, ANYOID, ANYOID };
+										 TypeNullCons,
+										 castNode(Const, makeBoolConst(false, true)) };
+	Oid type_id[DROP_CHUNKS_NARGS] = {
+		REGCLASSOID, ANYOID, ANYOID, BOOLOID, ANYOID, ANYOID, BOOLOID
+	};
 	char *const schema_name = ts_extension_schema_name();
 	List *const fqn = list_make2(makeString(schema_name), makeString(DROP_CHUNKS_FUNCNAME));
 

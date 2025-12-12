@@ -281,3 +281,736 @@ SELECT * FROM conditions_2 ORDER BY bucket;
      18 |   5 |     2
 
 DROP PROCEDURE refresh_cagg_by_chunk_range(REGCLASS, REGCLASS, INTEGER);
+--
+-- Test drop_chunks with continuous aggregates and watermark protection
+--
+CREATE TABLE sensor_data (
+    time TIMESTAMPTZ NOT NULL,
+    sensor_id INTEGER NOT NULL,
+    temperature DOUBLE PRECISION,
+    humidity DOUBLE PRECISION,
+    pressure DOUBLE PRECISION
+);
+SELECT create_hypertable('sensor_data', 'time',
+    chunk_time_interval => INTERVAL '1 day'
+);
+    create_hypertable     
+--------------------------
+ (5,public,sensor_data,t)
+
+INSERT INTO sensor_data
+SELECT
+    timestamp '2024-01-01' + (i * INTERVAL '4 hours') AS time,
+    (i % 5) + 1 AS sensor_id,
+    15 + 15 * random() AS temperature,
+    30 + 60 * random() AS humidity,
+    980 + 40 * random() AS pressure
+FROM generate_series(0, 25) AS i;
+CREATE MATERIALIZED VIEW sensor_hourly_avg
+WITH (timescaledb.continuous) AS
+SELECT
+    time_bucket('1 hour', time) AS bucket,
+    sensor_id,
+    AVG(temperature) AS avg_temperature,
+    AVG(humidity) AS avg_humidity,
+    AVG(pressure) AS avg_pressure,
+    COUNT(*) AS reading_count
+FROM sensor_data
+GROUP BY bucket, sensor_id
+WITH NO DATA;
+-- Checks range start and end for chunks
+SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data'
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_5_71_chunk | Sun Dec 31 16:00:00 2023 PST | Mon Jan 01 16:00:00 2024 PST
+ _hyper_5_72_chunk | Mon Jan 01 16:00:00 2024 PST | Tue Jan 02 16:00:00 2024 PST
+ _hyper_5_73_chunk | Tue Jan 02 16:00:00 2024 PST | Wed Jan 03 16:00:00 2024 PST
+ _hyper_5_74_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 16:00:00 2024 PST
+ _hyper_5_75_chunk | Thu Jan 04 16:00:00 2024 PST | Fri Jan 05 16:00:00 2024 PST
+
+-- Completely refresh the aggregate
+CALL refresh_continuous_aggregate('sensor_hourly_avg', NULL, NULL);
+SELECT count(*) AS ht_before FROM show_chunks('sensor_data');
+ ht_before 
+-----------
+         5
+
+-- Insert more data after the CAgg watermark
+INSERT INTO sensor_data
+SELECT
+    timestamp '2024-02-01' + (i * INTERVAL '4 hours') AS time,
+    (i % 5) + 1 AS sensor_id,
+    15 + 15 * random() AS temperature,
+    30 + 60 * random() AS humidity,
+    980 + 40 * random() AS pressure
+FROM generate_series(0, 25) AS i;
+-- View ranges before drop chunks
+SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data'
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_5_71_chunk | Sun Dec 31 16:00:00 2023 PST | Mon Jan 01 16:00:00 2024 PST
+ _hyper_5_72_chunk | Mon Jan 01 16:00:00 2024 PST | Tue Jan 02 16:00:00 2024 PST
+ _hyper_5_73_chunk | Tue Jan 02 16:00:00 2024 PST | Wed Jan 03 16:00:00 2024 PST
+ _hyper_5_74_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 16:00:00 2024 PST
+ _hyper_5_75_chunk | Thu Jan 04 16:00:00 2024 PST | Fri Jan 05 16:00:00 2024 PST
+ _hyper_5_77_chunk | Wed Jan 31 16:00:00 2024 PST | Thu Feb 01 16:00:00 2024 PST
+ _hyper_5_78_chunk | Thu Feb 01 16:00:00 2024 PST | Fri Feb 02 16:00:00 2024 PST
+ _hyper_5_79_chunk | Fri Feb 02 16:00:00 2024 PST | Sat Feb 03 16:00:00 2024 PST
+ _hyper_5_80_chunk | Sat Feb 03 16:00:00 2024 PST | Sun Feb 04 16:00:00 2024 PST
+ _hyper_5_81_chunk | Sun Feb 04 16:00:00 2024 PST | Mon Feb 05 16:00:00 2024 PST
+
+-- Verify watermark
+SELECT h.id AS mat_hypertable_id
+  FROM _timescaledb_catalog.continuous_agg ca
+  JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
+  WHERE ca.user_view_name = 'sensor_hourly_avg' \gset
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id));
+         to_timestamp         
+------------------------------
+ Fri Jan 05 05:00:00 2024 PST
+
+\set VERBOSITY terse
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_data', newer_than => '2023-12-31 17:00:00-07'::timestamp with time zone);
+NOTICE:  skipping _timescaledb_internal._hyper_5_75_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_77_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_78_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_79_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_80_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_81_chunk, chunk contains data required for a continuous aggregate refresh
+ dropped_count 
+---------------
+             4
+
+SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data'
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_5_75_chunk | Thu Jan 04 16:00:00 2024 PST | Fri Jan 05 16:00:00 2024 PST
+ _hyper_5_77_chunk | Wed Jan 31 16:00:00 2024 PST | Thu Feb 01 16:00:00 2024 PST
+ _hyper_5_78_chunk | Thu Feb 01 16:00:00 2024 PST | Fri Feb 02 16:00:00 2024 PST
+ _hyper_5_79_chunk | Fri Feb 02 16:00:00 2024 PST | Sat Feb 03 16:00:00 2024 PST
+ _hyper_5_80_chunk | Sat Feb 03 16:00:00 2024 PST | Sun Feb 04 16:00:00 2024 PST
+ _hyper_5_81_chunk | Sun Feb 04 16:00:00 2024 PST | Mon Feb 05 16:00:00 2024 PST
+
+ROLLBACK;
+-- Chunk with unrefreshed data can be dropped directly using DROP TABLE ...
+BEGIN;
+SELECT format('%I.%I', chunk_schema, chunk_name) AS chunk_to_drop
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data'
+  ORDER BY range_start LIMIT 1 \gset
+SELECT :'chunk_to_drop' AS dropped_chunk;
+              dropped_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_5_71_chunk
+
+DROP TABLE :chunk_to_drop;
+SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data'
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_5_72_chunk | Mon Jan 01 16:00:00 2024 PST | Tue Jan 02 16:00:00 2024 PST
+ _hyper_5_73_chunk | Tue Jan 02 16:00:00 2024 PST | Wed Jan 03 16:00:00 2024 PST
+ _hyper_5_74_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 16:00:00 2024 PST
+ _hyper_5_75_chunk | Thu Jan 04 16:00:00 2024 PST | Fri Jan 05 16:00:00 2024 PST
+ _hyper_5_77_chunk | Wed Jan 31 16:00:00 2024 PST | Thu Feb 01 16:00:00 2024 PST
+ _hyper_5_78_chunk | Thu Feb 01 16:00:00 2024 PST | Fri Feb 02 16:00:00 2024 PST
+ _hyper_5_79_chunk | Fri Feb 02 16:00:00 2024 PST | Sat Feb 03 16:00:00 2024 PST
+ _hyper_5_80_chunk | Sat Feb 03 16:00:00 2024 PST | Sun Feb 04 16:00:00 2024 PST
+ _hyper_5_81_chunk | Sun Feb 04 16:00:00 2024 PST | Mon Feb 05 16:00:00 2024 PST
+
+ROLLBACK;
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_data', older_than => '2024-02-05 17:00:00-07'::timestamp with time zone);
+NOTICE:  skipping _timescaledb_internal._hyper_5_75_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_77_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_78_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_79_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_80_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_81_chunk, chunk contains data required for a continuous aggregate refresh
+ dropped_count 
+---------------
+             4
+
+SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data'
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_5_75_chunk | Thu Jan 04 16:00:00 2024 PST | Fri Jan 05 16:00:00 2024 PST
+ _hyper_5_77_chunk | Wed Jan 31 16:00:00 2024 PST | Thu Feb 01 16:00:00 2024 PST
+ _hyper_5_78_chunk | Thu Feb 01 16:00:00 2024 PST | Fri Feb 02 16:00:00 2024 PST
+ _hyper_5_79_chunk | Fri Feb 02 16:00:00 2024 PST | Sat Feb 03 16:00:00 2024 PST
+ _hyper_5_80_chunk | Sat Feb 03 16:00:00 2024 PST | Sun Feb 04 16:00:00 2024 PST
+ _hyper_5_81_chunk | Sun Feb 04 16:00:00 2024 PST | Mon Feb 05 16:00:00 2024 PST
+
+ROLLBACK;
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_data', newer_than => '2024-01-02 17:00:00-07'::timestamp with time zone, older_than => '2024-02-02 17:00:00-07'::timestamp with time zone);
+NOTICE:  skipping _timescaledb_internal._hyper_5_75_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_77_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_78_chunk, chunk contains data required for a continuous aggregate refresh
+ dropped_count 
+---------------
+             2
+
+SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data'
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_5_71_chunk | Sun Dec 31 16:00:00 2023 PST | Mon Jan 01 16:00:00 2024 PST
+ _hyper_5_72_chunk | Mon Jan 01 16:00:00 2024 PST | Tue Jan 02 16:00:00 2024 PST
+ _hyper_5_75_chunk | Thu Jan 04 16:00:00 2024 PST | Fri Jan 05 16:00:00 2024 PST
+ _hyper_5_77_chunk | Wed Jan 31 16:00:00 2024 PST | Thu Feb 01 16:00:00 2024 PST
+ _hyper_5_78_chunk | Thu Feb 01 16:00:00 2024 PST | Fri Feb 02 16:00:00 2024 PST
+ _hyper_5_79_chunk | Fri Feb 02 16:00:00 2024 PST | Sat Feb 03 16:00:00 2024 PST
+ _hyper_5_80_chunk | Sat Feb 03 16:00:00 2024 PST | Sun Feb 04 16:00:00 2024 PST
+ _hyper_5_81_chunk | Sun Feb 04 16:00:00 2024 PST | Mon Feb 05 16:00:00 2024 PST
+
+ROLLBACK;
+-- Test force option
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_data', newer_than => '2023-01-05 17:00:00-07'::timestamp with time zone, force => true);
+WARNING:  _timescaledb_internal._hyper_5_75_chunk contained data required for continuous aggregate refresh
+WARNING:  _timescaledb_internal._hyper_5_77_chunk contained data required for continuous aggregate refresh
+WARNING:  _timescaledb_internal._hyper_5_78_chunk contained data required for continuous aggregate refresh
+WARNING:  _timescaledb_internal._hyper_5_79_chunk contained data required for continuous aggregate refresh
+WARNING:  _timescaledb_internal._hyper_5_80_chunk contained data required for continuous aggregate refresh
+WARNING:  _timescaledb_internal._hyper_5_81_chunk contained data required for continuous aggregate refresh
+ dropped_count 
+---------------
+            10
+
+SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data'
+  ORDER BY range_start;
+ chunk_name | range_start | range_end 
+------------+-------------+-----------
+
+ROLLBACK;
+\set VERBOSITY default
+--
+-- Test with multiple continuous aggregates to verify earliest watermark is used
+--
+-- Create a second continuous aggregate on the same hypertable (NOT hierarchical cagg)
+CREATE MATERIALIZED VIEW sensor_daily_avg
+WITH (timescaledb.continuous) AS
+SELECT
+    time_bucket('1 day', time) AS bucket,
+    sensor_id,
+    AVG(temperature) AS avg_temperature,
+    AVG(humidity) AS avg_humidity,
+    AVG(pressure) AS avg_pressure,
+    COUNT(*) AS reading_count
+FROM sensor_data
+GROUP BY bucket, sensor_id
+WITH NO DATA;
+-- Refresh the second aggregate partially to a different point
+CALL refresh_continuous_aggregate('sensor_daily_avg', '2024-01-01', '2024-01-03');
+SELECT h.id AS mat_hypertable_id_daily
+  FROM _timescaledb_catalog.continuous_agg ca
+  JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
+  WHERE ca.user_view_name = 'sensor_daily_avg' \gset
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS hourly_watermark;
+       hourly_watermark       
+------------------------------
+ Fri Jan 05 05:00:00 2024 PST
+
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id_daily)) AS daily_watermark;
+       daily_watermark        
+------------------------------
+ Tue Jan 02 16:00:00 2024 PST
+
+\set VERBOSITY terse
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_data', older_than => '2024-02-05 17:00:00-07'::timestamp with time zone);
+NOTICE:  skipping _timescaledb_internal._hyper_5_73_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_74_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_75_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_77_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_78_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_79_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_80_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_81_chunk, chunk contains data required for a continuous aggregate refresh
+ dropped_count 
+---------------
+             2
+
+SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data'
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_5_73_chunk | Tue Jan 02 16:00:00 2024 PST | Wed Jan 03 16:00:00 2024 PST
+ _hyper_5_74_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 16:00:00 2024 PST
+ _hyper_5_75_chunk | Thu Jan 04 16:00:00 2024 PST | Fri Jan 05 16:00:00 2024 PST
+ _hyper_5_77_chunk | Wed Jan 31 16:00:00 2024 PST | Thu Feb 01 16:00:00 2024 PST
+ _hyper_5_78_chunk | Thu Feb 01 16:00:00 2024 PST | Fri Feb 02 16:00:00 2024 PST
+ _hyper_5_79_chunk | Fri Feb 02 16:00:00 2024 PST | Sat Feb 03 16:00:00 2024 PST
+ _hyper_5_80_chunk | Sat Feb 03 16:00:00 2024 PST | Sun Feb 04 16:00:00 2024 PST
+ _hyper_5_81_chunk | Sun Feb 04 16:00:00 2024 PST | Mon Feb 05 16:00:00 2024 PST
+
+ROLLBACK;
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_data', newer_than => '2024-01-01 17:00:00-07'::timestamp with time zone, older_than => '2024-02-02 17:00:00-07'::timestamp with time zone);
+NOTICE:  skipping _timescaledb_internal._hyper_5_73_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_74_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_75_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_77_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_78_chunk, chunk contains data required for a continuous aggregate refresh
+ dropped_count 
+---------------
+             1
+
+SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data'
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_5_71_chunk | Sun Dec 31 16:00:00 2023 PST | Mon Jan 01 16:00:00 2024 PST
+ _hyper_5_73_chunk | Tue Jan 02 16:00:00 2024 PST | Wed Jan 03 16:00:00 2024 PST
+ _hyper_5_74_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 16:00:00 2024 PST
+ _hyper_5_75_chunk | Thu Jan 04 16:00:00 2024 PST | Fri Jan 05 16:00:00 2024 PST
+ _hyper_5_77_chunk | Wed Jan 31 16:00:00 2024 PST | Thu Feb 01 16:00:00 2024 PST
+ _hyper_5_78_chunk | Thu Feb 01 16:00:00 2024 PST | Fri Feb 02 16:00:00 2024 PST
+ _hyper_5_79_chunk | Fri Feb 02 16:00:00 2024 PST | Sat Feb 03 16:00:00 2024 PST
+ _hyper_5_80_chunk | Sat Feb 03 16:00:00 2024 PST | Sun Feb 04 16:00:00 2024 PST
+ _hyper_5_81_chunk | Sun Feb 04 16:00:00 2024 PST | Mon Feb 05 16:00:00 2024 PST
+
+ROLLBACK;
+\set VERBOSITY default
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_data', newer_than => '2024-01-05 17:00:00-07'::timestamp with time zone, force => true);
+WARNING:  _timescaledb_internal._hyper_5_77_chunk contained data required for continuous aggregate refresh
+WARNING:  _timescaledb_internal._hyper_5_78_chunk contained data required for continuous aggregate refresh
+WARNING:  _timescaledb_internal._hyper_5_79_chunk contained data required for continuous aggregate refresh
+WARNING:  _timescaledb_internal._hyper_5_80_chunk contained data required for continuous aggregate refresh
+WARNING:  _timescaledb_internal._hyper_5_81_chunk contained data required for continuous aggregate refresh
+ dropped_count 
+---------------
+             5
+
+SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data'
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_5_71_chunk | Sun Dec 31 16:00:00 2023 PST | Mon Jan 01 16:00:00 2024 PST
+ _hyper_5_72_chunk | Mon Jan 01 16:00:00 2024 PST | Tue Jan 02 16:00:00 2024 PST
+ _hyper_5_73_chunk | Tue Jan 02 16:00:00 2024 PST | Wed Jan 03 16:00:00 2024 PST
+ _hyper_5_74_chunk | Wed Jan 03 16:00:00 2024 PST | Thu Jan 04 16:00:00 2024 PST
+ _hyper_5_75_chunk | Thu Jan 04 16:00:00 2024 PST | Fri Jan 05 16:00:00 2024 PST
+
+ROLLBACK;
+\set VERBOSITY default
+DROP MATERIALIZED VIEW sensor_daily_avg;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_82_chunk
+--
+-- Test with hierarchical continuous aggregate
+--
+-- Create hierarchical cagg
+CREATE MATERIALIZED VIEW sensor_daily_avg_hier
+WITH (timescaledb.continuous) AS
+SELECT
+    time_bucket('1 day', bucket) AS bucket,
+    sensor_id,
+    AVG(avg_temperature) AS avg_temperature,
+    AVG(avg_humidity) AS avg_humidity,
+    AVG(avg_pressure) AS avg_pressure,
+    SUM(reading_count) AS reading_count
+FROM sensor_hourly_avg
+GROUP BY time_bucket('1 day', bucket), sensor_id
+WITH NO DATA;
+-- Refresh the hierarchical aggregate partially
+CALL refresh_continuous_aggregate('sensor_daily_avg_hier', NULL, '2024-01-03');
+-- Verify watermarks
+SELECT h.id AS mat_hypertable_id_daily_hier
+  FROM _timescaledb_catalog.continuous_agg ca
+  JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
+  WHERE ca.user_view_name = 'sensor_daily_avg_hier' \gset
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS hourly_watermark;
+       hourly_watermark       
+------------------------------
+ Fri Jan 05 05:00:00 2024 PST
+
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id_daily_hier)) AS daily_hierarchical_watermark;
+ daily_hierarchical_watermark 
+------------------------------
+ Tue Jan 02 16:00:00 2024 PST
+
+\set VERBOSITY terse
+BEGIN;
+-- With hierarchical cagg, drop_chunks should still use the earliest watermark from the raw hypertable's caggs
+-- The hierarchical cagg watermark should not affect raw hypertable chunk retention
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_data', older_than => '2024-02-05 17:00:00-07'::timestamp with time zone);
+NOTICE:  skipping _timescaledb_internal._hyper_5_75_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_77_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_78_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_79_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_80_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_81_chunk, chunk contains data required for a continuous aggregate refresh
+ dropped_count 
+---------------
+             4
+
+SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data'
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_5_75_chunk | Thu Jan 04 16:00:00 2024 PST | Fri Jan 05 16:00:00 2024 PST
+ _hyper_5_77_chunk | Wed Jan 31 16:00:00 2024 PST | Thu Feb 01 16:00:00 2024 PST
+ _hyper_5_78_chunk | Thu Feb 01 16:00:00 2024 PST | Fri Feb 02 16:00:00 2024 PST
+ _hyper_5_79_chunk | Fri Feb 02 16:00:00 2024 PST | Sat Feb 03 16:00:00 2024 PST
+ _hyper_5_80_chunk | Sat Feb 03 16:00:00 2024 PST | Sun Feb 04 16:00:00 2024 PST
+ _hyper_5_81_chunk | Sun Feb 04 16:00:00 2024 PST | Mon Feb 05 16:00:00 2024 PST
+
+ROLLBACK;
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_data', newer_than => '2024-01-01 17:00:00-07'::timestamp with time zone, older_than => '2024-02-02 17:00:00-07'::timestamp with time zone);
+NOTICE:  skipping _timescaledb_internal._hyper_5_75_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_77_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_5_78_chunk, chunk contains data required for a continuous aggregate refresh
+ dropped_count 
+---------------
+             3
+
+SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data'
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_5_71_chunk | Sun Dec 31 16:00:00 2023 PST | Mon Jan 01 16:00:00 2024 PST
+ _hyper_5_75_chunk | Thu Jan 04 16:00:00 2024 PST | Fri Jan 05 16:00:00 2024 PST
+ _hyper_5_77_chunk | Wed Jan 31 16:00:00 2024 PST | Thu Feb 01 16:00:00 2024 PST
+ _hyper_5_78_chunk | Thu Feb 01 16:00:00 2024 PST | Fri Feb 02 16:00:00 2024 PST
+ _hyper_5_79_chunk | Fri Feb 02 16:00:00 2024 PST | Sat Feb 03 16:00:00 2024 PST
+ _hyper_5_80_chunk | Sat Feb 03 16:00:00 2024 PST | Sun Feb 04 16:00:00 2024 PST
+ _hyper_5_81_chunk | Sun Feb 04 16:00:00 2024 PST | Mon Feb 05 16:00:00 2024 PST
+
+ROLLBACK;
+\set VERBOSITY default
+-- Try drop_chunks on base cagg in the case of hierarchical caggs
+-- Here, the watermark of the hierarchical CAgg matters but the base CAgg watermark shouldn't affect it
+CALL refresh_continuous_aggregate('sensor_hourly_avg', NULL, NULL);
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS hourly_watermark;
+       hourly_watermark       
+------------------------------
+ Mon Feb 05 05:00:00 2024 PST
+
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id_daily_hier)) AS daily_hierarchical_watermark;
+ daily_hierarchical_watermark 
+------------------------------
+ Tue Jan 02 16:00:00 2024 PST
+
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_hourly_avg', older_than => '2024-01-10 17:00:00-07'::timestamp with time zone);
+NOTICE:  skipping _timescaledb_internal._hyper_6_76_chunk, chunk contains data required for a continuous aggregate refresh
+HINT:  To drop this chunk, refresh all continuous aggregates on this hypertable till Sun Jan 07 16:00:00 2024 PST, or specify force=>true
+ dropped_count 
+---------------
+             0
+
+ SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = (
+      SELECT h.table_name
+      FROM _timescaledb_catalog.continuous_agg ca
+      JOIN _timescaledb_catalog.hypertable h ON
+  h.id = ca.mat_hypertable_id
+      WHERE ca.user_view_name = 'sensor_hourly_avg'
+  )
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_6_76_chunk | Thu Dec 28 16:00:00 2023 PST | Sun Jan 07 16:00:00 2024 PST
+ _hyper_6_84_chunk | Sat Jan 27 16:00:00 2024 PST | Tue Feb 06 16:00:00 2024 PST
+
+ROLLBACK;
+-- Test force option
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_hourly_avg', older_than => '2024-01-10 17:00:00-07'::timestamp with time zone, force => true);
+WARNING:  _timescaledb_internal._hyper_6_76_chunk contained data required for continuous aggregate refresh
+ dropped_count 
+---------------
+             1
+
+ SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = (
+      SELECT h.table_name
+      FROM _timescaledb_catalog.continuous_agg ca
+      JOIN _timescaledb_catalog.hypertable h ON
+  h.id = ca.mat_hypertable_id
+      WHERE ca.user_view_name = 'sensor_hourly_avg'
+  )
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_6_84_chunk | Sat Jan 27 16:00:00 2024 PST | Tue Feb 06 16:00:00 2024 PST
+
+ROLLBACK;
+-- Refresh hierarchical cagg completely
+CALL refresh_continuous_aggregate('sensor_daily_avg_hier', NULL, NULL);
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id_daily_hier)) AS daily_hierarchical_watermark;
+ daily_hierarchical_watermark 
+------------------------------
+ Mon Feb 05 16:00:00 2024 PST
+
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_hourly_avg', older_than => '2024-01-10 17:00:00-07'::timestamp with time zone);
+ dropped_count 
+---------------
+             1
+
+ SELECT chunk_name, range_start, range_end
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = (
+      SELECT h.table_name
+      FROM _timescaledb_catalog.continuous_agg ca
+      JOIN _timescaledb_catalog.hypertable h ON
+  h.id = ca.mat_hypertable_id
+      WHERE ca.user_view_name = 'sensor_hourly_avg'
+  )
+  ORDER BY range_start;
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_6_84_chunk | Sat Jan 27 16:00:00 2024 PST | Tue Feb 06 16:00:00 2024 PST
+
+ROLLBACK;
+DROP MATERIALIZED VIEW sensor_daily_avg_hier;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to table _timescaledb_internal._hyper_8_83_chunk
+drop cascades to table _timescaledb_internal._hyper_8_85_chunk
+DROP MATERIALIZED VIEW sensor_hourly_avg;
+NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to table _timescaledb_internal._hyper_6_76_chunk
+drop cascades to table _timescaledb_internal._hyper_6_84_chunk
+DROP TABLE sensor_data;
+--
+-- Test drop_chunks with integer time continuous aggregates
+--
+CREATE OR REPLACE FUNCTION integer_now_sensor_data() returns INT LANGUAGE SQL STABLE as
+    $$ SELECT 150 $$;
+CREATE TABLE sensor_data_int (
+    time_int INT NOT NULL,
+    sensor_id INTEGER NOT NULL,
+    temperature DOUBLE PRECISION,
+    humidity DOUBLE PRECISION,
+    pressure DOUBLE PRECISION
+);
+SELECT create_hypertable('sensor_data_int', 'time_int',
+    chunk_time_interval => 10
+);
+      create_hypertable       
+------------------------------
+ (9,public,sensor_data_int,t)
+
+SELECT set_integer_now_func('sensor_data_int', 'integer_now_sensor_data');
+ set_integer_now_func 
+----------------------
+ 
+
+INSERT INTO sensor_data_int
+SELECT
+    i AS time_int,
+    (i % 5) + 1 AS sensor_id,
+    15 + 15 * random() AS temperature,
+    30 + 60 * random() AS humidity,
+    980 + 40 * random() AS pressure
+FROM generate_series(0, 99, 4) AS i;
+CREATE MATERIALIZED VIEW sensor_hourly_avg_int
+WITH (timescaledb.continuous) AS
+SELECT
+    time_bucket(5, time_int) AS bucket,
+    sensor_id,
+    AVG(temperature) AS avg_temperature,
+    AVG(humidity) AS avg_humidity,
+    AVG(pressure) AS avg_pressure,
+    COUNT(*) AS reading_count
+FROM sensor_data_int
+GROUP BY bucket, sensor_id
+WITH NO DATA;
+-- Check range start and end for chunks
+SELECT chunk_name, range_start_integer, range_end_integer
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data_int'
+  ORDER BY range_start_integer;
+    chunk_name     | range_start_integer | range_end_integer 
+-------------------+---------------------+-------------------
+ _hyper_9_86_chunk |                   0 |                10
+ _hyper_9_87_chunk |                  10 |                20
+ _hyper_9_88_chunk |                  20 |                30
+ _hyper_9_89_chunk |                  30 |                40
+ _hyper_9_90_chunk |                  40 |                50
+ _hyper_9_91_chunk |                  50 |                60
+ _hyper_9_92_chunk |                  60 |                70
+ _hyper_9_93_chunk |                  70 |                80
+ _hyper_9_94_chunk |                  80 |                90
+ _hyper_9_95_chunk |                  90 |               100
+
+-- Refresh the aggregate completely
+CALL refresh_continuous_aggregate('sensor_hourly_avg_int', NULL, NULL);
+SELECT count(*) AS ht_before FROM show_chunks('sensor_data_int');
+ ht_before 
+-----------
+        10
+
+-- Insert more data after the CAgg watermark
+INSERT INTO sensor_data_int
+SELECT
+    i AS time_int,
+    (i % 5) + 1 AS sensor_id,
+    15 + 15 * random() AS temperature,
+    30 + 60 * random() AS humidity,
+    980 + 40 * random() AS pressure
+FROM generate_series(100, 199, 4) AS i;
+-- View ranges before drop chunks
+SELECT chunk_name, range_start_integer, range_end_integer
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data_int'
+  ORDER BY range_start_integer;
+     chunk_name     | range_start_integer | range_end_integer 
+--------------------+---------------------+-------------------
+ _hyper_9_86_chunk  |                   0 |                10
+ _hyper_9_87_chunk  |                  10 |                20
+ _hyper_9_88_chunk  |                  20 |                30
+ _hyper_9_89_chunk  |                  30 |                40
+ _hyper_9_90_chunk  |                  40 |                50
+ _hyper_9_91_chunk  |                  50 |                60
+ _hyper_9_92_chunk  |                  60 |                70
+ _hyper_9_93_chunk  |                  70 |                80
+ _hyper_9_94_chunk  |                  80 |                90
+ _hyper_9_95_chunk  |                  90 |               100
+ _hyper_9_97_chunk  |                 100 |               110
+ _hyper_9_98_chunk  |                 110 |               120
+ _hyper_9_99_chunk  |                 120 |               130
+ _hyper_9_100_chunk |                 130 |               140
+ _hyper_9_101_chunk |                 140 |               150
+ _hyper_9_102_chunk |                 150 |               160
+ _hyper_9_103_chunk |                 160 |               170
+ _hyper_9_104_chunk |                 170 |               180
+ _hyper_9_105_chunk |                 180 |               190
+ _hyper_9_106_chunk |                 190 |               200
+
+-- Verify watermark
+SELECT h.id AS mat_hypertable_id_int
+  FROM _timescaledb_catalog.continuous_agg ca
+  JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
+  WHERE ca.user_view_name = 'sensor_hourly_avg_int' \gset
+SELECT _timescaledb_functions.cagg_watermark(:mat_hypertable_id_int);
+ cagg_watermark 
+----------------
+            100
+
+\set VERBOSITY terse
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_data_int', newer_than => 0);
+NOTICE:  skipping _timescaledb_internal._hyper_9_97_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_9_98_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_9_99_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_9_100_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_9_101_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_9_102_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_9_103_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_9_104_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_9_105_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_9_106_chunk, chunk contains data required for a continuous aggregate refresh
+ dropped_count 
+---------------
+            10
+
+SELECT chunk_name, range_start_integer, range_end_integer
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data_int'
+  ORDER BY range_start_integer;
+     chunk_name     | range_start_integer | range_end_integer 
+--------------------+---------------------+-------------------
+ _hyper_9_97_chunk  |                 100 |               110
+ _hyper_9_98_chunk  |                 110 |               120
+ _hyper_9_99_chunk  |                 120 |               130
+ _hyper_9_100_chunk |                 130 |               140
+ _hyper_9_101_chunk |                 140 |               150
+ _hyper_9_102_chunk |                 150 |               160
+ _hyper_9_103_chunk |                 160 |               170
+ _hyper_9_104_chunk |                 170 |               180
+ _hyper_9_105_chunk |                 180 |               190
+ _hyper_9_106_chunk |                 190 |               200
+
+ROLLBACK;
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_data_int', older_than => 120);
+NOTICE:  skipping _timescaledb_internal._hyper_9_97_chunk, chunk contains data required for a continuous aggregate refresh
+NOTICE:  skipping _timescaledb_internal._hyper_9_98_chunk, chunk contains data required for a continuous aggregate refresh
+ dropped_count 
+---------------
+            10
+
+SELECT chunk_name, range_start_integer, range_end_integer
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data_int'
+  ORDER BY range_start_integer;
+     chunk_name     | range_start_integer | range_end_integer 
+--------------------+---------------------+-------------------
+ _hyper_9_97_chunk  |                 100 |               110
+ _hyper_9_98_chunk  |                 110 |               120
+ _hyper_9_99_chunk  |                 120 |               130
+ _hyper_9_100_chunk |                 130 |               140
+ _hyper_9_101_chunk |                 140 |               150
+ _hyper_9_102_chunk |                 150 |               160
+ _hyper_9_103_chunk |                 160 |               170
+ _hyper_9_104_chunk |                 170 |               180
+ _hyper_9_105_chunk |                 180 |               190
+ _hyper_9_106_chunk |                 190 |               200
+
+ROLLBACK;
+BEGIN;
+SELECT count(*) AS dropped_count FROM drop_chunks('sensor_data_int', newer_than => 10, older_than => 110);
+NOTICE:  skipping _timescaledb_internal._hyper_9_97_chunk, chunk contains data required for a continuous aggregate refresh
+ dropped_count 
+---------------
+             9
+
+SELECT chunk_name, range_start_integer, range_end_integer
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data_int'
+  ORDER BY range_start_integer;
+     chunk_name     | range_start_integer | range_end_integer 
+--------------------+---------------------+-------------------
+ _hyper_9_86_chunk  |                   0 |                10
+ _hyper_9_97_chunk  |                 100 |               110
+ _hyper_9_98_chunk  |                 110 |               120
+ _hyper_9_99_chunk  |                 120 |               130
+ _hyper_9_100_chunk |                 130 |               140
+ _hyper_9_101_chunk |                 140 |               150
+ _hyper_9_102_chunk |                 150 |               160
+ _hyper_9_103_chunk |                 160 |               170
+ _hyper_9_104_chunk |                 170 |               180
+ _hyper_9_105_chunk |                 180 |               190
+ _hyper_9_106_chunk |                 190 |               200
+
+ROLLBACK;
+\set VERBOSITY default
+DROP MATERIALIZED VIEW sensor_hourly_avg_int;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_96_chunk
+DROP TABLE sensor_data_int;

@@ -472,8 +472,20 @@ AS SELECT time_bucket('5', time), max(data)
     FROM drop_chunks_table
     GROUP BY 1 WITH NO DATA;
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 20) AS i;
---dropping chunks will process the invalidations
+-- chunks that contain data that hasn't been refreshed yet i.e. after the watermark will not be dropped unless force is specified
+-- drop_chunks does not process invalidations on drop
 SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
+NOTICE:  skipping _timescaledb_internal._hyper_10_13_chunk, chunk contains data required for a continuous aggregate refresh
+ drop_chunks 
+-------------
+
+SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
+ time | data 
+------+------
+    0 |    0
+
+SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9), force => true);
+WARNING:  _timescaledb_internal._hyper_10_13_chunk contained data required for continuous aggregate refresh
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_10_13_chunk
@@ -485,10 +497,8 @@ SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
 
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(20, 35) AS i;
 CALL refresh_continuous_aggregate('drop_chunks_view', 10, 40);
---this will be seen after the drop its within the invalidation window and will be dropped
 INSERT INTO drop_chunks_table VALUES (26, 100);
---this will not be processed by the drop since chunk 30-39 is not dropped but will be seen after refresh
---shows that the drop doesn't do more work than necessary
+-- Invalidation on 31 will not be seen in the CAgg after the drop
 INSERT INTO drop_chunks_table VALUES (31, 200);
 --move the time up to 39
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(35, 39) AS i;
@@ -513,7 +523,7 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
           15 |  19
           10 |  14
 
---refresh to process the invalidations and then drop
+--refresh to process the invalidations till 30 and then drop
 CALL refresh_continuous_aggregate('drop_chunks_view', NULL, (integer_now_test2()-9));
 SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
                drop_chunks                
@@ -521,7 +531,7 @@ SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
  _timescaledb_internal._hyper_10_14_chunk
  _timescaledb_internal._hyper_10_15_chunk
 
---new values on 25 now seen in view
+--new values on 25 are seen because of the refresh, but new value on 31 is not
 SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
  time_bucket | max 
 -------------+-----

@@ -213,7 +213,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  detach_tablespace(name,regclass,boolean)
  detach_tablespaces(regclass)
  disable_chunk_skipping(regclass,name,boolean)
- drop_chunks(regclass,"any","any",boolean,"any","any")
+ drop_chunks(regclass,"any","any",boolean,"any","any",boolean)
  enable_chunk_skipping(regclass,name,boolean)
  first(anyelement,"any")
  generate_uuidv7()
