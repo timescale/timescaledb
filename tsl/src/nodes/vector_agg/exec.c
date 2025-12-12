@@ -123,7 +123,7 @@ columnar_result_init_for_type(ColumnarResult *columnar_result,
 	}
 }
 
-static void
+static pg_attribute_always_inline void
 columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState const *batch_state,
 						int row, Datum datum, bool isnull)
 {
@@ -356,6 +356,8 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 			arrow_validity_and(num_validity_words, combined_validity, arg_values[i].buffers[0]);
 		}
 		input_validity = combined_validity;
+
+		fprintf(stderr, "have input validity for some reason\n");
 	}
 
 	ColumnarResult columnar_result = { 0 };
@@ -364,7 +366,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	for (int row = 0; row < nrows; row++)
 	{
 		/*
-		 * The Arrow format requires the offsets to monotinically increase even
+		 * The Arrow format requires the offsets to monotonically increase even
 		 * for the invalid rows.
 		 */
 		if (columnar_result.offset_buffer != NULL)

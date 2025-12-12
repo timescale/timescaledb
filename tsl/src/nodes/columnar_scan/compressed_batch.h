@@ -214,7 +214,7 @@ store_text_datum(CompressedColumnValues *column_values, int arrow_row)
 		   value_bytes);
 }
 
-inline static void
+static pg_attribute_always_inline void
 compressed_columns_to_postgres_data(CompressedColumnValues *columns, int num_data_columns,
 									uint16 arrow_row)
 {
