@@ -833,7 +833,7 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 
 /*
  * Return the arrow array or the datum (in case of single scalar value) for a
- * given attribute as a CompressedColumnValues struct.
+ * given expression as a CompressedColumnValues struct.
  */
 CompressedColumnValues
 vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slot,
@@ -853,14 +853,11 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 		case T_Var:
 		{
 			const Var *var = (const Var *) argument;
-			const uint16 offset =
-				get_input_offset(dcontext, var); // AttrNumberGetAttrOffset(var->varattno);
+			const uint16 offset = get_input_offset(dcontext, var);
 			const CompressedColumnValues *values = &batch_state->compressed_columns[offset];
-			if (values->decompression_type == DT_Invalid)
-			{
-				//				my_print((void *) var);
-				elog(ERROR, "got invalid decompression type at offset %d for var ^^^\n", offset);
-			}
+			Ensure(values->decompression_type != DT_Invalid,
+				   "got DT_Invalid decompression type at offset %d",
+				   offset);
 			return *values;
 		}
 		case T_OpExpr:
