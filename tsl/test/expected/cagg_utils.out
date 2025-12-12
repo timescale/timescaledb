@@ -221,6 +221,31 @@ SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 year', bucket) AS buc
 ----------+-------------+------------+---------------+--------------+------------
  t        |             |            |               |              | 
 
+--get grouping cols for cagg
+SELECT _timescaledb_functions.cagg_get_grouping_columns('metrics_by_hour'::regclass);
+ cagg_get_grouping_columns 
+---------------------------
+ {bucket}
+
+SELECT _timescaledb_functions.cagg_get_grouping_columns('metrics_by_month'::regclass);
+ cagg_get_grouping_columns 
+---------------------------
+ {bucket}
+
+CREATE MATERIALIZED VIEW cagg_test_groupingcols
+WITH( timescaledb.continuous ) AS
+SELECT device_id, count(*), max(value),
+       time_bucket('1 day'::interval, time) as bkt,
+       min( value)
+FROM
+metrics
+GROUP BY 4, 1 WITH NO DATA;
+SELECT unnest(_timescaledb_functions.cagg_get_grouping_columns('cagg_test_groupingcols'::regclass));
+  unnest   
+-----------
+ bkt
+ device_id
+
 --
 -- Test bucket Oid recovery
 --
@@ -233,7 +258,7 @@ SELECT create_hypertable('timestamp_ht', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
      create_hypertable     
 ---------------------------
- (4,public,timestamp_ht,t)
+ (5,public,timestamp_ht,t)
 
 INSERT INTO timestamp_ht
   SELECT time, ceil(random() * 100)::int
@@ -252,7 +277,7 @@ CREATE TABLE timestamptz_ht (
 SELECT create_hypertable('timestamptz_ht', 'time');
       create_hypertable      
 -----------------------------
- (6,public,timestamptz_ht,t)
+ (7,public,timestamptz_ht,t)
 
 INSERT INTO timestamptz_ht
   SELECT time, ceil(random() * 100)::int
@@ -367,7 +392,7 @@ SELECT user_view_name, bf.bucket_func
 FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE user_view_name = 'temperature_tz_4h_2'
 ORDER BY user_view_name;
-ERROR:  time_bucket function not found in CAgg definition for mat_ht_id: 14
+ERROR:  time_bucket function not found in CAgg definition for mat_ht_id: 15
 \set ON_ERROR_STOP 1
 -- Group by another function to make sure it will be ignored
 CREATE FUNCTION skip() RETURNS INTEGER AS $$ SELECT 1; $$ IMMUTABLE LANGUAGE SQL;

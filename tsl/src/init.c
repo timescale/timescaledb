@@ -137,6 +137,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
 	.continuous_agg_migrate_to_time_bucket = continuous_agg_migrate_to_time_bucket,
+	.continuous_agg_get_grouping_columns = continuous_agg_get_grouping_columns,
 
 	/* Compression */
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,
@@ -167,6 +168,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.process_rename_cmd = tsl_process_rename_cmd,
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
+	.rebuild_columnstore = tsl_rebuild_columnstore,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,
@@ -190,6 +192,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.split_chunk = chunk_split_chunk,
 	.detach_chunk = chunk_detach,
 	.attach_chunk = chunk_attach,
+	.estimate_compressed_batch_size = tsl_estimate_compressed_batch_size,
 };
 
 static void

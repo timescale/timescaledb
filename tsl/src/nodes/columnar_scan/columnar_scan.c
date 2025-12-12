@@ -22,6 +22,7 @@
 #include <planner/planner.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 #include <utils/typcache.h>
 
 #include <planner.h>
@@ -634,22 +635,20 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
  * Postgres statistics for _ts_meta_count column.
  * Returns TARGET_COMPRESSED_BATCH_SIZE when no pg_statistic entry exists.
  */
-static double
-estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compression_info)
+double
+ts_columnar_estimate_compressed_batch_size(const Oid relid)
 {
-	AttrNumber attnum = get_attnum(compression_info->compressed_rte->relid, "_ts_meta_count");
+	AttrNumber attnum = get_attnum(relid, "_ts_meta_count");
 	if (attnum == InvalidAttrNumber)
 		return TARGET_COMPRESSED_BATCH_SIZE;
 
-	Var *var = makeVar(compression_info->compressed_rel->relid, attnum, INT4OID, -1, InvalidOid, 0);
-
 	/* fetch statistics */
-	VariableStatData vardata;
-	examine_variable(root, (Node *) var, 0, &vardata);
-
-	if (!HeapTupleIsValid(vardata.statsTuple))
+	HeapTuple statsTuple = SearchSysCache3(STATRELATTINH,
+										   ObjectIdGetDatum(relid),
+										   Int16GetDatum(attnum),
+										   BoolGetDatum(false));
+	if (!HeapTupleIsValid(statsTuple))
 	{
-		ReleaseVariableStats(vardata);
 		return TARGET_COMPRESSED_BATCH_SIZE;
 	}
 
@@ -659,7 +658,7 @@ estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compres
 	/* exact MCV contribution */
 	AttStatsSlot mcvslot;
 	if (get_attstatsslot(&mcvslot,
-						 vardata.statsTuple,
+						 statsTuple,
 						 STATISTIC_KIND_MCV,
 						 InvalidOid,
 						 ATTSTATSSLOT_VALUES | ATTSTATSSLOT_NUMBERS))
@@ -679,7 +678,7 @@ estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compres
 	/* histogram contribution */
 	AttStatsSlot histslot;
 	if (get_attstatsslot(&histslot,
-						 vardata.statsTuple,
+						 statsTuple,
 						 STATISTIC_KIND_HISTOGRAM,
 						 InvalidOid,
 						 ATTSTATSSLOT_VALUES))
@@ -699,7 +698,7 @@ estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compres
 		free_attstatsslot(&histslot);
 	}
 
-	ReleaseVariableStats(vardata);
+	ReleaseSysCache(statsTuple);
 
 	const double final_result = mcv_sum + hist_sum;
 	if (final_result == 0)
@@ -1138,7 +1137,7 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	 * statistics.
 	 */
 	compression_info->compressed_batch_size =
-		estimate_compressed_batch_size(root, compression_info);
+		ts_columnar_estimate_compressed_batch_size(compression_info->compressed_rte->relid);
 
 	/*
 	 * Estimate the size of decompressed chunk based on the compressed chunk.

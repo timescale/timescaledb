@@ -115,6 +115,7 @@ typedef struct CrossModuleFunctions
 	PGFunction continuous_agg_get_bucket_function;
 	PGFunction continuous_agg_get_bucket_function_info;
 	PGFunction continuous_agg_migrate_to_time_bucket;
+	PGFunction continuous_agg_get_grouping_columns;
 
 	PGFunction compressed_data_send;
 	PGFunction compressed_data_recv;
@@ -128,6 +129,7 @@ typedef struct CrossModuleFunctions
 	PGFunction create_compressed_chunk;
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
+	PGFunction rebuild_columnstore;
 	void (*decompress_batches_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	void (*init_decompress_state_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);
@@ -179,6 +181,8 @@ typedef struct CrossModuleFunctions
 
 	PGFunction detach_chunk;
 	PGFunction attach_chunk;
+
+	PGFunction estimate_compressed_batch_size;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;
