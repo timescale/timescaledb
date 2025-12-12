@@ -60,171 +60,6 @@ get_input_offset(const DecompressContext *dcontext, const Var *var)
 }
 
 /*
- * Create an arrow array with memory for buffers.
- *
- * The space for buffers are allocated after the main structure.
- */
-static ArrowArray *
-arrow_create_with_buffers(MemoryContext mcxt, int n_buffers)
-{
-	struct
-	{
-		ArrowArray array;
-		const void *buffers[FLEXIBLE_ARRAY_MEMBER];
-	} *array_with_buffers =
-		MemoryContextAllocZero(mcxt, sizeof(ArrowArray) + (sizeof(const void *) * n_buffers));
-
-	ArrowArray *array = &array_with_buffers->array;
-
-	array->n_buffers = n_buffers;
-	array->buffers = array_with_buffers->buffers;
-
-	return array;
-}
-
-/*
- * Variable-size primitive layout ArrowArray from decompression iterator.
- */
-static ArrowArray *
-arrow_from_const_varlen(MemoryContext mcxt, int nrows, Datum value)
-{
-	const int value_bytes = VARSIZE_ANY_EXHDR(value);
-
-	int32 *restrict offsets_buffer =
-		MemoryContextAlloc(mcxt, pad_to_multiple(64, nrows * sizeof(*offsets_buffer)));
-	for (int i = 0; i < nrows; i++)
-	{
-		offsets_buffer[i] = value_bytes * i;
-	}
-
-	uint8 *restrict data_buffer =
-		MemoryContextAlloc(mcxt, pad_to_multiple(64, nrows * value_bytes));
-	for (int i = 0; i < nrows; i++)
-	{
-		memcpy(data_buffer + value_bytes * i, DatumGetPointer(value), value_bytes);
-	}
-
-	ArrowArray *array = arrow_create_with_buffers(mcxt, 3);
-	array->length = nrows;
-	array->buffers[0] = NULL;
-	array->buffers[1] = offsets_buffer;
-	array->buffers[2] = data_buffer;
-
-	return array;
-}
-
-/*
- * Fixed-Size Primitive layout ArrowArray from decompression iterator.
- */
-static ArrowArray *
-arrow_from_const_fixlen(MemoryContext mcxt, int nrows, Datum value, int16 typlen, bool typbyval)
-{
-	/* Just a precaution: this should not be a varlen type */
-	Assert(typlen > 0);
-
-	uint8 *restrict data_buffer = MemoryContextAlloc(mcxt, pad_to_multiple(64, nrows * typlen));
-	for (int i = 0; i < nrows; i++)
-	{
-		if (typbyval)
-		{
-			/*
-			 * We use unsigned integers to avoid conversions between signed
-			 * and unsigned values (which in theory could change the value)
-			 * when converting to datum (which is an unsigned value).
-			 *
-			 * Conversions between unsigned values is well-defined in the C
-			 * standard and will work here.
-			 */
-			switch (typlen)
-			{
-				case sizeof(uint8):
-					data_buffer[i] = DatumGetUInt8(value);
-					break;
-				case sizeof(uint16):
-					((uint16 *) data_buffer)[i] = DatumGetUInt16(value);
-					break;
-				case sizeof(uint32):
-					((uint32 *) data_buffer)[i] = DatumGetUInt32(value);
-					break;
-				case sizeof(uint64):
-					/* This branch is not called for by-reference 64-bit values */
-					((uint64 *) data_buffer)[i] = DatumGetUInt64(value);
-					break;
-				default:
-					ereport(ERROR,
-							errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							errmsg("not supporting writing by value length %d", typlen));
-			}
-		}
-		else
-		{
-			memcpy(&data_buffer[typlen * i], DatumGetPointer(value), typlen);
-		}
-	}
-
-	ArrowArray *array = arrow_create_with_buffers(mcxt, 2);
-	array->length = nrows;
-	array->buffers[0] = NULL;
-	array->buffers[1] = data_buffer;
-	return array;
-}
-
-static ArrowArray *
-arrow_from_const_bool(MemoryContext mcxt, int nrows, Datum value)
-{
-	const size_t words = (size_t) ((nrows + 63) / 64);
-	uint64 *values = (uint64 *) MemoryContextAlloc(mcxt, words * sizeof(*values));
-	memset(values, DatumGetBool(value) ? (uint8) -1 : 0, words * sizeof(*values));
-
-	ArrowArray *array = arrow_create_with_buffers(mcxt, 2);
-	array->length = nrows;
-	array->buffers[0] = NULL;
-	array->buffers[1] = values;
-	return array;
-}
-
-static ArrowArray *
-arrow_from_const_null(MemoryContext mcxt, int nrows)
-{
-	ArrowArray *array = arrow_create_with_buffers(mcxt, 2);
-	array->length = nrows;
-	array->null_count = nrows;
-
-	const size_t words = (size_t) ((nrows + 63) / 64);
-	uint64 *validity = (uint64 *) MemoryContextAllocZero(mcxt, words * sizeof(uint64));
-	array->buffers[0] = validity;
-	return array;
-}
-
-/*
- * Read the entire contents of a decompression iterator into the arrow array.
- */
-static ArrowArray *
-arrow_from_constant(MemoryContext mcxt, int nrows, const Const *c)
-{
-	int16 typlen;
-	bool typbyval;
-	get_typlenbyval(c->consttype, &typlen, &typbyval);
-
-	if (c->constisnull)
-	{
-		return arrow_from_const_null(mcxt, nrows);
-	}
-	else if (c->consttype == BOOLOID)
-	{
-		return arrow_from_const_bool(mcxt, nrows, c->constvalue);
-	}
-	else if (typlen == -1)
-	{
-		return arrow_from_const_varlen(mcxt, nrows, c->constvalue);
-	}
-	else
-	{
-		return arrow_from_const_fixlen(mcxt, nrows, c->constvalue, typlen, typbyval);
-	}
-}
-
-/*
  * Workspace for converting the results of a Postgres function into a columnar
  * format.
  */
@@ -297,10 +132,6 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 
 	if (isnull)
 	{
-		/*
-		 * A strict function can still return a null for a non-null
-		 * argument.
-		 */
 		if (columnar_result->validity == NULL)
 		{
 			columnar_result->validity =
@@ -348,10 +179,10 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 				columnar_result->allocated_body_bytes = new_body_bytes;
 			}
 
-			columnar_result->offset_buffer[row] = columnar_result->current_offset;
 			memcpy(&columnar_result->body_buffer[columnar_result->current_offset],
 				   VARDATA_ANY(datum),
 				   result_bytes);
+			columnar_result->offset_buffer[row] = columnar_result->current_offset;
 			columnar_result->current_offset += result_bytes;
 			break;
 		}
@@ -378,7 +209,7 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 }
 
 static CompressedColumnValues
-columnar_result_return(ColumnarResult *columnar_result, DecompressBatchState const *batch_state)
+columnar_result_finalize(ColumnarResult *columnar_result, DecompressBatchState const *batch_state)
 {
 	const int nrows = batch_state->total_batch_rows;
 
@@ -409,6 +240,7 @@ columnar_result_return(ColumnarResult *columnar_result, DecompressBatchState con
 		arrow_result->buffers = (void *) &arrow_result[1];
 		arrow_result->buffers[1] = columnar_result->body_buffer;
 	}
+
 	arrow_result->length = nrows;
 
 	arrow_result->buffers[0] = columnar_result->validity;
@@ -417,8 +249,6 @@ columnar_result_return(ColumnarResult *columnar_result, DecompressBatchState con
 
 	//	fprintf(stderr, "length %ld, null count %ld\n", arrow_result->length,
 	// arrow_result->null_count);
-
-	(void) columnar_result_return;
 
 	CompressedColumnValues result = {
 		.decompression_type = columnar_result->type,
@@ -445,73 +275,61 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	InitFunctionCallInfoData(*fcinfo, &flinfo, nargs, inputcollid, NULL, NULL);
 
 	CompressedColumnValues arg_values[5] = { 0 };
-	ListCell *lc;
 	bool have_null_bitmap = false;
 	bool have_null_scalars = false;
+	ListCell *lc;
 	foreach (lc, args)
 	{
 		const int i = foreach_current_index(lc);
-		arg_values[i] = vector_slot_evaluate_expression(dcontext, slot, filter, lfirst(lc));
-		//		fprintf(stderr, "column %d decompression type %d\n", i,
-		// arg_values[i].decompression_type);
-
-		if (arg_values[i].decompression_type == DT_Invalid)
-		{
-			//			my_print(lfirst(lc));
-			elog(ERROR, "got DT_Invalid for argument %d ^^^", foreach_current_index(lc));
-		}
+		CompressedColumnValues arg_value =
+			vector_slot_evaluate_expression(dcontext, slot, filter, lfirst(lc));
+		Ensure(arg_value.decompression_type != DT_Invalid, "got DT_Invalid for argument %d", i);
 
 		/*
 		 * In case of DT_Scalar, the actual value is stored in the
-		 * CompressedColumnValues.output_value/output_isnull fields, so the are
+		 * CompressedColumnValues.output_value/output_isnull fields, so they are
 		 * already initialized.
 		 *
 		 * In the other cases, they serve as a space for materialization of the
 		 * Postgres datum for a given row, so we have to initialize them now.
 		 */
-		if (arg_values[i].decompression_type == DT_Scalar)
+		if (arg_value.decompression_type == DT_Scalar)
 		{
-			have_null_scalars = *arg_values[i].output_isnull || have_null_scalars;
+			have_null_scalars = *arg_value.output_isnull || have_null_scalars;
 
-			fcinfo->args[i].isnull = *arg_values[i].output_isnull;
+			fcinfo->args[i].isnull = *arg_value.output_isnull;
 
 			if (!fcinfo->args[i].isnull)
 			{
-				fcinfo->args[i].value = *arg_values[i].output_value;
+				fcinfo->args[i].value = *arg_value.output_value;
 			}
 		}
 		else
 		{
-			Ensure(arg_values[i].arrow != NULL, "no arrow for arg %d", i);
-			have_null_bitmap = (arg_values[i].arrow->null_count > 0) || have_null_bitmap;
+			Ensure(arg_value.arrow != NULL, "no arrow for arg %d", i);
+			have_null_bitmap = (arg_value.arrow->null_count > 0) || have_null_bitmap;
 
-			arg_values[i].output_value = &fcinfo->args[i].value;
-			arg_values[i].output_isnull = &fcinfo->args[i].isnull;
+			arg_value.output_value = &fcinfo->args[i].value;
+			arg_value.output_isnull = &fcinfo->args[i].isnull;
 
-			if (arg_values[i].decompression_type == DT_ArrowText ||
-				arg_values[i].decompression_type == DT_ArrowTextDict)
+			if (arg_value.decompression_type == DT_ArrowText ||
+				arg_value.decompression_type == DT_ArrowTextDict)
 			{
-				const int maxbytes = get_max_varlena_bytes(arg_values[i].arrow);
-				*arg_values[i].output_value =
+				const int maxbytes = get_max_varlena_bytes(arg_value.arrow);
+				*arg_value.output_value =
 					PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
 			}
 		}
 
-		(void) arrow_from_constant;
-
-		Assert(arg_values[i].decompression_type != DT_Invalid);
+		arg_values[i] = arg_value;
 	}
 
-	Assert(arg_values[0].decompression_type != DT_Invalid);
-
-	const int nrows = batch_state->total_batch_rows;
-
+	/*
+	 * We only evaluate strict functions, so if we have a scalar null argument,
+	 * return a scalar null.
+	 */
 	if (have_null_scalars)
 	{
-		/*
-		 * The function is strict, and we have a scalar null argument, so we
-		 * return a scalar null.
-		 */
 		CompressedColumnValues result = {
 			.decompression_type = DT_Scalar,
 			.output_isnull = MemoryContextAlloc(batch_state->per_batch_context, sizeof(bool))
@@ -523,6 +341,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	/*
 	 * Our functions are strict so we handle validity separately.
 	 */
+	const int nrows = batch_state->total_batch_rows;
 	const size_t num_validity_words = (nrows + 63) / 64;
 	uint64 *input_validity = NULL;
 	if (have_null_bitmap || filter != NULL)
@@ -539,16 +358,18 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 		input_validity = combined_validity;
 	}
 
-	ColumnarResult columnar_result_storage = { 0 };
-	ColumnarResult *columnar_result = &columnar_result_storage;
-
-	columnar_result_init_for_type(columnar_result, batch_state, get_func_rettype(funcoid));
+	ColumnarResult columnar_result = { 0 };
+	columnar_result_init_for_type(&columnar_result, batch_state, get_func_rettype(funcoid));
 
 	for (int row = 0; row < nrows; row++)
 	{
-		if (columnar_result->type == DT_ArrowText)
+		/*
+		 * The Arrow format requires the offsets to monotinically increase even
+		 * for the invalid rows.
+		 */
+		if (columnar_result.offset_buffer != NULL)
 		{
-			columnar_result->offset_buffer[row] = columnar_result->current_offset;
+			columnar_result.offset_buffer[row] = columnar_result.current_offset;
 		}
 
 		if (!arrow_row_is_valid(input_validity, row))
@@ -559,27 +380,30 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 		compressed_columns_to_postgres_data(arg_values, nargs, row);
 
 		Datum datum = FunctionCallInvoke(fcinfo);
+
+		/*
+		 * A strict function can still return a null for a non-null
+		 * argument.
+		 */
 		bool isnull = fcinfo->isnull;
 
-		columnar_result_set_row(columnar_result, batch_state, row, datum, isnull);
-
-		//		fprintf(stderr, "[%d]: %ld %d\n", i, result, fcinfo->isnull);
+		columnar_result_set_row(&columnar_result, batch_state, row, datum, isnull);
 	}
 
 	/*
 	 * Figure out the nullability of the result. Besides the null inputs, we
 	 * have to AND a separate bitmap if the function returned nulls for some rows.
 	 */
-	if (columnar_result->validity != NULL)
+	if (columnar_result.validity != NULL)
 	{
-		arrow_validity_and(num_validity_words, columnar_result->validity, input_validity);
+		arrow_validity_and(num_validity_words, columnar_result.validity, input_validity);
 	}
 	else
 	{
-		columnar_result->validity = (uint64 *) input_validity;
+		columnar_result.validity = (uint64 *) input_validity;
 	}
 
-	return columnar_result_return(columnar_result, batch_state);
+	return columnar_result_finalize(&columnar_result, batch_state);
 }
 
 static CompressedColumnValues
@@ -654,7 +478,7 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 
 		/*
 		 * In case of DT_Scalar, the actual value is stored in the
-		 * CompressedColumnValues.output_value/output_isnull fields, so the are
+		 * CompressedColumnValues.output_value/output_isnull fields, so they are
 		 * already initialized.
 		 *
 		 * In the other cases, they serve as a space for materialization of the
@@ -689,7 +513,11 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 
 	for (int row = 0; row < nrows; row++)
 	{
-		if (columnar_result.type == DT_ArrowText)
+		/*
+		 * The Arrow format requires the offsets to monotinically increase even
+		 * for the invalid rows.
+		 */
+		if (columnar_result.offset_buffer != NULL)
 		{
 			columnar_result.offset_buffer[row] = columnar_result.current_offset;
 		}
@@ -727,7 +555,7 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 		columnar_result.validity = (uint64 *) top_filter;
 	}
 
-	return columnar_result_return(&columnar_result, batch_state);
+	return columnar_result_finalize(&columnar_result, batch_state);
 }
 
 /*
