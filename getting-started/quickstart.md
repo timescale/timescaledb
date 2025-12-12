@@ -71,8 +71,6 @@ CREATE TABLE sensor_data (
     pressure DOUBLE PRECISION
 ) WITH (
     tsdb.hypertable
-    --,tsdb.segmentby='sensor_id' TODO: I want to be able to remove these and be smart about the default settings
-	--,tsdb.orderby   = 'time DESC'
 );
 
 -- create index
