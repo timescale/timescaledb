@@ -102,7 +102,8 @@ FROM generate_series(
     INTERVAL '1 seconds'
 ) AS time;
 
--- re-sort data (TODO: Understand if we can optimize this from the start)
+-- Once data is inserted into the columnstore we use recompress to optimize the order and structure 
+-- of the each chunk to ensure optimal performance during querying
 DO $$
 DECLARE ch TEXT;
 BEGIN
@@ -165,6 +166,7 @@ ORDER BY day DESC
 LIMIT 10;
 
 -- Query 4: Latest reading for each sensor
+-- Highlights the value of Skipscan executing in under 100ms without skipscan it takes over 5sec
 SELECT DISTINCT ON (sensor_id)
     sensor_id,
     time,
