@@ -260,7 +260,7 @@ columnar_result_finalize(ColumnarResult *columnar_result, DecompressBatchState c
 	return result;
 }
 
-static CompressedColumnValues
+static pg_noinline CompressedColumnValues
 vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 							  uint64 const *filter, List *args, Oid funcoid, Oid inputcollid)
 {
@@ -339,7 +339,8 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	}
 
 	/*
-	 * Our functions are strict so we handle validity separately.
+	 * Our Postgres function is strict, so we should avoid calling it on null
+	 * inputs.
 	 */
 	const int nrows = batch_state->total_batch_rows;
 	const size_t num_validity_words = (nrows + 63) / 64;
@@ -358,9 +359,14 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 		input_validity = combined_validity;
 	}
 
+	/*
+	 * Call the Postgres function on every row.
+	 */
 	ColumnarResult columnar_result = { 0 };
 	columnar_result_init_for_type(&columnar_result, batch_state, get_func_rettype(funcoid));
-
+	MemoryContext function_call_context =
+		AllocSetContextCreate(CurrentMemoryContext, "bulk function call", ALLOCSET_DEFAULT_SIZES);
+	MemoryContext old = MemoryContextSwitchTo(function_call_context);
 	for (int row = 0; row < nrows; row++)
 	{
 		/*
@@ -372,6 +378,9 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 			columnar_result.offset_buffer[row] = columnar_result.current_offset;
 		}
 
+		/*
+		 * Do not the function on null inputs because it is strict.
+		 */
 		if (!arrow_row_is_valid(input_validity, row))
 		{
 			continue;
@@ -379,20 +388,25 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 
 		compressed_columns_to_postgres_data(arg_values, nargs, row);
 
-		Datum datum = FunctionCallInvoke(fcinfo);
+		const Datum datum = FunctionCallInvoke(fcinfo);
 
 		/*
-		 * A strict function can still return a null for a non-null
-		 * argument.
+		 * A strict function can still return a null for a non-null argument.
 		 */
-		bool isnull = fcinfo->isnull;
+		const bool isnull = fcinfo->isnull;
 
 		columnar_result_set_row(&columnar_result, batch_state, row, datum, isnull);
+
+		MemoryContextReset(function_call_context);
 	}
+	MemoryContextSwitchTo(old);
+	MemoryContextDelete(function_call_context);
+
+	// MemoryContextStats(CurrentMemoryContext);
 
 	/*
-	 * Figure out the nullability of the result. Besides the null inputs, we
-	 * have to AND a separate bitmap if the function returned nulls for some rows.
+	 * Figure out the validity bitmap of the result rows. Besides the null
+	 * inputs, the function itself can return nulls for some rows.
 	 */
 	if (columnar_result.validity != NULL)
 	{
@@ -406,7 +420,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	return columnar_result_finalize(&columnar_result, batch_state);
 }
 
-static CompressedColumnValues
+static pg_noinline CompressedColumnValues
 vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 						  uint64 const *top_filter, CaseExpr const *case_expr)
 {
@@ -418,8 +432,6 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 
 	uint64 const *branch_filters[5] = { 0 };
 	CompressedColumnValues branch_values[5] = { 0 };
-	//	Datum branch_data[5] = { 0 };
-	//	bool branch_isnulls[5] = { 0 };
 	Datum tmp_branch_datum;
 	bool tmp_branch_isnull;
 	bool tmp_branch_null_storage = true;
@@ -470,11 +482,9 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 										  .output_isnull = &tmp_branch_null_storage };
 		}
 
-		if (branch_values[i].decompression_type == DT_Invalid)
-		{
-			//			my_print(lfirst(lc));
-			elog(ERROR, "got DT_Invalid for argument %d ^^^", i);
-		}
+		Ensure(branch_values[i].decompression_type != DT_Invalid,
+			   "got DT_Invalid for argument %d",
+			   i);
 
 		/*
 		 * In case of DT_Scalar, the actual value is stored in the
@@ -501,20 +511,12 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 		}
 	}
 
-	Oid rettype;
-	TupleDesc tdesc = NULL;
-	TypeFuncClass type_class = get_expr_result_type((Node *) case_expr, &rettype, &tdesc);
-	Ensure(type_class == TYPEFUNC_SCALAR,
-		   "unexpected type class %d for case expression",
-		   type_class);
-
 	ColumnarResult columnar_result = { 0 };
-	columnar_result_init_for_type(&columnar_result, batch_state, rettype);
-
+	columnar_result_init_for_type(&columnar_result, batch_state, case_expr->casetype);
 	for (int row = 0; row < nrows; row++)
 	{
 		/*
-		 * The Arrow format requires the offsets to monotinically increase even
+		 * The Arrow format requires the offsets to monotonically increase even
 		 * for the invalid rows.
 		 */
 		if (columnar_result.offset_buffer != NULL)
@@ -939,6 +941,12 @@ vector_agg_exec(CustomScanState *node)
 	}
 
 	/*
+	 * Have no more partial aggregation results and still have input, have to
+	 * reset the grouping policy and start a new cycle of partial aggregation.
+	 */
+	grouping->gp_reset(grouping);
+
+	/*
 	 * If the partial aggregation results have ended, and the input has ended,
 	 * we're done.
 	 */
@@ -946,12 +954,6 @@ vector_agg_exec(CustomScanState *node)
 	{
 		return NULL;
 	}
-
-	/*
-	 * Have no more partial aggregation results and still have input, have to
-	 * reset the grouping policy and start a new cycle of partial aggregation.
-	 */
-	grouping->gp_reset(grouping);
 
 	/*
 	 * Now we loop through the input compressed tuples, until they end or until
