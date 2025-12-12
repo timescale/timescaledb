@@ -144,8 +144,15 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 }
 
 int
-get_max_text_datum_size(ArrowArray *text_array)
+get_max_varlena_bytes(ArrowArray *text_array)
 {
+	if (text_array->dictionary != NULL)
+	{
+		Ensure(text_array->dictionary->dictionary == NULL,
+			   "got dictionary-encoded dictionary for a text arrow array");
+		return get_max_varlena_bytes(text_array->dictionary);
+	}
+
 	int maxbytes = 0;
 	uint32 *offsets = (uint32 *) text_array->buffers[1];
 	for (int i = 0; i < text_array->length; i++)
@@ -157,7 +164,7 @@ get_max_text_datum_size(ArrowArray *text_array)
 		}
 	}
 
-	return maxbytes;
+	return VARHDRSZ + maxbytes;
 }
 
 static void
@@ -283,10 +290,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		 * memory there, because it doesn't have the varlena headers that
 		 * Postgres expects for text.
 		 */
-		const int maxbytes =
-			VARHDRSZ + (arrow->dictionary ? get_max_text_datum_size(arrow->dictionary) :
-											get_max_text_datum_size(arrow));
-
+		const int maxbytes = get_max_varlena_bytes(arrow);
 		*column_values->output_value =
 			PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
 

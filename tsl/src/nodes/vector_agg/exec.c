@@ -255,6 +255,14 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 			elog(ERROR, "got DT_Invalid for argument %d ^^^", foreach_current_index(lc));
 		}
 
+		/*
+		 * In case of DT_Scalar, the actual value is stored in the
+		 * CompressedColumnValues.output_value/output_isnull fields, so the are
+		 * already initialized.
+		 *
+		 * In the other cases, they serve as a space for materialization of the
+		 * Postgres datum for a given row, so we have to initalize them now.
+		 */
 		if (arg_values[i].decompression_type == DT_Scalar)
 		{
 			have_null_scalars = *arg_values[i].output_isnull || have_null_scalars;
@@ -268,7 +276,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 		}
 		else
 		{
-			Ensure(arg_values[i].arrow != NULL, "no arrow for arg");
+			Ensure(arg_values[i].arrow != NULL, "no arrow for arg %d", i);
 			have_null_bitmap = (arg_values[i].arrow->null_count > 0) || have_null_bitmap;
 
 			arg_values[i].output_value = &fcinfo->args[i].value;
@@ -277,11 +285,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 			if (arg_values[i].decompression_type == DT_ArrowText ||
 				arg_values[i].decompression_type == DT_ArrowTextDict)
 			{
-				const int maxbytes =
-					VARHDRSZ + (arg_values[i].arrow->dictionary ?
-									get_max_text_datum_size(arg_values[i].arrow->dictionary) :
-									get_max_text_datum_size(arg_values[i].arrow));
-
+				const int maxbytes = get_max_varlena_bytes(arg_values[i].arrow);
 				*arg_values[i].output_value =
 					PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
 			}
@@ -540,15 +544,10 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 	//	bool branch_isnulls[5] = { 0 };
 	Datum tmp_branch_datum;
 	bool tmp_branch_isnull;
-	bool tmp_branch_null_storage = false;
+	bool tmp_branch_null_storage = true;
 
 	for (int i = 0; i < list_length(case_expr->args) + 1; i++)
 	{
-		(void) branch_filters;
-		(void) branch_values;
-		(void) i;
-		(void) batch_state;
-
 		Expr *condition_expression;
 		Expr *value_expression;
 		if (i < list_length(case_expr->args))
@@ -598,19 +597,25 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 			elog(ERROR, "got DT_Invalid for argument %d ^^^", i);
 		}
 
+		/*
+		 * In case of DT_Scalar, the actual value is stored in the
+		 * CompressedColumnValues.output_value/output_isnull fields, so the are
+		 * already initialized.
+		 *
+		 * In the other cases, they serve as a space for materialization of the
+		 * Postgres datum for a given row, so we have to initalize them now.
+		 */
 		if (branch_values[i].decompression_type != DT_Scalar)
 		{
+			Ensure(branch_values[i].arrow != NULL, "no arrow for arg %d", i);
+
 			branch_values[i].output_value = &tmp_branch_datum;
 			branch_values[i].output_isnull = &tmp_branch_isnull;
 
 			if (branch_values[i].decompression_type == DT_ArrowText ||
 				branch_values[i].decompression_type == DT_ArrowTextDict)
 			{
-				const int maxbytes =
-					VARHDRSZ + (branch_values[i].arrow->dictionary ?
-									get_max_text_datum_size(branch_values[i].arrow->dictionary) :
-									get_max_text_datum_size(branch_values[i].arrow));
-
+				const int maxbytes = get_max_varlena_bytes(branch_values[i].arrow);
 				*branch_values[i].output_value =
 					PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
 			}
