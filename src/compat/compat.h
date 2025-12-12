@@ -869,3 +869,14 @@ ItemPointerGetDatum(const ItemPointerData *X)
 	return PointerGetDatum(X);
 }
 #endif
+
+#if PG18_GE
+#ifdef PG_MODULE_MAGIC_EXT
+#define TS_MODULE_MAGIC(extname)                                                                   \
+	PG_MODULE_MAGIC_EXT(.name = extname, .version = TIMESCALEDB_VERSION_MOD)
+#endif
+#else
+#ifdef PG_MODULE_MAGIC
+#define TS_MODULE_MAGIC(extname) PG_MODULE_MAGIC
+#endif
+#endif
