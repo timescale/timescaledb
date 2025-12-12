@@ -58,17 +58,6 @@ typedef struct VectorAggState
 	GroupingPolicy *grouping;
 
 	/*
-	 * State to compute vector quals for FILTER clauses.
-	 */
-	CompressedBatchVectorQualState vqual_state;
-
-	/*
-	 * Initialization function for vectorized quals depending on slot type.
-	 */
-	VectorQualState *(*init_vector_quals)(struct VectorAggState *agg_state, VectorAggDef *agg_def,
-										  TupleTableSlot *slot);
-
-	/*
 	 * Function for getting the next slot from the child node depending on
 	 * child node type.
 	 */

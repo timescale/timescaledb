@@ -74,6 +74,10 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 	}
 	else if (params.single_grouping_column.decompression_type == DT_ArrowText)
 	{
+		/*
+		 * The Arrow format requires the offsets to be monotonically increasing
+		 * even for null rows, so this is safe.
+		 */
 		*output_key = get_bytes_view(&params.single_grouping_column, row);
 		*valid = arrow_row_is_valid(params.single_grouping_column.buffers[0], row);
 	}

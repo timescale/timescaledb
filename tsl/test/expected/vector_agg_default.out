@@ -48,59 +48,744 @@ select sum(c) from dvagg;
  17982
 
 set timescaledb.debug_require_vector_agg = 'require';
----- Uncomment to generate reference
---set timescaledb.debug_require_vector_agg = 'forbid';
---set timescaledb.enable_vectorized_aggregation to off;
--- Vectorized aggregation should work with vectorized filters.
-select sum(c) from dvagg where b >= 0;
+-- Uncomment to generate reference
+--set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
+-- Test vectorized aggregation, filters and expressions with a default column.
+select
+    format('select %s%s from dvagg%s%s%s;',
+            grouping || ', ',
+            function,
+            ' where ' || condition,
+            ' group by ' || grouping,
+            format(' order by %s, ', function) || grouping || ' limit 10')
+from
+    unnest(array[
+        'count(*)',
+        'sum(c)',
+        'sum(b + c)']) function,
+    unnest(array[
+        null,
+        'b >= 0',
+        'b = 0',
+        'b in (0, 1)',
+        'b in (0, 1, 3)',
+        'b > 10',
+        'c != 7',
+        'c > 1000',
+        'c < 1000']) with ordinality as condition(condition, n),
+    unnest(array[
+        null,
+        'b',
+        'c',
+        'b + c']) with ordinality as grouping(grouping, n)
+\gexec
+select count(*) from dvagg;
+ count 
+-------
+  1998
+
+select b, count(*) from dvagg group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+ 0 |   398
+ 1 |   400
+ 2 |   400
+ 3 |   400
+ 4 |   400
+
+select c, count(*) from dvagg group by c order by count(*), c limit 10;
+ c  | count 
+----+-------
+  7 |   999
+ 11 |   999
+
+select b + c, count(*) from dvagg group by b + c order by count(*), b + c limit 10;
+ ?column? | count 
+----------+-------
+        7 |   199
+        8 |   200
+        9 |   200
+       10 |   200
+       12 |   200
+       13 |   200
+       14 |   200
+       15 |   200
+       11 |   399
+
+select sum(c) from dvagg;
   sum  
 -------
  17982
 
-select sum(c) from dvagg where b = 0;
- sum  
-------
- 3582
+select b, sum(c) from dvagg group by b order by sum(c), b limit 10;
+ b | sum  
+---+------
+ 0 | 3582
+ 1 | 3600
+ 2 | 3600
+ 3 | 3600
+ 4 | 3600
 
-select sum(c) from dvagg where b in (0, 1);
- sum  
-------
- 7182
+select c, sum(c) from dvagg group by c order by sum(c), c limit 10;
+ c  |  sum  
+----+-------
+  7 |  6993
+ 11 | 10989
 
-select sum(c) from dvagg where b in (0, 1, 3);
+select b + c, sum(c) from dvagg group by b + c order by sum(c), b + c limit 10;
+ ?column? | sum  
+----------+------
+        7 | 1393
+        8 | 1400
+        9 | 1400
+       10 | 1400
+       12 | 2200
+       13 | 2200
+       14 | 2200
+       15 | 2200
+       11 | 3589
+
+select sum(b + c) from dvagg;
   sum  
 -------
- 10782
+ 21982
 
-select sum(c) from dvagg where b > 10;
- sum 
------
-    
+select b, sum(b + c) from dvagg group by b order by sum(b + c), b limit 10;
+ b | sum  
+---+------
+ 0 | 3582
+ 1 | 4000
+ 2 | 4400
+ 3 | 4800
+ 4 | 5200
+
+select c, sum(b + c) from dvagg group by c order by sum(b + c), c limit 10;
+ c  |  sum  
+----+-------
+  7 |  8993
+ 11 | 12989
+
+select b + c, sum(b + c) from dvagg group by b + c order by sum(b + c), b + c limit 10;
+ ?column? | sum  
+----------+------
+        7 | 1393
+        8 | 1600
+        9 | 1800
+       10 | 2000
+       12 | 2400
+       13 | 2600
+       14 | 2800
+       15 | 3000
+       11 | 4389
 
 select count(*) from dvagg where b >= 0;
  count 
 -------
   1998
 
+select b, count(*) from dvagg where b >= 0 group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+ 0 |   398
+ 1 |   400
+ 2 |   400
+ 3 |   400
+ 4 |   400
+
+select c, count(*) from dvagg where b >= 0 group by c order by count(*), c limit 10;
+ c  | count 
+----+-------
+  7 |   999
+ 11 |   999
+
+select b + c, count(*) from dvagg where b >= 0 group by b + c order by count(*), b + c limit 10;
+ ?column? | count 
+----------+-------
+        7 |   199
+        8 |   200
+        9 |   200
+       10 |   200
+       12 |   200
+       13 |   200
+       14 |   200
+       15 |   200
+       11 |   399
+
+select sum(c) from dvagg where b >= 0;
+  sum  
+-------
+ 17982
+
+select b, sum(c) from dvagg where b >= 0 group by b order by sum(c), b limit 10;
+ b | sum  
+---+------
+ 0 | 3582
+ 1 | 3600
+ 2 | 3600
+ 3 | 3600
+ 4 | 3600
+
+select c, sum(c) from dvagg where b >= 0 group by c order by sum(c), c limit 10;
+ c  |  sum  
+----+-------
+  7 |  6993
+ 11 | 10989
+
+select b + c, sum(c) from dvagg where b >= 0 group by b + c order by sum(c), b + c limit 10;
+ ?column? | sum  
+----------+------
+        7 | 1393
+        8 | 1400
+        9 | 1400
+       10 | 1400
+       12 | 2200
+       13 | 2200
+       14 | 2200
+       15 | 2200
+       11 | 3589
+
+select sum(b + c) from dvagg where b >= 0;
+  sum  
+-------
+ 21982
+
+select b, sum(b + c) from dvagg where b >= 0 group by b order by sum(b + c), b limit 10;
+ b | sum  
+---+------
+ 0 | 3582
+ 1 | 4000
+ 2 | 4400
+ 3 | 4800
+ 4 | 5200
+
+select c, sum(b + c) from dvagg where b >= 0 group by c order by sum(b + c), c limit 10;
+ c  |  sum  
+----+-------
+  7 |  8993
+ 11 | 12989
+
+select b + c, sum(b + c) from dvagg where b >= 0 group by b + c order by sum(b + c), b + c limit 10;
+ ?column? | sum  
+----------+------
+        7 | 1393
+        8 | 1600
+        9 | 1800
+       10 | 2000
+       12 | 2400
+       13 | 2600
+       14 | 2800
+       15 | 3000
+       11 | 4389
+
 select count(*) from dvagg where b = 0;
  count 
 -------
    398
+
+select b, count(*) from dvagg where b = 0 group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+ 0 |   398
+
+select c, count(*) from dvagg where b = 0 group by c order by count(*), c limit 10;
+ c  | count 
+----+-------
+  7 |   199
+ 11 |   199
+
+select b + c, count(*) from dvagg where b = 0 group by b + c order by count(*), b + c limit 10;
+ ?column? | count 
+----------+-------
+        7 |   199
+       11 |   199
+
+select sum(c) from dvagg where b = 0;
+ sum  
+------
+ 3582
+
+select b, sum(c) from dvagg where b = 0 group by b order by sum(c), b limit 10;
+ b | sum  
+---+------
+ 0 | 3582
+
+select c, sum(c) from dvagg where b = 0 group by c order by sum(c), c limit 10;
+ c  | sum  
+----+------
+  7 | 1393
+ 11 | 2189
+
+select b + c, sum(c) from dvagg where b = 0 group by b + c order by sum(c), b + c limit 10;
+ ?column? | sum  
+----------+------
+        7 | 1393
+       11 | 2189
+
+select sum(b + c) from dvagg where b = 0;
+ sum  
+------
+ 3582
+
+select b, sum(b + c) from dvagg where b = 0 group by b order by sum(b + c), b limit 10;
+ b | sum  
+---+------
+ 0 | 3582
+
+select c, sum(b + c) from dvagg where b = 0 group by c order by sum(b + c), c limit 10;
+ c  | sum  
+----+------
+  7 | 1393
+ 11 | 2189
+
+select b + c, sum(b + c) from dvagg where b = 0 group by b + c order by sum(b + c), b + c limit 10;
+ ?column? | sum  
+----------+------
+        7 | 1393
+       11 | 2189
 
 select count(*) from dvagg where b in (0, 1);
  count 
 -------
    798
 
+select b, count(*) from dvagg where b in (0, 1) group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+ 0 |   398
+ 1 |   400
+
+select c, count(*) from dvagg where b in (0, 1) group by c order by count(*), c limit 10;
+ c  | count 
+----+-------
+  7 |   399
+ 11 |   399
+
+select b + c, count(*) from dvagg where b in (0, 1) group by b + c order by count(*), b + c limit 10;
+ ?column? | count 
+----------+-------
+        7 |   199
+       11 |   199
+        8 |   200
+       12 |   200
+
+select sum(c) from dvagg where b in (0, 1);
+ sum  
+------
+ 7182
+
+select b, sum(c) from dvagg where b in (0, 1) group by b order by sum(c), b limit 10;
+ b | sum  
+---+------
+ 0 | 3582
+ 1 | 3600
+
+select c, sum(c) from dvagg where b in (0, 1) group by c order by sum(c), c limit 10;
+ c  | sum  
+----+------
+  7 | 2793
+ 11 | 4389
+
+select b + c, sum(c) from dvagg where b in (0, 1) group by b + c order by sum(c), b + c limit 10;
+ ?column? | sum  
+----------+------
+        7 | 1393
+        8 | 1400
+       11 | 2189
+       12 | 2200
+
+select sum(b + c) from dvagg where b in (0, 1);
+ sum  
+------
+ 7582
+
+select b, sum(b + c) from dvagg where b in (0, 1) group by b order by sum(b + c), b limit 10;
+ b | sum  
+---+------
+ 0 | 3582
+ 1 | 4000
+
+select c, sum(b + c) from dvagg where b in (0, 1) group by c order by sum(b + c), c limit 10;
+ c  | sum  
+----+------
+  7 | 2993
+ 11 | 4589
+
+select b + c, sum(b + c) from dvagg where b in (0, 1) group by b + c order by sum(b + c), b + c limit 10;
+ ?column? | sum  
+----------+------
+        7 | 1393
+        8 | 1600
+       11 | 2189
+       12 | 2400
+
 select count(*) from dvagg where b in (0, 1, 3);
  count 
 -------
   1198
 
+select b, count(*) from dvagg where b in (0, 1, 3) group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+ 0 |   398
+ 1 |   400
+ 3 |   400
+
+select c, count(*) from dvagg where b in (0, 1, 3) group by c order by count(*), c limit 10;
+ c  | count 
+----+-------
+  7 |   599
+ 11 |   599
+
+select b + c, count(*) from dvagg where b in (0, 1, 3) group by b + c order by count(*), b + c limit 10;
+ ?column? | count 
+----------+-------
+        7 |   199
+       11 |   199
+        8 |   200
+       10 |   200
+       12 |   200
+       14 |   200
+
+select sum(c) from dvagg where b in (0, 1, 3);
+  sum  
+-------
+ 10782
+
+select b, sum(c) from dvagg where b in (0, 1, 3) group by b order by sum(c), b limit 10;
+ b | sum  
+---+------
+ 0 | 3582
+ 1 | 3600
+ 3 | 3600
+
+select c, sum(c) from dvagg where b in (0, 1, 3) group by c order by sum(c), c limit 10;
+ c  | sum  
+----+------
+  7 | 4193
+ 11 | 6589
+
+select b + c, sum(c) from dvagg where b in (0, 1, 3) group by b + c order by sum(c), b + c limit 10;
+ ?column? | sum  
+----------+------
+        7 | 1393
+        8 | 1400
+       10 | 1400
+       11 | 2189
+       12 | 2200
+       14 | 2200
+
+select sum(b + c) from dvagg where b in (0, 1, 3);
+  sum  
+-------
+ 12382
+
+select b, sum(b + c) from dvagg where b in (0, 1, 3) group by b order by sum(b + c), b limit 10;
+ b | sum  
+---+------
+ 0 | 3582
+ 1 | 4000
+ 3 | 4800
+
+select c, sum(b + c) from dvagg where b in (0, 1, 3) group by c order by sum(b + c), c limit 10;
+ c  | sum  
+----+------
+  7 | 4993
+ 11 | 7389
+
+select b + c, sum(b + c) from dvagg where b in (0, 1, 3) group by b + c order by sum(b + c), b + c limit 10;
+ ?column? | sum  
+----------+------
+        7 | 1393
+        8 | 1600
+       10 | 2000
+       11 | 2189
+       12 | 2400
+       14 | 2800
+
 select count(*) from dvagg where b > 10;
  count 
 -------
      0
+
+select b, count(*) from dvagg where b > 10 group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+
+select c, count(*) from dvagg where b > 10 group by c order by count(*), c limit 10;
+ c | count 
+---+-------
+
+select b + c, count(*) from dvagg where b > 10 group by b + c order by count(*), b + c limit 10;
+ ?column? | count 
+----------+-------
+
+select sum(c) from dvagg where b > 10;
+ sum 
+-----
+    
+
+select b, sum(c) from dvagg where b > 10 group by b order by sum(c), b limit 10;
+ b | sum 
+---+-----
+
+select c, sum(c) from dvagg where b > 10 group by c order by sum(c), c limit 10;
+ c | sum 
+---+-----
+
+select b + c, sum(c) from dvagg where b > 10 group by b + c order by sum(c), b + c limit 10;
+ ?column? | sum 
+----------+-----
+
+select sum(b + c) from dvagg where b > 10;
+ sum 
+-----
+    
+
+select b, sum(b + c) from dvagg where b > 10 group by b order by sum(b + c), b limit 10;
+ b | sum 
+---+-----
+
+select c, sum(b + c) from dvagg where b > 10 group by c order by sum(b + c), c limit 10;
+ c | sum 
+---+-----
+
+select b + c, sum(b + c) from dvagg where b > 10 group by b + c order by sum(b + c), b + c limit 10;
+ ?column? | sum 
+----------+-----
+
+select count(*) from dvagg where c != 7;
+ count 
+-------
+   999
+
+select b, count(*) from dvagg where c != 7 group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+ 0 |   199
+ 1 |   200
+ 2 |   200
+ 3 |   200
+ 4 |   200
+
+select c, count(*) from dvagg where c != 7 group by c order by count(*), c limit 10;
+ c  | count 
+----+-------
+ 11 |   999
+
+select b + c, count(*) from dvagg where c != 7 group by b + c order by count(*), b + c limit 10;
+ ?column? | count 
+----------+-------
+       11 |   199
+       12 |   200
+       13 |   200
+       14 |   200
+       15 |   200
+
+select sum(c) from dvagg where c != 7;
+  sum  
+-------
+ 10989
+
+select b, sum(c) from dvagg where c != 7 group by b order by sum(c), b limit 10;
+ b | sum  
+---+------
+ 0 | 2189
+ 1 | 2200
+ 2 | 2200
+ 3 | 2200
+ 4 | 2200
+
+select c, sum(c) from dvagg where c != 7 group by c order by sum(c), c limit 10;
+ c  |  sum  
+----+-------
+ 11 | 10989
+
+select b + c, sum(c) from dvagg where c != 7 group by b + c order by sum(c), b + c limit 10;
+ ?column? | sum  
+----------+------
+       11 | 2189
+       12 | 2200
+       13 | 2200
+       14 | 2200
+       15 | 2200
+
+select sum(b + c) from dvagg where c != 7;
+  sum  
+-------
+ 12989
+
+select b, sum(b + c) from dvagg where c != 7 group by b order by sum(b + c), b limit 10;
+ b | sum  
+---+------
+ 0 | 2189
+ 1 | 2400
+ 2 | 2600
+ 3 | 2800
+ 4 | 3000
+
+select c, sum(b + c) from dvagg where c != 7 group by c order by sum(b + c), c limit 10;
+ c  |  sum  
+----+-------
+ 11 | 12989
+
+select b + c, sum(b + c) from dvagg where c != 7 group by b + c order by sum(b + c), b + c limit 10;
+ ?column? | sum  
+----------+------
+       11 | 2189
+       12 | 2400
+       13 | 2600
+       14 | 2800
+       15 | 3000
+
+select count(*) from dvagg where c > 1000;
+ count 
+-------
+     0
+
+select b, count(*) from dvagg where c > 1000 group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+
+select c, count(*) from dvagg where c > 1000 group by c order by count(*), c limit 10;
+ c | count 
+---+-------
+
+select b + c, count(*) from dvagg where c > 1000 group by b + c order by count(*), b + c limit 10;
+ ?column? | count 
+----------+-------
+
+select sum(c) from dvagg where c > 1000;
+ sum 
+-----
+    
+
+select b, sum(c) from dvagg where c > 1000 group by b order by sum(c), b limit 10;
+ b | sum 
+---+-----
+
+select c, sum(c) from dvagg where c > 1000 group by c order by sum(c), c limit 10;
+ c | sum 
+---+-----
+
+select b + c, sum(c) from dvagg where c > 1000 group by b + c order by sum(c), b + c limit 10;
+ ?column? | sum 
+----------+-----
+
+select sum(b + c) from dvagg where c > 1000;
+ sum 
+-----
+    
+
+select b, sum(b + c) from dvagg where c > 1000 group by b order by sum(b + c), b limit 10;
+ b | sum 
+---+-----
+
+select c, sum(b + c) from dvagg where c > 1000 group by c order by sum(b + c), c limit 10;
+ c | sum 
+---+-----
+
+select b + c, sum(b + c) from dvagg where c > 1000 group by b + c order by sum(b + c), b + c limit 10;
+ ?column? | sum 
+----------+-----
+
+select count(*) from dvagg where c < 1000;
+ count 
+-------
+  1998
+
+select b, count(*) from dvagg where c < 1000 group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+ 0 |   398
+ 1 |   400
+ 2 |   400
+ 3 |   400
+ 4 |   400
+
+select c, count(*) from dvagg where c < 1000 group by c order by count(*), c limit 10;
+ c  | count 
+----+-------
+  7 |   999
+ 11 |   999
+
+select b + c, count(*) from dvagg where c < 1000 group by b + c order by count(*), b + c limit 10;
+ ?column? | count 
+----------+-------
+        7 |   199
+        8 |   200
+        9 |   200
+       10 |   200
+       12 |   200
+       13 |   200
+       14 |   200
+       15 |   200
+       11 |   399
+
+select sum(c) from dvagg where c < 1000;
+  sum  
+-------
+ 17982
+
+select b, sum(c) from dvagg where c < 1000 group by b order by sum(c), b limit 10;
+ b | sum  
+---+------
+ 0 | 3582
+ 1 | 3600
+ 2 | 3600
+ 3 | 3600
+ 4 | 3600
+
+select c, sum(c) from dvagg where c < 1000 group by c order by sum(c), c limit 10;
+ c  |  sum  
+----+-------
+  7 |  6993
+ 11 | 10989
+
+select b + c, sum(c) from dvagg where c < 1000 group by b + c order by sum(c), b + c limit 10;
+ ?column? | sum  
+----------+------
+        7 | 1393
+        8 | 1400
+        9 | 1400
+       10 | 1400
+       12 | 2200
+       13 | 2200
+       14 | 2200
+       15 | 2200
+       11 | 3589
+
+select sum(b + c) from dvagg where c < 1000;
+  sum  
+-------
+ 21982
+
+select b, sum(b + c) from dvagg where c < 1000 group by b order by sum(b + c), b limit 10;
+ b | sum  
+---+------
+ 0 | 3582
+ 1 | 4000
+ 2 | 4400
+ 3 | 4800
+ 4 | 5200
+
+select c, sum(b + c) from dvagg where c < 1000 group by c order by sum(b + c), c limit 10;
+ c  |  sum  
+----+-------
+  7 |  8993
+ 11 | 12989
+
+select b + c, sum(b + c) from dvagg where c < 1000 group by b + c order by sum(b + c), b + c limit 10;
+ ?column? | sum  
+----------+------
+        7 | 1393
+        8 | 1600
+        9 | 1800
+       10 | 2000
+       12 | 2400
+       13 | 2600
+       14 | 2800
+       15 | 3000
+       11 | 4389
 
 explain (buffers off, costs off) select sum(c) from dvagg where b in (0, 1, 3);
 --- QUERY PLAN ---
@@ -133,7 +818,6 @@ explain (buffers off, costs off) select sum(a), sum(b), sum(c) from dvagg where 
                      Vectorized Filter: (b = ANY ('{0,1,3}'::integer[]))
                      ->  Seq Scan on compress_hyper_2_4_chunk
 
-reset timescaledb.enable_vectorized_aggregation;
 -- The runtime chunk exclusion should work.
 explain (buffers off, costs off) select sum(c) from dvagg where a < stable_abs(1000);
 --- QUERY PLAN ---
