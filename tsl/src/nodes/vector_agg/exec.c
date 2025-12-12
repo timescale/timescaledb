@@ -57,7 +57,7 @@ get_input_offset(const DecompressContext *dcontext, const Var *var)
 
 /*
  * Return the arrow array or the datum (in case of single scalar value) for a
- * given attribute as a CompressedColumnValues struct.
+ * given expression as a CompressedColumnValues struct.
  */
 CompressedColumnValues
 vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slot,
