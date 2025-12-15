@@ -42,6 +42,20 @@ FROM original
 FULL OUTER JOIN decompressed ON (original.row_number = decompressed.row_number)
 WHERE (original.*) IS DISTINCT FROM (decompressed.*);
 
+--test that decompression gives same result with compressed_data_to_array
+with original AS (
+  SELECT row_number() OVER() row_number, * FROM (:QUERY) as q
+),
+decompressed AS (
+  SELECT row_number() OVER () row_number, * FROM (SELECT unnest(_timescaledb_functions.compressed_data_to_array(c, cast(NULL as :TYPE))) FROM compressed ) as q
+)
+SELECT 'Number of rows different between original and compressed_data_to_array (expect 0)', count(*), :'TYPE' AS type
+FROM original
+FULL OUTER JOIN decompressed ON (original.row_number = decompressed.row_number)
+WHERE (original.*) IS DISTINCT FROM (decompressed.*);
+
+SELECT :'TYPE' AS type, _timescaledb_functions.compressed_data_column_size(c, cast(NULL as :TYPE)) AS "column size" FROM compressed;
+
 --Test IO
 SELECT c "COMPRESSED_AS_TEXT" FROM compressed \gset
 
