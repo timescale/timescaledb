@@ -55,6 +55,14 @@ psql:include/compression_test.sql:7: NOTICE:  table "compressed" does not exist,
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count |  type  
+-----------------------------------------------------------------------------------+-------+--------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | BIGINT
+
+  type  | column size 
+--------+-------------
+ BIGINT |        8000
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -83,6 +91,14 @@ INSERT INTO base_ints VALUES (0, NULL), (10, NULL), (10000, NULL);
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count |  type  
+-----------------------------------------------------------------------------------+-------+--------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | BIGINT
+
+  type  | column size 
+--------+-------------
+ BIGINT |        8000
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -116,6 +132,14 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (S
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count |  type  
+-----------------------------------------------------------------------------------+-------+--------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | BIGINT
+
+  type  | column size 
+--------+-------------
+ BIGINT |           8
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -157,6 +181,14 @@ CREATE TABLE base_ints AS SELECT row_number() over () as rn, item FROM
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count |  type  
+-----------------------------------------------------------------------------------+-------+--------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | BIGINT
+
+  type  | column size 
+--------+-------------
+ BIGINT |         216
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -185,6 +217,14 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 5) item FR
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count |  type  
+-----------------------------------------------------------------------------------+-------+--------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | BIGINT
+
+  type  | column size 
+--------+-------------
+ BIGINT |          72
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -211,6 +251,14 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 1) item FR
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count |  type  
+-----------------------------------------------------------------------------------+-------+--------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | BIGINT
+
+  type  | column size 
+--------+-------------
+ BIGINT |          72
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -239,6 +287,14 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 10) item F
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count |  type  
+-----------------------------------------------------------------------------------+-------+--------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | BIGINT
+
+  type  | column size 
+--------+-------------
+ BIGINT |          72
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -265,6 +321,14 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count |  type  
+-----------------------------------------------------------------------------------+-------+--------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | BIGINT
+
+  type  | column size 
+--------+-------------
+ BIGINT |          48
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -303,6 +367,14 @@ SELECT
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count |  type  
+-----------------------------------------------------------------------------------+-------+--------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | BIGINT
+
+  type  | column size 
+--------+-------------
+ BIGINT |        8000
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -345,6 +417,14 @@ CREATE TABLE base_time AS SELECT row_number() OVER() as rn, item FROM
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count |    type     
+-----------------------------------------------------------------------------------+-------+-------------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TIMESTAMPTZ
+
+    type     | column size 
+-------------+-------------
+ TIMESTAMPTZ |        4992
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -386,6 +466,14 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, item::float4 FROM
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | real
+
+ type | column size 
+------+-------------
+ real |        4000
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -418,6 +506,14 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, item::float4 FROM 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | real
+
+ type | column size 
+------+-------------
+ real |           4
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -458,6 +554,14 @@ CREATE TABLE base_floats AS SELECT row_number() over () as rn, item FROM
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | real
+
+ type | column size 
+------+-------------
+ real |          96
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -485,6 +589,14 @@ CREATE TABLE base_floats AS SELECT row_number() over () as rn, 0::float4 as item
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | real
+
+ type | column size 
+------+-------------
+ real |        4000
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -514,6 +626,14 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::floa
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | real
+
+ type | column size 
+------+-------------
+ real |          36
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -540,6 +660,14 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::floa
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | real
+
+ type | column size 
+------+-------------
+ real |          36
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -568,6 +696,14 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::flo
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | real
+
+ type | column size 
+------+-------------
+ real |          36
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -594,6 +730,14 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULL
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | real
+
+ type | column size 
+------+-------------
+ real |          24
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -636,6 +780,14 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double prec
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count |       type       
+-----------------------------------------------------------------------------------+-------+------------------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | DOUBLE PRECISION
+
+       type       | column size 
+------------------+-------------
+ DOUBLE PRECISION |        8000
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -668,6 +820,14 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double prec
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count |       type       
+-----------------------------------------------------------------------------------+-------+------------------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | DOUBLE PRECISION
+
+       type       | column size 
+------------------+-------------
+ DOUBLE PRECISION |           8
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -708,6 +868,14 @@ CREATE TABLE base_doubles AS SELECT row_number() over () as rn, item FROM
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count |       type       
+-----------------------------------------------------------------------------------+-------+------------------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | DOUBLE PRECISION
+
+       type       | column size 
+------------------+-------------
+ DOUBLE PRECISION |         192
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -735,6 +903,14 @@ CREATE TABLE base_doubles AS SELECT row_number() over () as rn, 0::FLOAT(50) as 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count |       type       
+-----------------------------------------------------------------------------------+-------+------------------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | DOUBLE PRECISION
+
+       type       | column size 
+------------------+-------------
+ DOUBLE PRECISION |        8000
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -764,6 +940,14 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::DOU
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count |       type       
+-----------------------------------------------------------------------------------+-------+------------------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | DOUBLE PRECISION
+
+       type       | column size 
+------------------+-------------
+ DOUBLE PRECISION |          72
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -790,6 +974,14 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::DOU
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count |       type       
+-----------------------------------------------------------------------------------+-------+------------------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | DOUBLE PRECISION
+
+       type       | column size 
+------------------+-------------
+ DOUBLE PRECISION |          72
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -818,6 +1010,14 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::DO
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count |       type       
+-----------------------------------------------------------------------------------+-------+------------------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | DOUBLE PRECISION
+
+       type       | column size 
+------------------+-------------
+ DOUBLE PRECISION |          72
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -844,6 +1044,14 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NUL
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count |       type       
+-----------------------------------------------------------------------------------+-------+------------------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | DOUBLE PRECISION
+
+       type       | column size 
+------------------+-------------
+ DOUBLE PRECISION |          48
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -887,6 +1095,14 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |        3893
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -921,6 +1137,14 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |        2100
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -948,6 +1172,14 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |           2
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -986,6 +1218,14 @@ SELECT pg_total_relation_size(reltoastrelid)
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |     1100040
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -1014,6 +1254,14 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |        1900
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -1040,6 +1288,14 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |        1900
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -1068,6 +1324,14 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |        1800
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -1094,6 +1358,14 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |        1300
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -1137,6 +1409,14 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |         292
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -1169,6 +1449,14 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |           2
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -1207,6 +1495,14 @@ SELECT pg_total_relation_size(reltoastrelid)
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |     1100040
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -1235,6 +1531,14 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |          19
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -1261,6 +1565,14 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |          19
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -1289,6 +1601,14 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |          18
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -1315,6 +1635,14 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | TEXT
+
+ type | column size 
+------+-------------
+ TEXT |          13
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -1357,6 +1685,14 @@ CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, (item%2=0)::boolean
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count |  type   
+-----------------------------------------------------------------------------------+-------+---------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | boolean
+
+  type   | column size 
+---------+-------------
+ boolean |        1000
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -1384,6 +1720,14 @@ CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, true as item FROM (
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count |  type   
+-----------------------------------------------------------------------------------+-------+---------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | boolean
+
+  type   | column size 
+---------+-------------
+ boolean |        1000
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -1413,6 +1757,14 @@ CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, false as item FROM 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count |  type   
+-----------------------------------------------------------------------------------+-------+---------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | boolean
+
+  type   | column size 
+---------+-------------
+ boolean |        1000
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -1440,6 +1792,14 @@ CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, true as item FROM (
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count |  type   
+-----------------------------------------------------------------------------------+-------+---------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | boolean
+
+  type   | column size 
+---------+-------------
+ boolean |           1
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -1469,6 +1829,14 @@ CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, ((NULLIF(i, (CASE W
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count |  type   
+-----------------------------------------------------------------------------------+-------+---------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | boolean
+
+  type   | column size 
+---------+-------------
+ boolean |         977
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -1496,6 +1864,14 @@ CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, ((NULLIF(i, (CASE W
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count |  type   
+-----------------------------------------------------------------------------------+-------+---------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | boolean
+
+  type   | column size 
+---------+-------------
+ boolean |         966
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -1569,6 +1945,14 @@ UPDATE base_uuids SET item = (SELECT u FROM uuid_set WHERE i = rn % 97) WHERE rn
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | uuid
+
+ type | column size 
+------+-------------
+ uuid |       11952
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -1598,6 +1982,14 @@ UPDATE base_uuids SET item = '0197a7a9-b48b-7c74-a2a4-dcdbce635d11' WHERE rn = 1
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | uuid
+
+ type | column size 
+------+-------------
+ uuid |          16
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -1626,6 +2018,14 @@ UPDATE base_uuids SET item = (SELECT u FROM uuid_set WHERE i = rn % 100);
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | uuid
+
+ type | column size 
+------+-------------
+ uuid |       15840
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
@@ -1657,6 +2057,14 @@ UPDATE base_uuids SET item = '0197a7a9-b48b-7c74-a2a4-dcdbce635d12' WHERE rn % 3
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
 
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | uuid
+
+ type | column size 
+------+-------------
+ uuid |       10672
+
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
@@ -1684,6 +2092,14 @@ CREATE TABLE base_uuids AS SELECT row_number() OVER() as rn, u as item FROM uuid
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
+
+                                     ?column?                                      | count | type 
+-----------------------------------------------------------------------------------+-------+------
+ Number of rows different between original and compressed_data_to_array (expect 0) |     0 | uuid
+
+ type | column size 
+------+-------------
+ uuid |        1600
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
