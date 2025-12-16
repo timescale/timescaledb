@@ -72,9 +72,6 @@ CREATE TABLE sensor_data (
 ) WITH (
     tsdb.hypertable
 );
-
--- create index
-CREATE INDEX idx_sensor_id_time ON sensor_data(sensor_id, time DESC);
 ```
 
 `tsdb.hypertable` - Converts this into a TimescaleDB hypertable
@@ -82,6 +79,8 @@ CREATE INDEX idx_sensor_id_time ON sensor_data(sensor_id, time DESC);
 ## Step 4: Insert Sample Data
 
 Let's add some sample sensor readings:
+-- Enable query timing to see time to run queries
+\timing on
 
 ```sql
 -- Insert sample data for multiple sensors
