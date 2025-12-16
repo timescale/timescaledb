@@ -4,7 +4,7 @@ Get started with TimescaleDB in under 10 minutes. This guide will help you run T
 
 ## What You'll Learn
 
-- How to run TimescaleDB with a single Docker command
+- How to run TimescaleDB with a one-line install or Docker command
 - How to create a hypertable with columnstore enabled
 - How to insert data directly to the columnstore 
 - How to execute analytical queries
@@ -17,28 +17,43 @@ Get started with TimescaleDB in under 10 minutes. This guide will help you run T
 
 ## Step 1: Start TimescaleDB
 
-Run TimescaleDB using Docker with a single command:
+You have two options to start TimescaleDB:
 
-```bash
-docker run -d --name timescaledb \
-    -p 5432:5432 \
-    -e POSTGRES_PASSWORD=password \
-    timescale/timescaledb-ha:pg18
+### Option 1: One-line install (Recommended)
+
+The easiest way to get started:
+
+```sh
+curl -sL https://tsdb.co/start-local | sh
 ```
 
 This command:
 - Downloads and starts TimescaleDB (if not already downloaded)
-- Exposes PostgreSQL on port 5432
+- Exposes PostgreSQL on port **6543** (a non-standard port to avoid conflicts with other PostgreSQL instances on port 5432)
 - Automatically tunes settings for your environment using timescaledb-tune
+- Sets up a persistent data volume
 
-Wait about 10-15 seconds for TimescaleDB to initialize.
+### Option 2: Manual Docker command
+
+Alternatively, you can run TimescaleDB directly with Docker:
+
+```bash
+docker run -d --name timescaledb \
+    -p 6543:5432 \
+    -e POSTGRES_PASSWORD=password \
+    timescale/timescaledb-ha:pg18
+```
+
+**Note:** We use port **6543** (mapped to container port 5432) to avoid conflicts if you have other PostgreSQL instances running on the standard port 5432.
+
+Wait about 1-2 minutes for TimescaleDB to download & initialize.
 
 ## Step 2: Connect to TimescaleDB
 
 Connect using `psql`:
 
 ```bash
-psql -h localhost -p 5432 -U postgres
+psql -h localhost -p 6543 -U postgres
 # When prompted, enter password: password
 ```
 
@@ -55,7 +70,7 @@ Expected output:
  timescaledb | 2.x.x
 ```
 
-**Prefer a GUI?** If you'd rather use a graphical tool instead of the command line, you can download [pgAdmin](https://www.pgadmin.org/download/) and connect to TimescaleDB using the same connection details (host: `localhost`, port: `5432`, user: `postgres`, password: `password`).
+**Prefer a GUI?** If you'd rather use a graphical tool instead of the command line, you can download [pgAdmin](https://www.pgadmin.org/download/) and connect to TimescaleDB using the same connection details (host: `localhost`, port: `6543`, user: `postgres`, password: `password`).
 
 ## Step 3: Create Your First Hypertable
 
@@ -79,10 +94,12 @@ CREATE TABLE sensor_data (
 ## Step 4: Insert Sample Data
 
 Let's add some sample sensor readings:
--- Enable query timing to see time to run queries
-\timing on
+
 
 ```sql
+-- Enable timing to see time to execute queries
+\timing on
+
 -- Insert sample data for multiple sensors
 -- SET timescaledb.enable_direct_compress_insert = on to insert data directly to the columnstore (columnnar format for performance)
 SET timescaledb.enable_direct_compress_insert = on;
@@ -214,29 +231,56 @@ Check out our complete examples with real-world datasets:
 # Check if container is running
 docker ps -a
 
-# View container logs
+# View container logs (use the appropriate container name)
+# For one-line install:
+docker logs timescaledb-ha-pg18-quickstart
+# For manual Docker command:
 docker logs timescaledb
 
 # Stop and remove existing container
+# For one-line install:
+docker stop timescaledb-ha-pg18-quickstart && docker rm timescaledb-ha-pg18-quickstart
+# For manual Docker command:
 docker stop timescaledb && docker rm timescaledb
 
 # Start fresh
-docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=password timescale/timescaledb-ha:pg17
+# Option 1: Use the one-line install
+curl -sL https://tsdb.co/start-local | sh
+# Option 2: Use manual Docker command
+docker run -d --name timescaledb -p 6543:5432 -e POSTGRES_PASSWORD=password timescale/timescaledb-ha:pg18
 ```
 
 ### Can't connect with psql
 
 - Verify Docker container is running: `docker ps`
-- Check port 5432 isn't already in use: `lsof -i :5432`
-- Try using explicit host: `psql -h 127.0.0.1 -p 5432 -U postgres`
+- Check port 6543 isn't already in use: `lsof -i :6543`
+- Try using explicit host: `psql -h 127.0.0.1 -p 6543 -U postgres`
 
 ### TimescaleDB extension not found
 
-The `timescale/timescaledb-ha:pg17` image has TimescaleDB pre-installed and pre-loaded. If you see errors, ensure you're using the correct image.
+The `timescale/timescaledb-ha:pg18` image has TimescaleDB pre-installed and pre-loaded. If you see errors, ensure you're using the correct image.
 
 ## Clean Up
 
 When you're done experimenting:
+
+### If you used the one-line install:
+
+```bash
+# Stop the container
+docker stop timescaledb-ha-pg18-quickstart
+
+# Remove the container
+docker rm timescaledb-ha-pg18-quickstart
+
+# Remove the persistent data volume
+docker volume rm timescaledb_data
+
+# (Optional) Remove the Docker image
+docker rmi timescale/timescaledb-ha:pg18
+```
+
+### If you used the manual Docker command:
 
 ```bash
 # Stop the container
@@ -246,8 +290,10 @@ docker stop timescaledb
 docker rm timescaledb
 
 # (Optional) Remove the Docker image
-docker rmi timescale/timescaledb-ha:pg17
+docker rmi timescale/timescaledb-ha:pg18
 ```
+
+**Note:** If you created a named volume with the manual Docker command, you can remove it with `docker volume rm <volume_name>`.
 
 ---
 
