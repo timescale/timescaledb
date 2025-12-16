@@ -904,6 +904,14 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		ContinuousAggRefreshState refresh;
 		continuous_agg_refresh_init(&refresh, cagg, &refresh_window, bucketing_refresh_window);
 
+#ifdef TS_DEBUG
+		elog(NOTICE,
+			 "continuous aggregate \"%s\" has pending materializations in window [ %s, %s ]",
+			 NameStr(cagg->data.user_view_name),
+			 ts_internal_to_time_string(refresh_window.start, refresh_window.type),
+			 ts_internal_to_time_string(refresh_window.end, refresh_window.type));
+#endif
+
 		InternalTimeRange invalidation = {
 			.type = refresh_window.type,
 			.start = refresh_window.start,

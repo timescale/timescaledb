@@ -208,8 +208,12 @@ continuous_agg_has_pending_materializations(const ContinuousAgg *cagg,
 	if (materialization_range.start > materialization_range.end)
 		materialization_range.start = materialization_range.end;
 
+	PushActiveSnapshot(GetLatestSnapshot());
 	bool has_pending_materializations =
 		(execute_materialization_plan(&context, PLAN_TYPE_RANGES_PENDING) > 0);
+
+	free_materialization_plan(&context, PLAN_TYPE_RANGES_PENDING);
+	PopActiveSnapshot();
 
 	/* Restore search_path */
 	AtEOXact_GUC(false, save_nestlevel);
@@ -882,7 +886,7 @@ execute_materializations(MaterializationContext *context)
 				rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT);
 			}
 
-			/* Delete the invalidation entry */
+			/* Delete the pending range entry */
 			rows_processed += execute_materialization_plan(context, PLAN_TYPE_RANGES_DELETE);
 		}
 
