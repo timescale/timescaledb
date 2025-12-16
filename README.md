@@ -17,8 +17,8 @@
  
 ## Get started with TimescaleDB
 
-```bash
-curl -sL https://tsdb.co/start-local | bash
+```sh
+curl -sL https://tsdb.co/start-local | sh
 ```
 
 See [other installation options](https://docs.tigerdata.com/self-hosted/latest/install/) or try [Tiger Cloud](https://docs.tigerdata.com/getting-started/latest/) for free.
