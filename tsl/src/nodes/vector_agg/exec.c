@@ -436,11 +436,12 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 	bool tmp_branch_isnull;
 	bool tmp_branch_null_storage = true;
 
-	for (int i = 0; i < list_length(case_expr->args) + 1; i++)
+	const int num_explicit_branches = list_length(case_expr->args);
+	for (int i = 0; i < num_explicit_branches + 1; i++)
 	{
 		Expr *condition_expression;
 		Expr *value_expression;
-		if (i < list_length(case_expr->args))
+		if (i < num_explicit_branches)
 		{
 			CaseWhen const *when = castNode(CaseWhen, list_nth(case_expr->args, i));
 			condition_expression = when->expr;
@@ -530,9 +531,7 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 		}
 
 		int branch_index;
-		for (branch_index = 0;
-			 branch_index < (int) (sizeof(branch_values) / sizeof(branch_values[0]));
-			 branch_index++)
+		for (branch_index = 0; branch_index < num_explicit_branches; branch_index++)
 		{
 			if (arrow_row_is_valid(branch_filters[branch_index], row))
 			{

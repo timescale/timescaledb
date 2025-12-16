@@ -17,9 +17,9 @@ alter table aggexpr set (tsdb.compress_segmentby = '');
 insert into aggexpr select 11, null, null, null, generate_series(1, 1489);
 insert into aggexpr select 12, 12, '12', false, generate_series(1, 1487);
 insert into aggexpr select 13, case when x % 2 = 0 then 13 else null end,
-    case when x % 2 = 1 then '13' else null end, x % 2 = 0, x from generate_series(1, 1483) x;
+    case when x % 2 = 1 then '13' else null end, x % 3 = 0, x from generate_series(1, 1483) x;
 insert into aggexpr select 14, case when x % 2 = 0 then 14 else null end,
-    case when x % 2 = 0 then '14' || x::text else null end, x % 2 = 1, x from generate_series(1, 1481) x;
+    case when x % 2 = 0 then '14' || x::text else null end, x % 3 = 1, x from generate_series(1, 1481) x;
 select count(compress_chunk(x)) from show_chunks('aggexpr') x;
 NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
  count 
@@ -44,6 +44,7 @@ from
         , 'count(x)'
         , 'count(b)'
         , 'sum((i = 12)::int)'
+        , 'sum(abs(v - 500))'
         ]) function,
     unnest(array[
         null
@@ -60,6 +61,7 @@ from
         , 'i % 2'
         , 'ts'
         , 'b'
+        , 'v - 501 > 0'
         ]) with ordinality as grouping(grouping, n)
 order by grouping.n, condition.n, function
 \gexec
@@ -83,6 +85,11 @@ select count(x) from aggexpr;
 -------
   4462
 
+select sum(abs(v - 500)) from aggexpr;
+   sum   
+---------
+ 3683961
+
 select sum((i = 12)::int) from aggexpr;
  sum  
 ------
@@ -91,22 +98,27 @@ select sum((i = 12)::int) from aggexpr;
 select count(*) from aggexpr where b;
  count 
 -------
-  1482
+   988
 
 select count(b) from aggexpr where b;
  count 
 -------
-  1482
+   988
 
 select count(i) from aggexpr where b;
  count 
 -------
-   741
+   494
 
 select count(x) from aggexpr where b;
  count 
 -------
-     0
+   494
+
+select sum(abs(v - 500)) from aggexpr where b;
+  sum   
+--------
+ 404936
 
 select sum((i = 12)::int) from aggexpr where b;
  sum 
@@ -116,22 +128,27 @@ select sum((i = 12)::int) from aggexpr where b;
 select count(*) from aggexpr where not b;
  count 
 -------
-  4462
+  4956
 
 select count(b) from aggexpr where not b;
  count 
 -------
-  4462
+  4956
 
 select count(i) from aggexpr where not b;
  count 
 -------
-  3720
+  3967
 
 select count(x) from aggexpr where not b;
  count 
 -------
-  4462
+  3968
+
+select sum(abs(v - 500)) from aggexpr where not b;
+   sum   
+---------
+ 2040470
 
 select sum((i = 12)::int) from aggexpr where not b;
  sum  
@@ -158,6 +175,11 @@ select count(x) from aggexpr where length(x) = 1;
 -------
   1493
 
+select sum(abs(v - 500)) from aggexpr where length(x) = 1;
+  sum   
+--------
+ 618271
+
 select sum((i = 12)::int) from aggexpr where length(x) = 1;
  sum 
 -----
@@ -183,6 +205,11 @@ select count(x) from aggexpr where length(x) < 0;
 -------
      0
 
+select sum(abs(v - 500)) from aggexpr where length(x) < 0;
+ sum 
+-----
+   $
+
 select sum((i = 12)::int) from aggexpr where length(x) < 0;
  sum 
 -----
@@ -207,6 +234,11 @@ select count(x) from aggexpr where i % 2 = 0;
  count 
 -------
   3720
+
+select sum(abs(v - 500)) from aggexpr where i % 2 = 0;
+   sum   
+---------
+ 1533439
 
 select sum((i = 12)::int) from aggexpr where i % 2 = 0;
  sum  
@@ -257,6 +289,17 @@ select length(x), count(x) from aggexpr group by length(x) order by count(x), le
       1 |  1493
       2 |  2229
 
+select length(x), sum(abs(v - 500)) from aggexpr group by length(x) order by sum(abs(v - 500)), length(x) limit 10;
+ length |   sum   
+--------+---------
+      3 |    1980
+      4 |   20070
+      5 |  102450
+      6 |  178340
+      1 |  618271
+      2 |  916892
+      $ | 1845958
+
 select length(x), sum((i = 12)::int) from aggexpr group by length(x) order by sum((i = 12)::int), length(x) limit 10;
  length | sum  
 --------+------
@@ -271,67 +314,117 @@ select length(x), sum((i = 12)::int) from aggexpr group by length(x) order by su
 select length(x), count(*) from aggexpr where b group by length(x) order by count(*), length(x) limit 10;
  length | count 
 --------+-------
-      $ |  1482
+      3 |     1
+      4 |    15
+      6 |    81
+      5 |   150
+      2 |   247
+      $ |   494
 
 select length(x), count(b) from aggexpr where b group by length(x) order by count(b), length(x) limit 10;
  length | count 
 --------+-------
-      $ |  1482
+      3 |     1
+      4 |    15
+      6 |    81
+      5 |   150
+      2 |   247
+      $ |   494
 
 select length(x), count(i) from aggexpr where b group by length(x) order by count(i), length(x) limit 10;
  length | count 
 --------+-------
-      $ |   741
+      2 |     0
+      3 |     1
+      4 |    15
+      6 |    81
+      5 |   150
+      $ |   247
 
 select length(x), count(x) from aggexpr where b group by length(x) order by count(x), length(x) limit 10;
  length | count 
 --------+-------
       $ |     0
+      3 |     1
+      4 |    15
+      6 |    81
+      5 |   150
+      2 |   247
+
+select length(x), sum(abs(v - 500)) from aggexpr where b group by length(x) order by sum(abs(v - 500)), length(x) limit 10;
+ length |  sum   
+--------+--------
+      3 |    496
+      4 |   6720
+      5 |  34118
+      6 |  59940
+      2 | 101193
+      $ | 202469
 
 select length(x), sum((i = 12)::int) from aggexpr where b group by length(x) order by sum((i = 12)::int), length(x) limit 10;
  length | sum 
 --------+-----
+      3 |   0
+      4 |   0
+      5 |   0
+      6 |   0
       $ |   0
+      2 |   $
 
 select length(x), count(*) from aggexpr where not b group by length(x) order by count(*), length(x) limit 10;
  length | count 
 --------+-------
-      3 |     4
-      4 |    45
-      6 |   241
-      5 |   450
+      3 |     3
+      4 |    30
+      6 |   160
+      5 |   300
+      $ |   988
       1 |  1493
-      2 |  2229
+      2 |  1982
 
 select length(x), count(b) from aggexpr where not b group by length(x) order by count(b), length(x) limit 10;
  length | count 
 --------+-------
-      3 |     4
-      4 |    45
-      6 |   241
-      5 |   450
+      3 |     3
+      4 |    30
+      6 |   160
+      5 |   300
+      $ |   988
       1 |  1493
-      2 |  2229
+      2 |  1982
 
 select length(x), count(i) from aggexpr where not b group by length(x) order by count(i), length(x) limit 10;
  length | count 
 --------+-------
-      3 |     4
-      4 |    45
-      6 |   241
-      5 |   450
+      3 |     3
+      4 |    30
+      6 |   160
+      5 |   300
+      $ |   494
       2 |  1487
       1 |  1493
 
 select length(x), count(x) from aggexpr where not b group by length(x) order by count(x), length(x) limit 10;
  length | count 
 --------+-------
-      3 |     4
-      4 |    45
-      6 |   241
-      5 |   450
+      $ |     0
+      3 |     3
+      4 |    30
+      6 |   160
+      5 |   300
       1 |  1493
-      2 |  2229
+      2 |  1982
+
+select length(x), sum(abs(v - 500)) from aggexpr where not b group by length(x) order by sum(abs(v - 500)), length(x) limit 10;
+ length |  sum   
+--------+--------
+      3 |   1484
+      4 |  13350
+      5 |  68332
+      6 | 118400
+      $ | 404934
+      1 | 618271
+      2 | 815699
 
 select length(x), sum((i = 12)::int) from aggexpr where not b group by length(x) order by sum((i = 12)::int), length(x) limit 10;
  length | sum  
@@ -341,6 +434,7 @@ select length(x), sum((i = 12)::int) from aggexpr where not b group by length(x)
       4 |    0
       5 |    0
       6 |    0
+      $ |    0
       2 | 1487
 
 select length(x), count(*) from aggexpr where length(x) = 1 group by length(x) order by count(*), length(x) limit 10;
@@ -363,6 +457,11 @@ select length(x), count(x) from aggexpr where length(x) = 1 group by length(x) o
 --------+-------
       1 |  1493
 
+select length(x), sum(abs(v - 500)) from aggexpr where length(x) = 1 group by length(x) order by sum(abs(v - 500)), length(x) limit 10;
+ length |  sum   
+--------+--------
+      1 | 618271
+
 select length(x), sum((i = 12)::int) from aggexpr where length(x) = 1 group by length(x) order by sum((i = 12)::int), length(x) limit 10;
  length | sum 
 --------+-----
@@ -383,6 +482,10 @@ select length(x), count(i) from aggexpr where length(x) < 0 group by length(x) o
 select length(x), count(x) from aggexpr where length(x) < 0 group by length(x) order by count(x), length(x) limit 10;
  length | count 
 --------+-------
+
+select length(x), sum(abs(v - 500)) from aggexpr where length(x) < 0 group by length(x) order by sum(abs(v - 500)), length(x) limit 10;
+ length | sum 
+--------+-----
 
 select length(x), sum((i = 12)::int) from aggexpr where length(x) < 0 group by length(x) order by sum((i = 12)::int), length(x) limit 10;
  length | sum 
@@ -427,6 +530,16 @@ select length(x), count(x) from aggexpr where i % 2 = 0 group by length(x) order
       5 |   450
       2 |  1487
       1 |  1493
+
+select length(x), sum(abs(v - 500)) from aggexpr where i % 2 = 0 group by length(x) order by sum(abs(v - 500)), length(x) limit 10;
+ length |  sum   
+--------+--------
+      3 |   1980
+      4 |  20070
+      5 | 102450
+      6 | 178340
+      2 | 612328
+      1 | 618271
 
 select length(x), sum((i = 12)::int) from aggexpr where i % 2 = 0 group by length(x) order by sum((i = 12)::int), length(x) limit 10;
  length | sum  
@@ -494,6 +607,20 @@ select lower(x), count(x) from aggexpr group by lower(x) order by count(x), lowe
  141010 |     1
  141012 |     1
 
+select lower(x), sum(abs(v - 500)) from aggexpr group by lower(x) order by sum(abs(v - 500)), lower(x) limit 10;
+ lower | sum 
+-------+-----
+ 14500 |   0
+ 14498 |   2
+ 14502 |   2
+ 14496 |   4
+ 14504 |   4
+ 14494 |   6
+ 14506 |   6
+ 14492 |   8
+ 14508 |   8
+ 14490 |  10
+
 select lower(x), sum((i = 12)::int) from aggexpr group by lower(x) order by sum((i = 12)::int), lower(x) limit 10;
  lower  | sum 
 --------+-----
@@ -509,99 +636,172 @@ select lower(x), sum((i = 12)::int) from aggexpr group by lower(x) order by sum(
  141014 |   0
 
 select lower(x), count(*) from aggexpr where b group by lower(x) order by count(*), lower(x) limit 10;
- lower | count 
--------+-------
- $     |  1482
+ lower  | count 
+--------+-------
+ 1410   |     1
+ 14100  |     1
+ 141000 |     1
+ 141006 |     1
+ 141012 |     1
+ 141018 |     1
+ 141024 |     1
+ 141030 |     1
+ 141036 |     1
+ 141042 |     1
 
 select lower(x), count(b) from aggexpr where b group by lower(x) order by count(b), lower(x) limit 10;
- lower | count 
--------+-------
- $     |  1482
+ lower  | count 
+--------+-------
+ 1410   |     1
+ 14100  |     1
+ 141000 |     1
+ 141006 |     1
+ 141012 |     1
+ 141018 |     1
+ 141024 |     1
+ 141030 |     1
+ 141036 |     1
+ 141042 |     1
 
 select lower(x), count(i) from aggexpr where b group by lower(x) order by count(i), lower(x) limit 10;
- lower | count 
--------+-------
- $     |   741
-
-select lower(x), count(x) from aggexpr where b group by lower(x) order by count(x), lower(x) limit 10;
- lower | count 
--------+-------
- $     |     0
-
-select lower(x), sum((i = 12)::int) from aggexpr where b group by lower(x) order by sum((i = 12)::int), lower(x) limit 10;
- lower | sum 
--------+-----
- $     |   0
-
-select lower(x), count(*) from aggexpr where not b group by lower(x) order by count(*), lower(x) limit 10;
- lower  | count 
---------+-------
- 1410   |     1
- 14100  |     1
- 141000 |     1
- 141002 |     1
- 141004 |     1
- 141006 |     1
- 141008 |     1
- 141010 |     1
- 141012 |     1
- 141014 |     1
-
-select lower(x), count(b) from aggexpr where not b group by lower(x) order by count(b), lower(x) limit 10;
- lower  | count 
---------+-------
- 1410   |     1
- 14100  |     1
- 141000 |     1
- 141002 |     1
- 141004 |     1
- 141006 |     1
- 141008 |     1
- 141010 |     1
- 141012 |     1
- 141014 |     1
-
-select lower(x), count(i) from aggexpr where not b group by lower(x) order by count(i), lower(x) limit 10;
  lower  | count 
 --------+-------
  13     |     0
  1410   |     1
  14100  |     1
  141000 |     1
- 141002 |     1
- 141004 |     1
  141006 |     1
- 141008 |     1
- 141010 |     1
  141012 |     1
+ 141018 |     1
+ 141024 |     1
+ 141030 |     1
+ 141036 |     1
 
-select lower(x), count(x) from aggexpr where not b group by lower(x) order by count(x), lower(x) limit 10;
+select lower(x), count(x) from aggexpr where b group by lower(x) order by count(x), lower(x) limit 10;
  lower  | count 
 --------+-------
+ $      |     0
  1410   |     1
  14100  |     1
  141000 |     1
- 141002 |     1
- 141004 |     1
  141006 |     1
- 141008 |     1
- 141010 |     1
  141012 |     1
- 141014 |     1
+ 141018 |     1
+ 141024 |     1
+ 141030 |     1
+ 141036 |     1
 
-select lower(x), sum((i = 12)::int) from aggexpr where not b group by lower(x) order by sum((i = 12)::int), lower(x) limit 10;
+select lower(x), sum(abs(v - 500)) from aggexpr where b group by lower(x) order by sum(abs(v - 500)), lower(x) limit 10;
+ lower | sum 
+-------+-----
+ 14502 |   2
+ 14496 |   4
+ 14508 |   8
+ 14490 |  10
+ 14514 |  14
+ 14484 |  16
+ 14520 |  20
+ 14478 |  22
+ 14526 |  26
+ 14472 |  28
+
+select lower(x), sum((i = 12)::int) from aggexpr where b group by lower(x) order by sum((i = 12)::int), lower(x) limit 10;
  lower  | sum 
 --------+-----
  1410   |   0
  14100  |   0
  141000 |   0
+ 141006 |   0
+ 141012 |   0
+ 141018 |   0
+ 141024 |   0
+ 141030 |   0
+ 141036 |   0
+ 141042 |   0
+
+select lower(x), count(*) from aggexpr where not b group by lower(x) order by count(*), lower(x) limit 10;
+ lower  | count 
+--------+-------
+ 141002 |     1
+ 141004 |     1
+ 141008 |     1
+ 141010 |     1
+ 141014 |     1
+ 141016 |     1
+ 14102  |     1
+ 141020 |     1
+ 141022 |     1
+ 141026 |     1
+
+select lower(x), count(b) from aggexpr where not b group by lower(x) order by count(b), lower(x) limit 10;
+ lower  | count 
+--------+-------
+ 141002 |     1
+ 141004 |     1
+ 141008 |     1
+ 141010 |     1
+ 141014 |     1
+ 141016 |     1
+ 14102  |     1
+ 141020 |     1
+ 141022 |     1
+ 141026 |     1
+
+select lower(x), count(i) from aggexpr where not b group by lower(x) order by count(i), lower(x) limit 10;
+ lower  | count 
+--------+-------
+ 13     |     0
+ 141002 |     1
+ 141004 |     1
+ 141008 |     1
+ 141010 |     1
+ 141014 |     1
+ 141016 |     1
+ 14102  |     1
+ 141020 |     1
+ 141022 |     1
+
+select lower(x), count(x) from aggexpr where not b group by lower(x) order by count(x), lower(x) limit 10;
+ lower  | count 
+--------+-------
+ $      |     0
+ 141002 |     1
+ 141004 |     1
+ 141008 |     1
+ 141010 |     1
+ 141014 |     1
+ 141016 |     1
+ 14102  |     1
+ 141020 |     1
+ 141022 |     1
+
+select lower(x), sum(abs(v - 500)) from aggexpr where not b group by lower(x) order by sum(abs(v - 500)), lower(x) limit 10;
+ lower | sum 
+-------+-----
+ 14500 |   0
+ 14498 |   2
+ 14504 |   4
+ 14494 |   6
+ 14506 |   6
+ 14492 |   8
+ 14510 |  10
+ 14488 |  12
+ 14512 |  12
+ 14486 |  14
+
+select lower(x), sum((i = 12)::int) from aggexpr where not b group by lower(x) order by sum((i = 12)::int), lower(x) limit 10;
+ lower  | sum 
+--------+-----
  141002 |   0
  141004 |   0
- 141006 |   0
  141008 |   0
  141010 |   0
- 141012 |   0
  141014 |   0
+ 141016 |   0
+ 14102  |   0
+ 141020 |   0
+ 141022 |   0
+ 141026 |   0
 
 select lower(x), count(*) from aggexpr where length(x) = 1 group by lower(x) order by count(*), lower(x) limit 10;
  lower | count 
@@ -623,6 +823,11 @@ select lower(x), count(x) from aggexpr where length(x) = 1 group by lower(x) ord
 -------+-------
  2     |  1493
 
+select lower(x), sum(abs(v - 500)) from aggexpr where length(x) = 1 group by lower(x) order by sum(abs(v - 500)), lower(x) limit 10;
+ lower |  sum   
+-------+--------
+ 2     | 618271
+
 select lower(x), sum((i = 12)::int) from aggexpr where length(x) = 1 group by lower(x) order by sum((i = 12)::int), lower(x) limit 10;
  lower | sum 
 -------+-----
@@ -643,6 +848,10 @@ select lower(x), count(i) from aggexpr where length(x) < 0 group by lower(x) ord
 select lower(x), count(x) from aggexpr where length(x) < 0 group by lower(x) order by count(x), lower(x) limit 10;
  lower | count 
 -------+-------
+
+select lower(x), sum(abs(v - 500)) from aggexpr where length(x) < 0 group by lower(x) order by sum(abs(v - 500)), lower(x) limit 10;
+ lower | sum 
+-------+-----
 
 select lower(x), sum((i = 12)::int) from aggexpr where length(x) < 0 group by lower(x) order by sum((i = 12)::int), lower(x) limit 10;
  lower | sum 
@@ -704,6 +913,20 @@ select lower(x), count(x) from aggexpr where i % 2 = 0 group by lower(x) order b
  141012 |     1
  141014 |     1
 
+select lower(x), sum(abs(v - 500)) from aggexpr where i % 2 = 0 group by lower(x) order by sum(abs(v - 500)), lower(x) limit 10;
+ lower | sum 
+-------+-----
+ 14500 |   0
+ 14498 |   2
+ 14502 |   2
+ 14496 |   4
+ 14504 |   4
+ 14494 |   6
+ 14506 |   6
+ 14492 |   8
+ 14508 |   8
+ 14490 |  10
+
 select lower(x), sum((i = 12)::int) from aggexpr where i % 2 = 0 group by lower(x) order by sum((i = 12)::int), lower(x) limit 10;
  lower  | sum 
 --------+-----
@@ -746,6 +969,13 @@ select i % 2, count(x) from aggexpr group by i % 2 order by count(x), i % 2 limi
         $ |   742
         0 |  3720
 
+select i % 2, sum(abs(v - 500)) from aggexpr group by i % 2 order by sum(abs(v - 500)), i % 2 limit 10;
+ ?column? |   sum   
+----------+---------
+        1 |  303822
+        0 | 1533439
+        $ | 1846700
+
 select i % 2, sum((i = 12)::int) from aggexpr group by i % 2 order by sum((i = 12)::int), i % 2 limit 10;
  ?column? | sum  
 ----------+------
@@ -756,60 +986,84 @@ select i % 2, sum((i = 12)::int) from aggexpr group by i % 2 order by sum((i = 1
 select i % 2, count(*) from aggexpr where b group by i % 2 order by count(*), i % 2 limit 10;
  ?column? | count 
 ----------+-------
-        1 |   741
-        $ |   741
+        0 |   247
+        1 |   247
+        $ |   494
 
 select i % 2, count(b) from aggexpr where b group by i % 2 order by count(b), i % 2 limit 10;
  ?column? | count 
 ----------+-------
-        1 |   741
-        $ |   741
+        0 |   247
+        1 |   247
+        $ |   494
 
 select i % 2, count(i) from aggexpr where b group by i % 2 order by count(i), i % 2 limit 10;
  ?column? | count 
 ----------+-------
         $ |     0
-        1 |   741
+        0 |   247
+        1 |   247
 
 select i % 2, count(x) from aggexpr where b group by i % 2 order by count(x), i % 2 limit 10;
  ?column? | count 
 ----------+-------
         1 |     0
-        $ |     0
+        0 |   247
+        $ |   247
+
+select i % 2, sum(abs(v - 500)) from aggexpr where b group by i % 2 order by sum(abs(v - 500)), i % 2 limit 10;
+ ?column? |  sum   
+----------+--------
+        0 | 101274
+        1 | 101436
+        $ | 202226
 
 select i % 2, sum((i = 12)::int) from aggexpr where b group by i % 2 order by sum((i = 12)::int), i % 2 limit 10;
  ?column? | sum 
 ----------+-----
+        0 |   0
         1 |   0
         $ |   $
 
 select i % 2, count(*) from aggexpr where not b group by i % 2 order by count(*), i % 2 limit 10;
  ?column? | count 
 ----------+-------
-        $ |   742
-        0 |  3720
+        1 |   494
+        $ |   989
+        0 |  3473
 
 select i % 2, count(b) from aggexpr where not b group by i % 2 order by count(b), i % 2 limit 10;
  ?column? | count 
 ----------+-------
-        $ |   742
-        0 |  3720
+        1 |   494
+        $ |   989
+        0 |  3473
 
 select i % 2, count(i) from aggexpr where not b group by i % 2 order by count(i), i % 2 limit 10;
  ?column? | count 
 ----------+-------
         $ |     0
-        0 |  3720
+        1 |   494
+        0 |  3473
 
 select i % 2, count(x) from aggexpr where not b group by i % 2 order by count(x), i % 2 limit 10;
  ?column? | count 
 ----------+-------
-        $ |   742
-        0 |  3720
+        1 |     0
+        $ |   495
+        0 |  3473
+
+select i % 2, sum(abs(v - 500)) from aggexpr where not b group by i % 2 order by sum(abs(v - 500)), i % 2 limit 10;
+ ?column? |   sum   
+----------+---------
+        1 |  202386
+        $ |  405919
+        0 | 1432165
 
 select i % 2, sum((i = 12)::int) from aggexpr where not b group by i % 2 order by sum((i = 12)::int), i % 2 limit 10;
  ?column? | sum  
 ----------+------
+        1 |    0
         0 | 1487
         $ |    $
 
@@ -833,6 +1087,11 @@ select i % 2, count(x) from aggexpr where length(x) = 1 group by i % 2 order by 
 ----------+-------
         0 |  1493
 
+select i % 2, sum(abs(v - 500)) from aggexpr where length(x) = 1 group by i % 2 order by sum(abs(v - 500)), i % 2 limit 10;
+ ?column? |  sum   
+----------+--------
+        0 | 618271
+
 select i % 2, sum((i = 12)::int) from aggexpr where length(x) = 1 group by i % 2 order by sum((i = 12)::int), i % 2 limit 10;
  ?column? | sum 
 ----------+-----
@@ -853,6 +1112,10 @@ select i % 2, count(i) from aggexpr where length(x) < 0 group by i % 2 order by 
 select i % 2, count(x) from aggexpr where length(x) < 0 group by i % 2 order by count(x), i % 2 limit 10;
  ?column? | count 
 ----------+-------
+
+select i % 2, sum(abs(v - 500)) from aggexpr where length(x) < 0 group by i % 2 order by sum(abs(v - 500)), i % 2 limit 10;
+ ?column? | sum 
+----------+-----
 
 select i % 2, sum((i = 12)::int) from aggexpr where length(x) < 0 group by i % 2 order by sum((i = 12)::int), i % 2 limit 10;
  ?column? | sum 
@@ -877,6 +1140,11 @@ select i % 2, count(x) from aggexpr where i % 2 = 0 group by i % 2 order by coun
  ?column? | count 
 ----------+-------
         0 |  3720
+
+select i % 2, sum(abs(v - 500)) from aggexpr where i % 2 = 0 group by i % 2 order by sum(abs(v - 500)), i % 2 limit 10;
+ ?column? |   sum   
+----------+---------
+        0 | 1533439
 
 select i % 2, sum((i = 12)::int) from aggexpr where i % 2 = 0 group by i % 2 order by sum((i = 12)::int), i % 2 limit 10;
  ?column? | sum  
@@ -923,6 +1191,16 @@ select ts, count(x) from aggexpr group by ts order by count(x), ts limit 10;
  12 |  1487
   2 |  1493
 
+select ts, sum(abs(v - 500)) from aggexpr group by ts order by sum(abs(v - 500)), ts limit 10;
+ ts |  sum   
+----+--------
+ 14 | 606421
+ 13 | 608386
+ 12 | 612328
+ 11 | 614305
+  2 | 618271
+  1 | 624250
+
 select ts, sum((i = 12)::int) from aggexpr group by ts order by sum((i = 12)::int), ts limit 10;
  ts | sum  
 ----+------
@@ -936,72 +1214,86 @@ select ts, sum((i = 12)::int) from aggexpr group by ts order by sum((i = 12)::in
 select ts, count(*) from aggexpr where b group by ts order by count(*), ts limit 10;
  ts | count 
 ----+-------
- 13 |   741
- 14 |   741
+ 13 |   494
+ 14 |   494
 
 select ts, count(b) from aggexpr where b group by ts order by count(b), ts limit 10;
  ts | count 
 ----+-------
- 13 |   741
- 14 |   741
+ 13 |   494
+ 14 |   494
 
 select ts, count(i) from aggexpr where b group by ts order by count(i), ts limit 10;
  ts | count 
 ----+-------
- 14 |     0
- 13 |   741
+ 13 |   247
+ 14 |   247
 
 select ts, count(x) from aggexpr where b group by ts order by count(x), ts limit 10;
  ts | count 
 ----+-------
- 13 |     0
- 14 |     0
+ 13 |   247
+ 14 |   247
+
+select ts, sum(abs(v - 500)) from aggexpr where b group by ts order by sum(abs(v - 500)), ts limit 10;
+ ts |  sum   
+----+--------
+ 14 | 202307
+ 13 | 202629
 
 select ts, sum((i = 12)::int) from aggexpr where b group by ts order by sum((i = 12)::int), ts limit 10;
  ts | sum 
 ----+-----
  13 |   0
- 14 |   $
+ 14 |   0
 
 select ts, count(*) from aggexpr where not b group by ts order by count(*), ts limit 10;
  ts | count 
 ----+-------
- 14 |   740
- 13 |   742
+ 14 |   987
+ 13 |   989
  12 |  1487
   2 |  1493
 
 select ts, count(b) from aggexpr where not b group by ts order by count(b), ts limit 10;
  ts | count 
 ----+-------
- 14 |   740
- 13 |   742
+ 14 |   987
+ 13 |   989
  12 |  1487
   2 |  1493
 
 select ts, count(i) from aggexpr where not b group by ts order by count(i), ts limit 10;
  ts | count 
 ----+-------
- 13 |     0
- 14 |   740
+ 14 |   493
+ 13 |   494
  12 |  1487
   2 |  1493
 
 select ts, count(x) from aggexpr where not b group by ts order by count(x), ts limit 10;
  ts | count 
 ----+-------
- 14 |   740
- 13 |   742
+ 14 |   493
+ 13 |   495
  12 |  1487
   2 |  1493
+
+select ts, sum(abs(v - 500)) from aggexpr where not b group by ts order by sum(abs(v - 500)), ts limit 10;
+ ts |  sum   
+----+--------
+ 14 | 404114
+ 13 | 405757
+ 12 | 612328
+  2 | 618271
 
 select ts, sum((i = 12)::int) from aggexpr where not b group by ts order by sum((i = 12)::int), ts limit 10;
  ts | sum  
 ----+------
   2 |    0
+ 13 |    0
  14 |    0
  12 | 1487
- 13 |    $
 
 select ts, count(*) from aggexpr where length(x) = 1 group by ts order by count(*), ts limit 10;
  ts | count 
@@ -1023,6 +1315,11 @@ select ts, count(x) from aggexpr where length(x) = 1 group by ts order by count(
 ----+-------
   2 |  1493
 
+select ts, sum(abs(v - 500)) from aggexpr where length(x) = 1 group by ts order by sum(abs(v - 500)), ts limit 10;
+ ts |  sum   
+----+--------
+  2 | 618271
+
 select ts, sum((i = 12)::int) from aggexpr where length(x) = 1 group by ts order by sum((i = 12)::int), ts limit 10;
  ts | sum 
 ----+-----
@@ -1043,6 +1340,10 @@ select ts, count(i) from aggexpr where length(x) < 0 group by ts order by count(
 select ts, count(x) from aggexpr where length(x) < 0 group by ts order by count(x), ts limit 10;
  ts | count 
 ----+-------
+
+select ts, sum(abs(v - 500)) from aggexpr where length(x) < 0 group by ts order by sum(abs(v - 500)), ts limit 10;
+ ts | sum 
+----+-----
 
 select ts, sum((i = 12)::int) from aggexpr where length(x) < 0 group by ts order by sum((i = 12)::int), ts limit 10;
  ts | sum 
@@ -1076,6 +1377,13 @@ select ts, count(x) from aggexpr where i % 2 = 0 group by ts order by count(x), 
  12 |  1487
   2 |  1493
 
+select ts, sum(abs(v - 500)) from aggexpr where i % 2 = 0 group by ts order by sum(abs(v - 500)), ts limit 10;
+ ts |  sum   
+----+--------
+ 14 | 302840
+ 12 | 612328
+  2 | 618271
+
 select ts, sum((i = 12)::int) from aggexpr where i % 2 = 0 group by ts order by sum((i = 12)::int), ts limit 10;
  ts | sum  
 ----+------
@@ -1086,30 +1394,37 @@ select ts, sum((i = 12)::int) from aggexpr where i % 2 = 0 group by ts order by 
 select b, count(*) from aggexpr group by b order by count(*), b limit 10;
  b | count 
 ---+-------
- t |  1482
+ t |   988
  $ |  2988
- f |  4462
+ f |  4956
 
 select b, count(b) from aggexpr group by b order by count(b), b limit 10;
  b | count 
 ---+-------
  $ |     0
- t |  1482
- f |  4462
+ t |   988
+ f |  4956
 
 select b, count(i) from aggexpr group by b order by count(i), b limit 10;
  b | count 
 ---+-------
  $ |     0
- t |   741
- f |  3720
+ t |   494
+ f |  3967
 
 select b, count(x) from aggexpr group by b order by count(x), b limit 10;
  b | count 
 ---+-------
- t |     0
  $ |     0
- f |  4462
+ t |   494
+ f |  3968
+
+select b, sum(abs(v - 500)) from aggexpr group by b order by sum(abs(v - 500)), b limit 10;
+ b |   sum   
+---+---------
+ t |  404936
+ $ | 1238555
+ f | 2040470
 
 select b, sum((i = 12)::int) from aggexpr group by b order by sum((i = 12)::int), b limit 10;
  b | sum  
@@ -1121,22 +1436,27 @@ select b, sum((i = 12)::int) from aggexpr group by b order by sum((i = 12)::int)
 select b, count(*) from aggexpr where b group by b order by count(*), b limit 10;
  b | count 
 ---+-------
- t |  1482
+ t |   988
 
 select b, count(b) from aggexpr where b group by b order by count(b), b limit 10;
  b | count 
 ---+-------
- t |  1482
+ t |   988
 
 select b, count(i) from aggexpr where b group by b order by count(i), b limit 10;
  b | count 
 ---+-------
- t |   741
+ t |   494
 
 select b, count(x) from aggexpr where b group by b order by count(x), b limit 10;
  b | count 
 ---+-------
- t |     0
+ t |   494
+
+select b, sum(abs(v - 500)) from aggexpr where b group by b order by sum(abs(v - 500)), b limit 10;
+ b |  sum   
+---+--------
+ t | 404936
 
 select b, sum((i = 12)::int) from aggexpr where b group by b order by sum((i = 12)::int), b limit 10;
  b | sum 
@@ -1146,22 +1466,27 @@ select b, sum((i = 12)::int) from aggexpr where b group by b order by sum((i = 1
 select b, count(*) from aggexpr where not b group by b order by count(*), b limit 10;
  b | count 
 ---+-------
- f |  4462
+ f |  4956
 
 select b, count(b) from aggexpr where not b group by b order by count(b), b limit 10;
  b | count 
 ---+-------
- f |  4462
+ f |  4956
 
 select b, count(i) from aggexpr where not b group by b order by count(i), b limit 10;
  b | count 
 ---+-------
- f |  3720
+ f |  3967
 
 select b, count(x) from aggexpr where not b group by b order by count(x), b limit 10;
  b | count 
 ---+-------
- f |  4462
+ f |  3968
+
+select b, sum(abs(v - 500)) from aggexpr where not b group by b order by sum(abs(v - 500)), b limit 10;
+ b |   sum   
+---+---------
+ f | 2040470
 
 select b, sum((i = 12)::int) from aggexpr where not b group by b order by sum((i = 12)::int), b limit 10;
  b | sum  
@@ -1188,6 +1513,11 @@ select b, count(x) from aggexpr where length(x) = 1 group by b order by count(x)
 ---+-------
  f |  1493
 
+select b, sum(abs(v - 500)) from aggexpr where length(x) = 1 group by b order by sum(abs(v - 500)), b limit 10;
+ b |  sum   
+---+--------
+ f | 618271
+
 select b, sum((i = 12)::int) from aggexpr where length(x) = 1 group by b order by sum((i = 12)::int), b limit 10;
  b | sum 
 ---+-----
@@ -1209,6 +1539,10 @@ select b, count(x) from aggexpr where length(x) < 0 group by b order by count(x)
  b | count 
 ---+-------
 
+select b, sum(abs(v - 500)) from aggexpr where length(x) < 0 group by b order by sum(abs(v - 500)), b limit 10;
+ b | sum 
+---+-----
+
 select b, sum((i = 12)::int) from aggexpr where length(x) < 0 group by b order by sum((i = 12)::int), b limit 10;
  b | sum 
 ---+-----
@@ -1216,641 +1550,294 @@ select b, sum((i = 12)::int) from aggexpr where length(x) < 0 group by b order b
 select b, count(*) from aggexpr where i % 2 = 0 group by b order by count(*), b limit 10;
  b | count 
 ---+-------
- f |  3720
+ t |   247
+ f |  3473
 
 select b, count(b) from aggexpr where i % 2 = 0 group by b order by count(b), b limit 10;
  b | count 
 ---+-------
- f |  3720
+ t |   247
+ f |  3473
 
 select b, count(i) from aggexpr where i % 2 = 0 group by b order by count(i), b limit 10;
  b | count 
 ---+-------
- f |  3720
+ t |   247
+ f |  3473
 
 select b, count(x) from aggexpr where i % 2 = 0 group by b order by count(x), b limit 10;
  b | count 
 ---+-------
- f |  3720
+ t |   247
+ f |  3473
+
+select b, sum(abs(v - 500)) from aggexpr where i % 2 = 0 group by b order by sum(abs(v - 500)), b limit 10;
+ b |   sum   
+---+---------
+ t |  101274
+ f | 1432165
 
 select b, sum((i = 12)::int) from aggexpr where i % 2 = 0 group by b order by sum((i = 12)::int), b limit 10;
  b | sum  
 ---+------
+ t |    0
  f | 1487
 
+select v - 501 > 0, count(*) from aggexpr group by v - 501 > 0 order by count(*), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |  3006
+ t        |  5926
+
+select v - 501 > 0, count(b) from aggexpr group by v - 501 > 0 order by count(b), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |  2004
+ t        |  3940
+
+select v - 501 > 0, count(i) from aggexpr group by v - 501 > 0 order by count(i), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |  1502
+ t        |  2959
+
+select v - 501 > 0, count(x) from aggexpr group by v - 501 > 0 order by count(x), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |  1503
+ t        |  2959
+
+select v - 501 > 0, sum(abs(v - 500)) from aggexpr group by v - 501 > 0 order by sum(abs(v - 500)), v - 501 > 0 limit 10;
+ ?column? |   sum   
+----------+---------
+ f        |  748506
+ t        | 2935455
+
+select v - 501 > 0, sum((i = 12)::int) from aggexpr group by v - 501 > 0 order by sum((i = 12)::int), v - 501 > 0 limit 10;
+ ?column? | sum 
+----------+-----
+ f        | 501
+ t        | 986
+
+select v - 501 > 0, count(*) from aggexpr where b group by v - 501 > 0 order by count(*), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |   334
+ t        |   654
+
+select v - 501 > 0, count(b) from aggexpr where b group by v - 501 > 0 order by count(b), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |   334
+ t        |   654
+
+select v - 501 > 0, count(i) from aggexpr where b group by v - 501 > 0 order by count(i), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |   166
+ t        |   328
+
+select v - 501 > 0, count(x) from aggexpr where b group by v - 501 > 0 order by count(x), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |   167
+ t        |   327
+
+select v - 501 > 0, sum(abs(v - 500)) from aggexpr where b group by v - 501 > 0 order by sum(abs(v - 500)), v - 501 > 0 limit 10;
+ ?column? |  sum   
+----------+--------
+ f        |  83168
+ t        | 321768
+
+select v - 501 > 0, sum((i = 12)::int) from aggexpr where b group by v - 501 > 0 order by sum((i = 12)::int), v - 501 > 0 limit 10;
+ ?column? | sum 
+----------+-----
+ f        |   0
+ t        |   0
+
+select v - 501 > 0, count(*) from aggexpr where not b group by v - 501 > 0 order by count(*), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |  1670
+ t        |  3286
+
+select v - 501 > 0, count(b) from aggexpr where not b group by v - 501 > 0 order by count(b), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |  1670
+ t        |  3286
+
+select v - 501 > 0, count(i) from aggexpr where not b group by v - 501 > 0 order by count(i), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |  1336
+ t        |  2631
+
+select v - 501 > 0, count(x) from aggexpr where not b group by v - 501 > 0 order by count(x), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |  1336
+ t        |  2632
+
+select v - 501 > 0, sum(abs(v - 500)) from aggexpr where not b group by v - 501 > 0 order by sum(abs(v - 500)), v - 501 > 0 limit 10;
+ ?column? |   sum   
+----------+---------
+ f        |  415836
+ t        | 1624634
+
+select v - 501 > 0, sum((i = 12)::int) from aggexpr where not b group by v - 501 > 0 order by sum((i = 12)::int), v - 501 > 0 limit 10;
+ ?column? | sum 
+----------+-----
+ f        | 501
+ t        | 986
+
+select v - 501 > 0, count(*) from aggexpr where length(x) = 1 group by v - 501 > 0 order by count(*), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |   501
+ t        |   992
+
+select v - 501 > 0, count(b) from aggexpr where length(x) = 1 group by v - 501 > 0 order by count(b), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |   501
+ t        |   992
+
+select v - 501 > 0, count(i) from aggexpr where length(x) = 1 group by v - 501 > 0 order by count(i), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |   501
+ t        |   992
+
+select v - 501 > 0, count(x) from aggexpr where length(x) = 1 group by v - 501 > 0 order by count(x), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |   501
+ t        |   992
+
+select v - 501 > 0, sum(abs(v - 500)) from aggexpr where length(x) = 1 group by v - 501 > 0 order by sum(abs(v - 500)), v - 501 > 0 limit 10;
+ ?column? |  sum   
+----------+--------
+ f        | 124751
+ t        | 493520
+
+select v - 501 > 0, sum((i = 12)::int) from aggexpr where length(x) = 1 group by v - 501 > 0 order by sum((i = 12)::int), v - 501 > 0 limit 10;
+ ?column? | sum 
+----------+-----
+ f        |   0
+ t        |   0
+
+select v - 501 > 0, count(*) from aggexpr where length(x) < 0 group by v - 501 > 0 order by count(*), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+
+select v - 501 > 0, count(b) from aggexpr where length(x) < 0 group by v - 501 > 0 order by count(b), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+
+select v - 501 > 0, count(i) from aggexpr where length(x) < 0 group by v - 501 > 0 order by count(i), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+
+select v - 501 > 0, count(x) from aggexpr where length(x) < 0 group by v - 501 > 0 order by count(x), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+
+select v - 501 > 0, sum(abs(v - 500)) from aggexpr where length(x) < 0 group by v - 501 > 0 order by sum(abs(v - 500)), v - 501 > 0 limit 10;
+ ?column? | sum 
+----------+-----
+
+select v - 501 > 0, sum((i = 12)::int) from aggexpr where length(x) < 0 group by v - 501 > 0 order by sum((i = 12)::int), v - 501 > 0 limit 10;
+ ?column? | sum 
+----------+-----
+
+select v - 501 > 0, count(*) from aggexpr where i % 2 = 0 group by v - 501 > 0 order by count(*), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |  1252
+ t        |  2468
+
+select v - 501 > 0, count(b) from aggexpr where i % 2 = 0 group by v - 501 > 0 order by count(b), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |  1252
+ t        |  2468
+
+select v - 501 > 0, count(i) from aggexpr where i % 2 = 0 group by v - 501 > 0 order by count(i), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |  1252
+ t        |  2468
+
+select v - 501 > 0, count(x) from aggexpr where i % 2 = 0 group by v - 501 > 0 order by count(x), v - 501 > 0 limit 10;
+ ?column? | count 
+----------+-------
+ f        |  1252
+ t        |  2468
+
+select v - 501 > 0, sum(abs(v - 500)) from aggexpr where i % 2 = 0 group by v - 501 > 0 order by sum(abs(v - 500)), v - 501 > 0 limit 10;
+ ?column? |   sum   
+----------+---------
+ f        |  311752
+ t        | 1221687
+
+select v - 501 > 0, sum((i = 12)::int) from aggexpr where i % 2 = 0 group by v - 501 > 0 order by sum((i = 12)::int), v - 501 > 0 limit 10;
+ ?column? | sum 
+----------+-----
+ f        | 501
+ t        | 986
+
 reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
 -- Not all CASE statements are vectorized yet.
-set timescaledb.debug_require_vector_agg = 'allow';
+set timescaledb.debug_require_vector_agg = 'require';
 ---- Uncomment to generate reference
 --set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
-select
-    format('select %s%s from aggexpr%s%s%s;',
-            grouping || ', ',
-            function,
-            ' where ' || condition,
-            ' group by ' || grouping,
-            format(' order by %s, ', function) || grouping || ' limit 10')
-from
-    unnest(array[
-        'count(*)'
-        , 'sum(case when i % 2 = 0 then i else -i end)'
-        , 'count(case when i % 2 = 0 then i end)'
-        , 'sum((case when b then length(x) end)::int)'
-        , 'count(case when (case when length(x) = 1 then x else ''long'' end) = ''long'' then 1 end)'
-        ]) function,
-    unnest(array[
-        null
-        , 'b'
-        , 'not b'
-        , 'length(x) = 1'
-        , 'length(x) < 0'
-        , 'i % 2 = 0'
-        ]) with ordinality as condition(condition, n),
-    unnest(array[
-        null
-        , 'x'
-        , 'case when b then ''true'' else ''false'' end'
-        ]) with ordinality as grouping(grouping, n)
-order by grouping.n, condition.n, function
-\gexec
-select count(*) from aggexpr;
- count 
--------
-  8932
-
-select count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr;
- count 
--------
-  7439
-
-select count(case when i % 2 = 0 then i end) from aggexpr;
- count 
--------
-  3720
-
-select sum((case when b then length(x) end)::int) from aggexpr;
- sum 
------
-   $
-
-select sum(case when i % 2 = 0 then i else -i end) from aggexpr;
+select sum(case when i > 10 then i else -i end) from aggexpr group by b order by 1;
   sum  
 -------
- 21557
+  6669
+ 28182
+     $
 
-select count(*) from aggexpr where b;
+select count(case when i > 10 then i end) from aggexpr group by v - 501 > 0 order by 1;
  count 
 -------
-  1482
+  1001
+  1967
 
-select count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where b;
- count 
--------
-  1482
-
-select count(case when i % 2 = 0 then i end) from aggexpr where b;
- count 
--------
-     0
-
-select sum((case when b then length(x) end)::int) from aggexpr where b;
+select sum(case when i > 10 then (case when i > 12 then length(x) else -length(x) end) end) from aggexpr group by v - 502 > 0;
  sum 
 -----
-   $
+ 198
+ 716
 
-select sum(case when i % 2 = 0 then i else -i end) from aggexpr where b;
-  sum  
--------
- -9633
-
-select count(*) from aggexpr where not b;
- count 
--------
-  4462
-
-select count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where not b;
- count 
--------
-  2969
-
-select count(case when i % 2 = 0 then i end) from aggexpr where not b;
- count 
--------
-  3720
-
-select sum((case when b then length(x) end)::int) from aggexpr where not b;
- sum 
+select avg(case when v > 500 then v - 500 else 500 - v end) from aggexpr group by x order by 1 limit 10;
+ avg 
 -----
-   $
-
-select sum(case when i % 2 = 0 then i else -i end) from aggexpr where not b;
-  sum  
--------
- 31190
-
-select count(*) from aggexpr where length(x) = 1;
- count 
--------
-  1493
-
-select count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where length(x) = 1;
- count 
--------
-     0
-
-select count(case when i % 2 = 0 then i end) from aggexpr where length(x) = 1;
- count 
--------
-  1493
-
-select sum((case when b then length(x) end)::int) from aggexpr where length(x) = 1;
- sum 
------
-   $
-
-select sum(case when i % 2 = 0 then i else -i end) from aggexpr where length(x) = 1;
- sum  
-------
- 2986
-
-select count(*) from aggexpr where length(x) < 0;
- count 
--------
-     0
-
-select count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where length(x) < 0;
- count 
--------
-     0
-
-select count(case when i % 2 = 0 then i end) from aggexpr where length(x) < 0;
- count 
--------
-     0
-
-select sum((case when b then length(x) end)::int) from aggexpr where length(x) < 0;
- sum 
------
-   $
-
-select sum(case when i % 2 = 0 then i else -i end) from aggexpr where length(x) < 0;
- sum 
------
-   $
-
-select count(*) from aggexpr where i % 2 = 0;
- count 
--------
-  3720
-
-select count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where i % 2 = 0;
- count 
--------
-  2227
-
-select count(case when i % 2 = 0 then i end) from aggexpr where i % 2 = 0;
- count 
--------
-  3720
-
-select sum((case when b then length(x) end)::int) from aggexpr where i % 2 = 0;
- sum 
------
-   $
-
-select sum(case when i % 2 = 0 then i else -i end) from aggexpr where i % 2 = 0;
-  sum  
--------
- 31190
-
-select x, count(*) from aggexpr group by x order by count(*), x limit 10;
-   x    | count 
---------+-------
- 1410   |     1
- 14100  |     1
- 141000 |     1
- 141002 |     1
- 141004 |     1
- 141006 |     1
- 141008 |     1
- 141010 |     1
- 141012 |     1
- 141014 |     1
-
-select x, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr group by x order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), x limit 10;
-   x    | count 
---------+-------
- 2      |     0
- 1410   |     1
- 14100  |     1
- 141000 |     1
- 141002 |     1
- 141004 |     1
- 141006 |     1
- 141008 |     1
- 141010 |     1
- 141012 |     1
-
-select x, count(case when i % 2 = 0 then i end) from aggexpr group by x order by count(case when i % 2 = 0 then i end), x limit 10;
-   x    | count 
---------+-------
- 13     |     0
- $      |     0
- 1410   |     1
- 14100  |     1
- 141000 |     1
- 141002 |     1
- 141004 |     1
- 141006 |     1
- 141008 |     1
- 141010 |     1
-
-select x, sum((case when b then length(x) end)::int) from aggexpr group by x order by sum((case when b then length(x) end)::int), x limit 10;
-   x    | sum 
---------+-----
- 12     |   $
- 13     |   $
- 1410   |   $
- 14100  |   $
- 141000 |   $
- 141002 |   $
- 141004 |   $
- 141006 |   $
- 141008 |   $
- 141010 |   $
-
-select x, sum(case when i % 2 = 0 then i else -i end) from aggexpr group by x order by sum(case when i % 2 = 0 then i else -i end), x limit 10;
-   x    |  sum  
---------+-------
- $      | -9633
- 1410   |    14
- 14100  |    14
- 141000 |    14
- 141002 |    14
- 141004 |    14
- 141006 |    14
- 141008 |    14
- 141010 |    14
- 141012 |    14
-
-select x, count(*) from aggexpr where b group by x order by count(*), x limit 10;
- x | count 
----+-------
- $ |  1482
-
-select x, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where b group by x order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), x limit 10;
- x | count 
----+-------
- $ |  1482
-
-select x, count(case when i % 2 = 0 then i end) from aggexpr where b group by x order by count(case when i % 2 = 0 then i end), x limit 10;
- x | count 
----+-------
- $ |     0
-
-select x, sum((case when b then length(x) end)::int) from aggexpr where b group by x order by sum((case when b then length(x) end)::int), x limit 10;
- x | sum 
----+-----
- $ |   $
-
-select x, sum(case when i % 2 = 0 then i else -i end) from aggexpr where b group by x order by sum(case when i % 2 = 0 then i else -i end), x limit 10;
- x |  sum  
----+-------
- $ | -9633
-
-select x, count(*) from aggexpr where not b group by x order by count(*), x limit 10;
-   x    | count 
---------+-------
- 1410   |     1
- 14100  |     1
- 141000 |     1
- 141002 |     1
- 141004 |     1
- 141006 |     1
- 141008 |     1
- 141010 |     1
- 141012 |     1
- 141014 |     1
-
-select x, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where not b group by x order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), x limit 10;
-   x    | count 
---------+-------
- 2      |     0
- 1410   |     1
- 14100  |     1
- 141000 |     1
- 141002 |     1
- 141004 |     1
- 141006 |     1
- 141008 |     1
- 141010 |     1
- 141012 |     1
-
-select x, count(case when i % 2 = 0 then i end) from aggexpr where not b group by x order by count(case when i % 2 = 0 then i end), x limit 10;
-   x    | count 
---------+-------
- 13     |     0
- 1410   |     1
- 14100  |     1
- 141000 |     1
- 141002 |     1
- 141004 |     1
- 141006 |     1
- 141008 |     1
- 141010 |     1
- 141012 |     1
-
-select x, sum((case when b then length(x) end)::int) from aggexpr where not b group by x order by sum((case when b then length(x) end)::int), x limit 10;
-   x    | sum 
---------+-----
- 12     |   $
- 13     |   $
- 1410   |   $
- 14100  |   $
- 141000 |   $
- 141002 |   $
- 141004 |   $
- 141006 |   $
- 141008 |   $
- 141010 |   $
-
-select x, sum(case when i % 2 = 0 then i else -i end) from aggexpr where not b group by x order by sum(case when i % 2 = 0 then i else -i end), x limit 10;
-   x    | sum 
---------+-----
- 1410   |  14
- 14100  |  14
- 141000 |  14
- 141002 |  14
- 141004 |  14
- 141006 |  14
- 141008 |  14
- 141010 |  14
- 141012 |  14
- 141014 |  14
-
-select x, count(*) from aggexpr where length(x) = 1 group by x order by count(*), x limit 10;
- x | count 
----+-------
- 2 |  1493
-
-select x, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where length(x) = 1 group by x order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), x limit 10;
- x | count 
----+-------
- 2 |     0
-
-select x, count(case when i % 2 = 0 then i end) from aggexpr where length(x) = 1 group by x order by count(case when i % 2 = 0 then i end), x limit 10;
- x | count 
----+-------
- 2 |  1493
-
-select x, sum((case when b then length(x) end)::int) from aggexpr where length(x) = 1 group by x order by sum((case when b then length(x) end)::int), x limit 10;
- x | sum 
----+-----
- 2 |   $
-
-select x, sum(case when i % 2 = 0 then i else -i end) from aggexpr where length(x) = 1 group by x order by sum(case when i % 2 = 0 then i else -i end), x limit 10;
- x | sum  
----+------
- 2 | 2986
-
-select x, count(*) from aggexpr where length(x) < 0 group by x order by count(*), x limit 10;
- x | count 
----+-------
-
-select x, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where length(x) < 0 group by x order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), x limit 10;
- x | count 
----+-------
-
-select x, count(case when i % 2 = 0 then i end) from aggexpr where length(x) < 0 group by x order by count(case when i % 2 = 0 then i end), x limit 10;
- x | count 
----+-------
-
-select x, sum((case when b then length(x) end)::int) from aggexpr where length(x) < 0 group by x order by sum((case when b then length(x) end)::int), x limit 10;
- x | sum 
----+-----
-
-select x, sum(case when i % 2 = 0 then i else -i end) from aggexpr where length(x) < 0 group by x order by sum(case when i % 2 = 0 then i else -i end), x limit 10;
- x | sum 
----+-----
-
-select x, count(*) from aggexpr where i % 2 = 0 group by x order by count(*), x limit 10;
-   x    | count 
---------+-------
- 1410   |     1
- 14100  |     1
- 141000 |     1
- 141002 |     1
- 141004 |     1
- 141006 |     1
- 141008 |     1
- 141010 |     1
- 141012 |     1
- 141014 |     1
-
-select x, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where i % 2 = 0 group by x order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), x limit 10;
-   x    | count 
---------+-------
- 2      |     0
- 1410   |     1
- 14100  |     1
- 141000 |     1
- 141002 |     1
- 141004 |     1
- 141006 |     1
- 141008 |     1
- 141010 |     1
- 141012 |     1
-
-select x, count(case when i % 2 = 0 then i end) from aggexpr where i % 2 = 0 group by x order by count(case when i % 2 = 0 then i end), x limit 10;
-   x    | count 
---------+-------
- 1410   |     1
- 14100  |     1
- 141000 |     1
- 141002 |     1
- 141004 |     1
- 141006 |     1
- 141008 |     1
- 141010 |     1
- 141012 |     1
- 141014 |     1
-
-select x, sum((case when b then length(x) end)::int) from aggexpr where i % 2 = 0 group by x order by sum((case when b then length(x) end)::int), x limit 10;
-   x    | sum 
---------+-----
- 12     |   $
- 1410   |   $
- 14100  |   $
- 141000 |   $
- 141002 |   $
- 141004 |   $
- 141006 |   $
- 141008 |   $
- 141010 |   $
- 141012 |   $
-
-select x, sum(case when i % 2 = 0 then i else -i end) from aggexpr where i % 2 = 0 group by x order by sum(case when i % 2 = 0 then i else -i end), x limit 10;
-   x    | sum 
---------+-----
- 1410   |  14
- 14100  |  14
- 141000 |  14
- 141002 |  14
- 141004 |  14
- 141006 |  14
- 141008 |  14
- 141010 |  14
- 141012 |  14
- 141014 |  14
-
-select case when b then 'true' else 'false' end, count(*) from aggexpr group by case when b then 'true' else 'false' end order by count(*), case when b then 'true' else 'false' end limit 10;
- case  | count 
--------+-------
- true  |  1482
- false |  7450
-
-select case when b then 'true' else 'false' end, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr group by case when b then 'true' else 'false' end order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), case when b then 'true' else 'false' end limit 10;
- case  | count 
--------+-------
- true  |  1482
- false |  5957
-
-select case when b then 'true' else 'false' end, count(case when i % 2 = 0 then i end) from aggexpr group by case when b then 'true' else 'false' end order by count(case when i % 2 = 0 then i end), case when b then 'true' else 'false' end limit 10;
- case  | count 
--------+-------
- true  |     0
- false |  3720
-
-select case when b then 'true' else 'false' end, sum((case when b then length(x) end)::int) from aggexpr group by case when b then 'true' else 'false' end order by sum((case when b then length(x) end)::int), case when b then 'true' else 'false' end limit 10;
- case  | sum 
--------+-----
- false |   $
- true  |   $
-
-select case when b then 'true' else 'false' end, sum(case when i % 2 = 0 then i else -i end) from aggexpr group by case when b then 'true' else 'false' end order by sum(case when i % 2 = 0 then i else -i end), case when b then 'true' else 'false' end limit 10;
- case  |  sum  
--------+-------
- true  | -9633
- false | 31190
-
-select case when b then 'true' else 'false' end, count(*) from aggexpr where b group by case when b then 'true' else 'false' end order by count(*), case when b then 'true' else 'false' end limit 10;
- case | count 
-------+-------
- true |  1482
-
-select case when b then 'true' else 'false' end, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where b group by case when b then 'true' else 'false' end order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), case when b then 'true' else 'false' end limit 10;
- case | count 
-------+-------
- true |  1482
-
-select case when b then 'true' else 'false' end, count(case when i % 2 = 0 then i end) from aggexpr where b group by case when b then 'true' else 'false' end order by count(case when i % 2 = 0 then i end), case when b then 'true' else 'false' end limit 10;
- case | count 
-------+-------
- true |     0
-
-select case when b then 'true' else 'false' end, sum((case when b then length(x) end)::int) from aggexpr where b group by case when b then 'true' else 'false' end order by sum((case when b then length(x) end)::int), case when b then 'true' else 'false' end limit 10;
- case | sum 
-------+-----
- true |   $
-
-select case when b then 'true' else 'false' end, sum(case when i % 2 = 0 then i else -i end) from aggexpr where b group by case when b then 'true' else 'false' end order by sum(case when i % 2 = 0 then i else -i end), case when b then 'true' else 'false' end limit 10;
- case |  sum  
-------+-------
- true | -9633
-
-select case when b then 'true' else 'false' end, count(*) from aggexpr where not b group by case when b then 'true' else 'false' end order by count(*), case when b then 'true' else 'false' end limit 10;
- case  | count 
--------+-------
- false |  4462
-
-select case when b then 'true' else 'false' end, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where not b group by case when b then 'true' else 'false' end order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), case when b then 'true' else 'false' end limit 10;
- case  | count 
--------+-------
- false |  2969
-
-select case when b then 'true' else 'false' end, count(case when i % 2 = 0 then i end) from aggexpr where not b group by case when b then 'true' else 'false' end order by count(case when i % 2 = 0 then i end), case when b then 'true' else 'false' end limit 10;
- case  | count 
--------+-------
- false |  3720
-
-select case when b then 'true' else 'false' end, sum((case when b then length(x) end)::int) from aggexpr where not b group by case when b then 'true' else 'false' end order by sum((case when b then length(x) end)::int), case when b then 'true' else 'false' end limit 10;
- case  | sum 
--------+-----
- false |   $
-
-select case when b then 'true' else 'false' end, sum(case when i % 2 = 0 then i else -i end) from aggexpr where not b group by case when b then 'true' else 'false' end order by sum(case when i % 2 = 0 then i else -i end), case when b then 'true' else 'false' end limit 10;
- case  |  sum  
--------+-------
- false | 31190
-
-select case when b then 'true' else 'false' end, count(*) from aggexpr where length(x) = 1 group by case when b then 'true' else 'false' end order by count(*), case when b then 'true' else 'false' end limit 10;
- case  | count 
--------+-------
- false |  1493
-
-select case when b then 'true' else 'false' end, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where length(x) = 1 group by case when b then 'true' else 'false' end order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), case when b then 'true' else 'false' end limit 10;
- case  | count 
--------+-------
- false |     0
-
-select case when b then 'true' else 'false' end, count(case when i % 2 = 0 then i end) from aggexpr where length(x) = 1 group by case when b then 'true' else 'false' end order by count(case when i % 2 = 0 then i end), case when b then 'true' else 'false' end limit 10;
- case  | count 
--------+-------
- false |  1493
-
-select case when b then 'true' else 'false' end, sum((case when b then length(x) end)::int) from aggexpr where length(x) = 1 group by case when b then 'true' else 'false' end order by sum((case when b then length(x) end)::int), case when b then 'true' else 'false' end limit 10;
- case  | sum 
--------+-----
- false |   $
-
-select case when b then 'true' else 'false' end, sum(case when i % 2 = 0 then i else -i end) from aggexpr where length(x) = 1 group by case when b then 'true' else 'false' end order by sum(case when i % 2 = 0 then i else -i end), case when b then 'true' else 'false' end limit 10;
- case  | sum  
--------+------
- false | 2986
-
-select case when b then 'true' else 'false' end, count(*) from aggexpr where length(x) < 0 group by case when b then 'true' else 'false' end order by count(*), case when b then 'true' else 'false' end limit 10;
- case | count 
-------+-------
-
-select case when b then 'true' else 'false' end, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where length(x) < 0 group by case when b then 'true' else 'false' end order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), case when b then 'true' else 'false' end limit 10;
- case | count 
-------+-------
-
-select case when b then 'true' else 'false' end, count(case when i % 2 = 0 then i end) from aggexpr where length(x) < 0 group by case when b then 'true' else 'false' end order by count(case when i % 2 = 0 then i end), case when b then 'true' else 'false' end limit 10;
- case | count 
-------+-------
-
-select case when b then 'true' else 'false' end, sum((case when b then length(x) end)::int) from aggexpr where length(x) < 0 group by case when b then 'true' else 'false' end order by sum((case when b then length(x) end)::int), case when b then 'true' else 'false' end limit 10;
- case | sum 
-------+-----
-
-select case when b then 'true' else 'false' end, sum(case when i % 2 = 0 then i else -i end) from aggexpr where length(x) < 0 group by case when b then 'true' else 'false' end order by sum(case when i % 2 = 0 then i else -i end), case when b then 'true' else 'false' end limit 10;
- case | sum 
-------+-----
-
-select case when b then 'true' else 'false' end, count(*) from aggexpr where i % 2 = 0 group by case when b then 'true' else 'false' end order by count(*), case when b then 'true' else 'false' end limit 10;
- case  | count 
--------+-------
- false |  3720
-
-select case when b then 'true' else 'false' end, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where i % 2 = 0 group by case when b then 'true' else 'false' end order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), case when b then 'true' else 'false' end limit 10;
- case  | count 
--------+-------
- false |  2227
-
-select case when b then 'true' else 'false' end, count(case when i % 2 = 0 then i end) from aggexpr where i % 2 = 0 group by case when b then 'true' else 'false' end order by count(case when i % 2 = 0 then i end), case when b then 'true' else 'false' end limit 10;
- case  | count 
--------+-------
- false |  3720
-
-select case when b then 'true' else 'false' end, sum((case when b then length(x) end)::int) from aggexpr where i % 2 = 0 group by case when b then 'true' else 'false' end order by sum((case when b then length(x) end)::int), case when b then 'true' else 'false' end limit 10;
- case  | sum 
--------+-----
- false |   $
-
-select case when b then 'true' else 'false' end, sum(case when i % 2 = 0 then i else -i end) from aggexpr where i % 2 = 0 group by case when b then 'true' else 'false' end order by sum(case when i % 2 = 0 then i else -i end), case when b then 'true' else 'false' end limit 10;
- case  |  sum  
--------+-------
- false | 31190
+   0
+   2
+   2
+   4
+   4
+   6
+   6
+   8
+   8
+  10
+
+select count(*), case when v > 503 then x else 'something-else' end from aggexpr group by 2 order by 1 limit 10;
+ count |  case  
+-------+--------
+     1 | 141228
+     1 | 141230
+     1 | 141296
+     1 | 141308
+     1 | 14900
+     1 | 14838
+     1 | 141470
+     1 | 141122
+     1 | 14840
+     1 | 141294
 
 reset timescaledb.debug_require_vector_agg;

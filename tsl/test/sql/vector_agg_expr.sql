@@ -24,10 +24,10 @@ insert into aggexpr select 11, null, null, null, generate_series(1, 1489);
 insert into aggexpr select 12, 12, '12', false, generate_series(1, 1487);
 
 insert into aggexpr select 13, case when x % 2 = 0 then 13 else null end,
-    case when x % 2 = 1 then '13' else null end, x % 2 = 0, x from generate_series(1, 1483) x;
+    case when x % 2 = 1 then '13' else null end, x % 3 = 0, x from generate_series(1, 1483) x;
 
 insert into aggexpr select 14, case when x % 2 = 0 then 14 else null end,
-    case when x % 2 = 0 then '14' || x::text else null end, x % 2 = 1, x from generate_series(1, 1481) x;
+    case when x % 2 = 0 then '14' || x::text else null end, x % 3 = 1, x from generate_series(1, 1481) x;
 
 select count(compress_chunk(x)) from show_chunks('aggexpr') x;
 
@@ -52,6 +52,7 @@ from
         , 'count(x)'
         , 'count(b)'
         , 'sum((i = 12)::int)'
+        , 'sum(abs(v - 500))'
         ]) function,
     unnest(array[
         null
@@ -68,46 +69,27 @@ from
         , 'i % 2'
         , 'ts'
         , 'b'
+        , 'v - 501 > 0'
         ]) with ordinality as grouping(grouping, n)
 order by grouping.n, condition.n, function
 \gexec
 
 reset timescaledb.debug_require_vector_agg;
-
+reset timescaledb.enable_vectorized_aggregation;
 
 -- Not all CASE statements are vectorized yet.
-set timescaledb.debug_require_vector_agg = 'allow';
+set timescaledb.debug_require_vector_agg = 'require';
 ---- Uncomment to generate reference
 --set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
-select
-    format('select %s%s from aggexpr%s%s%s;',
-            grouping || ', ',
-            function,
-            ' where ' || condition,
-            ' group by ' || grouping,
-            format(' order by %s, ', function) || grouping || ' limit 10')
-from
-    unnest(array[
-        'count(*)'
-        , 'sum(case when i % 2 = 0 then i else -i end)'
-        , 'count(case when i % 2 = 0 then i end)'
-        , 'sum((case when b then length(x) end)::int)'
-        , 'count(case when (case when length(x) = 1 then x else ''long'' end) = ''long'' then 1 end)'
-        ]) function,
-    unnest(array[
-        null
-        , 'b'
-        , 'not b'
-        , 'length(x) = 1'
-        , 'length(x) < 0'
-        , 'i % 2 = 0'
-        ]) with ordinality as condition(condition, n),
-    unnest(array[
-        null
-        , 'x'
-        , 'case when b then ''true'' else ''false'' end'
-        ]) with ordinality as grouping(grouping, n)
-order by grouping.n, condition.n, function
-\gexec
+
+select sum(case when i > 10 then i else -i end) from aggexpr group by b order by 1;
+
+select count(case when i > 10 then i end) from aggexpr group by v - 501 > 0 order by 1;
+
+select sum(case when i > 10 then (case when i > 12 then length(x) else -length(x) end) end) from aggexpr group by v - 502 > 0;
+
+select avg(case when v > 500 then v - 500 else 500 - v end) from aggexpr group by x order by 1 limit 10;
+
+select count(*), case when v > 503 then x else 'something-else' end from aggexpr group by 2 order by 1 limit 10;
 
 reset timescaledb.debug_require_vector_agg;
