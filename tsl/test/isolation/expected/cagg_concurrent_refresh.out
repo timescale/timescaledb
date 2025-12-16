@@ -336,6 +336,7 @@ step L3_unlock_cagg_table:
     ROLLBACK;
 
 step R1_refresh: <... completed>
+R2: NOTICE:  continuous aggregate "cond_10" has pending materializations in window [ 35, 62 ]
 step R2_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
@@ -669,6 +670,7 @@ user_view_name|lowest_modified_value|greatest_modified_value
 --------------+---------------------+-----------------------
 cond_10       |                   30|                     70
 
+R13: NOTICE:  continuous aggregate "cond_10" has pending materializations in window [ 40, 100 ]
 step R13_refresh2: 
     -- the window start 40 is one bucket before the pending range start 30
     -- so in this case the left behind pending range will be processed
@@ -758,6 +760,7 @@ user_view_name|lowest_modified_value|greatest_modified_value
 --------------+---------------------+-----------------------
 cond_10       |                   30|                    120
 
+R13: NOTICE:  continuous aggregate "cond_10" has pending materializations in window [ 40, 110 ]
 step R13_refresh4: 
     -- the window end 110 is one bucket after the pending range end 120
     -- so in this case the left behind pending range will be processed
