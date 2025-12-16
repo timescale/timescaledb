@@ -1,3 +1,4 @@
+DROP VIEW IF EXISTS timescaledb_information.dimensions;
 --
 -- Rebuild the catalog table `_timescaledb_catalog.continuous_agg` to add `finalized` column
 --
@@ -104,3 +105,6 @@ GRANT USAGE ON SCHEMA _timescaledb_config TO PUBLIC;
 
 ALTER TABLE _timescaledb_catalog.bgw_job SET SCHEMA _timescaledb_config;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_compressed_batch_size(REGCLASS);
+DROP PROCEDURE IF EXISTS _timescaledb_functions.rebuild_columnstore(REGCLASS);
+DROP FUNCTION IF EXISTS _timescaledb_functions.cagg_get_grouping_columns;

@@ -69,7 +69,6 @@
 #include "finalize.h"
 #include "invalidation_threshold.h"
 
-#include "continuous_aggs/invalidation_multi.h"
 #include "debug_assert.h"
 #include "dimension.h"
 #include "extension_constants.h"
@@ -303,91 +302,6 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not create materialization hypertable")));
-}
-
-/*
- * Add a logical decoding slot for reading invalidations.
- *
- * It is the responsibility of the caller to check that the replication slot
- * does not exist. There is an assert to check this.
- *
- * This code is mostly copied from create_logical_replication_slot and friends
- * in slotfunc.c.
- *
- * It is important that the slot exists if and only if there are continuous
- * aggregates that use the WAL to collect invalidations.
- *
- * Obviously, the slot is needed to read invalidations for the hypertables and
- * it needs to have the version expected by the timescale extension. If the
- * versions do not match, the rows returned by pg_logical_slot_get_changes()
- * will not match what is expected and decoding will fail.
- *
- * Less obvious, the slot needs to be removed once there are no more continuous
- * aggregates that need the slot. If not, the WAL will not be used and will
- * start to fill up storage.
- *
- * There is a bug in PostgreSQL causing it to error out before the slot is
- * created in LogicalDecodingProcessRecord() trying to allocate too much
- * memory if you have too many other concurrent transactions in progress.
- */
-static void
-cagg_add_logical_decoding_slot_prepare(const char *slot_name)
-{
-	CatalogSecurityContext sec_ctx;
-	LogicalDecodingContext *ctx = NULL;
-	const char *plugin_name = CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_PLUGIN_NAME;
-
-	Assert(!MyReplicationSlot);
-	Assert(SearchNamedReplicationSlot(slot_name, true) == NULL);
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
-	TS_DEBUG_LOG("create invalidation slot %s", slot_name);
-
-	/*
-	 * Similar to how it works in create_logical_replication_slot(), this
-	 * initially create persistent slot as ephemeral to be able to handle
-	 * errors during initialization and allow it to be dropped if this
-	 * transaction fails. It's made persistent after the continuous aggregate
-	 * has been successfully created.
-	 */
-
-#if PG17_LT
-	ReplicationSlotCreate(slot_name, true, RS_EPHEMERAL, false);
-#else
-	ReplicationSlotCreate(slot_name, true, RS_EPHEMERAL, false, false, false);
-#endif
-	TS_DEBUG_LOG("init plugin %s", plugin_name);
-	ctx = CreateInitDecodingContext(plugin_name,
-									NIL,
-									false,
-									InvalidXLogRecPtr,
-									XL_ROUTINE(.page_read = read_local_xlog_page,
-											   .segment_open = wal_segment_open,
-											   .segment_close = wal_segment_close),
-									NULL,
-									NULL,
-									NULL);
-
-	/*
-	 * To avoid the above mentioned bug, we can find our own start point here
-	 * in a manner that does not require allocating a lot of memory.
-	 */
-	TS_DEBUG_LOG("find startpoint");
-	DecodingContextFindStartpoint(ctx);
-
-	TS_DEBUG_LOG("free decoding context");
-	FreeDecodingContext(ctx);
-
-	ts_catalog_restore_user(&sec_ctx);
-}
-
-static void
-cagg_add_logical_decoding_slot_finalize(void)
-{
-	TS_DEBUG_LOG("persist invalidation slot");
-	ReplicationSlotPersist();
-	ReplicationSlotRelease();
 }
 
 /*
@@ -705,7 +619,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	int32 materialize_hypertable_id;
 	bool materialized_only =
 		DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
-	bool slot_prepared = false;
 
 	int64 matpartcol_interval = 0;
 	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
@@ -735,21 +648,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	 * The options are valid only for internal use (ts_continuous).
 	 */
 	stmt->options = NULL;
-
-	/*
-	 * Step 0: Create logical replication slot if used. This needs to be first
-	 * since we cannot do this in a transaction that has performed any writes.
-	 */
-	if (ts_guc_enable_cagg_wal_based_invalidation)
-	{
-		char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
-		ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
-		if (SearchNamedReplicationSlot(slot_name, true) == NULL)
-		{
-			cagg_add_logical_decoding_slot_prepare(slot_name);
-			slot_prepared = true;
-		}
-	}
 
 	/*
 	 * Old format caggs are not supported anymore, there is no need to add
@@ -879,10 +777,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 										 bucket_offset,
 										 bucket_info->bf->bucket_time_timezone,
 										 bucket_info->bf->bucket_fixed_interval);
-
-	/* Step 5: Finalize slot creation if using wal based invalidation. */
-	if (ts_guc_enable_cagg_wal_based_invalidation && slot_prepared)
-		cagg_add_logical_decoding_slot_finalize();
 }
 
 DDLResult

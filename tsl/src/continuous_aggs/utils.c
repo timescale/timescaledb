@@ -924,3 +924,30 @@ continuous_agg_get_bucket_function_info(PG_FUNCTION_ARGS)
 	/* Return all bucket function info */
 	PG_RETURN_DATUM(cagg_get_bucket_function_datum(PG_GETARG_INT32(0), fcinfo));
 }
+
+Datum
+continuous_agg_get_grouping_columns(PG_FUNCTION_ARGS)
+{
+	List *cagg_group_cols = NIL;
+	ListCell *lc = NULL;
+	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	ArrayBuildState *astate = NULL;
+	ContinuousAgg *cagg = cagg_get_by_relid_or_fail(cagg_relid);
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *mat_ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
+	Assert(mat_ht != NULL);
+
+	cagg_group_cols = cagg_find_groupingcols(cagg, mat_ht);
+
+	foreach (lc, cagg_group_cols)
+	{
+		char *group_col = lfirst(lc);
+		astate = accumArrayResult(astate,
+								  CStringGetTextDatum(group_col),
+								  false,
+								  TEXTOID,
+								  CurrentMemoryContext);
+	}
+	ts_cache_release(&hcache);
+	PG_RETURN_DATUM(makeArrayResult(astate, CurrentMemoryContext));
+}

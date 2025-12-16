@@ -83,17 +83,17 @@ CROSSMODULE_WRAPPER(uuid_compressor_finish);
 CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
+CROSSMODULE_WRAPPER(rebuild_columnstore);
 CROSSMODULE_WRAPPER(bloom1_contains);
 CROSSMODULE_WRAPPER(bloom1_contains_any);
 
 /* continuous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
-CROSSMODULE_WRAPPER(continuous_agg_process_hypertable_invalidations);
 CROSSMODULE_WRAPPER(continuous_agg_validate_query);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function_info);
 CROSSMODULE_WRAPPER(continuous_agg_migrate_to_time_bucket);
-CROSSMODULE_WRAPPER(continuous_agg_read_invalidation_record);
+CROSSMODULE_WRAPPER(continuous_agg_get_grouping_columns);
 
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
 CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
@@ -105,6 +105,8 @@ CROSSMODULE_WRAPPER(split_chunk);
 
 CROSSMODULE_WRAPPER(detach_chunk);
 CROSSMODULE_WRAPPER(attach_chunk);
+
+CROSSMODULE_WRAPPER(estimate_compressed_batch_size);
 
 /*
  * casting a function pointer to a pointer of another type is undefined
@@ -333,7 +335,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
-	.continuous_agg_process_hypertable_invalidations = error_no_default_fn_pg_community,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht_all_default,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate_default,
@@ -342,7 +343,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function_info = error_no_default_fn_pg_community,
 	.continuous_agg_migrate_to_time_bucket = error_no_default_fn_pg_community,
-	.continuous_agg_read_invalidation_record = error_no_default_fn_pg_community,
+	.continuous_agg_get_grouping_columns = error_no_default_fn_pg_community,
 
 	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,
@@ -353,6 +354,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.create_compressed_chunk = error_no_default_fn_pg_community,
 	.compress_chunk = error_no_default_fn_pg_community,
 	.decompress_chunk = error_no_default_fn_pg_community,
+	.rebuild_columnstore = error_no_default_fn_pg_community,
 	.compressed_data_decompress_forward = error_no_default_fn_pg_community,
 	.compressed_data_decompress_reverse = error_no_default_fn_pg_community,
 	.deltadelta_compressor_append = error_no_default_fn_pg_community,

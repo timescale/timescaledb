@@ -728,19 +728,13 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time |              application_name              |                                                                                   msg                                                                                   
---------+-----------+--------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ msg_no | mock_time |              application_name              |                                                                           msg                                                                            
+--------+-----------+--------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Mon Dec 23 00:00:00 2024 UTC, Wed Jan 22 00:00:00 2025 UTC ] (batch 1 of 3)
+      0 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Tue Aug 01 00:00:00 2023 UTC, Sat Mar 01 00:00:00 2025 UTC ]
       1 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
-      2 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
-      3 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Wed Jan 22 00:00:00 2025 UTC, Fri Feb 21 00:00:00 2025 UTC ] (batch 2 of 3)
-      4 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 5 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
-      5 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
-      6 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Fri Feb 21 00:00:00 2025 UTC, Sat Mar 01 00:00:00 2025 UTC ] (batch 3 of 3)
-      7 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 5 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
-      8 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
+      2 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
  materialization_id | lowest_modified_value | greatest_modified_value 

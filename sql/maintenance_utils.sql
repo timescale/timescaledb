@@ -55,6 +55,10 @@ CREATE OR REPLACE PROCEDURE @extschema@.convert_to_rowstore(
     if_columnstore BOOLEAN = true
 ) AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C;
 
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.rebuild_columnstore(
+    chunk REGCLASS
+) AS '@MODULE_PATHNAME@', 'ts_rebuild_columnstore' LANGUAGE C;
+
 CREATE OR REPLACE PROCEDURE _timescaledb_functions.chunk_rewrite_cleanup()
 LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_chunk_rewrite_cleanup';
 

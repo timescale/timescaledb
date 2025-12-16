@@ -66,4 +66,6 @@ void ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *rel, const H
 extern bool ts_is_columnar_scan_path(Path *path);
 extern bool ts_is_columnar_scan_plan(Plan *plan);
 
+extern double ts_columnar_estimate_compressed_batch_size(const Oid relid);
+
 ColumnarScanPath *copy_columnar_scan_path(ColumnarScanPath *src);

@@ -1,0 +1,1 @@
+Implements: #9031 Change default `buckets_per_batch` on CAgg refresh policy to `10`

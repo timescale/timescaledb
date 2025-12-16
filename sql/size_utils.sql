@@ -364,6 +364,10 @@ BEGIN
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.estimate_compressed_batch_size(relation REGCLASS)
+RETURNS FLOAT8
+AS '@MODULE_PATHNAME@', 'ts_estimate_compressed_batch_size' LANGUAGE C STRICT STABLE;
+
 CREATE OR REPLACE FUNCTION _timescaledb_functions.get_approx_row_count(relation REGCLASS)
 RETURNS BIGINT
 LANGUAGE PLPGSQL VOLATILE STRICT AS
@@ -382,7 +386,7 @@ BEGIN
 
   IF v_chunk_id IS NOT NULL THEN
     SELECT format('%I.%I', schema_name, table_name)::regclass INTO v_oid FROM _timescaledb_catalog.chunk WHERE id = v_chunk_id;
-    row_count := (SELECT row_count + CASE WHEN reltuples IS NULL THEN 0 WHEN reltuples < 0 THEN 0 ELSE reltuples * 1000 END FROM pg_class WHERE oid = v_oid);
+    row_count := (SELECT CASE WHEN reltuples IS NULL THEN 0 WHEN reltuples < 0 THEN 0 ELSE reltuples * _timescaledb_functions.estimate_compressed_batch_size(oid) END FROM pg_class WHERE oid = v_oid);
   END IF;
 
   row_count := COALESCE((SELECT row_count + CASE WHEN reltuples < 0 OR relkind = 'p' THEN 0 ELSE reltuples END FROM pg_class WHERE oid = relation), 0);

@@ -31,8 +31,6 @@
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/invalidation.h"
-#include "continuous_aggs/invalidation_multi.h"
-#include "continuous_aggs/invalidation_record.h"
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
 #include "continuous_aggs/utils.h"
@@ -131,8 +129,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	/* Continuous Aggregates */
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
 	.continuous_agg_refresh = continuous_agg_refresh,
-	.continuous_agg_process_hypertable_invalidations =
-		continuous_agg_process_hypertable_invalidations,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
@@ -141,7 +137,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
 	.continuous_agg_migrate_to_time_bucket = continuous_agg_migrate_to_time_bucket,
-	.continuous_agg_read_invalidation_record = ts_invalidation_read_record,
+	.continuous_agg_get_grouping_columns = continuous_agg_get_grouping_columns,
 
 	/* Compression */
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,
@@ -172,6 +168,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.process_rename_cmd = tsl_process_rename_cmd,
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
+	.rebuild_columnstore = tsl_rebuild_columnstore,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,
@@ -195,6 +192,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.split_chunk = chunk_split_chunk,
 	.detach_chunk = chunk_detach,
 	.attach_chunk = chunk_attach,
+	.estimate_compressed_batch_size = tsl_estimate_compressed_batch_size,
 };
 
 static void

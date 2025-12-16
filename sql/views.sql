@@ -238,14 +238,14 @@ SELECT ht.schema_name AS hypertable_schema,
     'Time'
   END AS dimension_type,
   CASE WHEN dim.interval_length IS NOT NULL THEN
-    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
       _timescaledb_functions.to_interval(dim.interval_length)
     ELSE
       NULL
     END
   END AS time_interval,
   CASE WHEN dim.interval_length IS NOT NULL THEN
-    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
       NULL
     ELSE
       dim.interval_length

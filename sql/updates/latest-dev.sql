@@ -1,3 +1,4 @@
+DROP VIEW IF EXISTS timescaledb_information.dimensions;
 -- Block update if CAggs in old format are found
 DO
 $$
@@ -186,3 +187,22 @@ END;
 $$
 LANGUAGE plpgsql;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.cagg_parse_invalidation_record(bytea);
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_hypertable_id(regclass, regtype);
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_hypertable_invalidations(regclass,timestamp without time zone,interval[]);
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_hypertable_invalidations(regclass,timestamp with time zone,interval[]);
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_materialization_info(regclass);
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_materialization_invalidations(regclass,tsrange);
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_materialization_invalidations(regclass,tstzrange);
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_raw_materialization_ranges(regtype);
+DROP FUNCTION IF EXISTS _timescaledb_functions.invalidation_plugin_name();
+DROP PROCEDURE IF EXISTS _timescaledb_functions.accept_hypertable_invalidations(regclass,text);
+DROP PROCEDURE IF EXISTS _timescaledb_functions.add_materialization_invalidations(regclass,tsrange);
+DROP PROCEDURE IF EXISTS _timescaledb_functions.add_materialization_invalidations(regclass,tstzrange);
+DROP PROCEDURE IF EXISTS _timescaledb_functions.process_hypertable_invalidations(name);
+DROP PROCEDURE IF EXISTS _timescaledb_functions.process_hypertable_invalidations(regclass);
+DROP PROCEDURE IF EXISTS _timescaledb_functions.process_hypertable_invalidations(regclass[]);
+
+-- Remove orphaned entries in materialization ranges table
+DELETE FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
+WHERE NOT EXISTS (SELECT FROM _timescaledb_catalog.continuous_agg WHERE mat_hypertable_id = materialization_id);

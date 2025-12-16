@@ -1391,8 +1391,7 @@ SELECT mat_htid AS "MAT_HTID"
 FROM cagg_compression_status
 WHERE cagg_name = 'search_query_count_3' \gset
 ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'true');
-NOTICE:  defaulting compress_segmentby to search_query
-NOTICE:  defaulting compress_orderby to bucket
+NOTICE:  defaulting compress_orderby to bucket,search_query
 SELECT cagg_name, mat_table_name
 FROM cagg_compression_status where cagg_name = 'search_query_count_3';
       cagg_name       |       mat_table_name        
@@ -1405,17 +1404,17 @@ WHERE hypertable_name = :'MAT_TABLE_NAME';
 -[ RECORD 1 ]----------+----------------------------
 hypertable_schema      | _timescaledb_internal
 hypertable_name        | _materialized_hypertable_41
-attname                | search_query
-segmentby_column_index | 1
-orderby_column_index   | 
-orderby_asc            | 
-orderby_nullsfirst     | 
--[ RECORD 2 ]----------+----------------------------
-hypertable_schema      | _timescaledb_internal
-hypertable_name        | _materialized_hypertable_41
 attname                | bucket
 segmentby_column_index | 
 orderby_column_index   | 1
+orderby_asc            | t
+orderby_nullsfirst     | f
+-[ RECORD 2 ]----------+----------------------------
+hypertable_schema      | _timescaledb_internal
+hypertable_name        | _materialized_hypertable_41
+attname                | search_query
+segmentby_column_index | 
+orderby_column_index   | 2
 orderby_asc            | t
 orderby_nullsfirst     | f
 
