@@ -87,6 +87,8 @@ CREATE TABLE sensor_data (
 ) WITH (
     tsdb.hypertable
 );
+-- create index
+CREATE INDEX idx_sensor_id_time ON sensor_data(sensor_id, time DESC);
 ```
 
 `tsdb.hypertable` - Converts this into a TimescaleDB hypertable
@@ -222,6 +224,102 @@ Check out our complete examples with real-world datasets:
 - [Time-series Best Practices](https://docs.timescale.com/use-timescale/latest/schema-management/)
 - [Continuous Aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
 - [Data Retention Policies](https://docs.timescale.com/use-timescale/latest/data-retention/)
+
+## Create Continuous Aggregates
+
+Continuous aggregates make real-time analytics run faster on very large datasets. They continuously and incrementally refresh a query in the background, so that when you run such query, only the data that has changed needs to be computed, not the entire dataset. This is what makes them different from regular PostgreSQL materialized views, which cannot be incrementally materialized and have to be rebuilt from scratch every time you want to refresh them.
+
+Let's create a continuous aggregate for hourly sensor statistics:
+
+### Step 1: Create the Continuous Aggregate
+
+```sql
+CREATE MATERIALIZED VIEW sensor_data_hourly
+WITH (timescaledb.continuous) AS
+SELECT
+    time_bucket('1 hour', time) AS hour,
+    sensor_id,
+    AVG(temperature) AS avg_temp,
+    AVG(humidity) AS avg_humidity,
+    AVG(pressure) AS avg_pressure,
+    MIN(temperature) AS min_temp,
+    MAX(temperature) AS max_temp,
+    COUNT(*) AS reading_count
+FROM sensor_data
+GROUP BY hour, sensor_id;
+```
+
+This creates a materialized view that pre-aggregates your sensor data into hourly buckets. The view is automatically populated with existing data.
+
+### Step 2: Add a Refresh Policy
+
+To keep the continuous aggregate up-to-date as new data arrives, add a refresh policy:
+
+```sql
+SELECT add_continuous_aggregate_policy(
+    'sensor_data_hourly',
+    start_offset => INTERVAL '3 hours',
+    end_offset => INTERVAL '1 hour',
+    schedule_interval => INTERVAL '1 hour'
+);
+```
+
+This policy:
+- Refreshes the continuous aggregate every hour
+- Processes data from 3 hours ago up to 1 hour ago (leaving the most recent hour for real-time queries)
+- Only processes new or changed data incrementally
+
+### Step 3: Query the Continuous Aggregate
+
+Now you can query the pre-aggregated data for much faster results:
+
+```sql
+-- Get hourly averages for the last 24 hours
+SELECT
+    hour,
+    sensor_id,
+    ROUND(avg_temp::numeric, 2) AS avg_temp,
+    ROUND(avg_humidity::numeric, 2) AS avg_humidity,
+    reading_count
+FROM sensor_data_hourly
+WHERE hour > NOW() - INTERVAL '24 hours'
+ORDER BY hour DESC, sensor_id
+LIMIT 50;
+```
+
+### Benefits of Continuous Aggregates
+
+- **Faster queries**: Pre-aggregated data means queries run in milliseconds instead of seconds
+- **Incremental refresh**: Only new/changed data is processed, not the entire dataset
+- **Automatic updates**: The refresh policy keeps your aggregates current without manual intervention
+- **Real-time option**: You can enable real-time aggregation to combine materialized and raw data
+
+### Try It Yourself
+
+Compare the performance difference:
+
+```sql
+-- Query the raw hypertable (slower on large datasets)
+\timing on
+SELECT
+    time_bucket('1 hour', time) AS hour,
+    sensor_id,
+    AVG(temperature) AS avg_temp
+FROM sensor_data
+WHERE time > NOW() - INTERVAL '7 days'
+GROUP BY hour, sensor_id;
+
+-- Query the continuous aggregate (much faster)
+SELECT
+    hour,
+    sensor_id,
+    avg_temp
+FROM sensor_data_hourly
+WHERE hour > NOW() - INTERVAL '7 days'
+ORDER BY hour DESC, sensor_id;
+```
+
+Notice how the continuous aggregate query is significantly faster, especially as your dataset grows!
 
 ## Troubleshooting
 
