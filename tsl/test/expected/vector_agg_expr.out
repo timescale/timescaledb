@@ -1239,3 +1239,618 @@ select b, sum((i = 12)::int) from aggexpr where i % 2 = 0 group by b order by su
  f | 1487
 
 reset timescaledb.debug_require_vector_agg;
+-- Not all CASE statements are vectorized yet.
+set timescaledb.debug_require_vector_agg = 'allow';
+---- Uncomment to generate reference
+--set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
+select
+    format('select %s%s from aggexpr%s%s%s;',
+            grouping || ', ',
+            function,
+            ' where ' || condition,
+            ' group by ' || grouping,
+            format(' order by %s, ', function) || grouping || ' limit 10')
+from
+    unnest(array[
+        'count(*)'
+        , 'sum(case when i % 2 = 0 then i else -i end)'
+        , 'count(case when i % 2 = 0 then i end)'
+        , 'sum((case when b then length(x) end)::int)'
+        , 'count(case when (case when length(x) = 1 then x else ''long'' end) = ''long'' then 1 end)'
+        ]) function,
+    unnest(array[
+        null
+        , 'b'
+        , 'not b'
+        , 'length(x) = 1'
+        , 'length(x) < 0'
+        , 'i % 2 = 0'
+        ]) with ordinality as condition(condition, n),
+    unnest(array[
+        null
+        , 'x'
+        , 'case when b then ''true'' else ''false'' end'
+        ]) with ordinality as grouping(grouping, n)
+order by grouping.n, condition.n, function
+\gexec
+select count(*) from aggexpr;
+ count 
+-------
+  8932
+
+select count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr;
+ count 
+-------
+  7439
+
+select count(case when i % 2 = 0 then i end) from aggexpr;
+ count 
+-------
+  3720
+
+select sum((case when b then length(x) end)::int) from aggexpr;
+ sum 
+-----
+   $
+
+select sum(case when i % 2 = 0 then i else -i end) from aggexpr;
+  sum  
+-------
+ 21557
+
+select count(*) from aggexpr where b;
+ count 
+-------
+  1482
+
+select count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where b;
+ count 
+-------
+  1482
+
+select count(case when i % 2 = 0 then i end) from aggexpr where b;
+ count 
+-------
+     0
+
+select sum((case when b then length(x) end)::int) from aggexpr where b;
+ sum 
+-----
+   $
+
+select sum(case when i % 2 = 0 then i else -i end) from aggexpr where b;
+  sum  
+-------
+ -9633
+
+select count(*) from aggexpr where not b;
+ count 
+-------
+  4462
+
+select count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where not b;
+ count 
+-------
+  2969
+
+select count(case when i % 2 = 0 then i end) from aggexpr where not b;
+ count 
+-------
+  3720
+
+select sum((case when b then length(x) end)::int) from aggexpr where not b;
+ sum 
+-----
+   $
+
+select sum(case when i % 2 = 0 then i else -i end) from aggexpr where not b;
+  sum  
+-------
+ 31190
+
+select count(*) from aggexpr where length(x) = 1;
+ count 
+-------
+  1493
+
+select count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where length(x) = 1;
+ count 
+-------
+     0
+
+select count(case when i % 2 = 0 then i end) from aggexpr where length(x) = 1;
+ count 
+-------
+  1493
+
+select sum((case when b then length(x) end)::int) from aggexpr where length(x) = 1;
+ sum 
+-----
+   $
+
+select sum(case when i % 2 = 0 then i else -i end) from aggexpr where length(x) = 1;
+ sum  
+------
+ 2986
+
+select count(*) from aggexpr where length(x) < 0;
+ count 
+-------
+     0
+
+select count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where length(x) < 0;
+ count 
+-------
+     0
+
+select count(case when i % 2 = 0 then i end) from aggexpr where length(x) < 0;
+ count 
+-------
+     0
+
+select sum((case when b then length(x) end)::int) from aggexpr where length(x) < 0;
+ sum 
+-----
+   $
+
+select sum(case when i % 2 = 0 then i else -i end) from aggexpr where length(x) < 0;
+ sum 
+-----
+   $
+
+select count(*) from aggexpr where i % 2 = 0;
+ count 
+-------
+  3720
+
+select count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where i % 2 = 0;
+ count 
+-------
+  2227
+
+select count(case when i % 2 = 0 then i end) from aggexpr where i % 2 = 0;
+ count 
+-------
+  3720
+
+select sum((case when b then length(x) end)::int) from aggexpr where i % 2 = 0;
+ sum 
+-----
+   $
+
+select sum(case when i % 2 = 0 then i else -i end) from aggexpr where i % 2 = 0;
+  sum  
+-------
+ 31190
+
+select x, count(*) from aggexpr group by x order by count(*), x limit 10;
+   x    | count 
+--------+-------
+ 1410   |     1
+ 14100  |     1
+ 141000 |     1
+ 141002 |     1
+ 141004 |     1
+ 141006 |     1
+ 141008 |     1
+ 141010 |     1
+ 141012 |     1
+ 141014 |     1
+
+select x, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr group by x order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), x limit 10;
+   x    | count 
+--------+-------
+ 2      |     0
+ 1410   |     1
+ 14100  |     1
+ 141000 |     1
+ 141002 |     1
+ 141004 |     1
+ 141006 |     1
+ 141008 |     1
+ 141010 |     1
+ 141012 |     1
+
+select x, count(case when i % 2 = 0 then i end) from aggexpr group by x order by count(case when i % 2 = 0 then i end), x limit 10;
+   x    | count 
+--------+-------
+ 13     |     0
+ $      |     0
+ 1410   |     1
+ 14100  |     1
+ 141000 |     1
+ 141002 |     1
+ 141004 |     1
+ 141006 |     1
+ 141008 |     1
+ 141010 |     1
+
+select x, sum((case when b then length(x) end)::int) from aggexpr group by x order by sum((case when b then length(x) end)::int), x limit 10;
+   x    | sum 
+--------+-----
+ 12     |   $
+ 13     |   $
+ 1410   |   $
+ 14100  |   $
+ 141000 |   $
+ 141002 |   $
+ 141004 |   $
+ 141006 |   $
+ 141008 |   $
+ 141010 |   $
+
+select x, sum(case when i % 2 = 0 then i else -i end) from aggexpr group by x order by sum(case when i % 2 = 0 then i else -i end), x limit 10;
+   x    |  sum  
+--------+-------
+ $      | -9633
+ 1410   |    14
+ 14100  |    14
+ 141000 |    14
+ 141002 |    14
+ 141004 |    14
+ 141006 |    14
+ 141008 |    14
+ 141010 |    14
+ 141012 |    14
+
+select x, count(*) from aggexpr where b group by x order by count(*), x limit 10;
+ x | count 
+---+-------
+ $ |  1482
+
+select x, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where b group by x order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), x limit 10;
+ x | count 
+---+-------
+ $ |  1482
+
+select x, count(case when i % 2 = 0 then i end) from aggexpr where b group by x order by count(case when i % 2 = 0 then i end), x limit 10;
+ x | count 
+---+-------
+ $ |     0
+
+select x, sum((case when b then length(x) end)::int) from aggexpr where b group by x order by sum((case when b then length(x) end)::int), x limit 10;
+ x | sum 
+---+-----
+ $ |   $
+
+select x, sum(case when i % 2 = 0 then i else -i end) from aggexpr where b group by x order by sum(case when i % 2 = 0 then i else -i end), x limit 10;
+ x |  sum  
+---+-------
+ $ | -9633
+
+select x, count(*) from aggexpr where not b group by x order by count(*), x limit 10;
+   x    | count 
+--------+-------
+ 1410   |     1
+ 14100  |     1
+ 141000 |     1
+ 141002 |     1
+ 141004 |     1
+ 141006 |     1
+ 141008 |     1
+ 141010 |     1
+ 141012 |     1
+ 141014 |     1
+
+select x, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where not b group by x order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), x limit 10;
+   x    | count 
+--------+-------
+ 2      |     0
+ 1410   |     1
+ 14100  |     1
+ 141000 |     1
+ 141002 |     1
+ 141004 |     1
+ 141006 |     1
+ 141008 |     1
+ 141010 |     1
+ 141012 |     1
+
+select x, count(case when i % 2 = 0 then i end) from aggexpr where not b group by x order by count(case when i % 2 = 0 then i end), x limit 10;
+   x    | count 
+--------+-------
+ 13     |     0
+ 1410   |     1
+ 14100  |     1
+ 141000 |     1
+ 141002 |     1
+ 141004 |     1
+ 141006 |     1
+ 141008 |     1
+ 141010 |     1
+ 141012 |     1
+
+select x, sum((case when b then length(x) end)::int) from aggexpr where not b group by x order by sum((case when b then length(x) end)::int), x limit 10;
+   x    | sum 
+--------+-----
+ 12     |   $
+ 13     |   $
+ 1410   |   $
+ 14100  |   $
+ 141000 |   $
+ 141002 |   $
+ 141004 |   $
+ 141006 |   $
+ 141008 |   $
+ 141010 |   $
+
+select x, sum(case when i % 2 = 0 then i else -i end) from aggexpr where not b group by x order by sum(case when i % 2 = 0 then i else -i end), x limit 10;
+   x    | sum 
+--------+-----
+ 1410   |  14
+ 14100  |  14
+ 141000 |  14
+ 141002 |  14
+ 141004 |  14
+ 141006 |  14
+ 141008 |  14
+ 141010 |  14
+ 141012 |  14
+ 141014 |  14
+
+select x, count(*) from aggexpr where length(x) = 1 group by x order by count(*), x limit 10;
+ x | count 
+---+-------
+ 2 |  1493
+
+select x, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where length(x) = 1 group by x order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), x limit 10;
+ x | count 
+---+-------
+ 2 |     0
+
+select x, count(case when i % 2 = 0 then i end) from aggexpr where length(x) = 1 group by x order by count(case when i % 2 = 0 then i end), x limit 10;
+ x | count 
+---+-------
+ 2 |  1493
+
+select x, sum((case when b then length(x) end)::int) from aggexpr where length(x) = 1 group by x order by sum((case when b then length(x) end)::int), x limit 10;
+ x | sum 
+---+-----
+ 2 |   $
+
+select x, sum(case when i % 2 = 0 then i else -i end) from aggexpr where length(x) = 1 group by x order by sum(case when i % 2 = 0 then i else -i end), x limit 10;
+ x | sum  
+---+------
+ 2 | 2986
+
+select x, count(*) from aggexpr where length(x) < 0 group by x order by count(*), x limit 10;
+ x | count 
+---+-------
+
+select x, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where length(x) < 0 group by x order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), x limit 10;
+ x | count 
+---+-------
+
+select x, count(case when i % 2 = 0 then i end) from aggexpr where length(x) < 0 group by x order by count(case when i % 2 = 0 then i end), x limit 10;
+ x | count 
+---+-------
+
+select x, sum((case when b then length(x) end)::int) from aggexpr where length(x) < 0 group by x order by sum((case when b then length(x) end)::int), x limit 10;
+ x | sum 
+---+-----
+
+select x, sum(case when i % 2 = 0 then i else -i end) from aggexpr where length(x) < 0 group by x order by sum(case when i % 2 = 0 then i else -i end), x limit 10;
+ x | sum 
+---+-----
+
+select x, count(*) from aggexpr where i % 2 = 0 group by x order by count(*), x limit 10;
+   x    | count 
+--------+-------
+ 1410   |     1
+ 14100  |     1
+ 141000 |     1
+ 141002 |     1
+ 141004 |     1
+ 141006 |     1
+ 141008 |     1
+ 141010 |     1
+ 141012 |     1
+ 141014 |     1
+
+select x, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where i % 2 = 0 group by x order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), x limit 10;
+   x    | count 
+--------+-------
+ 2      |     0
+ 1410   |     1
+ 14100  |     1
+ 141000 |     1
+ 141002 |     1
+ 141004 |     1
+ 141006 |     1
+ 141008 |     1
+ 141010 |     1
+ 141012 |     1
+
+select x, count(case when i % 2 = 0 then i end) from aggexpr where i % 2 = 0 group by x order by count(case when i % 2 = 0 then i end), x limit 10;
+   x    | count 
+--------+-------
+ 1410   |     1
+ 14100  |     1
+ 141000 |     1
+ 141002 |     1
+ 141004 |     1
+ 141006 |     1
+ 141008 |     1
+ 141010 |     1
+ 141012 |     1
+ 141014 |     1
+
+select x, sum((case when b then length(x) end)::int) from aggexpr where i % 2 = 0 group by x order by sum((case when b then length(x) end)::int), x limit 10;
+   x    | sum 
+--------+-----
+ 12     |   $
+ 1410   |   $
+ 14100  |   $
+ 141000 |   $
+ 141002 |   $
+ 141004 |   $
+ 141006 |   $
+ 141008 |   $
+ 141010 |   $
+ 141012 |   $
+
+select x, sum(case when i % 2 = 0 then i else -i end) from aggexpr where i % 2 = 0 group by x order by sum(case when i % 2 = 0 then i else -i end), x limit 10;
+   x    | sum 
+--------+-----
+ 1410   |  14
+ 14100  |  14
+ 141000 |  14
+ 141002 |  14
+ 141004 |  14
+ 141006 |  14
+ 141008 |  14
+ 141010 |  14
+ 141012 |  14
+ 141014 |  14
+
+select case when b then 'true' else 'false' end, count(*) from aggexpr group by case when b then 'true' else 'false' end order by count(*), case when b then 'true' else 'false' end limit 10;
+ case  | count 
+-------+-------
+ true  |  1482
+ false |  7450
+
+select case when b then 'true' else 'false' end, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr group by case when b then 'true' else 'false' end order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), case when b then 'true' else 'false' end limit 10;
+ case  | count 
+-------+-------
+ true  |  1482
+ false |  5957
+
+select case when b then 'true' else 'false' end, count(case when i % 2 = 0 then i end) from aggexpr group by case when b then 'true' else 'false' end order by count(case when i % 2 = 0 then i end), case when b then 'true' else 'false' end limit 10;
+ case  | count 
+-------+-------
+ true  |     0
+ false |  3720
+
+select case when b then 'true' else 'false' end, sum((case when b then length(x) end)::int) from aggexpr group by case when b then 'true' else 'false' end order by sum((case when b then length(x) end)::int), case when b then 'true' else 'false' end limit 10;
+ case  | sum 
+-------+-----
+ false |   $
+ true  |   $
+
+select case when b then 'true' else 'false' end, sum(case when i % 2 = 0 then i else -i end) from aggexpr group by case when b then 'true' else 'false' end order by sum(case when i % 2 = 0 then i else -i end), case when b then 'true' else 'false' end limit 10;
+ case  |  sum  
+-------+-------
+ true  | -9633
+ false | 31190
+
+select case when b then 'true' else 'false' end, count(*) from aggexpr where b group by case when b then 'true' else 'false' end order by count(*), case when b then 'true' else 'false' end limit 10;
+ case | count 
+------+-------
+ true |  1482
+
+select case when b then 'true' else 'false' end, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where b group by case when b then 'true' else 'false' end order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), case when b then 'true' else 'false' end limit 10;
+ case | count 
+------+-------
+ true |  1482
+
+select case when b then 'true' else 'false' end, count(case when i % 2 = 0 then i end) from aggexpr where b group by case when b then 'true' else 'false' end order by count(case when i % 2 = 0 then i end), case when b then 'true' else 'false' end limit 10;
+ case | count 
+------+-------
+ true |     0
+
+select case when b then 'true' else 'false' end, sum((case when b then length(x) end)::int) from aggexpr where b group by case when b then 'true' else 'false' end order by sum((case when b then length(x) end)::int), case when b then 'true' else 'false' end limit 10;
+ case | sum 
+------+-----
+ true |   $
+
+select case when b then 'true' else 'false' end, sum(case when i % 2 = 0 then i else -i end) from aggexpr where b group by case when b then 'true' else 'false' end order by sum(case when i % 2 = 0 then i else -i end), case when b then 'true' else 'false' end limit 10;
+ case |  sum  
+------+-------
+ true | -9633
+
+select case when b then 'true' else 'false' end, count(*) from aggexpr where not b group by case when b then 'true' else 'false' end order by count(*), case when b then 'true' else 'false' end limit 10;
+ case  | count 
+-------+-------
+ false |  4462
+
+select case when b then 'true' else 'false' end, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where not b group by case when b then 'true' else 'false' end order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), case when b then 'true' else 'false' end limit 10;
+ case  | count 
+-------+-------
+ false |  2969
+
+select case when b then 'true' else 'false' end, count(case when i % 2 = 0 then i end) from aggexpr where not b group by case when b then 'true' else 'false' end order by count(case when i % 2 = 0 then i end), case when b then 'true' else 'false' end limit 10;
+ case  | count 
+-------+-------
+ false |  3720
+
+select case when b then 'true' else 'false' end, sum((case when b then length(x) end)::int) from aggexpr where not b group by case when b then 'true' else 'false' end order by sum((case when b then length(x) end)::int), case when b then 'true' else 'false' end limit 10;
+ case  | sum 
+-------+-----
+ false |   $
+
+select case when b then 'true' else 'false' end, sum(case when i % 2 = 0 then i else -i end) from aggexpr where not b group by case when b then 'true' else 'false' end order by sum(case when i % 2 = 0 then i else -i end), case when b then 'true' else 'false' end limit 10;
+ case  |  sum  
+-------+-------
+ false | 31190
+
+select case when b then 'true' else 'false' end, count(*) from aggexpr where length(x) = 1 group by case when b then 'true' else 'false' end order by count(*), case when b then 'true' else 'false' end limit 10;
+ case  | count 
+-------+-------
+ false |  1493
+
+select case when b then 'true' else 'false' end, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where length(x) = 1 group by case when b then 'true' else 'false' end order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), case when b then 'true' else 'false' end limit 10;
+ case  | count 
+-------+-------
+ false |     0
+
+select case when b then 'true' else 'false' end, count(case when i % 2 = 0 then i end) from aggexpr where length(x) = 1 group by case when b then 'true' else 'false' end order by count(case when i % 2 = 0 then i end), case when b then 'true' else 'false' end limit 10;
+ case  | count 
+-------+-------
+ false |  1493
+
+select case when b then 'true' else 'false' end, sum((case when b then length(x) end)::int) from aggexpr where length(x) = 1 group by case when b then 'true' else 'false' end order by sum((case when b then length(x) end)::int), case when b then 'true' else 'false' end limit 10;
+ case  | sum 
+-------+-----
+ false |   $
+
+select case when b then 'true' else 'false' end, sum(case when i % 2 = 0 then i else -i end) from aggexpr where length(x) = 1 group by case when b then 'true' else 'false' end order by sum(case when i % 2 = 0 then i else -i end), case when b then 'true' else 'false' end limit 10;
+ case  | sum  
+-------+------
+ false | 2986
+
+select case when b then 'true' else 'false' end, count(*) from aggexpr where length(x) < 0 group by case when b then 'true' else 'false' end order by count(*), case when b then 'true' else 'false' end limit 10;
+ case | count 
+------+-------
+
+select case when b then 'true' else 'false' end, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where length(x) < 0 group by case when b then 'true' else 'false' end order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), case when b then 'true' else 'false' end limit 10;
+ case | count 
+------+-------
+
+select case when b then 'true' else 'false' end, count(case when i % 2 = 0 then i end) from aggexpr where length(x) < 0 group by case when b then 'true' else 'false' end order by count(case when i % 2 = 0 then i end), case when b then 'true' else 'false' end limit 10;
+ case | count 
+------+-------
+
+select case when b then 'true' else 'false' end, sum((case when b then length(x) end)::int) from aggexpr where length(x) < 0 group by case when b then 'true' else 'false' end order by sum((case when b then length(x) end)::int), case when b then 'true' else 'false' end limit 10;
+ case | sum 
+------+-----
+
+select case when b then 'true' else 'false' end, sum(case when i % 2 = 0 then i else -i end) from aggexpr where length(x) < 0 group by case when b then 'true' else 'false' end order by sum(case when i % 2 = 0 then i else -i end), case when b then 'true' else 'false' end limit 10;
+ case | sum 
+------+-----
+
+select case when b then 'true' else 'false' end, count(*) from aggexpr where i % 2 = 0 group by case when b then 'true' else 'false' end order by count(*), case when b then 'true' else 'false' end limit 10;
+ case  | count 
+-------+-------
+ false |  3720
+
+select case when b then 'true' else 'false' end, count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end) from aggexpr where i % 2 = 0 group by case when b then 'true' else 'false' end order by count(case when (case when length(x) = 1 then x else 'long' end) = 'long' then 1 end), case when b then 'true' else 'false' end limit 10;
+ case  | count 
+-------+-------
+ false |  2227
+
+select case when b then 'true' else 'false' end, count(case when i % 2 = 0 then i end) from aggexpr where i % 2 = 0 group by case when b then 'true' else 'false' end order by count(case when i % 2 = 0 then i end), case when b then 'true' else 'false' end limit 10;
+ case  | count 
+-------+-------
+ false |  3720
+
+select case when b then 'true' else 'false' end, sum((case when b then length(x) end)::int) from aggexpr where i % 2 = 0 group by case when b then 'true' else 'false' end order by sum((case when b then length(x) end)::int), case when b then 'true' else 'false' end limit 10;
+ case  | sum 
+-------+-----
+ false |   $
+
+select case when b then 'true' else 'false' end, sum(case when i % 2 = 0 then i else -i end) from aggexpr where i % 2 = 0 group by case when b then 'true' else 'false' end order by sum(case when i % 2 = 0 then i else -i end), case when b then 'true' else 'false' end limit 10;
+ case  |  sum  
+-------+-------
+ false | 31190
+
+reset timescaledb.debug_require_vector_agg;

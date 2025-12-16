@@ -73,3 +73,41 @@ order by grouping.n, condition.n, function
 \gexec
 
 reset timescaledb.debug_require_vector_agg;
+
+
+-- Not all CASE statements are vectorized yet.
+set timescaledb.debug_require_vector_agg = 'allow';
+---- Uncomment to generate reference
+--set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
+select
+    format('select %s%s from aggexpr%s%s%s;',
+            grouping || ', ',
+            function,
+            ' where ' || condition,
+            ' group by ' || grouping,
+            format(' order by %s, ', function) || grouping || ' limit 10')
+from
+    unnest(array[
+        'count(*)'
+        , 'sum(case when i % 2 = 0 then i else -i end)'
+        , 'count(case when i % 2 = 0 then i end)'
+        , 'sum((case when b then length(x) end)::int)'
+        , 'count(case when (case when length(x) = 1 then x else ''long'' end) = ''long'' then 1 end)'
+        ]) function,
+    unnest(array[
+        null
+        , 'b'
+        , 'not b'
+        , 'length(x) = 1'
+        , 'length(x) < 0'
+        , 'i % 2 = 0'
+        ]) with ordinality as condition(condition, n),
+    unnest(array[
+        null
+        , 'x'
+        , 'case when b then ''true'' else ''false'' end'
+        ]) with ordinality as grouping(grouping, n)
+order by grouping.n, condition.n, function
+\gexec
+
+reset timescaledb.debug_require_vector_agg;
