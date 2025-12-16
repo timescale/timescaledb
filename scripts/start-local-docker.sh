@@ -198,6 +198,7 @@ if [ "$SUCCESS" = true ]; then
     echo ""
     printf "   %bContainer:%b   $CONTAINER_NAME\n" "${BOLD}" "${RESET}"
     printf "   %bPort:%b        $DB_PORT\n" "${BOLD}" "${RESET}"
+    printf "   %bUser:%b        postgres\n" "${BOLD}" "${RESET}"
     printf "   %bPassword:%b    $DB_PASSWORD\n" "${BOLD}" "${RESET}"
     echo ""
     printf "%b   Connect:%b\n" "${BOLD}" "${RESET}"
