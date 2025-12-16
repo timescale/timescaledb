@@ -182,7 +182,10 @@ coerce_to_time_type(Oid type)
 	if (ts_type_is_int8_binary_compatible(type))
 		return INT8OID;
 
-	elog(ERROR, "unsupported time type \"%s\"", format_type_be(type));
+	ereport(ERROR,
+			errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+			errmsg("unsupported time type \"%s\"",
+				   DatumGetPointer(DirectFunctionCall1(regtypeout, type))));
 	pg_unreachable();
 }
 
