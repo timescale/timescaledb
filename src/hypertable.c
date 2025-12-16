@@ -2510,10 +2510,11 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	if (time_dim == NULL)
-		elog(ERROR,
-			 "could not find time dimension for hypertable %s.%s",
-			 quote_identifier(NameStr(ht->fd.schema_name)),
-			 quote_identifier(NameStr(ht->fd.table_name)));
+		ereport(ERROR,
+				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				errmsg("could not find time dimension for hypertable %s.%s",
+					   quote_identifier(NameStr(ht->fd.schema_name)),
+					   quote_identifier(NameStr(ht->fd.table_name))));
 
 	time_type = ts_dimension_get_partition_type(time_dim);
 
@@ -2561,7 +2562,9 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 			ts_time_value_to_internal(PG_GETARG_DATUM(2), get_fn_expr_argtype(fcinfo->flinfo, 2));
 
 	if (range_start_internal > range_end_internal)
-		ereport(ERROR, errmsg("dimension slice range_end cannot be less than range_start"));
+		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("dimension slice range_end cannot be less than range_start"));
 
 	bool osm_chunk_empty = PG_GETARG_BOOL(3);
 
