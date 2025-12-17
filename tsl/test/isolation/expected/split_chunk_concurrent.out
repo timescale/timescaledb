@@ -607,7 +607,6 @@ step s4_commit: commit;
 step s3_vacuum_freeze_chunks: 
     vacuum freeze readings;
 
-ERROR:  found xmin 831 from before relfrozenxid 832
 s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
 s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
 s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
