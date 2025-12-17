@@ -5016,7 +5016,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 
 	if (chunk->hypertable_relid != merge_chunk->hypertable_relid)
 		ereport(ERROR,
-				(errmsg("cannot merge chunks from different hypertables"),
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("cannot merge chunks from different hypertables"),
 				 errhint("chunk 1: \"%s\", chunk 2: \"%s\"",
 						 get_rel_name(chunk->table_id),
 						 get_rel_name(merge_chunk->table_id))));
@@ -5033,7 +5034,8 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 		{
 			/* If the slices do not match (except on time dimension), we cannot merge the chunks. */
 			ereport(ERROR,
-					(errmsg("cannot merge chunks with different partitioning schemas"),
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("cannot merge chunks with different partitioning schemas"),
 					 errhint("chunk 1: \"%s\", chunk 2: \"%s\" have different slices on "
 							 "dimension ID %d",
 							 get_rel_name(chunk->table_id),
