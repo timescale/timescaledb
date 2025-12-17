@@ -730,3 +730,27 @@ ROLLBACK;
 
 SELECT delete_job(:job_func);
 SELECT delete_job(:job_proc);
+
+-- Test work_mem config option in job execution
+CREATE TABLE work_mem_log(job_id int, work_mem_value text);
+
+CREATE OR REPLACE PROCEDURE log_work_mem(job_id int, config jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+    INSERT INTO work_mem_log VALUES(job_id, current_setting('work_mem'));
+END
+$$;
+
+-- Add job with work_mem in config
+SELECT add_job('log_work_mem', '1h', config => '{"work_mem": "123MB"}'::jsonb) AS job_work_mem \gset
+
+-- Run the job - work_mem should be set to 123MB before execution
+CALL run_job(:job_work_mem);
+
+-- Verify work_mem was set during job execution
+SELECT * FROM work_mem_log;
+
+-- Cleanup
+SELECT delete_job(:job_work_mem);
+DROP TABLE work_mem_log;
+DROP PROCEDURE log_work_mem;

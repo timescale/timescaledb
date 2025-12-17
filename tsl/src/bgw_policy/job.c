@@ -716,6 +716,16 @@ job_execute(BgwJob *job)
 	StringInfoData query;
 	Portal portal = ActivePortal;
 
+	/* Check for work_mem setting in config and apply it */
+	if (job->fd.config)
+	{
+		char *work_mem_setting = ts_jsonb_get_str_field(job->fd.config, "work_mem");
+		if (work_mem_setting != NULL)
+		{
+			SetConfigOption("work_mem", work_mem_setting, PGC_USERSET, PGC_S_SESSION);
+		}
+	}
+
 	if (job->fd.config)
 		elog(DEBUG1,
 			 "Executing %s with parameters %s",
