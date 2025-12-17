@@ -393,6 +393,20 @@ ts_guc_default_orderby_fn_oid()
 	return get_orderby_func(ts_guc_default_orderby_fn);
 }
 
+/*
+ * Assign hook for chunk skipping.
+ *
+ * When chunk skipping is enabled, we need to clear the hypertable cache.
+ * Otherwise there might be cached entries without a valid range_space entry,
+ * which could lead to column stats not being created.
+ */
+static void
+chunk_skipping_assign_hook(bool newval, void *extra)
+{
+	if (newval)
+		ts_hypertable_cache_invalidate_callback();
+}
+
 void
 _guc_init(void)
 {
@@ -864,7 +878,7 @@ _guc_init(void)
 							 PGC_USERSET,
 							 0,
 							 NULL,
-							 NULL,
+							 chunk_skipping_assign_hook,
 							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_segmentwise_recompression"),
