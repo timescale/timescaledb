@@ -59,9 +59,9 @@ SELECT typ,
 
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.get_internal_time_min(0);
-ERROR:  cache lookup failed for type 0
+ERROR:  unsupported time type "-"
 SELECT _timescaledb_functions.get_internal_time_max(0);
-ERROR:  cache lookup failed for type 0
+ERROR:  unsupported time type "-"
 \set ON_ERROR_STOP 1
 WITH
   tstzranges AS (

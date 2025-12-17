@@ -1,3 +1,4 @@
+DROP VIEW IF EXISTS timescaledb_information.dimensions;
 --
 -- Rebuild the catalog table `_timescaledb_catalog.continuous_agg` to add `finalized` column
 --

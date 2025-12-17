@@ -17,6 +17,13 @@ SELECT create_hypertable('uuid_events', 'id', chunk_time_interval => interval '1
 --------------------------
  (1,public,uuid_events,t)
 
+SELECT time_interval
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'uuid_events';
+ time_interval 
+---------------
+ @ 1 day
+
 --
 -- Test that inserting boundary values generates the right constraints
 -- on chunks.
