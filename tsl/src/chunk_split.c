@@ -8,6 +8,7 @@
 #include <access/rewriteheap.h>
 #include <catalog/dependency.h>
 #include <catalog/heap.h>
+#include <catalog/indexing.h>
 #include <catalog/pg_am.h>
 #include <catalog/pg_collation.h>
 #include <catalog/pg_constraint.h>
@@ -719,6 +720,27 @@ split_relation(Relation rel, SplitPoint *sp, unsigned int split_factor,
 		}
 		else
 		{
+			/*
+			 * Update relfrozenxid and relminmxid for the new chunk.
+			 * This is necessary because the heap rewrite preserved tuple
+			 * visibility information (xmin/xmax), and the new relation's
+			 * relfrozenxid must reflect the freeze limit used during the rewrite.
+			 * Without this, VACUUM may find tuples with xmin < relfrozenxid
+			 * that aren't frozen, causing "found xmin from before relfrozenxid" errors.
+			 */
+			Relation relRelation = table_open(RelationRelationId, RowExclusiveLock);
+			HeapTuple reltup = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(sri->relid));
+
+			if (!HeapTupleIsValid(reltup))
+				elog(ERROR, "cache lookup failed for relation %u", sri->relid);
+
+			Form_pg_class relform = (Form_pg_class) GETSTRUCT(reltup);
+			relform->relfrozenxid = scontext.cutoffs.FreezeLimit;
+			relform->relminmxid = scontext.cutoffs.MultiXactCutoff;
+			CatalogTupleUpdate(relRelation, &reltup->t_self, reltup);
+			heap_freetuple(reltup);
+			table_close(relRelation, RowExclusiveLock);
+
 			reindex_relation_compat(NULL, sri->relid, reindex_flags, &reindex_params);
 		}
 	}
@@ -1102,7 +1124,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	CommandCounterIncrement();
 
-	DEBUG_WAITPOINT("split_chunk_before_tuple_routing");
+	DEBUG_WAITPOINT("split_chunk_after_creating_new_chunk");
 
 	SplitPoint sp = {
 		.point = split_at,
