@@ -142,6 +142,22 @@ step "s3_wp_before_routing_off" { select debug_waitpoint_release('split_chunk_be
 step "s3_wp_at_end_on" { select debug_waitpoint_enable('split_chunk_at_end'); }
 step "s3_wp_at_end_off" { select debug_waitpoint_release('split_chunk_at_end'); }
 
+# Vacuum freeze all chunks to test relfrozenxid consistency. This will fail with
+# "found xmin from before relfrozenxid" if the new chunk's relfrozenxid
+# was not properly updated after split.
+# VACUUM FREEZE forces tuple freezing which triggers the relfrozenxid check.
+# Regular VACUUM only freezes tuples older than vacuum_freeze_min_age (default
+# 50 million transactions), so it won't catch the issue in a test environment.
+step "s3_vacuum_freeze_chunks" {
+    vacuum freeze readings;
+}
+
+session "s4"
+setup	{
+    set local lock_timeout = '500ms';
+    set local deadlock_timeout = '100ms';
+}
+
 step "s4_begin" {
     start transaction isolation level repeatable read;
     select count(*) > 0 from pg_stat_activity;
@@ -188,3 +204,18 @@ permutation "s3_query_data" "s4_begin" "s1_update_splitting_chunk" "s2_split_chu
 
 # Insert into splitting chunk by splitting process
 permutation "s2_begin" "s2_insert_into_splitting_chunk" "s2_split_chunk" "s3_query_data" "s2_commit"
+
+# Test that relfrozenxid is properly set for the new chunk after split.
+# Without proper relfrozenxid update, VACUUM will fail with:
+# "found xmin %d from before relfrozenxid %d"
+#
+# The scenario:
+# 1. s4 starts a REPEATABLE READ transaction, pinning OldestXmin at X1
+# 2. s1 inserts data (xmin = X2 > X1)
+# 3. s2 splits the chunk (transaction X3 > X2 > X1)
+# 4. FreezeLimit is based on OldestXmin (X1), so tuples with xmin=X2 won't be frozen
+# 5. New chunk is created - if bug exists, its relfrozenxid might be set to
+#    RecentXmin (≈X3) instead of FreezeLimit (based on X1)
+# 6. After s4 commits, VACUUM FREEZE finds tuples with xmin=X2 < relfrozenxid=X3
+#    that aren't frozen, causing the error
+permutation "s4_begin" "s1_insert_into_splitting_chunk" "s2_split_chunk" "s4_commit" "s3_vacuum_freeze_chunks" "s3_query_data"
