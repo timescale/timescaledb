@@ -541,8 +541,8 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 
 		compressed_columns_to_postgres_data(&branch_values[branch_index], 1, row);
 
-		Datum result = *branch_values[branch_index].output_value;
-		bool isnull = *branch_values[branch_index].output_isnull;
+		const bool isnull = *branch_values[branch_index].output_isnull;
+		const Datum result = isnull ? 0 : *branch_values[branch_index].output_value;
 
 		columnar_result_set_row(&columnar_result, batch_state, row, result, isnull);
 	}
