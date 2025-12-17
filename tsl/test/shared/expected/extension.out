@@ -182,6 +182,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_internal.to_unix_microseconds(timestamp with time zone)
  _timescaledb_internal.tsl_loaded()
  _timescaledb_internal.unfreeze_chunk(regclass)
+ clear_hypertable_cache()
  debug_waitpoint_enable(text)
  debug_waitpoint_id(text)
  debug_waitpoint_release(text)

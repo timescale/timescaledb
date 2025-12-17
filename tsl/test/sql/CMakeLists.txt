@@ -18,7 +18,6 @@ set(TEST_FILES
     cagg_refresh_using_merge.sql
     cagg_utils.sql
     cagg_watermark.sql
-    chunk_column_stats.sql
     columnar_scan_cost.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
@@ -112,6 +111,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
     cagg_policy_incremental.sql
+    chunk_column_stats.sql
     compress_bgw_reorder_drop_chunks.sql
     compress_bloom_legacy_v1.sql
     chunk_api.sql
