@@ -53,7 +53,7 @@ from
         , 'count(b)'
         , 'sum((i = 12)::int)'
         , 'sum(abs(v - 500))'
-        ]) function,
+        ]) with ordinality as function(function, n),
     unnest(array[
         null
         , 'b'
@@ -71,7 +71,7 @@ from
         , 'b'
         , 'v - 501 > 0'
         ]) with ordinality as grouping(grouping, n)
-order by grouping.n, condition.n, function
+order by grouping.n, condition.n, function.n
 \gexec
 
 reset timescaledb.debug_require_vector_agg;
