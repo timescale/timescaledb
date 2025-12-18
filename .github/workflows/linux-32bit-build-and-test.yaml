@@ -11,6 +11,7 @@ name: Regression Linux i386
     branches:
       - main
       - ?.*.x
+      - trigger/regression
     paths-ignore:
       - '**.md'
       - 'LICENSE*'
