@@ -9,6 +9,7 @@ name: Regression Windows
       - main
       - ?.*.x
       - trigger/windows_tests
+      - trigger/regression
     paths-ignore:
       - '**.md'
       - 'LICENSE*'
