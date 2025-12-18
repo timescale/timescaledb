@@ -178,7 +178,7 @@ All services include all the cloud tooling you'd expect for production use: [aut
 
 We welcome contributions to TimescaleDB! See [Contributing](https://github.com/timescale/timescaledb/blob/main/CONTRIBUTING.md) and [Code style guide](https://github.com/timescale/timescaledb/blob/main/docs/StyleGuide.md) for details.
 
-## Learn about TigerData
+## Learn about Tiger Data
 
-TigerData is the fastest PostgreSQL for transactional, analytical and agentic workloads. To learn more about the company and its products, visit [tigerdata.com](https://www.tigerdata.com).
+Tiger Data is the fastest PostgreSQL for transactional, analytical and agentic workloads. To learn more about the company and its products, visit [tigerdata.com](https://www.tigerdata.com).
 
