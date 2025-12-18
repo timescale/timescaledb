@@ -108,3 +108,5 @@ ALTER TABLE _timescaledb_catalog.bgw_job SET SCHEMA _timescaledb_config;
 DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_compressed_batch_size(REGCLASS);
 DROP PROCEDURE IF EXISTS _timescaledb_functions.rebuild_columnstore(REGCLASS);
 DROP FUNCTION IF EXISTS _timescaledb_functions.cagg_get_grouping_columns;
+
+DROP FUNCTION IF EXISTS @extschema@.drop_chunks;

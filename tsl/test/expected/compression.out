@@ -1439,7 +1439,8 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
 -------
      2
 
-SELECT drop_chunks('metrics', older_than=>'1 day'::interval);
+SELECT drop_chunks('metrics', older_than=>'1 day'::interval, force=>true);
+WARNING:  _timescaledb_internal._hyper_13_34_chunk contained data required for continuous aggregate refresh
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_13_33_chunk

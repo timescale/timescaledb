@@ -57,4 +57,3 @@ UPDATE ONLY :CHUNK SET time = time + INTERVAL '1 minute' RETURNING *;
 UPDATE :CHUNK SET time = time + INTERVAL '1 month' RETURNING *;
 UPDATE ONLY :CHUNK SET time = time + INTERVAL '1 month' RETURNING *;
 \set ON_ERROR_STOP 1
-
