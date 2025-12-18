@@ -23,6 +23,8 @@ You have two options to start TimescaleDB:
 
 The easiest way to get started:
 
+> **Important:** This script is intended for local development and testing only. Do **not** use it for production deployments. For production-ready installation options, see the [TimescaleDB installation guide](https://docs.timescale.com/self-hosted/latest/install/).
+
 ```sh
 curl -sL https://tsdb.co/start-local | sh
 ```
