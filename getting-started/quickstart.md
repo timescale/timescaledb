@@ -305,20 +305,21 @@ Compare the performance difference:
 \timing on
 SELECT
     time_bucket('1 hour', time) AS hour,
-    sensor_id,
     AVG(temperature) AS avg_temp
 FROM sensor_data
-WHERE time > NOW() - INTERVAL '7 days'
-GROUP BY hour, sensor_id;
+WHERE time > NOW() - INTERVAL '60 days'
+GROUP BY hour
+ORDER BY hour DESC
+LIMIT 24;
 
 -- Query the continuous aggregate (much faster)
 SELECT
     hour,
-    sensor_id,
     avg_temp
 FROM sensor_data_hourly
-WHERE hour > NOW() - INTERVAL '7 days'
-ORDER BY hour DESC, sensor_id;
+WHERE hour > NOW() - INTERVAL '60 days'
+ORDER BY hour DESC
+LIMIT 24;
 ```
 
 Notice how the continuous aggregate query is significantly faster, especially as your dataset grows!
