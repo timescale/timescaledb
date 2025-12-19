@@ -17,6 +17,7 @@ set(TEST_FILES
     cagg_refresh_using_merge.sql
     cagg_utils.sql
     cagg_watermark.sql
+    chunk_publication_compression.sql
     columnar_scan_cost.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql

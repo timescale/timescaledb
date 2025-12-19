@@ -937,6 +937,67 @@ DELETE FROM :COMPRESSED_CHUNK WHERE device = 'dev1';
 COPY :COMPRESSED_CHUNK FROM STDIN;
 \set ON_ERROR_STOP 1
 
+-- TEST: OSM chunks should NOT be added to publications
+-- Create a new hypertable for publication testing
+\c :TEST_DBNAME :ROLE_4
+CREATE TABLE ht_pub_test(timec timestamptz NOT NULL, device_id int, value float);
+SELECT create_hypertable('ht_pub_test', 'timec', chunk_time_interval => interval '1 day');
+
+-- Insert data to create first normal chunk
+INSERT INTO ht_pub_test VALUES ('2023-01-01 01:00', 1, 10.5);
+
+-- Create publication
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timescaledb.enable_chunk_auto_publication = true;
+CREATE PUBLICATION test_pub_osm FOR TABLE ht_pub_test;
+
+-- Verify: 1 normal chunk in publication
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_pub_osm'
+ORDER BY schemaname, tablename;
+
+-- Create a new foreign table for OSM testing
+\c :TEST_DBNAME :ROLE_4
+CREATE FOREIGN TABLE osm_chunk_pub_test
+(timec timestamptz NOT NULL, device_id int, value float)
+SERVER s3_server OPTIONS (schema_name 'public', table_name 'fdw_table');
+
+-- Attach OSM chunk
+SELECT _timescaledb_functions.attach_osm_table_chunk('ht_pub_test', 'osm_chunk_pub_test');
+SELECT _timescaledb_functions.hypertable_osm_range_update('ht_pub_test', '2020-01-01'::timestamptz, '2020-01-02');
+
+-- Check chunks also have OSM chunk
+SELECT schema_name, table_name, status, osm_chunk
+FROM _timescaledb_catalog.chunk
+WHERE hypertable_id IN (SELECT id from _timescaledb_catalog.hypertable
+                        WHERE table_name = 'ht_pub_test')
+ORDER BY table_name;
+
+-- Verify: still only 1 normal chunk in publication (OSM chunk NOT added)
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_pub_osm'
+ORDER BY schemaname, tablename;
+
+-- Insert data to create second normal chunk
+\c :TEST_DBNAME :ROLE_4
+SET timescaledb.enable_chunk_auto_publication = true;
+INSERT INTO ht_pub_test VALUES ('2023-01-02 01:00', 2, 20.5);
+
+-- Verify: 2 normal chunks in publication (second chunk added, OSM still not)
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_pub_osm'
+ORDER BY schemaname, tablename;
+
+-- Cleanup
+DROP PUBLICATION test_pub_osm CASCADE;
+\c :TEST_DBNAME :ROLE_4
+DROP TABLE ht_pub_test CASCADE;
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- clean up databases created
 DROP DATABASE postgres_fdw_db WITH (FORCE);
