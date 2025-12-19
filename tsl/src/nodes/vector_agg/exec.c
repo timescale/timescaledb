@@ -285,40 +285,29 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 			vector_slot_evaluate_expression(dcontext, slot, filter, lfirst(lc));
 		Ensure(arg_value.decompression_type != DT_Invalid, "got DT_Invalid for argument %d", i);
 
-		/*
-		 * In case of DT_Scalar, the actual value is stored in the
-		 * CompressedColumnValues.output_value/output_isnull fields, so they are
-		 * already initialized.
-		 *
-		 * In the other cases, they serve as a space for materialization of the
-		 * Postgres datum for a given row, so we have to initialize them now.
-		 */
-		if (arg_value.decompression_type == DT_Scalar)
+		have_null_bitmap =
+			(arg_value.arrow != NULL && arg_value.arrow->null_count > 0) || have_null_bitmap;
+
+		arg_value.output_value = &fcinfo->args[i].value;
+		arg_value.output_isnull = &fcinfo->args[i].isnull;
+
+		if (arg_value.decompression_type == DT_ArrowText ||
+			arg_value.decompression_type == DT_ArrowTextDict)
 		{
-			have_null_scalars = *arg_value.output_isnull || have_null_scalars;
-
-			fcinfo->args[i].isnull = *arg_value.output_isnull;
-
-			if (!fcinfo->args[i].isnull)
-			{
-				fcinfo->args[i].value = *arg_value.output_value;
-			}
+			const int maxbytes = get_max_varlena_bytes(arg_value.arrow);
+			*arg_value.output_value =
+				PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
 		}
-		else
+		else if (arg_value.decompression_type == DT_Scalar)
 		{
-			Ensure(arg_value.arrow != NULL, "no arrow for arg %d", i);
-			have_null_bitmap = (arg_value.arrow->null_count > 0) || have_null_bitmap;
+			/*
+			 * The values of the scalar columns have to be stored once at
+			 * initialization, they won't be updated per-row.
+			 */
+			*arg_value.output_value = PointerGetDatum(arg_value.buffers[1]);
+			*arg_value.output_isnull = DatumGetBool(PointerGetDatum(arg_value.buffers[0]));
 
-			arg_value.output_value = &fcinfo->args[i].value;
-			arg_value.output_isnull = &fcinfo->args[i].isnull;
-
-			if (arg_value.decompression_type == DT_ArrowText ||
-				arg_value.decompression_type == DT_ArrowTextDict)
-			{
-				const int maxbytes = get_max_varlena_bytes(arg_value.arrow);
-				*arg_value.output_value =
-					PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
-			}
+			have_null_scalars = *arg_value.output_isnull || have_null_scalars;
 		}
 
 		arg_values[i] = arg_value;
@@ -330,12 +319,8 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	 */
 	if (have_null_scalars)
 	{
-		CompressedColumnValues result = {
-			.decompression_type = DT_Scalar,
-			.output_isnull = MemoryContextAlloc(batch_state->per_batch_context, sizeof(bool))
-		};
-		*result.output_isnull = true;
-		return result;
+		return (CompressedColumnValues){ .decompression_type = DT_Scalar,
+										 .buffers[0] = DatumGetPointer(BoolGetDatum(true)) };
 	}
 
 	/*
@@ -432,9 +417,8 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 
 	uint64 const *branch_filters[5] = { 0 };
 	CompressedColumnValues branch_values[5] = { 0 };
-	Datum tmp_branch_datum;
-	bool tmp_branch_isnull;
-	bool tmp_branch_null_storage = true;
+	Datum branch_data[5] = { 0 };
+	bool branch_isnull[5] = { 0 };
 
 	const int num_explicit_branches = list_length(case_expr->args);
 	for (int i = 0; i < num_explicit_branches + 1; i++)
@@ -480,35 +464,29 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 		{
 			branch_values[i] =
 				(CompressedColumnValues){ .decompression_type = DT_Scalar,
-										  .output_isnull = &tmp_branch_null_storage };
+										  .buffers[0] = DatumGetPointer(BoolGetDatum(true)) };
 		}
+
+		branch_values[i].output_value = &branch_data[i];
+		branch_values[i].output_isnull = &branch_isnull[i];
 
 		Ensure(branch_values[i].decompression_type != DT_Invalid,
 			   "got DT_Invalid for argument %d",
 			   i);
 
-		/*
-		 * In case of DT_Scalar, the actual value is stored in the
-		 * CompressedColumnValues.output_value/output_isnull fields, so they are
-		 * already initialized.
-		 *
-		 * In the other cases, they serve as a space for materialization of the
-		 * Postgres datum for a given row, so we have to initialize them now.
-		 */
-		if (branch_values[i].decompression_type != DT_Scalar)
+		if (branch_values[i].decompression_type == DT_ArrowText ||
+			branch_values[i].decompression_type == DT_ArrowTextDict)
 		{
 			Ensure(branch_values[i].arrow != NULL, "no arrow for arg %d", i);
-
-			branch_values[i].output_value = &tmp_branch_datum;
-			branch_values[i].output_isnull = &tmp_branch_isnull;
-
-			if (branch_values[i].decompression_type == DT_ArrowText ||
-				branch_values[i].decompression_type == DT_ArrowTextDict)
-			{
-				const int maxbytes = get_max_varlena_bytes(branch_values[i].arrow);
-				*branch_values[i].output_value =
-					PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
-			}
+			const int maxbytes = get_max_varlena_bytes(branch_values[i].arrow);
+			*branch_values[i].output_value =
+				PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+		}
+		else if (branch_values[i].decompression_type == DT_Scalar)
+		{
+			*branch_values[i].output_value = PointerGetDatum(branch_values[i].buffers[1]);
+			*branch_values[i].output_isnull =
+				DatumGetBool(PointerGetDatum(branch_values[i].buffers[0]));
 		}
 	}
 
@@ -574,8 +552,9 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 		{
 			const Const *c = (const Const *) argument;
 			CompressedColumnValues result = { .decompression_type = DT_Scalar,
-											  .output_value = (Datum *) &c->constvalue,
-											  .output_isnull = (bool *) &c->constisnull };
+											  .buffers[1] = DatumGetPointer(c->constvalue),
+											  .buffers[0] =
+												  DatumGetPointer(BoolGetDatum(c->constisnull)) };
 			return result;
 		}
 		case T_Var:
