@@ -9,11 +9,17 @@ $DB_PORT        = 6543
 $VOLUME_NAME    = "timescaledb_data"
 
 function Pause-OnExit([int]$Code = 0) {
-  # Only pause in interactive hosts (keeps one-liners from flashing and closing)
-  if ($Host.Name -match 'ConsoleHost|Visual Studio Code Host') {
+  # Always pause on errors to prevent window from closing instantly
+  # Also pause in interactive hosts for successful runs
+  if ($Code -ne 0 -or $Host.Name -match 'ConsoleHost|Visual Studio Code Host') {
     Write-Host "" 
     Write-Host "Press Enter to close..." -ForegroundColor Yellow
-    [void][System.Console]::ReadLine()
+    try {
+      [void][System.Console]::ReadLine()
+    } catch {
+      # If ReadLine fails (non-interactive), wait a bit so user can see the error
+      Start-Sleep -Seconds 3
+    }
   }
   exit $Code
 }
