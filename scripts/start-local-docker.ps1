@@ -8,16 +8,11 @@ $DB_PASSWORD    = "password"
 $DB_PORT        = 6543
 $VOLUME_NAME    = "timescaledb_data"
 
-function Pause-OnExit([int]$Code = 0) {
-  # Exit cleanly and return to command prompt
-  exit $Code
-}
-
-# Catch-all so users see the error and the window doesn't vanish
+# Catch-all so users see the error and return to command prompt
 trap {
   Write-Host "" 
   Write-Host ("[ERROR] " + $_.Exception.Message) -ForegroundColor Red
-  Pause-OnExit 1
+  return  # Return to command prompt instead of exiting
 }
 
 function Fail($msg) {
