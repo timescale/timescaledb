@@ -8,9 +8,25 @@ $DB_PASSWORD    = "password"
 $DB_PORT        = 6543
 $VOLUME_NAME    = "timescaledb_data"
 
+function Pause-OnExit([int]$Code = 0) {
+  # Only pause in interactive hosts (keeps one-liners from flashing and closing)
+  if ($Host.Name -match 'ConsoleHost|Visual Studio Code Host') {
+    Write-Host "" 
+    Write-Host "Press Enter to close..." -ForegroundColor Yellow
+    [void][System.Console]::ReadLine()
+  }
+  exit $Code
+}
+
+# Catch-all so users see the error and the window doesn't vanish
+trap {
+  Write-Host "" 
+  Write-Host ("[ERROR] " + $_.Exception.Message) -ForegroundColor Red
+  Pause-OnExit 1
+}
+
 function Fail($msg) {
-  Write-Host "[ERROR] $msg" -ForegroundColor Red
-  exit 1
+  throw $msg  # IMPORTANT: do NOT use exit here; it kills the host instantly when invoked via iwr|iex
 }
 function Info($msg)    { Write-Host "[INFO] $msg" -ForegroundColor Cyan }
 function Success($msg) { Write-Host "[SUCCESS] $msg" -ForegroundColor Green }
@@ -42,7 +58,7 @@ try {
 }
 Success "Docker is running"
 
-# Remove existing container if present
+# Cleanup old container
 $existing = (docker ps -aq -f "name=^/$CONTAINER_NAME$").Trim()
 if ($existing) {
   Info "Found existing container. Removing it .."
@@ -83,8 +99,7 @@ if (-not $ready) {
 }
 Success "Database is ready!"
 
-# Get versions WITHOUT requiring psql on Windows host: use psql inside container.
-# (timescaledb-ha image includes psql)
+# Get versions without host psql: use psql inside container
 $tsdbVersion = (docker exec $CONTAINER_NAME psql -U postgres -t -A -c "select extversion from pg_extension where extname='timescaledb';" 2>$null).Trim()
 $pgVersion   = (docker exec $CONTAINER_NAME psql -U postgres -t -A -c "select split_part(version(),' ',2);" 2>$null).Trim()
 
@@ -94,8 +109,8 @@ Write-Host "║             🚀 SETUP COMPLETED SUCCESSFULLY              ║" 
 Write-Host "╚══════════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
 
-Write-Host ("   Postgres:    {0}" -f ($pgVersion  | ForEach-Object { if ($_){$_} else {"(unknown)"} }))
-Write-Host ("   TimescaleDB: {0}" -f ($tsdbVersion| ForEach-Object { if ($_){$_} else {"(unknown)"} }))
+Write-Host ("   Postgres:    {0}" -f ($(if ($pgVersion) { $pgVersion } else { "(unknown)" })))
+Write-Host ("   TimescaleDB: {0}" -f ($(if ($tsdbVersion) { $tsdbVersion } else { "(unknown)" })))
 Write-Host ""
 Write-Host "   Container:   $CONTAINER_NAME"
 Write-Host "   Port:        $DB_PORT"
@@ -103,7 +118,7 @@ Write-Host "   User:        postgres"
 Write-Host "   Password:    $DB_PASSWORD"
 Write-Host ""
 Write-Host "   Connect:"
-Write-Host "     psql ""postgres://postgres:$DB_PASSWORD@localhost:$DB_PORT/postgres"""
+Write-Host "     psql \"postgres://postgres:$DB_PASSWORD@localhost:$DB_PORT/postgres\""
 Write-Host ""
 Write-Host "   Getting Started:"
 Write-Host "    * Quick start:    https://tsdb.co/quick-start"
@@ -111,3 +126,6 @@ Write-Host "    * NYC taxis:      https://tsdb.co/quick-start-nyc-taxis"
 Write-Host "    * S&P 500 stocks: https://tsdb.co/quick-start-sp500-stocks"
 Write-Host "    * Sensor devices: https://tsdb.co/quick-start-sensors"
 Write-Host ""
+
+# Success: optionally pause if launched in a transient window
+# Pause-OnExit 0
