@@ -18,13 +18,11 @@
 
 ## Get started with TimescaleDB
 
-> **Important:** This script is intended for local development and testing only. Do **not** use it for production deployments. For production-ready installation options, see the [TimescaleDB installation guide](https://docs.timescale.com/self-hosted/latest/install/).
+> **Important:** This script is intended for local development and testing only. Do **not** use it for production deployments. For production-ready installation options, see the [TimescaleDB installation guide](https://docs.timescale.com/self-hosted/latest/install/) for local install options or try [Tiger Cloud](https://docs.tigerdata.com/getting-started/latest/) for free.
 
 ```sh
 curl -sL https://tsdb.co/start-local | sh
 ```
-
-See [other installation options](https://docs.tigerdata.com/self-hosted/latest/install/) or try [Tiger Cloud](https://docs.tigerdata.com/getting-started/latest/) for free.
 
 ## Quick Start
 
