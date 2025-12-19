@@ -1245,3 +1245,18 @@ SELECT compress_chunk(show_chunks('badly_compressed_ht'));
 
 RESET timescaledb.enable_compression_ratio_warnings;
 
+CREATE TABLE test_xid_compressed(time timestamptz not null, device int, value int);
+SELECT create_hypertable('test_xid_compressed', 'time');
+INSERT INTO test_xid_compressed VALUES ('2020-01-01', 1, 1);
+ALTER TABLE test_xid_compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT compress_chunk(show_chunks('test_xid_compressed'));
+
+SELECT show_chunks('test_xid_compressed') AS chunk LIMIT 1 \gset
+BEGIN;
+SELECT txid_current_if_assigned() IS NULL;
+SELECT COUNT(*) FROM :chunk LIMIT 1;
+SELECT txid_current_if_assigned() IS NULL;
+COMMIT;
+
+DROP TABLE test_xid_compressed;
+
