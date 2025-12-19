@@ -183,20 +183,6 @@ compressed_batch_current_tuple(DecompressBatchState *batch_state)
 	return &batch_state->decompressed_scan_slot_data.base;
 }
 
-static inline void
-compressed_column_set_scalar(CompressedColumnValues *column, Datum value, bool isnull)
-{
-	column->decompression_type = DT_Scalar;
-	column->buffers[0] = DatumGetPointer(BoolGetDatum(isnull));
-	column->buffers[1] = DatumGetPointer(value);
-
-	*column->output_isnull = isnull;
-	if (!isnull)
-	{
-		*column->output_value = value;
-	}
-}
-
 /*
  * VectorQualState for a compressed batch used to pass
  * ColumnarScan-specific data to vector qual functions that are shared

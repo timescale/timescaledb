@@ -168,6 +168,17 @@ get_max_varlena_bytes(ArrowArray *text_array)
 }
 
 static void
+decompress_scalar_column(CompressedColumnValues *column, Datum value, bool isnull)
+{
+	column->decompression_type = DT_Scalar;
+	column->buffers[0] = DatumGetPointer(BoolGetDatum(isnull));
+	column->buffers[1] = DatumGetPointer(value);
+
+	*column->output_isnull = isnull;
+	*column->output_value = value;
+}
+
+static void
 decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state,
 				  TupleTableSlot *compressed_slot, int i)
 {
@@ -194,7 +205,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		Datum value = getmissingattr(dcontext->uncompressed_chunk_tdesc,
 									 column_description->uncompressed_chunk_attno,
 									 &isnull);
-		compressed_column_set_scalar(column_values, value, isnull);
+		decompress_scalar_column(column_values, value, isnull);
 		return;
 	}
 
@@ -208,7 +219,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	/* First check if this is a block of NULL values. */
 	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
 	{
-		compressed_column_set_scalar(column_values, (Datum) NULL, /* isnull = */ true);
+		decompress_scalar_column(column_values, (Datum) NULL, /* isnull = */ true);
 		return;
 	}
 
@@ -979,7 +990,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 					AttrNumberGetAttrOffset(column_description->custom_scan_attno);
 				column_values->output_value = &decompressed_tuple->tts_values[attr];
 				column_values->output_isnull = &decompressed_tuple->tts_isnull[attr];
-				compressed_column_set_scalar(column_values, value, isnull);
+				decompress_scalar_column(column_values, value, isnull);
 				break;
 			}
 			case COUNT_COLUMN:
