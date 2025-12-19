@@ -37,14 +37,14 @@ Write-Host ""
 Write-Host "1. System Check" -ForegroundColor White
 
 if (-not (Test-Command docker)) {
-  Fail "Docker is not found. Install Docker Desktop first."
+  Fail "Docker is not found. Install Docker Desktop first.`nDownload Docker: https://www.docker.com/get-started/"
 }
 Success "Docker found"
 
 try {
   docker info *> $null
 } catch {
-  Fail "Docker is installed but not running. Start Docker Desktop and try again."
+  Fail "Docker is installed but not running. Start Docker Desktop and try again.`nDownload Docker: https://www.docker.com/get-started/"
 }
 Success "Docker is running"
 
