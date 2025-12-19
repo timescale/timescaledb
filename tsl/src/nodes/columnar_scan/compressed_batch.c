@@ -174,9 +174,6 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	CompressionColumnDescription *column_description = &dcontext->compressed_chunk_columns[i];
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 	column_values->arrow = NULL;
-	const AttrNumber attr = AttrNumberGetAttrOffset(column_description->custom_scan_attno);
-	column_values->output_value = &compressed_batch_current_tuple(batch_state)->tts_values[attr];
-	column_values->output_isnull = &compressed_batch_current_tuple(batch_state)->tts_isnull[attr];
 	const int value_bytes = get_typlen(column_description->typid);
 	Assert(value_bytes != 0);
 
@@ -188,17 +185,16 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		/*
 		 * The column will have a default value for the entire batch,
 		 * set it now.
-		 */
-		column_values->decompression_type = DT_Scalar;
-
-		/*
+		 *
 		 * We might use a custom targetlist-based scan tuple which has no
 		 * default values, so the default values are fetched from the
 		 * uncompressed chunk tuple descriptor.
 		 */
-		*column_values->output_value = getmissingattr(dcontext->uncompressed_chunk_tdesc,
-													  column_description->uncompressed_chunk_attno,
-													  column_values->output_isnull);
+		bool isnull;
+		Datum value = getmissingattr(dcontext->uncompressed_chunk_tdesc,
+									 column_description->uncompressed_chunk_attno,
+									 &isnull);
+		compressed_column_set_scalar(column_values, value, isnull);
 		return;
 	}
 
@@ -212,9 +208,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	/* First check if this is a block of NULL values. */
 	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
 	{
-		column_values->decompression_type = DT_Scalar;
-		*column_values->output_isnull = true;
-		*column_values->output_value = (Datum) NULL;
+		compressed_column_set_scalar(column_values, (Datum) NULL, /* isnull = */ true);
 		return;
 	}
 
@@ -410,8 +404,8 @@ compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is_
 		 * above, so pull it from there.
 		 */
 		vector = make_single_value_arrow(column_description->typid,
-										 *column_values->output_value,
-										 *column_values->output_isnull);
+										 PointerGetDatum(column_values->buffers[1]),
+										 DatumGetBool(PointerGetDatum(column_values->buffers[0])));
 
 		/*
 		 * We start from an all-valid bitmap, because the predicate is
@@ -937,6 +931,10 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 				column_values->decompression_type = DT_Invalid;
 				column_values->arrow = NULL;
+				const AttrNumber attr =
+					AttrNumberGetAttrOffset(column_description->custom_scan_attno);
+				column_values->output_value = &decompressed_tuple->tts_values[attr];
+				column_values->output_isnull = &decompressed_tuple->tts_isnull[attr];
 				break;
 			}
 			case SEGMENTBY_COLUMN:
@@ -948,30 +946,23 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				 */
 				Assert(i < dcontext->num_data_columns);
 				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-				column_values->decompression_type = DT_Scalar;
-				AttrNumber attr = AttrNumberGetAttrOffset(column_description->custom_scan_attno);
-				Datum *output_value = &decompressed_tuple->tts_values[attr];
-				bool *output_isnull = &decompressed_tuple->tts_isnull[attr];
-				column_values->output_value = output_value;
-				column_values->output_isnull = output_isnull;
-				column_values->arrow = NULL;
 
-				*output_value = slot_getattr(compressed_slot,
-											 column_description->compressed_scan_attno,
-											 output_isnull);
+				bool isnull;
+				Datum value = slot_getattr(compressed_slot,
+										   column_description->compressed_scan_attno,
+										   &isnull);
 
 				/*
 				 * Note that if it's not a by-value type, we should copy it into
 				 * the slot context.
 				 */
-				if (!column_description->by_value && !*output_isnull &&
-					DatumGetPointer(*output_value) != NULL)
+				if (!column_description->by_value && !isnull && DatumGetPointer(value) != NULL)
 				{
 					if (column_description->value_bytes < 0)
 					{
 						/* This is a varlena type. */
-						*output_value = PointerGetDatum(
-							detoaster_detoast_attr_copy((struct varlena *) *output_value,
+						value = PointerGetDatum(
+							detoaster_detoast_attr_copy((struct varlena *) value,
 														&dcontext->detoaster,
 														batch_state->per_batch_context));
 					}
@@ -980,12 +971,15 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 						/* This is a fixed-length by-reference type. */
 						void *tmp = MemoryContextAlloc(batch_state->per_batch_context,
 													   column_description->value_bytes);
-						memcpy(tmp,
-							   DatumGetPointer(*output_value),
-							   column_description->value_bytes);
-						*output_value = PointerGetDatum(tmp);
+						memcpy(tmp, DatumGetPointer(value), column_description->value_bytes);
+						value = PointerGetDatum(tmp);
 					}
 				}
+				const AttrNumber attr =
+					AttrNumberGetAttrOffset(column_description->custom_scan_attno);
+				column_values->output_value = &decompressed_tuple->tts_values[attr];
+				column_values->output_isnull = &decompressed_tuple->tts_isnull[attr];
+				compressed_column_set_scalar(column_values, value, isnull);
 				break;
 			}
 			case COUNT_COLUMN:
