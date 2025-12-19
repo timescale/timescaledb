@@ -25,8 +25,16 @@ The easiest way to get started:
 
 > **Important:** This script is intended for local development and testing only. Do **not** use it for production deployments. For production-ready installation options, see the [TimescaleDB installation guide](https://docs.timescale.com/self-hosted/latest/install/).
 
+**Linux/Mac:**
+
 ```sh
 curl -sL https://tsdb.co/start-local | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+iwr -useb https://tsdb.co/start-local-windows | iex
 ```
 
 This command:
