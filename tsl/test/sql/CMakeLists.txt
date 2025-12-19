@@ -18,6 +18,7 @@ set(TEST_FILES
     cagg_utils.sql
     cagg_watermark.sql
     chunk_column_stats.sql
+    chunk_publication_compression.sql
     columnar_scan_cost.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
