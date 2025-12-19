@@ -233,3 +233,10 @@ CREATE TABLE new_col_chunk(time timestamptz not null, temp float, device int);
 INSERT INTO new_col_chunk VALUES ('2018-01-15 05:00:00-8', 23.4, 1);
 ALTER TABLE chunkapi ADD COLUMN temp float;
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1515628800000000, 1516233600000000], "device": [-9223372036854775808, 1073741823]}', NULL, NULL, 'new_col_chunk');
+
+SELECT show_chunks('chunkapi') AS chunk LIMIT 1 \gset
+BEGIN;
+SELECT txid_current_if_assigned() IS NULL;
+SELECT COUNT(*) FROM :chunk LIMIT 1;
+SELECT txid_current_if_assigned() IS NULL;
+COMMIT;
