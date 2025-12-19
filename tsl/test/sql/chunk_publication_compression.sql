@@ -1,0 +1,42 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- Test that compressed chunks are NOT automatically added to publications
+-- Publications require superuser privileges
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+SET client_min_messages = WARNING;
+SET timescaledb.enable_chunk_auto_publication = true;
+SET timescaledb.enable_compression_ratio_warnings = false;
+
+-- Test 1: Basic publication with compression
+-- Compressed chunks should NOT be automatically added to publications
+CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
+ALTER TABLE test_hypertable SET (timescaledb.compress, timescaledb.compress_segmentby='device_id');
+
+-- Insert to create 3 chunks
+INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
+INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
+INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
+
+-- Create publication and add hypertable
+CREATE PUBLICATION test_pub FOR TABLE test_hypertable;
+
+-- Verify initial state (3 uncompressed chunks)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub' ORDER BY schemaname, tablename;
+
+-- Compress all chunks
+SELECT compress_chunk(show_chunks('test_hypertable'));
+
+-- Verify after compression: should still have only 3 chunks, NO compressed chunk table
+-- (compressed chunk table should NOT be automatically added to publication)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub' ORDER BY schemaname, tablename;
+
+-- Cleanup
+DROP PUBLICATION test_pub CASCADE;
+DROP TABLE test_hypertable CASCADE;
+
+RESET client_min_messages;
