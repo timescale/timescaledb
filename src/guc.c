@@ -118,6 +118,7 @@ TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
 TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
 bool ts_guc_enable_event_triggers = false;
+bool ts_guc_enable_chunk_auto_publication = false;
 bool ts_guc_debug_skip_scan_info = false;
 
 /* Only settable in debug mode for testing */
@@ -970,6 +971,18 @@ _guc_init(void)
 							 &ts_guc_enable_event_triggers,
 							 false,
 							 PGC_SUSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_chunk_auto_publication"),
+							 "Enable automatic chunk publication",
+							 "Enable automatically adding newly created chunks to the publication "
+							 "of their hypertable",
+							 &ts_guc_enable_chunk_auto_publication,
+							 false,
+							 PGC_USERSET,
 							 0,
 							 NULL,
 							 NULL,
