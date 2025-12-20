@@ -2351,7 +2351,10 @@ tsl_compressed_data_column_size(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("could not determine element type")));
 
-	int16 typlen = get_typlen(element_type);
+	int16 typlen;
+	bool typbyval pg_attribute_unused();
+	char typalign;
+	get_typlenbyvalalign(element_type, &typlen, &typbyval, &typalign);
 
 	CompressedDataHeader *header;
 	DecompressionIterator *iter;
@@ -2381,6 +2384,8 @@ tsl_compressed_data_column_size(PG_FUNCTION_ARGS)
 				column_size += strlen(DatumGetCString(res.val)) + 1;
 			else
 				column_size += typlen;
+
+			column_size = att_align_nominal(column_size, typalign);
 		}
 	}
 
