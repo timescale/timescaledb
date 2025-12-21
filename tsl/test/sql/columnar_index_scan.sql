@@ -1,0 +1,83 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+\set PREFIX 'EXPLAIN (costs off)'
+
+CREATE TABLE metrics(
+    time timestamptz NOT NULL,
+    device text,
+    sensor text,
+    value float,
+    value2 float
+) WITH (tsdb.hypertable,tsdb.orderby='time desc',tsdb.segmentby='device,sensor',tsdb.index='minmax(value)');
+
+INSERT INTO metrics VALUES
+('2025-01-01 00:00:00 PST', 'd1', 'A', 10.0, 10.0),
+('2025-01-01 01:00:00 PST', 'd1', 'A', 20.0, 20.0),
+('2025-01-01 02:00:00 PST', 'd1', 'A', 15.0, 15.0),
+('2025-01-01 00:30:00 PST', 'd1', 'B', 5.0, 5.0),
+('2025-01-01 01:30:00 PST', 'd1', 'B', 25.0, 25.0),
+('2025-01-01 02:30:00 PST', 'd1', 'B', 30.0, 30.0),
+('2025-01-01 00:00:00 PST', 'd2', 'A', 10.0, 10.0),
+('2025-01-01 01:00:00 PST', 'd2', 'A', 20.0, 20.0),
+('2025-01-01 02:00:00 PST', 'd2', 'A', 15.0, 15.0),
+('2025-01-01 00:30:00 PST', 'd2', 'C', 5.0, 5.0),
+('2025-01-01 01:30:00 PST', 'd2', 'C', 25.0, 25.0),
+('2025-01-01 02:30:00 PST', 'd2', 'C', 30.0, 30.0);
+
+-- Compress all chunks
+SELECT compress_chunk(c) FROM show_chunks('metrics') c;
+
+SET max_parallel_workers_per_gather = 0;
+SET timescaledb.enable_columnarindexscan = on;
+
+:PREFIX SELECT device, max(time) FROM metrics GROUP BY device;
+SELECT device, max(time) FROM metrics GROUP BY device;
+
+:PREFIX SELECT sensor, min(time) FROM metrics GROUP BY sensor;
+SELECT sensor, min(time) FROM metrics GROUP BY sensor;
+
+-- explicit index columns dont prevent optimization
+:PREFIX SELECT sensor, min(value) FROM metrics GROUP BY sensor;
+SELECT sensor, min(value) FROM metrics GROUP BY sensor;
+
+-- test multiple group by columns
+:PREFIX SELECT device, sensor, max(time) FROM metrics GROUP BY device,sensor;
+SELECT device, sensor, max(time) FROM metrics GROUP BY device,sensor;
+
+-- order by does currently prevent optimization
+:PREFIX SELECT device, max(time) FROM metrics GROUP BY device ORDER BY device;
+SELECT device, max(time) FROM metrics GROUP BY device ORDER BY device;
+
+-- filter on segmentby allows optimization
+:PREFIX SELECT device, min(time) FROM metrics WHERE device IN ('d1','d2') GROUP BY device;
+:PREFIX SELECT device, min(time) FROM metrics WHERE device =ANY(ARRAY['d1','d2']) AND sensor='B' GROUP BY device;
+
+-- filter on non-segmentby prevents optimization
+:PREFIX SELECT device, max(time) FROM metrics WHERE time <> '2025-01-01'  GROUP BY device;
+SELECT device, max(time) FROM metrics WHERE time <> '2025-01-01'  GROUP BY device;
+
+-- tableoid doesnt prevent optimization
+:PREFIX SELECT tableoid, device, max(time) FROM metrics GROUP BY device, tableoid;
+
+-- group by on non-segmentby prevents optimization
+:PREFIX SELECT max(time) FROM metrics GROUP BY value;
+SELECT max(time) FROM metrics GROUP BY value;
+:PREFIX SELECT device, max(time) FROM metrics GROUP BY device,value;
+SELECT device, max(time) FROM metrics GROUP BY device,value;
+
+-- no group by prevents optimization
+:PREFIX SELECT max(time) FROM metrics;
+SELECT max(time) FROM metrics;
+
+-- multiple min/max prevent optimization
+:PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device;
+
+-- aggregate on segmentby can use optimization
+:PREFIX SELECT device, min(sensor) FROM metrics GROUP BY device;
+
+-- aggregate on column without metadata does not use optimization
+:PREFIX SELECT device, min(value2) FROM metrics GROUP BY device;
+SELECT device, min(value2) FROM metrics GROUP BY device;
+
