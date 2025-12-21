@@ -19,6 +19,7 @@ set(TEST_FILES
     cagg_watermark.sql
     chunk_column_stats.sql
     columnar_scan_cost.sql
+    columnar_index_scan.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
