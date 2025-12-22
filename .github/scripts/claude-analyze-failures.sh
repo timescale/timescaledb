@@ -204,26 +204,46 @@ download_failure_artifacts() {
     mkdir -p "${WORK_DIR}/artifacts"
     cd "${WORK_DIR}/artifacts"
 
-    # Build a pattern to match artifacts for failed jobs only
-    local failed_job_patterns=""
+    # Extract key identifiers from failed job names to match against artifacts
+    # Job names are like: "PG17.2 Debug ubuntu-22.04"
+    # Artifact names are like: "Regression diff ubuntu-22.04 Debug 17.2"
+    # We extract: OS (ubuntu-22.04), build type (Debug/Release), PG version (17.2)
+    local match_patterns_file="${WORK_DIR}/artifact_match_patterns.txt"
+    > "${match_patterns_file}"
+
     while IFS= read -r job; do
         [[ -z "${job}" ]] && continue
         local job_name
         job_name=$(echo "$job" | jq -r '.name')
-        # Escape special regex characters in job name
-        local escaped_name
-        escaped_name=$(echo "${job_name}" | sed 's/[.[\*^$()+?{|]/\\&/g')
-        if [[ -n "${failed_job_patterns}" ]]; then
-            failed_job_patterns="${failed_job_patterns}|${escaped_name}"
-        else
-            failed_job_patterns="${escaped_name}"
+        log_info "Failed job: ${job_name}"
+
+        # Extract components from job name
+        # Pattern: PG<version>[snapshot] <build_type> <os>
+        local pg_version os_name build_type
+        pg_version=$(echo "${job_name}" | grep -oE 'PG[0-9]+(\.[0-9]+)*' | sed 's/^PG//')
+        os_name=$(echo "${job_name}" | grep -oE '(ubuntu-[0-9.]+-*[a-z]*|macos-[0-9]+-*[a-z]*|timescaledb-runner-[a-z0-9]+)')
+        build_type=$(echo "${job_name}" | grep -oE '(Debug|Release|RelWithDebInfo|ApacheOnly|ReleaseWithoutTelemetry)')
+
+        # Build a pattern that matches artifacts for this job
+        # Artifacts contain: os, build_type, and pg_version (without PG prefix)
+        if [[ -n "${pg_version}" && -n "${os_name}" ]]; then
+            # Escape dots in version for regex
+            local escaped_version
+            escaped_version=$(echo "${pg_version}" | sed 's/\./\\./g')
+            echo "${os_name}.*${escaped_version}|${escaped_version}.*${os_name}" >> "${match_patterns_file}"
+            log_info "  -> Match pattern: ${os_name} + ${pg_version}"
         fi
     done < "${jobs_file}"
 
-    if [[ -z "${failed_job_patterns}" ]]; then
-        log_warn "No failed job patterns to match"
+    if [[ ! -s "${match_patterns_file}" ]]; then
+        log_warn "Could not extract match patterns from job names"
         return 1
     fi
+
+    # Combine all patterns into one regex
+    local combined_pattern
+    combined_pattern=$(sort -u "${match_patterns_file}" | tr '\n' '|' | sed 's/|$//')
+    log_info "Combined artifact match pattern: ${combined_pattern}"
 
     log_info "Fetching artifact list (with pagination)..."
     local artifacts_file="${WORK_DIR}/artifacts.json"
@@ -231,14 +251,27 @@ download_failure_artifacts() {
     # Get artifacts that match failed jobs and are relevant types
     gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
         --paginate \
-        --jq ".artifacts[] | select(.name | test(\"Regression|PostgreSQL log|Stacktrace|TAP\")) | select(.name | test(\"${failed_job_patterns}\")) | {name: .name, id: .id}" \
-        > "${artifacts_file}" 2>/dev/null || {
+        --jq ".artifacts[] | select(.name | test(\"Regression|PostgreSQL log|Stacktrace|TAP\")) | {name: .name, id: .id}" \
+        > "${artifacts_file}.all" 2>/dev/null || {
         log_error "Failed to fetch artifacts list"
         return 1
     }
 
+    # Filter artifacts matching our failed jobs
+    > "${artifacts_file}"
+    while IFS= read -r artifact; do
+        [[ -z "${artifact}" ]] && continue
+        local name
+        name=$(echo "$artifact" | jq -r '.name')
+        if echo "${name}" | grep -qE "${combined_pattern}"; then
+            echo "${artifact}" >> "${artifacts_file}"
+        fi
+    done < "${artifacts_file}.all"
+
     if [[ ! -s "${artifacts_file}" ]]; then
         log_warn "No failure artifacts found for failed jobs"
+        log_info "Available artifacts were:"
+        jq -r '.name' "${artifacts_file}.all" | head -20 >&2
         return 1
     fi
 
