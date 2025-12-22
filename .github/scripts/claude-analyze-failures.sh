@@ -19,6 +19,7 @@
 #   ANTHROPIC_API_KEY  - API key for Claude Code (not needed if logged in locally)
 #   TARGET_REPOSITORY  - Repository to create the PR in (default: GITHUB_REPOSITORY)
 #                        Useful for creating PRs in a fork during testing
+#   BASE_BRANCH        - Branch to create the PR against (default: main)
 #   CLAUDE_MODEL       - Model to use (default: claude-sonnet-4-20250514)
 #   MAX_ARTIFACTS      - Maximum number of artifacts to download (default: 10)
 #   DRY_RUN            - If set to "true", skip Claude invocation and PR creation
@@ -34,6 +35,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 WORK_DIR="${WORK_DIR:-/tmp/claude-fix-$$}"
 MAX_ARTIFACTS="${MAX_ARTIFACTS:-10}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-sonnet-4-20250514}"
+BASE_BRANCH="${BASE_BRANCH:-main}"
 DRY_RUN="${DRY_RUN:-false}"
 SKIP_PR="${SKIP_PR:-false}"
 KEEP_WORK_DIR="${KEEP_WORK_DIR:-false}"
@@ -733,7 +735,7 @@ EOF
 
     # Show all commits made
     log_info "Commits created:"
-    git log --oneline main..HEAD 2>/dev/null | while read -r line; do
+    git log --oneline "${BASE_BRANCH}..HEAD" 2>/dev/null | while read -r line; do
         log_info "  ${line}"
     done >&2
 
@@ -756,7 +758,7 @@ create_pull_request() {
 
     # Check if there are any commits on this branch
     local commit_count
-    commit_count=$(git rev-list --count main..HEAD 2>/dev/null || echo "0")
+    commit_count=$(git rev-list --count "${BASE_BRANCH}..HEAD" 2>/dev/null || echo "0")
     if [[ "${commit_count}" -eq 0 ]]; then
         log_warn "No commits were made by Claude Code"
         return 1
@@ -785,16 +787,16 @@ create_pull_request() {
 
     # Debug: show current branch and commits
     log_info "Current branch: $(git branch --show-current)"
-    log_info "Commits to push (main..HEAD):"
-    git log --oneline main..HEAD >&2
+    log_info "Commits to push (${BASE_BRANCH}..HEAD):"
+    git log --oneline "${BASE_BRANCH}..HEAD" >&2
 
     # Verify we have commits
     local local_commit_count
-    local_commit_count=$(git rev-list --count main..HEAD 2>/dev/null || echo "0")
+    local_commit_count=$(git rev-list --count "${BASE_BRANCH}..HEAD" 2>/dev/null || echo "0")
     if [[ "${local_commit_count}" -eq 0 ]]; then
-        log_error "No commits found between main and HEAD"
+        log_error "No commits found between ${BASE_BRANCH} and HEAD"
         log_info "HEAD: $(git rev-parse HEAD)"
-        log_info "main: $(git rev-parse main)"
+        log_info "${BASE_BRANCH}: $(git rev-parse "${BASE_BRANCH}")"
         return 1
     fi
 
@@ -810,7 +812,7 @@ create_pull_request() {
 
     # Generate commit list for PR body
     local commit_list
-    commit_list=$(git log --format="- **%s**%n  %b" main..HEAD 2>/dev/null | head -100)
+    commit_list=$(git log --format="- **%s**%n  %b" "${BASE_BRANCH}..HEAD" 2>/dev/null | head -100)
 
     # Create the PR body
     local pr_body
@@ -842,7 +844,7 @@ EOF
 
     # Create the PR in the target repository
     log_info "Creating PR in repository: ${TARGET_REPOSITORY}"
-    log_info "Base: main, Head: ${branch_name}"
+    log_info "Base: ${BASE_BRANCH}, Head: ${branch_name}"
 
     # Save PR body to file for debugging
     echo "${pr_body}" > "${WORK_DIR}/pr_body.md"
@@ -856,14 +858,14 @@ EOF
     # - Same repo: just branch name
     # - Cross-repo (fork): owner:branch format
     local head_ref="${branch_name}"
-    log_info "Creating PR: base=main, head=${head_ref}"
+    log_info "Creating PR: base=${BASE_BRANCH}, head=${head_ref}"
     log_info "Target repo: ${TARGET_REPOSITORY}"
 
     if gh pr create \
         --repo "${TARGET_REPOSITORY}" \
         --title "Fix nightly test failures ($(date +%Y-%m-%d))" \
         --body "${pr_body}" \
-        --base main \
+        --base "${BASE_BRANCH}" \
         --head "${head_ref}" \
         2>&1 | tee "${gh_output}"; then
         pr_url=$(grep -oE 'https://github.com/[^ ]+' "${gh_output}" | head -1)
@@ -873,7 +875,7 @@ EOF
         log_error "Failed to create PR. Output:"
         cat "${gh_output}" >&2
         log_info "You can manually create a PR with:"
-        log_info "  gh pr create --repo ${TARGET_REPOSITORY} --base main --head ${head_ref}"
+        log_info "  gh pr create --repo ${TARGET_REPOSITORY} --base ${BASE_BRANCH} --head ${head_ref}"
         return 1
     fi
 }
@@ -882,6 +884,7 @@ main() {
     log_info "Starting Claude failure analysis..."
     log_info "Source repository: ${GITHUB_REPOSITORY:-not set}"
     log_info "Target repository: ${TARGET_REPOSITORY:-${GITHUB_REPOSITORY:-not set}}"
+    log_info "Base branch: ${BASE_BRANCH}"
     log_info "Run ID: ${GITHUB_RUN_ID:-not set}"
     log_info "Mode: $(if [[ "${DRY_RUN}" == "true" ]]; then echo "DRY_RUN"; elif [[ "${SKIP_PR}" == "true" ]]; then echo "SKIP_PR"; else echo "FULL"; fi)"
 
@@ -929,7 +932,7 @@ main() {
     if [[ "${SKIP_PR}" == "true" ]]; then
         log_info "SKIP_PR mode - skipping PR creation"
         log_info "Changes are on branch: ${branch_name}"
-        log_info "To review changes: git diff main...${branch_name}"
+        log_info "To review changes: git diff ${BASE_BRANCH}...${branch_name}"
         log_info "To push manually: git push origin ${branch_name}"
         exit 0
     fi
