@@ -9,9 +9,11 @@
 # 4. Creates a PR with the proposed fix
 #
 # Required environment variables:
-#   GITHUB_TOKEN       - GitHub token with repo permissions
-#   GITHUB_REPOSITORY  - The source repository for artifacts (e.g., timescale/timescaledb)
 #   GITHUB_RUN_ID      - The workflow run ID
+#
+# Optional environment variables (with defaults):
+#   GITHUB_TOKEN       - GitHub token (default: from gh auth token)
+#   GITHUB_REPOSITORY  - The source repository for artifacts (default: timescale/timescaledb)
 #
 # Optional environment variables:
 #   ANTHROPIC_API_KEY  - API key for Claude Code (not needed if logged in locally)
@@ -35,6 +37,10 @@ CLAUDE_MODEL="${CLAUDE_MODEL:-claude-sonnet-4-20250514}"
 DRY_RUN="${DRY_RUN:-false}"
 LOCAL_ONLY="${LOCAL_ONLY:-false}"
 KEEP_WORK_DIR="${KEEP_WORK_DIR:-false}"
+
+# GITHUB_REPOSITORY defaults to timescale/timescaledb
+GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-timescale/timescaledb}"
+export GITHUB_REPOSITORY
 
 # GITHUB_TOKEN defaults to gh auth token if not set
 if [[ -z "${GITHUB_TOKEN:-}" ]]; then
@@ -79,8 +85,7 @@ check_prerequisites() {
     log_info "Checking prerequisites..."
 
     local missing_vars=()
-    [[ -z "${GITHUB_TOKEN:-}" ]] && missing_vars+=("GITHUB_TOKEN")
-    [[ -z "${GITHUB_REPOSITORY:-}" ]] && missing_vars+=("GITHUB_REPOSITORY")
+    [[ -z "${GITHUB_TOKEN:-}" ]] && missing_vars+=("GITHUB_TOKEN (set it or run 'gh auth login')")
     [[ -z "${GITHUB_RUN_ID:-}" ]] && missing_vars+=("GITHUB_RUN_ID")
 
     if [[ ${#missing_vars[@]} -gt 0 ]]; then
