@@ -352,3 +352,61 @@ jobs:
         fi
         export GITHUB_PR_NUMBER
         scripts/upload_ci_stats.sh
+
+  # Analyze test failures with Claude Code and create a fix PR
+  # This job only runs on scheduled (nightly) builds when tests fail
+  claude-analyze-failures:
+    name: Analyze Failures with Claude Code
+    needs: regress
+    # Only run on nightly (scheduled) builds when regress job fails
+    # Also requires ANTHROPIC_API_KEY to be configured
+    if: always() && github.event_name == 'schedule' && needs.regress.result == 'failure'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+    - name: Check for API key
+      id: check-key
+      run: |
+        if [[ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]]; then
+          echo "ANTHROPIC_API_KEY secret is not configured, skipping Claude analysis"
+          echo "skip=true" >> $GITHUB_OUTPUT
+        else
+          echo "skip=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Checkout TimescaleDB
+      if: steps.check-key.outputs.skip != 'true'
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Configure Git
+      if: steps.check-key.outputs.skip != 'true'
+      run: |
+        git config user.name "timescale-automation"
+        git config user.email "123763385+github-actions[bot]@users.noreply.github.com"
+
+    - name: Setup Node.js
+      if: steps.check-key.outputs.skip != 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Claude Code
+      if: steps.check-key.outputs.skip != 'true'
+      run: |
+        npm install -g @anthropic-ai/claude-code
+
+    - name: Analyze failures and create fix PR
+      if: steps.check-key.outputs.skip != 'true'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+      run: |
+        .github/scripts/claude-analyze-failures.sh
