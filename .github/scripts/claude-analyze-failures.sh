@@ -453,14 +453,36 @@ commit_claude_changes() {
         return 1
     fi
 
-    # Stage modified files
-    if [[ -n "${modified_files}" ]]; then
-        echo "${modified_files}" | xargs git add >&2
+    # Filter out workflow files - these require special 'workflow' scope that we don't have
+    # This is a safety measure in case Claude modifies workflow files despite instructions
+    local filtered_modified filtered_new
+    filtered_modified=$(echo "${modified_files}" | grep -v '^\.github/workflows/' || true)
+    filtered_new=$(echo "${new_files_list}" | grep -v '^\.github/workflows/' || true)
+
+    # Check if any workflow files were modified and warn
+    local workflow_changes
+    workflow_changes=$(echo "${modified_files}" | grep '^\.github/workflows/' || true)
+    if [[ -n "${workflow_changes}" ]]; then
+        log_warn "Skipping workflow file changes (requires 'workflow' scope):"
+        echo "${workflow_changes}" | while read -r f; do
+            log_warn "  - ${f}"
+            git checkout -- "${f}" 2>/dev/null || true  # Revert the changes
+        done >&2
     fi
 
-    # Stage new files created by Claude
-    if [[ -n "${new_files_list}" ]]; then
-        echo "${new_files_list}" | xargs git add >&2
+    if [[ -z "${filtered_modified}" && -z "${filtered_new}" ]]; then
+        log_info "No non-workflow changes made for test: ${test_name}"
+        return 1
+    fi
+
+    # Stage modified files (excluding workflows)
+    if [[ -n "${filtered_modified}" ]]; then
+        echo "${filtered_modified}" | xargs git add >&2
+    fi
+
+    # Stage new files created by Claude (excluding workflows)
+    if [[ -n "${filtered_new}" ]]; then
+        echo "${filtered_new}" | xargs git add >&2
     fi
 
     # Extract a summary from Claude's output for the commit message
@@ -515,6 +537,7 @@ ${test_context}
 Important:
 - Focus ONLY on fixing this one test: ${test_name}
 - Do not modify files unrelated to this test
+- NEVER modify files in .github/workflows/ - these require special permissions we don't have
 - Explain your reasoning briefly
 
 After making changes, provide a one-line summary of what was fixed.
@@ -681,6 +704,7 @@ Please:
 Important guidelines:
 - Only fix actual bugs, don't just update test expectations to make tests pass unless the new behavior is correct
 - If a test is flaky due to timing issues, make the test more robust rather than ignoring it
+- NEVER modify files in .github/workflows/ - these require special permissions we don't have
 - Explain your reasoning for each fix
 
 After making changes, provide a summary of what was fixed.
