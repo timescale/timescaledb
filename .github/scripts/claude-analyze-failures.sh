@@ -530,7 +530,7 @@ EOF
     log_info "Starting Claude Code analysis for: ${test_name}"
     if ! claude -p "$(cat "${prompt_file}")" \
         --allowedTools "Edit,Write,Read,Glob,Grep,Bash" \
-        2>&1 | tee "${analysis_output}"; then
+        2>&1 | tee "${analysis_output}" >&2; then
         log_warn "Claude Code failed to fix test: ${test_name}"
         return 1
     fi
@@ -689,7 +689,7 @@ EOF
         local analysis_output="${WORK_DIR}/analysis_output.txt"
         if claude -p "$(cat "${prompt_file}")" \
             --allowedTools "Edit,Write,Read,Glob,Grep,Bash" \
-            2>&1 | tee "${analysis_output}"; then
+            2>&1 | tee "${analysis_output}" >&2; then
             if commit_claude_changes "all-failures" "${analysis_output}"; then
                 ((fixed_tests++))
             else
