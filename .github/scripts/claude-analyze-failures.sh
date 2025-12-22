@@ -112,19 +112,34 @@ download_failure_artifacts() {
     cd "${WORK_DIR}/artifacts"
 
     # Get list of artifacts from the failed run
-    local artifacts_json
-    artifacts_json=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
-        --jq '.artifacts[] | select(.name | test("Regression|PostgreSQL log|Stacktrace|TAP")) | {name: .name, id: .id}')
+    # Use --paginate to handle pagination (default is 30 per page)
+    # Filter for artifacts that contain failure-related information
+    local artifacts_file="${WORK_DIR}/artifacts.json"
+    log_info "Fetching artifact list (with pagination)..."
 
-    if [[ -z "${artifacts_json}" ]]; then
+    gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
+        --paginate \
+        --jq '.artifacts[] | select(.name | test("Regression|PostgreSQL log|Stacktrace|TAP")) | {name: .name, id: .id}' \
+        > "${artifacts_file}" 2>/dev/null || {
+        log_error "Failed to fetch artifacts list"
+        return 1
+    }
+
+    if [[ ! -s "${artifacts_file}" ]]; then
         log_warn "No failure artifacts found"
         return 1
     fi
 
+    local total_artifacts
+    total_artifacts=$(wc -l < "${artifacts_file}")
+    log_info "Found ${total_artifacts} relevant artifacts"
+
     local count=0
     while IFS= read -r artifact; do
+        [[ -z "${artifact}" ]] && continue
+
         if [[ ${count} -ge ${MAX_ARTIFACTS} ]]; then
-            log_warn "Reached maximum artifact limit (${MAX_ARTIFACTS})"
+            log_warn "Reached maximum artifact limit (${MAX_ARTIFACTS}), skipping remaining $((total_artifacts - count)) artifacts"
             break
         fi
 
@@ -132,7 +147,8 @@ download_failure_artifacts() {
         name=$(echo "$artifact" | jq -r '.name')
         id=$(echo "$artifact" | jq -r '.id')
 
-        log_info "Downloading artifact: ${name}"
+        ((count++))
+        log_info "Downloading artifact: ${name} (${count}/${total_artifacts})"
         gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "${name}.zip" || {
             log_warn "Failed to download artifact: ${name}"
             continue
@@ -144,9 +160,7 @@ download_failure_artifacts() {
             continue
         }
         rm -f "${name}.zip"
-
-        ((count++))
-    done <<< "$(echo "${artifacts_json}" | jq -c '.')"
+    done < "${artifacts_file}"
 
     log_info "Downloaded ${count} artifacts"
     return 0
