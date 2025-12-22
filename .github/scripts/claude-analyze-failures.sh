@@ -749,9 +749,34 @@ create_pull_request() {
         push_remote="target"
     fi
 
+    # Debug: show remotes
+    log_info "Git remotes:"
+    git remote -v >&2
+
+    # Debug: show current branch and commits
+    log_info "Current branch: $(git branch --show-current)"
+    log_info "Commits to push (main..HEAD):"
+    git log --oneline main..HEAD >&2
+
+    # Verify we have commits
+    local local_commit_count
+    local_commit_count=$(git rev-list --count main..HEAD 2>/dev/null || echo "0")
+    if [[ "${local_commit_count}" -eq 0 ]]; then
+        log_error "No commits found between main and HEAD"
+        log_info "HEAD: $(git rev-parse HEAD)"
+        log_info "main: $(git rev-parse main)"
+        return 1
+    fi
+
     # Push the branch
-    log_info "Pushing branch to ${push_remote}..."
-    git push "${push_remote}" "${branch_name}"
+    log_info "Pushing branch '${branch_name}' to remote '${push_remote}'..."
+    if ! git push -u "${push_remote}" "${branch_name}" 2>&1 | tee "${WORK_DIR}/git_push_output.txt" >&2; then
+        log_error "Failed to push branch. Output:"
+        cat "${WORK_DIR}/git_push_output.txt" >&2
+        return 1
+    fi
+
+    log_info "Push successful"
 
     # Generate commit list for PR body
     local commit_list
@@ -797,15 +822,12 @@ EOF
     local gh_output
     gh_output="${WORK_DIR}/gh_pr_output.txt"
 
-    # For cross-repo PRs (fork to upstream), we might need different head format
+    # Determine head ref format
+    # - Same repo: just branch name
+    # - Cross-repo (fork): owner:branch format
     local head_ref="${branch_name}"
-    if [[ "${TARGET_REPOSITORY}" != "${GITHUB_REPOSITORY}" ]]; then
-        # When creating PR from fork, head needs to be owner:branch format
-        local fork_owner
-        fork_owner=$(echo "${TARGET_REPOSITORY}" | cut -d'/' -f1)
-        head_ref="${fork_owner}:${branch_name}"
-        log_info "Cross-repo PR: using head ref: ${head_ref}"
-    fi
+    log_info "Creating PR: base=main, head=${head_ref}"
+    log_info "Target repo: ${TARGET_REPOSITORY}"
 
     if gh pr create \
         --repo "${TARGET_REPOSITORY}" \
