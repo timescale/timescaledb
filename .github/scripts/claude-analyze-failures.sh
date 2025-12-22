@@ -21,6 +21,7 @@
 #   MAX_ARTIFACTS      - Maximum number of artifacts to download (default: 10)
 #   DRY_RUN            - If set to "true", skip Claude invocation and PR creation
 #   LOCAL_ONLY         - If set to "true", run Claude to make local changes but skip PR creation
+#   KEEP_WORK_DIR      - If set to "true", keep the work directory in /tmp for inspection
 #
 
 set -euo pipefail
@@ -33,6 +34,7 @@ MAX_ARTIFACTS="${MAX_ARTIFACTS:-10}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-sonnet-4-20250514}"
 DRY_RUN="${DRY_RUN:-false}"
 LOCAL_ONLY="${LOCAL_ONLY:-false}"
+KEEP_WORK_DIR="${KEEP_WORK_DIR:-false}"
 # TARGET_REPOSITORY defaults to GITHUB_REPOSITORY (set after env var check)
 
 # Colors for output
@@ -42,11 +44,11 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 log_info() {
-    echo -e "${GREEN}[INFO]${NC} $*"
+    echo -e "${GREEN}[INFO]${NC} $*" >&2
 }
 
 log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $*"
+    echo -e "${YELLOW}[WARN]${NC} $*" >&2
 }
 
 log_error() {
@@ -55,8 +57,12 @@ log_error() {
 
 cleanup() {
     if [[ -d "${WORK_DIR}" ]]; then
-        log_info "Cleaning up work directory: ${WORK_DIR}"
-        rm -rf "${WORK_DIR}"
+        if [[ "${KEEP_WORK_DIR}" == "true" ]]; then
+            log_info "Keeping work directory for inspection: ${WORK_DIR}"
+        else
+            log_info "Cleaning up work directory: ${WORK_DIR}"
+            rm -rf "${WORK_DIR}"
+        fi
     fi
 }
 
@@ -591,6 +597,10 @@ main() {
     if [[ "${DRY_RUN}" == "true" ]]; then
         log_info "Dry run mode - skipping Claude Code invocation and PR creation"
         log_info "Context file: ${context_file}"
+        if [[ "${KEEP_WORK_DIR}" == "true" ]]; then
+            log_info "Work directory contents:"
+            ls -la "${WORK_DIR}"
+        fi
         cat "${context_file}"
         exit 0
     fi
