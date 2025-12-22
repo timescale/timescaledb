@@ -744,14 +744,20 @@ create_pull_request() {
     local push_remote="origin"
     if [[ "${TARGET_REPOSITORY}" != "${GITHUB_REPOSITORY}" ]]; then
         log_info "Setting up remote for target repository: ${TARGET_REPOSITORY}"
-        git remote add target "https://github.com/${TARGET_REPOSITORY}.git" 2>/dev/null || \
-            git remote set-url target "https://github.com/${TARGET_REPOSITORY}.git"
+        # Use token in URL for authentication
+        local target_url="https://x-access-token:${GITHUB_TOKEN}@github.com/${TARGET_REPOSITORY}.git"
+        git remote add target "${target_url}" 2>/dev/null || \
+            git remote set-url target "${target_url}"
         push_remote="target"
+    else
+        # For same repo, also ensure origin uses token authentication
+        local origin_url="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        git remote set-url origin "${origin_url}" 2>/dev/null || true
     fi
 
-    # Debug: show remotes
+    # Debug: show remotes (hide tokens)
     log_info "Git remotes:"
-    git remote -v >&2
+    git remote -v 2>&1 | sed 's/x-access-token:[^@]*@/x-access-token:***@/g' >&2
 
     # Debug: show current branch and commits
     log_info "Current branch: $(git branch --show-current)"
