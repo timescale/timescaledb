@@ -35,6 +35,13 @@ CLAUDE_MODEL="${CLAUDE_MODEL:-claude-sonnet-4-20250514}"
 DRY_RUN="${DRY_RUN:-false}"
 LOCAL_ONLY="${LOCAL_ONLY:-false}"
 KEEP_WORK_DIR="${KEEP_WORK_DIR:-false}"
+
+# GITHUB_TOKEN defaults to gh auth token if not set
+if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+    GITHUB_TOKEN=$(gh auth token 2>/dev/null || true)
+fi
+export GITHUB_TOKEN
+
 # TARGET_REPOSITORY defaults to GITHUB_REPOSITORY (set after env var check)
 
 # Colors for output
