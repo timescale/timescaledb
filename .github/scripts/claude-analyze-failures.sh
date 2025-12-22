@@ -774,16 +774,44 @@ EOF
 )
 
     # Create the PR in the target repository
+    log_info "Creating PR in repository: ${TARGET_REPOSITORY}"
+    log_info "Base: main, Head: ${branch_name}"
+
+    # Save PR body to file for debugging
+    echo "${pr_body}" > "${WORK_DIR}/pr_body.md"
+    log_info "PR body saved to: ${WORK_DIR}/pr_body.md"
+
     local pr_url
-    pr_url=$(gh pr create \
+    local gh_output
+    gh_output="${WORK_DIR}/gh_pr_output.txt"
+
+    # For cross-repo PRs (fork to upstream), we might need different head format
+    local head_ref="${branch_name}"
+    if [[ "${TARGET_REPOSITORY}" != "${GITHUB_REPOSITORY}" ]]; then
+        # When creating PR from fork, head needs to be owner:branch format
+        local fork_owner
+        fork_owner=$(echo "${TARGET_REPOSITORY}" | cut -d'/' -f1)
+        head_ref="${fork_owner}:${branch_name}"
+        log_info "Cross-repo PR: using head ref: ${head_ref}"
+    fi
+
+    if gh pr create \
         --repo "${TARGET_REPOSITORY}" \
         --title "Fix nightly test failures ($(date +%Y-%m-%d))" \
         --body "${pr_body}" \
         --base main \
-        --head "${branch_name}")
-
-    log_info "Pull request created: ${pr_url}"
-    echo "${pr_url}"
+        --head "${head_ref}" \
+        2>&1 | tee "${gh_output}"; then
+        pr_url=$(grep -oE 'https://github.com/[^ ]+' "${gh_output}" | head -1)
+        log_info "Pull request created: ${pr_url}"
+        echo "${pr_url}"
+    else
+        log_error "Failed to create PR. Output:"
+        cat "${gh_output}" >&2
+        log_info "You can manually create a PR with:"
+        log_info "  gh pr create --repo ${TARGET_REPOSITORY} --base main --head ${head_ref}"
+        return 1
+    fi
 }
 
 main() {
