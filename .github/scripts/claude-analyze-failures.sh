@@ -423,8 +423,157 @@ EOF
     echo "${context_file}"
 }
 
+commit_claude_changes() {
+    local test_name="$1"
+    local analysis_output="$2"
+
+    # Check if there are any changes to commit
+    local modified_files new_files_list
+    modified_files=$(git diff --name-only 2>/dev/null)
+    new_files_list=$(git status --porcelain | grep '^??' | cut -c4- | while read -r file; do
+        if ! grep -qxF "${file}" "${WORK_DIR}/untracked_before.txt" 2>/dev/null; then
+            echo "${file}"
+        fi
+    done)
+
+    if [[ -z "${modified_files}" && -z "${new_files_list}" ]]; then
+        log_info "No changes made for test: ${test_name}"
+        return 1
+    fi
+
+    # Stage modified files
+    if [[ -n "${modified_files}" ]]; then
+        echo "${modified_files}" | xargs git add
+    fi
+
+    # Stage new files created by Claude
+    if [[ -n "${new_files_list}" ]]; then
+        echo "${new_files_list}" | xargs git add
+    fi
+
+    # Extract a summary from Claude's output for the commit message
+    local summary
+    summary=$(tail -50 "${analysis_output}" | head -30 | tr '\n' ' ' | cut -c1-200)
+
+    # Create commit with descriptive message
+    git commit -m "$(cat <<EOF
+Fix test: ${test_name}
+
+${summary}...
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+EOF
+)"
+
+    log_info "Committed fix for: ${test_name}"
+    return 0
+}
+
+fix_single_test() {
+    local test_name="$1"
+    local test_context="$2"
+    local test_number="$3"
+    local total_tests="$4"
+
+    log_info "----------------------------------------------"
+    log_info "FIXING TEST ${test_number}/${total_tests}: ${test_name}"
+    log_info "----------------------------------------------"
+
+    # Create a prompt file for this specific test
+    local prompt_file="${WORK_DIR}/prompt_${test_number}.txt"
+    local analysis_output="${WORK_DIR}/analysis_${test_number}.txt"
+
+    cat > "${prompt_file}" << EOF
+I need you to fix a specific test failure from our nightly CI run.
+
+## Test to Fix
+Test name: ${test_name}
+
+## Failure Context
+${test_context}
+
+## Instructions
+1. Analyze why this specific test is failing
+2. Identify the root cause
+3. Implement a fix - either in the code or in the test expectations
+4. Only fix actual bugs; don't just update test expectations unless the new behavior is correct
+
+Important:
+- Focus ONLY on fixing this one test: ${test_name}
+- Do not modify files unrelated to this test
+- Explain your reasoning briefly
+
+After making changes, provide a one-line summary of what was fixed.
+EOF
+
+    local prompt_size
+    prompt_size=$(wc -c < "${prompt_file}")
+    log_info "Prompt size: ${prompt_size} bytes"
+
+    local start_time
+    start_time=$(date +%s)
+
+    log_info "Starting Claude Code analysis for: ${test_name}"
+    if ! claude -p "$(cat "${prompt_file}")" \
+        --allowedTools "Edit,Write,Read,Glob,Grep,Bash" \
+        2>&1 | tee "${analysis_output}"; then
+        log_warn "Claude Code failed to fix test: ${test_name}"
+        return 1
+    fi
+
+    local end_time duration
+    end_time=$(date +%s)
+    duration=$((end_time - start_time))
+    log_info "Analysis completed in ${duration} seconds"
+
+    # Commit the changes for this test
+    if commit_claude_changes "${test_name}" "${analysis_output}"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+extract_test_context() {
+    local test_name="$1"
+    local context_file="$2"
+
+    # Extract relevant sections from the full context for this specific test
+    local test_context=""
+
+    # Look for this test in the regression diffs
+    if [[ -d "${WORK_DIR}/artifacts" ]]; then
+        # Find regression diff for this test
+        local diff_file
+        diff_file=$(find "${WORK_DIR}/artifacts" -name "regression.log" -o -name "*.diffs" 2>/dev/null | head -1)
+        if [[ -f "${diff_file}" ]]; then
+            # Extract section related to this test (if present)
+            local test_diff
+            test_diff=$(grep -A 100 "${test_name}" "${diff_file}" 2>/dev/null | head -100 || true)
+            if [[ -n "${test_diff}" ]]; then
+                test_context+="### Regression Diff
+\`\`\`diff
+${test_diff}
+\`\`\`
+
+"
+            fi
+        fi
+    fi
+
+    # Add the full context file as fallback
+    test_context+="### Full Failure Context
+$(cat "${context_file}")
+"
+
+    echo "${test_context}"
+}
+
 invoke_claude_code() {
     local context_file="$1"
+    local failed_tests_file="$2"
     local branch_name="claude-fix/nightly-$(date +%Y%m%d-%H%M%S)"
 
     log_info "=============================================="
@@ -434,7 +583,6 @@ invoke_claude_code() {
     cd "${REPO_ROOT}"
 
     # Save list of untracked files before Claude runs
-    # So we can distinguish new files created by Claude from pre-existing untracked files
     git status --porcelain | grep '^??' | cut -c4- > "${WORK_DIR}/untracked_before.txt"
     local untracked_count
     untracked_count=$(wc -l < "${WORK_DIR}/untracked_before.txt")
@@ -444,9 +592,51 @@ invoke_claude_code() {
     log_info "Creating branch: ${branch_name}"
     git checkout -b "${branch_name}"
 
-    # Create a prompt file for Claude Code
-    local prompt_file="${WORK_DIR}/prompt.txt"
-    cat > "${prompt_file}" << EOF
+    # Get list of unique failed tests
+    local unique_tests_file="${WORK_DIR}/unique_failed_tests.txt"
+    if [[ -f "${failed_tests_file}" && -s "${failed_tests_file}" ]]; then
+        # Extract just the test names (remove job prefix and duplicates)
+        sed 's/^[^:]*: //' "${failed_tests_file}" | \
+            grep -oE 'test [^ ]+|[^ ]+ \.\.\. FAILED' | \
+            sed 's/test //; s/ \.\.\. FAILED//' | \
+            sort -u > "${unique_tests_file}"
+    fi
+
+    local total_tests=0
+    local fixed_tests=0
+    local failed_fixes=0
+
+    if [[ -f "${unique_tests_file}" && -s "${unique_tests_file}" ]]; then
+        total_tests=$(wc -l < "${unique_tests_file}")
+        log_info "Found ${total_tests} unique failed tests to fix"
+
+        local test_number=0
+        while IFS= read -r test_name; do
+            [[ -z "${test_name}" ]] && continue
+            ((test_number++))
+
+            # Extract context specific to this test
+            local test_context
+            test_context=$(extract_test_context "${test_name}" "${context_file}")
+
+            # Fix this specific test
+            if fix_single_test "${test_name}" "${test_context}" "${test_number}" "${total_tests}"; then
+                ((fixed_tests++))
+            else
+                ((failed_fixes++))
+            fi
+
+            # Update untracked files list after each commit
+            git status --porcelain | grep '^??' | cut -c4- > "${WORK_DIR}/untracked_before.txt"
+
+        done < "${unique_tests_file}"
+    else
+        # Fallback: if we can't identify individual tests, do one big fix
+        log_info "Could not identify individual tests, attempting bulk fix..."
+        total_tests=1
+
+        local prompt_file="${WORK_DIR}/prompt.txt"
+        cat > "${prompt_file}" << EOF
 I need you to analyze test failures from our nightly CI run and fix them.
 
 Here is the failure context:
@@ -457,7 +647,6 @@ Please:
 2. Identify the root cause of each failure
 3. Implement fixes for the issues in the codebase
 4. If the test expectations need updating (not the code), update the expected output files
-5. Focus on the most critical failures first
 
 Important guidelines:
 - Only fix actual bugs, don't just update test expectations to make tests pass unless the new behavior is correct
@@ -467,66 +656,39 @@ Important guidelines:
 After making changes, provide a summary of what was fixed.
 EOF
 
-    local prompt_size
-    prompt_size=$(wc -c < "${prompt_file}")
-    log_info "Prompt size: ${prompt_size} bytes"
-    log_info "Prompt file saved to: ${prompt_file}"
-
-    # Run Claude Code with the prompt
-    # Using -p for non-interactive mode with a prompt
-    # --allowedTools ensures Claude can edit files
-    local analysis_output="${WORK_DIR}/analysis_output.txt"
-    log_info "Starting Claude Code analysis..."
-    log_info "  Tools allowed: Edit, Write, Read, Glob, Grep, Bash"
-    log_info "  Output will be saved to: ${analysis_output}"
-    log_info "----------------------------------------------"
-
-    local start_time
-    start_time=$(date +%s)
-
-    if ! claude -p "$(cat "${prompt_file}")" \
-        --allowedTools "Edit,Write,Read,Glob,Grep,Bash" \
-        2>&1 | tee "${analysis_output}"; then
-        log_error "Claude Code failed to analyze the failures"
-        return 1
-    fi
-
-    local end_time duration
-    end_time=$(date +%s)
-    duration=$((end_time - start_time))
-    log_info "----------------------------------------------"
-    log_info "Claude Code analysis completed in ${duration} seconds"
-
-    # Show what files were modified
-    log_info "Checking for changes made by Claude..."
-    local modified_files new_files
-    modified_files=$(git diff --name-only 2>/dev/null | wc -l)
-    new_files=$(git status --porcelain | grep '^??' | cut -c4- | while read -r file; do
-        if ! grep -qxF "${file}" "${WORK_DIR}/untracked_before.txt" 2>/dev/null; then
-            echo "${file}"
-        fi
-    done | wc -l)
-
-    log_info "Files modified by Claude: ${modified_files}"
-    if [[ ${modified_files} -gt 0 ]]; then
-        log_info "Modified files:"
-        git diff --name-only 2>/dev/null | while read -r f; do log_info "  - ${f}"; done
-    fi
-
-    log_info "New files created by Claude: ${new_files}"
-    if [[ ${new_files} -gt 0 ]]; then
-        log_info "New files:"
-        git status --porcelain | grep '^??' | cut -c4- | while read -r file; do
-            if ! grep -qxF "${file}" "${WORK_DIR}/untracked_before.txt" 2>/dev/null; then
-                log_info "  - ${file}"
+        local analysis_output="${WORK_DIR}/analysis_output.txt"
+        if claude -p "$(cat "${prompt_file}")" \
+            --allowedTools "Edit,Write,Read,Glob,Grep,Bash" \
+            2>&1 | tee "${analysis_output}"; then
+            if commit_claude_changes "all-failures" "${analysis_output}"; then
+                ((fixed_tests++))
+            else
+                ((failed_fixes++))
             fi
-        done
+        else
+            ((failed_fixes++))
+        fi
     fi
 
     log_info "=============================================="
+    log_info "SUMMARY"
+    log_info "=============================================="
+    log_info "Total tests attempted: ${total_tests}"
+    log_info "Successfully fixed: ${fixed_tests}"
+    log_info "Failed to fix: ${failed_fixes}"
 
-    # Save the analysis for the PR
-    cp "${analysis_output}" "${REPO_ROOT}/.claude-analysis.txt" 2>/dev/null || true
+    # Show all commits made
+    log_info "Commits created:"
+    git log --oneline main..HEAD 2>/dev/null | while read -r line; do
+        log_info "  ${line}"
+    done
+
+    log_info "=============================================="
+
+    if [[ ${fixed_tests} -eq 0 ]]; then
+        log_error "No tests were fixed"
+        return 1
+    fi
 
     echo "${branch_name}"
 }
@@ -538,55 +700,15 @@ create_pull_request() {
 
     cd "${REPO_ROOT}"
 
-    # Check if there are any changes
-    if git diff --quiet && git diff --staged --quiet; then
-        log_warn "No changes were made by Claude Code"
+    # Check if there are any commits on this branch
+    local commit_count
+    commit_count=$(git rev-list --count main..HEAD 2>/dev/null || echo "0")
+    if [[ "${commit_count}" -eq 0 ]]; then
+        log_warn "No commits were made by Claude Code"
         return 1
     fi
 
-    # Read the analysis output if available
-    local analysis_summary=""
-    if [[ -f "${REPO_ROOT}/.claude-analysis.txt" ]]; then
-        # Extract just the summary portion (last part of the output)
-        analysis_summary=$(tail -100 "${REPO_ROOT}/.claude-analysis.txt" | head -80)
-        # Clean up the analysis file before committing
-        rm -f "${REPO_ROOT}/.claude-analysis.txt"
-    fi
-
-    # Stage only files that were modified or newly created by Claude
-    # First, stage all modified tracked files
-    git add -u
-
-    # Then, add only new files that weren't untracked before Claude ran
-    # (i.e., files created by Claude, not pre-existing untracked files)
-    local new_files_by_claude="${WORK_DIR}/new_files_by_claude.txt"
-    git status --porcelain | grep '^??' | cut -c4- | while read -r file; do
-        if ! grep -qxF "${file}" "${WORK_DIR}/untracked_before.txt" 2>/dev/null; then
-            echo "${file}"
-        fi
-    done > "${new_files_by_claude}"
-
-    if [[ -s "${new_files_by_claude}" ]]; then
-        log_info "Adding new files created by Claude:"
-        cat "${new_files_by_claude}"
-        while read -r file; do
-            git add "${file}"
-        done < "${new_files_by_claude}"
-    fi
-
-    git commit -m "$(cat <<'EOF'
-Fix nightly test failures
-
-This PR was automatically generated by Claude Code to fix failing
-nightly CI tests.
-
-See the workflow run for details on the original failures.
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>
-EOF
-)"
+    log_info "Branch has ${commit_count} commit(s)"
 
     # Set up the remote for the target repository if different from source
     local push_remote="origin"
@@ -598,7 +720,12 @@ EOF
     fi
 
     # Push the branch
+    log_info "Pushing branch to ${push_remote}..."
     git push "${push_remote}" "${branch_name}"
+
+    # Generate commit list for PR body
+    local commit_list
+    commit_list=$(git log --format="- **%s**%n  %b" main..HEAD 2>/dev/null | head -100)
 
     # Create the PR body
     local pr_body
@@ -606,26 +733,20 @@ EOF
 ## Summary
 
 This PR was automatically generated by Claude Code to fix failing nightly CI tests.
+Each test fix is in a separate commit with its own description.
 
 ### Original Failure
 
 - **Run ID**: ${GITHUB_RUN_ID}
 - **Run URL**: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
 
-### Analysis and Changes
+### Commits (${commit_count} fixes)
 
-<details>
-<summary>Claude Code Analysis</summary>
-
-\`\`\`
-${analysis_summary}
-\`\`\`
-
-</details>
+${commit_list}
 
 ### Testing
 
-Please review the changes and ensure the fixes are appropriate before merging.
+Please review each commit and ensure the fixes are appropriate before merging.
 The CI will run the full test suite to verify the fixes.
 
 ---
@@ -691,9 +812,9 @@ main() {
         exit 0
     fi
 
-    # Step 5: Invoke Claude Code
+    # Step 5: Invoke Claude Code (one commit per test)
     local branch_name
-    branch_name=$(invoke_claude_code "${context_file}")
+    branch_name=$(invoke_claude_code "${context_file}" "${failed_tests_file}")
 
     if [[ "${LOCAL_ONLY}" == "true" ]]; then
         log_info "Local only mode - skipping PR creation"
