@@ -392,6 +392,10 @@ invoke_claude_code() {
 
     cd "${REPO_ROOT}"
 
+    # Save list of untracked files before Claude runs
+    # So we can distinguish new files created by Claude from pre-existing untracked files
+    git status --porcelain | grep '^??' | cut -c4- > "${WORK_DIR}/untracked_before.txt"
+
     # Create a new branch for the fix
     git checkout -b "${branch_name}"
 
@@ -457,8 +461,27 @@ create_pull_request() {
         rm -f "${REPO_ROOT}/.claude-analysis.txt"
     fi
 
-    # Stage and commit changes
-    git add -A
+    # Stage only files that were modified or newly created by Claude
+    # First, stage all modified tracked files
+    git add -u
+
+    # Then, add only new files that weren't untracked before Claude ran
+    # (i.e., files created by Claude, not pre-existing untracked files)
+    local new_files_by_claude="${WORK_DIR}/new_files_by_claude.txt"
+    git status --porcelain | grep '^??' | cut -c4- | while read -r file; do
+        if ! grep -qxF "${file}" "${WORK_DIR}/untracked_before.txt" 2>/dev/null; then
+            echo "${file}"
+        fi
+    done > "${new_files_by_claude}"
+
+    if [[ -s "${new_files_by_claude}" ]]; then
+        log_info "Adding new files created by Claude:"
+        cat "${new_files_by_claude}"
+        while read -r file; do
+            git add "${file}"
+        done < "${new_files_by_claude}"
+    fi
+
     git commit -m "$(cat <<'EOF'
 Fix nightly test failures
 
