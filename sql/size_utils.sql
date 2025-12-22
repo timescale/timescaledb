@@ -600,3 +600,70 @@ $BODY$
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -------------End index size for hypertables -------
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.estimate_uncompressed_size(IN regclass, OUT tuples bigint, OUT relation_size bigint, OUT index_size bigint, OUT total_size bigint)
+AS $$
+DECLARE
+  v_compressed_chunk regclass;
+  v_uncompressed_chunk regclass;
+  v_index regclass;
+  v_fixed_column_size integer;
+  v_num_varlen_columns integer;
+  v_tuple_header integer;
+  v_tuple_data integer;
+  v_index_header integer;
+  v_index_size bigint;
+  v_columns integer;
+  v_varlen_query text:= '';
+  v_multiplier decimal:=1.15; -- multiplier to account for page header, fill factor and alignment padding
+  v_index_multiplier decimal:=1.25; -- multiplier to account for page header, fill factor and alignment padding
+BEGIN
+
+  v_compressed_chunk := $1;
+
+  SELECT relid INTO v_uncompressed_chunk FROM _timescaledb_catalog.compression_settings WHERE compress_relid = v_compressed_chunk;
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+
+  SELECT
+    count(*), sum(attlen) FILTER(WHERE attlen > 0), count(*) FILTER(WHERE attlen = -1)
+  FROM pg_attribute
+    INTO v_columns, v_fixed_column_size, v_num_varlen_columns
+  WHERE attrelid = v_uncompressed_chunk AND attnum > 0 AND NOT attisdropped;
+
+  -- header size = MAXALIGN(Header + NullBitmap) + MAXALIGN(Data)
+  v_tuple_header := 23; -- Heap tuple header
+  v_tuple_header := v_tuple_header + ((v_columns + 7) / 8); -- Null bitmap size
+  v_tuple_header := v_tuple_header + 7 & ~7; -- align to 8 bytes
+
+  v_tuple_data := v_fixed_column_size; -- Fixed-length column sizes
+  v_tuple_data := v_tuple_data + 7 & ~7; -- align to 8 bytes
+
+  IF v_num_varlen_columns > 0 THEN
+	  SELECT ' + (' || string_agg(format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod)), ' + ') || ')' FROM pg_attribute INTO v_varlen_query WHERE attrelid = v_uncompressed_chunk AND attnum > 0 AND NOT attisdropped AND attlen = -1;
+  END IF;
+
+  EXECUTE format('SELECT sum(_ts_meta_count) FROM %s', v_compressed_chunk) INTO tuples;
+  -- we can optimize the following query if all columns are fixed size
+  EXECUTE format('SELECT ((%s * (%s + %s)) %s) * %s FROM %s', tuples, v_tuple_header, v_tuple_data, v_varlen_query, v_multiplier, v_compressed_chunk) INTO relation_size;
+
+  index_size := 0;
+  FOR v_index, v_varlen_query, v_columns IN
+    SELECT
+      i.indexrelid::regclass,
+      (SELECT ' + (' || string_agg(format('sum(_timescaledb_functions.compressed_data_column_size(%I,NULL::%s))', attname, pg_catalog.format_type(atttypid, atttypmod)), ' + ' ORDER BY attnum) || ')' FROM pg_attribute att WHERE att.attrelid=i.indrelid AND attnum =ANY(i.indkey)),
+      array_length(i.indkey,1) FROM pg_index i
+    WHERE i.indrelid = v_uncompressed_chunk
+  LOOP
+    v_index_header := 8; -- Index tuple header
+
+    -- v_compressed_chunk is a regclass, which will be properly escaped when cast to `text`
+    EXECUTE format('SELECT ((%s * %s) %s) * %s FROM %s', tuples, v_index_header, v_varlen_query, v_index_multiplier, v_compressed_chunk) INTO v_index_size;
+    index_size := index_size + v_index_size;
+  END LOOP;
+
+  total_size := relation_size + index_size;
+END
+$$ LANGUAGE plpgsql SET search_path TO pg_catalog, pg_temp;
+

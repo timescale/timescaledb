@@ -67,6 +67,7 @@ jobs:
           telemetry
           transparent_decompress_chunk-*
           transparent_decompression-*
+          uncompressed_size
           vector_agg_byte
           vector_agg_filter
           vector_agg_groupagg

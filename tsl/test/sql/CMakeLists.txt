@@ -67,6 +67,7 @@ set(TEST_FILES
     split_chunk.sql
     transparent_decompression_join_index.sql
     unlogged.sql
+    uncompressed_size.sql
     vector_agg_functions.sql
     vector_agg_groupagg.sql
     vector_agg_param.sql
