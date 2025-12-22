@@ -427,15 +427,21 @@ invoke_claude_code() {
     local context_file="$1"
     local branch_name="claude-fix/nightly-$(date +%Y%m%d-%H%M%S)"
 
-    log_info "Invoking Claude Code to analyze failures..."
+    log_info "=============================================="
+    log_info "INVOKING CLAUDE CODE"
+    log_info "=============================================="
 
     cd "${REPO_ROOT}"
 
     # Save list of untracked files before Claude runs
     # So we can distinguish new files created by Claude from pre-existing untracked files
     git status --porcelain | grep '^??' | cut -c4- > "${WORK_DIR}/untracked_before.txt"
+    local untracked_count
+    untracked_count=$(wc -l < "${WORK_DIR}/untracked_before.txt")
+    log_info "Pre-existing untracked files: ${untracked_count}"
 
     # Create a new branch for the fix
+    log_info "Creating branch: ${branch_name}"
     git checkout -b "${branch_name}"
 
     # Create a prompt file for Claude Code
@@ -461,16 +467,63 @@ Important guidelines:
 After making changes, provide a summary of what was fixed.
 EOF
 
+    local prompt_size
+    prompt_size=$(wc -c < "${prompt_file}")
+    log_info "Prompt size: ${prompt_size} bytes"
+    log_info "Prompt file saved to: ${prompt_file}"
+
     # Run Claude Code with the prompt
     # Using -p for non-interactive mode with a prompt
     # --allowedTools ensures Claude can edit files
     local analysis_output="${WORK_DIR}/analysis_output.txt"
+    log_info "Starting Claude Code analysis..."
+    log_info "  Tools allowed: Edit, Write, Read, Glob, Grep, Bash"
+    log_info "  Output will be saved to: ${analysis_output}"
+    log_info "----------------------------------------------"
+
+    local start_time
+    start_time=$(date +%s)
+
     if ! claude -p "$(cat "${prompt_file}")" \
         --allowedTools "Edit,Write,Read,Glob,Grep,Bash" \
         2>&1 | tee "${analysis_output}"; then
         log_error "Claude Code failed to analyze the failures"
         return 1
     fi
+
+    local end_time duration
+    end_time=$(date +%s)
+    duration=$((end_time - start_time))
+    log_info "----------------------------------------------"
+    log_info "Claude Code analysis completed in ${duration} seconds"
+
+    # Show what files were modified
+    log_info "Checking for changes made by Claude..."
+    local modified_files new_files
+    modified_files=$(git diff --name-only 2>/dev/null | wc -l)
+    new_files=$(git status --porcelain | grep '^??' | cut -c4- | while read -r file; do
+        if ! grep -qxF "${file}" "${WORK_DIR}/untracked_before.txt" 2>/dev/null; then
+            echo "${file}"
+        fi
+    done | wc -l)
+
+    log_info "Files modified by Claude: ${modified_files}"
+    if [[ ${modified_files} -gt 0 ]]; then
+        log_info "Modified files:"
+        git diff --name-only 2>/dev/null | while read -r f; do log_info "  - ${f}"; done
+    fi
+
+    log_info "New files created by Claude: ${new_files}"
+    if [[ ${new_files} -gt 0 ]]; then
+        log_info "New files:"
+        git status --porcelain | grep '^??' | cut -c4- | while read -r file; do
+            if ! grep -qxF "${file}" "${WORK_DIR}/untracked_before.txt" 2>/dev/null; then
+                log_info "  - ${file}"
+            fi
+        done
+    fi
+
+    log_info "=============================================="
 
     # Save the analysis for the PR
     cp "${analysis_output}" "${REPO_ROOT}/.claude-analysis.txt" 2>/dev/null || true
