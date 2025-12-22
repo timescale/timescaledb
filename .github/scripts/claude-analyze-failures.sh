@@ -595,11 +595,29 @@ invoke_claude_code() {
     # Get list of unique failed tests
     local unique_tests_file="${WORK_DIR}/unique_failed_tests.txt"
     if [[ -f "${failed_tests_file}" && -s "${failed_tests_file}" ]]; then
+        log_info "Failed tests file contents:"
+        head -20 "${failed_tests_file}" >&2
+
         # Extract just the test names (remove job prefix and duplicates)
-        sed 's/^[^:]*: //' "${failed_tests_file}" | \
-            grep -oE 'test [^ ]+|[^ ]+ \.\.\. FAILED' | \
-            sed 's/test //; s/ \.\.\. FAILED//' | \
+        # Handle various formats:
+        #   "test foo ... FAILED"
+        #   "test foo ... FAILED (ignored)"  <- should be filtered already
+        #   "not ok 1 - test_name"
+        #   "not ok 51    + chunk_column_stats    1542 ms"  (TAP format with timestamp prefix)
+        #   "foo ... FAILED 123 ms"
+        sed 's/^[^:]*: //' "${failed_tests_file}" | tee "${WORK_DIR}/tests_without_prefix.txt" | \
+            sed 's/^[0-9T:.Z-]* //' | \
+            grep -oE 'test [^ ]+|^[^ ]+ \.\.\.|not ok [0-9]+\s+[+-]\s+[a-zA-Z0-9_]+|not ok [0-9]+ - [^ ]+' | \
+            sed 's/^test //; s/ \.\.\..*//; s/^not ok [0-9]* - //; s/^not ok [0-9]*\s*[+-]\s*//' | \
             sort -u > "${unique_tests_file}"
+
+        log_info "After extraction (tests_without_prefix.txt):"
+        head -20 "${WORK_DIR}/tests_without_prefix.txt" >&2
+
+        log_info "Unique tests extracted:"
+        cat "${unique_tests_file}" >&2
+    else
+        log_warn "Failed tests file is empty or missing: ${failed_tests_file}"
     fi
 
     local total_tests=0
