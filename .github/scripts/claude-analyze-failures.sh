@@ -107,34 +107,138 @@ check_prerequisites() {
     log_info "All prerequisites satisfied"
 }
 
+get_failed_jobs() {
+    log_info "Fetching failed jobs from run ${GITHUB_RUN_ID}..."
+
+    local jobs_file="${WORK_DIR}/failed_jobs.json"
+
+    # Get all jobs from the run, filter for failed ones (excluding ignored failures)
+    gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" \
+        --paginate \
+        --jq '.jobs[] | select(.conclusion == "failure") | {id: .id, name: .name}' \
+        > "${jobs_file}" 2>/dev/null || {
+        log_error "Failed to fetch jobs list"
+        return 1
+    }
+
+    if [[ ! -s "${jobs_file}" ]]; then
+        log_warn "No failed jobs found"
+        return 1
+    fi
+
+    local num_failed
+    num_failed=$(wc -l < "${jobs_file}")
+    log_info "Found ${num_failed} failed jobs"
+
+    echo "${jobs_file}"
+}
+
+download_job_logs() {
+    local jobs_file="$1"
+    log_info "Downloading logs for failed jobs..."
+
+    mkdir -p "${WORK_DIR}/logs"
+
+    while IFS= read -r job; do
+        [[ -z "${job}" ]] && continue
+
+        local job_id job_name
+        job_id=$(echo "$job" | jq -r '.id')
+        job_name=$(echo "$job" | jq -r '.name')
+
+        log_info "Downloading log for job: ${job_name}"
+        local safe_name
+        safe_name=$(echo "${job_name}" | tr '/' '_' | tr ' ' '_')
+
+        gh api "repos/${GITHUB_REPOSITORY}/actions/jobs/${job_id}/logs" \
+            > "${WORK_DIR}/logs/${safe_name}.log" 2>/dev/null || {
+            log_warn "Failed to download log for job: ${job_name}"
+            continue
+        }
+    done < "${jobs_file}"
+}
+
+extract_failed_tests() {
+    local jobs_file="$1"
+    log_info "Extracting failed tests from job logs..."
+
+    local failed_tests_file="${WORK_DIR}/failed_tests.txt"
+    > "${failed_tests_file}"
+
+    # Parse job logs for failed tests, excluding ignored ones
+    for log_file in "${WORK_DIR}/logs"/*.log; do
+        [[ -f "${log_file}" ]] || continue
+
+        local job_name
+        job_name=$(basename "${log_file}" .log)
+
+        # Extract lines with "FAILED" or "not ok", excluding "(ignored)" entries
+        grep -E "(FAILED|not ok)" "${log_file}" 2>/dev/null | \
+            grep -v "(ignored)" | \
+            while read -r line; do
+                echo "${job_name}: ${line}" >> "${failed_tests_file}"
+            done
+    done
+
+    if [[ -s "${failed_tests_file}" ]]; then
+        local num_failed
+        num_failed=$(wc -l < "${failed_tests_file}")
+        log_info "Found ${num_failed} failed tests (excluding ignored)"
+    else
+        log_warn "No failed tests found in logs"
+    fi
+
+    echo "${failed_tests_file}"
+}
+
 download_failure_artifacts() {
-    log_info "Downloading failure artifacts from run ${GITHUB_RUN_ID}..."
+    local jobs_file="$1"
+    log_info "Downloading failure artifacts for failed jobs..."
 
     mkdir -p "${WORK_DIR}/artifacts"
     cd "${WORK_DIR}/artifacts"
 
-    # Get list of artifacts from the failed run
-    # Use --paginate to handle pagination (default is 30 per page)
-    # Filter for artifacts that contain failure-related information
-    local artifacts_file="${WORK_DIR}/artifacts.json"
-    log_info "Fetching artifact list (with pagination)..."
+    # Build a pattern to match artifacts for failed jobs only
+    local failed_job_patterns=""
+    while IFS= read -r job; do
+        [[ -z "${job}" ]] && continue
+        local job_name
+        job_name=$(echo "$job" | jq -r '.name')
+        # Escape special regex characters in job name
+        local escaped_name
+        escaped_name=$(echo "${job_name}" | sed 's/[.[\*^$()+?{|]/\\&/g')
+        if [[ -n "${failed_job_patterns}" ]]; then
+            failed_job_patterns="${failed_job_patterns}|${escaped_name}"
+        else
+            failed_job_patterns="${escaped_name}"
+        fi
+    done < "${jobs_file}"
 
+    if [[ -z "${failed_job_patterns}" ]]; then
+        log_warn "No failed job patterns to match"
+        return 1
+    fi
+
+    log_info "Fetching artifact list (with pagination)..."
+    local artifacts_file="${WORK_DIR}/artifacts.json"
+
+    # Get artifacts that match failed jobs and are relevant types
     gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
         --paginate \
-        --jq '.artifacts[] | select(.name | test("Regression|PostgreSQL log|Stacktrace|TAP")) | {name: .name, id: .id}' \
+        --jq ".artifacts[] | select(.name | test(\"Regression|PostgreSQL log|Stacktrace|TAP\")) | select(.name | test(\"${failed_job_patterns}\")) | {name: .name, id: .id}" \
         > "${artifacts_file}" 2>/dev/null || {
         log_error "Failed to fetch artifacts list"
         return 1
     }
 
     if [[ ! -s "${artifacts_file}" ]]; then
-        log_warn "No failure artifacts found"
+        log_warn "No failure artifacts found for failed jobs"
         return 1
     fi
 
     local total_artifacts
     total_artifacts=$(wc -l < "${artifacts_file}")
-    log_info "Found ${total_artifacts} relevant artifacts"
+    log_info "Found ${total_artifacts} relevant artifacts for failed jobs"
 
     local count=0
     while IFS= read -r artifact; do
@@ -169,6 +273,7 @@ download_failure_artifacts() {
 }
 
 prepare_failure_context() {
+    local failed_tests_file="$1"
     log_info "Preparing failure context for Claude..."
 
     local context_file="${WORK_DIR}/failure_context.md"
@@ -178,8 +283,33 @@ prepare_failure_context() {
 
 ## Overview
 The nightly CI tests have failed. Below is a summary of the failures.
+Note: Tests marked as "(ignored)" have been excluded from this analysis.
 
 EOF
+
+    # Add failed jobs summary
+    echo "## Failed Jobs" >> "${context_file}"
+    echo "" >> "${context_file}"
+
+    if [[ -f "${WORK_DIR}/failed_jobs.json" ]]; then
+        echo '```' >> "${context_file}"
+        jq -r '.name' "${WORK_DIR}/failed_jobs.json" >> "${context_file}"
+        echo '```' >> "${context_file}"
+        echo "" >> "${context_file}"
+    fi
+
+    # Add failed tests from job logs (excluding ignored)
+    echo "## Failed Tests (from job logs)" >> "${context_file}"
+    echo "" >> "${context_file}"
+
+    if [[ -f "${failed_tests_file}" && -s "${failed_tests_file}" ]]; then
+        echo '```' >> "${context_file}"
+        cat "${failed_tests_file}" >> "${context_file}"
+        echo '```' >> "${context_file}"
+    else
+        echo "No specific failed tests identified in job logs." >> "${context_file}"
+    fi
+    echo "" >> "${context_file}"
 
     # Add regression diffs
     echo "## Regression Diffs" >> "${context_file}"
@@ -199,18 +329,22 @@ EOF
         fi
     done
 
-    # Add installcheck logs
-    echo "## Install Check Logs" >> "${context_file}"
+    # Add installcheck logs (failures only, excluding ignored)
+    echo "## Install Check Failures" >> "${context_file}"
     echo "" >> "${context_file}"
 
     find "${WORK_DIR}/artifacts" -name "installcheck.log" 2>/dev/null | while read -r file; do
         if [[ -s "${file}" ]]; then
-            echo "### $(basename "$(dirname "${file}")")" >> "${context_file}"
-            echo '```' >> "${context_file}"
-            # Extract failed tests
-            grep -E "(FAILED|failed|not ok)" "${file}" | head -100 >> "${context_file}" || true
-            echo '```' >> "${context_file}"
-            echo "" >> "${context_file}"
+            # Extract failed tests, excluding ignored ones
+            local failures
+            failures=$(grep -E "(FAILED|not ok)" "${file}" 2>/dev/null | grep -v "(ignored)" | head -100 || true)
+            if [[ -n "${failures}" ]]; then
+                echo "### $(basename "$(dirname "${file}")")" >> "${context_file}"
+                echo '```' >> "${context_file}"
+                echo "${failures}" >> "${context_file}"
+                echo '```' >> "${context_file}"
+                echo "" >> "${context_file}"
+            fi
         fi
     done
 
@@ -409,15 +543,27 @@ main() {
 
     mkdir -p "${WORK_DIR}"
 
-    # Download artifacts
-    if ! download_failure_artifacts; then
-        log_error "Failed to download failure artifacts"
+    # Step 1: Get list of failed jobs
+    local jobs_file
+    jobs_file=$(get_failed_jobs)
+    if [[ -z "${jobs_file}" || ! -s "${jobs_file}" ]]; then
+        log_error "No failed jobs found in run ${GITHUB_RUN_ID}"
         exit 1
     fi
 
-    # Prepare context
+    # Step 2: Download job logs and extract failed tests
+    download_job_logs "${jobs_file}"
+    local failed_tests_file
+    failed_tests_file=$(extract_failed_tests "${jobs_file}")
+
+    # Step 3: Download artifacts only for failed jobs
+    if ! download_failure_artifacts "${jobs_file}"; then
+        log_warn "Failed to download some failure artifacts, continuing with available data"
+    fi
+
+    # Step 4: Prepare context with failed tests info
     local context_file
-    context_file=$(prepare_failure_context)
+    context_file=$(prepare_failure_context "${failed_tests_file}")
 
     if [[ "${DRY_RUN}" == "true" ]]; then
         log_info "Dry run mode - skipping Claude Code invocation and PR creation"
@@ -426,7 +572,7 @@ main() {
         exit 0
     fi
 
-    # Invoke Claude Code
+    # Step 5: Invoke Claude Code
     local branch_name
     branch_name=$(invoke_claude_code "${context_file}")
 
@@ -438,7 +584,7 @@ main() {
         exit 0
     fi
 
-    # Create PR
+    # Step 6: Create PR
     local pr_url
     pr_url=$(create_pull_request "${branch_name}")
 
