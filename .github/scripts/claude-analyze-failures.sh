@@ -22,7 +22,7 @@
 #   CLAUDE_MODEL       - Model to use (default: claude-sonnet-4-20250514)
 #   MAX_ARTIFACTS      - Maximum number of artifacts to download (default: 10)
 #   DRY_RUN            - If set to "true", skip Claude invocation and PR creation
-#   LOCAL_ONLY         - If set to "true", run Claude to make local changes but skip PR creation
+#   SKIP_PR            - If set to "true", run Claude to make local changes but skip PR creation
 #   KEEP_WORK_DIR      - If set to "true", keep the work directory in /tmp for inspection
 #
 
@@ -35,7 +35,7 @@ WORK_DIR="${WORK_DIR:-/tmp/claude-fix-$$}"
 MAX_ARTIFACTS="${MAX_ARTIFACTS:-10}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-sonnet-4-20250514}"
 DRY_RUN="${DRY_RUN:-false}"
-LOCAL_ONLY="${LOCAL_ONLY:-false}"
+SKIP_PR="${SKIP_PR:-false}"
 KEEP_WORK_DIR="${KEEP_WORK_DIR:-false}"
 
 # GITHUB_REPOSITORY defaults to timescale/timescaledb
@@ -831,7 +831,7 @@ main() {
     log_info "Source repository: ${GITHUB_REPOSITORY:-not set}"
     log_info "Target repository: ${TARGET_REPOSITORY:-${GITHUB_REPOSITORY:-not set}}"
     log_info "Run ID: ${GITHUB_RUN_ID:-not set}"
-    log_info "Mode: $(if [[ "${DRY_RUN}" == "true" ]]; then echo "DRY_RUN"; elif [[ "${LOCAL_ONLY}" == "true" ]]; then echo "LOCAL_ONLY"; else echo "FULL"; fi)"
+    log_info "Mode: $(if [[ "${DRY_RUN}" == "true" ]]; then echo "DRY_RUN"; elif [[ "${SKIP_PR}" == "true" ]]; then echo "SKIP_PR"; else echo "FULL"; fi)"
 
     check_prerequisites
 
@@ -874,8 +874,8 @@ main() {
     local branch_name
     branch_name=$(invoke_claude_code "${context_file}" "${failed_tests_file}")
 
-    if [[ "${LOCAL_ONLY}" == "true" ]]; then
-        log_info "Local only mode - skipping PR creation"
+    if [[ "${SKIP_PR}" == "true" ]]; then
+        log_info "SKIP_PR mode - skipping PR creation"
         log_info "Changes are on branch: ${branch_name}"
         log_info "To review changes: git diff main...${branch_name}"
         log_info "To push manually: git push origin ${branch_name}"
