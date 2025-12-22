@@ -183,7 +183,7 @@ extract_failed_tests() {
     log_info "Extracting failed tests from job logs..."
 
     local failed_tests_file="${WORK_DIR}/failed_tests.txt"
-    > "${failed_tests_file}"
+    : > "${failed_tests_file}"
 
     # Parse job logs for failed tests, excluding ignored ones
     for log_file in "${WORK_DIR}/logs"/*.log; do
@@ -223,7 +223,7 @@ download_failure_artifacts() {
     # Artifact names are like: "Regression diff ubuntu-22.04 Debug 17.2"
     # We extract: OS (ubuntu-22.04), build type (Debug/Release), PG version (17.2)
     local match_patterns_file="${WORK_DIR}/artifact_match_patterns.txt"
-    > "${match_patterns_file}"
+    : > "${match_patterns_file}"
 
     while IFS= read -r job; do
         [[ -z "${job}" ]] && continue
@@ -233,17 +233,16 @@ download_failure_artifacts() {
 
         # Extract components from job name
         # Pattern: PG<version>[snapshot] <build_type> <os>
-        local pg_version os_name build_type
+        local pg_version os_name
         pg_version=$(echo "${job_name}" | grep -oE 'PG[0-9]+(\.[0-9]+)*' | sed 's/^PG//')
         os_name=$(echo "${job_name}" | grep -oE '(ubuntu-[0-9.]+-*[a-z]*|macos-[0-9]+-*[a-z]*|timescaledb-runner-[a-z0-9]+)')
-        build_type=$(echo "${job_name}" | grep -oE '(Debug|Release|RelWithDebInfo|ApacheOnly|ReleaseWithoutTelemetry)')
 
         # Build a pattern that matches artifacts for this job
         # Artifacts contain: os, build_type, and pg_version (without PG prefix)
         if [[ -n "${pg_version}" && -n "${os_name}" ]]; then
             # Escape dots in version for regex
             local escaped_version
-            escaped_version=$(echo "${pg_version}" | sed 's/\./\\./g')
+            escaped_version="${pg_version//./\\.}"
             echo "${os_name}.*${escaped_version}|${escaped_version}.*${os_name}" >> "${match_patterns_file}"
             log_info "  -> Match pattern: ${os_name} + ${pg_version}"
         fi
@@ -272,7 +271,7 @@ download_failure_artifacts() {
     }
 
     # Filter artifacts matching our failed jobs
-    > "${artifacts_file}"
+    : > "${artifacts_file}"
     while IFS= read -r artifact; do
         [[ -z "${artifact}" ]] && continue
         local name
@@ -341,50 +340,64 @@ Note: Tests marked as "(ignored)" have been excluded from this analysis.
 EOF
 
     # Add failed jobs summary
-    echo "## Failed Jobs" >> "${context_file}"
-    echo "" >> "${context_file}"
+    {
+        echo "## Failed Jobs"
+        echo ""
+    } >> "${context_file}"
 
     if [[ -f "${WORK_DIR}/failed_jobs.json" ]]; then
-        echo '```' >> "${context_file}"
-        jq -r '.name' "${WORK_DIR}/failed_jobs.json" >> "${context_file}"
-        echo '```' >> "${context_file}"
-        echo "" >> "${context_file}"
+        {
+            echo '```'
+            jq -r '.name' "${WORK_DIR}/failed_jobs.json"
+            echo '```'
+            echo ""
+        } >> "${context_file}"
     fi
 
     # Add failed tests from job logs (excluding ignored)
-    echo "## Failed Tests (from job logs)" >> "${context_file}"
-    echo "" >> "${context_file}"
+    {
+        echo "## Failed Tests (from job logs)"
+        echo ""
+    } >> "${context_file}"
 
     if [[ -f "${failed_tests_file}" && -s "${failed_tests_file}" ]]; then
-        echo '```' >> "${context_file}"
-        cat "${failed_tests_file}" >> "${context_file}"
-        echo '```' >> "${context_file}"
+        {
+            echo '```'
+            cat "${failed_tests_file}"
+            echo '```'
+        } >> "${context_file}"
     else
         echo "No specific failed tests identified in job logs." >> "${context_file}"
     fi
     echo "" >> "${context_file}"
 
     # Add regression diffs
-    echo "## Regression Diffs" >> "${context_file}"
-    echo "" >> "${context_file}"
+    {
+        echo "## Regression Diffs"
+        echo ""
+    } >> "${context_file}"
 
     find "${WORK_DIR}/artifacts" -name "regression.log" -o -name "*.diffs" 2>/dev/null | while read -r file; do
         if [[ -s "${file}" ]]; then
-            echo "### $(basename "$(dirname "${file}")")" >> "${context_file}"
-            echo '```diff' >> "${context_file}"
-            head -500 "${file}" >> "${context_file}"
-            if [[ $(wc -l < "${file}") -gt 500 ]]; then
-                echo "" >> "${context_file}"
-                echo "... (truncated, ${file} has $(wc -l < "${file}") lines total)" >> "${context_file}"
-            fi
-            echo '```' >> "${context_file}"
-            echo "" >> "${context_file}"
+            {
+                echo "### $(basename "$(dirname "${file}")")"
+                echo '```diff'
+                head -500 "${file}"
+                if [[ $(wc -l < "${file}") -gt 500 ]]; then
+                    echo ""
+                    echo "... (truncated, ${file} has $(wc -l < "${file}") lines total)"
+                fi
+                echo '```'
+                echo ""
+            } >> "${context_file}"
         fi
     done
 
     # Add installcheck logs (failures only, excluding ignored)
-    echo "## Install Check Failures" >> "${context_file}"
-    echo "" >> "${context_file}"
+    {
+        echo "## Install Check Failures"
+        echo ""
+    } >> "${context_file}"
 
     find "${WORK_DIR}/artifacts" -name "installcheck.log" 2>/dev/null | while read -r file; do
         if [[ -s "${file}" ]]; then
@@ -392,43 +405,53 @@ EOF
             local failures
             failures=$(grep -E "(FAILED|not ok)" "${file}" 2>/dev/null | grep -v "(ignored)" | head -100 || true)
             if [[ -n "${failures}" ]]; then
-                echo "### $(basename "$(dirname "${file}")")" >> "${context_file}"
-                echo '```' >> "${context_file}"
-                echo "${failures}" >> "${context_file}"
-                echo '```' >> "${context_file}"
-                echo "" >> "${context_file}"
+                {
+                    echo "### $(basename "$(dirname "${file}")")"
+                    echo '```'
+                    echo "${failures}"
+                    echo '```'
+                    echo ""
+                } >> "${context_file}"
             fi
         fi
     done
 
     # Add stack traces if present
-    echo "## Stack Traces" >> "${context_file}"
-    echo "" >> "${context_file}"
+    {
+        echo "## Stack Traces"
+        echo ""
+    } >> "${context_file}"
 
     find "${WORK_DIR}/artifacts" -name "stacktrace.log" 2>/dev/null | while read -r file; do
         if [[ -s "${file}" ]]; then
-            echo "### $(basename "$(dirname "${file}")")" >> "${context_file}"
-            echo '```' >> "${context_file}"
-            head -200 "${file}" >> "${context_file}"
-            echo '```' >> "${context_file}"
-            echo "" >> "${context_file}"
+            {
+                echo "### $(basename "$(dirname "${file}")")"
+                echo '```'
+                head -200 "${file}"
+                echo '```'
+                echo ""
+            } >> "${context_file}"
         fi
     done
 
     # Add PostgreSQL log excerpts (errors only)
-    echo "## PostgreSQL Errors" >> "${context_file}"
-    echo "" >> "${context_file}"
+    {
+        echo "## PostgreSQL Errors"
+        echo ""
+    } >> "${context_file}"
 
     find "${WORK_DIR}/artifacts" -name "postmaster.*" 2>/dev/null | while read -r file; do
         if [[ -s "${file}" ]]; then
             local errors
             errors=$(grep -E "(ERROR|FATAL|PANIC)" "${file}" 2>/dev/null | head -50 || true)
             if [[ -n "${errors}" ]]; then
-                echo "### $(basename "$(dirname "${file}")")" >> "${context_file}"
-                echo '```' >> "${context_file}"
-                echo "${errors}" >> "${context_file}"
-                echo '```' >> "${context_file}"
-                echo "" >> "${context_file}"
+                {
+                    echo "### $(basename "$(dirname "${file}")")"
+                    echo '```'
+                    echo "${errors}"
+                    echo '```'
+                    echo ""
+                } >> "${context_file}"
             fi
         fi
     done
@@ -611,7 +634,8 @@ $(cat "${context_file}")
 invoke_claude_code() {
     local context_file="$1"
     local failed_tests_file="$2"
-    local branch_name="claude-fix/nightly-$(date +%Y%m%d-%H%M%S)"
+    local branch_name
+    branch_name="claude-fix/nightly-$(date +%Y%m%d-%H%M%S)"
 
     log_info "=============================================="
     log_info "INVOKING CLAUDE CODE"
