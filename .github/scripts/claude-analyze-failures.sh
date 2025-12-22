@@ -455,19 +455,19 @@ commit_claude_changes() {
 
     # Stage modified files
     if [[ -n "${modified_files}" ]]; then
-        echo "${modified_files}" | xargs git add
+        echo "${modified_files}" | xargs git add >&2
     fi
 
     # Stage new files created by Claude
     if [[ -n "${new_files_list}" ]]; then
-        echo "${new_files_list}" | xargs git add
+        echo "${new_files_list}" | xargs git add >&2
     fi
 
     # Extract a summary from Claude's output for the commit message
     local summary
     summary=$(tail -50 "${analysis_output}" | head -30 | tr '\n' ' ' | cut -c1-200)
 
-    # Create commit with descriptive message
+    # Create commit with descriptive message (redirect to stderr to avoid capturing in return value)
     git commit -m "$(cat <<EOF
 Fix test: ${test_name}
 
@@ -477,7 +477,7 @@ ${summary}...
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 EOF
-)"
+)" >&2
 
     log_info "Committed fix for: ${test_name}"
     return 0
@@ -602,7 +602,7 @@ invoke_claude_code() {
 
     # Create a new branch for the fix
     log_info "Creating branch: ${branch_name}"
-    git checkout -b "${branch_name}"
+    git checkout -b "${branch_name}" >&2
 
     # Get list of unique failed tests
     local unique_tests_file="${WORK_DIR}/unique_failed_tests.txt"
@@ -711,7 +711,7 @@ EOF
     log_info "Commits created:"
     git log --oneline main..HEAD 2>/dev/null | while read -r line; do
         log_info "  ${line}"
-    done
+    done >&2
 
     log_info "=============================================="
 
