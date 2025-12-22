@@ -781,10 +781,6 @@ create_pull_request() {
         git remote set-url origin "${origin_url}" 2>/dev/null || true
     fi
 
-    # Debug: show remotes (hide tokens)
-    log_info "Git remotes:"
-    git remote -v 2>&1 | sed 's/x-access-token:[^@]*@/x-access-token:***@/g' >&2
-
     # Debug: show current branch and commits
     log_info "Current branch: $(git branch --show-current)"
     log_info "Commits to push (${BASE_BRANCH}..HEAD):"
