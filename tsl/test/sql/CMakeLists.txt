@@ -65,6 +65,7 @@ set(TEST_FILES
     size_utils_tsl.sql
     skip_scan.sql
     split_chunk.sql
+    tigerlake_test.sql
     transparent_decompression_join_index.sql
     unlogged.sql
     vector_agg_functions.sql
