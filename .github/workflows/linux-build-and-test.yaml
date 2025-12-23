@@ -1,25 +1,26 @@
 name: Regression
 "on":
+  workflow_dispatch:
   schedule:
     # run daily 0:00 on main branch
     # Since we use the date as a part of the cache key to ensure no
     # stale cache entries hiding build failures we need to make sure
     # we have a cache entry present before workflows that depend on cache
     # are run.
-    - cron: '0 0 * * *'
+    - cron: "0 0 * * *"
   push:
     branches:
       - main
       - ?.*.x
       - trigger/regression
     paths-ignore:
-      - '**.md'
-      - 'LICENSE*'
+      - "**.md"
+      - "LICENSE*"
       - NOTICE
   pull_request:
     paths-ignore:
-      - '**.md'
-      - 'LICENSE*'
+      - "**.md"
+      - "LICENSE*"
       - NOTICE
 jobs:
   matrixbuilder:
@@ -27,19 +28,19 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-    - name: Checkout source code
-      uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
-    - name: Build matrix
-      id: set-matrix
-      run: |
-        if [[ "${{ github.event_name }}" == "pull_request" ]] ;
-        then
-          git fetch origin ${{ github.base_ref }}:base
-          .github/gh_matrix_builder.py ${{ github.event_name }} base
-        else
-          .github/gh_matrix_builder.py ${{ github.event_name }}
-        fi
+      - name: Build matrix
+        id: set-matrix
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]] ;
+          then
+            git fetch origin ${{ github.base_ref }}:base
+            .github/gh_matrix_builder.py ${{ github.event_name }} base
+          else
+            .github/gh_matrix_builder.py ${{ github.event_name }}
+          fi
 
   regress:
     # Change the JOB_NAME variable below when changing the name.
@@ -68,290 +69,290 @@ jobs:
       fail-fast: false
 
     steps:
-    - name: Install Linux Dependencies
-      if: runner.os == 'Linux'
-      run: |
-        # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
-        # If needed, install them before opening the core dump.
-        sudo apt-get update
-        sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
-          libtest-most-perl pkgconf icu-devtools faketime jq ${{ matrix.extra_packages }}
+      - name: Install Linux Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
+          # If needed, install them before opening the core dump.
+          sudo apt-get update
+          sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
+            libtest-most-perl pkgconf icu-devtools faketime jq ${{ matrix.extra_packages }}
 
-    - name: Install macOS Dependencies
-      if: runner.os == 'macOS'
-      run: |
-        # Disable the automatic dependency upgrade executed by `brew install`
-        # https://docs.brew.sh/Manpage#install-options-formulacask-
-        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gawk
-        brew --prefix openssl@3
-        # Install perl modules after last Homebew call, since Homebrew can change the perl version
-        sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
-        sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
+      - name: Install macOS Dependencies
+        if: runner.os == 'macOS'
+        run: |
+          # Disable the automatic dependency upgrade executed by `brew install`
+          # https://docs.brew.sh/Manpage#install-options-formulacask-
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gawk
+          brew --prefix openssl@3
+          # Install perl modules after last Homebew call, since Homebrew can change the perl version
+          sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
+          sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
 
-    - name: Setup macOS coredump directory
-      if: runner.os == 'macOS'
-      run: sudo chmod 777 /cores
+      - name: Setup macOS coredump directory
+        if: runner.os == 'macOS'
+        run: sudo chmod 777 /cores
 
-    - name: Checkout TimescaleDB
-      uses: actions/checkout@v4
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
 
-    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
-    # ages after the original problem.
-    - name: Get date for build caching
-      id: get-date
-      run: |
-        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+      # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+      # ages after the original problem.
+      - name: Get date for build caching
+        id: get-date
+        run: |
+          echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
 
-    # on macOS the path used is depending on the runner version leading to cache failure
-    # when the runner version changes so we extract runner version from path and add it
-    # as cache suffix
-    - name: Cache suffix
-      if: runner.os == 'macOS'
-      run: echo "CACHE_SUFFIX=-${ImageVersion}" >> $GITHUB_ENV
+      # on macOS the path used is depending on the runner version leading to cache failure
+      # when the runner version changes so we extract runner version from path and add it
+      # as cache suffix
+      - name: Cache suffix
+        if: runner.os == 'macOS'
+        run: echo "CACHE_SUFFIX=-${ImageVersion}" >> $GITHUB_ENV
 
-    # we cache the build directory instead of the install directory here
-    # because extension installation will write files to install directory
-    # leading to a tainted cache
-    - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
-      id: cache-postgresql
-      if: matrix.snapshot != 'snapshot' && runner.os == 'Linux'
-      uses: actions/cache@v4
-      with:
-        path: ~/${{ env.PG_SRC_DIR }}
-        key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
-          -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
+      # we cache the build directory instead of the install directory here
+      # because extension installation will write files to install directory
+      # leading to a tainted cache
+      - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
+        id: cache-postgresql
+        if: matrix.snapshot != 'snapshot' && runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: ~/${{ env.PG_SRC_DIR }}
+          key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
+            -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
 
-    - name: Build PostgreSQL ${{ matrix.pg }}${{ matrix.snapshot }}
-      if: steps.cache-postgresql.outputs.cache-hit != 'true'
-      run: |
-        if [ "${{ matrix.snapshot }}" = "snapshot" ]; then
-          wget -q -O postgresql.tar.bz2 \
-            https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
-        else
-          wget -q -O postgresql.tar.bz2 \
-            https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
-        fi
-        mkdir -p ~/$PG_SRC_DIR
-        tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
-        cd ~/$PG_SRC_DIR
-        ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
-          --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
-        make -j $(getconf _NPROCESSORS_ONLN)
-        for ext in ${{ matrix.pg_extensions }}; do
-          make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
-        done
+      - name: Build PostgreSQL ${{ matrix.pg }}${{ matrix.snapshot }}
+        if: steps.cache-postgresql.outputs.cache-hit != 'true'
+        run: |
+          if [ "${{ matrix.snapshot }}" = "snapshot" ]; then
+            wget -q -O postgresql.tar.bz2 \
+              https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
+          else
+            wget -q -O postgresql.tar.bz2 \
+              https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
+          fi
+          mkdir -p ~/$PG_SRC_DIR
+          tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
+          cd ~/$PG_SRC_DIR
+          ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
+            --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
+          make -j $(getconf _NPROCESSORS_ONLN)
+          for ext in ${{ matrix.pg_extensions }}; do
+            make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
+          done
 
-    - name: Install PostgreSQL ${{ matrix.pg }}
-      run: |
-        cd ~/$PG_SRC_DIR
-        make install
-        for ext in ${{ matrix.pg_extensions }}; do
-          make -C contrib/${ext} install
-        done
-        echo "$HOME/$PG_INSTALL_DIR/bin" >> "${GITHUB_PATH}"
+      - name: Install PostgreSQL ${{ matrix.pg }}
+        run: |
+          cd ~/$PG_SRC_DIR
+          make install
+          for ext in ${{ matrix.pg_extensions }}; do
+            make -C contrib/${ext} install
+          done
+          echo "$HOME/$PG_INSTALL_DIR/bin" >> "${GITHUB_PATH}"
 
-    - name: Upload config.log
-      if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/upload-artifact@v4
-      with:
-        name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: ~/${{ env.PG_SRC_DIR }}/config.log
+      - name: Upload config.log
+        if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+          path: ~/${{ env.PG_SRC_DIR }}/config.log
 
-    - name: Test telemetry without OpenSSL
-      if: github.event_name != 'pull_request' && runner.os == 'Linux' && matrix.build_type == 'Debug'
-      run: |
-        BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
-          -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
-          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF \
-          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j $(getconf _NPROCESSORS_ONLN) -C nossl
-        make -C nossl install
-        make -C nossl regresscheck TESTS=telemetry
+      - name: Test telemetry without OpenSSL
+        if: github.event_name != 'pull_request' && runner.os == 'Linux' && matrix.build_type == 'Debug'
+        run: |
+          BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
+            -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
+            ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF \
+            -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
+          make -j $(getconf _NPROCESSORS_ONLN) -C nossl
+          make -C nossl install
+          make -C nossl regresscheck TESTS=telemetry
 
-    - name: Build TimescaleDB
-      run: |
-        # Show the actual architecture this CI runner has
-        "$CC" -march=native -E -v - </dev/null 2>&1 | grep cc1
+      - name: Build TimescaleDB
+        run: |
+          # Show the actual architecture this CI runner has
+          "$CC" -march=native -E -v - </dev/null 2>&1 | grep cc1
 
-        ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
-          -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
-          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
-          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j $(getconf _NPROCESSORS_ONLN) -C build
-        make -C build install
+          ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
+            -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
+            ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
+            -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
+          make -j $(getconf _NPROCESSORS_ONLN) -C build
+          make -C build install
 
-    - name: Upload CMake Logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: CMake Logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: |
+      - name: Upload CMake Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: CMake Logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+          path: |
             build/CMakeCache.txt
             build/CMakeFiles/CMakeConfigureLog.yaml
             build/CMakeFiles/CMakeError.log
             build/CMakeFiles/CMakeOutput.log
             build/compile_commands.json
 
-    - name: Check exported symbols
-      run: ./build/scripts/export_prefix_check.sh
+      - name: Check exported symbols
+        run: ./build/scripts/export_prefix_check.sh
 
-    - name: make installcheck
-      if: matrix.installcheck
-      run: |
-        set -o pipefail
-        make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
-            SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
-            | tee installcheck.log
+      - name: make installcheck
+        if: matrix.installcheck
+        run: |
+          set -o pipefail
+          make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
+              SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
+              | tee installcheck.log
 
-    - name: pginstallcheck
-      if: matrix.pginstallcheck
-      run: make -C build pginstallcheck
+      - name: pginstallcheck
+        if: matrix.pginstallcheck
+        run: make -C build pginstallcheck
 
-    - name: coverage
-      if: matrix.coverage
-      run: make -j $(getconf _NPROCESSORS_ONLN) -k -C build coverage
+      - name: coverage
+        if: matrix.coverage
+        run: make -j $(getconf _NPROCESSORS_ONLN) -k -C build coverage
 
-    - name: Send coverage report to Codecov.io app
-      if: matrix.coverage
-      uses: codecov/codecov-action@v5
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        files: ./build/coverage/timescaledb-coverage.info
+      - name: Send coverage report to Codecov.io app
+        if: matrix.coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./build/coverage/timescaledb-coverage.info
 
-    - name: Save LCOV coverage report
-      if: matrix.coverage
-      uses: actions/upload-artifact@v4
-      with:
-        name: LCOV coverage report ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: ./build/coverage/lcov-report
+      - name: Save LCOV coverage report
+        if: matrix.coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: LCOV coverage report ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+          path: ./build/coverage/lcov-report
 
-    - name: Show regression diffs
-      if: always()
-      id: collectlogs
-      run: |
-        find . -name regression.diffs -exec cat {} + > regression.log
+      - name: Show regression diffs
+        if: always()
+        id: collectlogs
+        run: |
+          find . -name regression.diffs -exec cat {} + > regression.log
 
-        if [[ "${{ runner.os }}" == "Linux" ]] ; then
-          # wait in case there are in-progress coredumps
-          sleep 10
-          if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
-          # print OOM killer information
-          sudo journalctl --system -q --facility=kern --grep "Killed process" || true
-        elif [[ "${{ runner.os }}" == "macOS" ]] ; then
-           if [ $(find /cores -type f | wc -l) -gt 0 ]; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
-        fi
-        if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
-        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
-        cat regression.log
+          if [[ "${{ runner.os }}" == "Linux" ]] ; then
+            # wait in case there are in-progress coredumps
+            sleep 10
+            if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
+            # print OOM killer information
+            sudo journalctl --system -q --facility=kern --grep "Killed process" || true
+          elif [[ "${{ runner.os }}" == "macOS" ]] ; then
+             if [ $(find /cores -type f | wc -l) -gt 0 ]; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
+          fi
+          if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
+          grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
+          cat regression.log
 
-    - name: Save regression diffs
-      if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v4
-      with:
-        name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: |
-          regression.log
-          installcheck.log
+      - name: Save regression diffs
+        if: always() && steps.collectlogs.outputs.regression_diff == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+          path: |
+            regression.log
+            installcheck.log
 
-    - name: Save PostgreSQL log
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: postmaster.*
+      - name: Save PostgreSQL log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+          path: postmaster.*
 
-    - name: Stack trace Linux
-      if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'Linux'
-      run: |
-        sudo coredumpctl debug --debugger=gdb --debugger-arguments='' <<<"
-          set verbose on
-          set trace-commands on
-          show debug-file-directory
-          printf "'"'"query = '%s'\n\n"'"'", debug_query_string
-          bt full
+      - name: Stack trace Linux
+        if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'Linux'
+        run: |
+          sudo coredumpctl debug --debugger=gdb --debugger-arguments='' <<<"
+            set verbose on
+            set trace-commands on
+            show debug-file-directory
+            printf "'"'"query = '%s'\n\n"'"'", debug_query_string
+            bt full
 
-          # We try to find ExceptionalCondition frame to print the failed condition
-          # for searching in logs.
-          frame function ExceptionalCondition
-          printf "'"'"condition = '%s'\n"'"'", conditionName
+            # We try to find ExceptionalCondition frame to print the failed condition
+            # for searching in logs.
+            frame function ExceptionalCondition
+            printf "'"'"condition = '%s'\n"'"'", conditionName
 
-          # Hopefully now we should be around the failed assertion, print where
-          # we are.
-          up 1
-          list
-          info args
-          info locals
-        " 2>&1 | tee -a stacktrace.log
-        ./scripts/bundle_coredumps.sh
+            # Hopefully now we should be around the failed assertion, print where
+            # we are.
+            up 1
+            list
+            info args
+            info locals
+          " 2>&1 | tee -a stacktrace.log
+          ./scripts/bundle_coredumps.sh
 
-    - name: Stack trace macOS
-      if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'macOS'
-      run: |
-        ~/$PG_SRC_DIR/src/tools/ci/cores_backtrace.sh macos /cores
+      - name: Stack trace macOS
+        if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'macOS'
+        run: |
+          ~/$PG_SRC_DIR/src/tools/ci/cores_backtrace.sh macos /cores
 
-    - name: Coredumps
-      if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v4
-      with:
-        name: Coredumps ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: coredumps
+      - name: Coredumps
+        if: always() && steps.collectlogs.outputs.coredumps == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Coredumps ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+          path: coredumps
 
-    - name: Save stacktraces
-      if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v4
-      with:
-        name: Stacktraces ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: stacktrace.log
+      - name: Save stacktraces
+        if: always() && steps.collectlogs.outputs.coredumps == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stacktraces ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+          path: stacktrace.log
 
-    - name: Save TAP test logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: |
-          build/test/tmp_check/log
-          build/tsl/test/tmp_check/log
+      - name: Save TAP test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+          path: |
+            build/test/tmp_check/log
+            build/tsl/test/tmp_check/log
 
-    - name: Check that no new internal program errors are introduced
-      # We collect the same messages when uploading to the CI checks database,
-      # but it runs on different conditions (not on forks and not on flaky check),
-      # and requires different data (job date), so we do it separately here.
-      # The jq --exit-code option is broken with select() on jq-1.6 which we see
-      # on some machines, so we use grep instead (see https://github.com/jqlang/jq/issues/1139).
-      if: always() && contains(matrix.name, 'Flaky')
-      run: |
-        ! jq 'select(
-                (.state_code == "XX000" and .error_severity != "LOG")
-                or (.message | test("resource was not closed"))
-            ) | [.message, .func_name,  .statement] | @tsv
-        ' -r postmaster.json | grep .
+      - name: Check that no new internal program errors are introduced
+        # We collect the same messages when uploading to the CI checks database,
+        # but it runs on different conditions (not on forks and not on flaky check),
+        # and requires different data (job date), so we do it separately here.
+        # The jq --exit-code option is broken with select() on jq-1.6 which we see
+        # on some machines, so we use grep instead (see https://github.com/jqlang/jq/issues/1139).
+        if: always() && contains(matrix.name, 'Flaky')
+        run: |
+          ! jq 'select(
+                  (.state_code == "XX000" and .error_severity != "LOG")
+                  or (.message | test("resource was not closed"))
+              ) | [.message, .func_name,  .statement] | @tsv
+          ' -r postmaster.json | grep .
 
-    - name: Upload test results to the database
-      # Don't upload the results of the flaky check, because the db schema only
-      # supports running one test once per job.
-      if: always() && matrix.installcheck && (! contains(matrix.name, 'Flaky'))
-      env:
-        # GitHub Actions allow you neither to use the env context for the job name,
-        # nor to access the job name from the step context, so we have to
-        # duplicate it to work around this nonsense.
-        JOB_NAME: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
-        CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
-        GITHUB_EVENT_NAME: ${{ github.event_name }}
-        GITHUB_REF_NAME: ${{ github.ref_name }}
-        GITHUB_REPOSITORY: ${{ github.repository }}
-        GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-        GITHUB_RUN_NUMBER: ${{ github.run_number }}
-        JOB_STATUS: ${{ job.status }}
-      run: |
-        if [[ "${{ github.event_name }}" == "pull_request" ]] ;
-        then
-            GITHUB_PR_NUMBER="${{ github.event.number }}"
-        else
-            GITHUB_PR_NUMBER=0
-        fi
-        export GITHUB_PR_NUMBER
-        scripts/upload_ci_stats.sh
+      - name: Upload test results to the database
+        # Don't upload the results of the flaky check, because the db schema only
+        # supports running one test once per job.
+        if: always() && matrix.installcheck && (! contains(matrix.name, 'Flaky'))
+        env:
+          # GitHub Actions allow you neither to use the env context for the job name,
+          # nor to access the job name from the step context, so we have to
+          # duplicate it to work around this nonsense.
+          JOB_NAME: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
+          CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]] ;
+          then
+              GITHUB_PR_NUMBER="${{ github.event.number }}"
+          else
+              GITHUB_PR_NUMBER=0
+          fi
+          export GITHUB_PR_NUMBER
+          scripts/upload_ci_stats.sh
 
   # Analyze test failures with Claude Code and create a fix PR
   # This job only runs on scheduled (nightly) builds when tests fail
@@ -368,45 +369,45 @@ jobs:
       pull-requests: write
 
     steps:
-    - name: Check for API key
-      id: check-key
-      run: |
-        if [[ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]]; then
-          echo "ANTHROPIC_API_KEY secret is not configured, skipping Claude analysis"
-          echo "skip=true" >> $GITHUB_OUTPUT
-        else
-          echo "skip=false" >> $GITHUB_OUTPUT
-        fi
+      - name: Check for API key
+        id: check-key
+        run: |
+          if [[ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]]; then
+            echo "ANTHROPIC_API_KEY secret is not configured, skipping Claude analysis"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
 
-    - name: Checkout TimescaleDB
-      if: steps.check-key.outputs.skip != 'true'
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout TimescaleDB
+        if: steps.check-key.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Configure Git
-      if: steps.check-key.outputs.skip != 'true'
-      run: |
-        git config user.name "timescale-automation"
-        git config user.email "123763385+github-actions[bot]@users.noreply.github.com"
+      - name: Configure Git
+        if: steps.check-key.outputs.skip != 'true'
+        run: |
+          git config user.name "timescale-automation"
+          git config user.email "123763385+github-actions[bot]@users.noreply.github.com"
 
-    - name: Setup Node.js
-      if: steps.check-key.outputs.skip != 'true'
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
+      - name: Setup Node.js
+        if: steps.check-key.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
-    - name: Install Claude Code
-      if: steps.check-key.outputs.skip != 'true'
-      run: |
-        npm install -g @anthropic-ai/claude-code
+      - name: Install Claude Code
+        if: steps.check-key.outputs.skip != 'true'
+        run: |
+          npm install -g @anthropic-ai/claude-code
 
-    - name: Analyze failures and create fix PR
-      if: steps.check-key.outputs.skip != 'true'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        GITHUB_REPOSITORY: ${{ github.repository }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
-      run: |
-        .github/scripts/claude-analyze-failures.sh
+      - name: Analyze failures and create fix PR
+        if: steps.check-key.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          .github/scripts/claude-analyze-failures.sh
