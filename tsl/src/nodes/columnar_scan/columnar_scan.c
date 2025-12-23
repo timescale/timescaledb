@@ -2588,7 +2588,41 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 					TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_EQ_OPR);
 
 					if (op->opno != tce->eq_opr)
-						continue;
+					{
+						/* Issue #9066: check if our OpExpr is still an equality (Var = Const)
+						 * for Var and Const of different types
+						 */
+#if PG18_GE
+						List *opinfos = get_op_index_interpretation(op->opno);
+#else
+						List *opinfos = get_op_btree_interpretation(op->opno);
+#endif
+						ListCell *lc;
+						bool equality = false;
+						foreach (lc, opinfos)
+						{
+#if PG18_GE
+							OpIndexInterpretation *opinfo = (OpIndexInterpretation *) lfirst(lc);
+							if (opinfo->cmptype == COMPARE_EQ)
+#else
+							OpBtreeInterpretation *opinfo = (OpBtreeInterpretation *) lfirst(lc);
+							if (opinfo->strategy == BTEqualStrategyNumber)
+#endif
+							{
+								Oid mixed_type_eqop = get_opfamily_member(opinfo->opfamily_id,
+																		  var->vartype,
+																		  exprType((Node *) other),
+																		  BTEqualStrategyNumber);
+								if (op->opno == mixed_type_eqop)
+								{
+									equality = true;
+									break;
+								}
+							}
+						}
+						if (!equality)
+							continue;
+					}
 
 					if (bms_is_member(var->varattno, info->chunk_segmentby_attnos))
 						segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
