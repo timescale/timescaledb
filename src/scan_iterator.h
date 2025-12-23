@@ -37,6 +37,24 @@ typedef struct ScanIterator
 		}, \
 	}
 
+#define ts_scan_iterator_create_with_catalog_snapshot(catalog_table_id, lock_mode, mctx)             \
+	(ScanIterator)                                                                                   \
+	{                                                                                                \
+		.ctx = {                                                                                   \
+			.internal = {													\
+				.ended = true,											\
+				.scan_mcxt = CurrentMemoryContext,						\
+			},															\
+			.table = catalog_get_table_id(ts_catalog_get(), catalog_table_id),                     \
+			.nkeys = 0,                                                                            \
+			.scandirection = ForwardScanDirection,                                                 \
+			.lockmode = lock_mode,                                                                 \
+			.result_mctx = mctx,                                                                   \
+			.flags = SCANNER_F_NOFLAGS,									\
+			.use_catalog_snapshot = true,						\
+		}, \
+	}
+
 static inline TupleInfo *
 ts_scan_iterator_tuple_info(const ScanIterator *iterator)
 {
