@@ -576,8 +576,9 @@ EOF
     start_time=$(date +%s)
 
     log_info "Starting Claude Code analysis for: ${test_name}"
-    if ! claude -p "$(cat "${prompt_file}")" \
+    if ! claude -p - \
         --allowedTools "Edit,Write,Read,Glob,Grep,Bash" \
+        < "${prompt_file}" \
         2>&1 | tee "${analysis_output}" >&2; then
         log_warn "Claude Code failed to fix test: ${test_name}"
         return 1
@@ -737,8 +738,9 @@ After making changes, provide a summary of what was fixed.
 EOF
 
         local analysis_output="${WORK_DIR}/analysis_output.txt"
-        if claude -p "$(cat "${prompt_file}")" \
+        if claude -p - \
             --allowedTools "Edit,Write,Read,Glob,Grep,Bash" \
+            < "${prompt_file}" \
             2>&1 | tee "${analysis_output}" >&2; then
             if commit_claude_changes "all-failures" "${analysis_output}"; then
                 ((fixed_tests++))
