@@ -510,15 +510,29 @@ commit_claude_changes() {
         echo "${filtered_new}" | xargs git add >&2
     fi
 
-    # Extract a summary from Claude's output for the commit message
+    # Extract commit message from Claude's output using markers
     local summary
-    summary=$(tail -50 "${analysis_output}" | head -30 | tr '\n' ' ' | cut -c1-200)
+
+    # Look for content between COMMIT_MESSAGE: and END_COMMIT_MESSAGE markers
+    if grep -q "COMMIT_MESSAGE:" "${analysis_output}"; then
+        summary=$(sed -n '/COMMIT_MESSAGE:/,/END_COMMIT_MESSAGE/p' "${analysis_output}" | \
+            grep -v "COMMIT_MESSAGE:\|END_COMMIT_MESSAGE" | \
+            sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | \
+            tr '\n' ' ' | \
+            sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
+    fi
+
+    # Fallback: if no markers found, use the last meaningful lines
+    if [[ -z "${summary}" ]]; then
+        summary=$(tail -20 "${analysis_output}" | grep -v '^[[:space:]]*$' | tail -5 | tr '\n' ' ' | \
+            sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
+    fi
 
     # Create commit with descriptive message (redirect to stderr to avoid capturing in return value)
     git commit -m "$(cat <<EOF
 Fix test: ${test_name}
 
-${summary}...
+${summary}
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
@@ -565,7 +579,11 @@ Important:
 - NEVER modify files in .github/workflows/ - these require special permissions we don't have
 - Explain your reasoning briefly
 
-After making changes, provide a one-line summary of what was fixed.
+After making changes, output a commit message in this exact format:
+
+COMMIT_MESSAGE:
+<A brief description of the root cause and the fix, suitable for a git commit message body. 2-4 sentences.>
+END_COMMIT_MESSAGE
 EOF
 
     local prompt_size
@@ -734,7 +752,11 @@ Important guidelines:
 - NEVER modify files in .github/workflows/ - these require special permissions we don't have
 - Explain your reasoning for each fix
 
-After making changes, provide a summary of what was fixed.
+After making changes, output a commit message in this exact format:
+
+COMMIT_MESSAGE:
+<A brief description of the root cause and the fix, suitable for a git commit message body. 2-4 sentences.>
+END_COMMIT_MESSAGE
 EOF
 
         local analysis_output="${WORK_DIR}/analysis_output.txt"
