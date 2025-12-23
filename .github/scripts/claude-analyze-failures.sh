@@ -25,6 +25,7 @@
 #   DRY_RUN            - If set to "true", skip Claude invocation and PR creation
 #   SKIP_PR            - If set to "true", run Claude to make local changes but skip PR creation
 #   KEEP_WORK_DIR      - If set to "true", keep the work directory in /tmp for inspection
+#   ANALYSIS_OUTPUT_DIR - If set, copy Claude analysis output files to this directory before cleanup
 #
 
 set -euo pipefail
@@ -39,6 +40,7 @@ BASE_BRANCH="${BASE_BRANCH:-main}"
 DRY_RUN="${DRY_RUN:-false}"
 SKIP_PR="${SKIP_PR:-false}"
 KEEP_WORK_DIR="${KEEP_WORK_DIR:-false}"
+ANALYSIS_OUTPUT_DIR="${ANALYSIS_OUTPUT_DIR:-}"
 
 # GITHUB_REPOSITORY defaults to timescale/timescaledb
 GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-timescale/timescaledb}"
@@ -71,6 +73,29 @@ log_error() {
 }
 
 cleanup() {
+    # Save analysis output if requested
+    if [[ -n "${ANALYSIS_OUTPUT_DIR}" && -d "${WORK_DIR}" ]]; then
+        log_info "Saving analysis output to: ${ANALYSIS_OUTPUT_DIR}"
+        mkdir -p "${ANALYSIS_OUTPUT_DIR}"
+
+        # Copy analysis output files (Claude's reasoning and conclusions)
+        for f in "${WORK_DIR}"/analysis_*.txt; do
+            [[ -f "$f" ]] && cp "$f" "${ANALYSIS_OUTPUT_DIR}/"
+        done
+
+        # Copy the failure context that was sent to Claude
+        [[ -f "${WORK_DIR}/failure_context.md" ]] && cp "${WORK_DIR}/failure_context.md" "${ANALYSIS_OUTPUT_DIR}/"
+
+        # Copy prompt files for debugging
+        for f in "${WORK_DIR}"/prompt*.txt; do
+            [[ -f "$f" ]] && cp "$f" "${ANALYSIS_OUTPUT_DIR}/"
+        done
+
+        # List what was saved
+        log_info "Saved files:"
+        ls -la "${ANALYSIS_OUTPUT_DIR}" >&2
+    fi
+
     if [[ -d "${WORK_DIR}" ]]; then
         if [[ "${KEEP_WORK_DIR}" == "true" ]]; then
             log_info "Keeping work directory for inspection: ${WORK_DIR}"

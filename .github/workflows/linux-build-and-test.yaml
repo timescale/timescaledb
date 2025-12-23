@@ -409,5 +409,15 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_RUN_ID: ${{ github.run_id }}
+          ANALYSIS_OUTPUT_DIR: ${{ github.workspace }}/claude-analysis-output
         run: |
           .github/scripts/claude-analyze-failures.sh
+
+      - name: Upload Claude analysis output
+        if: always() && steps.check-key.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Claude analysis output
+          path: claude-analysis-output/
+          if-no-files-found: ignore
+          retention-days: 30
