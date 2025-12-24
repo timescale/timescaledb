@@ -53,6 +53,7 @@ typedef struct CompressedColumnValues
 	/*
 	 * The flattened source buffers for getting the decompressed datum.
 	 * Depending on decompression type, they are as follows:
+	 * scalar:          isnull, value
 	 * iterator:        iterator
 	 * arrow fixed:     validity, value
 	 * arrow text:      validity, uint32* offsets, void* bodies
