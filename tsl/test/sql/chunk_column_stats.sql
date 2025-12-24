@@ -193,6 +193,15 @@ SET timescaledb.enable_chunk_skipping to ON;
 
 -- Disabling the GUC will prevent execution time chunk skipping
 RESET timescaledb.enable_chunk_skipping;
+show timescaledb.enable_chunk_skipping;
+-- Manually trigger a clearing of the hypertable cache so that
+-- the entry for sample_table will be created new without a valid
+-- range_space when chunk skipping is off.
+--
+-- This triggers a bug where the Hypertable entry is cached without
+-- a range space entry even though chunk skipping is reenabled. The result is
+-- that no chunk_column_stats entry is created for new chunks.
+SELECT clear_hypertable_cache();
 :PREFIX UPDATE sample_table set sensor_id = 10 WHERE sensor_id > length(substring(version(),1,9));
 SET timescaledb.enable_chunk_skipping to ON;
 
