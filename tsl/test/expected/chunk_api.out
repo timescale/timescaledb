@@ -328,3 +328,21 @@ SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1515628
 ----------+---------------+-----------------------+-------------------+---------+----------------------------------------------------------------------------------------------+---------
        15 |             3 | _timescaledb_internal | _hyper_3_15_chunk | r       | {"time": [1515628800000000, 1516233600000000], "device": [-9223372036854775808, 1073741823]} | t
 
+SELECT show_chunks('chunkapi') AS chunk LIMIT 1 \gset
+BEGIN;
+SELECT txid_current_if_assigned() IS NULL;
+ ?column? 
+----------
+ t
+
+SELECT COUNT(*) FROM :chunk LIMIT 1;
+ count 
+-------
+     1
+
+SELECT txid_current_if_assigned() IS NULL;
+ ?column? 
+----------
+ t
+
+COMMIT;
