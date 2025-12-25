@@ -1559,6 +1559,11 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("must specify either the number of partitions or an interval")));
 
+	if (get_rel_relkind(info->table_relid) == RELKIND_PARTITIONED_TABLE)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot add dimension to partitioned table")));
+
 	ts_hypertable_permissions_check(info->table_relid, GetUserId());
 
 	/*
