@@ -208,6 +208,44 @@ is_vector_type(Oid typeoid)
 	}
 }
 
+static bool is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr);
+
+static bool
+is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid resulttype,
+				   Oid inputcollid)
+{
+	if (list_length(args) > 5)
+	{
+		return false;
+	}
+
+	if (!is_vector_type(resulttype))
+	{
+		return false;
+	}
+
+	ListCell *lc;
+	foreach (lc, args)
+	{
+		if (!is_vector_expr(vqinfo, (Expr *) lfirst(lc)))
+		{
+			return false;
+		}
+	}
+
+	if (!func_strict(funcoid))
+	{
+		return false;
+	}
+
+	if (func_volatile(funcoid) == PROVOLATILE_VOLATILE)
+	{
+		return false;
+	}
+
+	return true;
+}
+
 /*
  * Whether the expression can be used for vectorized processing: must be a Var
  * that refers to either a bulk-decompressed or a segmentby column.
@@ -215,8 +253,40 @@ is_vector_type(Oid typeoid)
 static bool
 is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 {
+	if (expr == NULL)
+	{
+		return true;
+	}
+
 	switch (((Node *) expr)->type)
 	{
+		case T_Const:
+		{
+			Const *c = (Const *) expr;
+			return is_vector_type(c->consttype);
+		}
+
+		case T_FuncExpr:
+		{
+			/* Can vectorize some functions! */
+			FuncExpr *f = castNode(FuncExpr, expr);
+			return is_vector_function(vqinfo,
+									  f->args,
+									  f->funcid,
+									  f->funcresulttype,
+									  f->inputcollid);
+		}
+
+		case T_OpExpr:
+		{
+			OpExpr *o = castNode(OpExpr, expr);
+			return is_vector_function(vqinfo,
+									  o->args,
+									  o->opfuncid,
+									  o->opresulttype,
+									  o->inputcollid);
+		}
+
 		case T_Var:
 		{
 			Var *var = castNode(Var, expr);
@@ -240,7 +310,63 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 
 			return is_vector;
 		}
+
+		case T_CaseExpr:
+		{
+			//						return false;
+			CaseExpr *c = castNode(CaseExpr, expr);
+			if (c->arg != NULL)
+			{
+				/*
+				 * We don't handle the "CASE testexpr WHEN comexpr ..." form at
+				 * the moment.
+				 */
+			}
+
+			if (list_length(c->args) >= 5)
+			{
+				/* FIXME */
+				return false;
+			}
+
+			ListCell *lc;
+			foreach (lc, c->args)
+			{
+				Node *when = lfirst(lc);
+				if (!is_vector_expr(vqinfo, (Expr *) when))
+				{
+					return false;
+				}
+			}
+
+			if (!is_vector_expr(vqinfo, c->defresult))
+			{
+				return false;
+			}
+
+			return true;
+		}
+
+		case T_CaseWhen:
+		{
+			CaseWhen *when = castNode(CaseWhen, expr);
+
+			if (!is_vector_expr(vqinfo, when->result))
+			{
+				return false;
+			}
+
+			Node *condition_vectorized = vector_qual_make((Node *) when->expr, vqinfo);
+			if (condition_vectorized == NULL)
+			{
+				return false;
+			}
+			when->expr = (Expr *) condition_vectorized;
+			return true;
+		}
+
 		default:
+			// my_print(expr);
 			return false;
 	}
 }
@@ -330,6 +456,9 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 		{
 			continue;
 		}
+
+		//		fprintf(stderr, "considering grouping column:\n");
+		// my_print(target_entry);
 
 		num_grouping_columns++;
 
@@ -692,23 +821,6 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 				/* Aggregate function not vectorizable. */
 				return plan;
 			}
-		}
-		else if (IsA(target_entry->expr, Var))
-		{
-			if (!is_vector_expr(&vqi, target_entry->expr))
-			{
-				/* Variable not vectorizable. */
-				return plan;
-			}
-		}
-		else
-		{
-			/*
-			 * Sometimes the plan can require this node to perform a projection,
-			 * e.g. we can see a nested loop param in its output targetlist. We
-			 * can't handle this case currently.
-			 */
-			return plan;
 		}
 	}
 

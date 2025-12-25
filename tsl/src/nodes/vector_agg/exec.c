@@ -9,6 +9,7 @@
 #include <commands/explain.h>
 #include <executor/executor.h>
 #include <executor/tuptable.h>
+#include <fmgr.h>
 #include <funcapi.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
@@ -33,6 +34,9 @@
 #include "commands/explain_state.h"
 #endif
 
+static CompressedBatchVectorQualState
+compressed_batch_init_vector_quals(DecompressContext *dcontext, List *quals, TupleTableSlot *slot);
+
 static int
 get_input_offset(const DecompressContext *dcontext, const Var *var)
 {
@@ -56,6 +60,484 @@ get_input_offset(const DecompressContext *dcontext, const Var *var)
 }
 
 /*
+ * Workspace for converting the results of a Postgres function into a columnar
+ * format.
+ */
+typedef struct
+{
+	DecompressionType type;
+
+	uint64 *restrict validity;
+
+	int allocated_body_bytes;
+	uint8 *restrict body_buffer;
+
+	uint32 *restrict offset_buffer;
+	uint32 current_offset;
+} ColumnarResult;
+
+static void
+columnar_result_init_for_type(ColumnarResult *columnar_result,
+							  DecompressBatchState const *batch_state, Oid typeoid)
+{
+	int16 typlen;
+	bool typbyval;
+	get_typlenbyval(typeoid, &typlen, &typbyval);
+	if (typeoid == BOOLOID)
+	{
+		columnar_result->type = DT_ArrowBits;
+	}
+	else if (typlen == -1)
+	{
+		columnar_result->type = DT_ArrowText;
+	}
+	else
+	{
+		Assert(typlen > 0);
+		columnar_result->type = typlen;
+	}
+
+	const int nrows = batch_state->total_batch_rows;
+	const size_t num_validity_words = (nrows + 63) / 64;
+	if (columnar_result->type == DT_ArrowBits)
+	{
+		columnar_result->body_buffer = MemoryContextAllocZero(batch_state->per_batch_context,
+															  sizeof(uint64) * num_validity_words);
+	}
+	else if (columnar_result->type == DT_ArrowText)
+	{
+		columnar_result->offset_buffer =
+			MemoryContextAllocZero(batch_state->per_batch_context,
+								   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1)));
+		columnar_result->allocated_body_bytes = pad_to_multiple(64, 10);
+		columnar_result->body_buffer =
+			MemoryContextAllocZero(batch_state->per_batch_context,
+								   columnar_result->allocated_body_bytes);
+	}
+	else
+	{
+		Assert(columnar_result->type > 0);
+		columnar_result->body_buffer =
+			MemoryContextAllocZero(batch_state->per_batch_context,
+								   pad_to_multiple(64, columnar_result->type * nrows));
+	}
+}
+
+static pg_attribute_always_inline void
+columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState const *batch_state,
+						int row, Datum datum, bool isnull)
+{
+	const int nrows = batch_state->total_batch_rows;
+	const int num_validity_words = (nrows + 63) / 64;
+
+	if (isnull)
+	{
+		if (columnar_result->validity == NULL)
+		{
+			columnar_result->validity =
+				MemoryContextAlloc(batch_state->per_batch_context,
+								   num_validity_words * sizeof(*columnar_result->validity));
+			memset(columnar_result->validity,
+				   -1,
+				   num_validity_words * sizeof(*columnar_result->validity));
+			const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
+			columnar_result->validity[nrows / 64] &= tail_mask;
+		}
+
+		arrow_set_row_validity(columnar_result->validity, row, false);
+
+		return;
+	}
+
+	switch ((int) columnar_result->type)
+	{
+		case DT_ArrowBits:
+		{
+			arrow_set_row_validity((uint64 *restrict) columnar_result->body_buffer,
+								   row,
+								   DatumGetBool(datum));
+			break;
+		}
+		case DT_ArrowText:
+		{
+			const int result_bytes = VARSIZE_ANY_EXHDR(datum);
+			const int required_body_bytes =
+				pad_to_multiple(64, columnar_result->current_offset + result_bytes);
+			if (required_body_bytes > columnar_result->allocated_body_bytes)
+			{
+				const int new_body_bytes =
+					required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) row + 1))) + 1;
+				//				fprintf(stderr,
+				//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
+				//						new_body_bytes,
+				//						new_body_bytes / (float) required_body_bytes,
+				//						i,
+				//						nrows);
+				Assert(new_body_bytes >= required_body_bytes);
+				columnar_result->body_buffer =
+					repalloc(columnar_result->body_buffer, new_body_bytes);
+				columnar_result->allocated_body_bytes = new_body_bytes;
+			}
+
+			memcpy(&columnar_result->body_buffer[columnar_result->current_offset],
+				   VARDATA_ANY(datum),
+				   result_bytes);
+			columnar_result->offset_buffer[row] = columnar_result->current_offset;
+			columnar_result->current_offset += result_bytes;
+			break;
+		}
+		case 2:
+		case 4:
+#ifdef USE_FLOAT8_BYVAL
+		case 8:
+#endif
+			memcpy(row * columnar_result->type + (uint8 *restrict) columnar_result->body_buffer,
+				   &datum,
+				   sizeof(Datum));
+			break;
+#ifndef USE_FLOAT8_BYVAL
+		case 8:
+#endif
+		case 16:
+			memcpy(row * columnar_result->type + (uint8 *restrict) columnar_result->body_buffer,
+				   DatumGetPointer(datum),
+				   columnar_result->type);
+			break;
+		default:
+			elog(ERROR, "wrong arrow result type %d", columnar_result->type);
+	}
+}
+
+static CompressedColumnValues
+columnar_result_finalize(ColumnarResult *columnar_result, DecompressBatchState const *batch_state)
+{
+	const int nrows = batch_state->total_batch_rows;
+
+	ArrowArray *arrow_result = NULL;
+	if (columnar_result->type == DT_ArrowBits)
+	{
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 2 * sizeof(void *));
+		arrow_result->buffers = (void *) &arrow_result[1];
+		arrow_result->buffers[1] = columnar_result->body_buffer;
+	}
+	else if (columnar_result->type == DT_ArrowText)
+	{
+		columnar_result->offset_buffer[nrows] = columnar_result->current_offset;
+
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 3 * sizeof(void *));
+		arrow_result->buffers = (void *) &arrow_result[1];
+		arrow_result->buffers[1] = columnar_result->offset_buffer;
+		arrow_result->buffers[2] = columnar_result->body_buffer;
+	}
+	else
+	{
+		Assert(columnar_result->type > 0);
+
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 2 * sizeof(void *));
+		arrow_result->buffers = (void *) &arrow_result[1];
+		arrow_result->buffers[1] = columnar_result->body_buffer;
+	}
+
+	arrow_result->length = nrows;
+
+	arrow_result->buffers[0] = columnar_result->validity;
+	arrow_result->null_count =
+		arrow_result->length - arrow_num_valid(arrow_result->buffers[0], nrows);
+
+	//	fprintf(stderr, "length %ld, null count %ld\n", arrow_result->length,
+	// arrow_result->null_count);
+
+	CompressedColumnValues result = {
+		.decompression_type = columnar_result->type,
+		.buffers = { arrow_result->buffers[0],
+					 arrow_result->buffers[1],
+					 columnar_result->type == DT_ArrowText ? arrow_result->buffers[2] : NULL },
+		.arrow = arrow_result,
+	};
+	return result;
+}
+
+static pg_noinline CompressedColumnValues
+vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
+							  uint64 const *filter, List *args, Oid funcoid, Oid inputcollid)
+{
+	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
+
+	const int nargs = list_length(args);
+	Ensure(nargs <= 5, "only <= 5 args supported");
+
+	FmgrInfo flinfo;
+	fmgr_info(funcoid, &flinfo);
+	LOCAL_FCINFO(fcinfo, 5);
+	InitFunctionCallInfoData(*fcinfo, &flinfo, nargs, inputcollid, NULL, NULL);
+
+	CompressedColumnValues arg_values[5] = { 0 };
+	bool have_null_bitmap = false;
+	bool have_null_scalars = false;
+	ListCell *lc;
+	foreach (lc, args)
+	{
+		const int i = foreach_current_index(lc);
+		CompressedColumnValues arg_value =
+			vector_slot_evaluate_expression(dcontext, slot, filter, lfirst(lc));
+		Ensure(arg_value.decompression_type != DT_Invalid, "got DT_Invalid for argument %d", i);
+
+		have_null_bitmap =
+			(arg_value.arrow != NULL && arg_value.arrow->null_count > 0) || have_null_bitmap;
+
+		arg_value.output_value = &fcinfo->args[i].value;
+		arg_value.output_isnull = &fcinfo->args[i].isnull;
+
+		if (arg_value.decompression_type == DT_ArrowText ||
+			arg_value.decompression_type == DT_ArrowTextDict)
+		{
+			const int maxbytes = get_max_varlena_bytes(arg_value.arrow);
+			*arg_value.output_value =
+				PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+		}
+		else if (arg_value.decompression_type == DT_Scalar)
+		{
+			/*
+			 * The values of the scalar columns have to be stored once at
+			 * initialization, they won't be updated per-row.
+			 */
+			*arg_value.output_value = PointerGetDatum(arg_value.buffers[1]);
+			*arg_value.output_isnull = DatumGetBool(PointerGetDatum(arg_value.buffers[0]));
+
+			have_null_scalars = *arg_value.output_isnull || have_null_scalars;
+		}
+
+		arg_values[i] = arg_value;
+	}
+
+	/*
+	 * We only evaluate strict functions, so if we have a scalar null argument,
+	 * return a scalar null.
+	 */
+	if (have_null_scalars)
+	{
+		return (CompressedColumnValues){ .decompression_type = DT_Scalar,
+										 .buffers[0] = DatumGetPointer(BoolGetDatum(true)) };
+	}
+
+	/*
+	 * Our Postgres function is strict, so we should avoid calling it on null
+	 * inputs.
+	 */
+	const int nrows = batch_state->total_batch_rows;
+	const size_t num_validity_words = (nrows + 63) / 64;
+	uint64 *input_validity = NULL;
+	if (have_null_bitmap || filter != NULL)
+	{
+		uint64 *restrict combined_validity =
+			MemoryContextAlloc(batch_state->per_batch_context,
+							   sizeof(*combined_validity) * num_validity_words);
+		memset(combined_validity, -1, num_validity_words * sizeof(*combined_validity));
+		arrow_validity_and(num_validity_words, combined_validity, filter);
+		for (int i = 0; i < nargs; i++)
+		{
+			arrow_validity_and(num_validity_words, combined_validity, arg_values[i].buffers[0]);
+		}
+		input_validity = combined_validity;
+	}
+
+	/*
+	 * Call the Postgres function on every row.
+	 */
+	ColumnarResult columnar_result = { 0 };
+	columnar_result_init_for_type(&columnar_result, batch_state, get_func_rettype(funcoid));
+	MemoryContext function_call_context =
+		AllocSetContextCreate(CurrentMemoryContext, "bulk function call", ALLOCSET_DEFAULT_SIZES);
+	MemoryContext old = MemoryContextSwitchTo(function_call_context);
+	for (int row = 0; row < nrows; row++)
+	{
+		/*
+		 * The Arrow format requires the offsets to monotonically increase even
+		 * for the invalid rows.
+		 */
+		if (columnar_result.offset_buffer != NULL)
+		{
+			columnar_result.offset_buffer[row] = columnar_result.current_offset;
+		}
+
+		/*
+		 * Do not the function on null inputs because it is strict.
+		 */
+		if (!arrow_row_is_valid(input_validity, row))
+		{
+			continue;
+		}
+
+		compressed_columns_to_postgres_data(arg_values, nargs, row);
+
+		const Datum datum = FunctionCallInvoke(fcinfo);
+
+		/*
+		 * A strict function can still return a null for a non-null argument.
+		 */
+		const bool isnull = fcinfo->isnull;
+
+		columnar_result_set_row(&columnar_result, batch_state, row, datum, isnull);
+
+		MemoryContextReset(function_call_context);
+	}
+	MemoryContextSwitchTo(old);
+	MemoryContextDelete(function_call_context);
+
+	// MemoryContextStats(CurrentMemoryContext);
+
+	/*
+	 * Figure out the validity bitmap of the result rows. Besides the null
+	 * inputs, the function itself can return nulls for some rows.
+	 */
+	if (columnar_result.validity != NULL)
+	{
+		arrow_validity_and(num_validity_words, columnar_result.validity, input_validity);
+	}
+	else
+	{
+		columnar_result.validity = (uint64 *) input_validity;
+	}
+
+	return columnar_result_finalize(&columnar_result, batch_state);
+}
+
+static pg_noinline CompressedColumnValues
+vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
+						  uint64 const *top_filter, CaseExpr const *case_expr)
+{
+	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
+	const int nrows = batch_state->total_batch_rows;
+	const int num_validity_words = (nrows + 63) / 64;
+	Ensure(case_expr->arg == NULL,
+		   "The CASE with explicit argument is not supported by vectorized aggregation");
+
+	uint64 const *branch_filters[5] = { 0 };
+	CompressedColumnValues branch_values[5] = { 0 };
+	Datum branch_data[5] = { 0 };
+	bool branch_isnull[5] = { 0 };
+
+	const int num_explicit_branches = list_length(case_expr->args);
+	for (int i = 0; i < num_explicit_branches + 1; i++)
+	{
+		Expr *condition_expression;
+		Expr *value_expression;
+		if (i < num_explicit_branches)
+		{
+			CaseWhen const *when = castNode(CaseWhen, list_nth(case_expr->args, i));
+			condition_expression = when->expr;
+			value_expression = when->result;
+		}
+		else
+		{
+			condition_expression = NULL;
+			value_expression = case_expr->defresult;
+		}
+
+		uint64 const *branch_filter = top_filter;
+		if (condition_expression != NULL)
+		{
+			CompressedBatchVectorQualState vqstate =
+				compressed_batch_init_vector_quals(dcontext,
+												   list_make1(condition_expression),
+												   slot);
+			vector_qual_compute(&vqstate.vqstate);
+			uint64 const *qual_result = vqstate.vqstate.vector_qual_result;
+			if (qual_result != NULL)
+			{
+				arrow_validity_and(num_validity_words, (uint64 *) qual_result, top_filter);
+				branch_filter = qual_result;
+			}
+		}
+
+		branch_filters[i] = branch_filter;
+
+		if (value_expression != NULL)
+		{
+			branch_values[i] =
+				vector_slot_evaluate_expression(dcontext, slot, branch_filter, value_expression);
+		}
+		else
+		{
+			branch_values[i] =
+				(CompressedColumnValues){ .decompression_type = DT_Scalar,
+										  .buffers[0] = DatumGetPointer(BoolGetDatum(true)) };
+		}
+
+		branch_values[i].output_value = &branch_data[i];
+		branch_values[i].output_isnull = &branch_isnull[i];
+
+		Ensure(branch_values[i].decompression_type != DT_Invalid,
+			   "got DT_Invalid for argument %d",
+			   i);
+
+		if (branch_values[i].decompression_type == DT_ArrowText ||
+			branch_values[i].decompression_type == DT_ArrowTextDict)
+		{
+			Ensure(branch_values[i].arrow != NULL, "no arrow for arg %d", i);
+			const int maxbytes = get_max_varlena_bytes(branch_values[i].arrow);
+			*branch_values[i].output_value =
+				PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+		}
+		else if (branch_values[i].decompression_type == DT_Scalar)
+		{
+			*branch_values[i].output_value = PointerGetDatum(branch_values[i].buffers[1]);
+			*branch_values[i].output_isnull =
+				DatumGetBool(PointerGetDatum(branch_values[i].buffers[0]));
+		}
+	}
+
+	ColumnarResult columnar_result = { 0 };
+	columnar_result_init_for_type(&columnar_result, batch_state, case_expr->casetype);
+	for (int row = 0; row < nrows; row++)
+	{
+		/*
+		 * The Arrow format requires the offsets to monotonically increase even
+		 * for the invalid rows.
+		 */
+		if (columnar_result.offset_buffer != NULL)
+		{
+			columnar_result.offset_buffer[row] = columnar_result.current_offset;
+		}
+
+		if (!arrow_row_is_valid(top_filter, row))
+		{
+			continue;
+		}
+
+		int branch_index;
+		for (branch_index = 0; branch_index < num_explicit_branches; branch_index++)
+		{
+			if (arrow_row_is_valid(branch_filters[branch_index], row))
+			{
+				break;
+			}
+		}
+
+		compressed_columns_to_postgres_data(&branch_values[branch_index], 1, row);
+
+		const bool isnull = *branch_values[branch_index].output_isnull;
+		const Datum result = isnull ? 0 : *branch_values[branch_index].output_value;
+
+		columnar_result_set_row(&columnar_result, batch_state, row, result, isnull);
+	}
+
+	if (columnar_result.validity != NULL)
+	{
+		arrow_validity_and(num_validity_words, columnar_result.validity, top_filter);
+	}
+	else
+	{
+		columnar_result.validity = (uint64 *) top_filter;
+	}
+
+	return columnar_result_finalize(&columnar_result, batch_state);
+}
+
+/*
  * Return the arrow array or the datum (in case of single scalar value) for a
  * given expression as a CompressedColumnValues struct.
  */
@@ -66,6 +548,15 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
 	switch (((Node *) argument)->type)
 	{
+		case T_Const:
+		{
+			const Const *c = (const Const *) argument;
+			CompressedColumnValues result = { .decompression_type = DT_Scalar,
+											  .buffers[1] = DatumGetPointer(c->constvalue),
+											  .buffers[0] =
+												  DatumGetPointer(BoolGetDatum(c->constisnull)) };
+			return result;
+		}
 		case T_Var:
 		{
 			const Var *var = (const Var *) argument;
@@ -75,6 +566,31 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 				   "got DT_Invalid decompression type at offset %d",
 				   offset);
 			return *values;
+		}
+		case T_OpExpr:
+		{
+			const OpExpr *o = (const OpExpr *) argument;
+			return vector_slot_evaluate_function(dcontext,
+												 slot,
+												 filter,
+												 o->args,
+												 o->opfuncid,
+												 o->inputcollid);
+		}
+		case T_FuncExpr:
+		{
+			const FuncExpr *f = (const FuncExpr *) argument;
+			return vector_slot_evaluate_function(dcontext,
+												 slot,
+												 filter,
+												 f->args,
+												 f->funcid,
+												 f->inputcollid);
+		}
+		case T_CaseExpr:
+		{
+			CaseExpr const *c = (CaseExpr const *) argument;
+			return vector_slot_evaluate_case(dcontext, slot, filter, c);
 		}
 		default:
 			Ensure(false,
@@ -135,7 +651,6 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		else
 		{
 			/* This is a grouping column. */
-			Assert(IsA(tlentry->expr, Var));
 			grouping_column_counter++;
 		}
 	}
@@ -181,6 +696,10 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 				Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
 
 				def->argument = castNode(TargetEntry, linitial(aggref->args))->expr;
+				//				Var *var = castNode(Var, ;
+				//				def->input_offset =
+				//					get_input_offset((const ColumnarScanState *) childstate,
+				// var);
 			}
 			else
 			{
@@ -353,28 +872,22 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
  *
  * Used to implement vectorized aggregate function filter clause.
  */
-static VectorQualState *
-compressed_batch_init_vector_quals(VectorAggState *agg_state, VectorAggDef *agg_def,
-								   TupleTableSlot *slot)
+static CompressedBatchVectorQualState
+compressed_batch_init_vector_quals(DecompressContext *dcontext, List *quals, TupleTableSlot *slot)
 {
-	ColumnarScanState *decompress_state =
-		(ColumnarScanState *) linitial(agg_state->custom.custom_ps);
-	DecompressContext *dcontext = &decompress_state->decompress_context;
 	DecompressBatchState *batch_state = (DecompressBatchState *) slot;
 
-	agg_state->vqual_state = (CompressedBatchVectorQualState) {
+	return (CompressedBatchVectorQualState) {
 				.vqstate = {
-					.vectorized_quals_constified = agg_def->filter_clauses,
+					.vectorized_quals_constified = quals,
 					.num_results = batch_state->total_batch_rows,
 					.per_vector_mcxt = batch_state->per_batch_context,
-					.slot = decompress_state->csstate.ss.ss_ScanTupleSlot,
+					.slot = slot,
 					.get_arrow_array = compressed_batch_get_arrow_array,
 				},
 				.batch_state = batch_state,
 				.dcontext = dcontext,
 			};
-
-	return &agg_state->vqual_state.vqstate;
 }
 
 static TupleTableSlot *
@@ -406,6 +919,12 @@ vector_agg_exec(CustomScanState *node)
 	}
 
 	/*
+	 * Have no more partial aggregation results and still have input, have to
+	 * reset the grouping policy and start a new cycle of partial aggregation.
+	 */
+	grouping->gp_reset(grouping);
+
+	/*
 	 * If the partial aggregation results have ended, and the input has ended,
 	 * we're done.
 	 */
@@ -413,12 +932,6 @@ vector_agg_exec(CustomScanState *node)
 	{
 		return NULL;
 	}
-
-	/*
-	 * Have no more partial aggregation results and still have input, have to
-	 * reset the grouping policy and start a new cycle of partial aggregation.
-	 */
-	grouping->gp_reset(grouping);
 
 	/*
 	 * Now we loop through the input compressed tuples, until they end or until
@@ -454,11 +967,11 @@ vector_agg_exec(CustomScanState *node)
 			uint64 *filter_clause_result = NULL;
 			if (agg_def->filter_clauses != NIL)
 			{
-				VectorQualState *vqstate =
-					vector_agg_state->init_vector_quals(vector_agg_state, agg_def, slot);
-				if (vector_qual_compute(vqstate) != AllRowsPass)
+				CompressedBatchVectorQualState vqstate =
+					compressed_batch_init_vector_quals(dcontext, agg_def->filter_clauses, slot);
+				if (vector_qual_compute(&vqstate.vqstate) != AllRowsPass)
 				{
-					filter_clause_result = vqstate->vector_qual_result;
+					filter_clause_result = vqstate.vqstate.vector_qual_result;
 				}
 			}
 
@@ -556,7 +1069,6 @@ vector_agg_state_create(CustomScan *cscan)
 	 * compressed batches, respectively.
 	 */
 	state->get_next_slot = compressed_batch_get_next_slot;
-	state->init_vector_quals = compressed_batch_init_vector_quals;
 
 	return (Node *) state;
 }
