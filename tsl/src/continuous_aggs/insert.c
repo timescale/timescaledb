@@ -57,6 +57,8 @@ static int64 tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, Tuple
 static inline void cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry,
 										  int32 hypertable_id, Oid chunk_relid);
 static inline void update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval);
+static inline ContinuousAggsCacheInvalEntry *get_cache_inval_entry(int32 hypertable_id,
+																   Oid chunk_relid);
 static void cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry);
 static void cache_inval_cleanup(void);
 static void cache_inval_htab_write(void);
@@ -75,7 +77,7 @@ cache_inval_init()
 															  ALLOCSET_DEFAULT_SIZES);
 
 	memset(&ctl, 0, sizeof(ctl));
-	ctl.keysize = sizeof(int32);
+	ctl.keysize = sizeof(Oid);
 	ctl.entrysize = sizeof(ContinuousAggsCacheInvalEntry);
 	ctl.hcxt = continuous_aggs_invalidation_mctx;
 
@@ -137,11 +139,8 @@ update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval)
 		cache_entry->greatest_modified_value = timeval;
 }
 
-/*
- * Used by direct compress invalidation
- */
-void
-continuous_agg_invalidate_range(int32 hypertable_id, Oid chunk_relid, int64 start, int64 end)
+static inline ContinuousAggsCacheInvalEntry *
+get_cache_inval_entry(int32 hypertable_id, Oid chunk_relid)
 {
 	ContinuousAggsCacheInvalEntry *cache_entry;
 	bool found;
@@ -150,10 +149,21 @@ continuous_agg_invalidate_range(int32 hypertable_id, Oid chunk_relid, int64 star
 		cache_inval_init();
 
 	cache_entry = (ContinuousAggsCacheInvalEntry *)
-		hash_search(continuous_aggs_cache_inval_htab, &hypertable_id, HASH_ENTER, &found);
+		hash_search(continuous_aggs_cache_inval_htab, &chunk_relid, HASH_ENTER, &found);
 
 	if (!found)
 		cache_inval_entry_init(cache_entry, hypertable_id, chunk_relid);
+
+	return cache_entry;
+}
+
+/*
+ * Used by direct compress invalidation
+ */
+void
+continuous_agg_invalidate_range(int32 hypertable_id, Oid chunk_relid, int64 start, int64 end)
+{
+	ContinuousAggsCacheInvalEntry *cache_entry = get_cache_inval_entry(hypertable_id, chunk_relid);
 
 	cache_entry->value_is_set = true;
 	Assert(start <= end);
@@ -167,20 +177,9 @@ void
 continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tuple,
 							  HeapTuple chunk_newtuple, bool update)
 {
-	ContinuousAggsCacheInvalEntry *cache_entry;
-	bool found;
+	ContinuousAggsCacheInvalEntry *cache_entry =
+		get_cache_inval_entry(hypertable_id, chunk_rel->rd_id);
 	int64 timeval;
-	Oid chunk_relid = chunk_rel->rd_id;
-
-	/* On first call, init the mctx and hash table */
-	if (!continuous_aggs_cache_inval_htab)
-		cache_inval_init();
-
-	cache_entry = (ContinuousAggsCacheInvalEntry *)
-		hash_search(continuous_aggs_cache_inval_htab, &chunk_relid, HASH_ENTER, &found);
-
-	if (!found)
-		cache_inval_entry_init(cache_entry, hypertable_id, chunk_relid);
 
 	timeval = tuple_get_time(&cache_entry->hypertable_open_dimension,
 							 chunk_tuple,
