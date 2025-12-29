@@ -52,7 +52,6 @@ set(TEST_FILES
     compression_uuid.sql
     compression_trigger.sql
     create_table_with.sql
-    custom_hashagg.sql
     decompress_index.sql
     merge_compress.sql
     move.sql
