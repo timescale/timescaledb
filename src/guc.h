@@ -105,7 +105,6 @@ extern char *ts_telemetry_cloud;
 extern TSDLLEXPORT char *ts_guc_license;
 extern char *ts_last_tune_time;
 extern char *ts_last_tune_version;
-extern TSDLLEXPORT bool ts_guc_enable_2pc;
 extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 extern TSDLLEXPORT bool ts_guc_enable_bulk_decompression;
 extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
@@ -166,5 +165,3 @@ typedef enum
 extern TSDLLEXPORT void ts_feature_flag_check(FeatureFlagType);
 extern TSDLLEXPORT Oid ts_guc_default_segmentby_fn_oid(void);
 extern TSDLLEXPORT Oid ts_guc_default_orderby_fn_oid(void);
-
-extern TSDLLEXPORT bool ts_is_whitelisted_indexam(const char *amname);
