@@ -980,11 +980,13 @@ build_telemetry_report()
 	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
 	/* add tuned info, which is optional */
-	if (ts_last_tune_time != NULL)
-		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_TIME, ts_last_tune_time);
+	char *last_tune_time = GetConfigOptionByName("timescaledb.last_tune_time", NULL, true);
+	if (last_tune_time != NULL)
+		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_TIME, last_tune_time);
 
-	if (ts_last_tune_version != NULL)
-		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_VERSION, ts_last_tune_version);
+	char *last_tune_version = GetConfigOptionByName("timescaledb.last_tune_version", NULL, true);
+	if (last_tune_version != NULL)
+		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_VERSION, last_tune_version);
 
 	/* add cloud to telemetry when set */
 	if (ts_telemetry_cloud != NULL)
