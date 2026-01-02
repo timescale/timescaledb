@@ -2047,6 +2047,7 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 	{
 		cur_em = (EquivalenceMember *) lfirst(lc);
 #endif
+		Node *node;
 		Expr *child_expr;
 		Relids new_relids;
 		Var *var;
@@ -2054,11 +2055,10 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 
 		/* only consider EquivalenceMembers that are Vars, possibly with RelabelType, of the
 		 * uncompressed chunk */
-		var = (Var *) cur_em->em_expr;
-		while (var && IsA(var, RelabelType))
-			var = (Var *) ((RelabelType *) var)->arg;
-		if (!(var && IsA(var, Var)))
+		node = strip_implicit_coercions((Node *) cur_em->em_expr);
+		if (!(node && IsA(node, Var)))
 			continue;
+		var = castNode(Var, node);
 
 		/*
 		 * We want to base our equivalence member on the hypertable equivalence
@@ -2551,29 +2551,25 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 			if (IsA(ri->clause, OpExpr) && list_length(castNode(OpExpr, ri->clause)->args) == 2)
 			{
 				OpExpr *op = castNode(OpExpr, ri->clause);
-				Var *lvar, *rvar, *var;
+				Node *lnode, *rnode;
+				Var *var;
 				Expr *other;
 
 				if (op->opretset)
 					continue;
 
-				lvar = linitial(op->args);
-				while (lvar && IsA(lvar, RelabelType))
-					lvar = (Var *) ((RelabelType *) lvar)->arg;
+				lnode = strip_implicit_coercions(linitial(op->args));
+				rnode = strip_implicit_coercions(lsecond(op->args));
 
-				rvar = lsecond(op->args);
-				while (rvar && IsA(rvar, RelabelType))
-					rvar = (Var *) ((RelabelType *) rvar)->arg;
-
-				Assert(lvar && rvar);
-				if (IsA(lvar, Var))
+				Assert(lnode && rnode);
+				if (IsA(lnode, Var))
 				{
-					var = castNode(Var, lvar);
+					var = castNode(Var, lnode);
 					other = lsecond(op->args);
 				}
-				else if (IsA(rvar, Var))
+				else if (IsA(rnode, Var))
 				{
-					var = castNode(Var, rvar);
+					var = castNode(Var, rnode);
 					other = linitial(op->args);
 				}
 				else
@@ -2647,16 +2643,14 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 	{
 		compressed_pk_index++;
 		PathKey *pk = list_nth_node(PathKey, pathkeys, i);
-		Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
-		while (expr && IsA(expr, RelabelType))
-			expr = ((RelabelType *) expr)->arg;
+		Node *node = strip_implicit_coercions((Node *) list_nth(chunk_em_exprs, i));
 
-		if (expr == NULL || !IsA(expr, Var))
+		if (node == NULL || !IsA(node, Var))
 		{
 			return false;
 		}
 
-		Var *var = castNode(Var, expr);
+		Var *var = castNode(Var, node);
 
 		if (var->varattno <= 0)
 		{
@@ -2826,13 +2820,11 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		{
 			Assert(bms_num_members(segmentby_columns) <= compression_info->num_segmentby_columns);
 
-			Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
-			while (expr && IsA(expr, RelabelType))
-				expr = ((RelabelType *) expr)->arg;
+			Node *node = strip_implicit_coercions((Node *) list_nth(chunk_em_exprs, i));
 
-			if (expr == NULL || !IsA(expr, Var))
+			if (node == NULL || !IsA(node, Var))
 				break;
-			var = castNode(Var, expr);
+			var = castNode(Var, node);
 
 			if (var->varattno <= 0)
 				break;
