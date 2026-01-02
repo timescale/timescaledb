@@ -17,11 +17,14 @@
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_opfamily.h>
+#include <catalog/pg_publication.h>
+#include <catalog/pg_publication_rel_d.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/pg_type.h>
 #include <catalog/pg_type_d.h>
 #include <catalog/toasting.h>
 #include <commands/defrem.h>
+#include <commands/publicationcmds.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
 #include <executor/executor.h>
@@ -32,6 +35,8 @@
 #include <nodes/execnodes.h>
 #include <nodes/lockoptions.h>
 #include <nodes/makefuncs.h>
+#include <nodes/value.h>
+#include <parser/parse_node.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <tcop/tcopprot.h>
@@ -63,6 +68,7 @@
 #include "dimension_vector.h"
 #include "errors.h"
 #include "foreign_key.h"
+#include "guc.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
@@ -1025,6 +1031,84 @@ chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const 
 	return chunk;
 }
 
+static void
+get_hypertable_publication_filters(Oid puboid, const Chunk *chunk, List **columns,
+								   Node **whereClause)
+{
+	HeapTuple pubtuple;
+	Datum datum;
+	bool isnull;
+
+	*columns = NIL;
+	*whereClause = NULL;
+
+	/* Get filters for hypertable, chunk should inherit them */
+	pubtuple = SearchSysCache2(PUBLICATIONRELMAP,
+							   ObjectIdGetDatum(chunk->hypertable_relid),
+							   ObjectIdGetDatum(puboid));
+
+	if (!HeapTupleIsValid(pubtuple))
+		return;
+
+	datum = SysCacheGetAttr(PUBLICATIONRELMAP, pubtuple, Anum_pg_publication_rel_prqual, &isnull);
+	if (!isnull)
+	{
+		char *prqual_str = TextDatumGetCString(datum);
+		*whereClause = stringToNode(prqual_str);
+	}
+
+	datum = SysCacheGetAttr(PUBLICATIONRELMAP, pubtuple, Anum_pg_publication_rel_prattrs, &isnull);
+	if (!isnull)
+	{
+		ArrayType *arr = DatumGetArrayTypeP(datum);
+		int nelems = ARR_DIMS(arr)[0];
+		int16 *attnums = (int16 *) ARR_DATA_PTR(arr);
+
+		for (int i = 0; i < nelems; i++)
+		{
+			char *colname = get_attname(chunk->hypertable_relid, attnums[i], false);
+			*columns = lappend(*columns, makeString(colname));
+		}
+	}
+
+	ReleaseSysCache(pubtuple);
+}
+
+static void
+chunk_add_to_publication(Oid puboid, const Chunk *chunk)
+{
+	PublicationRelInfo pri = { 0 };
+	Relation chunk_rel;
+	List *columns = NIL;
+	Node *whereClause = NULL;
+
+	get_hypertable_publication_filters(puboid, chunk, &columns, &whereClause);
+
+	chunk_rel = table_open(chunk->table_id, AccessShareLock);
+
+	pri.relation = chunk_rel;
+	pri.columns = columns;
+	pri.whereClause = whereClause;
+
+	publication_add_relation(puboid, &pri, true);
+
+	table_close(chunk_rel, AccessShareLock);
+}
+
+static void
+chunk_add_to_publications(const Chunk *chunk)
+{
+	List *puboids;
+	ListCell *lc;
+
+	puboids = GetRelationPublications(chunk->hypertable_relid);
+	foreach (lc, puboids)
+	{
+		Oid puboid = lfirst_oid(lc);
+		chunk_add_to_publication(puboid, chunk);
+	}
+}
+
 static Chunk *
 chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 									   const char *schema_name, const char *table_name,
@@ -1077,6 +1161,10 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 	chunk_add_constraints(chunk);
 	chunk_insert_into_metadata_after_lock(chunk);
 	chunk_create_table_constraints(ht, chunk);
+
+	/* Add chunk to publications if hypertable is in any publications */
+	if (ts_guc_enable_chunk_auto_publication)
+		chunk_add_to_publications(chunk);
 
 	return chunk;
 }
@@ -1236,6 +1324,10 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 	chunk_insert_into_metadata_after_lock(chunk);
 	chunk_add_inheritance(chunk, ht);
 	chunk_create_table_constraints(ht, chunk);
+
+	/* Add chunk to publications if hypertable is in any publications */
+	if (ts_guc_enable_chunk_auto_publication)
+		chunk_add_to_publications(chunk);
 
 	return chunk;
 }
@@ -2003,6 +2095,10 @@ chunk_resurrect(const Hypertable *ht, int chunk_id)
 		chunk->relkind = RELKIND_RELATION;
 		chunk->table_id = chunk_create_table(chunk, ht);
 		chunk_create_table_constraints(ht, chunk);
+
+		/* Add chunk to publications if hypertable is in any publications */
+		if (ts_guc_enable_chunk_auto_publication)
+			chunk_add_to_publications(chunk);
 
 		/* Finally, update the chunk tuple to no longer be a tombstone */
 		chunk->fd.dropped = false;
