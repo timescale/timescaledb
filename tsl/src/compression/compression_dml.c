@@ -26,6 +26,7 @@
 #include <compression/compression_dml.h>
 #include <compression/create.h>
 #include <compression/wal_utils.h>
+#include <continuous_aggs/insert.h>
 #include <expression_utils.h>
 #include <indexing.h>
 #include <nodes/columnar_scan/vector_dict.h>
@@ -33,17 +34,31 @@
 #include <nodes/modify_hypertable.h>
 #include <ts_catalog/array_utils.h>
 
+/*
+ * Context for tracking continuous aggregate invalidation during direct batch delete.
+ * When batches are deleted without decompression, we need to track the
+ * time range covered by deleted batches to properly invalidate any
+ * continuous aggregates.
+ */
+typedef struct InvalidationContext
+{
+	int32 hypertable_id;
+	Oid chunk_relid;
+	Oid time_type_oid;
+	AttrNumber min_time_attno; /* compressed chunk column for time min */
+	AttrNumber max_time_attno; /* compressed chunk column for time max */
+} InvalidationContext;
+
 typedef BatchQualSummary(BatchMatcher)(RowDecompressor *decompressor, ScanKeyData *scankeys,
 									   int num_scankeys, tuple_filtering_constraints *constraints,
 									   bool check_full_match, bool *skip_current_tuple);
 
-static struct decompress_batches_stats
-decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, Snapshot snapshot,
-						ScanKeyData *index_scankeys, int num_index_scankeys,
-						ScanKeyData *heap_scankeys, int num_heap_scankeys,
-						ScanKeyData *mem_scankeys, int num_mem_scankeys,
-						tuple_filtering_constraints *constraints, bool *skip_current_tuple,
-						bool delete_only, Bitmapset *null_columns, List *is_nulls);
+static struct decompress_batches_stats decompress_batches_scan(
+	Relation in_rel, Relation out_rel, Relation index_rel, Snapshot snapshot,
+	ScanKeyData *index_scankeys, int num_index_scankeys, ScanKeyData *heap_scankeys,
+	int num_heap_scankeys, ScanKeyData *mem_scankeys, int num_mem_scankeys,
+	tuple_filtering_constraints *constraints, bool *skip_current_tuple, bool delete_only,
+	Bitmapset *null_columns, List *is_nulls, InvalidationContext *invalidation_ctx);
 
 static BatchQualSummary batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys,
 									  int num_scankeys, tuple_filtering_constraints *constraints,
@@ -304,7 +319,8 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 									false,
 									cdst->columns_with_null_check, /* no null column check for
 														   non-segmentby columns */
-									NIL);
+									NIL,
+									NULL /* no CAgg invalidation for inserts */);
 	if (index_rel)
 		index_close(index_rel, AccessShareLock);
 	PopActiveSnapshot();
@@ -367,6 +383,34 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
 	bool delete_only = ht_state->mt->operation == CMD_DELETE && !has_joins &&
 					   can_delete_without_decompression(ht_state, settings, chunk, predicates);
+	InvalidationContext invalidation_ctx = { 0 };
+
+	/*
+	 * Set up CAgg invalidation context if we're doing direct batch delete
+	 * on a hypertable with continuous aggregates.
+	 */
+	if (delete_only && ht_state->has_continuous_aggregate)
+	{
+		const Dimension *time_dim = hyperspace_get_open_dimension(ht_state->ht->space, 0);
+		AttrNumber chunk_time_attno =
+			get_attnum(chunk->table_id, NameStr(time_dim->fd.column_name));
+
+		invalidation_ctx.hypertable_id = ht_state->ht->fd.id;
+		invalidation_ctx.chunk_relid = chunk->table_id;
+		invalidation_ctx.time_type_oid = time_dim->fd.column_type;
+		invalidation_ctx.min_time_attno =
+			compressed_column_metadata_attno(settings,
+											 chunk->table_id,
+											 chunk_time_attno,
+											 settings->fd.compress_relid,
+											 "min");
+		invalidation_ctx.max_time_attno =
+			compressed_column_metadata_attno(settings,
+											 chunk->table_id,
+											 chunk_time_attno,
+											 settings->fd.compress_relid,
+											 "max");
+	}
 
 	process_predicates(chunk,
 					   settings,
@@ -414,7 +458,8 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 									NULL,
 									delete_only,
 									null_columns,
-									is_null);
+									is_null,
+									ht_state->has_continuous_aggregate ? &invalidation_ctx : NULL);
 
 	/* close the selected index */
 	if (matching_index_rel)
@@ -527,7 +572,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 						ScanKeyData *heap_scankeys, int num_heap_scankeys,
 						ScanKeyData *mem_scankeys, int num_mem_scankeys,
 						tuple_filtering_constraints *constraints, bool *skip_current_tuple,
-						bool delete_only, Bitmapset *null_columns, List *is_nulls)
+						bool delete_only, Bitmapset *null_columns, List *is_nulls,
+						InvalidationContext *invalidation_ctx)
 {
 	HeapTuple compressed_tuple;
 	BulkWriter writer;
@@ -705,6 +751,24 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			stats.batches_deleted++;
 			stats.tuples_deleted += DatumGetInt32(
 				decompressor.compressed_datums[AttrNumberGetAttrOffset(meta_count_attno)]);
+
+			/* Track time range for continuous aggregate invalidation if needed */
+			if (invalidation_ctx)
+			{
+				Datum min_time_datum = decompressor.compressed_datums[AttrNumberGetAttrOffset(
+					invalidation_ctx->min_time_attno)];
+				Datum max_time_datum = decompressor.compressed_datums[AttrNumberGetAttrOffset(
+					invalidation_ctx->max_time_attno)];
+				int64 batch_min =
+					ts_time_value_to_internal(min_time_datum, invalidation_ctx->time_type_oid);
+				int64 batch_max =
+					ts_time_value_to_internal(max_time_datum, invalidation_ctx->time_type_oid);
+
+				continuous_agg_invalidate_range(invalidation_ctx->hypertable_id,
+												invalidation_ctx->chunk_relid,
+												batch_min,
+												batch_max);
+			}
 		}
 		else
 		{
@@ -1729,9 +1793,6 @@ can_delete_without_decompression(ModifyHypertableState *ht_state, CompressionSet
 	 * If there is a RETURNING clause we skip the optimization to delete compressed batches directly
 	 */
 	if (ht_state->mt->returningLists)
-		return false;
-
-	if (ts_hypertable_has_continuous_aggregates(ht_state->ht->fd.id))
 		return false;
 
 	/*
