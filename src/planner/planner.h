@@ -86,7 +86,6 @@ typedef enum TsRelType
 } TsRelType;
 
 extern TSDLLEXPORT Hypertable *ts_planner_get_hypertable(const Oid relid, const unsigned int flags);
-extern void ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel);
 extern void ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist);
 extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel,
 											 bool include_osm);
