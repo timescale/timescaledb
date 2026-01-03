@@ -155,8 +155,6 @@ char *ts_telemetry_cloud = NULL;
 #endif
 
 TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
-char *ts_last_tune_time = NULL;
-char *ts_last_tune_version = NULL;
 
 bool ts_guc_debug_allow_cagg_with_deprecated_funcs = false;
 
@@ -1234,28 +1232,6 @@ _guc_init(void)
 							   /* flags= */ 0,
 							   /* check_hook= */ ts_license_guc_check_hook,
 							   /* assign_hook= */ ts_license_guc_assign_hook,
-							   /* show_hook= */ NULL);
-
-	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("last_tuned"),
-							   /* short_desc= */ "last tune run",
-							   /* long_desc= */ "records last time timescaledb-tune ran",
-							   /* valueAddr= */ &ts_last_tune_time,
-							   /* bootValue= */ NULL,
-							   /* context= */ PGC_SIGHUP,
-							   /* flags= */ 0,
-							   /* check_hook= */ NULL,
-							   /* assign_hook= */ NULL,
-							   /* show_hook= */ NULL);
-
-	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("last_tuned_version"),
-							   /* short_desc= */ "version of timescaledb-tune",
-							   /* long_desc= */ "version of timescaledb-tune used to tune",
-							   /* valueAddr= */ &ts_last_tune_version,
-							   /* bootValue= */ NULL,
-							   /* context= */ PGC_SIGHUP,
-							   /* flags= */ 0,
-							   /* check_hook= */ NULL,
-							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
 
 	DefineCustomEnumVariable(MAKE_EXTOPTION("bgw_log_level"),
