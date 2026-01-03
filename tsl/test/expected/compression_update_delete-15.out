@@ -3208,20 +3208,19 @@ CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_buck
 NOTICE:  refreshing continuous aggregate "cagg1"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
 CREATE MATERIALIZED VIEW
--- should not use direct batch delete
+-- should use direct batch delete with invalidation tracking
 EXPLAIN (analyze,costs off, timing off,summary off, buffers off) DELETE FROM cagg_inval;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches decompressed: 2
-   Tuples decompressed: 2
+   Batches deleted: 2
    ->  Delete on cagg_inval (actual rows=0.00 loops=1)
          Delete on _hyper_45_86_chunk cagg_inval_1
          Delete on _hyper_45_87_chunk cagg_inval_2
-         ->  Append (actual rows=2.00 loops=1)
-               ->  Seq Scan on _hyper_45_86_chunk cagg_inval_1 (actual rows=1.00 loops=1)
-               ->  Seq Scan on _hyper_45_87_chunk cagg_inval_2 (actual rows=1.00 loops=1)
+         ->  Append (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_45_86_chunk cagg_inval_1 (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_45_87_chunk cagg_inval_2 (actual rows=0.00 loops=1)
 
--- should have invalidation entry
+-- should have invalidation entry from the direct batch delete
 SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
