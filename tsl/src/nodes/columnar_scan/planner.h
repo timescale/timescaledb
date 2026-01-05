@@ -15,6 +15,7 @@ typedef enum
 	DCS_BatchSortedMerge = 3,
 	DCS_EnableBulkDecompression = 4,
 	DCS_HasRowMarks = 5,
+	DCS_ChunkStatus = 6,
 	DCS_Count
 } ColumnarScanSettingsIndex;
 

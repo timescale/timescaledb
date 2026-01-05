@@ -95,6 +95,9 @@ typedef struct DecompressContext
 	PlanState *ps; /* Set for filtering and instrumentation */
 
 	Detoaster detoaster;
+
+	int32 chunk_status;
+
 } DecompressContext;
 
 #endif /* TIMESCALEDB_DECOMPRESS_CONTEXT_H */

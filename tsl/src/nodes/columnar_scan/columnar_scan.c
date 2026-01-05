@@ -627,6 +627,8 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 		info->parent_relids = find_childrel_parents(root, chunk_rel);
 	}
 
+	info->chunk_status = chunk->fd.status;
+
 	return info;
 }
 
@@ -2369,6 +2371,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 
 	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->reverse = false;
+	path->chunk_status = compression_info->chunk_status;
 	path->required_compressed_pathkeys = NIL;
 	cost_columnar_scan(root, compression_info, &path->custom_path.path, compressed_path);
 
