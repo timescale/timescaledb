@@ -42,24 +42,32 @@ typedef struct ContinuousAggsCacheInvalEntry
 	Dimension hypertable_open_dimension;
 	AttrNumber open_dimension_attno;
 	bool value_is_set;
+	int64 hypertable_invalidation_threshold;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
 } ContinuousAggsCacheInvalEntry;
+
+typedef struct ContinuousAggsCacheHyperInvalThresholdEntry
+{
+	int32 hypertable_id;
+	int64 watermark;
+} ContinuousAggsCacheHyperInvalThresholdEntry;
 
 static int64 get_lowest_invalidated_time_for_hypertable(int32 hypertable_id);
 
 #define CA_CACHE_INVAL_INIT_HTAB_SIZE 64
 
 static HTAB *continuous_aggs_cache_inval_htab = NULL;
+static HTAB *continuous_aggs_cache_hyper_inval_threshold_htab = NULL;
+
 static MemoryContext continuous_aggs_invalidation_mctx = NULL;
 
 static int64 tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc);
 static inline void cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry,
 										  int32 hypertable_id, Oid chunk_relid);
-static inline void update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval);
+static inline void cache_update_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval);
 static inline ContinuousAggsCacheInvalEntry *get_cache_inval_entry(int32 hypertable_id,
 																   Oid chunk_relid);
-static void cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry);
 static void cache_inval_cleanup(void);
 static void cache_inval_htab_write(void);
 static void continuous_agg_xact_invalidation_callback(XactEvent event, void *arg);
@@ -85,7 +93,18 @@ cache_inval_init()
 												   CA_CACHE_INVAL_INIT_HTAB_SIZE,
 												   &ctl,
 												   HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
-};
+
+	memset(&ctl, 0, sizeof(ctl));
+	ctl.keysize = sizeof(int32);
+	ctl.entrysize = sizeof(ContinuousAggsCacheHyperInvalThresholdEntry);
+	ctl.hcxt = continuous_aggs_invalidation_mctx;
+
+	continuous_aggs_cache_hyper_inval_threshold_htab =
+		hash_create("TS Continuous Aggs Hypertable Invalidation Threshold",
+					CA_CACHE_INVAL_INIT_HTAB_SIZE,
+					&ctl,
+					HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+}
 
 static int64
 tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
@@ -126,11 +145,28 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	cache_entry->value_is_set = false;
 	cache_entry->lowest_modified_value = INVAL_POS_INFINITY;
 	cache_entry->greatest_modified_value = INVAL_NEG_INFINITY;
+
+	ContinuousAggsCacheHyperInvalThresholdEntry *hyper_inval_cache_entry;
+	bool found;
+
+	hyper_inval_cache_entry = (ContinuousAggsCacheHyperInvalThresholdEntry *)
+		hash_search(continuous_aggs_cache_hyper_inval_threshold_htab,
+					&cache_entry->hypertable_id,
+					HASH_ENTER,
+					&found);
+	if (!found)
+	{
+		hyper_inval_cache_entry->hypertable_id = cache_entry->hypertable_id;
+		hyper_inval_cache_entry->watermark =
+			get_lowest_invalidated_time_for_hypertable(cache_entry->hypertable_id);
+	}
+	cache_entry->hypertable_invalidation_threshold = hyper_inval_cache_entry->watermark;
+
 	ts_cache_release(&ht_cache);
 }
 
 static inline void
-update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval)
+cache_update_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval)
 {
 	cache_entry->value_is_set = true;
 	if (timeval < cache_entry->lowest_modified_value)
@@ -186,7 +222,7 @@ continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple
 							 cache_entry->open_dimension_attno,
 							 RelationGetDescr(chunk_rel));
 
-	update_cache_entry(cache_entry, timeval);
+	cache_update_entry(cache_entry, timeval);
 
 	if (!update)
 		return;
@@ -197,14 +233,12 @@ continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple
 							 cache_entry->open_dimension_attno,
 							 RelationGetDescr(chunk_rel));
 
-	update_cache_entry(cache_entry, timeval);
+	cache_update_entry(cache_entry, timeval);
 }
 
 static void
 cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 {
-	int64 liv;
-
 	if (!entry->value_is_set)
 		return;
 
@@ -223,9 +257,7 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 		return;
 	}
 
-	liv = get_lowest_invalidated_time_for_hypertable(entry->hypertable_id);
-
-	if (entry->lowest_modified_value < liv)
+	if (entry->lowest_modified_value < entry->hypertable_invalidation_threshold)
 		invalidation_hyper_log_add_entry(entry->hypertable_id,
 										 entry->lowest_modified_value,
 										 entry->greatest_modified_value);
@@ -236,9 +268,11 @@ cache_inval_cleanup(void)
 {
 	Assert(continuous_aggs_cache_inval_htab != NULL);
 	hash_destroy(continuous_aggs_cache_inval_htab);
+	hash_destroy(continuous_aggs_cache_hyper_inval_threshold_htab);
 	MemoryContextDelete(continuous_aggs_invalidation_mctx);
 
 	continuous_aggs_cache_inval_htab = NULL;
+	continuous_aggs_cache_hyper_inval_threshold_htab = NULL;
 	continuous_aggs_invalidation_mctx = NULL;
 };
 
@@ -263,7 +297,10 @@ cache_inval_htab_write(void)
 
 	hash_seq_init(&hash_seq, continuous_aggs_cache_inval_htab);
 	while ((current_entry = hash_seq_search(&hash_seq)) != NULL)
-		cache_inval_entry_write(current_entry);
+	{
+		if (current_entry->value_is_set)
+			cache_inval_entry_write(current_entry);
+	}
 };
 
 /*
