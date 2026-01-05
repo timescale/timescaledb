@@ -147,6 +147,9 @@ SELECT test_check_version_response('{"current_timescaledb_version": "1.6.1"}');
 SELECT test_check_version_response('{"is_up_to_date": false}');
 \set ON_ERROR_STOP 1
 
+SET timescaledb.last_tune_time = '2024-01-01 00:00:00+00';
+SET timescaledb.last_tune_version = '1.2.3';
+
 SET timescaledb.telemetry_level=basic;
 -- Connect to a bogus host and path to test error handling in telemetry_main()
 SELECT _timescaledb_internal.test_telemetry_main_conn('noservice.timescale.com', 'path');

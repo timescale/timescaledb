@@ -45,6 +45,7 @@ set(SOURCE_FILES
     views.sql
     views_experimental.sql
     gapfill.sql
+    compression.sql
     maintenance_utils.sql
     restoring.sql
     job_api.sql

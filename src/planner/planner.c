@@ -1701,8 +1701,6 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 	{
 		if (parse->hasAggs)
 			ts_preprocess_first_last_aggregates(root, root->processed_tlist);
-
-		ts_plan_add_hashagg(root, input_rel, output_rel);
 	}
 
 	if (ts_cm_functions->create_upper_paths_hook != NULL)
