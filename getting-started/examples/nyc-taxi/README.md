@@ -20,30 +20,104 @@ Get started with TimescaleDB using New York City taxi trip data. This example de
 
 ### Step 1: Start TimescaleDB
 
+You have two options to start TimescaleDB:
+
+#### Option 1: One-line install (Recommended)
+
+The easiest way to get started:
+
+> **Important:** This script is intended for local development and testing only. Do **not** use it for production deployments. For production-ready installation options, see the [TimescaleDB installation guide](https://docs.timescale.com/self-hosted/latest/install/).
+
+**Linux/Mac:**
+
+```sh
+curl -sL https://tsdb.co/start-local | sh
+```
+
+This command:
+- Downloads and starts TimescaleDB (if not already downloaded)
+- Exposes PostgreSQL on port **6543** (a non-standard port to avoid conflicts with other PostgreSQL instances on port 5432)
+- Automatically tunes settings for your environment using timescaledb-tune
+- Sets up a persistent data volume
+
+#### Option 2: Manual Docker command also used for Windows
+
+Alternatively, you can run TimescaleDB directly with Docker:
+
 ```bash
 docker run -d --name timescaledb \
-    -p 5432:5432 \
+    -p 6543:5432 \
     -e POSTGRES_PASSWORD=password \
-    timescale/timescaledb-ha:pg17
+    timescale/timescaledb-ha:pg18
 ```
 
-Wait 10-15 seconds for the container to start, then connect:
+**Note:** We use port **6543** (mapped to container port 5432) to avoid conflicts if you have other PostgreSQL instances running on the standard port 5432.
+
+Wait about 1-2 minutes for TimescaleDB to download & initialize.
+
+### Step 2: Connect to TimescaleDB
+
+Connect using `psql`:
 
 ```bash
-psql -h localhost -p 5432 -U postgres
-# Password: password
+psql -h localhost -p 6543 -U postgres
+# When prompted, enter password: password
 ```
 
-### Step 2: Create the Schema
+You should see the PostgreSQL prompt. Verify TimescaleDB is installed:
 
-Run the schema definition to create the optimized hypertable:
-
-```bash
-# From your terminal (outside psql)
-psql -h localhost -p 5432 -U postgres < nyc-taxi-schema.sql
+```sql
+SELECT extname, extversion FROM pg_extension WHERE extname = 'timescaledb';
 ```
 
-Or copy-paste the contents of [`nyc-taxi-schema.sql`](nyc-taxi-schema.sql) directly into your `psql` session.
+Expected output:
+```
+   extname   | extversion
+-------------+------------
+ timescaledb | 2.x.x
+```
+
+**Prefer a GUI?** If you'd rather use a graphical tool instead of the command line, you can download [pgAdmin](https://www.pgadmin.org/download/) and connect to TimescaleDB using the same connection details (host: `localhost`, port: `6543`, user: `postgres`, password: `password`).
+
+### Step 3: Create the Schema
+
+Create the optimized hypertable by running this SQL in your `psql` session:
+
+```sql
+-- Create the hypertable with optimal settings for NYC Taxi data
+-- This automatically enables columnstore for fast analytical queries
+CREATE TABLE trips (
+    vendor_id TEXT,
+    pickup_boroname VARCHAR,
+    pickup_datetime TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    dropoff_datetime TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    passenger_count NUMERIC,
+    trip_distance NUMERIC,
+    pickup_longitude NUMERIC,
+    pickup_latitude NUMERIC,
+    rate_code INTEGER,
+    dropoff_longitude NUMERIC,
+    dropoff_latitude NUMERIC,
+    payment_type VARCHAR,
+    fare_amount NUMERIC,
+    extra NUMERIC,
+    mta_tax NUMERIC,
+    tip_amount NUMERIC,
+    tolls_amount NUMERIC,
+    improvement_surcharge NUMERIC,
+    total_amount NUMERIC
+) WITH (
+    tsdb.hypertable,
+    tsdb.partition_column='pickup_datetime',
+    tsdb.enable_columnstore=true,
+    tsdb.segmentby='pickup_boroname',
+    tsdb.orderby='pickup_datetime DESC'
+);
+
+-- Create indexes 
+CREATE INDEX idx_trips_pickup_time ON trips (pickup_datetime DESC);
+CREATE INDEX idx_trips_borough_time ON trips (pickup_boroname, pickup_datetime DESC);
+```
 
 This creates a `trips` table with:
 - Automatic time-based partitioning on `pickup_datetime`
@@ -51,7 +125,7 @@ This creates a `trips` table with:
 - Segmentation by `pickup_boroname` for optimal compression (6 boroughs)
 - Full trip details including fares, distances, and coordinates
 
-### Step 3: Load Sample Data
+### Step 4: Load Sample Data
 
 We provide two approaches for loading data. Choose based on your needs:
 
@@ -75,7 +149,7 @@ SELECT COUNT(*) FROM trips;
 **From command line:**
 
 ```bash
-psql -h localhost -p 5432 -U postgres \
+psql -h localhost -p 6543 -U postgres \
   -v ON_ERROR_STOP=1 \
   -c "SET timescaledb.enable_direct_compress_copy = on;
       COPY trips FROM STDIN WITH (FORMAT csv, HEADER true);" \
@@ -97,18 +171,11 @@ SELECT COUNT(*) FROM trips;
 SELECT compress_chunk(chunk) FROM show_chunks('trips');
 ```
 
-### Step 4: Run Sample Queries
+### Step 5: Run Sample Queries
 
-Now let's explore the data with some analytical queries:
+Now let's explore the data with some analytical queries. Run these in your `psql` session:
 
-```bash
-# Run all sample queries
-psql -h localhost -p 5432 -U postgres < nyc-taxi-queries.sql
-```
-
-Or run queries individually in your `psql` session. Here are some highlights:
-
-**Overall statistics:**
+**Query 1: Overall statistics**
 ```sql
 \timing on
 
@@ -120,7 +187,20 @@ SELECT
 FROM trips;
 ```
 
-**Hourly patterns using time_bucket:**
+**Query 2: Breakdown by vendor**
+```sql
+SELECT
+    vendor_id,
+    COUNT(*) as trips,
+    ROUND(AVG(fare_amount)::numeric, 2) as avg_fare,
+    ROUND(AVG(tip_amount)::numeric, 2) as avg_tip,
+    ROUND(AVG(passenger_count)::numeric, 2) as avg_passengers
+FROM trips
+GROUP BY vendor_id
+ORDER BY trips DESC;
+```
+
+**Query 3: Hourly patterns using time_bucket**
 ```sql
 SELECT
     time_bucket('1 hour', pickup_datetime) AS hour,
@@ -133,21 +213,49 @@ ORDER BY hour DESC
 LIMIT 24;
 ```
 
-**Top revenue locations:**
+**Query 4: Payment type analysis**
 ```sql
 SELECT
-    pickup_location_id,
+    payment_type,
     COUNT(*) as trip_count,
     ROUND(SUM(fare_amount)::numeric, 2) as total_revenue,
     ROUND(AVG(trip_distance)::numeric, 2) as avg_distance,
     ROUND(AVG(tip_amount)::numeric, 2) as avg_tip
 FROM trips
-GROUP BY pickup_location_id
-ORDER BY total_revenue DESC
-LIMIT 10;
+GROUP BY payment_type
+ORDER BY total_revenue DESC;
 ```
 
-Notice how fast these analytical queries execute, even with aggregations across thousands of rows. This is the power of TimescaleDB's columnstore.
+**Query 5: Daily statistics by borough**
+```sql
+SELECT
+    time_bucket('1 day', pickup_datetime) AS day,
+    pickup_boroname,
+    COUNT(*) as trips,
+    ROUND(AVG(fare_amount)::numeric, 2) as avg_fare,
+    ROUND(MAX(fare_amount)::numeric, 2) as max_fare
+FROM trips
+GROUP BY day, pickup_boroname
+ORDER BY day DESC, pickup_boroname
+LIMIT 20;
+```
+
+**Query 6: Trips by distance category**
+```sql
+SELECT
+    CASE
+        WHEN trip_distance < 1 THEN 'Short (< 1 mile)'
+        WHEN trip_distance < 5 THEN 'Medium (1-5 miles)'
+        WHEN trip_distance < 10 THEN 'Long (5-10 miles)'
+        ELSE 'Very Long (> 10 miles)'
+    END as distance_category,
+    COUNT(*) as trips,
+    ROUND(AVG(fare_amount)::numeric, 2) as avg_fare,
+    ROUND(AVG(tip_amount)::numeric, 2) as avg_tip
+FROM trips
+GROUP BY distance_category
+ORDER BY trips DESC;
+```
 
 ## What's Happening Behind the Scenes?
 
@@ -217,40 +325,6 @@ See [`nyc-taxi-queries.sql`](nyc-taxi-queries.sql) for the complete set of queri
 - Optimizes for "latest trips" queries
 - Improves query performance for time-range scans
 
-## Common Query Patterns
-
-### Time-range queries
-```sql
--- Last 24 hours of trips
-SELECT * FROM trips
-WHERE pickup_datetime > NOW() - INTERVAL '24 hours';
-```
-
-### Aggregation with time_bucket
-```sql
--- 15-minute intervals
-SELECT
-    time_bucket('15 minutes', pickup_datetime) AS bucket,
-    COUNT(*) as trips,
-    AVG(fare_amount) as avg_fare
-FROM trips
-WHERE pickup_datetime > NOW() - INTERVAL '7 days'
-GROUP BY bucket
-ORDER BY bucket DESC;
-```
-
-### Borough-based analysis
-```sql
--- Trips from a specific borough
-SELECT
-    COUNT(*) as trips,
-    AVG(fare_amount) as avg_fare,
-    AVG(trip_distance) as avg_distance
-FROM trips
-WHERE pickup_boroname = 'Manhattan'
-    AND pickup_datetime > NOW() - INTERVAL '7 days';
-```
-
 ## Continuous Aggregates (Advanced)
 
 For real-time dashboards, you can create continuous aggregates that automatically update:
@@ -278,16 +352,6 @@ SELECT add_continuous_aggregate_policy('trips_hourly',
 
 Now you can query `trips_hourly` for instant results on pre-aggregated data.
 
-## Data Retention Policies (Advanced)
-
-For production systems, you can automatically drop old data:
-
-```sql
--- Keep only the last 90 days of raw data
-SELECT add_retention_policy('trips', INTERVAL '90 days');
-```
-
-Continuous aggregates can retain data longer than raw data, giving you historical trends without storing all the details.
 
 ## Troubleshooting
 
@@ -310,29 +374,6 @@ Continuous aggregates can retain data longer than raw data, giving you historica
 - Reduce batch size in COPY command
 - Increase Docker memory allocation
 - Consider loading data in smaller time-range batches
-
-## Next Steps
-
-### Explore More Examples
-- [IoT Sensors](../iot-sensors/) - Device monitoring patterns
-- [Financial Ticks](../financial-ticks/) - Market data analytics
-- [Events with UUIDv7](../events-uuidv7/) - Application event logging
-- [Cryptocurrency](../crypto/) - Crypto market analysis
-
-### Bring Your Own Data
-Ready to try TimescaleDB with your data? See our guide:
-- [Your Own Data Guide](../../your-own-data/)
-
-### Learn Advanced Features
-- [Continuous Aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
-- [Data Retention Policies](https://docs.timescale.com/use-timescale/latest/data-retention/)
-- [Compression Settings](https://docs.timescale.com/use-timescale/latest/compression/)
-- [TimescaleDB Best Practices](https://docs.timescale.com/use-timescale/latest/schema-management/)
-
-### Production Deployment
-- [Timescale Cloud](https://www.timescale.com/cloud) - Managed TimescaleDB hosting
-- [Self-hosting Guide](https://docs.timescale.com/self-hosted/latest/)
-- [Performance Tuning](https://docs.timescale.com/self-hosted/latest/configuration/)
 
 ## Use Cases
 
