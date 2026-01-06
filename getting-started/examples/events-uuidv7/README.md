@@ -243,28 +243,6 @@ ORDER BY total_revenue DESC
 LIMIT 10;
 ```
 
-**Query 6: Inspect Chunks and Compression**
-```sql
--- View chunk distribution
-SELECT
-    chunk_name,
-    range_start,
-    range_end,
-    pg_size_pretty(total_bytes) as total_size,
-    pg_size_pretty(table_bytes) as table_size,
-    pg_size_pretty(index_bytes) as index_size
-FROM timescaledb_information.chunks
-WHERE hypertable_name = 'app_events'
-ORDER BY range_start;
-
--- Compression statistics
-SELECT * FROM hypertable_columnstore_stats('app_events');
-
--- Columnstore settings
-SELECT * FROM timescaledb_information.hypertable_columnstore_settings
-WHERE hypertable_name = 'app_events';
-```
-
 ## What's Happening Behind the Scenes?
 
 ### UUIDv7 Partitioning
