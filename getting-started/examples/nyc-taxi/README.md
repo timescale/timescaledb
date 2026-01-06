@@ -368,7 +368,7 @@ Now you can query `trips_hourly` for instant results on pre-aggregated data.
 ### Queries seem slow
 - Verify columnstore is enabled: `SELECT * FROM timescaledb_information.hypertables WHERE hypertable_name = 'trips';`
 - Check if data is compressed: `SELECT * FROM timescaledb_information.chunks WHERE hypertable_name = 'trips';`
-- Ensure you're querying with time ranges (enables chunk pruning)
+- Ensure you're querying with time ranges (enables chunk exclusion)
 
 ### Out of memory during load
 - Reduce batch size in COPY command
