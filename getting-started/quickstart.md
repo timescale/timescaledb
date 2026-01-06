@@ -103,6 +103,14 @@ CREATE INDEX idx_sensor_id_time ON sensor_data(sensor_id, time DESC);
 
 `tsdb.hypertable` - Converts this into a TimescaleDB hypertable
 
+See more:
+
+- [About hypertables](https://docs.tigerdata.com/use-timescale/latest/hypertables/)
+- [API reference](https://docs.tigerdata.com/api/latest/hypertable/)
+- [About columnstore](https://docs.tigerdata.com/use-timescale/latest/compression/about-compression/)
+- [Enable columnstore manually](https://docs.tigerdata.com/use-timescale/latest/compression/manual-compression/)
+- [API reference](https://docs.tigerdata.com/api/latest/compression/)
+
 ## Step 4: Insert Sample Data
 
 Let's add some sample sensor readings:
@@ -213,6 +221,13 @@ TimescaleDB automatically:
 - **Optimizes queries** by only scanning relevant time ranges and columns
 - **Enables time_bucket()** - a powerful function for time-series aggregation
 
+See more:
+
+- [Query data](https://docs.tigerdata.com/use-timescale/latest/query-data/)
+- [Write data](https://docs.tigerdata.com/use-timescale/latest/write-data/)
+- [About time buckets](https://docs.tigerdata.com/use-timescale/latest/time-buckets/about-time-buckets/)
+- [API reference](https://docs.tigerdata.com/api/latest/hyperfunctions/time_bucket/)
+- [All TimescaleDB features](https://docs.tigerdata.com/use-timescale/latest/)
 
 ## Next Steps
 
@@ -233,11 +248,10 @@ Check out our complete examples with real-world datasets:
 - [TimescaleDB Documentation](https://docs.timescale.com)
 - [Time-series Best Practices](https://docs.timescale.com/use-timescale/latest/schema-management/)
 - [Continuous Aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
-- [Data Retention Policies](https://docs.timescale.com/use-timescale/latest/data-retention/)
 
 ## Create Continuous Aggregates
 
-Continuous aggregates make real-time analytics run faster on very large datasets. They continuously and incrementally refresh a query in the background, so that when you run such query, only the data that has changed needs to be computed, not the entire dataset. This is what makes them different from regular PostgreSQL materialized views, which cannot be incrementally materialized and have to be rebuilt from scratch every time you want to refresh them.
+Continuous aggregates make real-time analytics run faster on very large datasets. They continuously and incrementally refresh a query in the background, so that when you run such query, only the data that has changed needs to be computed, not the entire dataset. This is what makes them different from regular PostgreSQL [materialized views](https://www.postgresql.org/docs/current/rules-materializedviews.html), which cannot be incrementally materialized and have to be rebuilt from scratch every time you want to refresh them.
 
 Let's create a continuous aggregate for hourly sensor statistics:
 
@@ -331,6 +345,11 @@ LIMIT 24;
 ```
 
 Notice how the continuous aggregate query is significantly faster, especially as your dataset grows!
+
+See more:
+
+- [About continuous aggregates](https://docs.tigerdata.com/use-timescale/latest/continuous-aggregates/)
+- [API reference](https://docs.tigerdata.com/api/latest/continuous-aggregates/create_materialized_view/)
 
 ## Troubleshooting
 
