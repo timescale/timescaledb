@@ -347,26 +347,9 @@ See more:
 
 - [About continuous aggregates](https://docs.tigerdata.com/use-timescale/latest/continuous-aggregates/)
 - [API reference](https://docs.tigerdata.com/api/latest/continuous-aggregates/create_materialized_view/)
-
-#### Try Complete Examples
-
-Check out our complete examples with real-world datasets:
-
-- **[IoT Sensors](getting-started/examples/iot-sensors/)** - Device monitoring and analytics
-- **[NYC Taxi Data](getting-started/examples/nyc-taxi/)** - Transportation and location analytics
-- **[Financial Ticks](getting-started/examples/financial-ticks/)** - Market data and trading analytics
-- **[Events with UUIDv7](getting-started/examples/events-uuidv7/)** - Application event logging
-- **[Cryptocurrency](getting-started/examples/crypto/)** - Crypto market data analysis
-
-#### Learn More
-
 - [TimescaleDB Documentation](https://docs.timescale.com)
 - [Time-series Best Practices](https://docs.timescale.com/use-timescale/latest/schema-management/)
 - [Continuous Aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
-
----
-
-**Ready for more?** Check out our [complete examples](getting-started/examples/) with real-world datasets and production-ready patterns.
 
 ## Examples
 
@@ -406,7 +389,7 @@ We welcome contributions to TimescaleDB! See [Contributing](https://github.com/t
 
 TigerData is the fastest PostgreSQL for transactional, analytical and agentic workloads. To learn more about the company and its products, visit [tigerdata.com](https://www.tigerdata.com).
 
-### Troubleshooting
+## Troubleshooting
 
 #### Docker container won't start
 
@@ -443,7 +426,7 @@ docker run -d --name timescaledb -p 6543:5432 -e POSTGRES_PASSWORD=password time
 
 The `timescale/timescaledb-ha:pg18` image has TimescaleDB pre-installed and pre-loaded. If you see errors, ensure you're using the correct image.
 
-### Clean Up
+## Clean Up
 
 When you're done experimenting:
 
