@@ -19,6 +19,7 @@ set(TEST_FILES
     cagg_watermark.sql
     chunk_column_stats.sql
     columnar_scan_cost.sql
+    columnar_index_scan.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
@@ -142,10 +143,10 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     decompress_memory.sql
     decompress_vector_qual.sql
     detach_chunk.sql
-    exp_cagg_monthly.sql
-    exp_cagg_next_gen.sql
-    exp_cagg_origin.sql
-    exp_cagg_timezone.sql
+    cagg_exp_monthly.sql
+    cagg_exp_next_gen.sql
+    cagg_exp_origin.sql
+    cagg_exp_timezone.sql
     hypertable_generalization.sql
     insert_memory_usage.sql
     information_view_chunk_count.sql
@@ -172,8 +173,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_ddl.sql.in
     cagg_migrate_function.sql.in
     cagg_usage.sql.in
+    cagg.sql.in
     compression_update_delete.sql.in
-    continuous_aggs.sql.in
     transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)

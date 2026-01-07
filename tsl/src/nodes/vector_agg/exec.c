@@ -919,8 +919,8 @@ vector_agg_exec(CustomScanState *node)
 	}
 
 	/*
-	 * Have no more partial aggregation results and still have input, have to
-	 * reset the grouping policy and start a new cycle of partial aggregation.
+	 * Have no more partial aggregation results but might still have input.
+	 * Reset the grouping policy and start a new cycle of partial aggregation.
 	 */
 	grouping->gp_reset(grouping);
 
