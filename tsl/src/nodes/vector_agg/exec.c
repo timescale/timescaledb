@@ -33,6 +33,9 @@
 #include "commands/explain_state.h"
 #endif
 
+static CompressedBatchVectorQualState
+compressed_batch_init_vector_quals(DecompressContext *dcontext, List *quals, TupleTableSlot *slot);
+
 static int
 get_input_offset(const DecompressContext *dcontext, const Var *var)
 {
@@ -353,28 +356,22 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
  *
  * Used to implement vectorized aggregate function filter clause.
  */
-static VectorQualState *
-compressed_batch_init_vector_quals(VectorAggState *agg_state, VectorAggDef *agg_def,
-								   TupleTableSlot *slot)
+static CompressedBatchVectorQualState
+compressed_batch_init_vector_quals(DecompressContext *dcontext, List *quals, TupleTableSlot *slot)
 {
-	ColumnarScanState *decompress_state =
-		(ColumnarScanState *) linitial(agg_state->custom.custom_ps);
-	DecompressContext *dcontext = &decompress_state->decompress_context;
 	DecompressBatchState *batch_state = (DecompressBatchState *) slot;
 
-	agg_state->vqual_state = (CompressedBatchVectorQualState) {
+	return (CompressedBatchVectorQualState) {
 				.vqstate = {
-					.vectorized_quals_constified = agg_def->filter_clauses,
+					.vectorized_quals_constified = quals,
 					.num_results = batch_state->total_batch_rows,
 					.per_vector_mcxt = batch_state->per_batch_context,
-					.slot = decompress_state->csstate.ss.ss_ScanTupleSlot,
+					.slot = slot,
 					.get_arrow_array = compressed_batch_get_arrow_array,
 				},
 				.batch_state = batch_state,
 				.dcontext = dcontext,
 			};
-
-	return &agg_state->vqual_state.vqstate;
 }
 
 static TupleTableSlot *
@@ -406,6 +403,12 @@ vector_agg_exec(CustomScanState *node)
 	}
 
 	/*
+	 * Have no more partial aggregation results but might still have input.
+	 * Reset the grouping policy and start a new cycle of partial aggregation.
+	 */
+	grouping->gp_reset(grouping);
+
+	/*
 	 * If the partial aggregation results have ended, and the input has ended,
 	 * we're done.
 	 */
@@ -413,12 +416,6 @@ vector_agg_exec(CustomScanState *node)
 	{
 		return NULL;
 	}
-
-	/*
-	 * Have no more partial aggregation results and still have input, have to
-	 * reset the grouping policy and start a new cycle of partial aggregation.
-	 */
-	grouping->gp_reset(grouping);
 
 	/*
 	 * Now we loop through the input compressed tuples, until they end or until
@@ -454,11 +451,11 @@ vector_agg_exec(CustomScanState *node)
 			uint64 *filter_clause_result = NULL;
 			if (agg_def->filter_clauses != NIL)
 			{
-				VectorQualState *vqstate =
-					vector_agg_state->init_vector_quals(vector_agg_state, agg_def, slot);
-				if (vector_qual_compute(vqstate) != AllRowsPass)
+				CompressedBatchVectorQualState vqstate =
+					compressed_batch_init_vector_quals(dcontext, agg_def->filter_clauses, slot);
+				if (vector_qual_compute(&vqstate.vqstate) != AllRowsPass)
 				{
-					filter_clause_result = vqstate->vector_qual_result;
+					filter_clause_result = vqstate.vqstate.vector_qual_result;
 				}
 			}
 
@@ -556,7 +553,6 @@ vector_agg_state_create(CustomScan *cscan)
 	 * compressed batches, respectively.
 	 */
 	state->get_next_slot = compressed_batch_get_next_slot;
-	state->init_vector_quals = compressed_batch_init_vector_quals;
 
 	return (Node *) state;
 }

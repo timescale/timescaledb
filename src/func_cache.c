@@ -527,6 +527,27 @@ static FuncInfo funcinfo[] = {
 	},
 
 	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = false,
+		.allowed_in_cagg_definition = false,
+		.funcname = "first",
+		.nargs = 2,
+		.arg_types = { ANYELEMENTOID, ANYOID },
+		.group_estimate = NULL,
+		.sort_transform = NULL,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = false,
+		.allowed_in_cagg_definition = false,
+		.funcname = "last",
+		.nargs = 2,
+		.arg_types = { ANYELEMENTOID, ANYOID },
+		.group_estimate = NULL,
+		.sort_transform = NULL,
+	},
+
+	{
 		.origin = ORIGIN_POSTGRES,
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
@@ -549,6 +570,9 @@ static FuncInfo funcinfo[] = {
 };
 
 #define _MAX_CACHE_FUNCTIONS (sizeof(funcinfo) / sizeof(funcinfo[0]))
+
+Oid ts_first_func_oid = InvalidOid;
+Oid ts_last_func_oid = InvalidOid;
 
 static HTAB *func_hash = NULL;
 
@@ -614,6 +638,12 @@ initialize_func_info()
 		}
 
 		funcid = proc_get_oid(tuple);
+
+		/* Special handling for first/last to set up named variables for their oids */
+		if (strcmp(finfo->funcname, "first") == 0)
+			ts_first_func_oid = funcid;
+		else if (strcmp(finfo->funcname, "last") == 0)
+			ts_last_func_oid = funcid;
 
 		fentry = hash_search(func_hash, &funcid, HASH_ENTER, &hash_found);
 		Assert(!hash_found);

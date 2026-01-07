@@ -38,6 +38,7 @@
 #include "export.h"
 #include "hypertable.h"
 #include "license_guc.h"
+#include "nodes/columnar_index_scan/columnar_index_scan.h"
 #include "nodes/columnar_scan/planner.h"
 #include "nodes/gapfill/gapfill_functions.h"
 #include "nodes/skip_scan/skip_scan.h"
@@ -142,6 +143,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	/* Compression */
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,
 	.compressed_data_decompress_reverse = tsl_compressed_data_decompress_reverse,
+	.compressed_data_column_size = tsl_compressed_data_column_size,
+	.compressed_data_to_array = tsl_compressed_data_to_array,
 	.compressed_data_send = tsl_compressed_data_send,
 	.compressed_data_recv = tsl_compressed_data_recv,
 	.compressed_data_in = tsl_compressed_data_in,
@@ -212,6 +215,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	ts_cm_functions = &tsl_cm_functions;
 
 	_continuous_aggs_cache_inval_init();
+	_columnar_index_scan_init();
 	_columnar_scan_init();
 	_skip_scan_init();
 	_vector_agg_init();

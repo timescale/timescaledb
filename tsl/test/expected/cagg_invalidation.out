@@ -1276,9 +1276,8 @@ EXPLAIN (analyze,buffers off,costs off,timing off,summary off) INSERT INTO direc
 SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 18 ORDER BY 1,2;
          start          |          end           
 ------------------------+------------------------
- 2023-12-31 00:01:00+00 | 2023-12-31 16:40:00+00
+ 2023-12-31 00:01:00+00 | 2024-01-01 09:20:00+00
  2023-12-31 07:20:00+00 | 2023-12-31 23:59:00+00
- 2023-12-31 16:41:00+00 | 2024-01-01 09:20:00+00
  2024-01-01 00:01:00+00 | 2024-01-01 16:40:00+00
 
 -- should have 1 uncompressed and 1 compressed chunk

@@ -1,8 +1,7 @@
 <div align=center>
 <picture align=center>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.timescale.com/docs/images/tigerdata-gradient-white.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://assets.timescale.com/docs/images/tigerdata-gradient-black.svg">
-    <img alt="TigerData logo" >
+    <source  srcset="https://assets.timescale.com/timescale-web/brand/show/horizontal-black.svg">
+    <img alt="Tiger Data logo" >
 </picture>
 </div>
 
@@ -178,7 +177,7 @@ All services include all the cloud tooling you'd expect for production use: [aut
 
 We welcome contributions to TimescaleDB! See [Contributing](https://github.com/timescale/timescaledb/blob/main/CONTRIBUTING.md) and [Code style guide](https://github.com/timescale/timescaledb/blob/main/docs/StyleGuide.md) for details.
 
-## Learn about TigerData
+## Learn about Tiger Data
 
-TigerData is the fastest PostgreSQL for transactional, analytical and agentic workloads. To learn more about the company and its products, visit [tigerdata.com](https://www.tigerdata.com).
+Tiger Data is the fastest PostgreSQL for transactional, analytical and agentic workloads. To learn more about the company and its products, visit [tigerdata.com](https://www.tigerdata.com).
 

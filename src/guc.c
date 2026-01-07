@@ -100,7 +100,6 @@ TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
 bool ts_guc_enable_vectorized_aggregation = true;
-bool ts_guc_enable_custom_hashagg = false;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
@@ -127,6 +126,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
+TSDLLEXPORT bool ts_guc_enable_columnarindexscan = false;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 #if PG16_GE
@@ -155,8 +155,6 @@ char *ts_telemetry_cloud = NULL;
 #endif
 
 TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
-char *ts_last_tune_time = NULL;
-char *ts_last_tune_version = NULL;
 
 bool ts_guc_debug_allow_cagg_with_deprecated_funcs = false;
 
@@ -999,17 +997,6 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_custom_hashagg"),
-							 "Enable custom hash aggregation",
-							 "Enable creating custom hash aggregation plans",
-							 &ts_guc_enable_custom_hashagg,
-							 false,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_vectorized_aggregation"),
 							 "Enable vectorized aggregation",
 							 "Enable vectorized aggregation for compressed data",
@@ -1091,6 +1078,18 @@ _guc_init(void)
 							 "sequence scans.",
 							 &ts_guc_enable_columnarscan,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarindexscan"),
+							 "Enable metadata-only optimization for ColumnarScans",
+							 "Enable returning results directly from compression "
+							 "metadata without decompression",
+							 &ts_guc_enable_columnarindexscan,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -1234,28 +1233,6 @@ _guc_init(void)
 							   /* flags= */ 0,
 							   /* check_hook= */ ts_license_guc_check_hook,
 							   /* assign_hook= */ ts_license_guc_assign_hook,
-							   /* show_hook= */ NULL);
-
-	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("last_tuned"),
-							   /* short_desc= */ "last tune run",
-							   /* long_desc= */ "records last time timescaledb-tune ran",
-							   /* valueAddr= */ &ts_last_tune_time,
-							   /* bootValue= */ NULL,
-							   /* context= */ PGC_SIGHUP,
-							   /* flags= */ 0,
-							   /* check_hook= */ NULL,
-							   /* assign_hook= */ NULL,
-							   /* show_hook= */ NULL);
-
-	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("last_tuned_version"),
-							   /* short_desc= */ "version of timescaledb-tune",
-							   /* long_desc= */ "version of timescaledb-tune used to tune",
-							   /* valueAddr= */ &ts_last_tune_version,
-							   /* bootValue= */ NULL,
-							   /* context= */ PGC_SIGHUP,
-							   /* flags= */ 0,
-							   /* check_hook= */ NULL,
-							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
 
 	DefineCustomEnumVariable(MAKE_EXTOPTION("bgw_log_level"),

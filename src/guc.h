@@ -53,7 +53,6 @@ extern TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge;
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
 extern TSDLLEXPORT bool ts_guc_enable_chunkwise_aggregation;
 extern TSDLLEXPORT bool ts_guc_enable_vectorized_aggregation;
-extern TSDLLEXPORT bool ts_guc_enable_custom_hashagg;
 extern bool ts_guc_restoring;
 extern int ts_guc_max_open_chunks_per_insert;
 extern int ts_guc_max_cached_chunks_per_hypertable;
@@ -103,15 +102,13 @@ extern char *ts_telemetry_cloud;
 #endif
 
 extern TSDLLEXPORT char *ts_guc_license;
-extern char *ts_last_tune_time;
-extern char *ts_last_tune_version;
-extern TSDLLEXPORT bool ts_guc_enable_2pc;
 extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 extern TSDLLEXPORT bool ts_guc_enable_bulk_decompression;
 extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
 extern TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom;
 extern TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1;
 extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
+extern TSDLLEXPORT bool ts_guc_enable_columnarindexscan;
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
 
 /*
@@ -166,5 +163,3 @@ typedef enum
 extern TSDLLEXPORT void ts_feature_flag_check(FeatureFlagType);
 extern TSDLLEXPORT Oid ts_guc_default_segmentby_fn_oid(void);
 extern TSDLLEXPORT Oid ts_guc_default_orderby_fn_oid(void);
-
-extern TSDLLEXPORT bool ts_is_whitelisted_indexam(const char *amname);
