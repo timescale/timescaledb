@@ -596,10 +596,6 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 	if (!ht)
 		return;
 
-	/* Perform partial aggregation planning only if there is an aggregation is requested */
-	if (!parse->hasAggs)
-		return;
-
 	/* Grouping sets are not supported by the partial aggregation pushdown */
 	if (parse->groupingSets)
 		return;
