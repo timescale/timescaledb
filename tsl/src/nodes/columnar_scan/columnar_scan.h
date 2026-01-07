@@ -47,6 +47,8 @@ typedef struct CompressionInfo
 
 	/* Compressed batch size estimated from statistics. */
 	double compressed_batch_size;
+
+	int32 chunk_status;
 } CompressionInfo;
 
 typedef struct ColumnarScanPath
@@ -58,6 +60,7 @@ typedef struct ColumnarScanPath
 	bool needs_sequence_num;
 	bool reverse;
 	bool batch_sorted_merge;
+	int32 chunk_status;
 } ColumnarScanPath;
 
 void ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht,

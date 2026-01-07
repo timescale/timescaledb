@@ -1329,6 +1329,7 @@ SELECT sum(segment_by_value) FROM testtable;
                Grouping Policy: all compressed batches
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.segment_by_value
+                     Chunk Status: PARTIAL
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                            Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
          ->  Partial Aggregate
@@ -1416,6 +1417,7 @@ SELECT sum(int_value) FROM testtable;
                Grouping Policy: all compressed batches
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.int_value
+                     Chunk Status: PARTIAL
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                            Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
          ->  Partial Aggregate
@@ -1502,6 +1504,7 @@ SELECT sum(abs(int_value)) FROM testtable;
                Output: PARTIAL sum(abs(_hyper_1_1_chunk.int_value))
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.int_value
+                     Chunk Status: PARTIAL
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                            Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
          ->  Partial Aggregate
@@ -1575,6 +1578,7 @@ SELECT sum(int_value) FROM testtable;
                Output: PARTIAL sum(_hyper_1_1_chunk.int_value)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.int_value
+                     Chunk Status: PARTIAL
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                            Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
          ->  Partial Aggregate
@@ -1650,6 +1654,7 @@ SELECT sum(int_value) FROM testtable;
                Output: PARTIAL sum(_hyper_1_1_chunk.int_value)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.int_value
+                     Chunk Status: PARTIAL
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                            Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
          ->  Partial Aggregate
@@ -1722,6 +1727,7 @@ SELECT sum(segment_by_value) FROM testtable;
                Grouping Policy: all compressed batches
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.segment_by_value
+                     Chunk Status: PARTIAL
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                            Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
          ->  Partial Aggregate
@@ -1810,6 +1816,7 @@ SELECT sum(int_value), sum(int_value) FROM testtable;
                Grouping Policy: all compressed batches
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.int_value
+                     Chunk Status: PARTIAL
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                            Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
          ->  Partial Aggregate
@@ -1892,6 +1899,7 @@ SELECT sum(segment_by_value), sum(segment_by_value) FROM testtable;
                Grouping Policy: all compressed batches
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.segment_by_value
+                     Chunk Status: PARTIAL
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                            Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
          ->  Partial Aggregate
@@ -1974,6 +1982,7 @@ SELECT sum(int_value), sum(segment_by_value) FROM testtable;
                Grouping Policy: all compressed batches
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.segment_by_value
+                     Chunk Status: PARTIAL
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                            Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
          ->  Partial Aggregate
@@ -2060,6 +2069,7 @@ SELECT sum(int_value), bit_or(int_value) FROM testtable;
                Output: PARTIAL sum(_hyper_1_1_chunk.int_value), PARTIAL bit_or(_hyper_1_1_chunk.int_value)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.int_value
+                     Chunk Status: PARTIAL
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                            Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
          ->  Partial Aggregate
@@ -2132,6 +2142,7 @@ SELECT sum(segment_by_value), bit_or(segment_by_value) FROM testtable;
                Output: PARTIAL sum(_hyper_1_1_chunk.segment_by_value), PARTIAL bit_or(_hyper_1_1_chunk.segment_by_value)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.segment_by_value
+                     Chunk Status: PARTIAL
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                            Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
          ->  Partial Aggregate

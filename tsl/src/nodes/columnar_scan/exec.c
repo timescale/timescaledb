@@ -30,6 +30,7 @@
 #include "nodes/columnar_scan/compressed_batch.h"
 #include "nodes/columnar_scan/exec.h"
 #include "nodes/columnar_scan/planner.h"
+#include "ts_catalog/array_utils.h"
 
 #if PG18_GE
 #include <commands/explain_format.h>
@@ -83,6 +84,7 @@ columnar_scan_state_create(CustomScan *cscan)
 	chunk_state->decompress_context.reverse = list_nth_int(settings, DCS_Reverse);
 	chunk_state->decompress_context.batch_sorted_merge =
 		list_nth_int(settings, DCS_BatchSortedMerge);
+	chunk_state->decompress_context.chunk_status = list_nth_int(settings, DCS_ChunkStatus);
 	chunk_state->decompress_context.enable_bulk_decompression =
 		list_nth_int(settings, DCS_EnableBulkDecompression);
 	chunk_state->has_row_marks = list_nth_int(settings, DCS_HasRowMarks);
@@ -532,6 +534,20 @@ columnar_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 
 	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
 	{
+		/* Display any statuses in addition to COMPRESSED */
+		if (dcontext->chunk_status > CHUNK_STATUS_COMPRESSED)
+		{
+			StringInfoData status_text;
+			initStringInfo(&status_text);
+			ArrayType *arr =
+				DatumGetArrayTypeP(DirectFunctionCall1(ts_chunk_status_text,
+													   Int32GetDatum(dcontext->chunk_status -
+																	 CHUNK_STATUS_COMPRESSED)));
+			ts_array_append_stringinfo(arr, &status_text);
+			pfree(arr);
+			ExplainPropertyText("Chunk Status", status_text.data, es);
+		}
+
 		if (dcontext->batch_sorted_merge)
 		{
 			ExplainPropertyBool("Batch Sorted Merge", dcontext->batch_sorted_merge, es);

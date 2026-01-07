@@ -1449,6 +1449,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	lfirst_int(list_nth_cell(settings, DCS_BatchSortedMerge)) = dcpath->batch_sorted_merge;
 	lfirst_int(list_nth_cell(settings, DCS_EnableBulkDecompression)) = enable_bulk_decompression;
 	lfirst_int(list_nth_cell(settings, DCS_HasRowMarks)) = root->parse->rowMarks != NIL;
+	lfirst_int(list_nth_cell(settings, DCS_ChunkStatus)) = dcpath->chunk_status;
 
 	/*
 	 * Vectorized quals must go into custom_exprs, because Postgres has to see

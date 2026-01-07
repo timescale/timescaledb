@@ -78,6 +78,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25.00 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Vectorized Filter: ((_hyper_1_1_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
+                     Chunk Status: PARTIAL
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk (actual rows=5.00 loops=1)
                            Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk.filter_1, compress_hyper_2_3_chunk.filler_2, compress_hyper_2_3_chunk.filler_3, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.v0, compress_hyper_2_3_chunk.v1, compress_hyper_2_3_chunk.v2, compress_hyper_2_3_chunk.v3
@@ -93,6 +94,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25.00 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
+                     Chunk Status: PARTIAL
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=5.00 loops=1)
                            Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.device_id, compress_hyper_2_4_chunk.filter_1, compress_hyper_2_4_chunk.filler_2, compress_hyper_2_4_chunk.filler_3, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk."time", compress_hyper_2_4_chunk.v0, compress_hyper_2_4_chunk.v1, compress_hyper_2_4_chunk.v2, compress_hyper_2_4_chunk.v3
@@ -125,6 +127,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25.00 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Vectorized Filter: ((_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
+                     Chunk Status: PARTIAL
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk (actual rows=5.00 loops=1)
                            Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk.filter_1, compress_hyper_2_3_chunk.filler_2, compress_hyper_2_3_chunk.filler_3, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.v0, compress_hyper_2_3_chunk.v1, compress_hyper_2_3_chunk.v2, compress_hyper_2_3_chunk.v3
@@ -140,6 +143,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25.00 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
+                     Chunk Status: PARTIAL
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=5.00 loops=1)
                            Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.device_id, compress_hyper_2_4_chunk.filter_1, compress_hyper_2_4_chunk.filler_2, compress_hyper_2_4_chunk.filler_3, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk."time", compress_hyper_2_4_chunk.v0, compress_hyper_2_4_chunk.v1, compress_hyper_2_4_chunk.v2, compress_hyper_2_4_chunk.v3
@@ -168,6 +172,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" >= ('2000-01-09 00:00:00+0'::cstring)::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= ('2000-02-01 00:00:00+0'::cstring)::timestamp with time zone))
                      Rows Removed by Filter: 15
+                     Chunk Status: PARTIAL
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=5.00 loops=1)
                            Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.device_id, compress_hyper_2_4_chunk.filter_1, compress_hyper_2_4_chunk.filler_2, compress_hyper_2_4_chunk.filler_3, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk."time", compress_hyper_2_4_chunk.v0, compress_hyper_2_4_chunk.v1, compress_hyper_2_4_chunk.v2, compress_hyper_2_4_chunk.v3
@@ -202,6 +207,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25.00 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Vectorized Filter: ((_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
+                     Chunk Status: PARTIAL
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk (actual rows=5.00 loops=1)
                            Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk.filter_1, compress_hyper_2_3_chunk.filler_2, compress_hyper_2_3_chunk.filler_3, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.v0, compress_hyper_2_3_chunk.v1, compress_hyper_2_3_chunk.v2, compress_hyper_2_3_chunk.v3
@@ -217,6 +223,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25.00 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
+                     Chunk Status: PARTIAL
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=5.00 loops=1)
                            Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.device_id, compress_hyper_2_4_chunk.filter_1, compress_hyper_2_4_chunk.filler_2, compress_hyper_2_4_chunk.filler_3, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk."time", compress_hyper_2_4_chunk.v0, compress_hyper_2_4_chunk.v1, compress_hyper_2_4_chunk.v2, compress_hyper_2_4_chunk.v3
@@ -252,6 +259,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" >= ('2000-01-09 00:00:00+0'::cstring)::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= ('2000-02-01 00:00:00+0'::cstring)::timestamp with time zone))
                      Rows Removed by Filter: 15
+                     Chunk Status: PARTIAL
                      Bulk Decompression: true
                      ->  Index Scan using compress_hyper_2_4_chunk_device_id__ts_meta_min_1__ts_meta__idx on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=5.00 loops=1)
                            Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.device_id, compress_hyper_2_4_chunk.filter_1, compress_hyper_2_4_chunk.filler_2, compress_hyper_2_4_chunk.filler_3, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk."time", compress_hyper_2_4_chunk.v0, compress_hyper_2_4_chunk.v1, compress_hyper_2_4_chunk.v2, compress_hyper_2_4_chunk.v3
