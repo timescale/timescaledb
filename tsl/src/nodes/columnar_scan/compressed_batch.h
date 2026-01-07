@@ -53,6 +53,7 @@ typedef struct CompressedColumnValues
 	/*
 	 * The flattened source buffers for getting the decompressed datum.
 	 * Depending on decompression type, they are as follows:
+	 * scalar:          isnull, value
 	 * iterator:        iterator
 	 * arrow fixed:     validity, value
 	 * arrow text:      validity, uint32* offsets, void* bodies
@@ -181,17 +182,6 @@ compressed_batch_current_tuple(DecompressBatchState *batch_state)
 
 	Assert(batch_state->per_batch_context != NULL);
 	return &batch_state->decompressed_scan_slot_data.base;
-}
-
-static inline void
-compressed_column_set_scalar(CompressedColumnValues *column, Datum value, bool isnull)
-{
-	column->decompression_type = DT_Scalar;
-	column->buffers[0] = DatumGetPointer(BoolGetDatum(isnull));
-	column->buffers[1] = DatumGetPointer(value);
-
-	*column->output_isnull = isnull;
-	*column->output_value = value;
 }
 
 /*
