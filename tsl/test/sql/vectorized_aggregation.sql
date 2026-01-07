@@ -84,6 +84,11 @@ SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_b
 
 SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
 
+:EXPLAIN
+SELECT segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1;
+
+SELECT segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1;
+
 -- Vectorized aggregation possible
 SELECT sum(int_value) FROM testtable;
 

@@ -996,6 +996,188 @@ SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_b
                99 | 6039
               100 | 6100
 
+:EXPLAIN
+SELECT segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1;
+--- QUERY PLAN ---
+ Sort
+   Output: testtable.segment_by_value
+   Sort Key: testtable.segment_by_value
+   ->  Finalize HashAggregate
+         Output: testtable.segment_by_value
+         Group Key: testtable.segment_by_value
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     Output: _hyper_1_1_chunk.segment_by_value
+                     Grouping Policy: per compressed batch
+                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
+                           Output: _hyper_1_1_chunk.segment_by_value
+                           ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                                 Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
+               ->  Custom Scan (VectorAgg)
+                     Output: _hyper_1_2_chunk.segment_by_value
+                     Grouping Policy: per compressed batch
+                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
+                           Output: _hyper_1_2_chunk.segment_by_value
+                           ->  Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                                 Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
+               ->  Custom Scan (VectorAgg)
+                     Output: _hyper_1_3_chunk.segment_by_value
+                     Grouping Policy: per compressed batch
+                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk
+                           Output: _hyper_1_3_chunk.segment_by_value
+                           ->  Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                                 Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
+               ->  Partial HashAggregate
+                     Output: _hyper_1_4_chunk.segment_by_value
+                     Group Key: _hyper_1_4_chunk.segment_by_value
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
+                           Output: _hyper_1_4_chunk.segment_by_value
+               ->  Partial HashAggregate
+                     Output: _hyper_1_5_chunk.segment_by_value
+                     Group Key: _hyper_1_5_chunk.segment_by_value
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_5_chunk
+                           Output: _hyper_1_5_chunk.segment_by_value
+               ->  Partial HashAggregate
+                     Output: _hyper_1_6_chunk.segment_by_value
+                     Group Key: _hyper_1_6_chunk.segment_by_value
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_6_chunk
+                           Output: _hyper_1_6_chunk.segment_by_value
+               ->  Partial HashAggregate
+                     Output: _hyper_1_7_chunk.segment_by_value
+                     Group Key: _hyper_1_7_chunk.segment_by_value
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_7_chunk
+                           Output: _hyper_1_7_chunk.segment_by_value
+               ->  Partial HashAggregate
+                     Output: _hyper_1_8_chunk.segment_by_value
+                     Group Key: _hyper_1_8_chunk.segment_by_value
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_8_chunk
+                           Output: _hyper_1_8_chunk.segment_by_value
+               ->  Partial HashAggregate
+                     Output: _hyper_1_9_chunk.segment_by_value
+                     Group Key: _hyper_1_9_chunk.segment_by_value
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_9_chunk
+                           Output: _hyper_1_9_chunk.segment_by_value
+               ->  Partial HashAggregate
+                     Output: _hyper_1_10_chunk.segment_by_value
+                     Group Key: _hyper_1_10_chunk.segment_by_value
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
+                           Output: _hyper_1_10_chunk.segment_by_value
+
+SELECT segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1;
+ segment_by_value 
+------------------
+              -10
+               -9
+               -8
+               -7
+               -6
+               -5
+               -4
+               -3
+               -2
+               -1
+                0
+                1
+                2
+                3
+                4
+                5
+                6
+                7
+                8
+                9
+               10
+               11
+               12
+               13
+               14
+               15
+               16
+               17
+               18
+               19
+               20
+               21
+               22
+               23
+               24
+               25
+               26
+               27
+               28
+               29
+               30
+               31
+               32
+               33
+               34
+               35
+               36
+               37
+               38
+               39
+               40
+               41
+               42
+               43
+               44
+               45
+               46
+               47
+               48
+               49
+               50
+               51
+               52
+               53
+               54
+               55
+               56
+               57
+               58
+               59
+               60
+               61
+               62
+               63
+               64
+               65
+               66
+               67
+               68
+               69
+               70
+               71
+               72
+               73
+               74
+               75
+               76
+               77
+               78
+               79
+               80
+               81
+               82
+               83
+               84
+               85
+               86
+               87
+               88
+               89
+               90
+               91
+               92
+               93
+               94
+               95
+               96
+               97
+               98
+               99
+              100
+
 -- Vectorized aggregation possible
 SELECT sum(int_value) FROM testtable;
   sum   
