@@ -1054,7 +1054,7 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					FuncInfo *info = ts_func_cache_get_bucketing_func(func->funcid);
 					Expr *transformed;
 
-					if (info != NULL)
+					if (info && info->sort_transform)
 					{
 						transformed = info->sort_transform(func);
 						if (IsA(transformed, Var) &&
