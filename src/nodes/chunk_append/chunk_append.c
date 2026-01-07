@@ -508,7 +508,7 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 		FuncInfo *info = ts_func_cache_get_bucketing_func(castNode(FuncExpr, tle->expr)->funcid);
 		Expr *transformed;
 
-		if (info == NULL)
+		if (!info || !info->sort_transform)
 			return false;
 
 		transformed = info->sort_transform(castNode(FuncExpr, tle->expr));

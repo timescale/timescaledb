@@ -48,5 +48,5 @@ typedef struct FuncInfo
 extern TSDLLEXPORT FuncInfo *ts_func_cache_get(Oid funcid);
 extern TSDLLEXPORT FuncInfo *ts_func_cache_get_bucketing_func(Oid funcid);
 
-extern Oid ts_first_func_oid;
-extern Oid ts_last_func_oid;
+extern TSDLLEXPORT Oid ts_first_func_oid;
+extern TSDLLEXPORT Oid ts_last_func_oid;
