@@ -59,12 +59,12 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 
 	if (unlikely(params.single_grouping_column.decompression_type == DT_Scalar))
 	{
-		*valid = !*params.single_grouping_column.output_isnull;
+		*valid = !DatumGetBool(PointerGetDatum(params.single_grouping_column.buffers[0]));
 		if (*valid)
 		{
-			output_key->len = VARSIZE_ANY_EXHDR(*params.single_grouping_column.output_value);
+			output_key->len = VARSIZE_ANY_EXHDR(params.single_grouping_column.buffers[1]);
 			output_key->data =
-				(const uint8 *) VARDATA_ANY(*params.single_grouping_column.output_value);
+				(const uint8 *) VARDATA_ANY(params.single_grouping_column.buffers[1]);
 		}
 		else
 		{
