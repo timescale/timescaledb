@@ -403,6 +403,12 @@ vector_agg_exec(CustomScanState *node)
 	}
 
 	/*
+	 * Have no more partial aggregation results but might still have input.
+	 * Reset the grouping policy and start a new cycle of partial aggregation.
+	 */
+	grouping->gp_reset(grouping);
+
+	/*
 	 * If the partial aggregation results have ended, and the input has ended,
 	 * we're done.
 	 */
@@ -410,12 +416,6 @@ vector_agg_exec(CustomScanState *node)
 	{
 		return NULL;
 	}
-
-	/*
-	 * Have no more partial aggregation results and still have input, have to
-	 * reset the grouping policy and start a new cycle of partial aggregation.
-	 */
-	grouping->gp_reset(grouping);
 
 	/*
 	 * Now we loop through the input compressed tuples, until they end or until
