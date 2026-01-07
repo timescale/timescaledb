@@ -22,6 +22,7 @@
 #include <planner/planner.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 #include <utils/typcache.h>
 
 #include <planner.h>
@@ -34,6 +35,7 @@
 #include "debug_assert.h"
 #include "import/allpaths.h"
 #include "import/planner.h"
+#include "nodes/columnar_index_scan/columnar_index_scan.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/planner.h"
 #include "nodes/columnar_scan/qual_pushdown.h"
@@ -634,22 +636,20 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
  * Postgres statistics for _ts_meta_count column.
  * Returns TARGET_COMPRESSED_BATCH_SIZE when no pg_statistic entry exists.
  */
-static double
-estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compression_info)
+double
+ts_columnar_estimate_compressed_batch_size(const Oid relid)
 {
-	AttrNumber attnum = get_attnum(compression_info->compressed_rte->relid, "_ts_meta_count");
+	AttrNumber attnum = get_attnum(relid, "_ts_meta_count");
 	if (attnum == InvalidAttrNumber)
 		return TARGET_COMPRESSED_BATCH_SIZE;
 
-	Var *var = makeVar(compression_info->compressed_rel->relid, attnum, INT4OID, -1, InvalidOid, 0);
-
 	/* fetch statistics */
-	VariableStatData vardata;
-	examine_variable(root, (Node *) var, 0, &vardata);
-
-	if (!HeapTupleIsValid(vardata.statsTuple))
+	HeapTuple statsTuple = SearchSysCache3(STATRELATTINH,
+										   ObjectIdGetDatum(relid),
+										   Int16GetDatum(attnum),
+										   BoolGetDatum(false));
+	if (!HeapTupleIsValid(statsTuple))
 	{
-		ReleaseVariableStats(vardata);
 		return TARGET_COMPRESSED_BATCH_SIZE;
 	}
 
@@ -659,7 +659,7 @@ estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compres
 	/* exact MCV contribution */
 	AttStatsSlot mcvslot;
 	if (get_attstatsslot(&mcvslot,
-						 vardata.statsTuple,
+						 statsTuple,
 						 STATISTIC_KIND_MCV,
 						 InvalidOid,
 						 ATTSTATSSLOT_VALUES | ATTSTATSSLOT_NUMBERS))
@@ -679,7 +679,7 @@ estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compres
 	/* histogram contribution */
 	AttStatsSlot histslot;
 	if (get_attstatsslot(&histslot,
-						 vardata.statsTuple,
+						 statsTuple,
 						 STATISTIC_KIND_HISTOGRAM,
 						 InvalidOid,
 						 ATTSTATSSLOT_VALUES))
@@ -699,7 +699,7 @@ estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compres
 		free_attstatsslot(&histslot);
 	}
 
-	ReleaseVariableStats(vardata);
+	ReleaseSysCache(statsTuple);
 
 	const double final_result = mcv_sum + hist_sum;
 	if (final_result == 0)
@@ -1138,7 +1138,7 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	 * statistics.
 	 */
 	compression_info->compressed_batch_size =
-		estimate_compressed_batch_size(root, compression_info);
+		ts_columnar_estimate_compressed_batch_size(compression_info->compressed_rte->relid);
 
 	/*
 	 * Estimate the size of decompressed chunk based on the compressed chunk.
@@ -1227,6 +1227,8 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	foreach (compressed_cell, compressed_rel->partial_pathlist)
 	{
 		Path *compressed_path = lfirst(compressed_cell);
+		/* Partial parameterized paths are not supported */
+		Assert(bms_is_empty(PATH_REQ_OUTER(compressed_path)));
 		List *decompressed_paths = build_on_single_compressed_path(root,
 																   chunk,
 																   chunk_rel,
@@ -1357,6 +1359,22 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("debug: batch sorted merge is required but not possible at planning "
 						"time")));
+	}
+
+	/*
+	 * Try to create a ColumnarIndexScan path for the metadata-only optimization.
+	 */
+	{
+		ColumnarIndexScanPath *index_scan_path =
+			ts_columnar_index_scan_path_create(root,
+											   chunk,
+											   chunk_rel,
+											   compression_info,
+											   compressed_path);
+		if (index_scan_path)
+		{
+			decompressed_paths = lappend(decompressed_paths, index_scan_path);
+		}
 	}
 
 	/*
@@ -2046,6 +2064,7 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 	{
 		cur_em = (EquivalenceMember *) lfirst(lc);
 #endif
+		Node *node;
 		Expr *child_expr;
 		Relids new_relids;
 		Var *var;
@@ -2053,11 +2072,10 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 
 		/* only consider EquivalenceMembers that are Vars, possibly with RelabelType, of the
 		 * uncompressed chunk */
-		var = (Var *) cur_em->em_expr;
-		while (var && IsA(var, RelabelType))
-			var = (Var *) ((RelabelType *) var)->arg;
-		if (!(var && IsA(var, Var)))
+		node = strip_implicit_coercions((Node *) cur_em->em_expr);
+		if (!(node && IsA(node, Var)))
 			continue;
+		var = castNode(Var, node);
 
 		/*
 		 * We want to base our equivalence member on the hypertable equivalence
@@ -2271,6 +2289,7 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	 */
 	Assert(info->single_chunk || chunk_rel->top_parent_relids != NULL);
 	compressed_rel->top_parent_relids = bms_copy(chunk_rel->top_parent_relids);
+	compressed_rel->lateral_relids = bms_copy(chunk_rel->lateral_relids);
 
 	root->simple_rel_array[compressed_index] = compressed_rel;
 	info->compressed_rel = compressed_rel;
@@ -2314,7 +2333,6 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 		 */
 		root->append_rel_array[compressed_rel->relid] = makeNode(AppendRelInfo);
 		root->append_rel_array[compressed_rel->relid]->parent_relid = info->ht_rel->relid;
-		compressed_rel->top_parent_relids = chunk_rel->top_parent_relids;
 	}
 }
 
@@ -2383,6 +2401,10 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 							 const CompressionInfo *compression_info, const SortInfo *sort_info)
 {
 	Path *compressed_path;
+	Relids required_outer = compressed_rel->lateral_relids;
+
+	/* Must have same lateral relids as the chunk hypertable */
+	Assert(bms_equal(required_outer, compression_info->chunk_rel->lateral_relids));
 
 	/* clamp total_table_pages to 10 pages since this is the
 	 * minimum estimate for number of pages.
@@ -2391,7 +2413,7 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	root->total_table_pages += Max(compressed_rel->pages, 10);
 
 	/* create non parallel scan path */
-	compressed_path = create_seqscan_path(root, compressed_rel, NULL, 0);
+	compressed_path = create_seqscan_path(root, compressed_rel, required_outer, 0);
 	add_path(compressed_rel, compressed_path);
 
 	/*
@@ -2401,8 +2423,11 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	 * tables, so that they don't prevent parallelism in the entire append plan.
 	 * See compute_parallel_workers(). This also applies to the creation of
 	 * index paths below.
+	 *
+	 * Parameterized rels that depend on an outer rel are not allowed to form partial
+	 * sequential scan paths
 	 */
-	if (compressed_rel->consider_parallel)
+	if (compressed_rel->consider_parallel && required_outer == NULL)
 	{
 		int parallel_workers = compute_parallel_worker(compressed_rel,
 													   compressed_rel->pages,
@@ -2543,29 +2568,25 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 			if (IsA(ri->clause, OpExpr) && list_length(castNode(OpExpr, ri->clause)->args) == 2)
 			{
 				OpExpr *op = castNode(OpExpr, ri->clause);
-				Var *lvar, *rvar, *var;
+				Node *lnode, *rnode;
+				Var *var;
 				Expr *other;
 
 				if (op->opretset)
 					continue;
 
-				lvar = linitial(op->args);
-				while (lvar && IsA(lvar, RelabelType))
-					lvar = (Var *) ((RelabelType *) lvar)->arg;
+				lnode = strip_implicit_coercions(linitial(op->args));
+				rnode = strip_implicit_coercions(lsecond(op->args));
 
-				rvar = lsecond(op->args);
-				while (rvar && IsA(rvar, RelabelType))
-					rvar = (Var *) ((RelabelType *) rvar)->arg;
-
-				Assert(lvar && rvar);
-				if (IsA(lvar, Var))
+				Assert(lnode && rnode);
+				if (IsA(lnode, Var))
 				{
-					var = castNode(Var, lvar);
+					var = castNode(Var, lnode);
 					other = lsecond(op->args);
 				}
-				else if (IsA(rvar, Var))
+				else if (IsA(rnode, Var))
 				{
-					var = castNode(Var, rvar);
+					var = castNode(Var, rnode);
 					other = linitial(op->args);
 				}
 				else
@@ -2579,7 +2600,41 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 					TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_EQ_OPR);
 
 					if (op->opno != tce->eq_opr)
-						continue;
+					{
+						/* Issue #9066: check if our OpExpr is still an equality (Var = Const)
+						 * for Var and Const of different types
+						 */
+#if PG18_GE
+						List *opinfos = get_op_index_interpretation(op->opno);
+#else
+						List *opinfos = get_op_btree_interpretation(op->opno);
+#endif
+						ListCell *lc;
+						bool equality = false;
+						foreach (lc, opinfos)
+						{
+#if PG18_GE
+							OpIndexInterpretation *opinfo = (OpIndexInterpretation *) lfirst(lc);
+							if (opinfo->cmptype == COMPARE_EQ)
+#else
+							OpBtreeInterpretation *opinfo = (OpBtreeInterpretation *) lfirst(lc);
+							if (opinfo->strategy == BTEqualStrategyNumber)
+#endif
+							{
+								Oid mixed_type_eqop = get_opfamily_member(opinfo->opfamily_id,
+																		  var->vartype,
+																		  exprType((Node *) other),
+																		  BTEqualStrategyNumber);
+								if (op->opno == mixed_type_eqop)
+								{
+									equality = true;
+									break;
+								}
+							}
+						}
+						if (!equality)
+							continue;
+					}
 
 					if (bms_is_member(var->varattno, info->chunk_segmentby_attnos))
 						segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
@@ -2605,16 +2660,14 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 	{
 		compressed_pk_index++;
 		PathKey *pk = list_nth_node(PathKey, pathkeys, i);
-		Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
-		while (expr && IsA(expr, RelabelType))
-			expr = ((RelabelType *) expr)->arg;
+		Node *node = strip_implicit_coercions((Node *) list_nth(chunk_em_exprs, i));
 
-		if (expr == NULL || !IsA(expr, Var))
+		if (node == NULL || !IsA(node, Var))
 		{
 			return false;
 		}
 
-		Var *var = castNode(Var, expr);
+		Var *var = castNode(Var, node);
 
 		if (var->varattno <= 0)
 		{
@@ -2784,13 +2837,11 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		{
 			Assert(bms_num_members(segmentby_columns) <= compression_info->num_segmentby_columns);
 
-			Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
-			while (expr && IsA(expr, RelabelType))
-				expr = ((RelabelType *) expr)->arg;
+			Node *node = strip_implicit_coercions((Node *) list_nth(chunk_em_exprs, i));
 
-			if (expr == NULL || !IsA(expr, Var))
+			if (node == NULL || !IsA(node, Var))
 				break;
-			var = castNode(Var, expr);
+			var = castNode(Var, node);
 
 			if (var->varattno <= 0)
 				break;

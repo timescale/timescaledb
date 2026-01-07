@@ -10,6 +10,8 @@
 
 typedef struct GroupingPolicy GroupingPolicy;
 
+typedef struct DecompressContext DecompressContext;
+
 typedef struct TupleTableSlot TupleTableSlot;
 
 typedef struct VectorAggDef VectorAggDef;
@@ -32,7 +34,8 @@ typedef struct GroupingPolicy
 	/*
 	 * Aggregate a single compressed batch.
 	 */
-	void (*gp_add_batch)(GroupingPolicy *gp, TupleTableSlot *vector_slot);
+	void (*gp_add_batch)(GroupingPolicy *gp, DecompressContext *dcontext,
+						 TupleTableSlot *vector_slot);
 
 	/*
 	 * Is a partial aggregation result ready?

@@ -145,3 +145,65 @@ explain (buffers off, costs off) SELECT * FROM record WHERE 'Yes' <= data ORDER 
          Index Cond: ((data)::text >= 'Yes'::text)
 
 drop table record cascade;
+-- Fix for issue #9066: IndexScan is not chosen for columnstore segmented on several keys
+-- for a query sorted on columnstore keys
+-- but where one numeric key is pinned to a Const of different but compatible type.
+-- We should chose IndexScan now, and use SkipScan as well.
+CREATE TABLE log_numeric(
+	"time"       timestamp with time zone NOT NULL,
+	device_id    integer                  NOT NULL,
+	parameter_id smallint                 NOT NULL,
+	value        double precision
+);
+SELECT create_hypertable('log_numeric', 'time', chunk_time_interval => interval '1 days', create_default_indexes => false);
+    create_hypertable     
+--------------------------
+ (5,public,log_numeric,t)
+
+ALTER TABLE log_numeric SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id, parameter_id', timescaledb.compress_orderby='"time" DESC');
+INSERT INTO log_numeric
+SELECT time, device_id, parameter_id, device_id*parameter_id
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03'::timestamptz, '10 minute'::interval) AS g1(time),
+generate_series(1,4) device_id, generate_series(1,4) parameter_id;
+select compress_chunk(ch) from show_chunks('log_numeric') ch;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_5_7_chunk
+ _timescaledb_internal._hyper_5_8_chunk
+ _timescaledb_internal._hyper_5_9_chunk
+
+-- enable_seqscan is OFF, should see IndexScan
+explain (buffers off, costs off) SELECT * FROM log_numeric WHERE parameter_id = 1 ORDER BY device_id, parameter_id, time DESC;
+--- QUERY PLAN ---
+ Merge Append
+   Sort Key: log_numeric.device_id, log_numeric."time" DESC
+   ->  Custom Scan (ColumnarScan) on _hyper_5_7_chunk
+         ->  Index Scan using compress_hyper_6_10_chunk_device_id_parameter_id__ts_meta_m_idx on compress_hyper_6_10_chunk
+               Index Cond: (parameter_id = 1)
+   ->  Custom Scan (ColumnarScan) on _hyper_5_8_chunk
+         ->  Index Scan using compress_hyper_6_11_chunk_device_id_parameter_id__ts_meta_m_idx on compress_hyper_6_11_chunk
+               Index Cond: (parameter_id = 1)
+   ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk
+         ->  Index Scan using compress_hyper_6_12_chunk_device_id_parameter_id__ts_meta_m_idx on compress_hyper_6_12_chunk
+               Index Cond: (parameter_id = 1)
+
+-- SkipScan is chosen because IndexScan is chosen
+explain (buffers off, costs off) SELECT DISTINCT ON(device_id, parameter_id) * FROM log_numeric WHERE parameter_id = 1 ORDER BY device_id, parameter_id, time DESC;
+--- QUERY PLAN ---
+ Unique
+   ->  Merge Append
+         Sort Key: log_numeric.device_id, log_numeric."time" DESC
+         ->  Custom Scan (SkipScan) on _hyper_5_7_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_5_7_chunk
+                     ->  Index Scan using compress_hyper_6_10_chunk_device_id_parameter_id__ts_meta_m_idx on compress_hyper_6_10_chunk
+                           Index Cond: (parameter_id = 1)
+         ->  Custom Scan (SkipScan) on _hyper_5_8_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_5_8_chunk
+                     ->  Index Scan using compress_hyper_6_11_chunk_device_id_parameter_id__ts_meta_m_idx on compress_hyper_6_11_chunk
+                           Index Cond: (parameter_id = 1)
+         ->  Custom Scan (SkipScan) on _hyper_5_9_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk
+                     ->  Index Scan using compress_hyper_6_12_chunk_device_id_parameter_id__ts_meta_m_idx on compress_hyper_6_12_chunk
+                           Index Cond: (parameter_id = 1)
+
+drop table log_numeric cascade;

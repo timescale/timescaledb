@@ -36,6 +36,7 @@ set(SOURCES
     license_guc.c
     osm_callbacks.c
     partitioning.c
+    partition_chunk.c
     process_utility.c
     scanner.c
     scan_iterator.c
@@ -108,10 +109,6 @@ if(USE_OPENSSL)
     target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
   endif(MSVC)
 endif(USE_OPENSSL)
-
-set(TSL_CAGG_INVALIDATION_PLUGIN_NAME
-    "${PROJECT_NAME}-invalidations-${PROJECT_VERSION_MOD}"
-    CACHE STRING "Continuous aggregates invalidation plugin name")
 
 configure_file(config.h.in config.h)
 add_dependencies(${PROJECT_NAME} gitcheck)

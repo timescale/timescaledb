@@ -55,6 +55,10 @@ CREATE OR REPLACE PROCEDURE @extschema@.convert_to_rowstore(
     if_columnstore BOOLEAN = true
 ) AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C;
 
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.rebuild_columnstore(
+    chunk REGCLASS
+) AS '@MODULE_PATHNAME@', 'ts_rebuild_columnstore' LANGUAGE C;
+
 CREATE OR REPLACE PROCEDURE _timescaledb_functions.chunk_rewrite_cleanup()
 LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_chunk_rewrite_cleanup';
 
@@ -159,13 +163,6 @@ BEGIN
         SELECT FROM information_schema.tables
         WHERE tables.table_schema = chunk.schema_name
         AND tables.table_name = chunk.table_name
-    )
-    AND NOT EXISTS (
-        SELECT FROM _timescaledb_catalog.hypertable
-        JOIN _timescaledb_catalog.continuous_agg ON continuous_agg.raw_hypertable_id = hypertable.id
-        WHERE hypertable.id = chunk.hypertable_id
-        -- for the old caggs format we need to keep chunk metadata for dropped chunks
-        AND continuous_agg.finalized IS FALSE
     )
   LOOP
     _removed := _removed + 1;

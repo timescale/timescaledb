@@ -9,6 +9,7 @@
 #include <commands/explain.h>
 #include <executor/executor.h>
 #include <executor/tuptable.h>
+#include <funcapi.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
@@ -25,27 +26,19 @@
 #include "nodes/columnar_scan/vector_quals.h"
 #include "nodes/vector_agg.h"
 #include "nodes/vector_agg/plan.h"
+#include "nodes/vector_agg/vector_slot.h"
 
 #if PG18_GE
 #include "commands/explain_format.h"
 #include "commands/explain_state.h"
 #endif
 
+static CompressedBatchVectorQualState
+compressed_batch_init_vector_quals(DecompressContext *dcontext, List *quals, TupleTableSlot *slot);
+
 static int
-get_input_offset(const ColumnarScanState *decompress_state, const Var *var)
+get_input_offset(const DecompressContext *dcontext, const Var *var)
 {
-	const DecompressContext *dcontext = &decompress_state->decompress_context;
-
-	/*
-	 * All variable references in the vectorized aggregation node were
-	 * translated to uncompressed chunk variables when it was created.
-	 */
-	const CustomScan *cscan = castNode(CustomScan, decompress_state->csstate.ss.ps.plan);
-	Ensure((Index) var->varno == (Index) cscan->scan.scanrelid,
-		   "got vector varno %d expected %d",
-		   var->varno,
-		   cscan->scan.scanrelid);
-
 	const CompressionColumnDescription *value_column_description = NULL;
 	for (int i = 0; i < dcontext->num_data_columns; i++)
 	{
@@ -65,14 +58,33 @@ get_input_offset(const ColumnarScanState *decompress_state, const Var *var)
 	return index;
 }
 
-static void
-get_column_storage_properties(const ColumnarScanState *state, int input_offset,
-							  GroupingColumn *result)
+/*
+ * Return the arrow array or the datum (in case of single scalar value) for a
+ * given expression as a CompressedColumnValues struct.
+ */
+CompressedColumnValues
+vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slot,
+								uint64 const *filter, const Expr *argument)
 {
-	const DecompressContext *dcontext = &state->decompress_context;
-	const CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[input_offset];
-	result->value_bytes = desc->value_bytes;
-	result->by_value = desc->by_value;
+	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
+	switch (((Node *) argument)->type)
+	{
+		case T_Var:
+		{
+			const Var *var = (const Var *) argument;
+			const uint16 offset = get_input_offset(dcontext, var);
+			const CompressedColumnValues *values = &batch_state->compressed_columns[offset];
+			Ensure(values->decompression_type != DT_Invalid,
+				   "got DT_Invalid decompression type at offset %d",
+				   offset);
+			return *values;
+		}
+		default:
+			Ensure(false,
+				   "wrong node type %s for vector expression",
+				   ts_get_node_name((Node *) argument));
+			return (CompressedColumnValues){ .decompression_type = DT_Invalid };
+	}
 }
 
 static void
@@ -84,7 +96,6 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 	VectorAggState *vector_agg_state = (VectorAggState *) node;
 	vector_agg_state->input_ended = false;
-	CustomScanState *childstate = (CustomScanState *) linitial(vector_agg_state->custom.custom_ps);
 
 	/*
 	 * Set up the helper structures used to evaluate stable expressions in
@@ -172,12 +183,11 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 				/* The aggregate should be a partial aggregate */
 				Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
 
-				Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
-				def->input_offset = get_input_offset((const ColumnarScanState *) childstate, var);
+				def->argument = castNode(TargetEntry, linitial(aggref->args))->expr;
 			}
 			else
 			{
-				def->input_offset = -1;
+				def->argument = NULL;
 			}
 
 			if (aggref->aggfilter != NULL)
@@ -189,16 +199,18 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		else
 		{
 			/* This is a grouping column. */
-			Assert(IsA(tlentry->expr, Var));
 
 			GroupingColumn *col = &vector_agg_state->grouping_columns[grouping_column_counter++];
+			col->expr = tlentry->expr;
 			col->output_offset = i;
 
-			Var *var = castNode(Var, tlentry->expr);
-			col->input_offset = get_input_offset((const ColumnarScanState *) childstate, var);
-			get_column_storage_properties((const ColumnarScanState *) childstate,
-										  col->input_offset,
-										  col);
+			TupleDesc tdesc = NULL;
+			Oid type = InvalidOid;
+			TypeFuncClass type_class = get_expr_result_type((Node *) tlentry->expr, &type, &tdesc);
+			Ensure(type_class == TYPEFUNC_SCALAR,
+				   "wrong grouping column type class %d",
+				   type_class);
+			get_typlenbyval(type, &col->value_bytes, &col->by_value);
 		}
 	}
 
@@ -344,34 +356,33 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
  *
  * Used to implement vectorized aggregate function filter clause.
  */
-static VectorQualState *
-compressed_batch_init_vector_quals(VectorAggState *agg_state, VectorAggDef *agg_def,
-								   TupleTableSlot *slot)
+static CompressedBatchVectorQualState
+compressed_batch_init_vector_quals(DecompressContext *dcontext, List *quals, TupleTableSlot *slot)
 {
-	ColumnarScanState *decompress_state =
-		(ColumnarScanState *) linitial(agg_state->custom.custom_ps);
-	DecompressContext *dcontext = &decompress_state->decompress_context;
 	DecompressBatchState *batch_state = (DecompressBatchState *) slot;
 
-	agg_state->vqual_state = (CompressedBatchVectorQualState) {
+	return (CompressedBatchVectorQualState) {
 				.vqstate = {
-					.vectorized_quals_constified = agg_def->filter_clauses,
+					.vectorized_quals_constified = quals,
 					.num_results = batch_state->total_batch_rows,
 					.per_vector_mcxt = batch_state->per_batch_context,
-					.slot = decompress_state->csstate.ss.ss_ScanTupleSlot,
+					.slot = slot,
 					.get_arrow_array = compressed_batch_get_arrow_array,
 				},
 				.batch_state = batch_state,
 				.dcontext = dcontext,
 			};
-
-	return &agg_state->vqual_state.vqstate;
 }
 
 static TupleTableSlot *
 vector_agg_exec(CustomScanState *node)
 {
 	VectorAggState *vector_agg_state = (VectorAggState *) node;
+
+	ColumnarScanState *decompress_state =
+		(ColumnarScanState *) linitial(vector_agg_state->custom.custom_ps);
+	DecompressContext *dcontext = &decompress_state->decompress_context;
+
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
 	ResetExprContext(econtext);
 
@@ -392,6 +403,12 @@ vector_agg_exec(CustomScanState *node)
 	}
 
 	/*
+	 * Have no more partial aggregation results but might still have input.
+	 * Reset the grouping policy and start a new cycle of partial aggregation.
+	 */
+	grouping->gp_reset(grouping);
+
+	/*
 	 * If the partial aggregation results have ended, and the input has ended,
 	 * we're done.
 	 */
@@ -399,12 +416,6 @@ vector_agg_exec(CustomScanState *node)
 	{
 		return NULL;
 	}
-
-	/*
-	 * Have no more partial aggregation results and still have input, have to
-	 * reset the grouping policy and start a new cycle of partial aggregation.
-	 */
-	grouping->gp_reset(grouping);
 
 	/*
 	 * Now we loop through the input compressed tuples, until they end or until
@@ -437,21 +448,36 @@ vector_agg_exec(CustomScanState *node)
 		for (int i = 0; i < naggs; i++)
 		{
 			VectorAggDef *agg_def = &vector_agg_state->agg_defs[i];
-			if (agg_def->filter_clauses == NIL)
+			uint64 *filter_clause_result = NULL;
+			if (agg_def->filter_clauses != NIL)
 			{
-				continue;
+				CompressedBatchVectorQualState vqstate =
+					compressed_batch_init_vector_quals(dcontext, agg_def->filter_clauses, slot);
+				if (vector_qual_compute(&vqstate.vqstate) != AllRowsPass)
+				{
+					filter_clause_result = vqstate.vqstate.vector_qual_result;
+				}
 			}
 
-			VectorQualState *vqstate =
-				vector_agg_state->init_vector_quals(vector_agg_state, agg_def, slot);
-			vector_qual_compute(vqstate);
-			agg_def->filter_result = vqstate->vector_qual_result;
+			DecompressBatchState *batch_state = (DecompressBatchState *) slot;
+			if (filter_clause_result != NULL)
+			{
+				const int num_validity_words = (batch_state->total_batch_rows + 63) / 64;
+				arrow_validity_and(num_validity_words,
+								   filter_clause_result,
+								   batch_state->vector_qual_result);
+				agg_def->effective_batch_filter = filter_clause_result;
+			}
+			else
+			{
+				agg_def->effective_batch_filter = batch_state->vector_qual_result;
+			}
 		}
 
 		/*
 		 * Finally, pass the compressed batch to the grouping policy.
 		 */
-		grouping->gp_add_batch(grouping, slot);
+		grouping->gp_add_batch(grouping, dcontext, slot);
 	}
 
 	/*
@@ -527,7 +553,6 @@ vector_agg_state_create(CustomScan *cscan)
 	 * compressed batches, respectively.
 	 */
 	state->get_next_slot = compressed_batch_get_next_slot;
-	state->init_vector_quals = compressed_batch_init_vector_quals;
 
 	return (Node *) state;
 }

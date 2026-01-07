@@ -15,7 +15,6 @@ typedef enum CreateMaterializedViewFlags
 	CreateMaterializedViewFlagCreateGroupIndexes,
 	CreateMaterializedViewFlagMaterializedOnly,
 	CreateMaterializedViewFlagColumnstore,
-	CreateMaterializedViewFlagFinalized,
 	CreateMaterializedViewFlagChunkTimeInterval,
 	CreateMaterializedViewFlagSegmentBy,
 	CreateMaterializedViewFlagOrderBy,

@@ -1692,9 +1692,9 @@ ROLLBACK;
 
 CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_bucket('1 day', time) FROM cagg_inval GROUP BY 1;
 
--- should not use direct batch delete
+-- should use direct batch delete with invalidation tracking
 EXPLAIN (analyze,costs off, timing off,summary off, buffers off) DELETE FROM cagg_inval;
 
--- should have invalidation entry
-SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+-- should have invalidation entry from the direct batch delete
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log ORDER BY 1,2;
 

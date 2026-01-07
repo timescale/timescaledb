@@ -59,7 +59,43 @@ ALTER TABLE metrics_compressed SET (timescaledb.compress, timescaledb.compress_o
 SELECT compress_chunk(show_chunks('metrics_compressed'));
 UPDATE metrics_compressed SET v3 = 42 WHERE device_id=1 AND time > '2000-01-01' AND time < '2000-01-02';
 
+-- Make a different metadata column layout in compressed chunk table. The layout
+-- used to be different before 2.15 with all metadata columns at the back. We
+-- had cases where new code broke with this layout, but this was not detected by
+-- the tests since they all use the modern layout.
+select schema_name || '.' || table_name chunk, 'c' column from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'metrics_compressed') order by id limit 1)
+\gset
+
+set role :ROLE_SUPERUSER;
+
+set timescaledb.restoring to on;
+
+alter table :chunk rename column _ts_meta_count to _ts_meta_count_old;
+
+alter table :chunk rename column _ts_meta_max_1 to _ts_meta_max_1_old;
+
+alter table :chunk add column _ts_meta_count integer;
+
+alter table :chunk add column _ts_meta_max_1 timestamptz;
+
+update :chunk set _ts_meta_max_1 = _ts_meta_max_1_old,
+    _ts_meta_count = _ts_meta_count_old;
+
+alter table :chunk drop column _ts_meta_count_old;
+
+alter table :chunk drop column _ts_meta_max_1_old;
+
+create index on :chunk(device_id, _ts_meta_min_1 desc, _ts_meta_max_1 desc);
+
+reset timescaledb.restoring;
+
+set role :ROLE_DEFAULT_PERM_USER;
+
 VACUUM ANALYZE metrics_compressed;
+
 
 -- create hypertable with space partitioning and compression
 CREATE TABLE metrics_space_compressed(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);

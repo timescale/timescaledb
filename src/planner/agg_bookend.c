@@ -62,6 +62,7 @@
 
 #include "compat/compat.h"
 #include "extension.h"
+#include "func_cache.h"
 #include "planner.h"
 #include "utils.h"
 
@@ -138,40 +139,18 @@ replace_aggref_in_tlist(MinMaxAggPath *minmaxagg_path)
 									(void *) &context);
 }
 
-/* Stores function id (FIRST/LAST) with proper comparison strategy */
-typedef struct FuncStrategy
-{
-	Oid func_oid;
-	StrategyNumber strategy;
-} FuncStrategy;
-
-static Oid first_last_arg_types[] = { ANYELEMENTOID, ANYOID };
-
-static struct FuncStrategy first_func_strategy = { .func_oid = InvalidOid,
-												   .strategy = BTLessStrategyNumber };
-static struct FuncStrategy last_func_strategy = { .func_oid = InvalidOid,
-												  .strategy = BTGreaterStrategyNumber };
-
-static FuncStrategy *
-initialize_func_strategy(FuncStrategy *func_strategy, char *name, int nargs, Oid arg_types[])
-{
-	List *l = list_make2(makeString(ts_extension_schema_name()), makeString(name));
-	func_strategy->func_oid = LookupFuncName(l, nargs, arg_types, false);
-	return func_strategy;
-}
-
-static FuncStrategy *
+static StrategyNumber
 get_func_strategy(Oid func_oid)
 {
-	if (!OidIsValid(first_func_strategy.func_oid))
-		initialize_func_strategy(&first_func_strategy, "first", 2, first_last_arg_types);
-	if (!OidIsValid(last_func_strategy.func_oid))
-		initialize_func_strategy(&last_func_strategy, "last", 2, first_last_arg_types);
-	if (first_func_strategy.func_oid == func_oid)
-		return &first_func_strategy;
-	if (last_func_strategy.func_oid == func_oid)
-		return &last_func_strategy;
-	return NULL;
+	if (!OidIsValid(ts_first_func_oid) || !OidIsValid(ts_last_func_oid))
+		ts_func_cache_get(func_oid); // ensure function cache is initialized
+
+	if (func_oid == ts_first_func_oid)
+		return BTLessStrategyNumber;
+	if (func_oid == ts_last_func_oid)
+		return BTGreaterStrategyNumber;
+
+	return InvalidStrategy;
 }
 
 static bool
@@ -183,9 +162,7 @@ is_first_last_node(Node *node, List **context)
 	{
 		Aggref *aggref = (Aggref *) node;
 
-		FuncStrategy *func_strategy = get_func_strategy(aggref->aggfnoid);
-
-		if (func_strategy != NULL)
+		if (aggref->aggfnoid == ts_first_func_oid || aggref->aggfnoid == ts_last_func_oid)
 			return true;
 	}
 	return expression_tree_walker(node, is_first_last_node, (void *) context);
@@ -438,7 +415,7 @@ find_first_last_aggs_walker(Node *node, List **context)
 		FirstLastAggInfo *fl_info;
 		Oid sort_oid;
 		TypeCacheEntry *sort_tce;
-		FuncStrategy *func_strategy;
+		StrategyNumber func_strategy;
 
 		Assert(aggref->agglevelsup == 0);
 		if (list_length(aggref->args) != 2)
@@ -473,12 +450,11 @@ find_first_last_aggs_walker(Node *node, List **context)
 		sort_oid = lsecond_oid(aggref->aggargtypes);
 
 		func_strategy = get_func_strategy(aggref->aggfnoid);
-		if (func_strategy == NULL)
+		if (func_strategy == InvalidStrategy)
 			return true; /* not first/last aggregate */
 
 		sort_tce = lookup_type_cache(sort_oid, TYPECACHE_BTREE_OPFAMILY);
-		aggsortop =
-			get_opfamily_member(sort_tce->btree_opf, sort_oid, sort_oid, func_strategy->strategy);
+		aggsortop = get_opfamily_member(sort_tce->btree_opf, sort_oid, sort_oid, func_strategy);
 		if (!OidIsValid(aggsortop))
 			elog(ERROR,
 				 "Cannot resolve sort operator for function \"%s\" and type \"%s\"",

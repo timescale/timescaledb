@@ -121,55 +121,58 @@ gp_hash_reset(GroupingPolicy *obj)
 }
 
 static void
-compute_single_aggregate(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, int start_row,
-						 int end_row, const VectorAggDef *agg_def, void *agg_states)
+compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext,
+						 TupleTableSlot *vector_slot, int start_row, int end_row,
+						 const VectorAggDef *agg_def, void *agg_states)
 {
-	const ArrowArray *arg_arrow = NULL;
-	const uint64 *arg_validity_bitmap = NULL;
-	Datum arg_datum = 0;
-	bool arg_isnull = true;
-	uint16 total_batch_rows = 0;
 	const uint32 *offsets = policy->key_index_for_row;
 	MemoryContext agg_extra_mctx = policy->agg_extra_mctx;
-	const uint64 *vector_qual_result = vector_slot_get_qual_result(vector_slot, &total_batch_rows);
 
 	/*
 	 * We have functions with one argument, and one function with no arguments
 	 * (count(*)). Collect the arguments.
 	 */
-	if (agg_def->input_offset >= 0)
+	const ArrowArray *arg_arrow = NULL;
+	const uint64 *arg_validity_bitmap = NULL;
+	Datum arg_datum = 0;
+	bool arg_isnull = true;
+	if (agg_def->argument != NULL)
 	{
-		const AttrNumber attnum = AttrOffsetGetAttrNumber(agg_def->input_offset);
-		const CompressedColumnValues *values =
-			vector_slot_get_compressed_column_values(vector_slot, attnum);
+		const CompressedColumnValues values =
+			vector_slot_evaluate_expression(dcontext,
+											vector_slot,
+											agg_def->effective_batch_filter,
+											agg_def->argument);
 
-		Assert(values->decompression_type != DT_Invalid);
-		Ensure(values->decompression_type != DT_Iterator,
-			   "expected arrow array but got iterator for attnum %d",
-			   attnum);
+		Assert(values.decompression_type != DT_Invalid);
+		Ensure(values.decompression_type != DT_Iterator, "expected arrow array but got iterator");
 
-		if (values->arrow != NULL)
+		if (values.arrow != NULL)
 		{
-			arg_arrow = values->arrow;
-			arg_validity_bitmap = values->buffers[0];
+			arg_arrow = values.arrow;
+			arg_validity_bitmap = values.buffers[0];
 		}
 		else
 		{
-			Assert(values->decompression_type == DT_Scalar);
-			arg_datum = *values->output_value;
-			arg_isnull = *values->output_isnull;
+			Assert(values.decompression_type == DT_Scalar);
+			arg_isnull = *values.output_isnull;
+			if (!arg_isnull)
+			{
+				arg_datum = *values.output_value;
+			}
 		}
 	}
 
 	/*
-	 * Compute the unified validity bitmap.
+	 * Compute the combined validity bitmap that includes the argument validity.
 	 */
-	const size_t num_words = (total_batch_rows + 63) / 64;
-	const uint64 *filter = arrow_combine_validity(num_words,
-												  policy->tmp_filter,
-												  agg_def->filter_result,
-												  vector_qual_result,
-												  arg_validity_bitmap);
+	DecompressBatchState *batch_state = (DecompressBatchState *) vector_slot;
+	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+	const uint64 *combined_validity = arrow_combine_validity(num_words,
+															 policy->tmp_filter,
+															 agg_def->effective_batch_filter,
+															 arg_validity_bitmap,
+															 NULL);
 
 	/*
 	 * Now call the function.
@@ -179,7 +182,7 @@ compute_single_aggregate(GroupingPolicyHash *policy, TupleTableSlot *vector_slot
 		/* Arrow argument. */
 		agg_def->func.agg_many_vector(agg_states,
 									  offsets,
-									  filter,
+									  combined_validity,
 									  start_row,
 									  end_row,
 									  arg_arrow,
@@ -195,7 +198,7 @@ compute_single_aggregate(GroupingPolicyHash *policy, TupleTableSlot *vector_slot
 		{
 			agg_def->func.agg_many_scalar(agg_states,
 										  offsets,
-										  filter,
+										  combined_validity,
 										  start_row,
 										  end_row,
 										  arg_datum,
@@ -206,7 +209,7 @@ compute_single_aggregate(GroupingPolicyHash *policy, TupleTableSlot *vector_slot
 		{
 			for (int i = start_row; i < end_row; i++)
 			{
-				if (!arrow_row_is_valid(filter, i))
+				if (!arrow_row_is_valid(combined_validity, i))
 				{
 					continue;
 				}
@@ -219,8 +222,8 @@ compute_single_aggregate(GroupingPolicyHash *policy, TupleTableSlot *vector_slot
 }
 
 static void
-add_one_range(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, const int start_row,
-			  const int end_row)
+add_one_range(GroupingPolicyHash *policy, DecompressContext *dcontext, TupleTableSlot *vector_slot,
+			  const int start_row, const int end_row)
 {
 	const int num_fns = policy->num_agg_defs;
 	Assert(start_row < end_row);
@@ -275,6 +278,7 @@ add_one_range(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, const int
 		 * Add this batch to the states of this aggregate function.
 		 */
 		compute_single_aggregate(policy,
+								 dcontext,
 								 vector_slot,
 								 start_row,
 								 end_row,
@@ -294,7 +298,7 @@ add_one_range(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, const int
 }
 
 static void
-gp_hash_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
+gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlot *vector_slot)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
 	uint16 n;
@@ -338,8 +342,7 @@ gp_hash_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 		const GroupingColumn *def = &policy->grouping_columns[i];
 
 		policy->current_batch_grouping_column_values[i] =
-			*vector_slot_get_compressed_column_values(vector_slot,
-													  AttrOffsetGetAttrNumber(def->input_offset));
+			vector_slot_evaluate_expression(dcontext, vector_slot, filter, def->expr);
 	}
 
 	/*
@@ -356,7 +359,7 @@ gp_hash_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 		 * We don't have a filter on this batch, so aggregate it entirely in one
 		 * go.
 		 */
-		add_one_range(policy, vector_slot, 0, n);
+		add_one_range(policy, dcontext, vector_slot, 0, n);
 	}
 	else
 	{
@@ -411,7 +414,7 @@ gp_hash_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 
 			statistics_range_row += end_row - start_row;
 
-			add_one_range(policy, vector_slot, start_row, end_row);
+			add_one_range(policy, dcontext, vector_slot, start_row, end_row);
 		}
 
 		policy->stat_bulk_filtered_rows += n - statistics_range_row;

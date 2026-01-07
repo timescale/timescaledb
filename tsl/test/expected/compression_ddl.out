@@ -456,7 +456,7 @@ select add_compression_policy(:'UNCOMPRESSED_HYPER_NAME', interval '1 day');
 ------------------------
                    1000
 
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
+SELECT count(*) FROM _timescaledb_catalog.bgw_job WHERE id >= 1000;
  count 
 -------
      1
@@ -469,7 +469,7 @@ SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
      0
 
 --verify that the policy is gone
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
+SELECT count(*) FROM _timescaledb_catalog.bgw_job WHERE id >= 1000;
  count 
 -------
      0
@@ -1217,8 +1217,7 @@ FROM public."tEst2"
 GROUP BY "Idd", "bUcket";
 NOTICE:  continuous aggregate "tEst2_mv" is already up-to-date
 ALTER MATERIALIZED VIEW "tEst2_mv" SET (timescaledb.compress = true);
-NOTICE:  defaulting compress_segmentby to "Idd"
-NOTICE:  defaulting compress_orderby to "bUcket"
+NOTICE:  defaulting compress_orderby to "bUcket","Idd"
 -- #5161 segmentby param
 CREATE MATERIALIZED VIEW test1_cont_view2
 WITH (timescaledb.continuous,
@@ -1232,14 +1231,12 @@ ALTER MATERIALIZED VIEW test1_cont_view2 SET (
   timescaledb.compress = true,
   timescaledb.compress_segmentby = 'invalid_column'
 );
-NOTICE:  defaulting compress_orderby to t
 ERROR:  column "invalid_column" does not exist
 \set ON_ERROR_STOP 1
 ALTER MATERIALIZED VIEW test1_cont_view2 SET (
   timescaledb.compress = true
 );
-NOTICE:  defaulting compress_segmentby to "iDeA"
-NOTICE:  defaulting compress_orderby to t
+NOTICE:  defaulting compress_orderby to t,"iDeA"
 ALTER MATERIALIZED VIEW test1_cont_view2 SET (
   timescaledb.compress = true,
   timescaledb.compress_segmentby = '"iDeA"'
@@ -1250,7 +1247,6 @@ ALTER MATERIALIZED VIEW test1_cont_view2 SET (
   timescaledb.compress = true,
   timescaledb.compress_orderby = '"iDeA"'
 );
-NOTICE:  defaulting compress_segmentby to "iDeA"
 ERROR:  cannot use column "iDeA" for both ordering and segmenting
 \set ON_ERROR_STOP 1
 ALTER MATERIALIZED VIEW test1_cont_view2 SET (

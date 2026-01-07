@@ -3,8 +3,11 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- Set path to check data intergrity after in-memory recompression
+\set TEST_BASE_NAME recompression_intergrity_tests
+-- requires TEST_BASE_NAME, TEST_TABLE_NAME, BATCH_METADATA_QUERY, ORDER_BY_CLAUSE
 \set RECOMPRESSION_INTEGRITY_CHECK_RELPATH 'include/recompression_integrity_check.sql'
 \set BATCH_METADATA_QUERY ''
+\set ORDER_BY_CLAUSE ''
 
 -- Test Case 1: Basic segmentby configuration
 DROP TABLE IF EXISTS recomp_segmentby_test CASCADE;
@@ -35,6 +38,7 @@ INSERT INTO recomp_segmentby_test VALUES
   ('2001-01-01 01:00:00', 'device2', 'room2', 23.5, 68.5);
 
 \set TEST_TABLE_NAME 'recomp_segmentby_test'
+SELECT compress_chunk(ch) FROM show_chunks(:'TEST_TABLE_NAME') ch;
 \ir :RECOMPRESSION_INTEGRITY_CHECK_RELPATH
 
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
@@ -69,6 +73,7 @@ INSERT INTO recomp_multi_segmentby_test VALUES
   ('2001-01-01', 'device2', 'room1', 'humidity', 63.0);
 
 \set TEST_TABLE_NAME 'recomp_multi_segmentby_test'
+SELECT compress_chunk(ch) FROM show_chunks(:'TEST_TABLE_NAME') ch;
 \ir :RECOMPRESSION_INTEGRITY_CHECK_RELPATH
 
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
@@ -105,6 +110,7 @@ SELECT x, md5(x::text),
 FROM generate_series(1, 10000) x;
 
 \set TEST_TABLE_NAME 'recomp_index_test'
+SELECT compress_chunk(ch) FROM show_chunks(:'TEST_TABLE_NAME') ch;
 \ir :RECOMPRESSION_INTEGRITY_CHECK_RELPATH
 
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
@@ -141,6 +147,8 @@ SELECT x, md5(x::text),
 FROM generate_series(1, 10000) x;
 
 \set TEST_TABLE_NAME 'recomp_large_data_test'
+-- Compress all uncompressed chunks
+SELECT compress_chunk(ch) FROM show_chunks(:'TEST_TABLE_NAME') ch;
 \ir :RECOMPRESSION_INTEGRITY_CHECK_RELPATH
 
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
@@ -151,23 +159,9 @@ DROP TABLE recomp_large_data_test CASCADE;
 \set BATCH_METADATA_QUERY 'SELECT _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM :COMPRESSED_CHUNK_NAME;'
 SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_sort_batches = true;
-SET timescaledb.enable_direct_compress_insert_client_sorted = false;
-
--- Test Case 5: Unordered chunk
-DROP TABLE IF EXISTS recomp_unordered CASCADE;
-CREATE TABLE recomp_unordered (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.orderby='time');
-INSERT INTO recomp_unordered SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,100) i;
-INSERT INTO recomp_unordered SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(101,800) i;
-
--- Will not use in-memory recompression due to unordered
-\set TEST_TABLE_NAME 'recomp_unordered'
-\ir :RECOMPRESSION_INTEGRITY_CHECK_RELPATH
-SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
-DROP TABLE IF EXISTS recomp_unordered CASCADE;
-
--- Test Case 5: Direct Compress Batches
 SET timescaledb.enable_direct_compress_insert_client_sorted = true;
 
+-- Test Case 5: Direct Compress Batches
 DROP TABLE IF EXISTS recomp_direct_compress CASCADE;
 CREATE TABLE recomp_direct_compress (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.orderby='time');
 
@@ -197,6 +191,35 @@ DROP TABLE IF EXISTS recomp_direct_compress CASCADE;
 RESET timescaledb.enable_direct_compress_insert;
 RESET timescaledb.enable_direct_compress_insert_sort_batches;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
+
+-- Test Case 6: Disabled in-memory recompression GUC
+CREATE TABLE recomp_guc_test(
+    time timestamptz NOT NULL,
+    device text,
+    value float
+);
+SELECT create_hypertable('recomp_guc_test','time') \gset
+
+ALTER TABLE recomp_guc_test SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby='device',
+    timescaledb.compress_orderby='time'
+);
+
+SET timescaledb.enable_in_memory_recompression = off;
+-- Insert test data
+INSERT INTO recomp_guc_test VALUES ('2000-01-01 00:00:00', 'device1', 20.5);
+
+SELECT ch AS chunk FROM show_chunks('recomp_guc_test') ch ORDER BY ch LIMIT 1 \gset
+CALL convert_to_columnstore(:'chunk');
+CALL convert_to_columnstore(:'chunk', recompress := true);
+
+-- Verify data integrity after fallback recompression
+SELECT COUNT(*) FROM recomp_guc_test;
+SELECT * FROM recomp_guc_test ORDER BY time, device;
+
+RESET timescaledb.enable_in_memory_recompression;
+DROP TABLE recomp_guc_test CASCADE;
 
 
 

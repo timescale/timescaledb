@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <access/attmap.h>
 #include <access/attnum.h>
+#include <access/detoast.h>
 #include <access/skey.h>
 #include <access/tupdesc.h>
 #include <catalog/heap.h>
@@ -17,6 +18,7 @@
 #include <storage/predicate.h>
 #include <utils/datum.h>
 #include <utils/elog.h>
+#include <utils/lsyscache.h>
 #include <utils/palloc.h>
 #include <utils/rel.h>
 #include <utils/snapmgr.h>
@@ -35,6 +37,8 @@
 #include "batch_metadata_builder.h"
 #include "chunk_insert_state.h"
 #include "compression.h"
+#include "compression/sparse_index_bloom1.h"
+#include "continuous_aggs/insert.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
@@ -836,7 +840,7 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 												 settings->fd.relid,
 												 attr->attnum,
 												 settings->fd.compress_relid,
-												 "bloom1");
+												 bloom1_column_prefix);
 			if (AttributeNumberIsValid(bloom_attr_number))
 			{
 				const int bloom_attr_offset = AttrNumberGetAttrOffset(bloom_attr_number);
@@ -881,12 +885,29 @@ check_for_limited_size_compressors(PerColumn *pcolumns, int16 natts)
 }
 
 void
+tsl_compressor_set_invalidation(RowCompressor *compressor, Hypertable *ht, Oid chunk_relid)
+{
+	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Ensure(time_dim, "Hypertable must have an open dimension");
+	AttrNumber attnum = get_attnum(chunk_relid, NameStr(time_dim->fd.column_name));
+
+	compressor->invalidation = palloc0(sizeof(InvalidationSettings));
+	compressor->invalidation->hypertable_id = ht->fd.id;
+	compressor->invalidation->chunk_relid = chunk_relid;
+	compressor->invalidation->invalidation_column_offset = AttrNumberGetAttrOffset(attnum);
+}
+
+void
 tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer, TupleTableSlot *slot)
 {
 	if (compressor->sort_state)
 	{
 		tuplesort_puttupleslot(compressor->sort_state, slot);
 		compressor->tuples_to_sort++;
+
+		if (compressor->tuple_sort_limit &&
+			compressor->tuples_to_sort >= compressor->tuple_sort_limit)
+			tsl_compressor_flush(compressor, bulk_writer);
 	}
 	else
 	{
@@ -932,6 +953,8 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
 {
 	if (compressor->sort_state)
 		tuplesort_end(compressor->sort_state);
+	if (compressor->invalidation)
+		pfree(compressor->invalidation);
 	tsl_compressor_flush(compressor, bulk_writer);
 	row_compressor_close(compressor);
 	bulk_writer_close(bulk_writer);
@@ -945,7 +968,7 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
  * Tuplesortstate and sort them before flushing to the output relation.
  */
 RowCompressor *
-tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort)
+tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int sort_limit)
 {
 	RowCompressor *compressor = palloc0(sizeof(RowCompressor));
 	CompressionSettings *settings = ts_compression_settings_get(in_rel->rd_id);
@@ -954,7 +977,10 @@ tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort)
 	row_compressor_init(compressor, settings, RelationGetDescr(in_rel), RelationGetDescr(out_rel));
 
 	if (sort)
+	{
 		compressor->sort_state = compression_create_tuplesort_state(settings, in_rel);
+		compressor->tuple_sort_limit = sort_limit;
+	}
 
 	return compressor;
 }
@@ -1330,6 +1356,20 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 {
 	HeapTuple compressed_tuple = row_compressor_build_tuple(row_compressor);
 	MemoryContext old_cxt = MemoryContextSwitchTo(row_compressor->per_row_ctx);
+
+	/* invalidate continuous aggregate range */
+	if (row_compressor->invalidation)
+	{
+		InvalidationSettings *settings = row_compressor->invalidation;
+		PerColumn *dim_col = &row_compressor->per_column[settings->invalidation_column_offset];
+		BatchMetadataBuilderMinMax *builder =
+			(BatchMetadataBuilderMinMax *) dim_col->metadata_builder;
+		Datum min = row_compressor->compressed_values[builder->min_metadata_attr_offset];
+		Datum max = row_compressor->compressed_values[builder->max_metadata_attr_offset];
+		int64 start = ts_time_value_to_internal(min, builder->type_oid);
+		int64 end = ts_time_value_to_internal(max, builder->type_oid);
+		continuous_agg_invalidate_range(settings->hypertable_id, settings->chunk_relid, start, end);
+	}
 
 	Assert(writer->bistate != NULL);
 	heap_insert(writer->out_rel,
@@ -2205,6 +2245,151 @@ tsl_compressed_data_decompress_reverse(PG_FUNCTION_ARGS)
 
 	SRF_RETURN_NEXT(funcctx, res.val);
 	;
+}
+
+/*
+ * compressed_data_to_array(compressed_data, element_type) -> anyarray
+ */
+Datum
+tsl_compressed_data_to_array(PG_FUNCTION_ARGS)
+{
+	Datum compressed_data;
+	Oid element_type;
+	ArrayType *result;
+
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	compressed_data = PG_GETARG_DATUM(0);
+
+	/* Get element type from the second argument's type */
+	element_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+
+	if (!OidIsValid(element_type))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("could not determine element type")));
+
+	/* Initial allocation - will grow as needed */
+	int capacity = TARGET_COMPRESSED_BATCH_SIZE;
+	int count = 0;
+	Datum *values = palloc(sizeof(Datum) * capacity);
+	bool *nulls = palloc(sizeof(bool) * capacity);
+
+	/* Get type info for array construction */
+	int16 typlen;
+	bool typbyval;
+	char typalign;
+	get_typlenbyvalalign(element_type, &typlen, &typbyval, &typalign);
+
+	CompressedDataHeader *header;
+	DecompressionIterator *iter;
+	DecompressResult res;
+	/* Get compressed data header and validate */
+	header = get_compressed_data_header(compressed_data);
+
+	/* Initialize the decompression iterator */
+	iter = definitions[header->compression_algorithm].iterator_init_forward(PointerGetDatum(header),
+																			element_type);
+
+	/* Iterate through all compressed values */
+	for (;;)
+	{
+		res = iter->try_next(iter);
+
+		if (res.is_done)
+			break;
+
+		/* Grow arrays if needed */
+		if (count >= capacity)
+		{
+			capacity *= 2;
+			values = repalloc(values, sizeof(Datum) * capacity);
+			nulls = repalloc(nulls, sizeof(bool) * capacity);
+		}
+
+		values[count] = res.val;
+		nulls[count] = res.is_null;
+		count++;
+	}
+
+	/* Construct and return the PostgreSQL array */
+	int dims[1];
+	int lbs[1];
+
+	dims[0] = count;
+	lbs[0] = 1; /* 1-based indexing */
+
+	result = construct_md_array(values,
+								nulls,
+								1, /* ndims */
+								dims,
+								lbs,
+								element_type,
+								typlen,
+								typbyval,
+								typalign);
+	PG_RETURN_ARRAYTYPE_P(result);
+}
+
+/*
+ * compressed_data_column_size(compressed_data, element_type) -> anyarray
+ */
+Datum
+tsl_compressed_data_column_size(PG_FUNCTION_ARGS)
+{
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	Datum compressed_data = PG_GETARG_DATUM(0);
+
+	/* Get element type from the second argument's type */
+	Oid element_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+
+	if (!OidIsValid(element_type))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("could not determine element type")));
+
+	int16 typlen;
+	bool typbyval pg_attribute_unused();
+	char typalign;
+	get_typlenbyvalalign(element_type, &typlen, &typbyval, &typalign);
+
+	CompressedDataHeader *header;
+	DecompressionIterator *iter;
+	DecompressResult res;
+	/* Get compressed data header and validate */
+	header = get_compressed_data_header(compressed_data);
+
+	/* Initialize the decompression iterator */
+	iter = definitions[header->compression_algorithm].iterator_init_forward(PointerGetDatum(header),
+																			element_type);
+
+	int32 column_size = 0;
+	/* Iterate through all compressed values */
+	for (;;)
+	{
+		res = iter->try_next(iter);
+
+		if (res.is_done)
+			break;
+
+		/* similar to pg_column_size implementation */
+		if (!res.is_null)
+		{
+			if (typlen == -1)
+				column_size += toast_datum_size(res.val);
+			else if (typlen == -2)
+				column_size += strlen(DatumGetCString(res.val)) + 1;
+			else
+				column_size += typlen;
+
+			column_size = att_align_nominal(column_size, typalign);
+		}
+	}
+
+	PG_RETURN_INT32(column_size);
 }
 
 Datum

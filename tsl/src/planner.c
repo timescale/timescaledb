@@ -20,29 +20,14 @@
 #include "guc.h"
 #include "hypertable.h"
 #include "nodes/columnar_scan/columnar_scan.h"
-#include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"
 #include "nodes/gapfill/gapfill.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/vector_agg/plan.h"
 #include "planner.h"
-#include "planner/partialize.h"
 
 #include <math.h>
 
 #define OSM_EXTENSION_NAME "timescaledb_osm"
-
-static int osm_present = -1;
-
-static bool
-is_osm_present()
-{
-	if (osm_present == -1)
-	{
-		Oid osm_oid = get_extension_oid(OSM_EXTENSION_NAME, true);
-		osm_present = OidIsValid(osm_oid);
-	}
-	return osm_present;
-}
 
 static bool
 involves_hypertable(PlannerInfo *root, RelOptInfo *parent)
@@ -153,20 +138,6 @@ void
 tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
 						 Hypertable *ht)
 {
-	if (is_osm_present())
-	{
-		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
-		if (chunk && ts_chunk_is_frozen(chunk))
-		{
-			ListCell *lc;
-			foreach (lc, rel->pathlist)
-			{
-				Path **pathptr = (Path **) &lfirst(lc);
-				*pathptr = frozen_chunk_dml_generate_path(*pathptr, chunk);
-			}
-			return;
-		}
-	}
 	/*
 	 * We do not support MERGE command with UPDATE/DELETE merge actions on
 	 * compressed hypertables, because Custom Scan (ModifyHypertable) node is
@@ -203,6 +174,30 @@ tsl_preprocess_query(Query *parse, int *cursor_opts)
 		cagg_sort_pushdown(parse, cursor_opts);
 	}
 #endif
+}
+
+/*
+ * Replaces pathkeys in tsl-specific custom path types during sort transformation.
+ *
+ * This hook is called from ts_sort_transform_replace_pathkeys() in sort_transform.c
+ * after the basic pathkey replacement has been performed. It handles tsl-specific
+ * path types (such as ColumnarScan) that contain additional pathkey fields beyond
+ * the standard path.pathkeys field.
+ */
+void
+tsl_sort_transform_replace_pathkeys(void *path, List *transformed_pathkeys, List *original_pathkeys)
+{
+	if (!path)
+		return;
+	if (ts_is_columnar_scan_path(path))
+	{
+		ColumnarScanPath *dcpath = (ColumnarScanPath *) path;
+		if (compare_pathkeys(dcpath->required_compressed_pathkeys, transformed_pathkeys) ==
+			PATHKEYS_EQUAL)
+		{
+			dcpath->required_compressed_pathkeys = original_pathkeys;
+		}
+	}
 }
 
 /*

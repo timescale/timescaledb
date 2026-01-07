@@ -848,14 +848,6 @@ should exclude chunks on m2
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Only Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Index Only Scan Backward using _hyper_7_167_chunk_metrics_timestamptz_2_time_idx on _hyper_7_167_chunk m2_3
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Index Only Scan Backward using _hyper_7_168_chunk_metrics_timestamptz_2_time_idx on _hyper_7_168_chunk m2_4
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Index Only Scan Backward using _hyper_7_169_chunk_metrics_timestamptz_2_time_idx on _hyper_7_169_chunk m2_5
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Index Only Scan Backward using _hyper_7_170_chunk_metrics_timestamptz_2_time_idx on _hyper_7_170_chunk m2_6
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 
 \qecho should exclude chunks on m1
 should exclude chunks on m1
@@ -870,12 +862,6 @@ should exclude chunks on m1
                ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk m1_3
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Index Only Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk m1_4
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Index Only Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk m1_5
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Materialize
                ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 m2
@@ -1821,44 +1807,44 @@ DEALLOCATE P8;
    Sort Key: hyper."time"
    ->  Append
          ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_3_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_4_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_5_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_6_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_7_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_8_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_9_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_10_chunk
-               Filter: (("time" > 10) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
 
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) > 10 AND time_bucket(10, time) < 20 ORDER BY time;
 --- QUERY PLAN ---
  Sort
    Sort Key: _hyper_1_2_chunk."time"
    ->  Seq Scan on _hyper_1_2_chunk
-         Filter: (("time" > 10) AND ("time" < '20'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 20))
+         Filter: (("time" > '10'::bigint) AND ("time" < '20'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 20))
 
 :PREFIX SELECT * FROM hyper WHERE time_bucket(1, time) > 11 AND time_bucket(1, time) < 19 ORDER BY time;
 --- QUERY PLAN ---
  Sort
    Sort Key: _hyper_1_2_chunk."time"
    ->  Seq Scan on _hyper_1_2_chunk
-         Filter: (("time" > 11) AND ("time" < '19'::bigint) AND (time_bucket('1'::bigint, "time") > 11) AND (time_bucket('1'::bigint, "time") < 19))
+         Filter: (("time" > '11'::bigint) AND ("time" < '19'::bigint) AND (time_bucket('1'::bigint, "time") > 11) AND (time_bucket('1'::bigint, "time") < 19))
 
 :PREFIX SELECT * FROM hyper WHERE 10 < time_bucket(10, time) AND 20 > time_bucket(10,time) ORDER BY time;
 --- QUERY PLAN ---
  Sort
    Sort Key: _hyper_1_2_chunk."time"
    ->  Seq Scan on _hyper_1_2_chunk
-         Filter: (("time" > 10) AND ("time" < '20'::bigint) AND (10 < time_bucket('10'::bigint, "time")) AND (20 > time_bucket('10'::bigint, "time")))
+         Filter: (("time" > '10'::bigint) AND ("time" < '20'::bigint) AND (10 < time_bucket('10'::bigint, "time")) AND (20 > time_bucket('10'::bigint, "time")))
 
 \qecho time_bucket exclusion with date
 time_bucket exclusion with date

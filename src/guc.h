@@ -28,10 +28,6 @@ extern bool ts_guc_enable_constraint_exclusion;
 extern bool ts_guc_enable_cagg_reorder_groupby;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_window_functions;
 extern TSDLLEXPORT int ts_guc_cagg_max_individual_materializations;
-extern TSDLLEXPORT bool ts_guc_enable_cagg_wal_based_invalidation;
-extern TSDLLEXPORT int ts_guc_cagg_wal_batch_size;
-extern TSDLLEXPORT int ts_guc_cagg_low_work_mem;
-extern TSDLLEXPORT int ts_guc_cagg_high_work_mem;
 extern bool ts_guc_enable_now_constify;
 extern bool ts_guc_enable_foreign_key_propagation;
 extern TSDLLEXPORT bool ts_guc_enable_osm_reads;
@@ -44,9 +40,11 @@ extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
 extern bool ts_guc_enable_direct_compress_copy;
 extern bool ts_guc_enable_direct_compress_copy_sort_batches;
 extern bool ts_guc_enable_direct_compress_copy_client_sorted;
+extern int ts_guc_direct_compress_copy_tuple_sort_limit;
 extern bool ts_guc_enable_direct_compress_insert;
 extern bool ts_guc_enable_direct_compress_insert_sort_batches;
 extern bool ts_guc_enable_direct_compress_insert_client_sorted;
+extern int ts_guc_direct_compress_insert_tuple_sort_limit;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
 extern TSDLLEXPORT bool ts_guc_enable_transparent_decompression;
@@ -55,7 +53,6 @@ extern TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge;
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
 extern TSDLLEXPORT bool ts_guc_enable_chunkwise_aggregation;
 extern TSDLLEXPORT bool ts_guc_enable_vectorized_aggregation;
-extern TSDLLEXPORT bool ts_guc_enable_custom_hashagg;
 extern bool ts_guc_restoring;
 extern int ts_guc_max_open_chunks_per_insert;
 extern int ts_guc_max_cached_chunks_per_hypertable;
@@ -65,6 +62,7 @@ extern TSDLLEXPORT bool ts_guc_enable_delete_after_compression;
 extern TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh;
 extern bool ts_guc_enable_chunk_skipping;
 extern TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression;
+extern TSDLLEXPORT bool ts_guc_enable_in_memory_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_bool_compression;
 extern TSDLLEXPORT bool ts_guc_enable_uuid_compression;
@@ -104,14 +102,13 @@ extern char *ts_telemetry_cloud;
 #endif
 
 extern TSDLLEXPORT char *ts_guc_license;
-extern char *ts_last_tune_time;
-extern char *ts_last_tune_version;
-extern TSDLLEXPORT bool ts_guc_enable_2pc;
 extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 extern TSDLLEXPORT bool ts_guc_enable_bulk_decompression;
 extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
 extern TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom;
+extern TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1;
 extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
+extern TSDLLEXPORT bool ts_guc_enable_columnarindexscan;
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
 
 /*
@@ -151,6 +148,8 @@ extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_batch_sorted_merge;
 
 extern TSDLLEXPORT bool ts_guc_debug_allow_cagg_with_deprecated_funcs;
 
+extern bool ts_guc_enable_partitioned_hypertables;
+
 void _guc_init(void);
 
 typedef enum
@@ -164,5 +163,3 @@ typedef enum
 extern TSDLLEXPORT void ts_feature_flag_check(FeatureFlagType);
 extern TSDLLEXPORT Oid ts_guc_default_segmentby_fn_oid(void);
 extern TSDLLEXPORT Oid ts_guc_default_orderby_fn_oid(void);
-
-extern TSDLLEXPORT bool ts_is_whitelisted_indexam(const char *amname);

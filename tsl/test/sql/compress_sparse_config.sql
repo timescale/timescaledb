@@ -188,7 +188,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 
-\d+ :chunk
+select * from test.show_columns_ext(:'chunk'::regclass);
 
 -- UUID uses bloom
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
@@ -224,7 +224,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 
-\d+ :chunk
+select * from test.show_columns_ext(:'chunk'::regclass);
 
 -- these tests show that despite column having multiple sparse indexes, the appropriate one is selected by the planner
 -- UUID uses bloom
@@ -257,7 +257,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 
-\d+ :chunk
+select * from test.show_columns_ext(:'chunk'::regclass);
 
 -- Test same minmax and orderby column
 alter table test_sparse_index set (timescaledb.compress,
@@ -273,7 +273,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 
-\d+ :chunk
+select * from test.show_columns_ext(:'chunk'::regclass);
 select * from settings;
 
 -- Test auto sparse index
@@ -291,7 +291,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 
-\d+ :chunk
+select * from test.show_columns_ext(:'chunk'::regclass);
 select * from settings;
 
 -- Test empty sparse index
@@ -309,7 +309,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 
-\d+ :chunk
+select * from test.show_columns_ext(:'chunk'::regclass);
 select * from settings;
 
 -- Test default orderby without sparse index
@@ -326,7 +326,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 
-\d+ :chunk
+select * from test.show_columns_ext(:'chunk'::regclass);
 select * from settings;
 reset timescaledb.enable_sparse_index_bloom;
 drop table test_sparse_index;

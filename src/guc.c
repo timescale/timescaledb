@@ -63,17 +63,14 @@ static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 	{ NULL, 0, false }
 };
 
-#define GUC_CAGG_LOW_WORK_MEM_NAME "cagg_processing_low_work_mem"
-#define GUC_CAGG_LOW_WORK_MEM_VALUE (0.6 * 65536)
-#define GUC_CAGG_HIGH_WORK_MEM_NAME "cagg_processing_high_work_mem"
-#define GUC_CAGG_HIGH_WORK_MEM_VALUE (0.8 * 65536)
-
 bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
+int ts_guc_direct_compress_copy_tuple_sort_limit = 100000;
 bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
 bool ts_guc_enable_direct_compress_insert_client_sorted = false;
+int ts_guc_direct_compress_insert_tuple_sort_limit = 10000;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -93,10 +90,6 @@ TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown = true;
 #endif
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
-TSDLLEXPORT bool ts_guc_enable_cagg_wal_based_invalidation = false;
-TSDLLEXPORT int ts_guc_cagg_wal_batch_size = 10000;
-TSDLLEXPORT int ts_guc_cagg_low_work_mem = GUC_CAGG_LOW_WORK_MEM_VALUE;
-TSDLLEXPORT int ts_guc_cagg_high_work_mem = GUC_CAGG_HIGH_WORK_MEM_VALUE;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
@@ -107,13 +100,16 @@ TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
 bool ts_guc_enable_vectorized_aggregation = true;
-bool ts_guc_enable_custom_hashagg = false;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom = true;
+
+TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1 = false;
+
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
+TSDLLEXPORT bool ts_guc_enable_in_memory_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT bool ts_guc_enable_uuid_compression = true;
@@ -130,6 +126,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
+TSDLLEXPORT bool ts_guc_enable_columnarindexscan = false;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 #if PG16_GE
@@ -145,6 +142,8 @@ bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 
+bool ts_guc_enable_partitioned_hypertables = false;
+
 /* default value of ts_guc_max_open_chunks_per_insert and
  * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
  * GUC mechanism starts up */
@@ -156,8 +155,6 @@ char *ts_telemetry_cloud = NULL;
 #endif
 
 TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
-char *ts_last_tune_time = NULL;
-char *ts_last_tune_version = NULL;
 
 bool ts_guc_debug_allow_cagg_with_deprecated_funcs = false;
 
@@ -331,38 +328,6 @@ get_segmentby_func(char *input_name)
 }
 
 static bool
-check_cagg_low_work_mem(int *newval, void **extra, GucSource source)
-{
-	if (*newval >= ts_guc_cagg_high_work_mem)
-	{
-		GUC_check_errdetail("\"%s\" must be less than value of \"%s\".",
-							GUC_CAGG_LOW_WORK_MEM_NAME,
-							GUC_CAGG_HIGH_WORK_MEM_NAME);
-		GUC_check_errhint("Set \"%s\" to a value less than %d.",
-						  GUC_CAGG_LOW_WORK_MEM_NAME,
-						  ts_guc_cagg_high_work_mem);
-		return false;
-	}
-	return true;
-}
-
-static bool
-check_cagg_high_work_mem(int *newval, void **extra, GucSource source)
-{
-	if (*newval <= ts_guc_cagg_low_work_mem)
-	{
-		GUC_check_errdetail("\"%s\" must be greater than value of \"%s\".",
-							GUC_CAGG_HIGH_WORK_MEM_NAME,
-							GUC_CAGG_LOW_WORK_MEM_NAME);
-		GUC_check_errhint("Set \"%s\" to a value greater than %d.",
-						  GUC_CAGG_HIGH_WORK_MEM_NAME,
-						  ts_guc_cagg_low_work_mem);
-		return false;
-	}
-	return true;
-}
-
-static bool
 check_segmentby_func(char **newval, void **extra, GucSource source)
 {
 	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
@@ -475,6 +440,21 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomIntVariable(MAKE_EXTOPTION("direct_compress_copy_tuple_sort_limit"),
+							"Number of tuples that can be sorted at once in a COPY operation",
+							"This is mainly used to keep the memory footprint down for "
+							"operations like importing large amounts of data in "
+							"single transaction. Setting this to 0 would make it unlimited.",
+							&ts_guc_direct_compress_copy_tuple_sort_limit,
+							100000,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_insert"),
 							 "Enable direct compression during INSERT",
 							 "Enable experimental support for direct compression during INSERT",
@@ -508,6 +488,21 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("direct_compress_insert_tuple_sort_limit"),
+							"Number of tuples that can be sorted at once in an INSERT operation",
+							"This is mainly used to keep the memory footprint down for "
+							"operations like importing large amounts of data in "
+							"single transaction. Setting this to 0 would make it unlimited.",
+							&ts_guc_direct_compress_insert_tuple_sort_limit,
+							10000,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_optimizations"),
 							 "Enable TimescaleDB query optimizations",
@@ -869,6 +864,16 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_in_memory_recompression"),
+							 "Enable in-memory recompression functionality",
+							 "Enable in-memory recompression",
+							 &ts_guc_enable_in_memory_recompression,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_exclusive_locking_recompression"),
 							 "Enable exclusive locking recompression",
 							 "Enable getting exclusive lock on chunk during segmentwise "
@@ -968,63 +973,6 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_wal_based_invalidation"),
-							 "Enable experimental invalidations for continuous aggregates using "
-							 "WAL",
-							 "Use WAL to track changes to hypertables for continuous aggregates. "
-							 "This is not meant for production use.",
-							 &ts_guc_enable_cagg_wal_based_invalidation,
-							 false,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomIntVariable(MAKE_EXTOPTION("cagg_processing_wal_batch_size"),
-							"Batch size when processing WAL entries.",
-							"Number of entries processed from the WAL at a go. Larger values take "
-							"more memory but might be more efficient.",
-							&ts_guc_cagg_wal_batch_size,
-							10000,
-							1000,
-							10000000,
-							PGC_USERSET,
-							0,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable(MAKE_EXTOPTION(GUC_CAGG_LOW_WORK_MEM_NAME),
-							"Low working memory limit for continuous aggregate invalidation "
-							"processing.",
-							"The low working memory limit for the continuous aggregate "
-							"invalidation processing.",
-							&ts_guc_cagg_low_work_mem,
-							GUC_CAGG_LOW_WORK_MEM_VALUE,
-							64,
-							MAX_KILOBYTES,
-							PGC_USERSET,
-							GUC_UNIT_KB,
-							check_cagg_low_work_mem,
-							NULL,
-							NULL);
-
-	DefineCustomIntVariable(MAKE_EXTOPTION(GUC_CAGG_HIGH_WORK_MEM_NAME),
-							"High working memory limit for continuous aggregate invalidation "
-							"processing.",
-							"The high working memory limit for the continuous aggregate "
-							"invalidation processing.",
-							&ts_guc_cagg_high_work_mem,
-							GUC_CAGG_HIGH_WORK_MEM_VALUE,
-							64,
-							MAX_KILOBYTES,
-							PGC_USERSET,
-							GUC_UNIT_KB,
-							check_cagg_high_work_mem,
-							NULL,
-							NULL);
-
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_tiered_reads"),
 							 "Enable tiered data reads",
 							 "Enable reading of tiered data by including a foreign table "
@@ -1043,17 +991,6 @@ _guc_init(void)
 							 " chunk level",
 							 &ts_guc_enable_chunkwise_aggregation,
 							 true,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_custom_hashagg"),
-							 "Enable custom hash aggregation",
-							 "Enable creating custom hash aggregation plans",
-							 &ts_guc_enable_custom_hashagg,
-							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -1118,6 +1055,20 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("read_legacy_bloom1_v1"),
+							 "Enable reading the legacy bloom1 version 1 sparse indexes for SELECT "
+							 "queries",
+							 "These legacy indexes might give false negatives if they were built "
+							 "by the TimescaleDB extension compiled with different build options.",
+							 &ts_guc_read_legacy_bloom1_v1,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan"),
 							 "Enable columnar-optimized scans for supported access methods",
 							 "A columnar scan replaces sequence scans for columnar-oriented "
@@ -1127,6 +1078,18 @@ _guc_init(void)
 							 "sequence scans.",
 							 &ts_guc_enable_columnarscan,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarindexscan"),
+							 "Enable metadata-only optimization for ColumnarScans",
+							 "Enable returning results directly from compression "
+							 "metadata without decompression",
+							 &ts_guc_enable_columnarindexscan,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -1207,6 +1170,20 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+#ifdef TS_DEBUG
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_partitioned_hypertables"),
+							 "Enable hypertables using declarative partitioning",
+							 "Enable experimental support for creating hypertables using "
+							 "PostgreSQL's native declarative partitioning",
+							 &ts_guc_enable_partitioned_hypertables,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
+
 #ifdef USE_TELEMETRY
 	DefineCustomEnumVariable(MAKE_EXTOPTION("telemetry_level"),
 							 "Telemetry settings level",
@@ -1256,28 +1233,6 @@ _guc_init(void)
 							   /* flags= */ 0,
 							   /* check_hook= */ ts_license_guc_check_hook,
 							   /* assign_hook= */ ts_license_guc_assign_hook,
-							   /* show_hook= */ NULL);
-
-	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("last_tuned"),
-							   /* short_desc= */ "last tune run",
-							   /* long_desc= */ "records last time timescaledb-tune ran",
-							   /* valueAddr= */ &ts_last_tune_time,
-							   /* bootValue= */ NULL,
-							   /* context= */ PGC_SIGHUP,
-							   /* flags= */ 0,
-							   /* check_hook= */ NULL,
-							   /* assign_hook= */ NULL,
-							   /* show_hook= */ NULL);
-
-	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("last_tuned_version"),
-							   /* short_desc= */ "version of timescaledb-tune",
-							   /* long_desc= */ "version of timescaledb-tune used to tune",
-							   /* valueAddr= */ &ts_last_tune_version,
-							   /* bootValue= */ NULL,
-							   /* context= */ PGC_SIGHUP,
-							   /* flags= */ 0,
-							   /* check_hook= */ NULL,
-							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
 
 	DefineCustomEnumVariable(MAKE_EXTOPTION("bgw_log_level"),

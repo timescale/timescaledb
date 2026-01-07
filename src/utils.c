@@ -985,16 +985,28 @@ ts_subtract_integer_from_now(PG_FUNCTION_ARGS)
 	const Dimension *dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	if (!dim)
-		elog(ERROR, "hypertable has no open partitioning dimension");
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("hypertable has no open partitioning dimension")));
+	}
 
 	Oid partitioning_type = ts_dimension_get_partition_type(dim);
 
 	if (!IS_INTEGER_TYPE(partitioning_type))
-		elog(ERROR, "hypertable has no integer partitioning dimension");
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("hypertable has no integer partitioning dimension")));
+	}
 
 	Oid now_func = ts_get_integer_now_func(dim, true);
 	if (!OidIsValid(now_func))
-		elog(ERROR, "could not find valid integer_now function for hypertable");
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("could not find valid integer_now function for hypertable")));
+	}
 
 	int64 res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
 	ts_cache_release(&hcache);

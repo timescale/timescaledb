@@ -35,10 +35,10 @@ GROUP BY time_bucket(1, a), a WITH NO DATA;
 
 SET timezone TO PST8PDT;
 
-DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT count(*) FROM _timescaledb_config.bgw_job;
+SELECT count(*) FROM _timescaledb_catalog.bgw_job;
 
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
@@ -125,8 +125,8 @@ SELECT add_continuous_aggregate_policy('mat_m1', 20, 15, '1h'::interval, if_not_
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>true);
 
 -- modify config and try to add, should error out
-SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
-SELECT hypertable_id as mat_id FROM _timescaledb_config.bgw_job where id = :job_id \gset
+SELECT config FROM _timescaledb_catalog.bgw_job where id = :job_id;
+SELECT hypertable_id as mat_id FROM _timescaledb_catalog.bgw_job where id = :job_id \gset
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 
@@ -134,11 +134,11 @@ SELECT hypertable_id as mat_id FROM _timescaledb_config.bgw_job where id = :job_
 
 SET timezone TO PST8PDT;
 
-UPDATE _timescaledb_config.bgw_job
+UPDATE _timescaledb_catalog.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
+SELECT config FROM _timescaledb_catalog.bgw_job where id = :job_id;
 
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
@@ -300,7 +300,7 @@ SELECT add_continuous_aggregate_policy('max_mat_view_date', NULL, NULL, '1 day':
 SELECT remove_continuous_aggregate_policy('max_mat_view_date');
 
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '15 days', '1 day', '1 day'::interval) as job_id \gset
-SELECT config FROM _timescaledb_config.bgw_job
+SELECT config FROM _timescaledb_catalog.bgw_job
 WHERE id = :job_id;
 
 INSERT INTO continuous_agg_max_mat_date
@@ -341,19 +341,19 @@ SET client_min_messages TO warning;
 CALL run_job(:job_id);
 RESET client_min_messages ;
 
-SELECT config FROM _timescaledb_config.bgw_job
+SELECT config FROM _timescaledb_catalog.bgw_job
 WHERE id = :job_id;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 SET timezone TO PST8PDT;
 
-UPDATE _timescaledb_config.bgw_job
+UPDATE _timescaledb_catalog.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
+SELECT config FROM _timescaledb_catalog.bgw_job where id = :job_id;
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '15 day', '1 day', '1h'::interval, if_not_exists=>true);
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', 'xyz', '1 day', '1h'::interval, if_not_exists=>true);

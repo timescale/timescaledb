@@ -8,12 +8,6 @@ SET client_min_messages TO NOTICE;
 SET work_mem TO '64MB';
 SET timezone TO PST8PDT;
 
-SELECT _timescaledb_functions.invalidation_plugin_name() AS plugin_name \gset
-
-CREATE VIEW invalidation_slots AS
-SELECT * FROM pg_replication_slots
- WHERE plugin = :'plugin_name';
-
 -- START OF USAGE TEST --
 
 --First create your hypertable
@@ -65,12 +59,12 @@ SELECT * FROM timescaledb_information.continuous_aggregates;
 --
 -- The refresh interval determines how often the background worker
 -- for automatic materialization will run. The default is (2 x bucket_width)
-SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
+SELECT schedule_interval FROM _timescaledb_catalog.bgw_job WHERE id = 1000;
 
 -- You can change this setting with ALTER VIEW (equivalently, specify in WITH clause of CREATE VIEW)
 SELECT alter_job(1000, schedule_interval := '1h');
 
-SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
+SELECT schedule_interval FROM _timescaledb_catalog.bgw_job WHERE id = 1000;
 
 --
 -- Refresh with lag
@@ -306,9 +300,6 @@ FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
 
--- all caggs in the new format (finalized=true)
-SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
-
 -- dropping chunk should also remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-01 00:00:00-02'::timestamptz);
 
@@ -320,15 +311,6 @@ FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id AND h.table_name = 'metrics'
 ORDER BY 1;
 
--- let's update the catalog to fake an old format cagg (finalized=false)
-\c :TEST_DBNAME :ROLE_SUPERUSER
-UPDATE _timescaledb_catalog.continuous_agg SET finalized=FALSE WHERE user_view_name = 'cagg1';
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-
--- cagg1 now is a fake old format (finalized=false)
-SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
-
--- cagg1 now is in the old format (finalized=false)
 -- dropping chunk should NOT remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-13 00:00:00-02'::timestamptz);
 
@@ -343,9 +325,6 @@ ORDER BY 1;
 -- remove the fake old format cagg
 DROP MATERIALIZED VIEW cagg1;
 
--- no more old format caggs (finalized=false)
-SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
-
 -- dropping chunk should remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-25 00:00:00-02'::timestamptz);
 
@@ -358,119 +337,4 @@ FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
 \set ON_ERROR_STOP 1
-
-SELECT count(*) FROM invalidation_slots WHERE database = current_database();
-
-CREATE TABLE magic1(time timestamptz not null, device int, value float);
-CREATE TABLE magic2(time timestamptz not null, device int, value float);
-CREATE TABLE magic3(time timestamptz not null, device int, value float);
-
-SELECT table_name FROM create_hypertable('magic1','time');
-SELECT table_name FROM create_hypertable('magic2','time');
-SELECT table_name FROM create_hypertable('magic3','time');
-
-INSERT INTO magic1
-SELECT generate_series('1999-12-20'::timestamptz, '2000-02-01'::timestamptz, '12 day'::interval),
-       (100 * random())::int,
-       100 * random();
-
-INSERT INTO magic2
-SELECT generate_series('1999-12-20'::timestamptz, '2000-02-01'::timestamptz, '12 day'::interval),
-       (100 * random())::int,
-       100 * random();
-
-INSERT INTO magic3
-SELECT generate_series('1999-12-20'::timestamptz, '2000-02-01'::timestamptz, '12 day'::interval),
-       (100 * random())::int,
-       100 * random();
-
-SELECT count(*) FROM invalidation_slots WHERE database = current_database();
-
--- Creating a materialized view with a failure between adding the slot
--- and finishing adding the slot should not leave a slot around.
-\c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE TABLE bad(time timestamptz not null, device int, value float);
-SELECT table_name FROM create_hypertable('bad','time');
-
--- We create such an error by setting the hypertable id sequence
--- number to an already existing one, which will generate an error
--- when adding the new hypertable data to the catalog.
-select currval('_timescaledb_catalog.hypertable_id_seq') - 1 as prev_htid \gset
-select setval('_timescaledb_catalog.hypertable_id_seq', :prev_htid, false);
-\set ON_ERROR_STOP 0
-CREATE MATERIALIZED VIEW bad_summary_wal
-  WITH (timescaledb.continuous)
-    AS SELECT time_bucket('1 day', time), device, avg(value)
-         FROM bad
-     GROUP BY 1,2;
-\set ON_ERROR_STOP 1
-
--- There should be no replication slot around.
-SELECT count(*) FROM invalidation_slots WHERE database = current_database();
-
--- Advance the sequence again to consume the value we set before.
-SELECT FROM nextval('_timescaledb_catalog.hypertable_id_seq');
-
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
-
-SET timescaledb.enable_cagg_wal_based_invalidation TO true;
-
--- Test the option "invalidate_using". This should create the continuous
--- aggregate and there should be a replication slot.
-CREATE MATERIALIZED VIEW magic1_summary1_wal
-  WITH (timescaledb.continuous)
-    AS SELECT time_bucket('1 day', time), device, avg(value)
-         FROM magic1
-     GROUP BY 1,2;
-
-SELECT count(*) FROM invalidation_slots WHERE database = current_database();
-
--- Create another continuous aggregate on the same hypertable to be
--- able to check that the slot remains after one continuous aggregate
--- has been dropped.
-CREATE MATERIALIZED VIEW magic1_summary2_wal
-  WITH (timescaledb.continuous)
-    AS SELECT time_bucket('1 day', time), device, avg(value)
-         FROM magic1
-     GROUP BY 1,2;
-
-SELECT count(*) FROM invalidation_slots WHERE database = current_database();
-
--- Create another continuous aggregate on a different hypertable that
--- uses WAL-based invalidation collection. This is used to check that
--- the slot stays when we remove all continuous aggregates for a
--- hypertable.
-CREATE MATERIALIZED VIEW magic2_summary1_wal
-  WITH (timescaledb.continuous)
-    AS SELECT time_bucket('1 day', time), device, avg(value)
-         FROM magic2
-     GROUP BY 1,2;
-
-SELECT count(*) FROM pg_replication_slots
- WHERE plugin = :'plugin_name'
-   AND database = current_database();
-
-DROP MATERIALIZED VIEW magic2_summary1_wal;
-
--- Slot should be there. We have another hypertable using WAL-based
--- invalidation collection.
-SELECT count(*) FROM pg_replication_slots
- WHERE plugin = :'plugin_name'
-   AND database = current_database();
-
-DROP MATERIALIZED VIEW magic1_summary1_wal;
-
--- Slot should be there. We have yet another continuous aggregate for
--- the hypertable using WAL-based invalidation collection.
-SELECT count(*) FROM pg_replication_slots
- WHERE plugin = :'plugin_name'
-   AND database = current_database();
-
-DROP MATERIALIZED VIEW magic1_summary2_wal;
-
--- Now slot should be gone and we should not have any continuous
--- aggregates using WAL-based invalidation collection.
-SELECT count(*) FROM pg_replication_slots
- WHERE plugin = :'plugin_name'
-   AND database = current_database();
 

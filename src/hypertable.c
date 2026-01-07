@@ -24,6 +24,7 @@
 #include <commands/trigger.h>
 #include <executor/spi.h>
 #include <funcapi.h>
+#include <lib/stringinfo.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/memnodes.h>
@@ -53,12 +54,14 @@
 #include "dimension_vector.h"
 #include "error_utils.h"
 #include "errors.h"
+#include "extension.h"
 #include "guc.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
 #include "indexing.h"
 #include "license_guc.h"
 #include "osm_callbacks.h"
+#include "partition_chunk.h"
 #include "scan_iterator.h"
 #include "scanner.h"
 #include "subspace_store.h"
@@ -317,7 +320,7 @@ ts_resolve_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_ma
 
 		if (!ht)
 			ereport(ERROR,
-					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("no materialized table for continuous aggregate"),
 					 errdetail("Continuous aggregate \"%s\" had a materialized hypertable"
 							   " with id %d but it was not found in the hypertable "
@@ -1317,7 +1320,8 @@ hypertable_validate_constraints(Oid relid)
 
 		if (form->contype == CONSTRAINT_FOREIGN)
 		{
-			if (ts_hypertable_relid_to_id(form->confrelid) != INVALID_HYPERTABLE_ID)
+			if (ts_hypertable_relid_to_id(form->confrelid) != INVALID_HYPERTABLE_ID &&
+				!is_partitioning_allowed(form->confrelid))
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("hypertables cannot be used as foreign key references of "
@@ -1614,9 +1618,12 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 	 * earlier "ts_hypertable_create" implementation.
 	 */
 	if (IS_CLOSED_DIMENSION(dim_info))
+	{
 		ereport(ERROR,
-				(errmsg("cannot partition using a closed dimension on primary column"),
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("cannot partition using a closed dimension on primary column"),
 				 errhint("Use range partitioning on the primary column.")));
+	}
 
 	/*
 	 * Current implementation requires to provide a valid chunk sizing function
@@ -1767,10 +1774,13 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	switch (get_rel_relkind(table_relid))
 	{
 		case RELKIND_PARTITIONED_TABLE:
-			ereport(ERROR,
-					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
-					 errdetail("It is not possible to turn partitioned tables into hypertables.")));
+			if (!ts_guc_enable_partitioned_hypertables)
+				ereport(ERROR,
+						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+						 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
+						 errdetail(
+							 "It is not possible to turn partitioned tables into hypertables.")));
+			break;
 		case RELKIND_MATVIEW:
 		case RELKIND_RELATION:
 			break;
@@ -1794,7 +1804,10 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	/* Check that the table doesn't have any unsupported constraints */
 	hypertable_validate_constraints(table_relid);
 
-	table_has_data = ts_relation_has_tuples(rel);
+	/* No need to check for data in partitioned tables */
+	table_has_data = get_rel_relkind(table_relid) == RELKIND_PARTITIONED_TABLE ?
+						 false :
+						 ts_relation_has_tuples(rel);
 
 	if ((flags & HYPERTABLE_CREATE_MIGRATE_DATA) == 0 && table_has_data)
 		ereport(ERROR,
@@ -2259,6 +2272,29 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 }
 
 /*
+ * Construct an expression for a dimensional column which is compatible with the max() function.
+ * Normally, this is just the column name, but in the case of UUIDv7 there is no max() function
+ * defined for the type so in that case the expression extracts the timestamp from the UUID.
+ */
+static const char *
+get_expr_for_dim_max(const char *colname, Oid timetype)
+{
+	if (timetype == UUIDOID)
+	{
+		StringInfoData expr;
+
+		initStringInfo(&expr);
+		appendStringInfo(&expr,
+						 "%s.uuid_timestamp(%s)",
+						 ts_extension_schema_name(),
+						 quote_identifier(colname));
+		return expr.data;
+	}
+
+	return quote_identifier(colname);
+}
+
+/*
  * Get the max value of an open dimension.
  */
 int64
@@ -2288,7 +2324,7 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	initStringInfo(&command);
 	appendStringInfo(&command,
 					 "SELECT pg_catalog.max(%s) FROM %s.%s",
-					 quote_identifier(NameStr(dim->fd.column_name)),
+					 get_expr_for_dim_max(NameStr(dim->fd.column_name), timetype),
 					 quote_identifier(NameStr(ht->fd.schema_name)),
 					 quote_identifier(NameStr(ht->fd.table_name)));
 
@@ -2303,7 +2339,11 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 				 (errmsg("could not find the maximum time value for hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 
-	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == timetype,
+	/* In most cases the result type is the same as the time type. However, with UUIDs we first
+	 * extract the timestamptz so the result type is timestamptz instead. */
+	Oid result_type = timetype == UUIDOID ? TIMESTAMPTZOID : timetype;
+
+	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == result_type,
 		   "partition types for result (%d) and dimension (%d) do not match",
 		   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
 		   ts_dimension_get_partition_type(dim));
@@ -2313,7 +2353,7 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 		*isnull = max_isnull;
 
 	int64 max_value =
-		max_isnull ? ts_time_get_min(timetype) : ts_time_value_to_internal(maxdat, timetype);
+		max_isnull ? ts_time_get_min(result_type) : ts_time_value_to_internal(maxdat, result_type);
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
@@ -2470,19 +2510,21 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	if (time_dim == NULL)
-		elog(ERROR,
-			 "could not find time dimension for hypertable %s.%s",
-			 quote_identifier(NameStr(ht->fd.schema_name)),
-			 quote_identifier(NameStr(ht->fd.table_name)));
+		ereport(ERROR,
+				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				errmsg("could not find time dimension for hypertable %s.%s",
+					   quote_identifier(NameStr(ht->fd.schema_name)),
+					   quote_identifier(NameStr(ht->fd.table_name))));
 
 	time_type = ts_dimension_get_partition_type(time_dim);
 
 	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 	if (osm_chunk_id == INVALID_CHUNK_ID)
-		elog(ERROR,
-			 "no OSM chunk found for hypertable %s.%s",
-			 quote_identifier(NameStr(ht->fd.schema_name)),
-			 quote_identifier(NameStr(ht->fd.table_name)));
+		ereport(ERROR,
+				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				errmsg("no OSM chunk found for hypertable %s.%s",
+					   quote_identifier(NameStr(ht->fd.schema_name)),
+					   quote_identifier(NameStr(ht->fd.table_name))));
 	/*
 	 * range_start, range_end arguments must be converted to internal representation
 	 * a NULL start value is interpreted as INT64_MAX - 1 and a NULL end value is
@@ -2491,7 +2533,9 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	 * OSM chunk is given upon creation, which is [INT64_MAX - 1, INT64_MAX]
 	 */
 	if ((PG_ARGISNULL(1) && !PG_ARGISNULL(2)) || (!PG_ARGISNULL(1) && PG_ARGISNULL(2)))
-		elog(ERROR, "range_start and range_end parameters must be both NULL or both non-NULL");
+		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("range_start and range_end parameters must be both NULL or both non-NULL"));
 
 	Oid argtypes[2];
 	for (int i = 0; i < 2; i++)
@@ -2518,7 +2562,9 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 			ts_time_value_to_internal(PG_GETARG_DATUM(2), get_fn_expr_argtype(fcinfo->flinfo, 2));
 
 	if (range_start_internal > range_end_internal)
-		ereport(ERROR, errmsg("dimension slice range_end cannot be less than range_start"));
+		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("dimension slice range_end cannot be less than range_start"));
 
 	bool osm_chunk_empty = PG_GETARG_BOOL(3);
 
@@ -2547,6 +2593,7 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	 */
 	if (overlap)
 		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				errmsg("attempting to set overlapping range for tiered chunk of %s.%s",
 					   NameStr(ht->fd.schema_name),
 					   NameStr(ht->fd.table_name)),

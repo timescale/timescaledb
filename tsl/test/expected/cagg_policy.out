@@ -34,9 +34,9 @@ FROM int_tab
 GROUP BY time_bucket(1, a), a WITH NO DATA;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timezone TO PST8PDT;
-DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT count(*) FROM _timescaledb_config.bgw_job;
+SELECT count(*) FROM _timescaledb_catalog.bgw_job;
  count 
 -------
      0
@@ -45,8 +45,7 @@ SELECT count(*) FROM _timescaledb_config.bgw_job;
 \set VERBOSITY default
 -- Test 1 step policy for integer type buckets
 ALTER materialized view mat_m1 set (timescaledb.compress = true);
-NOTICE:  defaulting compress_segmentby to a
-NOTICE:  defaulting compress_orderby to time_partition_col
+NOTICE:  defaulting compress_orderby to time_partition_col,a
 -- No policy is added if one errors out
 SELECT timescaledb_experimental.add_policies('mat_m1', refresh_start_offset => 1, refresh_end_offset => 10, compress_after => 11, drop_after => 20);
 ERROR:  policy refresh window too small
@@ -221,21 +220,21 @@ DETAIL:  A refresh policy with the same start and end offset already exists for 
                               -1
 
 -- modify config and try to add, should error out
-SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
+SELECT config FROM _timescaledb_catalog.bgw_job where id = :job_id;
                              config                             
 ----------------------------------------------------------------
  {"end_offset": 10, "start_offset": 20, "mat_hypertable_id": 2}
 
-SELECT hypertable_id as mat_id FROM _timescaledb_config.bgw_job where id = :job_id \gset
+SELECT hypertable_id as mat_id FROM _timescaledb_catalog.bgw_job where id = :job_id \gset
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timezone TO PST8PDT;
-UPDATE _timescaledb_config.bgw_job
+UPDATE _timescaledb_catalog.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
+SELECT config FROM _timescaledb_catalog.bgw_job where id = :job_id;
           config          
 --------------------------
  {"mat_hypertable_id": 2}
@@ -645,7 +644,7 @@ SELECT remove_continuous_aggregate_policy('max_mat_view_date');
  
 
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '15 days', '1 day', '1 day'::interval) as job_id \gset
-SELECT config FROM _timescaledb_config.bgw_job
+SELECT config FROM _timescaledb_catalog.bgw_job
 WHERE id = :job_id;
                                      config                                     
 --------------------------------------------------------------------------------
@@ -699,7 +698,7 @@ SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '15 days', '1 h
 SET client_min_messages TO warning;
 CALL run_job(:job_id);
 RESET client_min_messages ;
-SELECT config FROM _timescaledb_config.bgw_job
+SELECT config FROM _timescaledb_catalog.bgw_job
 WHERE id = :job_id;
                                      config                                      
 ---------------------------------------------------------------------------------
@@ -707,11 +706,11 @@ WHERE id = :job_id;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timezone TO PST8PDT;
-UPDATE _timescaledb_config.bgw_job
+UPDATE _timescaledb_catalog.bgw_job
 SET config = jsonb_build_object('mat_hypertable_id', :mat_id)
 WHERE id = :job_id;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
+SELECT config FROM _timescaledb_catalog.bgw_job where id = :job_id;
           config          
 --------------------------
  {"mat_hypertable_id": 2}
@@ -1103,8 +1102,7 @@ SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
 ERROR:  columnstore not enabled on continuous aggregate "metrics_cagg"
 ALTER MATERIALIZED VIEW metrics_cagg SET (timescaledb.compress);
-NOTICE:  defaulting compress_segmentby to device_id
-NOTICE:  defaulting compress_orderby to dayb
+NOTICE:  defaulting compress_orderby to dayb,device_id
 --cannot use compress_created_before with cagg
 SELECT add_compression_policy('metrics_cagg', compress_created_before => '8 day'::interval) AS "COMP_JOB" ;
 ERROR:  cannot use "compress_created_before" with continuous aggregate "metrics_cagg" 

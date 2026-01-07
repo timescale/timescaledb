@@ -271,8 +271,7 @@ FROM show_chunks('hyper') c ORDER BY c LIMIT 4;
  _timescaledb_internal._hyper_1_4_chunk
 
 ALTER MATERIALIZED VIEW contagg SET (timescaledb.compress);
-NOTICE:  defaulting compress_segmentby to device
-NOTICE:  defaulting compress_orderby to hour
+NOTICE:  defaulting compress_orderby to hour,device
 SELECT compress_chunk(c)
 FROM show_chunks('contagg') c ORDER BY c LIMIT 1;
              compress_chunk              
@@ -304,11 +303,11 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_reltuples": 697                             +
      },                                                   +
      "hypertables": {                                     +
-         "heap_size": 368640,                             +
+         "heap_size": 335872,                             +
          "toast_size": 40960,                             +
          "compression": {                                 +
-             "compressed_heap_size": 114688,              +
-             "compressed_row_count": 49,                  +
+             "compressed_heap_size": 81920,               +
+             "compressed_row_count": 40,                  +
              "compressed_toast_size": 40960,              +
              "num_compressed_chunks": 5,                  +
              "uncompressed_heap_size": 221184,            +
@@ -317,7 +316,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
              "uncompressed_toast_size": 0,                +
              "uncompressed_indexes_size": 131072,         +
              "num_compressed_hypertables": 2,             +
-             "compressed_row_count_frozen_immediately": 49+
+             "compressed_row_count_frozen_immediately": 40+
          },                                               +
          "indexes_size": 270336,                          +
          "num_children": 11,                              +
@@ -429,11 +428,11 @@ select r->'num_compression_policies_fixed' as compress_fixed, r->'num_retention_
 ----------------+-----------------
  1              | 1
 
-DELETE FROM _timescaledb_config.bgw_job WHERE id = 2;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE id = 2;
 TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 -- create some "errors" for testing
 INSERT INTO
-_timescaledb_config.bgw_job(id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name)
+_timescaledb_catalog.bgw_job(id, application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name)
 VALUES (2000, 'User-Defined Action [2000]', interval '3 days', interval '1 hour', 5, interval '5 min', 'public', 'custom_action_1'),
 (2001, 'User-Defined Action [2001]', interval '3 days', interval '1 hour', 5, interval '5 min', 'public', 'custom_action_2'),
 (2002, 'Compression Policy [2002]', interval '3 days', interval '1 hour', 5, interval '5 min', '_timescaledb_functions', 'policy_compression'),

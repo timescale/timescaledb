@@ -69,7 +69,6 @@
 #include "finalize.h"
 #include "invalidation_threshold.h"
 
-#include "continuous_aggs/invalidation_multi.h"
 #include "debug_assert.h"
 #include "dimension.h"
 #include "extension_constants.h"
@@ -88,7 +87,7 @@ static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char
 									  const char *user_view, const char *partial_schema,
 									  const char *partial_view, bool materialized_only,
 									  const char *direct_schema, const char *direct_view,
-									  const bool finalized, const int32 parent_mat_hypertable_id);
+									  const int32 parent_mat_hypertable_id);
 static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function,
 												 const char *bucket_width, const char *origin,
 												 const char *offset, const char *timezone,
@@ -123,7 +122,7 @@ static int32 mattablecolumninfo_create_materialization_table(
 	char *table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress);
 static Query *
 mattablecolumninfo_get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo,
-											Query *userview_query, bool finalized);
+											Query *userview_query);
 
 /*
  * Create a entry for the materialization table in table CONTINUOUS_AGGS.
@@ -132,7 +131,7 @@ static void
 create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 						  const char *user_view, const char *partial_schema,
 						  const char *partial_view, bool materialized_only,
-						  const char *direct_schema, const char *direct_view, const bool finalized,
+						  const char *direct_schema, const char *direct_view,
 						  const int32 parent_mat_hypertable_id)
 {
 	Catalog *catalog = ts_catalog_get();
@@ -178,7 +177,6 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 		NameGetDatum(&direct_viewnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(materialized_only);
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_finalized)] = BoolGetDatum(finalized);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -304,91 +302,6 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not create materialization hypertable")));
-}
-
-/*
- * Add a logical decoding slot for reading invalidations.
- *
- * It is the responsibility of the caller to check that the replication slot
- * does not exist. There is an assert to check this.
- *
- * This code is mostly copied from create_logical_replication_slot and friends
- * in slotfunc.c.
- *
- * It is important that the slot exists if and only if there are continuous
- * aggregates that use the WAL to collect invalidations.
- *
- * Obviously, the slot is needed to read invalidations for the hypertables and
- * it needs to have the version expected by the timescale extension. If the
- * versions do not match, the rows returned by pg_logical_slot_get_changes()
- * will not match what is expected and decoding will fail.
- *
- * Less obvious, the slot needs to be removed once there are no more continuous
- * aggregates that need the slot. If not, the WAL will not be used and will
- * start to fill up storage.
- *
- * There is a bug in PostgreSQL causing it to error out before the slot is
- * created in LogicalDecodingProcessRecord() trying to allocate too much
- * memory if you have too many other concurrent transactions in progress.
- */
-static void
-cagg_add_logical_decoding_slot_prepare(const char *slot_name)
-{
-	CatalogSecurityContext sec_ctx;
-	LogicalDecodingContext *ctx = NULL;
-	const char *plugin_name = CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_PLUGIN_NAME;
-
-	Assert(!MyReplicationSlot);
-	Assert(SearchNamedReplicationSlot(slot_name, true) == NULL);
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-
-	TS_DEBUG_LOG("create invalidation slot %s", slot_name);
-
-	/*
-	 * Similar to how it works in create_logical_replication_slot(), this
-	 * initially create persistent slot as ephemeral to be able to handle
-	 * errors during initialization and allow it to be dropped if this
-	 * transaction fails. It's made persistent after the continuous aggregate
-	 * has been successfully created.
-	 */
-
-#if PG17_LT
-	ReplicationSlotCreate(slot_name, true, RS_EPHEMERAL, false);
-#else
-	ReplicationSlotCreate(slot_name, true, RS_EPHEMERAL, false, false, false);
-#endif
-	TS_DEBUG_LOG("init plugin %s", plugin_name);
-	ctx = CreateInitDecodingContext(plugin_name,
-									NIL,
-									false,
-									InvalidXLogRecPtr,
-									XL_ROUTINE(.page_read = read_local_xlog_page,
-											   .segment_open = wal_segment_open,
-											   .segment_close = wal_segment_close),
-									NULL,
-									NULL,
-									NULL);
-
-	/*
-	 * To avoid the above mentioned bug, we can find our own start point here
-	 * in a manner that does not require allocating a lot of memory.
-	 */
-	TS_DEBUG_LOG("find startpoint");
-	DecodingContextFindStartpoint(ctx);
-
-	TS_DEBUG_LOG("free decoding context");
-	FreeDecodingContext(ctx);
-
-	ts_catalog_restore_user(&sec_ctx);
-}
-
-static void
-cagg_add_logical_decoding_slot_finalize(void)
-{
-	TS_DEBUG_LOG("persist invalidation slot");
-	ReplicationSlotPersist();
-	ReplicationSlotRelease();
 }
 
 /*
@@ -541,30 +454,14 @@ mattablecolumninfo_create_materialization_table(
  */
 static Query *
 mattablecolumninfo_get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo,
-											Query *userview_query, bool finalized)
+											Query *userview_query)
 {
 	Query *partial_selquery = NULL;
 
-	if (!finalized)
-	{
-		CAGG_MAKEQUERY(partial_selquery, userview_query);
-		partial_selquery->rtable = copyObject(userview_query->rtable);
-		partial_selquery->jointree = copyObject(userview_query->jointree);
-#if PG16_GE
-		partial_selquery->rteperminfos = copyObject(userview_query->rteperminfos);
-#endif
-		partial_selquery->targetList = mattblinfo->partial_seltlist;
-		partial_selquery->groupClause = mattblinfo->partial_grouplist;
-		partial_selquery->havingQual = NULL;
-		partial_selquery->sortClause = NULL;
-	}
-	else
-	{
-		partial_selquery = copyObject(userview_query);
-		/* Partial view should always include the time dimension column */
-		partial_selquery->targetList = mattblinfo->partial_seltlist;
-		partial_selquery->groupClause = mattblinfo->partial_grouplist;
-	}
+	partial_selquery = copyObject(userview_query);
+	/* Partial view should always include the time dimension column */
+	partial_selquery->targetList = mattblinfo->partial_seltlist;
+	partial_selquery->groupClause = mattblinfo->partial_grouplist;
 
 	return partial_selquery;
 }
@@ -722,8 +619,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	int32 materialize_hypertable_id;
 	bool materialized_only =
 		DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
-	bool finalized = DatumGetBool(with_clause_options[CreateMaterializedViewFlagFinalized].parsed);
-	bool slot_prepared = false;
 
 	int64 matpartcol_interval = 0;
 	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
@@ -740,8 +635,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 			matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;
 	}
 
-	finalqinfo.finalized = finalized;
-
 	/*
 	 * Assign the column_name aliases in CREATE VIEW to the query.
 	 * No other modifications to panquery.
@@ -755,21 +648,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	 * The options are valid only for internal use (ts_continuous).
 	 */
 	stmt->options = NULL;
-
-	/*
-	 * Step 0: Create logical replication slot if used. This needs to be first
-	 * since we cannot do this in a transaction that has performed any writes.
-	 */
-	if (ts_guc_enable_cagg_wal_based_invalidation)
-	{
-		char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
-		ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
-		if (SearchNamedReplicationSlot(slot_name, true) == NULL)
-		{
-			cagg_add_logical_decoding_slot_prepare(slot_name);
-			slot_prepared = true;
-		}
-	}
 
 	/*
 	 * Old format caggs are not supported anymore, there is no need to add
@@ -816,8 +694,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	/*
 	 * Step 3: create the internal view with select partialize(..).
 	 */
-	partial_selquery =
-		mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery, finalqinfo.finalized);
+	partial_selquery = mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery);
 
 	makeMaterializedTableName(relnamebuf, "_partial_view_%d", materialize_hypertable_id);
 	part_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
@@ -849,7 +726,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 							  materialized_only,
 							  dum_rel->schemaname,
 							  dum_rel->relname,
-							  finalized,
 							  bucket_info->parent_mat_hypertable_id);
 
 	char *bucket_origin = NULL;
@@ -901,10 +777,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 										 bucket_offset,
 										 bucket_info->bf->bucket_time_timezone,
 										 bucket_info->bf->bucket_fixed_interval);
-
-	/* Step 5: Finalize slot creation if using wal based invalidation. */
-	if (ts_guc_enable_cagg_wal_based_invalidation && slot_prepared)
-		cagg_add_logical_decoding_slot_finalize();
 }
 
 DDLResult
@@ -914,7 +786,6 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	const CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, node);
 	ContinuousAggTimeBucketInfo timebucket_exprinfo;
 	Oid nspid;
-	bool finalized = with_clause_options[CreateMaterializedViewFlagFinalized].parsed;
 	ViewStmt viewstmt = {
 		.type = T_ViewStmt,
 		.view = stmt->into->rel,
@@ -962,7 +833,6 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 
 	schema_name = get_namespace_name(nspid);
 	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery,
-											  finalized,
 											  schema_name,
 											  stmt->into->rel->relname,
 											  true);
@@ -1068,7 +938,6 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 
 	ContinuousAggTimeBucketInfo timebucket_exprinfo =
 		cagg_validate_query(direct_query,
-							agg->data.finalized,
 							NameStr(agg->data.user_view_schema),
 							NameStr(agg->data.user_view_name),
 							false);

@@ -17,7 +17,7 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
 
 -- Remove any default jobs, e.g., telemetry
-DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -52,11 +52,11 @@ INSERT INTO test_retention_table VALUES (now() - INTERVAL '8 months', 1);
 SELECT show_chunks('test_retention_table');
 SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_retention_table';
 
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_functions' AND proc_name = 'policy_retention';
+SELECT count(*) FROM _timescaledb_catalog.bgw_job WHERE proc_schema = '_timescaledb_functions' AND proc_name = 'policy_retention';
 SELECT add_retention_policy('test_retention_table', INTERVAL '4 months') as retention_job_id \gset
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_functions' AND proc_name = 'policy_retention';
+SELECT count(*) FROM _timescaledb_catalog.bgw_job WHERE proc_schema = '_timescaledb_functions' AND proc_name = 'policy_retention';
 SELECT alter_job(:retention_job_id, schedule_interval => INTERVAL '1 second');
-SELECT * FROM _timescaledb_config.bgw_job where id=:retention_job_id;
+SELECT * FROM _timescaledb_catalog.bgw_job where id=:retention_job_id;
 
 --turn on compression and compress all chunks
 ALTER TABLE test_retention_table set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');

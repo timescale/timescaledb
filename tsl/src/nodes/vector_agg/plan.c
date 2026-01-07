@@ -7,6 +7,7 @@
 #include <access/attnum.h>
 #include <commands/explain.h>
 #include <executor/executor.h>
+#include <funcapi.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
@@ -18,6 +19,7 @@
 
 #include "exec.h"
 #include "import/list.h"
+#include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/vector_quals.h"
 #include "nodes/vector_agg.h"
 #include "utils.h"
@@ -181,29 +183,66 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 }
 
 /*
+ * Whether we have an in-memory columnar representation for a given type.
+ */
+static bool
+is_vector_type(Oid typeoid)
+{
+	switch (typeoid)
+	{
+		case BOOLOID:
+		case FLOAT4OID:
+		case FLOAT8OID:
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+		case TEXTOID:
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+		case DATEOID:
+		case UUIDOID:
+		case INTERVALOID:
+			return true;
+		default:
+			return false;
+	}
+}
+
+/*
  * Whether the expression can be used for vectorized processing: must be a Var
  * that refers to either a bulk-decompressed or a segmentby column.
  */
 static bool
-is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
+is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 {
-	if (!IsA(expr, Var))
+	switch (((Node *) expr)->type)
 	{
-		/* Can aggregate only a bare decompressed column, not an expression. */
-		return false;
+		case T_Var:
+		{
+			Var *var = castNode(Var, expr);
+
+			if (var->varattno <= 0)
+			{
+				/* Can't work with special attributes like tableoid. */
+				return false;
+			}
+
+			Assert(var->varattno <= vqinfo->maxattno);
+
+			const bool is_vector = vqinfo->vector_attrs && vqinfo->vector_attrs[var->varattno];
+
+			if (is_vector)
+			{
+				Ensure(is_vector_type(var->vartype),
+					   "a variable with non-vectorizable type %s is marked as vectorized",
+					   format_type_be(var->vartype));
+			}
+
+			return is_vector;
+		}
+		default:
+			return false;
 	}
-
-	Var *var = castNode(Var, expr);
-
-	if (var->varattno <= 0)
-	{
-		/* Can't work with special attributes like tableoid. */
-		return false;
-	}
-
-	Assert(var->varattno <= vqinfo->maxattno);
-
-	return vqinfo->vector_attrs && vqinfo->vector_attrs[var->varattno];
 }
 
 /*
@@ -260,7 +299,7 @@ can_vectorize_aggref(const VectorQualInfo *vqi, Aggref *aggref)
 	Assert(list_length(aggref->args) == 1);
 	TargetEntry *argument = castNode(TargetEntry, linitial(aggref->args));
 
-	return is_vector_var(vqi, argument->expr);
+	return is_vector_expr(vqi, argument->expr);
 }
 
 /*
@@ -278,7 +317,10 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 	 */
 	int num_grouping_columns = 0;
 	bool all_segmentby = true;
-	Var *single_grouping_var = NULL;
+
+	Oid single_grouping_var_type = InvalidOid;
+	int16 typlen = 0;
+	bool typbyval = false;
 
 	ListCell *lc;
 	foreach (lc, resolved_targetlist)
@@ -289,37 +331,50 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 			continue;
 		}
 
-		if (!IsA(target_entry->expr, Var))
+		num_grouping_columns++;
+
+		if (!is_vector_expr(vqinfo, target_entry->expr))
 		{
-			/*
-			 * We shouldn't see anything except Vars or Aggrefs in the
-			 * aggregated targetlists. Just say it's not vectorizable, because
-			 * here we are working with arbitrary plans that we don't control.
-			 */
 			return VAGT_Invalid;
 		}
 
-		num_grouping_columns++;
-
-		if (!is_vector_var(vqinfo, target_entry->expr))
-			return VAGT_Invalid;
-
-		Var *var = castNode(Var, target_entry->expr);
-		all_segmentby &= vqinfo->segmentby_attrs[var->varattno];
+		/*
+		 * Detect whether we're only grouping by segmentby columns, in which
+		 * case we can use the whole-batch grouping strategy. Probably this
+		 * could be extended to allow arbitrary expressions referencing only the
+		 * segmentby columns.
+		 */
+		if (IsA(target_entry->expr, Var))
+		{
+			Var *var = castNode(Var, target_entry->expr);
+			all_segmentby &= vqinfo->segmentby_attrs[var->varattno];
+		}
+		else
+		{
+			all_segmentby = false;
+		}
 
 		/*
 		 * If we have a single grouping column, record it for the additional
 		 * checks later.
 		 */
-		single_grouping_var = var;
+		if (num_grouping_columns != 1)
+		{
+			continue;
+		}
+
+		TupleDesc tdesc = NULL;
+		TypeFuncClass type_class =
+			get_expr_result_type((Node *) target_entry->expr, &single_grouping_var_type, &tdesc);
+		if (type_class != TYPEFUNC_SCALAR)
+		{
+			continue;
+		}
+
+		get_typlenbyval(single_grouping_var_type, &typlen, &typbyval);
+		Ensure(typlen != 0, "invalid zero typlen for type %d", single_grouping_var_type);
 	}
 
-	if (num_grouping_columns != 1)
-	{
-		single_grouping_var = NULL;
-	}
-
-	Assert(num_grouping_columns == 1 || single_grouping_var == NULL);
 	Assert(num_grouping_columns >= agg->numCols);
 
 	/*
@@ -344,18 +399,15 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 	 * We can use our hash table for GroupAggregate as well, because it preserves
 	 * the input order of the keys, but only for the direct order, not reverse.
 	 */
-	if (num_grouping_columns == 1)
+	if (num_grouping_columns == 1 && typlen != 0)
 	{
-		int16 typlen;
-		bool typbyval;
-
-		get_typlenbyval(single_grouping_var->vartype, &typlen, &typbyval);
 		if (typbyval)
 		{
 			switch (typlen)
 			{
 				case 1:
 #ifdef TS_USE_UMASH
+					Assert(single_grouping_var_type == BOOLOID);
 					return VAGT_HashSerialized;
 #else
 					return VAGT_Invalid;
@@ -378,7 +430,7 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 		 * vectorized grouping support. It can use the serialized grouping
 		 * strategy.
 		 */
-		else if (single_grouping_var->vartype == TEXTOID)
+		else if (single_grouping_var_type == TEXTOID)
 		{
 			return VAGT_HashSingleText;
 		}
@@ -488,9 +540,7 @@ vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi
 		return false;
 	}
 
-	CustomScan *customscan = castNode(CustomScan, childplan);
-
-	if (strcmp(customscan->methods->CustomName, "ColumnarScan") == 0)
+	if (ts_is_columnar_scan_plan(childplan))
 	{
 		vectoragg_plan_columnar_scan(childplan, vqi);
 		return true;
@@ -645,7 +695,7 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 		}
 		else if (IsA(target_entry->expr, Var))
 		{
-			if (!is_vector_var(&vqi, target_entry->expr))
+			if (!is_vector_expr(&vqi, target_entry->expr))
 			{
 				/* Variable not vectorizable. */
 				return plan;

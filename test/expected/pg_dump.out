@@ -222,7 +222,7 @@ CREATE EXTENSION timescaledb CASCADE;
 --create a exported uuid before restoring (mocks telemetry running before restore)
 INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'new_db_uuid', true);
 -- disable background jobs
-UPDATE _timescaledb_config.bgw_job SET scheduled = false;
+UPDATE _timescaledb_catalog.bgw_job SET scheduled = false;
 RESET client_min_messages;
 SELECT timescaledb_pre_restore();
  timescaledb_pre_restore 

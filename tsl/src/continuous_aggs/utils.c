@@ -137,7 +137,7 @@ continuous_agg_validate_query(PG_FUNCTION_ARGS)
 				query = transformTopLevelStmt(pstate, rawstmt);
 				free_parsestate(pstate);
 
-				(void) cagg_validate_query(query, true, "public", "cagg_validate", false);
+				(void) cagg_validate_query(query, "public", "cagg_validate", false);
 				is_valid_query = true;
 			}
 		}
@@ -645,19 +645,6 @@ continuous_agg_migrate_to_time_bucket(PG_FUNCTION_ARGS)
 
 	PreventCommandIfReadOnly("continuous_agg_migrate_to_time_bucket");
 
-	/* Allow migration only on finalized CAggs */
-	if (!ContinuousAggIsFinalized(cagg))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("operation not supported on continuous aggregates that are not "
-						"finalized"),
-				 errhint("Run \"CALL cagg_migrate('%s.%s');\" to migrate to the new "
-						 "format.",
-						 NameStr(cagg->data.user_view_schema),
-						 NameStr(cagg->data.user_view_name))));
-	}
-
 	/* Ensure CAgg is not updated/deleted by somebody else concurrently. Should be moved
 	 * into the scanner since the CAgg can be deleted after we found it in the catalog. */
 	Assert(OidIsValid(cagg_relid));
@@ -936,4 +923,31 @@ continuous_agg_get_bucket_function_info(PG_FUNCTION_ARGS)
 {
 	/* Return all bucket function info */
 	PG_RETURN_DATUM(cagg_get_bucket_function_datum(PG_GETARG_INT32(0), fcinfo));
+}
+
+Datum
+continuous_agg_get_grouping_columns(PG_FUNCTION_ARGS)
+{
+	List *cagg_group_cols = NIL;
+	ListCell *lc = NULL;
+	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	ArrayBuildState *astate = NULL;
+	ContinuousAgg *cagg = cagg_get_by_relid_or_fail(cagg_relid);
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *mat_ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
+	Assert(mat_ht != NULL);
+
+	cagg_group_cols = cagg_find_groupingcols(cagg, mat_ht);
+
+	foreach (lc, cagg_group_cols)
+	{
+		char *group_col = lfirst(lc);
+		astate = accumArrayResult(astate,
+								  CStringGetTextDatum(group_col),
+								  false,
+								  TEXTOID,
+								  CurrentMemoryContext);
+	}
+	ts_cache_release(&hcache);
+	PG_RETURN_DATUM(makeArrayResult(astate, CurrentMemoryContext));
 }

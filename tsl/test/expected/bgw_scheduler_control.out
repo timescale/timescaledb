@@ -34,7 +34,7 @@ CREATE VIEW cleaned_bgw_log AS
     	   regexp_replace(regexp_replace(msg, '(Wait until|started at|execution time|database) [0-9]+(\.[0-9]+)?', '\1 (RANDOM)', 'g'), 'background worker "[^"]+"','connection') AS msg
       FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
 -- Remove all default jobs
-DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 --
 -- Set bgw log level and reload config.
@@ -56,7 +56,7 @@ SELECT ts_bgw_params_reset_time(0, false);
 --------------------------
  
 
-INSERT INTO _timescaledb_config.bgw_job(
+INSERT INTO _timescaledb_catalog.bgw_job(
        application_name,
        schedule_interval,
        max_runtime,

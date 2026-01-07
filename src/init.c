@@ -19,6 +19,7 @@
 #include "guc.h"
 #include "license_guc.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
+#include "partition_chunk.h"
 #include "ts_catalog/catalog.h"
 #include "version.h"
 
@@ -43,6 +44,9 @@ extern void _event_trigger_fini(void);
 
 extern void _conn_plain_init();
 extern void _conn_plain_fini();
+
+extern void _executor_init(void);
+extern void _executor_fini(void);
 
 #ifdef TS_USE_OPENSSL
 extern void _conn_ssl_init();
@@ -83,6 +87,7 @@ cleanup_on_pg_proc_exit(int code, Datum arg)
 	_cache_invalidate_fini();
 	_hypertable_cache_fini();
 	_cache_fini();
+	_executor_fini();
 }
 
 void
@@ -114,6 +119,7 @@ _PG_init(void)
 	_process_utility_init();
 	_guc_init();
 	_conn_plain_init();
+	_executor_init();
 #ifdef TS_USE_OPENSSL
 	_conn_ssl_init();
 #endif

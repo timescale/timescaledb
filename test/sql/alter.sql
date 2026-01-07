@@ -370,7 +370,6 @@ SELECT * FROM test.relation WHERE schema = 'new_name';
 ALTER SCHEMA _timescaledb_internal RENAME TO my_new_schema_name;
 ALTER SCHEMA _timescaledb_catalog RENAME TO my_new_schema_name;
 ALTER SCHEMA _timescaledb_cache RENAME TO my_new_schema_name;
-ALTER SCHEMA _timescaledb_config RENAME TO my_new_schema_name;
 \set ON_ERROR_STOP 1
 
 -- Make sure we can rename associated schemas

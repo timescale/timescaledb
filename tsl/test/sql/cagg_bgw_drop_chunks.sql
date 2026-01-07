@@ -17,7 +17,7 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 \set WAIT_FOR_OTHER_TO_ADVANCE 2
 
 -- Remove any default jobs, e.g., telemetry
-DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

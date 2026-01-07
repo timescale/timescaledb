@@ -7,26 +7,23 @@ set(TEST_FILES
     bgw_job_ddl.sql
     bgw_policy.sql
     bgw_security.sql
-    cagg_api.sql
-    cagg_config.sql
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
-    cagg_invalidation_multi.sql
     cagg_policy.sql
     cagg_policy_move.sql
     cagg_policy_concurrent.sql
-    cagg_plugin.sql
     cagg_refresh_using_trigger.sql
-    cagg_refresh_using_wal.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
     cagg_watermark.sql
     chunk_column_stats.sql
     columnar_scan_cost.sql
+    columnar_index_scan.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
+    compress_bloom_hash.sql
     compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
@@ -56,13 +53,14 @@ set(TEST_FILES
     compression_uuid.sql
     compression_trigger.sql
     create_table_with.sql
-    custom_hashagg.sql
     decompress_index.sql
     merge_compress.sql
     move.sql
     plan_skip_scan_notnull.sql
     policy_generalization.sql
+    rebuild_columnstore_tests.sql
     recompression_integrity_tests.sql
+    recompression_integrity_unordered.sql
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql
@@ -113,6 +111,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     scheduler_fixed.sql
     cagg_policy_incremental.sql
     compress_bgw_reorder_drop_chunks.sql
+    compress_bloom_legacy_v1.sql
     chunk_api.sql
     chunk_merge.sql
     chunk_utils_compression.sql
@@ -134,19 +133,19 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_drop_chunks.sql
     cagg_dump.sql
     cagg_joins.sql
-    cagg_migrate.sql
     cagg_multi.sql
     cagg_on_cagg.sql
     cagg_on_cagg_joins.sql
     cagg_tableam.sql
     cagg_policy_run.sql
+    cagg_uuid.sql
     decompress_memory.sql
     decompress_vector_qual.sql
     detach_chunk.sql
-    exp_cagg_monthly.sql
-    exp_cagg_next_gen.sql
-    exp_cagg_origin.sql
-    exp_cagg_timezone.sql
+    cagg_exp_monthly.sql
+    cagg_exp_next_gen.sql
+    cagg_exp_origin.sql
+    cagg_exp_timezone.sql
     hypertable_generalization.sql
     insert_memory_usage.sql
     information_view_chunk_count.sql
@@ -155,7 +154,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     license_tsl.sql
     merge_chunks.sql
     fixed_schedules.sql
-    partialize_finalize.sql
     recompress_chunk_segmentwise.sql
     feature_flags.sql
     vector_agg_byte.sql
@@ -173,10 +171,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_bgw.sql.in
     cagg_ddl.sql.in
     cagg_migrate_function.sql.in
-    cagg_repair.sql.in
     cagg_usage.sql.in
+    cagg.sql.in
     compression_update_delete.sql.in
-    continuous_aggs.sql.in
     transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)
@@ -216,15 +213,7 @@ set(SOLO_TESTS
     move
     reorder
     split_chunk
-    telemetry_stats
-    # These are solo tests because of a bug in PostgreSQL 17.5. A fix for it
-    # seems to be scheduled for release with 17.6.
-    #
-    # See
-    # https://github.com/postgres/postgres/commit/d87d07b7ad3b782cb74566cd771ecdb2823adf6a
-    cagg_invalidation
-    cagg_invalidation_multi
-    cagg_plugin)
+    telemetry_stats)
 
 # Check if PostgreSQL was compiled with JIT support
 set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")

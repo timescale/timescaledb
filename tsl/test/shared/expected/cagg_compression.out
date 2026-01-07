@@ -53,8 +53,7 @@ WHERE
  
 
 ALTER MATERIALIZED VIEW metrics_compressed_summary SET (timescaledb.compress);
-psql:include/cagg_compression_setup.sql:42: NOTICE:  defaulting compress_segmentby to device_id
-psql:include/cagg_compression_setup.sql:42: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_compression_setup.sql:42: NOTICE:  defaulting compress_orderby to bucket,device_id
 CALL refresh_continuous_aggregate('metrics_compressed_summary', NULL, '2000-01-15 23:55:00+0');
 SELECT CASE WHEN res is NULL THEN NULL
             ELSE 'compressed'
@@ -115,8 +114,7 @@ WHERE
  
 
 ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.compress);
-psql:include/cagg_compression_setup.sql:94: NOTICE:  defaulting compress_segmentby to device_id
-psql:include/cagg_compression_setup.sql:94: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_compression_setup.sql:94: NOTICE:  defaulting compress_orderby to bucket,device_id
 CALL refresh_continuous_aggregate('metrics_summary', NULL, '2000-01-15 23:55:00+0');
 SELECT CASE WHEN res is NULL THEN NULL
             ELSE 'compressed'

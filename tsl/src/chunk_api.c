@@ -299,7 +299,7 @@ chunk_show(PG_FUNCTION_ARGS)
 
 	if (NULL == tuple)
 		ereport(ERROR,
-				(errcode(ERRCODE_TS_INTERNAL_ERROR), errmsg("could not create tuple from chunk")));
+				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not create tuple from chunk")));
 
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }
@@ -390,7 +390,7 @@ chunk_create(PG_FUNCTION_ARGS)
 
 	if (NULL == tuple)
 		ereport(ERROR,
-				(errcode(ERRCODE_TS_INTERNAL_ERROR), errmsg("could not create tuple from chunk")));
+				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not create tuple from chunk")));
 
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }

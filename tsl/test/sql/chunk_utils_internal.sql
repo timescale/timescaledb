@@ -30,8 +30,6 @@ CREATE OR REPLACE VIEW chunk_view AS
 GRANT SELECT on chunk_view TO PUBLIC;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
--- fake presence of timescaledb_osm
-INSERT INTO pg_extension(oid,extname,extowner,extnamespace,extrelocatable,extversion) SELECT 1,'timescaledb_osm',10,11,false,'1.0';
 
 CREATE SCHEMA test1;
 GRANT CREATE ON SCHEMA test1 TO :ROLE_DEFAULT_PERM_USER;
@@ -463,7 +461,7 @@ BEGIN
 		include_tiered_data => include_tiered_data
 	);
 
-	cfg := config FROM _timescaledb_config.bgw_job WHERE id = job_id;
+	cfg := config FROM _timescaledb_catalog.bgw_job WHERE id = job_id;
 	RAISE NOTICE 'config: %', jsonb_pretty(cfg);
 
 	RETURN job_id;

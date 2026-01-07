@@ -118,6 +118,10 @@ SELECT * FROM sorted_bgw_log;
      10 |         0 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
      11 |         0 | Refresh Continuous Aggregate Policy [1000] | inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value 
+--------------------+-----------------------+-------------------------
+
 CREATE MATERIALIZED VIEW conditions_by_day_manual_refresh
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
@@ -191,6 +195,10 @@ SELECT * FROM sorted_bgw_log;
       5 | 3600000000 | Refresh Continuous Aggregate Policy [1000] | inserted 50 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
       6 | 3600000000 | Refresh Continuous Aggregate Policy [1000] | reached maximum number of batches per execution (2), batches not processed (2)
 
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value 
+--------------------+-----------------------+-------------------------
+
 SELECT count(*) FROM conditions_by_day;
  count 
 -------
@@ -243,6 +251,10 @@ SELECT * FROM sorted_bgw_log;
       3 | 7200000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Mon Nov 24 00:00:00 4714 UTC BC, Sun Feb 09 00:00:00 2025 UTC ] (batch 2 of 2)
       4 | 7200000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
       5 | 7200000000 | Refresh Continuous Aggregate Policy [1000] | inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value 
+--------------------+-----------------------+-------------------------
 
 -- Should have no differences
 SELECT
@@ -307,6 +319,10 @@ SELECT * FROM sorted_bgw_log;
       9 | 10800000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Wed Feb 05 00:00:00 2020 UTC, Sun Feb 09 00:00:00 2020 UTC ] (batch 4 of 4)
      10 | 10800000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
      11 | 10800000000 | Refresh Continuous Aggregate Policy [1000] | inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value 
+--------------------+-----------------------+-------------------------
 
 SELECT count(*) FROM conditions_by_day;
  count 
@@ -388,6 +404,10 @@ SELECT * FROM sorted_bgw_log;
       1 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | deleted 295 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
       2 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value 
+--------------------+-----------------------+-------------------------
+
 -- Should return zero rows
 SELECT count(*) FROM conditions_by_day;
  count 
@@ -426,6 +446,10 @@ SELECT * FROM sorted_bgw_log;
       1 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
       2 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value 
+--------------------+-----------------------+-------------------------
+
 -- Should return 10 rows because the bucket width is `1 day` and buckets per batch is `10`
 SELECT count(*) FROM conditions_by_day;
  count 
@@ -457,6 +481,10 @@ SELECT * FROM sorted_bgw_log;
       0 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu Mar 06 00:00:00 2025 UTC ]
       1 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
       2 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value 
+--------------------+-----------------------+-------------------------
 
 -- Should return 1 row
 SELECT count(*) FROM conditions_by_day;
@@ -527,6 +555,10 @@ SELECT * FROM sorted_bgw_log;
       0 |         0 | Refresh Continuous Aggregate Policy [1002] | continuous aggregate refresh (individual invalidation) on "conditions_by_day_manual_refresh" in window [ Mon Feb 24 00:00:00 2025 UTC, Wed Mar 12 00:00:00 2025 UTC ]
       1 |         0 | Refresh Continuous Aggregate Policy [1002] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
       2 |         0 | Refresh Continuous Aggregate Policy [1002] | inserted 80 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value 
+--------------------+-----------------------+-------------------------
 
 -- Both continuous aggregates should have the same data
 SELECT count(*) FROM conditions_by_day;
@@ -608,6 +640,10 @@ SELECT * FROM sorted_bgw_log;
       9 |         0 | Refresh Continuous Aggregate Policy [1003] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Tue Mar 11 00:00:00 2025 UTC, Wed Mar 12 00:00:00 2025 UTC ] (batch 4 of 4)
      10 |         0 | Refresh Continuous Aggregate Policy [1003] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
      11 |         0 | Refresh Continuous Aggregate Policy [1003] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value 
+--------------------+-----------------------+-------------------------
 
 -- Both continuous aggregates should have the same data
 SELECT count(*) FROM conditions_by_day;
@@ -692,19 +728,17 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  
 
 SELECT * FROM sorted_bgw_log;
- msg_no | mock_time |              application_name              |                                                                                   msg                                                                                   
---------+-----------+--------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ msg_no | mock_time |              application_name              |                                                                           msg                                                                            
+--------+-----------+--------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------
       0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
       1 |         0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Mon Dec 23 00:00:00 2024 UTC, Wed Jan 22 00:00:00 2025 UTC ] (batch 1 of 3)
+      0 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Tue Aug 01 00:00:00 2023 UTC, Sat Mar 01 00:00:00 2025 UTC ]
       1 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
-      2 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
-      3 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Wed Jan 22 00:00:00 2025 UTC, Fri Feb 21 00:00:00 2025 UTC ] (batch 2 of 3)
-      4 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 5 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
-      5 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
-      6 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Fri Feb 21 00:00:00 2025 UTC, Sat Mar 01 00:00:00 2025 UTC ] (batch 3 of 3)
-      7 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 5 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
-      8 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
+      2 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value 
+--------------------+-----------------------+-------------------------
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_SUPERUSER;

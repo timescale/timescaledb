@@ -22,7 +22,7 @@ BEGIN
     FOR constraint_row IN
     SELECT c.conname, h.id AS hypertable_id FROM _timescaledb_catalog.hypertable h INNER JOIN
            pg_constraint c ON (c.conrelid = format('%I.%I', h.schema_name, h.table_name)::regclass)
-        WHERE c.contype != 'c'
+        WHERE c.contype NOT IN ('c','n')
     LOOP
         SELECT count(*) FROM _timescaledb_catalog.chunk c
         WHERE c.hypertable_id = constraint_row.hypertable_id
@@ -52,4 +52,6 @@ $BODY$;
 SELECT timescaledb_integrity_test();
 
 -- Verify that the default jobs are the same in bgw_job
-SELECT id, application_name FROM _timescaledb_config.bgw_job ORDER BY id;
+SELECT relnamespace::regnamespace "JOB_SCHEMA" FROM pg_class WHERE relname='bgw_job' \gset
+SELECT id, application_name FROM :JOB_SCHEMA.bgw_job ORDER BY id;
+

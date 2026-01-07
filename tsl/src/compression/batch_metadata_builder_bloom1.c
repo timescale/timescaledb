@@ -603,7 +603,7 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 	 * systems.
 	 */
 #if FLOAT8PASSBYVAL
-	uint64 *item_base_hashes = items;
+	uint64 *item_base_hashes = (uint64 *) items;
 #else
 	uint64 *item_base_hashes = palloc(sizeof(uint64) * num_items);
 #endif
@@ -854,3 +854,5 @@ ts_bloom1_debug_hash(PG_FUNCTION_ARGS)
 }
 
 #endif // #ifndef NDEBUG
+
+char const *bloom1_column_prefix = NULL;

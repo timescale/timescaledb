@@ -50,17 +50,6 @@
 #define BUCKET_FUNCTION_SERIALIZE_VERSION 1
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
 
-TS_FUNCTION_INFO_V1(ts_invalidation_plugin_name);
-
-/*
- * Return the full name of the invalidation plugin, with version and all.
- */
-Datum
-ts_invalidation_plugin_name(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_TEXT_P(cstring_to_text(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_PLUGIN_NAME));
-}
-
 static void
 init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertable_id)
 {
@@ -148,6 +137,21 @@ init_materialization_invalidation_log_scan_by_materialization_id(ScanIterator *i
 		Int32GetDatum(materialization_id));
 }
 
+static void
+init_materialization_ranges_scan_by_materialization_id(ScanIterator *iterator,
+													   const int32 materialization_id)
+{
+	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
+											CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
+											CONTINUOUS_AGGS_MATERIALIZATION_RANGES_IDX);
+
+	ts_scan_iterator_scan_key_init(iterator,
+								   Anum_continuous_aggs_materialization_ranges_materialization_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(materialization_id));
+}
+
 static int32
 number_of_continuous_aggs_attached(int32 raw_hypertable_id)
 {
@@ -214,8 +218,8 @@ ts_get_invalidation_replication_slot_name(char *slotname, Size szslot)
 	snprintf(slotname, szslot, "ts_%u_cagg", MyDatabaseId);
 }
 
-void
-ts_materialization_invalidation_log_delete_inner(int32 mat_hypertable_id)
+static void
+ts_materialization_invalidation_log_delete(int32 mat_hypertable_id)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
@@ -224,6 +228,23 @@ ts_materialization_invalidation_log_delete_inner(int32 mat_hypertable_id)
 
 	elog(DEBUG1, "materialization log delete for hypertable %d", mat_hypertable_id);
 	init_materialization_invalidation_log_scan_by_materialization_id(&iterator, mat_hypertable_id);
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+	}
+}
+
+static void
+ts_materialization_ranges_delete(int32 mat_hypertable_id)
+{
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
+													RowExclusiveLock,
+													CurrentMemoryContext);
+
+	elog(DEBUG1, "materialization log delete for hypertable %d", mat_hypertable_id);
+	init_materialization_ranges_scan_by_materialization_id(&iterator, mat_hypertable_id);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -270,7 +291,6 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(fd->materialized_only);
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_finalized)] = BoolGetDatum(fd->finalized);
 
 	return heap_form_tuple(desc, values, nulls);
 }
@@ -320,8 +340,6 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 
 	fd->materialized_only =
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)]);
-	fd->finalized = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_finalized)]);
-
 	if (should_free)
 		heap_freetuple(tuple);
 }
@@ -550,33 +568,6 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id)
 	}
 
 	return status;
-}
-
-TSDLLEXPORT bool
-ts_continuous_agg_hypertable_all_finalized(int32 raw_hypertable_id)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	bool all_finalized = true;
-
-	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
-	ts_scanner_foreach(&iterator)
-	{
-		FormData_continuous_agg data;
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-
-		continuous_agg_formdata_fill(&data, ti);
-
-		if (!data.finalized)
-		{
-			all_finalized = false;
-			break;
-		}
-	}
-
-	ts_scan_iterator_close(&iterator);
-
-	return all_finalized;
 }
 
 TSDLLEXPORT List *
@@ -912,7 +903,8 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 			hypertable_invalidation_log_delete(form.raw_hypertable_id);
 		}
 
-		ts_materialization_invalidation_log_delete_inner(form.mat_hypertable_id);
+		ts_materialization_invalidation_log_delete(form.mat_hypertable_id);
+		ts_materialization_ranges_delete(form.mat_hypertable_id);
 
 		if (!raw_hypertable_has_other_caggs)
 		{
@@ -928,22 +920,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	/* Perform actual deletions now */
 	if (OidIsValid(user_view.objectId))
 		performDeletion(&user_view, DROP_RESTRICT, 0);
-
-	/*
-	 * Drop invalidation slot if there are no hypertables using WAL-based
-	 * invalidation collection.
-	 *
-	 * This is important since there is no actor that reads the slot, which
-	 * means that the WAL cannot be pruned.
-	 */
-	if (ts_guc_enable_cagg_wal_based_invalidation)
-	{
-		char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
-		ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
-		if (ts_guc_enable_cagg_wal_based_invalidation &&
-			SearchNamedReplicationSlot(slot_name, true) != NULL)
-			ts_hypertable_drop_invalidation_replication_slot(slot_name);
-	}
 
 	if (OidIsValid(mat_hypertable.objectId))
 	{
@@ -1564,18 +1540,9 @@ ts_continuous_agg_get_query(ContinuousAgg *cagg)
 	RewriteRule *rule;
 	Query *cagg_view_query;
 
-	/*
-	 * Get the partial_view definition for the finalized version because
-	 * the user view doesn't have the "GROUP BY" clause anymore.
-	 */
-	if (ContinuousAggIsFinalized(cagg))
-		cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.partial_view_schema),
-											  NameStr(cagg->data.partial_view_name),
-											  false);
-	else
-		cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.user_view_schema),
-											  NameStr(cagg->data.user_view_name),
-											  false);
+	cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.partial_view_schema),
+										  NameStr(cagg->data.partial_view_name),
+										  false);
 
 	cagg_view_rel = table_open(cagg_view_oid, AccessShareLock);
 	cagg_view_rules = cagg_view_rel->rd_rules;

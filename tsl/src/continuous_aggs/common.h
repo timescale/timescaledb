@@ -45,7 +45,6 @@ typedef struct FinalizeQueryInfo
 	List *final_seltlist;	/* select target list for finalize query */
 	Node *final_havingqual; /* having qual for finalize query */
 	Query *final_userquery; /* user query used to compute the finalize_query */
-	bool finalized;			/* finalized form? */
 } FinalizeQueryInfo;
 
 typedef struct MaterializationHypertableColumnInfo
@@ -109,8 +108,7 @@ typedef struct ContinuousAggRefreshContext
 		(selquery)->rtable = NULL;                                                                 \
 	} while (0);
 
-extern ContinuousAggTimeBucketInfo cagg_validate_query(const Query *query, const bool finalized,
-													   const char *cagg_schema,
+extern ContinuousAggTimeBucketInfo cagg_validate_query(const Query *query, const char *cagg_schema,
 													   const char *cagg_name,
 													   const bool is_cagg_create);
 extern Query *destroy_union_query(Query *q);
