@@ -48,7 +48,7 @@ FUNCTION_NAME(one)(void *restrict agg_state, const BytesView value)
 {
 	FUNCTION_NAME(state) *restrict state = (FUNCTION_NAME(state) *) agg_state;
 	bool replace = state->capacity == 0;
-	if (!replace)
+	if (likely(!replace))
 	{
 		const uint32 current_len = VARSIZE(state->data) - VARHDRSZ;
 		const int result = memcmp(VARDATA(state->data), value.data, Min(current_len, value.len));
