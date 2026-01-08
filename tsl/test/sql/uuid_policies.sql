@@ -80,7 +80,58 @@ SELECT count(*) AS chunks_final FROM show_chunks('uuid_retention_test');
 SELECT count(*) AS rows_final FROM uuid_retention_test;
 SELECT device FROM uuid_retention_test ORDER BY device;
 
--- Clean up
+-- Clean up retention test
 RESET timescaledb.current_timestamp_mock;
 SELECT remove_retention_policy('uuid_retention_test', if_exists => true);
 DROP TABLE uuid_retention_test;
+
+--
+-- Test compression policy on UUID-partitioned hypertables
+--
+CREATE TABLE uuid_compress_test(id uuid primary key, device int, temp float);
+SELECT create_hypertable('uuid_compress_test', 'id', chunk_time_interval => interval '1 day');
+
+-- Enable compression on the hypertable
+ALTER TABLE uuid_compress_test SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'device'
+);
+
+-- Insert data using same fixed UUIDs as retention test
+INSERT INTO uuid_compress_test VALUES
+       ('019433c2-ec00-7000-8000-000000000001', 1, 1.0),
+       ('019438e9-4800-7000-8000-000000000002', 2, 2.0),
+       ('01943e0f-a400-7000-8000-000000000003', 3, 3.0),
+       ('01944336-0000-7000-8000-000000000004', 4, 4.0),
+       ('0194485c-5c00-7000-8000-000000000005', 5, 5.0),
+       ('01944d82-b800-7000-8000-000000000006', 6, 6.0);
+
+-- Verify chunks before compression
+SELECT count(*) AS chunks_before_compress FROM show_chunks('uuid_compress_test');
+
+-- Add compression policy with INTERVAL - compress chunks older than 2 days
+SELECT add_compression_policy('uuid_compress_test', INTERVAL '2 days') AS compression_job_id \gset
+
+-- Verify the policy was created
+SELECT proc_name, config FROM timescaledb_information.jobs WHERE job_id = :compression_job_id;
+
+-- Test that invalid compress_after type is rejected (non-interval for UUID)
+\set ON_ERROR_STOP 0
+SELECT add_compression_policy('uuid_compress_test', 12345, if_not_exists => true);
+\set ON_ERROR_STOP 1
+
+-- Set mock time to 2025-01-10 00:00:00 UTC
+-- With 2-day compression, chunks older than 2025-01-08 should be compressed (Jan 5, 6, 7)
+SET timescaledb.current_timestamp_mock = '2025-01-10 00:00:00+00';
+
+-- Run the compression job
+CALL run_job(:compression_job_id);
+
+-- Verify compressed chunks
+SELECT count(*) AS compressed_chunks FROM chunk_compression_stats('uuid_compress_test')
+WHERE compression_status = 'Compressed';
+
+-- Clean up compression test
+RESET timescaledb.current_timestamp_mock;
+SELECT remove_compression_policy('uuid_compress_test', if_exists => true);
+DROP TABLE uuid_compress_test;
