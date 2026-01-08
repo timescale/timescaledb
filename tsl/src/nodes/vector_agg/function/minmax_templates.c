@@ -11,11 +11,16 @@
 #include <utils/fmgroids.h>
 #include <utils/fmgrprotos.h>
 #include <utils/timestamp.h>
-#include <varatt.h>
 
 #include "functions.h"
 #include "template_helper.h"
 #include <compression/arrow_c_data_interface.h>
+
+#include "compat/compat.h"
+
+#if PG16_GE
+#include <varatt.h>
+#endif
 
 /*
  * Common parts for vectorized min(), max().

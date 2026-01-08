@@ -138,9 +138,10 @@ FUNCTION_NAME(many_vector)(void *restrict agg_states, const uint32 *state_indice
 		const int body_bytes = body_offsets[body_offset_index + 1] - body_offset;
 
 		//		fprintf(stderr, "[%d/%ld] -> [%d]: filter %d, null %d, offset index %d, offset %d,
-		// bytes %d\n", 			row, arrow->length, state_indices[row], 			arrow_row_is_valid(filter,
-		// row), 			arrow_row_is_valid(arrow->buffers[0], row), 			body_offset_index, body_offset,
-		//body_bytes);
+		// bytes %d\n", 			row, arrow->length, state_indices[row],
+		// arrow_row_is_valid(filter, row), 			arrow_row_is_valid(arrow->buffers[0], row),
+		// body_offset_index, body_offset,
+		// body_bytes);
 
 		const BytesView value = { .data = &bodies[body_offset], .len = body_bytes };
 
