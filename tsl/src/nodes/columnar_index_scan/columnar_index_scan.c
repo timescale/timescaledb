@@ -144,7 +144,7 @@ is_supported_aggregate(const CompressionInfo *info, Aggref *aggref, AttrNumber *
 		default:
 			/* Initialize function cache for access to ts_first_func_oid and ts_last_func_oid */
 			if (!OidIsValid(ts_first_func_oid) || !OidIsValid(ts_last_func_oid))
-				ts_func_cache_get(InvalidOid);
+				ts_func_cache_init();
 
 			if (aggref->aggfnoid == ts_first_func_oid || aggref->aggfnoid == ts_last_func_oid)
 			{

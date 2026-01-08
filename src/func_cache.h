@@ -45,6 +45,7 @@ typedef struct FuncInfo
 	sort_transform_func sort_transform;
 } FuncInfo;
 
+extern TSDLLEXPORT void ts_func_cache_init(void);
 extern TSDLLEXPORT FuncInfo *ts_func_cache_get(Oid funcid);
 extern TSDLLEXPORT FuncInfo *ts_func_cache_get_bucketing_func(Oid funcid);
 
