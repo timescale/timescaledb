@@ -164,7 +164,7 @@ get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_gette
 		 */
 		if (IS_UUID_TYPE(partitioning_type))
 			partitioning_type = TIMESTAMPTZOID;
-		return subtract_interval_from_now(lag, partitioning_type);
+		return ts_subtract_interval_from_now(lag, partitioning_type);
 	}
 }
 

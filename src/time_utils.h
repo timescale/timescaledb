@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include <datatype/timestamp.h>
 
 #include "export.h"
 
@@ -103,6 +104,7 @@ extern TSDLLEXPORT int64 ts_time_saturating_add(int64 timeval, int64 interval, O
 extern TSDLLEXPORT int64 ts_time_saturating_sub(int64 timeval, int64 interval, Oid timetype);
 extern TSDLLEXPORT int64 ts_subtract_integer_from_now_saturating(Oid now_func, int64 interval,
 																 Oid timetype);
+extern TSDLLEXPORT Datum ts_subtract_interval_from_now(const Interval *interval, Oid timetype);
 #ifdef TS_DEBUG
 extern TSDLLEXPORT Datum ts_get_mock_time_or_current_time(void);
 #endif

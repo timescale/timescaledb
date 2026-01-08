@@ -14,54 +14,7 @@
 #include "policies_v2.h"
 #include "time_utils.h"
 #include "ts_catalog/continuous_agg.h"
-#include "uuid.h"
 #include <utils/builtins.h>
-
-Datum
-subtract_interval_from_now(Interval *lag, Oid time_dim_type)
-{
-#ifdef TS_DEBUG
-	Datum res = ts_get_mock_time_or_current_time();
-#else
-	Datum res = TimestampTzGetDatum(GetCurrentTransactionStartTimestamp());
-#endif
-
-	switch (time_dim_type)
-	{
-		case TIMESTAMPOID:
-			res = DirectFunctionCall1(timestamptz_timestamp, res);
-			res = DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(lag));
-
-			return res;
-		case TIMESTAMPTZOID:
-			res = DirectFunctionCall2(timestamptz_mi_interval, res, IntervalPGetDatum(lag));
-
-			return res;
-		case DATEOID:
-			res = DirectFunctionCall1(timestamptz_timestamp, res);
-			res = DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(lag));
-			res = DirectFunctionCall1(timestamp_date, res);
-
-			return res;
-		case UUIDOID:
-		{
-			/*
-			 * For UUIDv7-partitioned hypertables, compute (now - interval) and convert
-			 * to a UUIDv7 boundary.
-			 */
-			TimestampTz boundary_ts;
-			res = DirectFunctionCall2(timestamptz_mi_interval, res, IntervalPGetDatum(lag));
-			boundary_ts = DatumGetTimestampTz(res);
-			return UUIDPGetDatum(ts_create_uuid_v7_from_timestamptz(boundary_ts, true));
-		}
-		default:
-			/* this should never happen as otherwise hypertable has unsupported time type */
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("unsupported time type %s", format_type_be(time_dim_type))));
-			pg_unreachable();
-	}
-}
 
 const Dimension *
 get_open_dimension_for_hypertable(const Hypertable *ht, bool fail_if_not_found)
