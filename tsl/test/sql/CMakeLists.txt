@@ -19,7 +19,6 @@ set(TEST_FILES
     cagg_watermark.sql
     chunk_column_stats.sql
     columnar_scan_cost.sql
-    columnar_index_scan.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
@@ -78,6 +77,7 @@ set(TEST_TEMPLATES
     cagg_query_using_merge.sql.in
     cagg_union_view.sql.in
     cagg_permissions.sql.in
+    columnar_index_scan.sql.in
     compress_bloom_sparse.sql.in
     compression_permissions.sql.in
     foreign_keys_test.sql.in
