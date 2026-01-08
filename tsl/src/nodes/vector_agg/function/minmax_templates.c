@@ -6,10 +6,12 @@
 
 #include <postgres.h>
 
+#include <port/pg_bitutils.h>
 #include <utils/date.h>
 #include <utils/fmgroids.h>
 #include <utils/fmgrprotos.h>
 #include <utils/timestamp.h>
+#include <varatt.h>
 
 #include "functions.h"
 #include "template_helper.h"
@@ -59,5 +61,10 @@ minmax_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 #define PREDICATE(CURRENT, NEW)                                                                    \
 	(unlikely(!isnan((double) (CURRENT))) && (isnan((double) (NEW)) || (CURRENT) < (NEW)))
 #include "minmax_arithmetic_types.c"
+
+#define PG_TYPE TEXT
+#define AGG_NAME MIN
+#define PREDICATE(CURRENT, NEW) ((CURRENT) > (NEW))
+#include "minmax_text.c"
 
 #undef AGG_NAME
