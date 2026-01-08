@@ -153,6 +153,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     information_view_chunk_count.sql
     read_only.sql
     tsl_tables.sql
+    uuid_policies.sql
     license_tsl.sql
     merge_chunks.sql
     fixed_schedules.sql
