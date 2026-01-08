@@ -135,3 +135,60 @@ WHERE compression_status = 'Compressed';
 RESET timescaledb.current_timestamp_mock;
 SELECT remove_compression_policy('uuid_compress_test', if_exists => true);
 DROP TABLE uuid_compress_test;
+
+--
+-- Test reorder policy on UUID-partitioned hypertables
+--
+CREATE TABLE uuid_reorder_test(id uuid primary key, device int, temp float);
+SELECT create_hypertable('uuid_reorder_test', 'id', chunk_time_interval => interval '1 day');
+
+-- Create an index for reorder (by device)
+CREATE INDEX uuid_reorder_test_device_idx ON uuid_reorder_test(device);
+
+-- Insert data into multiple chunks so older ones are eligible for reorder
+-- Chunk 1 (Jan 5): insert in reverse device order (3, 2, 1)
+INSERT INTO uuid_reorder_test VALUES
+       ('019433c2-ec00-7000-8000-000000000003', 3, 3.0),
+       ('019433c2-ec00-7000-8000-000000000002', 2, 2.0),
+       ('019433c2-ec00-7000-8000-000000000001', 1, 1.0);
+-- Chunk 2 (Jan 6): insert in reverse device order (6, 5, 4)
+INSERT INTO uuid_reorder_test VALUES
+       ('019438e9-4800-7000-8000-000000000006', 6, 6.0),
+       ('019438e9-4800-7000-8000-000000000005', 5, 5.0),
+       ('019438e9-4800-7000-8000-000000000004', 4, 4.0);
+-- Chunk 3 (Jan 7) - will be skipped as too recent
+INSERT INTO uuid_reorder_test VALUES
+       ('01943e0f-a400-7000-8000-000000000009', 9, 9.0);
+
+SELECT count(*) AS num_chunks FROM show_chunks('uuid_reorder_test');
+
+-- Show physical order in oldest chunk BEFORE reorder (using ctid)
+-- Data should be in insert order: device 3, 2, 1
+SELECT device, chunk_name FROM (
+    SELECT device, tableoid::regclass::text AS chunk_name, ctid
+    FROM uuid_reorder_test
+    WHERE id < '019438e9-4800-7000-8000-000000000000'  -- Jan 5 chunk only
+    ORDER BY ctid
+) sub;
+
+-- Add reorder policy
+SELECT add_reorder_policy('uuid_reorder_test', 'uuid_reorder_test_device_idx') AS reorder_job_id \gset
+
+-- Verify the policy was created
+SELECT proc_name, config FROM timescaledb_information.jobs WHERE job_id = :reorder_job_id;
+
+-- Run the reorder job (reorders eligible older chunks)
+CALL run_job(:reorder_job_id);
+
+-- Show physical order in oldest chunk AFTER reorder (using ctid)
+-- Data should now be in index order: device 1, 2, 3
+SELECT device, chunk_name FROM (
+    SELECT device, tableoid::regclass::text AS chunk_name, ctid
+    FROM uuid_reorder_test
+    WHERE id < '019438e9-4800-7000-8000-000000000000'  -- Jan 5 chunk only
+    ORDER BY ctid
+) sub;
+
+-- Clean up reorder test
+SELECT remove_reorder_policy('uuid_reorder_test', if_exists => true);
+DROP TABLE uuid_reorder_test;
