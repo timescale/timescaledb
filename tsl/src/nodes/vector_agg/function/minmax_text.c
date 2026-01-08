@@ -27,7 +27,7 @@ typedef MinMaxBytesState FUNCTION_NAME(state);
 static void
 minmax_bytes_init(void *restrict agg_states, int n)
 {
-	MinMaxBytesState *states = (MinMaxBytesState *) agg_states;
+	MinMaxBytesState *restrict states = (MinMaxBytesState *) agg_states;
 	for (int i = 0; i < n; i++)
 	{
 		states[i].capacity = 0;
@@ -46,7 +46,7 @@ minmax_bytes_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 static pg_attribute_always_inline void
 FUNCTION_NAME(one)(void *restrict agg_state, const BytesView value)
 {
-	FUNCTION_NAME(state) *state = (FUNCTION_NAME(state) *) agg_state;
+	FUNCTION_NAME(state) *restrict state = (FUNCTION_NAME(state) *) agg_state;
 	bool replace = state->capacity == 0;
 	if (!replace)
 	{
@@ -75,7 +75,7 @@ FUNCTION_NAME(one)(void *restrict agg_state, const BytesView value)
 		SET_VARSIZE(state->data, new_vardata_bytes);
 		memcpy(VARDATA(state->data), value.data, value.len);
 
-		Assert(state->capacity >= 0);
+		Assert(state->capacity > 0);
 		Assert(VARSIZE(state->data) <= state->capacity);
 	}
 }
@@ -138,9 +138,9 @@ FUNCTION_NAME(many_vector)(void *restrict agg_states, const uint32 *state_indice
 		const int body_bytes = body_offsets[body_offset_index + 1] - body_offset;
 
 		//		fprintf(stderr, "[%d/%ld] -> [%d]: filter %d, null %d, offset index %d, offset %d,
-		//bytes %d\n", 			row, arrow->length, state_indices[row], 			arrow_row_is_valid(filter, row),
-		//			arrow_row_is_valid(arrow->buffers[0], row),
-		//			body_offset_index, body_offset, body_bytes);
+		// bytes %d\n", 			row, arrow->length, state_indices[row], 			arrow_row_is_valid(filter,
+		// row), 			arrow_row_is_valid(arrow->buffers[0], row), 			body_offset_index, body_offset,
+		//body_bytes);
 
 		const BytesView value = { .data = &bodies[body_offset], .len = body_bytes };
 
