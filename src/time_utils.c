@@ -24,10 +24,20 @@ TS_FUNCTION_INFO_V1(ts_make_range_from_internal_time);
 TS_FUNCTION_INFO_V1(ts_get_internal_time_min);
 TS_FUNCTION_INFO_V1(ts_get_internal_time_max);
 
-static Datum
-subtract_interval_from_now(Oid timetype, const Interval *interval)
+/*
+ * Subtract an interval from the current time and return the result as a Datum
+ * of the specified time type.
+ *
+ * In debug mode, uses mock time if configured for testing purposes.
+ */
+TSDLLEXPORT Datum
+ts_subtract_interval_from_now(const Interval *interval, Oid timetype)
 {
-	Datum res = DirectFunctionCall1(now, 0);
+#ifdef TS_DEBUG
+	Datum res = ts_get_mock_time_or_current_time();
+#else
+	Datum res = TimestampTzGetDatum(GetCurrentTransactionStartTimestamp());
+#endif
 
 	switch (timetype)
 	{
@@ -54,10 +64,9 @@ subtract_interval_from_now(Oid timetype, const Interval *interval)
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("unknown time type %s", format_type_be(timetype))));
+					 errmsg("unsupported time type %s", format_type_be(timetype))));
+			pg_unreachable();
 	}
-
-	return res;
 }
 
 Datum
@@ -150,14 +159,14 @@ ts_time_value_from_arg(Datum arg, Oid argtype, Oid timetype, bool need_now_func)
 		 * as TIMESTAMPTZ, the input argument should be typecast to TIMESTAMPTZ.
 		 */
 		if (argtype == INTERVALOID)
-			arg = subtract_interval_from_now(TIMESTAMPTZOID, DatumGetIntervalP(arg));
+			arg = ts_subtract_interval_from_now(DatumGetIntervalP(arg), TIMESTAMPTZOID);
 
 		return DatumGetInt64(arg);
 	}
 
 	if (argtype == INTERVALOID)
 	{
-		arg = subtract_interval_from_now(timetype, DatumGetIntervalP(arg));
+		arg = ts_subtract_interval_from_now(DatumGetIntervalP(arg), timetype);
 		argtype = timetype;
 	}
 	else if (argtype != timetype && !can_coerce_type(1, &argtype, &timetype, COERCION_IMPLICIT))
