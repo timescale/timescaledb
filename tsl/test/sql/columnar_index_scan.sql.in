@@ -38,6 +38,12 @@ SELECT device, max(time) FROM metrics GROUP BY device;
 :PREFIX SELECT sensor, min(time) FROM metrics GROUP BY sensor;
 SELECT sensor, min(time) FROM metrics GROUP BY sensor;
 
+:PREFIX SELECT device, first(time, time) FROM metrics GROUP BY device;
+SELECT device, first(time, time) FROM metrics GROUP BY device;
+
+:PREFIX SELECT device, last(time, time) FROM metrics GROUP BY device;
+SELECT device, last(time, time) FROM metrics GROUP BY device;
+
 -- explicit index columns dont prevent optimization
 :PREFIX SELECT sensor, min(value) FROM metrics GROUP BY sensor;
 SELECT sensor, min(value) FROM metrics GROUP BY sensor;
