@@ -142,8 +142,9 @@ replace_aggref_in_tlist(MinMaxAggPath *minmaxagg_path)
 static StrategyNumber
 get_func_strategy(Oid func_oid)
 {
+	/* Ensure function cache is initialized */
 	if (!OidIsValid(ts_first_func_oid) || !OidIsValid(ts_last_func_oid))
-		ts_func_cache_get(func_oid); // ensure function cache is initialized
+		ts_func_cache_init();
 
 	if (func_oid == ts_first_func_oid)
 		return BTLessStrategyNumber;
