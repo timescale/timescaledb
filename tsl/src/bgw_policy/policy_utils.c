@@ -14,6 +14,7 @@
 #include "policies_v2.h"
 #include "time_utils.h"
 #include "ts_catalog/continuous_agg.h"
+#include "uuid.h"
 #include <utils/builtins.h>
 
 Datum
@@ -42,6 +43,17 @@ subtract_interval_from_now(Interval *lag, Oid time_dim_type)
 			res = DirectFunctionCall1(timestamp_date, res);
 
 			return res;
+		case UUIDOID:
+		{
+			/*
+			 * For UUIDv7-partitioned hypertables, compute (now - interval) and convert
+			 * to a UUIDv7 boundary.
+			 */
+			TimestampTz boundary_ts;
+			res = DirectFunctionCall2(timestamptz_mi_interval, res, IntervalPGetDatum(lag));
+			boundary_ts = DatumGetTimestampTz(res);
+			return UUIDPGetDatum(ts_create_uuid_v7_from_timestamptz(boundary_ts, true));
+		}
 		default:
 			/* this should never happen as otherwise hypertable has unsupported time type */
 			ereport(ERROR,

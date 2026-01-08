@@ -263,12 +263,13 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 						 "time dimension.")));
 	}
 
-	if (IS_TIMESTAMP_TYPE(partitioning_type) && window_type != INTERVALOID)
+	if ((IS_TIMESTAMP_TYPE(partitioning_type) || IS_UUID_TYPE(partitioning_type)) &&
+		window_type != INTERVALOID)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid value for parameter %s", POL_RETENTION_CONF_KEY_DROP_AFTER),
 				 errhint("Interval time duration is required for hypertable"
-						 " with timestamp-based time dimension.")));
+						 " with timestamp or UUID time dimension.")));
 
 	JsonbParseState *parse_state = NULL;
 
