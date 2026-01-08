@@ -42,9 +42,13 @@ subtract_interval_from_now(Oid timetype, const Interval *interval)
 			return DirectFunctionCall1(timestamp_date, res);
 		case UUIDOID:
 		{
+			/*
+			 * For UUIDv7-partitioned hypertables, compute (now - interval) and convert
+			 * to a UUIDv7 boundary value suitable for range comparisons.
+			 */
 			res = DirectFunctionCall2(timestamptz_mi_interval, res, IntervalPGetDatum(interval));
-			pg_uuid_t *uuid =
-				ts_create_uuid_v7_from_unixtime_us(DatumGetTimestampTz(res), true, true);
+			TimestampTz boundary_ts = DatumGetTimestampTz(res);
+			pg_uuid_t *uuid = ts_create_uuid_v7_from_unixtime_us(boundary_ts, true, true);
 			return UUIDPGetDatum(uuid);
 		}
 		default:
