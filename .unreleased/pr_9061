@@ -1,0 +1,1 @@
+Fixes: #9061 Fix update race with BGW jobs

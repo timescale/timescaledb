@@ -1,0 +1,38 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s3_enable_waitpoint s1_alter_job s2_direct_update s3_release_waitpoint
+?column?
+--------
+       1
+
+step s3_enable_waitpoint: 
+    SELECT debug_waitpoint_enable('bgw_job_find_during_scan');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_alter_job: 
+    SELECT count(*) FROM (
+        SELECT alter_job(job_id, scheduled => false)
+        FROM timescaledb_information.jobs
+        WHERE proc_name = 'test_job_proc_race'
+    ) x;
+ <waiting ...>
+step s2_direct_update: 
+    UPDATE _timescaledb_catalog.bgw_job
+    SET scheduled = NOT scheduled
+    WHERE proc_name = 'test_job_proc_race';
+
+step s3_release_waitpoint: 
+    SELECT debug_waitpoint_release('bgw_job_find_during_scan');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_alter_job: <... completed>
+count
+-----
+    1
+

@@ -40,6 +40,7 @@
 #include "config.h"
 #include "cross_module_fn.h"
 #include "debug_assert.h"
+#include "debug_point.h"
 #include "extension.h"
 #include "job.h"
 #include "job_stat.h"
@@ -327,7 +328,8 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 {
 	MemoryContext old_ctx;
 	List *jobs = NIL;
-	ScanIterator iterator = ts_scan_iterator_create(BGW_JOB, AccessShareLock, mctx);
+	ScanIterator iterator =
+		ts_scan_iterator_create_with_catalog_snapshot(BGW_JOB, AccessShareLock, mctx);
 
 	iterator.ctx.index = catalog_get_index(ts_catalog_get(), BGW_JOB, BGW_JOB_PKEY_IDX);
 	iterator.ctx.filter = bgw_job_filter_scheduled;
@@ -410,6 +412,7 @@ ts_bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
 		.lockmode = AccessShareLock,
 		.result_mctx = mctx,
 		.scandirection = ForwardScanDirection,
+		.use_catalog_snapshot = true,
 	};
 
 	ts_scanner_scan(&scanctx);
@@ -465,6 +468,7 @@ ts_bgw_job_find_by_proc_and_hypertable_id(const char *proc_name, const char *pro
 		.tuple_found = bgw_job_accum_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
+		.use_catalog_snapshot = true,
 	};
 
 	init_scan_by_proc_schema(&scankey[0], proc_schema);
@@ -493,6 +497,7 @@ ts_bgw_job_find_by_hypertable_id(int32 hypertable_id)
 		.tuple_found = bgw_job_accum_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
+		.use_catalog_snapshot = true,
 	};
 
 	init_scan_by_hypertable_id(&scankey[0], hypertable_id);
@@ -547,7 +552,7 @@ ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_l
 {
 	/* Take a share lock on the table to prevent concurrent data changes during scan. This lock will
 	 * be released after the scan */
-	ScanIterator iterator = ts_scan_iterator_create(BGW_JOB, ShareLock, mctx);
+	ScanIterator iterator = ts_scan_iterator_create_with_catalog_snapshot(BGW_JOB, ShareLock, mctx);
 	List *jobs = NIL;
 	BgwJob *job = NULL;
 	LOCKTAG tag;
@@ -630,7 +635,8 @@ ts_bgw_job_get_share_lock(int32 bgw_job_id, MemoryContext mctx)
 BgwJob *
 ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 {
-	ScanIterator iterator = ts_scan_iterator_create(BGW_JOB, AccessShareLock, mctx);
+	ScanIterator iterator =
+		ts_scan_iterator_create_with_catalog_snapshot(BGW_JOB, AccessShareLock, mctx);
 	int num_found = 0;
 	BgwJob *job = NULL;
 
@@ -641,6 +647,7 @@ ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 		Assert(num_found == 0);
 		job = bgw_job_from_tupleinfo(ts_scan_iterator_tuple_info(&iterator), sizeof(BgwJob));
 		num_found++;
+		DEBUG_WAITPOINT("bgw_job_find_during_scan");
 	}
 
 	if (num_found == 0 && fail_if_not_found)
@@ -752,6 +759,7 @@ bgw_job_delete_scan(ScanKeyData *scankey, int32 job_id)
 		.lockmode = RowExclusiveLock,
 		.scandirection = ForwardScanDirection,
 		.result_mctx = CurrentMemoryContext,
+		.use_catalog_snapshot = true,
 	};
 
 	return ts_scanner_scan(&scanctx);
@@ -928,7 +936,8 @@ ts_bgw_job_update_by_id(int32 job_id, BgwJob *job)
 						   .lockmode = RowExclusiveLock,
 						   .scandirection = ForwardScanDirection,
 						   .result_mctx = CurrentMemoryContext,
-						   .tuplock = &scantuplock };
+						   .tuplock = &scantuplock,
+						   .use_catalog_snapshot = true };
 
 	ScanKeyInit(&scankey[0],
 				Anum_bgw_job_pkey_idx_id,
