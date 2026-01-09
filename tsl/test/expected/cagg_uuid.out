@@ -280,3 +280,135 @@ SELECT * FROM weekly_ts_events ORDER BY week;
  Sun Mar 02 16:00:00 2025 PST |   52.474
  Sun Mar 09 17:00:00 2025 PDT |   12.000
 
+-- Test compression policies on both raw table and cagg
+-- Record row counts before compression for comparison
+SELECT count(*) AS uuid_events_count_before FROM uuid_events;
+ uuid_events_count_before 
+--------------------------
+                     4333
+
+SELECT * FROM daily_uuid_events ORDER BY day;
+             day              |  temp  
+------------------------------+--------
+ Tue Dec 31 16:00:00 2024 PST |  1.500
+ Wed Jan 01 16:00:00 2025 PST |  4.250
+ Thu Jan 02 16:00:00 2025 PST |  5.000
+ Fri Feb 28 16:00:00 2025 PST | 47.928
+ Sat Mar 01 16:00:00 2025 PST | 50.767
+ Sun Mar 02 16:00:00 2025 PST | 49.410
+ Mon Mar 03 16:00:00 2025 PST | 52.474
+ Mon Mar 10 17:00:00 2025 PDT | 11.000
+ Tue Mar 11 17:00:00 2025 PDT | 12.000
+
+-- Show current chunk status for uuid_events before compression policy
+SELECT chunk_name, compression_status
+FROM chunk_compression_stats('uuid_events')
+ORDER BY chunk_name;
+    chunk_name     | compression_status 
+-------------------+--------------------
+ _hyper_1_11_chunk | Uncompressed
+ _hyper_1_16_chunk | Uncompressed
+ _hyper_1_17_chunk | Uncompressed
+ _hyper_1_18_chunk | Uncompressed
+ _hyper_1_1_chunk  | Uncompressed
+ _hyper_1_2_chunk  | Uncompressed
+ _hyper_1_30_chunk | Uncompressed
+ _hyper_1_31_chunk | Uncompressed
+ _hyper_1_3_chunk  | Uncompressed
+
+-- Add columnstore policy on raw hypertable (columnstore already enabled above)
+CALL add_columnstore_policy('uuid_events', after => '1 day'::interval);
+-- Get the job ID for the compression policy on uuid_events
+SELECT job_id AS uuid_compress_job
+FROM timescaledb_information.jobs
+WHERE hypertable_name = 'uuid_events' AND proc_name = 'policy_compression' \gset
+-- Run the compression job for uuid_events
+CALL run_job(:uuid_compress_job);
+-- Verify chunks are compressed on the raw hypertable
+SELECT chunk_name, compression_status
+FROM chunk_compression_stats('uuid_events')
+WHERE compression_status = 'Compressed'
+ORDER BY chunk_name;
+    chunk_name     | compression_status 
+-------------------+--------------------
+ _hyper_1_11_chunk | Compressed
+ _hyper_1_16_chunk | Compressed
+ _hyper_1_17_chunk | Compressed
+ _hyper_1_18_chunk | Compressed
+ _hyper_1_1_chunk  | Compressed
+ _hyper_1_2_chunk  | Compressed
+ _hyper_1_30_chunk | Compressed
+ _hyper_1_31_chunk | Compressed
+ _hyper_1_3_chunk  | Compressed
+
+-- Count compressed vs uncompressed chunks for uuid_events
+SELECT count(*) AS total_chunks,
+       count(*) FILTER (WHERE compression_status = 'Compressed') AS compressed_chunks
+FROM chunk_compression_stats('uuid_events');
+ total_chunks | compressed_chunks 
+--------------+-------------------
+            9 |                 9
+
+-- Show current chunk status for daily_uuid_events cagg before compression policy
+SELECT chunk_name, is_compressed
+FROM timescaledb_information.chunks
+WHERE hypertable_name = (SELECT materialization_hypertable_name FROM timescaledb_information.continuous_aggregates WHERE view_name = 'daily_uuid_events')
+ORDER BY chunk_name;
+    chunk_name     | is_compressed 
+-------------------+---------------
+ _hyper_3_13_chunk | f
+ _hyper_3_22_chunk | f
+ _hyper_3_7_chunk  | t
+ _hyper_3_8_chunk  | f
+
+-- Add columnstore policy on the continuous aggregate
+CALL add_columnstore_policy('daily_uuid_events', after => '1 day'::interval);
+-- Get the job ID for the compression policy on daily_uuid_events cagg
+SELECT job_id AS cagg_compress_job
+FROM timescaledb_information.jobs
+WHERE hypertable_name = 'daily_uuid_events' AND proc_name = 'policy_compression' \gset
+-- Refresh the cagg to ensure all data is materialized
+CALL refresh_continuous_aggregate('daily_uuid_events', NULL, NULL);
+NOTICE:  continuous aggregate "daily_uuid_events" is already up-to-date
+-- Run the compression job for daily_uuid_events cagg
+CALL run_job(:cagg_compress_job);
+-- Verify chunks are compressed on the cagg
+SELECT chunk_name, is_compressed
+FROM timescaledb_information.chunks
+WHERE hypertable_name = (SELECT materialization_hypertable_name FROM timescaledb_information.continuous_aggregates WHERE view_name = 'daily_uuid_events')
+ORDER BY chunk_name;
+    chunk_name     | is_compressed 
+-------------------+---------------
+ _hyper_3_13_chunk | t
+ _hyper_3_22_chunk | t
+ _hyper_3_7_chunk  | t
+ _hyper_3_8_chunk  | t
+
+-- Count compressed vs uncompressed chunks for the cagg
+SELECT count(*) AS total_chunks,
+       count(*) FILTER (WHERE is_compressed = true) AS compressed_chunks
+FROM timescaledb_information.chunks
+WHERE hypertable_name = (SELECT materialization_hypertable_name FROM timescaledb_information.continuous_aggregates WHERE view_name = 'daily_uuid_events');
+ total_chunks | compressed_chunks 
+--------------+-------------------
+            4 |                 4
+
+-- Verify data is still accessible after compression (compare with counts before)
+SELECT count(*) AS uuid_events_count_after FROM uuid_events;
+ uuid_events_count_after 
+-------------------------
+                    4333
+
+SELECT * FROM daily_uuid_events ORDER BY day;
+             day              |  temp  
+------------------------------+--------
+ Tue Dec 31 16:00:00 2024 PST |  1.500
+ Wed Jan 01 16:00:00 2025 PST |  4.250
+ Thu Jan 02 16:00:00 2025 PST |  5.000
+ Fri Feb 28 16:00:00 2025 PST | 47.928
+ Sat Mar 01 16:00:00 2025 PST | 50.767
+ Sun Mar 02 16:00:00 2025 PST | 49.410
+ Mon Mar 03 16:00:00 2025 PST | 52.474
+ Mon Mar 10 17:00:00 2025 PDT | 11.000
+ Tue Mar 11 17:00:00 2025 PDT | 12.000
+
