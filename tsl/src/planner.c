@@ -10,6 +10,7 @@
 #include <foreign/fdwapi.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/parsenodes.h>
+#include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <parser/parsetree.h>
 
@@ -150,6 +151,97 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("The MERGE command with UPDATE/DELETE merge actions is not support on "
 							"compressed hypertables")));
+
+#if !PG17_GE
+		/*
+		 * PG16 and earlier: Remove BitmapHeapScan paths for DML on partial chunks.
+		 *
+		 * On PG16, BitmapHeapScan eagerly initializes its heap scan descriptor
+		 * with the original snapshot during plan initialization. When we
+		 * decompress rows and call CommandCounterIncrement(), the stale
+		 * snapshot cannot see the newly decompressed rows.
+		 *
+		 * This bug only affects partial chunks because:
+		 * - Fully compressed chunks have rel->indexlist = NIL (set in
+		 *   timescaledb_get_relation_info_hook), so BitmapHeapScan is not
+		 *   available anyway.
+		 * - Partial chunks have indexes available, so BitmapHeapScan can be
+		 *   chosen, and decompression will add rows that it cannot see.
+		 *
+		 * PG17+ fixed this via commit 1577081e961 which lazily initializes
+		 * the scan descriptor in BitmapHeapNext(), using the current
+		 * estate->es_snapshot after CommandCounterIncrement().
+		 *
+		 * IMPORTANT: PostgreSQL's add_path() prunes dominated paths. If
+		 * BitmapHeapPath has lower cost than SeqScan (common with adjusted
+		 * cost parameters), SeqScan may have been pruned from the pathlist.
+		 * If removing BitmapHeapPath would leave no paths, we must add a
+		 * another path as fallback to ensure a valid plan exists.
+		 */
+		const Chunk *chunk = ts_planner_chunk_fetch(root, rel);
+		if (chunk && ts_chunk_is_partial(chunk))
+		{
+			ListCell *lc;
+			List *filtered_paths = NIL;
+
+			foreach (lc, rel->pathlist)
+			{
+				Path *path = lfirst(lc);
+				if (!IsA(path, BitmapHeapPath))
+					filtered_paths = lappend(filtered_paths, path);
+			}
+
+			/*
+			 * If removing BitmapHeapPath left us with no paths, try to add
+			 * alternative scan paths. This can happen when BitmapHeapPath
+			 * dominated and pruned other paths due to cost calculations.
+			 *
+			 * Prefer IndexScan if available, fall back to SeqScan.
+			 */
+			if (filtered_paths == NIL && rel->pathlist != NIL)
+			{
+				/*
+				 * Try to create index paths. create_index_paths() adds paths
+				 * to rel->pathlist, but it also creates BitmapHeapPath entries
+				 * which we must filter out again.
+				 */
+				rel->pathlist = NIL; /* Clear the BitmapHeapPath */
+				create_index_paths(root, rel);
+
+				/* Filter out any BitmapHeapPath that create_index_paths added */
+				foreach (lc, rel->pathlist)
+				{
+					Path *path = lfirst(lc);
+					if (!IsA(path, BitmapHeapPath))
+						filtered_paths = lappend(filtered_paths, path);
+				}
+
+				/*
+				 * If no non-bitmap index paths were created (e.g., enable_indexscan=off),
+				 * add SeqScan as the final fallback.
+				 */
+				if (filtered_paths == NIL)
+				{
+					Relids required_outer = rel->lateral_relids;
+					Path *seqpath = create_seqscan_path(root, rel, required_outer, 0);
+					filtered_paths = lappend(filtered_paths, seqpath);
+				}
+			}
+
+			rel->pathlist = filtered_paths;
+
+			/* Also filter partial_pathlist for parallel plans */
+			filtered_paths = NIL;
+			foreach (lc, rel->partial_pathlist)
+			{
+				Path *path = lfirst(lc);
+				if (!IsA(path, BitmapHeapPath))
+					filtered_paths = lappend(filtered_paths, path);
+			}
+			rel->partial_pathlist = filtered_paths;
+		}
+
+#endif /* !PG17_GE */
 	}
 }
 

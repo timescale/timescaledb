@@ -1,0 +1,214 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+--
+-- Test DELETE with BitmapHeapScan on partial chunk
+--
+-- The goal of this test is to make sure the issue in SDC3656
+-- doesn't regress later. This issue was reported on PG15.15 and
+-- verified on later versions, where it still exists on PG16.9 and
+-- it doesn't happen on PG17.7 and PG18.1,
+--
+-- The problem was that bitmap scan created the bitmap at an
+-- earlier time, then later the decompression added more
+-- tuples to the chunk table. For this reason the delete didn't
+-- see the new data and thus, it didn't remove them.
+--
+-- This problem doesn't exist in later versions, because the bitmap
+-- scan is lazily initialized at a time where the tuples were
+-- already decompressed.
+--
+-- There is a related test: compression_update_delete.sql.in that
+-- tests another related bug, where we tried to fix this problem
+-- by rescanning the records, but this together with a NestedLoopJoin
+-- crashed. This only happen on PG16 and earlier versions.
+--
+\set ON_ERROR_STOP 1
+CREATE TABLE test_bitmap_delete (
+    time_col BIGINT NOT NULL,
+    device_id INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    value INTEGER,
+    PRIMARY KEY (time_col, device_id)
+);
+SELECT create_hypertable('test_bitmap_delete', 'time_col', chunk_time_interval => 1000000);
+        create_hypertable        
+---------------------------------
+ (1,public,test_bitmap_delete,t)
+
+-- Create index that would enable BitmapHeapScan
+CREATE INDEX idx_device_status ON test_bitmap_delete (device_id, status);
+ALTER TABLE test_bitmap_delete SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'device_id',
+    timescaledb.compress_orderby = 'time_col DESC'
+);
+-- Insert rows to be deleted (will be compressed)
+INSERT INTO test_bitmap_delete (time_col, device_id, status, value)
+SELECT i, 1, 'delete_me', i FROM generate_series(1, 100) i;
+-- Insert rows to keep (same segment)
+INSERT INTO test_bitmap_delete (time_col, device_id, status, value)
+SELECT i + 500, 1, 'keep', i FROM generate_series(1, 100) i;
+-- Insert more data so BitmapHeapScan is naturally preferred
+INSERT INTO test_bitmap_delete (time_col, device_id, status, value)
+SELECT i + 2000, (i % 100) + 1,
+       CASE WHEN i % 100 = 0 THEN 'delete_me' ELSE 'keep' END,
+       i
+FROM generate_series(1, 100000) i;
+-- Compress the chunk
+SELECT compress_chunk(c) FROM show_chunks('test_bitmap_delete') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+
+-- Make chunk partial by inserting uncompressed data
+INSERT INTO test_bitmap_delete (time_col, device_id, status, value)
+SELECT i + 1000, 1, 'keep', i FROM generate_series(1, 50) i;
+ANALYZE test_bitmap_delete;
+-- Test: DELETE should work when bitmap and index scans are allowed
+BEGIN;
+-- Disable SeqScan to test BitmapHeapScan path and also make
+-- the bitmap scan more favorable. Note that BitmapHeapScan is
+-- removed from the paths on PG16 and earlier
+SET LOCAL enable_indexscan = on;
+SET LOCAL enable_seqscan = off;
+SET LOCAL random_page_cost = 0.5;  -- (default 4.0)
+SET LOCAL cpu_index_tuple_cost = 0.1; -- (default 0.005)
+EXPLAIN (buffers off, costs off)
+DELETE FROM test_bitmap_delete WHERE device_id = 1 AND status = 'delete_me';
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   ->  Delete on test_bitmap_delete
+         Delete on _hyper_1_1_chunk test_bitmap_delete_1
+         ->  Index Scan using _hyper_1_1_chunk_idx_device_status on _hyper_1_1_chunk test_bitmap_delete_1
+               Index Cond: ((device_id = 1) AND (status = 'delete_me'::text))
+
+DELETE FROM test_bitmap_delete WHERE device_id = 1 AND status = 'delete_me';
+-- Verify all rows were deleted (must be 0)
+-- (before the fix, it was 100)
+SELECT count(*) AS remaining_delete_me
+FROM test_bitmap_delete
+WHERE device_id = 1 AND status = 'delete_me';
+ remaining_delete_me 
+---------------------
+                   0
+
+-- Verify other rows were NOT deleted (must be 150)
+SELECT count(*) AS remaining_keep
+FROM test_bitmap_delete
+WHERE device_id = 1 AND status = 'keep';
+ remaining_keep 
+----------------
+            150
+
+ROLLBACK;
+-- Test: DELETE should work when bitmap scan is strongly preferred
+BEGIN;
+-- Disable IndexScan to test BitmapHeapScan path. Note that BitmapHeapScan is
+-- removed from the paths on PG16 and earlier
+SET LOCAL enable_indexscan = off;
+SET LOCAL enable_seqscan = on;
+-- Make sequential scan more expensive (default is 1.0)
+SET seq_page_cost = 10.0;
+-- Make random page cost lower to favor bitmap heap scan (default is 4.0)
+SET random_page_cost = 1.0;
+EXPLAIN (buffers off, costs off)
+DELETE FROM test_bitmap_delete WHERE device_id = 1 AND status = 'delete_me';
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   ->  Delete on test_bitmap_delete
+         Delete on _hyper_1_1_chunk test_bitmap_delete_1
+         ->  Seq Scan on _hyper_1_1_chunk test_bitmap_delete_1
+               Filter: ((device_id = 1) AND (status = 'delete_me'::text))
+
+DELETE FROM test_bitmap_delete WHERE device_id = 1 AND status = 'delete_me';
+-- Verify all rows were deleted (must be 0)
+-- (before the fix, it was 100)
+SELECT count(*) AS remaining_delete_me
+FROM test_bitmap_delete
+WHERE device_id = 1 AND status = 'delete_me';
+ remaining_delete_me 
+---------------------
+                   0
+
+-- Verify other rows were NOT deleted (must be 150)
+SELECT count(*) AS remaining_keep
+FROM test_bitmap_delete
+WHERE device_id = 1 AND status = 'keep';
+ remaining_keep 
+----------------
+            150
+
+ROLLBACK;
+-- Test: the fully compressed table did not trigger the problem
+--   but I put this case here for completeness and to make sure
+--   we exercise the new code paths in both cases
+BEGIN;
+SELECT compress_chunk(c) FROM show_chunks('test_bitmap_delete') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+
+SET LOCAL enable_indexscan = on;
+SET LOCAL enable_seqscan = off;
+EXPLAIN (buffers off, costs off)
+DELETE FROM test_bitmap_delete WHERE device_id = 1 AND status = 'delete_me';
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   ->  Delete on test_bitmap_delete
+         Delete on _hyper_1_1_chunk test_bitmap_delete_1
+         ->  Seq Scan on _hyper_1_1_chunk test_bitmap_delete_1
+               Filter: ((device_id = 1) AND (status = 'delete_me'::text))
+
+DELETE FROM test_bitmap_delete WHERE device_id = 1 AND status = 'delete_me';
+SELECT count(*) AS remaining_delete_me
+FROM test_bitmap_delete
+WHERE device_id = 1 AND status = 'delete_me';
+ remaining_delete_me 
+---------------------
+                   0
+
+SELECT count(*) AS remaining_keep
+FROM test_bitmap_delete
+WHERE device_id = 1 AND status = 'keep';
+ remaining_keep 
+----------------
+            150
+
+ROLLBACK;
+-- Test: similarly to the above, the fully decompressed test
+--  is only here for completeness
+BEGIN;
+SELECT decompress_chunk(c) FROM show_chunks('test_bitmap_delete') c;
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+
+SET LOCAL enable_indexscan = on;
+SET LOCAL enable_seqscan = off;
+EXPLAIN (buffers off, costs off)
+DELETE FROM test_bitmap_delete WHERE device_id = 1 AND status = 'delete_me';
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   ->  Delete on test_bitmap_delete
+         Delete on _hyper_1_1_chunk test_bitmap_delete_1
+         ->  Index Scan using _hyper_1_1_chunk_idx_device_status on _hyper_1_1_chunk test_bitmap_delete_1
+               Index Cond: ((device_id = 1) AND (status = 'delete_me'::text))
+
+DELETE FROM test_bitmap_delete WHERE device_id = 1 AND status = 'delete_me';
+SELECT count(*) AS remaining_delete_me
+FROM test_bitmap_delete
+WHERE device_id = 1 AND status = 'delete_me';
+ remaining_delete_me 
+---------------------
+                   0
+
+SELECT count(*) AS remaining_keep
+FROM test_bitmap_delete
+WHERE device_id = 1 AND status = 'keep';
+ remaining_keep 
+----------------
+            150
+
+ROLLBACK;
+DROP TABLE test_bitmap_delete;
