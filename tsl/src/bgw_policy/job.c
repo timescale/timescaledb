@@ -158,7 +158,13 @@ get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_gette
 	else
 	{
 		Interval *lag = interval_getter(config);
-		return subtract_interval_from_now(lag, partitioning_type);
+		/*
+		 * For UUID (v7) partitioned hypertables, drop_chunks expects TIMESTAMPTZ
+		 * input, so we compute the boundary as TIMESTAMPTZ instead of UUID.
+		 */
+		if (IS_UUID_TYPE(partitioning_type))
+			partitioning_type = TIMESTAMPTZOID;
+		return ts_subtract_interval_from_now(lag, partitioning_type);
 	}
 }
 
@@ -336,7 +342,16 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 		use_creation_time = true;
 	}
 	else
+	{
 		boundary_type = ts_dimension_get_partition_type(open_dim);
+		/*
+		 * For UUID (v7) partitioned hypertables, drop_chunks expects TIMESTAMPTZ
+		 * input (the timestamp is extracted from the UUID internally). We need to
+		 * pass the boundary as TIMESTAMPTZ, not as UUID.
+		 */
+		if (IS_UUID_TYPE(boundary_type))
+			boundary_type = TIMESTAMPTZOID;
+	}
 
 	boundary =
 		get_window_boundary(open_dim, config, policy_retention_get_drop_after_int, interval_getter);
