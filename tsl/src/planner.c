@@ -20,6 +20,7 @@
 #include "continuous_aggs/planner.h"
 #include "guc.h"
 #include "hypertable.h"
+#include "nodes/columnar_index_scan/columnar_index_scan.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/gapfill/gapfill.h"
 #include "nodes/skip_scan/skip_scan.h"
@@ -298,6 +299,11 @@ tsl_sort_transform_replace_pathkeys(void *path, List *transformed_pathkeys, List
 void
 tsl_postprocess_plan(PlannedStmt *stmt)
 {
+	if (ts_guc_enable_columnarindexscan)
+	{
+		ts_columnar_index_scan_fix_aggrefs(stmt->planTree);
+	}
+
 	if (ts_guc_enable_vectorized_aggregation)
 	{
 		stmt->planTree = try_insert_vector_agg_node(stmt->planTree, stmt->rtable);

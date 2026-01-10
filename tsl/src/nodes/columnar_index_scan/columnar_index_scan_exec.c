@@ -39,6 +39,7 @@ columnar_index_scan_state_create(CustomScan *cscan)
 		(ColumnarIndexScanState *) newNode(sizeof(ColumnarIndexScanState), T_CustomScanState);
 
 	state->csstate.methods = &columnar_index_scan_state_methods;
+	/* custom_private contains (output_map, remap_info), we only need output_map for execution */
 	state->output_map = linitial(cscan->custom_private);
 
 	return (Node *) state;
