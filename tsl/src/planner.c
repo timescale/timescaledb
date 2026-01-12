@@ -97,7 +97,7 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 static inline bool
 use_columnar_scan(const RelOptInfo *rel, const RangeTblEntry *rte, const Chunk *chunk)
 {
-	if (!ts_guc_enable_transparent_decompression)
+	if (!ts_guc_enable_columnarscan)
 		return false;
 
 	/* Check that the chunk is actually compressed */

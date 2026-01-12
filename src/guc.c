@@ -96,7 +96,6 @@ TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
-TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
@@ -695,17 +694,6 @@ _guc_init(void)
 							NULL,
 							NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_transparent_decompression"),
-							 "Enable transparent decompression",
-							 "Enable transparent decompression when querying hypertable",
-							 &ts_guc_enable_transparent_decompression,
-							 true,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_skipscan"),
 							 "Enable SkipScan",
 							 "Enable SkipScan for DISTINCT queries",
@@ -1097,12 +1085,10 @@ _guc_init(void)
 							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan"),
-							 "Enable columnar-optimized scans for supported access methods",
-							 "A columnar scan replaces sequence scans for columnar-oriented "
-							 "storage "
-							 "and enables storage-specific optimizations like vectorized filters. "
-							 "Disabling columnar scan will make PostgreSQL fall back to regular "
-							 "sequence scans.",
+							 "Enable ColumnarScan for columnar storage",
+							 "Transparently decompress columnar data using ColumnarScan custom "
+							 "node. Disabling columnar scan will ignore data stored in columnar "
+							 "format in queries.",
 							 &ts_guc_enable_columnarscan,
 							 true,
 							 PGC_USERSET,

@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-SET timescaledb.enable_transparent_decompression to OFF;
+SET timescaledb.enable_columnarscan to OFF;
 SET timezone TO 'America/Los_Angeles';
 \set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 \ir include/rand_generator.sql
@@ -52,10 +52,10 @@ SELECT count(*) from foo;
 
 alter table foo set (timescaledb.compress, timescaledb.compress_segmentby = 'a,b', timescaledb.compress_orderby = 'c desc, d asc nulls last');
 --test self-refencing updates
-SET timescaledb.enable_transparent_decompression to ON;
+SET timescaledb.enable_columnarscan to ON;
 update foo set c = 40
 where  a = (SELECT max(a) FROM foo);
-SET timescaledb.enable_transparent_decompression to OFF;
+SET timescaledb.enable_columnarscan to OFF;
 SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id FROM _timescaledb_catalog.hypertable ORDER BY id;
  id |      schema_name      |        table_name        | compressed | compressed_hypertable_id 
 ----+-----------------------+--------------------------+------------+--------------------------
@@ -488,7 +488,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
  t
 
 -- test plans get invalidated when chunks get compressed
-SET timescaledb.enable_transparent_decompression TO ON;
+SET timescaledb.enable_columnarscan TO ON;
 CREATE TABLE plan_inval(time timestamptz, device_id int);
 SELECT create_hypertable('plan_inval','time');
     create_hypertable    
