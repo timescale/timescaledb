@@ -20,13 +20,13 @@ jobs:
       - name: Check for sufficient approvals
         shell: bash --norc --noprofile {0}
         env:
-          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          GH_TOKEN: ${{ secrets.TIMESCALEDB_AUTOMATION_TOKEN_CLASSIC }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -eu
           echo "PR number is $PR_NUMBER"
-          BODY=$(gh pr view $PR_NUMBER -q .body --json body)
-          if ! echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
+          if ! echo "$PR_BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
           then
             # Get the list of modified files in this pull request
             echo "Modified files: "
