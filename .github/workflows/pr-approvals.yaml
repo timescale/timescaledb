@@ -36,7 +36,7 @@ jobs:
             # Get the number of modified files, but exclude those that
             # are workflow files. These require only a single
             # reviewer.
-            files=$(jq '[.files.[].path | select(startswith(".github") | not)] | length' files.json)
+            files=$(jq '[.files[].path | select(startswith(".github") | not)] | length' files.json)
 
             # Get the number of approvals in this pull request. Only count the
             # approvals by the timescale/database-eng team members.
