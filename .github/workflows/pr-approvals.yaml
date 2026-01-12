@@ -18,13 +18,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check for sufficient approvals
-        shell: bash --norc --noprofile {0}
+        shell: bash
         env:
+          # It's not possible to get the list of team members using a user-owned
+          # fine-grained access token on GitHub, so we have to use the classic
+          # token.
           GH_TOKEN: ${{ secrets.TIMESCALEDB_AUTOMATION_TOKEN_CLASSIC }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          set -eu
+          set -xeu
+          gh api -i user
+          gh auth status
           echo "PR number is $PR_NUMBER"
           if ! echo "$PR_BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
           then
