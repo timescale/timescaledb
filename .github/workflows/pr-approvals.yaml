@@ -23,7 +23,8 @@ jobs:
           GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          set -eu
+          set -xeu
+          jq --version
           echo "PR number is $PR_NUMBER"
           BODY=$(gh pr view $PR_NUMBER -q .body --json body)
           if ! echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
