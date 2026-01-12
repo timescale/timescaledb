@@ -28,8 +28,9 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -xeu
-          gh api -i user
           gh auth status
+          gh api -i user
+          gh api -i /orgs/timescale/teams/database-eng/members --paginate
           echo "PR number is $PR_NUMBER"
           if ! echo "$PR_BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
           then
