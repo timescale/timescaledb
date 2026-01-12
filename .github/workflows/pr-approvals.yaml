@@ -23,8 +23,7 @@ jobs:
           GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          set -xeu
-          jq --version
+          set -eu
           echo "PR number is $PR_NUMBER"
           BODY=$(gh pr view $PR_NUMBER -q .body --json body)
           if ! echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
@@ -43,9 +42,9 @@ jobs:
             gh pr view $PR_NUMBER --json latestReviews
             echo "Team Members: "
             gh api /orgs/timescale/teams/database-eng/members --paginate
-            approvals=$(jq -n
-                --slurpfile team_api <(gh api /orgs/timescale/teams/database-eng/members --paginate)
-                --slurpfile reviews_api <(gh pr view $PR_NUMBER --json latestReviews)
+            approvals=$(jq -n \
+                --slurpfile team_api <(gh api /orgs/timescale/teams/database-eng/members --paginate) \
+                --slurpfile reviews_api <(gh pr view $PR_NUMBER --json latestReviews) \
                 ' ($team_api | add | map(.login) ) as $owners
                   | ($reviews_api | add | [ .reviews[]
                     | select(.authorAssociation == "MEMBER" and .state == "APPROVED")
