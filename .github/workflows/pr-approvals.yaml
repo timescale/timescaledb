@@ -36,17 +36,22 @@ jobs:
             # reviewer.
             files=$(gh pr view $PR_NUMBER --json files --jq '[.files.[].path | select(startswith(".github") | not)] | length')
 
-            # Get the number of approvals in this pull request
+            # Get the number of approvals in this pull request. Only count the
+            # approvals by the timescale/database-eng team members.
             echo "Reviews: "
-            gh pr view $PR_NUMBER --json reviews
-            approvals=$(
-                gh pr view $PR_NUMBER --json reviews --jq '
-                    [
-                        .reviews.[]
-                        | select(.authorAssociation == "MEMBER" and .state == "APPROVED")
-                    ] | length
-                  '
-            )
+            gh pr view $PR_NUMBER --json latestReviews
+            echo "Team Members: "
+            gh api /orgs/timescale/teams/database-eng/members --paginate
+            approvals=$(jq -n
+                --slurpfile team_api <(gh api /orgs/timescale/teams/database-eng/members --paginate)
+                --slurpfile reviews_api <(gh pr view $PR_NUMBER --json latestReviews)
+                ' ($team_api | add | map(.login) ) as $owners
+                  | ($reviews_api | add | [ .reviews[]
+                    | select(.authorAssociation == "MEMBER" and .state == "APPROVED")
+                    | .author.login ] ) as $approving
+                  | ($approving - ($approving - $owners))
+                  | length')
+
             echo "approvals: $approvals, files: $files"
             if [[ $approvals -lt 2 && $files -gt 0 ]] ; then
               echo "This pull request requires 2 approvals before merging."
