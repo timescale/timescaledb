@@ -1,7 +1,9 @@
-# All PRs except trivial ones should require 2 approvals, since this a global setting
-# we cannot make this decision from github configuration alone. So we set the required
-# approved in github to 1 and make this check required which will enforce 2 approvals
-# unless overwritten or only CI files are touched.
+# All PRs except trivial ones should require two approvals. In GitHub branch
+# protection rules, there's no way to require different number of reviews based
+# on conditions. Therefore, we only require one approval in the branch
+# protection settings, and this workflow decides whether more reviews are
+# necessary. At the moment, it requires two approval unless only the GitHub
+# configuration (e.g. the CI workflows) is changed.
 name: PR Approval Check
 "on":
   pull_request:
@@ -21,31 +23,27 @@ jobs:
         shell: bash
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_BODY: ${{ github.event.pull_request.body }}
           GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           set -eu
           echo "PR number is $PR_NUMBER"
-          if ! echo "$PR_BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
+          BODY=$(gh pr view $PR_NUMBER -q .body --json body)
+          if ! echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
           then
             # Get the list of modified files in this pull request
             echo "Modified files: "
-            gh pr view $PR_NUMBER --json files
+            gh pr view $PR_NUMBER --json files | tee files.json
             # Get the number of modified files, but exclude those that
             # are workflow files. These require only a single
             # reviewer.
-            files=$(gh pr view $PR_NUMBER --json files --jq '[.files.[].path | select(startswith(".github") | not)] | length')
+            files=$(jq '[.files.[].path | select(startswith(".github") | not)] | length' files.json)
 
             # Get the number of approvals in this pull request. Only count the
             # approvals by the timescale/database-eng team members.
-            echo "Reviews: "
-            gh pr view $PR_NUMBER --json latestReviews
-            echo "Team Members: "
-            gh api /orgs/timescale/teams/database-eng/members --paginate
-            approvals=$(jq -n \
-                --slurpfile team_api <(gh api /orgs/timescale/teams/database-eng/members --paginate) \
-                --slurpfile reviews_api <(gh pr view $PR_NUMBER --json latestReviews) \
-                ' ($team_api | add | map(.login) ) as $owners
+            gh pr view $PR_NUMBER --json latestReviews > reviews_api.json
+            gh api /orgs/timescale/teams/database-eng/members --paginate > team_api.json
+            approvals=$(jq -n --slurpfile team_api team_api.json --slurpfile reviews_api reviews_api.json '
+                  ($team_api | add | map(.login) ) as $owners
                   | ($reviews_api | add | [ .latestReviews[]?
                     | select(.authorAssociation == "MEMBER" and .state == "APPROVED")
                     | .author.login ] ) as $approving
