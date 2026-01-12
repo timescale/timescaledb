@@ -665,7 +665,6 @@ static bool
 recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
 {
 	CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
-	CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
 	bool recompressed = false;
 
 	if (!chunk_settings || !chunk_settings->fd.orderby)
@@ -708,8 +707,7 @@ recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
 		*uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
 		recompressed = true;
 	}
-	/* TODO: optimize cases where settings differ but recompression is still possible */
-	else if (ts_compression_settings_equal_with_defaults(ht_settings, chunk_settings))
+	else
 	{
 		if (!ts_guc_enable_in_memory_recompression)
 		{
