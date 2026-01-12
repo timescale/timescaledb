@@ -126,6 +126,31 @@ SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 DROP TABLE IF EXISTS recomp_truly_unordered CASCADE;
 
+-- Test Case 5: Different compression settings
+CREATE TABLE recomp_comp_settings (time TIMESTAMPTZ NOT NULL, time2 TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.segmentby='device', tsdb.orderby='time');
+INSERT INTO recomp_comp_settings SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, '2025-02-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(50,500) i;
+INSERT INTO recomp_comp_settings SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, '2025-02-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,500) i;
+INSERT INTO recomp_comp_settings SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, '2025-02-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,700) i;
+INSERT INTO recomp_comp_settings SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, '2025-02-01'::timestamptz + (i || ' minute')::interval, 'd2', i::float FROM generate_series(0,700) i;
+
+-- change orderby setting
+ALTER TABLE recomp_comp_settings SET (tsdb.orderby='time2', tsdb.segmentby='device');
+\set TEST_TABLE_NAME 'recomp_comp_settings'
+\set ORDER_BY_CLAUSE ' ORDER BY device, time, time2'
+\ir :RECOMPRESSION_INTEGRITY_CHECK_RELPATH
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
+
+-- change sparse index setting
+ALTER TABLE recomp_comp_settings SET (tsdb.orderby='time', tsdb.index='bloom("time2")');
+\ir :RECOMPRESSION_INTEGRITY_CHECK_RELPATH
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
+
+-- change segmentby setting, will fallback to decompress/compress
+ALTER TABLE recomp_comp_settings SET (tsdb.segmentby='');
+\ir :RECOMPRESSION_INTEGRITY_CHECK_RELPATH
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
+DROP TABLE IF EXISTS recomp_comp_settings CASCADE;
+
 RESET timescaledb.enable_direct_compress_insert;
 RESET timescaledb.enable_direct_compress_insert_sort_batches;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;

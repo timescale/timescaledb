@@ -497,6 +497,269 @@ SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
  _timescaledb_internal._hyper_7_10_chunk | _timescaledb_internal.compress_hyper_8_12_chunk | {device}  | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
 
 DROP TABLE IF EXISTS recomp_truly_unordered CASCADE;
+-- Test Case 5: Different compression settings
+CREATE TABLE recomp_comp_settings (time TIMESTAMPTZ NOT NULL, time2 TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.segmentby='device', tsdb.orderby='time');
+NOTICE:  using column "time" as partitioning column
+INSERT INTO recomp_comp_settings SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, '2025-02-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(50,500) i;
+INSERT INTO recomp_comp_settings SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, '2025-02-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,500) i;
+INSERT INTO recomp_comp_settings SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, '2025-02-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,700) i;
+INSERT INTO recomp_comp_settings SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, '2025-02-01'::timestamptz + (i || ' minute')::interval, 'd2', i::float FROM generate_series(0,700) i;
+-- change orderby setting
+ALTER TABLE recomp_comp_settings SET (tsdb.orderby='time2', tsdb.segmentby='device');
+\set TEST_TABLE_NAME 'recomp_comp_settings'
+\set ORDER_BY_CLAUSE ' ORDER BY device, time, time2'
+\ir :RECOMPRESSION_INTEGRITY_CHECK_RELPATH
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COMPRESS",
+       format('%s/results/%s_results_recompressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_RECOMPRESS"
+\gset
+SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed result" %s %s', :'TEST_RESULTS_COMPRESS', :'TEST_RESULTS_RECOMPRESS') as "DIFF_CMD"
+\gset
+-- Store initial compressed chunk info before recompression
+SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
+        compressed.schema_name || '.' || compressed.table_name AS "OLD_COMPRESSED_CHUNK_NAME",
+        compressed.id AS "OLD_CHUNK_ID"
+FROM _timescaledb_catalog.chunk uncompressed
+JOIN _timescaledb_catalog.chunk compressed
+  ON uncompressed.compressed_chunk_id = compressed.id
+WHERE uncompressed.hypertable_id = (
+          SELECT id
+          FROM _timescaledb_catalog.hypertable
+          WHERE table_name = :'TEST_TABLE_NAME'
+      )
+LIMIT 1 \gset
+\set COMPRESSED_CHUNK_NAME :OLD_COMPRESSED_CHUNK_NAME
+:BATCH_METADATA_QUERY
+ _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+----------------+------------------------------+------------------------------
+            451 | Wed Jan 01 00:50:00 2025 PST | Wed Jan 01 08:20:00 2025 PST
+            501 | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 08:20:00 2025 PST
+            701 | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 11:40:00 2025 PST
+            701 | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 11:40:00 2025 PST
+
+\set QUERY1 'SELECT COUNT(*) FROM ' :OLD_CHUNK_NAME ';'
+\set QUERY2 'SELECT * FROM ' :OLD_CHUNK_NAME :ORDER_BY_CLAUSE ';'
+\o :TEST_RESULTS_COMPRESS
+:QUERY1
+:QUERY2
+\o
+-- Recompress the chunk in-memory
+SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_9_13_chunk
+
+-- Get info for the new compressed chunk
+SELECT compressed.schema_name || '.' || compressed.table_name AS "NEW_COMPRESSED_CHUNK_NAME",
+        compressed.id AS "NEW_CHUNK_ID"
+FROM _timescaledb_catalog.chunk uncompressed
+JOIN _timescaledb_catalog.chunk compressed
+  ON uncompressed.compressed_chunk_id = compressed.id
+WHERE uncompressed.schema_name || '.' || uncompressed.table_name = :'OLD_CHUNK_NAME'
+LIMIT 1 \gset
+\set COMPRESSED_CHUNK_NAME :NEW_COMPRESSED_CHUNK_NAME
+:BATCH_METADATA_QUERY
+ _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+----------------+------------------------------+------------------------------
+           1000 | Sat Feb 01 00:00:00 2025 PST | Sat Feb 01 05:49:00 2025 PST
+            653 | Sat Feb 01 05:50:00 2025 PST | Sat Feb 01 11:40:00 2025 PST
+            701 | Sat Feb 01 00:00:00 2025 PST | Sat Feb 01 11:40:00 2025 PST
+
+-- Get data after in-memory recompression
+\o :TEST_RESULTS_RECOMPRESS
+:QUERY1
+:QUERY2
+\o
+-- Check if a new chunk was created (this will show in the output)
+SELECT
+  CASE WHEN :'NEW_CHUNK_ID' IS NULL OR :'OLD_CHUNK_ID' = :'NEW_CHUNK_ID' THEN
+    'ERROR: Recompression did not create a new chunk'
+  ELSE
+    'SUCCESS: New chunk created, old_chunk_id=' || :'OLD_CHUNK_ID' || ', new_chunk_id=' || :'NEW_CHUNK_ID'
+  END AS recompression_status;
+                     recompression_status                     
+--------------------------------------------------------------
+ SUCCESS: New chunk created, old_chunk_id=14, new_chunk_id=15
+
+-- Compare result using diff to validate integrity of recompressed data
+:DIFF_CMD
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
+                  relid                  |                  compress_relid                  | segmentby |   orderby    | orderby_desc | orderby_nullsfirst |                                                          index                                                          
+-----------------------------------------+--------------------------------------------------+-----------+--------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
+ recomp_comp_settings                    |                                                  | {device}  | {time2,time} | {f,t}        | {f,t}              | 
+ _timescaledb_internal._hyper_9_13_chunk | _timescaledb_internal.compress_hyper_10_15_chunk | {device}  | {time2,time} | {f,t}        | {f,t}              | [{"type": "minmax", "column": "time2", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+
+-- change sparse index setting
+ALTER TABLE recomp_comp_settings SET (tsdb.orderby='time', tsdb.index='bloom("time2")');
+\ir :RECOMPRESSION_INTEGRITY_CHECK_RELPATH
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COMPRESS",
+       format('%s/results/%s_results_recompressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_RECOMPRESS"
+\gset
+SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed result" %s %s', :'TEST_RESULTS_COMPRESS', :'TEST_RESULTS_RECOMPRESS') as "DIFF_CMD"
+\gset
+-- Store initial compressed chunk info before recompression
+SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
+        compressed.schema_name || '.' || compressed.table_name AS "OLD_COMPRESSED_CHUNK_NAME",
+        compressed.id AS "OLD_CHUNK_ID"
+FROM _timescaledb_catalog.chunk uncompressed
+JOIN _timescaledb_catalog.chunk compressed
+  ON uncompressed.compressed_chunk_id = compressed.id
+WHERE uncompressed.hypertable_id = (
+          SELECT id
+          FROM _timescaledb_catalog.hypertable
+          WHERE table_name = :'TEST_TABLE_NAME'
+      )
+LIMIT 1 \gset
+\set COMPRESSED_CHUNK_NAME :OLD_COMPRESSED_CHUNK_NAME
+:BATCH_METADATA_QUERY
+ _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+----------------+------------------------------+------------------------------
+           1000 | Sat Feb 01 00:00:00 2025 PST | Sat Feb 01 05:49:00 2025 PST
+            653 | Sat Feb 01 05:50:00 2025 PST | Sat Feb 01 11:40:00 2025 PST
+            701 | Sat Feb 01 00:00:00 2025 PST | Sat Feb 01 11:40:00 2025 PST
+
+\set QUERY1 'SELECT COUNT(*) FROM ' :OLD_CHUNK_NAME ';'
+\set QUERY2 'SELECT * FROM ' :OLD_CHUNK_NAME :ORDER_BY_CLAUSE ';'
+\o :TEST_RESULTS_COMPRESS
+:QUERY1
+:QUERY2
+\o
+-- Recompress the chunk in-memory
+SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_9_13_chunk
+
+-- Get info for the new compressed chunk
+SELECT compressed.schema_name || '.' || compressed.table_name AS "NEW_COMPRESSED_CHUNK_NAME",
+        compressed.id AS "NEW_CHUNK_ID"
+FROM _timescaledb_catalog.chunk uncompressed
+JOIN _timescaledb_catalog.chunk compressed
+  ON uncompressed.compressed_chunk_id = compressed.id
+WHERE uncompressed.schema_name || '.' || uncompressed.table_name = :'OLD_CHUNK_NAME'
+LIMIT 1 \gset
+\set COMPRESSED_CHUNK_NAME :NEW_COMPRESSED_CHUNK_NAME
+:BATCH_METADATA_QUERY
+ _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+----------------+------------------------------+------------------------------
+           1000 | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 05:49:00 2025 PST
+            653 | Wed Jan 01 05:50:00 2025 PST | Wed Jan 01 11:40:00 2025 PST
+            701 | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 11:40:00 2025 PST
+
+-- Get data after in-memory recompression
+\o :TEST_RESULTS_RECOMPRESS
+:QUERY1
+:QUERY2
+\o
+-- Check if a new chunk was created (this will show in the output)
+SELECT
+  CASE WHEN :'NEW_CHUNK_ID' IS NULL OR :'OLD_CHUNK_ID' = :'NEW_CHUNK_ID' THEN
+    'ERROR: Recompression did not create a new chunk'
+  ELSE
+    'SUCCESS: New chunk created, old_chunk_id=' || :'OLD_CHUNK_ID' || ', new_chunk_id=' || :'NEW_CHUNK_ID'
+  END AS recompression_status;
+                     recompression_status                     
+--------------------------------------------------------------
+ SUCCESS: New chunk created, old_chunk_id=15, new_chunk_id=16
+
+-- Compare result using diff to validate integrity of recompressed data
+:DIFF_CMD
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
+                  relid                  |                  compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                         index                                                         
+-----------------------------------------+--------------------------------------------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------
+ recomp_comp_settings                    |                                                  | {device}  | {time}  | {f}          | {f}                | [{"type": "bloom", "column": "time2", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_9_13_chunk | _timescaledb_internal.compress_hyper_10_16_chunk | {device}  | {time}  | {f}          | {f}                | [{"type": "bloom", "column": "time2", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+
+-- change segmentby setting, will fallback to decompress/compress
+ALTER TABLE recomp_comp_settings SET (tsdb.segmentby='');
+\ir :RECOMPRESSION_INTEGRITY_CHECK_RELPATH
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SELECT format('%s/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COMPRESS",
+       format('%s/results/%s_results_recompressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_RECOMPRESS"
+\gset
+SELECT format('\! diff -u  --label "Compressed result" --label "Recompressed result" %s %s', :'TEST_RESULTS_COMPRESS', :'TEST_RESULTS_RECOMPRESS') as "DIFF_CMD"
+\gset
+-- Store initial compressed chunk info before recompression
+SELECT uncompressed.schema_name || '.' || uncompressed.table_name AS "OLD_CHUNK_NAME",
+        compressed.schema_name || '.' || compressed.table_name AS "OLD_COMPRESSED_CHUNK_NAME",
+        compressed.id AS "OLD_CHUNK_ID"
+FROM _timescaledb_catalog.chunk uncompressed
+JOIN _timescaledb_catalog.chunk compressed
+  ON uncompressed.compressed_chunk_id = compressed.id
+WHERE uncompressed.hypertable_id = (
+          SELECT id
+          FROM _timescaledb_catalog.hypertable
+          WHERE table_name = :'TEST_TABLE_NAME'
+      )
+LIMIT 1 \gset
+\set COMPRESSED_CHUNK_NAME :OLD_COMPRESSED_CHUNK_NAME
+:BATCH_METADATA_QUERY
+ _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+----------------+------------------------------+------------------------------
+           1000 | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 05:49:00 2025 PST
+            653 | Wed Jan 01 05:50:00 2025 PST | Wed Jan 01 11:40:00 2025 PST
+            701 | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 11:40:00 2025 PST
+
+\set QUERY1 'SELECT COUNT(*) FROM ' :OLD_CHUNK_NAME ';'
+\set QUERY2 'SELECT * FROM ' :OLD_CHUNK_NAME :ORDER_BY_CLAUSE ';'
+\o :TEST_RESULTS_COMPRESS
+:QUERY1
+:QUERY2
+\o
+-- Recompress the chunk in-memory
+SELECT compress_chunk(:'OLD_CHUNK_NAME', recompress := true);
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_9_13_chunk
+
+-- Get info for the new compressed chunk
+SELECT compressed.schema_name || '.' || compressed.table_name AS "NEW_COMPRESSED_CHUNK_NAME",
+        compressed.id AS "NEW_CHUNK_ID"
+FROM _timescaledb_catalog.chunk uncompressed
+JOIN _timescaledb_catalog.chunk compressed
+  ON uncompressed.compressed_chunk_id = compressed.id
+WHERE uncompressed.schema_name || '.' || uncompressed.table_name = :'OLD_CHUNK_NAME'
+LIMIT 1 \gset
+\set COMPRESSED_CHUNK_NAME :NEW_COMPRESSED_CHUNK_NAME
+:BATCH_METADATA_QUERY
+ _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+----------------+------------------------------+------------------------------
+           1000 | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 04:22:00 2025 PST
+           1000 | Wed Jan 01 04:22:00 2025 PST | Wed Jan 01 08:43:00 2025 PST
+            354 | Wed Jan 01 08:44:00 2025 PST | Wed Jan 01 11:40:00 2025 PST
+
+-- Get data after in-memory recompression
+\o :TEST_RESULTS_RECOMPRESS
+:QUERY1
+:QUERY2
+\o
+-- Check if a new chunk was created (this will show in the output)
+SELECT
+  CASE WHEN :'NEW_CHUNK_ID' IS NULL OR :'OLD_CHUNK_ID' = :'NEW_CHUNK_ID' THEN
+    'ERROR: Recompression did not create a new chunk'
+  ELSE
+    'SUCCESS: New chunk created, old_chunk_id=' || :'OLD_CHUNK_ID' || ', new_chunk_id=' || :'NEW_CHUNK_ID'
+  END AS recompression_status;
+                     recompression_status                     
+--------------------------------------------------------------
+ SUCCESS: New chunk created, old_chunk_id=16, new_chunk_id=17
+
+-- Compare result using diff to validate integrity of recompressed data
+:DIFF_CMD
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
+                  relid                  |                  compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                         index                                                         
+-----------------------------------------+--------------------------------------------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------
+ recomp_comp_settings                    |                                                  | {}        | {time}  | {f}          | {f}                | [{"type": "bloom", "column": "time2", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_9_13_chunk | _timescaledb_internal.compress_hyper_10_17_chunk | {}        | {time}  | {f}          | {f}                | [{"type": "bloom", "column": "time2", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+
+DROP TABLE IF EXISTS recomp_comp_settings CASCADE;
 RESET timescaledb.enable_direct_compress_insert;
 RESET timescaledb.enable_direct_compress_insert_sort_batches;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
