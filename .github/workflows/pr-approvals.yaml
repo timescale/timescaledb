@@ -20,7 +20,7 @@ jobs:
       - name: Check for sufficient approvals
         shell: bash --norc --noprofile {0}
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -eu
