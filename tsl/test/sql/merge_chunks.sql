@@ -206,14 +206,12 @@ select count(*) as num_orphaned_slices from orphaned_slices;
 select sum(temp) from mergeme;
 
 -- Test that indexes work after merge
-set timescaledb.enable_columnarscan = false;
 set enable_seqscan = false;
 analyze mergeme;
 explain (buffers off, costs off)
 select * from mergeme where device = 1;
 select * from mergeme where device = 1;
 select * from _timescaledb_internal._hyper_1_1_chunk where device = 1;
-reset timescaledb.enable_columnarscan;
 reset enable_seqscan;
 rollback;
 
