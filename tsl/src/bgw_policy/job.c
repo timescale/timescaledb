@@ -680,7 +680,7 @@ policy_process_hyper_inval_execute(int32 job_id, Jsonb *config)
 	int32 hypertable_id = policy_data.hypertable->fd.id;
 
 	/* We serialized on the invalidation threshold, so we get and lock it. */
-	invalidation_threshold_get(hypertable_id, dimtype);
+	invalidation_threshold_get(hypertable_id);
 	invalidation_process_hypertable_log(hypertable_id, dimtype);
 	ts_cache_release(&policy_data.hcache);
 
