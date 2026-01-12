@@ -709,7 +709,7 @@ recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
 		recompressed = true;
 	}
 	/* TODO: optimize cases where settings differ but recompression is still possible */
-	else if (ts_compression_settings_equal_with_defaults(ht_settings, chunk_settings))
+	else if (recompress && ts_compression_settings_equal_with_defaults(ht_settings, chunk_settings))
 	{
 		if (!ts_guc_enable_in_memory_recompression)
 		{
@@ -830,7 +830,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 	{
 		uncompressed_chunk_id = compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
 	}
-	else if (recompress || ts_chunk_needs_recompression(chunk))
+	else if (recompress || ts_chunk_is_partial(chunk))
 	{
 		/* Try in-memory recompression first and then fall back to decompress/recompress */
 		bool recompressed = recompress_chunk_impl(chunk, &uncompressed_chunk_id, recompress);

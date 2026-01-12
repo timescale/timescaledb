@@ -126,6 +126,19 @@ SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
 DROP TABLE IF EXISTS recomp_truly_unordered CASCADE;
 
+-- Test Case 5: Should not recompress, unless recompress flag is set to true
+DROP TABLE IF EXISTS recomp_without_flag CASCADE;
+CREATE TABLE recomp_without_flag (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.segmentby='device', tsdb.orderby='time');
+INSERT INTO recomp_without_flag SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(50,200) i;
+INSERT INTO recomp_without_flag SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,100) i;
+SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('recomp_without_flag') chunk;
+SELECT compress_chunk(ch) FROM show_chunks('recomp_without_flag') ch; -- should be a no-op
+-- status should be compressed, unordered
+SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('recomp_without_flag') chunk;
+SELECT compress_chunk(ch, recompress => true) FROM show_chunks('recomp_without_flag') ch;
+-- status should be compressed
+SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('recomp_without_flag') chunk;
+DROP TABLE IF EXISTS recomp_without_flag CASCADE;
 RESET timescaledb.enable_direct_compress_insert;
 RESET timescaledb.enable_direct_compress_insert_sort_batches;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
