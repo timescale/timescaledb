@@ -232,17 +232,21 @@ SELECT ht.schema_name AS hypertable_schema,
   rank() OVER (PARTITION BY hypertable_id ORDER BY dim.id) AS dimension_number,
   dim.column_name,
   dim.column_type,
-  CASE WHEN dim.interval_length IS NULL THEN
+  CASE WHEN dim.interval_length IS NULL AND dim.interval IS NULL THEN
     'Space'
   ELSE
     'Time'
   END AS dimension_type,
-  CASE WHEN dim.interval_length IS NOT NULL THEN
-    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
+  CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
+    CASE WHEN dim.interval IS NOT NULL THEN
+      dim.interval
+    WHEN dim.interval_length IS NOT NULL THEN
       _timescaledb_functions.to_interval(dim.interval_length)
     ELSE
       NULL
     END
+  ELSE
+    NULL
   END AS time_interval,
   CASE WHEN dim.interval_length IS NOT NULL THEN
     CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN

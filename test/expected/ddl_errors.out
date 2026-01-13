@@ -107,7 +107,7 @@ ERROR:  hypertables do not support rules
 \set ON_ERROR_STOP 1
 \set ON_ERROR_STOP 0
 SELECT add_dimension(NULL,NULL);
-ERROR:  hypertable cannot be NULL
+ERROR:  column_name cannot be NULL
 \set ON_ERROR_STOP 1
 \set ON_ERROR_STOP 0
 SELECT attach_tablespace(NULL,NULL);

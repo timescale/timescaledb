@@ -16,7 +16,7 @@ static Const *check_time_bucket_argument(Node *arg, char *position, bool process
 static void caggtimebucketinfo_init(ContinuousAggTimeBucketInfo *src, int32 hypertable_id,
 									Oid hypertable_oid, AttrNumber hypertable_partition_colno,
 									Oid hypertable_partition_coltype,
-									int64 hypertable_partition_col_interval,
+									const ChunkInterval *chunk_interval,
 									int32 parent_mat_hypertable_id);
 static void process_additional_timebucket_parameter(ContinuousAggBucketFunction *bf, Const *arg,
 													bool *custom_origin);
@@ -65,7 +65,7 @@ check_time_bucket_argument(Node *arg, char *position, bool process_checks)
 static void
 caggtimebucketinfo_init(ContinuousAggTimeBucketInfo *src, int32 hypertable_id, Oid hypertable_oid,
 						AttrNumber hypertable_partition_colno, Oid hypertable_partition_coltype,
-						int64 hypertable_partition_col_interval, int32 parent_mat_hypertable_id)
+						const ChunkInterval *chunk_interval, int32 parent_mat_hypertable_id)
 {
 	src->htid = hypertable_id;
 	src->parent_mat_hypertable_id = parent_mat_hypertable_id;
@@ -73,7 +73,7 @@ caggtimebucketinfo_init(ContinuousAggTimeBucketInfo *src, int32 hypertable_id, O
 	src->htoidparent = InvalidOid;
 	src->htpartcolno = hypertable_partition_colno;
 	src->htpartcoltype = hypertable_partition_coltype;
-	src->htpartcol_interval_len = hypertable_partition_col_interval;
+	src->htpartcol_interval = *chunk_interval;
 
 	/* Initialize bucket function data structure */
 	src->bf = palloc0(sizeof(ContinuousAggBucketFunction));
@@ -888,7 +888,7 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 							ht->main_table_relid,
 							part_dimension->column_attno,
 							part_dimension->fd.column_type,
-							part_dimension->fd.interval_length,
+							&part_dimension->chunk_interval,
 							parent_mat_hypertable_id);
 
 	if (is_hierarchical)
@@ -900,7 +900,7 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 								ht_parent->main_table_relid,
 								part_dimension_parent->column_attno,
 								part_dimension_parent->fd.column_type,
-								part_dimension_parent->fd.interval_length,
+								&part_dimension_parent->chunk_interval,
 								INVALID_HYPERTABLE_ID);
 	}
 

@@ -54,7 +54,6 @@ CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     migrate_data            BOOLEAN = FALSE
 ) RETURNS TABLE(hypertable_id INT, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create_general' LANGUAGE C VOLATILE;
 
-
 -- Set adaptive chunking. To disable, set chunk_target_size => 'off'.
 CREATE OR REPLACE FUNCTION @extschema@.set_adaptive_chunking(
     hypertable                     REGCLASS,
@@ -130,7 +129,6 @@ LANGUAGE C STABLE PARALLEL SAFE;
 -- chunk_time_interval - Size of intervals for time dimensions (can be integral or INTERVAL)
 -- partitioning_func - Function used to partition the column
 -- if_not_exists - If set, and the dimension already exists, generate a notice instead of an error
--- origin - The origin for chunk alignment (optional)
 CREATE OR REPLACE FUNCTION @extschema@.add_dimension(
     hypertable              REGCLASS,
     column_name             NAME,

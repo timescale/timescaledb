@@ -48,6 +48,7 @@
 #include <parser/parse_relation.h>
 #include <parser/parse_type.h>
 #include <parser/parsetree.h>
+#include <postgres_ext.h>
 #include <replication/logical.h>
 #include <replication/slot.h>
 #include <storage/lwlocknames.h>
@@ -93,7 +94,7 @@ static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_func
 												 const char *offset, const char *timezone,
 												 const bool bucket_fixed_width);
 static void cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartcolname,
-								   int64 mat_tbltimecol_interval);
+								   const ChunkInterval *chunk_interval);
 static void mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matcolinfo,
 												  Hypertable *ht);
 static ObjectAddress create_view_for_query(Query *selquery, RangeVar *viewrel);
@@ -119,7 +120,7 @@ makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
 static int32 mattablecolumninfo_create_materialization_table(
 	MaterializationHypertableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
 	ContinuousAggTimeBucketInfo *bucket_info, bool create_addl_index, char *tablespacename,
-	char *table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress);
+	char *table_access_method, const ChunkInterval *matpartcol_interval, ObjectAddress *mataddress);
 static Query *
 mattablecolumninfo_get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo,
 											Query *userview_query);
@@ -267,11 +268,11 @@ create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const 
 /*
  * Create hypertable for the table referred by mat_tbloid
  * matpartcolname - partition column for hypertable
- * timecol_interval - is the partitioning column's interval for hypertable partition
+ * chunk_interval - chunk interval for hypertable partition (preserves calendar vs fixed type)
  */
 static void
 cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartcolname,
-					   int64 mat_tbltimecol_interval)
+					   const ChunkInterval *chunk_interval)
 {
 	bool created;
 	int flags = 0;
@@ -281,12 +282,13 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 	namestrcpy(&mat_tbltimecol, matpartcolname);
 	time_dim_info = ts_dimension_info_create_open(mat_tbloid,
 												  &mat_tbltimecol,
-												  Int64GetDatum(mat_tbltimecol_interval),
-												  INT8OID,
+												  chunk_interval_get_datum(chunk_interval),
+												  chunk_interval->type,
 												  InvalidOid,
-												  (Datum) 0,  /* origin */
-												  InvalidOid, /* origin_type */
-												  false);	  /* has_origin */
+												  chunk_interval_get_origin(chunk_interval),
+												  chunk_interval->origin_type,
+												  chunk_interval->has_origin);
+
 	/*
 	 * Ideally would like to change/expand the API so setting the column name manually is
 	 * unnecessary, but not high priority.
@@ -383,10 +385,13 @@ mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matco
  *        materialization table
  */
 static int32
-mattablecolumninfo_create_materialization_table(
-	MaterializationHypertableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
-	ContinuousAggTimeBucketInfo *bucket_info, bool create_addl_index, char *const tablespacename,
-	char *const table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress)
+mattablecolumninfo_create_materialization_table(MaterializationHypertableColumnInfo *matcolinfo,
+												int32 hypertable_id, RangeVar *mat_rel,
+												ContinuousAggTimeBucketInfo *bucket_info,
+												bool create_addl_index, char *const tablespacename,
+												char *const table_access_method,
+												const ChunkInterval *matpartcol_interval,
+												ObjectAddress *mataddress)
 {
 	Oid uid, saved_uid;
 	int sec_ctx;
@@ -623,19 +628,45 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	bool materialized_only =
 		DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
 
-	int64 matpartcol_interval = 0;
+	/*
+	 * Build the chunk interval for the materialization hypertable.
+	 *
+	 * Start with a copy of the source hypertable's chunk interval. The origin
+	 * is inherited to keep chunk boundaries aligned. Note that changes to the
+	 * source hypertable's origin after CAgg creation are NOT propagated to the
+	 * materialization hypertable - each stores its origin independently.
+	 * This could be enhanced in the future to cascade origin changes.
+	 */
+	/*
+	 * Copy the source hypertable's chunk interval. Simple struct assignment works
+	 * because ChunkInterval stores values directly in unions.
+	 */
+	ChunkInterval matpartcol_interval = bucket_info->htpartcol_interval;
+
 	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
 	{
-		matpartcol_interval = interval_to_usec(DatumGetIntervalP(
+		/*
+		 * User specified an explicit chunk_time_interval - use it as a fixed
+		 * microsecond interval (not calendar-based), but keep the origin.
+		 */
+		matpartcol_interval.type = INT8OID;
+		matpartcol_interval.integer_interval = interval_to_usec(DatumGetIntervalP(
 			with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].parsed));
 	}
-	else
+	else if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
 	{
-		matpartcol_interval = bucket_info->htpartcol_interval_len;
-
-		/* Apply the factor just for non-Hierachical CAggs */
-		if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
-			matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;
+		/* Apply the interval factor for non-Hierarchical CAggs */
+		if (matpartcol_interval.type == INTERVALOID)
+		{
+			Interval *interval = &matpartcol_interval.interval;
+			matpartcol_interval.interval.month = interval->month * MATPARTCOL_INTERVAL_FACTOR;
+			matpartcol_interval.interval.day = interval->day * MATPARTCOL_INTERVAL_FACTOR;
+			matpartcol_interval.interval.time = interval->time * MATPARTCOL_INTERVAL_FACTOR;
+		}
+		else
+		{
+			matpartcol_interval.integer_interval *= MATPARTCOL_INTERVAL_FACTOR;
+		}
 	}
 
 	/*
@@ -672,7 +703,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 													is_create_mattbl_index,
 													create_stmt->into->tableSpaceName,
 													create_stmt->into->accessMethod,
-													matpartcol_interval,
+													&matpartcol_interval,
 													&mataddress);
 
 	/*

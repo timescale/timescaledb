@@ -148,6 +148,9 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 		if (ts_type_is_int8_binary_compatible(type_oid))
 			return DatumGetInt64(time_val);
 
+		/* Check for InvalidOid first to provide a better error message */
+		Ensure(OidIsValid(type_oid),
+			   "ts_time_value_to_internal called with invalid type (InvalidOid)");
 		elog(ERROR, "unknown time type \"%s\"", format_type_be(type_oid));
 	}
 
@@ -379,6 +382,9 @@ ts_internal_to_time_value(int64 value, Oid type)
 		default:
 			if (ts_type_is_int8_binary_compatible(type))
 				return Int64GetDatum(value);
+			/* Check for InvalidOid first to provide a better error message */
+			Ensure(OidIsValid(type),
+				   "ts_internal_to_time_value called with invalid type (InvalidOid)");
 			elog(ERROR,
 				 "unknown time type \"%s\" in ts_internal_to_time_value",
 				 format_type_be(type));

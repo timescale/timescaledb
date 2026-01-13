@@ -1561,8 +1561,7 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 									  open_partitioning_func, /* partitioning func */
 									  origin,				  /* origin */
 									  origin_type,			  /* origin_type */
-									  !origin_isnull		  /* has_origin */
-		);
+									  !origin_isnull /* has_origin */);
 
 	DimensionInfo *closed_dim_info = NULL;
 	if (closed_dim_name)
@@ -1642,7 +1641,10 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 	/*
 	 * Fill in the rest of the info.
 	 */
+	AttrNumber colattr = get_attnum(table_relid, NameStr(dim_info->colname));
 	dim_info->table_relid = table_relid;
+	dim_info->coltype = get_atttype(table_relid, colattr);
+	ts_dimension_info_set_defaults(dim_info);
 
 	return ts_hypertable_create_internal(fcinfo,
 										 table_relid,
@@ -2154,7 +2156,6 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 	ts_dimension_update(hypertable,
 						&open_dim->fd.column_name,
 						DIMENSION_TYPE_OPEN,
-						NULL,
 						NULL,
 						NULL,
 						&now_func_oid);
