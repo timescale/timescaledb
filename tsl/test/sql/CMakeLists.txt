@@ -8,6 +8,7 @@ set(TEST_FILES
     bgw_policy.sql
     bgw_security.sql
     cagg_deprecated_bucket_ng.sql
+    cagg_direct_compress.sql
     cagg_errors.sql
     cagg_invalidation.sql
     cagg_policy.sql
@@ -17,9 +18,7 @@ set(TEST_FILES
     cagg_refresh_using_merge.sql
     cagg_utils.sql
     cagg_watermark.sql
-    chunk_column_stats.sql
     columnar_scan_cost.sql
-    columnar_index_scan.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
@@ -27,6 +26,7 @@ set(TEST_FILES
     compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
+    compress_explain.sql
     compress_float8_corrupt.sql
     compress_qualpushdown_saop.sql
     compress_sort_transform.sql
@@ -78,6 +78,7 @@ set(TEST_TEMPLATES
     cagg_query_using_merge.sql.in
     cagg_union_view.sql.in
     cagg_permissions.sql.in
+    columnar_index_scan.sql.in
     compress_bloom_sparse.sql.in
     compression_permissions.sql.in
     foreign_keys_test.sql.in
@@ -111,6 +112,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
     cagg_policy_incremental.sql
+    chunk_column_stats.sql
     compress_bgw_reorder_drop_chunks.sql
     compress_bloom_legacy_v1.sql
     chunk_api.sql
@@ -152,6 +154,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     information_view_chunk_count.sql
     read_only.sql
     tsl_tables.sql
+    uuid_policies.sql
     license_tsl.sql
     merge_chunks.sql
     fixed_schedules.sql
@@ -164,7 +167,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_agg_text.sql
     vector_agg_memory.sql
     vector_agg_segmentby.sql
-    vector_agg_uuid.sql)
+    vector_agg_uuid.sql
+    vacuum.sql)
 
   list(
     APPEND

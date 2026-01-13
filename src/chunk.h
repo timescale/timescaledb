@@ -179,6 +179,7 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_by_id_with_slice_lock(int32 id, LOCKMODE 
 
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_id(int32 id, bool fail_if_not_found);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid_locked(Oid relid, LOCKMODE lockmode,
+													   const ScanTupLock *slice_lock,
 													   bool fail_if_not_found);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, bool fail_if_not_found);
 extern TSDLLEXPORT void ts_chunk_free(Chunk *chunk);

@@ -20,6 +20,7 @@
 #include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <planner/planner.h>
+#include <storage/lockdefs.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
@@ -627,6 +628,8 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 	{
 		info->parent_relids = find_childrel_parents(root, chunk_rel);
 	}
+
+	info->chunk_status = chunk->fd.status;
 
 	return info;
 }
@@ -2249,8 +2252,14 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	/*
 	 * Add the compressed chunk to the baserel cache. Note that it belongs to
 	 * a different hypertable, the internal compression table.
+	 *
+	 * Ensure we do not grab a slice lock because that will assign a transaction ID that could
+	 * unnecessarily block other operations.
 	 */
-	const Chunk *compressed_chunk = ts_chunk_get_by_relid(info->settings->fd.compress_relid, true);
+	const Chunk *compressed_chunk = ts_chunk_get_by_relid_locked(info->settings->fd.compress_relid,
+																 AccessShareLock,
+																 NULL,
+																 true);
 	ts_add_baserel_cache_entry_for_chunk(info->settings->fd.compress_relid,
 										 ts_planner_get_hypertable(compressed_chunk
 																	   ->hypertable_relid,
@@ -2386,6 +2395,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 
 	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->reverse = false;
+	path->chunk_status = compression_info->chunk_status;
 	path->required_compressed_pathkeys = NIL;
 	cost_columnar_scan(root, compression_info, &path->custom_path.path, compressed_path);
 

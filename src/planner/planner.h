@@ -15,6 +15,7 @@
 #include "export.h"
 #include "guc.h"
 #include "hypertable.h"
+#include <storage/lockdefs.h>
 
 /*
  * Constraints created during planning to improve chunk exclusion
@@ -133,8 +134,17 @@ ts_planner_chunk_fetch(const PlannerInfo *root, RelOptInfo *rel)
 	if (NULL == rel_private->cached_chunk_struct)
 	{
 		RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+
+		/*
+		 * Get the chunk and cache it. Do not use a slice tuple lock because
+		 * that will assign a transaction ID, which is not necessary for
+		 * queries.
+		 */
 		rel_private->cached_chunk_struct =
-			ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
+			ts_chunk_get_by_relid_locked(rte->relid,
+										 AccessShareLock,
+										 NULL,
+										 /* fail_if_not_found = */ true);
 	}
 
 	return rel_private->cached_chunk_struct;

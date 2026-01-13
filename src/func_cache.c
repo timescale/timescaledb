@@ -583,9 +583,10 @@ proc_get_oid(HeapTuple tuple)
 	return form->oid;
 }
 
-static void
-initialize_func_info()
+void
+ts_func_cache_init()
 {
+	Ensure(!func_hash, "function cache already initialized");
 	HASHCTL hashctl = {
 		.keysize = sizeof(Oid),
 		.entrysize = sizeof(FuncEntry),
@@ -660,8 +661,8 @@ ts_func_cache_get(Oid funcid)
 {
 	FuncEntry *entry;
 
-	if (NULL == func_hash)
-		initialize_func_info();
+	if (!func_hash)
+		ts_func_cache_init();
 
 	entry = hash_search(func_hash, &funcid, HASH_FIND, NULL);
 

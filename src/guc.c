@@ -67,9 +67,10 @@ bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
 int ts_guc_direct_compress_copy_tuple_sort_limit = 100000;
-bool ts_guc_enable_direct_compress_insert = false;
+TSDLLEXPORT bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
-bool ts_guc_enable_direct_compress_insert_client_sorted = false;
+TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted = false;
+TSDLLEXPORT bool ts_guc_enable_direct_compress_on_cagg_refresh = false;
 int ts_guc_direct_compress_insert_tuple_sort_limit = 10000;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
@@ -126,7 +127,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
-TSDLLEXPORT bool ts_guc_enable_columnarindexscan = false;
+TSDLLEXPORT bool ts_guc_enable_columnarindexscan = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 #if PG16_GE
@@ -392,6 +393,20 @@ ts_guc_default_orderby_fn_oid()
 	return get_orderby_func(ts_guc_default_orderby_fn);
 }
 
+/*
+ * Assign hook for chunk skipping.
+ *
+ * When chunk skipping is enabled, we need to clear the hypertable cache.
+ * Otherwise there might be cached entries without a valid range_space entry,
+ * which could lead to column stats not being created.
+ */
+static void
+chunk_skipping_assign_hook(bool newval, void *extra)
+{
+	if (newval)
+		ts_hypertable_cache_invalidate_callback();
+}
+
 void
 _guc_init(void)
 {
@@ -482,6 +497,18 @@ _guc_init(void)
 							 "Correct handling of data sorting by the user is required for this "
 							 "option.",
 							 &ts_guc_enable_direct_compress_insert_client_sorted,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_on_cagg_refresh"),
+							 "Enable direct compress on Continuous Aggregate refresh",
+							 "Enable experimental support for direct compression during Continuous "
+							 "Aggregate refresh",
+							 &ts_guc_enable_direct_compress_on_cagg_refresh,
 							 false,
 							 PGC_USERSET,
 							 0,
@@ -851,7 +878,7 @@ _guc_init(void)
 							 PGC_USERSET,
 							 0,
 							 NULL,
-							 NULL,
+							 chunk_skipping_assign_hook,
 							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_segmentwise_recompression"),
@@ -1089,7 +1116,7 @@ _guc_init(void)
 							 "Enable returning results directly from compression "
 							 "metadata without decompression",
 							 &ts_guc_enable_columnarindexscan,
-							 false,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,

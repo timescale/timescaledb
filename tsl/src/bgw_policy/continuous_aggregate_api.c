@@ -71,7 +71,7 @@ get_time_from_interval(const Dimension *dim, Datum interval, Oid type)
 	}
 	else if (type == INTERVALOID)
 	{
-		Datum res = subtract_interval_from_now(DatumGetIntervalP(interval), partitioning_type);
+		Datum res = ts_subtract_interval_from_now(DatumGetIntervalP(interval), partitioning_type);
 		return ts_time_value_to_internal(res, partitioning_type);
 	}
 	else

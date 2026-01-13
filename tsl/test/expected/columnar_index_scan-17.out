@@ -58,6 +58,32 @@ SELECT sensor, min(time) FROM metrics GROUP BY sensor;
  C      | Wed Jan 01 00:30:00 2025 PST
  A      | Wed Jan 01 00:00:00 2025 PST
 
+:PREFIX SELECT device, first(time, time) FROM metrics GROUP BY device;
+--- QUERY PLAN ---
+ HashAggregate
+   Group Key: _hyper_1_1_chunk.device
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+         ->  Seq Scan on compress_hyper_2_2_chunk
+
+SELECT device, first(time, time) FROM metrics GROUP BY device;
+ device |            first             
+--------+------------------------------
+ d1     | Wed Jan 01 00:00:00 2025 PST
+ d2     | Wed Jan 01 00:00:00 2025 PST
+
+:PREFIX SELECT device, last(time, time) FROM metrics GROUP BY device;
+--- QUERY PLAN ---
+ HashAggregate
+   Group Key: _hyper_1_1_chunk.device
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+         ->  Seq Scan on compress_hyper_2_2_chunk
+
+SELECT device, last(time, time) FROM metrics GROUP BY device;
+ device |             last             
+--------+------------------------------
+ d1     | Wed Jan 01 02:30:00 2025 PST
+ d2     | Wed Jan 01 02:30:00 2025 PST
+
 -- explicit index columns dont prevent optimization
 :PREFIX SELECT sensor, min(value) FROM metrics GROUP BY sensor;
 --- QUERY PLAN ---
@@ -92,10 +118,12 @@ SELECT device, sensor, max(time) FROM metrics GROUP BY device,sensor;
 -- order by does currently prevent optimization
 :PREFIX SELECT device, max(time) FROM metrics GROUP BY device ORDER BY device;
 --- QUERY PLAN ---
- GroupAggregate
-   Group Key: _hyper_1_1_chunk.device
-   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+ Sort
+   Sort Key: _hyper_1_1_chunk.device
+   ->  HashAggregate
+         Group Key: _hyper_1_1_chunk.device
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Seq Scan on compress_hyper_2_2_chunk
 
 SELECT device, max(time) FROM metrics GROUP BY device ORDER BY device;
  device |             max              
@@ -191,9 +219,13 @@ SELECT device, max(time) FROM metrics GROUP BY device,value;
 -- no group by prevents optimization
 :PREFIX SELECT max(time) FROM metrics;
 --- QUERY PLAN ---
- Aggregate
-   ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-         ->  Seq Scan on compress_hyper_2_2_chunk
+ Result
+   InitPlan 1
+     ->  Limit
+           ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                 ->  Sort
+                       Sort Key: compress_hyper_2_2_chunk._ts_meta_max_1 DESC
+                       ->  Seq Scan on compress_hyper_2_2_chunk
 
 SELECT max(time) FROM metrics;
              max              

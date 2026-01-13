@@ -987,9 +987,64 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 
 typedef struct VacuumCtx
 {
+	bool is_vacuumfull;
 	VacuumRelation *ht_vacuum_rel;
 	List *chunk_rels;
+	List *rebuild_columnstore_chunk_oids;
 } VacuumCtx;
+
+static bool
+chunk_has_missing_attrs(Chunk *chunk)
+{
+	bool has_missing_attrs = false;
+	Relation ht_rel = relation_open(chunk->hypertable_relid, AccessShareLock);
+	Relation chunk_rel = relation_open(chunk->table_id, AccessShareLock);
+	TupleDesc tupdesc = RelationGetDescr(chunk_rel);
+
+	for (int i = 0; i < tupdesc->natts; i++)
+	{
+		Form_pg_attribute att = TupleDescAttr(tupdesc, i);
+
+		if (att->atthasmissing)
+		{
+			has_missing_attrs = true;
+			break;
+		}
+	}
+
+	relation_close(chunk_rel, AccessShareLock);
+	relation_close(ht_rel, AccessShareLock);
+	return has_missing_attrs;
+}
+
+static void
+register_chunk_for_rebuild_if_needed(Oid chunk_relid, VacuumCtx *ctx)
+{
+	/* Only VACUUM FULL does a complete table rewrite */
+	if (!ctx->is_vacuumfull)
+		return;
+
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, false);
+	if (!chunk)
+		return;
+
+	/*
+	 * VACUUM FULL will materialize missing attributes. Propagate
+	 * these changes to columnstore data by rebuilding it.
+	 */
+	if (chunk_has_missing_attrs(chunk))
+	{
+		/*
+		 * Frozen chunks are not allowed to add columns with defaults
+		 */
+		Ensure(!ts_chunk_is_frozen(chunk),
+			   "chunk \"%s.%s\" was altered unsafely after it was frozen",
+			   NameStr(chunk->fd.schema_name),
+			   NameStr(chunk->fd.table_name));
+		ctx->rebuild_columnstore_chunk_oids =
+			lappend_oid(ctx->rebuild_columnstore_chunk_oids, chunk_relid);
+	}
+}
 
 /* Adds a chunk to the list of tables to be vacuumed */
 static void
@@ -1018,6 +1073,8 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 			ctx->chunk_rels = lappend(ctx->chunk_rels, chunk_vacuum_rel);
 		}
 	}
+
+	register_chunk_for_rebuild_if_needed(chunk_relid, ctx);
 }
 
 /*
@@ -1026,7 +1083,7 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
  * from vacuum.c.
  */
 static List *
-ts_get_all_vacuum_rels(bool is_vacuumcmd)
+ts_get_all_vacuum_rels(bool is_vacuumcmd, VacuumCtx *ctx)
 {
 	List *vacrels = NIL;
 	Relation pgclass;
@@ -1066,6 +1123,8 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 		 * about failure to open one of these relations later.
 		 */
 		vacrels = lappend(vacrels, makeVacuumRelation(NULL, relid, NIL));
+
+		register_chunk_for_rebuild_if_needed(relid, ctx);
 	}
 
 	table_endscan(scan);
@@ -1082,8 +1141,10 @@ process_vacuum(ProcessUtilityArgs *args)
 	VacuumStmt *stmt = (VacuumStmt *) args->parsetree;
 	bool is_toplevel = (args->context == PROCESS_UTILITY_TOPLEVEL);
 	VacuumCtx ctx = {
+		.is_vacuumfull = false,
 		.ht_vacuum_rel = NULL,
 		.chunk_rels = NIL,
+		.rebuild_columnstore_chunk_oids = NIL,
 	};
 	ListCell *lc;
 	Hypertable *ht;
@@ -1094,24 +1155,22 @@ process_vacuum(ProcessUtilityArgs *args)
 
 	is_vacuumcmd = stmt->is_vacuumcmd;
 
-#if PG16_GE
-	if (is_vacuumcmd)
+	/* Look for new option ONLY_DATABASE_STATS and FULL */
+	foreach (lc, stmt->options)
 	{
-		/* Look for new option ONLY_DATABASE_STATS */
-		foreach (lc, stmt->options)
-		{
-			DefElem *opt = (DefElem *) lfirst(lc);
-
-			/* if "only_database_stats" is defined then don't execute our custom code and return to
-			 * the postgres execution for the proper validations */
-			if (strcmp(opt->defname, "only_database_stats") == 0)
-				return DDL_CONTINUE;
-		}
-	}
+		DefElem *opt = (DefElem *) lfirst(lc);
+#if PG16_GE
+		/* if "only_database_stats" is defined then don't execute our custom code and return to
+		 * the postgres execution for the proper validations */
+		if (is_vacuumcmd && strcmp(opt->defname, "only_database_stats") == 0)
+			return DDL_CONTINUE;
 #endif
+		if (strcmp(opt->defname, "full") == 0)
+			ctx.is_vacuumfull = defGetBoolean(opt);
+	}
 
 	if (stmt->rels == NIL)
-		vacuum_rels = ts_get_all_vacuum_rels(is_vacuumcmd);
+		vacuum_rels = ts_get_all_vacuum_rels(is_vacuumcmd, &ctx);
 	else
 	{
 		Cache *hcache = ts_hypertable_cache_pin();
@@ -1147,6 +1206,17 @@ process_vacuum(ProcessUtilityArgs *args)
 	{
 		PreventCommandDuringRecovery(is_vacuumcmd ? "VACUUM" : "ANALYZE");
 
+		if (list_length(ctx.rebuild_columnstore_chunk_oids) > 0)
+		{
+			/* there are chunks that need rebuilding */
+			ListCell *lc;
+			foreach (lc, ctx.rebuild_columnstore_chunk_oids)
+			{
+				Oid chunk_relid = lfirst_oid(lc);
+				(void) DirectFunctionCall1(ts_cm_functions->rebuild_columnstore,
+										   ObjectIdGetDatum(chunk_relid));
+			}
+		}
 		/* ACL permission checks inside vacuum_rel and analyze_rel called by this ExecVacuum */
 		ExecVacuum(args->parse_state, stmt, is_toplevel);
 	}
@@ -3325,7 +3395,7 @@ process_index_start(ProcessUtilityArgs *args)
 
 	ts_hypertable_permissions_check_by_id(ht->fd.id);
 
-	ts_with_clause_filter(stmt->options, &hypertable_options, &postgres_options);
+	ts_with_clause_filter(stmt->options, &hypertable_options, NULL, &postgres_options);
 
 	stmt->options = postgres_options;
 
@@ -4374,15 +4444,16 @@ continuous_agg_with_clause_perm_check(ContinuousAgg *cagg, Oid view_relid)
 				 errmsg("must be owner of continuous aggregate \"%s\"", get_rel_name(view_relid))));
 }
 
-static void
+static List *
 process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const List *defelems)
 {
 	WithClauseResult *parse_results;
-	List *pg_options = NIL, *cagg_options = NIL;
+	List *pg_options = NIL, *other_namespace_options = NIL, *cagg_options = NIL;
 
 	continuous_agg_with_clause_perm_check(cagg, view_relid);
 
-	ts_with_clause_filter(defelems, &cagg_options, &pg_options);
+	ts_with_clause_filter(defelems, &cagg_options, &other_namespace_options, &pg_options);
+
 	if (list_length(pg_options) > 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -4394,6 +4465,12 @@ process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const L
 		parse_results = ts_create_materialized_view_with_clause_parse(cagg_options);
 		ts_cm_functions->continuous_agg_update_options(cagg, parse_results);
 	}
+	if (list_length(other_namespace_options) > 0)
+	{
+		return other_namespace_options;
+	}
+	else
+		return NIL;
 }
 
 /* Run an alter table command on a relation */
@@ -4435,6 +4512,7 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 	ContinuousAgg *cagg;
 	ListCell *lc;
 
+	DDLResult ddl_res = DDL_DONE;
 	if (!OidIsValid(view_relid))
 		return DDL_CONTINUE;
 
@@ -4456,7 +4534,16 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 					ereport(ERROR,
 							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 							 errmsg("expected set options to contain a list")));
-				process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
+				List *other_namespace_opt =
+					process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
+				/* pass on SET options to other extensions like timescaledb-lake. only if
+				 * there are additional PG related ones, we error out
+				 */
+				if (other_namespace_opt != NIL)
+				{
+					cmd->def = (Node *) other_namespace_opt;
+					ddl_res = DDL_CONTINUE;
+				}
 				break;
 
 			case AT_ChangeOwner:
@@ -4487,8 +4574,7 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 								"aggregate")));
 		}
 	}
-	/* All commands processed by us, nothing for postgres to do.*/
-	return DDL_DONE;
+	return ddl_res;
 }
 
 static DDLResult
@@ -4992,7 +5078,7 @@ check_no_timescale_options(AlterTableCmd *cmd, Oid reloid)
 	List *pg_options = NIL, *compress_options = NIL;
 	Ensure(IsA(cmd->def, List), "wrong node type used as ALTER TABLE command definition");
 	List *inpdef = (List *) cmd->def;
-	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
+	ts_with_clause_filter(inpdef, &compress_options, NULL, &pg_options);
 
 	if (compress_options != NIL)
 	{
@@ -5011,7 +5097,7 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	WithClauseResult *parse_results = NULL;
 
 	/* split postgres and timescaledb options */
-	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, &pg_options);
+	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, NULL, &pg_options);
 
 	if (!tsdb_options)
 		return DDL_CONTINUE;
@@ -5053,7 +5139,7 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 	WithClauseResult *parse_results = NULL;
 
 	/* split postgres and timescaledb options */
-	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, &pg_options);
+	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, NULL, &pg_options);
 
 	if (!tsdb_options)
 		return DDL_CONTINUE;
@@ -5107,7 +5193,7 @@ process_viewstmt(ProcessUtilityArgs *args)
 
 	/* Check if user is passing continuous aggregate parameters and print a
 	 * useful error message if that is the case. */
-	ts_with_clause_filter(stmt->options, &cagg_options, &pg_options);
+	ts_with_clause_filter(stmt->options, &cagg_options, NULL, &pg_options);
 	if (cagg_options)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -5122,12 +5208,15 @@ process_create_table_as(ProcessUtilityArgs *args)
 	CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, args->parsetree);
 	WithClauseResult *parse_results = NULL;
 	bool is_cagg = false;
-	List *pg_options = NIL, *cagg_options = NIL;
+	List *pg_options = NIL, *cagg_options = NIL, *other_namespace_options = NIL;
 
 	if (stmt->objtype == OBJECT_MATVIEW)
 	{
 		/* Check for creation of continuous aggregate */
-		ts_with_clause_filter(stmt->into->options, &cagg_options, &pg_options);
+		ts_with_clause_filter(stmt->into->options,
+							  &cagg_options,
+							  &other_namespace_options,
+							  &pg_options);
 
 		if (cagg_options)
 		{
@@ -5146,7 +5235,12 @@ process_create_table_as(ProcessUtilityArgs *args)
 							   "parameters."),
 					 errhint("Use only parameters with the \"timescaledb.\" prefix when "
 							 "creating a continuous aggregate.")));
-
+		if (other_namespace_options)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("non \"timescaledb\" namespace options can be set only via ALTER")));
+		}
 		if (!stmt->into->skipData)
 			PreventInTransactionBlock(args->context == PROCESS_UTILITY_TOPLEVEL,
 									  "CREATE MATERIALIZED VIEW ... WITH DATA");
@@ -5200,7 +5294,7 @@ process_create_stmt(ProcessUtilityArgs *args)
 	CreateStmt *stmt = castNode(CreateStmt, args->parsetree);
 
 	List *pg_options = NIL, *hypertable_options = NIL;
-	ts_with_clause_filter(stmt->options, &hypertable_options, &pg_options);
+	ts_with_clause_filter(stmt->options, &hypertable_options, NULL, &pg_options);
 	stmt->options = pg_options;
 
 	create_table_info.hypertable = false;
@@ -5303,7 +5397,6 @@ process_create_stmt(ProcessUtilityArgs *args)
 			}
 		}
 	}
-
 	return DDL_CONTINUE;
 }
 

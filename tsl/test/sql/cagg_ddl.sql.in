@@ -1449,3 +1449,36 @@ CREATE MATERIALIZED VIEW kpis_cagg WITH (tsdb.continuous) AS
 SELECT time_bucket('7 day', time) AS bucket, count(*) AS number_of_records, avg(value) AS average, unnest(groups) AS kpi_group
 FROM kpis_raw GROUP BY bucket, kpi_group;
 SELECT * FROM kpis_cagg ORDER BY bucket, kpi_group;
+
+--TEST for caggs with non timescaledb namespace options
+--non timescaledb namespace options can be set via ALTER
+\set ON_ERROR_STOP 0
+-- will error out
+CREATE MATERIALIZED VIEW ht_try_weekly
+WITH (timescaledb.continuous, tigerlake.newoption = true) AS
+SELECT time_bucket(interval '1 week', time) AS ts_bucket, avg(value)
+FROM kpis_raw
+GROUP BY 1;
+
+--caught by Postgres now
+ALTER MATERIALIZED VIEW kpis_cagg SET (tigerlake.newoption = true);
+\set ON_ERROR_STOP 1
+
+-- TEST that cached alter stmt still works (see PR 8739)
+-- test DDL inside function
+CREATE TABLE hypertab_ddl( ts timestamp, a integer)
+WITH (timescaledb.hypertable);
+
+CREATE OR REPLACE FUNCTION ddl_function() RETURNS VOID LANGUAGE PLPGSQL AS $$
+BEGIN
+  DROP MATERIALIZED VIEW IF EXISTS cagg_hypertab_ddl;
+  CREATE MATERIALIZED VIEW cagg_hypertab_ddl WITH (timescaledb.continuous)
+  AS SELECT time_bucket( '1 day'::interval, ts), COUNT(*)
+  FROM hypertab_ddl GROUP BY 1 WITH NO DATA;
+END
+$$;
+
+SELECT ddl_function();
+SELECT view_name from timescaledb_information.continuous_aggregates WHERE hypertable_name='hypertab_ddl';
+SELECT ddl_function();
+SELECT view_name from timescaledb_information.continuous_aggregates WHERE hypertable_name='hypertab_ddl';

@@ -15,6 +15,7 @@
 
 #include "compression/create.h"
 #include "debug_assert.h"
+#include "func_cache.h"
 #include "guc.h"
 #include "nodes/columnar_index_scan/columnar_index_scan.h"
 
@@ -75,11 +76,7 @@ is_supported_aggregate(const CompressionInfo *info, Aggref *aggref, AttrNumber *
 	if (var->varattno <= 0)
 		return false;
 
-	/* var references hypertable attnums so we have to use hypertable relid for column name lookup
-	 */
-	AttrNumber chunk_attno =
-		ts_map_attno(info->ht_rte->relid, info->chunk_rte->relid, var->varattno);
-	AttrNumber meta_attno;
+	char *meta_type = NULL;
 
 	switch (aggref->aggfnoid)
 	{
@@ -112,17 +109,7 @@ is_supported_aggregate(const CompressionInfo *info, Aggref *aggref, AttrNumber *
 		case F_MIN_TIMESTAMPTZ:
 		case F_MIN_TIMETZ:
 		case F_MIN_XID8:
-			meta_attno = compressed_column_metadata_attno(info->settings,
-														  info->chunk_rte->relid,
-														  chunk_attno,
-														  info->compressed_rte->relid,
-														  "min");
-			if (meta_attno)
-			{
-				*aggregate_attno = chunk_attno;
-				*metadata_attno = meta_attno;
-				return true;
-			}
+			meta_type = "min";
 			break;
 		case F_MAX_ANYARRAY:
 		case F_MAX_ANYENUM:
@@ -152,18 +139,44 @@ is_supported_aggregate(const CompressionInfo *info, Aggref *aggref, AttrNumber *
 		case F_MAX_TIMESTAMPTZ:
 		case F_MAX_TIMETZ:
 		case F_MAX_XID8:
-			meta_attno = compressed_column_metadata_attno(info->settings,
-														  info->chunk_rte->relid,
-														  chunk_attno,
-														  info->compressed_rte->relid,
-														  "max");
-			if (meta_attno)
+			meta_type = "max";
+			break;
+		default:
+			/* Initialize function cache for access to ts_first_func_oid and ts_last_func_oid */
+			if (!OidIsValid(ts_first_func_oid) || !OidIsValid(ts_last_func_oid))
+				ts_func_cache_init();
+
+			if (aggref->aggfnoid == ts_first_func_oid || aggref->aggfnoid == ts_last_func_oid)
 			{
-				*aggregate_attno = chunk_attno;
-				*metadata_attno = meta_attno;
-				return true;
+				/*
+				 * Check for eligible first/last aggregate
+				 * For now we only support first/last with both arguments referencing same column
+				 */
+				TargetEntry *tle2 = castNode(TargetEntry, lsecond(aggref->args));
+				if (!equal(var, tle2->expr))
+					return false;
+
+				meta_type = (aggref->aggfnoid == ts_first_func_oid) ? "min" : "max";
 			}
 			break;
+	}
+	if (meta_type)
+	{
+		/* var references hypertable attnums so we have to use hypertable relid for column name
+		 * lookup */
+		AttrNumber chunk_attno =
+			ts_map_attno(info->ht_rte->relid, info->chunk_rte->relid, var->varattno);
+		AttrNumber meta_attno = compressed_column_metadata_attno(info->settings,
+																 info->chunk_rte->relid,
+																 chunk_attno,
+																 info->compressed_rte->relid,
+																 meta_type);
+		if (meta_attno)
+		{
+			*aggregate_attno = chunk_attno;
+			*metadata_attno = meta_attno;
+			return true;
+		}
 	}
 	return false;
 }
@@ -192,8 +205,14 @@ can_use_columnar_index_scan(PlannerInfo *root, const Chunk *chunk, RelOptInfo *c
 	if (!parse->hasAggs)
 		return false;
 
-	/* Punt on ordered output for now until we add proper support for ordered append */
-	if (root->sort_pathkeys != NIL)
+	/*
+	 * Punt on queries without GROUP BY for now
+	 *
+	 * We can support these but this has the side effect of disabling
+	 * interaction with ordered append queries since those won't have
+	 * GROUP BY. So for now we only support GROUP BY queries.
+	 */
+	if (!parse->groupClause)
 		return false;
 
 	/*
