@@ -305,6 +305,29 @@ ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = '
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ALTER TABLE table1 SET (timescaledb.compress = false);
 
+-- test that compression settings are retained when disabling columnstore (issue #8841)
+-- settings should still exist after disabling
+SELECT * FROM _timescaledb_catalog.compression_settings;
+-- re-enable without specifying settings, should use retained settings
+ALTER TABLE table1 SET (timescaledb.compress = true);
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ALTER TABLE table1 SET (timescaledb.compress = false);
+
+-- test that INSERT works when settings exist but compression is disabled
+INSERT INTO table1 VALUES (1, 100), (2, 200), (11, 300);
+SELECT * FROM table1 ORDER BY col1;
+-- verify compression_state is off even though settings exist
+SELECT compression_state FROM _timescaledb_catalog.hypertable WHERE table_name = 'table1';
+SELECT count(*) FROM _timescaledb_catalog.compression_settings WHERE relid = 'table1'::regclass;
+
+-- test that re-enabling with explicit NEW settings clears retained settings
+ALTER TABLE table1 SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'col2');
+SELECT segmentby FROM _timescaledb_catalog.compression_settings WHERE relid = 'table1'::regclass;
+ALTER TABLE table1 SET (timescaledb.compress = false);
+
+-- verify settings updated to new value (col2, not col1)
+SELECT segmentby FROM _timescaledb_catalog.compression_settings WHERE relid = 'table1'::regclass;
+
 \set ON_ERROR_STOP 0
 SET timescaledb.compression_segmentby_default_function = 'function_does_not_exist';
 SET timescaledb.compression_orderby_default_function = 'function_does_not_exist';

@@ -85,15 +85,16 @@ ALTER TABLE metrics SET (timescaledb.compress = false);
 SET timescaledb.compression_segmentby_default_function   = '';
 RESET timescaledb.compression_orderby_default_function;
 ALTER TABLE metrics SET (timescaledb.compress = true);
+WARNING:  column "device_id" should be used for segmenting or ordering
 select count(compress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     27
 
 select * from chunk_settings;
- hypertable | chunks | segmentby |        orderby        |                                                            index                                                            
-------------+--------+-----------+-----------------------+-----------------------------------------------------------------------------------------------------------------------------
- metrics    |     27 |           | device_id,"time" DESC | [{"type": "minmax", "column": "device_id", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ hypertable | chunks | segmentby |   orderby   |                                                           index                                                            
+------------+--------+-----------+-------------+----------------------------------------------------------------------------------------------------------------------------
+ metrics    |     27 |           | "time" DESC | [{"type": "bloom", "column": "device_id", "source": "default"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
  count 
@@ -104,15 +105,16 @@ ALTER TABLE metrics SET (timescaledb.compress = false);
 RESET timescaledb.compression_segmentby_default_function;
 SET timescaledb.compression_orderby_default_function = '';
 ALTER TABLE metrics SET (timescaledb.compress = true);
+WARNING:  column "device_id" should be used for segmenting or ordering
 select count(compress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     27
 
 select * from chunk_settings;
- hypertable | chunks | segmentby |   orderby   |                            index                            
-------------+--------+-----------+-------------+-------------------------------------------------------------
- metrics    |     27 | device_id | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ hypertable | chunks | segmentby |   orderby   |                                                           index                                                            
+------------+--------+-----------+-------------+----------------------------------------------------------------------------------------------------------------------------
+ metrics    |     27 |           | "time" DESC | [{"type": "bloom", "column": "device_id", "source": "default"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
  count 
@@ -223,7 +225,7 @@ select count(compress_chunk(x)) from show_chunks('metrics') x;
 select * from chunk_settings;
  hypertable | chunks | segmentby |   orderby   |                            index                            
 ------------+--------+-----------+-------------+-------------------------------------------------------------
- metrics    |     27 | device_id | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ metrics    |     27 |           | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
  count 
@@ -522,6 +524,55 @@ SELECT * FROM _timescaledb_catalog.compression_settings;
  table1 |                | {col1}    |         |              |                    | 
 
 ALTER TABLE table1 SET (timescaledb.compress = false);
+-- test that compression settings are retained when disabling columnstore (issue #8841)
+-- settings should still exist after disabling
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
+--------+----------------+-----------+---------+--------------+--------------------+-------
+ table1 |                | {col1}    |         |              |                    | 
+
+-- re-enable without specifying settings, should use retained settings
+ALTER TABLE table1 SET (timescaledb.compress = true);
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
+--------+----------------+-----------+---------+--------------+--------------------+-------
+ table1 |                | {col1}    |         |              |                    | 
+
+ALTER TABLE table1 SET (timescaledb.compress = false);
+-- test that INSERT works when settings exist but compression is disabled
+INSERT INTO table1 VALUES (1, 100), (2, 200), (11, 300);
+SELECT * FROM table1 ORDER BY col1;
+ col1 | col2 
+------+------
+    1 |  100
+    2 |  200
+   11 |  300
+
+-- verify compression_state is off even though settings exist
+SELECT compression_state FROM _timescaledb_catalog.hypertable WHERE table_name = 'table1';
+ compression_state 
+-------------------
+                 0
+
+SELECT count(*) FROM _timescaledb_catalog.compression_settings WHERE relid = 'table1'::regclass;
+ count 
+-------
+     1
+
+-- test that re-enabling with explicit NEW settings clears retained settings
+ALTER TABLE table1 SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'col2');
+SELECT segmentby FROM _timescaledb_catalog.compression_settings WHERE relid = 'table1'::regclass;
+ segmentby 
+-----------
+ {col2}
+
+ALTER TABLE table1 SET (timescaledb.compress = false);
+-- verify settings updated to new value (col2, not col1)
+SELECT segmentby FROM _timescaledb_catalog.compression_settings WHERE relid = 'table1'::regclass;
+ segmentby 
+-----------
+ {col2}
+
 \set ON_ERROR_STOP 0
 SET timescaledb.compression_segmentby_default_function = 'function_does_not_exist';
 ERROR:  invalid value for parameter "timescaledb.compression_segmentby_default_function": "function_does_not_exist"
@@ -543,7 +594,7 @@ CREATE TABLE public.t1 (time timestamptz NOT NULL, segment_value text NOT NULL);
 SELECT public.create_hypertable('public.t1', 'time');
  create_hypertable 
 -------------------
- (16,public,t1,t)
+ (18,public,t1,t)
 
 ALTER TABLE public.t1 SET (timescaledb.compress, timescaledb.compress_orderby = 'segment_value');
 RESET search_path;
@@ -561,7 +612,7 @@ CREATE TABLE schema1.page_events2 (
 SELECT create_hypertable('schema1.page_events2', 'time');
       create_hypertable      
 -----------------------------
- (18,schema1,page_events2,t)
+ (20,schema1,page_events2,t)
 
 ALTER TABLE schema1.page_events2 SET (
  timescaledb.compress,
@@ -574,7 +625,7 @@ CREATE TABLE schema2.page_events2 (
 SELECT create_hypertable('schema2.page_events2', 'time');
       create_hypertable      
 -----------------------------
- (20,schema2,page_events2,t)
+ (22,schema2,page_events2,t)
 
 ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress,
@@ -591,7 +642,7 @@ CREATE TABLE schema1.page_events2 (
 SELECT create_hypertable('schema1.page_events2', 'time');
       create_hypertable      
 -----------------------------
- (22,schema1,page_events2,t)
+ (24,schema1,page_events2,t)
 
 ALTER TABLE schema1.page_events2 SET (
  timescaledb.compress,
@@ -605,7 +656,7 @@ CREATE TABLE schema2.page_events2 (
 SELECT create_hypertable('schema2.page_events2', 'time');
       create_hypertable      
 -----------------------------
- (24,schema2,page_events2,t)
+ (26,schema2,page_events2,t)
 
 ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress,
@@ -625,7 +676,7 @@ SELECT create_hypertable(
 );
     create_hypertable     
 --------------------------
- (26,public,test_table,t)
+ (28,public,test_table,t)
 
 INSERT INTO test_table (ts, uuid, val) VALUES
   (1, 1001, 10.1),
@@ -765,6 +816,6 @@ SELECT count(compress_chunk(x)) FROM show_chunks('test_exclude_datetype') x;
 SELECT * FROM timescaledb_information.chunk_compression_settings WHERE hypertable = 'test_exclude_datetype'::regclass ORDER BY chunk LIMIT 1;
       hypertable       |                   chunk                   | segmentby |      orderby       |                                                           index                                                            
 -----------------------+-------------------------------------------+-----------+--------------------+----------------------------------------------------------------------------------------------------------------------------
- test_exclude_datetype | _timescaledb_internal._hyper_28_279_chunk | device_id | event_date,ts DESC | [{"type": "minmax", "column": "event_date", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+ test_exclude_datetype | _timescaledb_internal._hyper_30_281_chunk | device_id | event_date,ts DESC | [{"type": "minmax", "column": "event_date", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
 
 DROP TABLE test_exclude_datetype;

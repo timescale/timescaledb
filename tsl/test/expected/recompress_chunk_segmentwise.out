@@ -434,7 +434,7 @@ select compressed_chunk_name as compressed_chunk_name_before_recompression from 
 INSERT INTO mytab VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
 -- expect to see same chunk after recompression
 SELECT compress_chunk(:'chunk_to_compress_mytab');
-INFO:  Using index "compress_hyper_13_14_chunk__ts_meta_min_1__ts_meta_max_1_idx" for recompression
+INFO:  Using index "compress_hyper_13_14_chunk_a_c__ts_meta_min_1__ts_meta_max__idx" for recompression
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_12_chunk
