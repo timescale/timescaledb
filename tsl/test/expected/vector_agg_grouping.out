@@ -1856,6 +1856,21 @@ select sum(t) from long group by b, c, d order by 1 limit 10;
   12
   16
 
+-- Expressions with scalar column
+select substr(a || b, 1, 10), sum(t) from long group by a || b order by 1, 2 limit 10;
+   substr   | sum 
+------------+-----
+ ab         |  -1
+ longlonglo |  -2
+ short11111 |   1
+ short11111 |   2
+ short11111 |   3
+ short11111 |   4
+ short21111 |   1
+ short21111 |   2
+ short21111 |   3
+ short21111 |   4
+
 -- No functions
 select a, b, c, d from long group by a, b, c, d order by a, b, c, d limit 10;
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 a                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |                                                                                                                                                                                                          b                                                                                                                                                                                                           |                                                                                                                                                                                                          c                                                                                                                                                                                                           |                                                                                                                                                                                                          d                                                                                                                                                                                                           
@@ -1886,6 +1901,7 @@ select a, b, c, d from long group by a, b, c, d order by d, c, b, a limit 10;
  short2 | 1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111 | 1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111 | 1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
 
 reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
 -- Test various serialized key lengths. We want to touch the transition from short
 -- to long varlena header for the serialized key.
 create table keylength(t int, a text, b text);
@@ -1935,6 +1951,7 @@ select sum(t) from keylength group by b, a order by 1 desc limit 10;
   991
 
 reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
 -- Add a very simple test for NULLs. We also have some null values in the general
 -- grouping test above.
 create table groupnull(t int, a text, b text);
@@ -1969,3 +1986,4 @@ select sum(t), a, b from groupnull group by b, a order by 1;
  3000000 | 3 | 3
 
 reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
