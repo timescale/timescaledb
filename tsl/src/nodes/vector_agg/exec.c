@@ -274,10 +274,10 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 
 	FmgrInfo flinfo;
 	fmgr_info(funcoid, &flinfo);
-	LOCAL_FCINFO(fcinfo, 5);
+	FunctionCallInfo fcinfo = palloc0(SizeForFunctionCallInfo(nargs));
 	InitFunctionCallInfoData(*fcinfo, &flinfo, nargs, inputcollid, NULL, NULL);
 
-	CompressedColumnValues arg_values[5] = { 0 };
+	CompressedColumnValues *arg_values = palloc0(nargs * sizeof(*arg_values));
 	bool have_null_bitmap = false;
 	bool have_null_scalars = false;
 	ListCell *lc;
@@ -322,6 +322,8 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	 */
 	if (have_null_scalars)
 	{
+		pfree(fcinfo);
+		pfree(arg_values);
 		return (CompressedColumnValues){ .decompression_type = DT_Scalar,
 										 .buffers[0] = DatumGetPointer(BoolGetDatum(true)) };
 	}
@@ -402,6 +404,9 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	{
 		columnar_result.validity = (uint64 *) input_validity;
 	}
+
+	pfree(fcinfo);
+	pfree(arg_values);
 
 	return columnar_result_finalize(&columnar_result, batch_state);
 }

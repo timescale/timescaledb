@@ -214,11 +214,6 @@ static bool
 is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid resulttype,
 				   Oid inputcollid)
 {
-	if (list_length(args) > 5)
-	{
-		return false;
-	}
-
 	if (!is_vector_type(resulttype))
 	{
 		return false;
