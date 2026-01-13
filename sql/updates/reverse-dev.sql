@@ -1,4 +1,116 @@
 DROP VIEW IF EXISTS timescaledb_information.dimensions;
+
+-- Drop new function signatures that include origin parameter
+DROP FUNCTION IF EXISTS @extschema@.create_hypertable(
+    regclass, name, name, integer, name, name, anyelement,
+    boolean, boolean, regproc, boolean, text, regproc, regproc, "any"
+);
+DROP FUNCTION IF EXISTS @extschema@.set_chunk_time_interval(regclass, anyelement, name, "any");
+DROP FUNCTION IF EXISTS @extschema@.set_partitioning_interval(regclass, anyelement, name, "any");
+DROP FUNCTION IF EXISTS @extschema@.add_dimension(regclass, name, integer, anyelement, regproc, boolean, "any");
+DROP FUNCTION IF EXISTS @extschema@.by_range(name, anyelement, regproc, "any");
+
+--
+-- Rebuild the catalog table `_timescaledb_catalog.dimension` to remove interval_origin column
+--
+
+-- Drop views that depend on the dimension table
+DROP VIEW IF EXISTS timescaledb_information.hypertables;
+DROP VIEW IF EXISTS timescaledb_information.hypertable_columnstore_settings;
+DROP VIEW IF EXISTS timescaledb_information.hypertable_compression_settings;
+DROP VIEW IF EXISTS timescaledb_information.chunks;
+
+-- Drop foreign key constraints referencing dimension table
+ALTER TABLE _timescaledb_catalog.dimension_slice
+    DROP CONSTRAINT dimension_slice_dimension_id_fkey;
+
+-- Drop the dimension table and its sequence from the extension so we can rebuild it
+ALTER EXTENSION timescaledb
+    DROP TABLE _timescaledb_catalog.dimension;
+ALTER EXTENSION timescaledb
+    DROP SEQUENCE _timescaledb_catalog.dimension_id_seq;
+
+-- Save existing data without interval_origin column
+CREATE TABLE _timescaledb_catalog._tmp_dimension AS
+    SELECT
+        id,
+        hypertable_id,
+        column_name,
+        column_type,
+        aligned,
+        num_slices,
+        partitioning_func_schema,
+        partitioning_func,
+        interval_length,
+        compress_interval_length,
+        integer_now_func_schema,
+        integer_now_func
+    FROM
+        _timescaledb_catalog.dimension
+    ORDER BY
+        id;
+
+-- Drop old table
+DROP TABLE _timescaledb_catalog.dimension;
+
+-- Create table without interval_origin column
+CREATE TABLE _timescaledb_catalog.dimension (
+    id serial NOT NULL,
+    hypertable_id integer NOT NULL,
+    column_name name NOT NULL,
+    column_type REGTYPE NOT NULL,
+    aligned boolean NOT NULL,
+    -- closed dimensions
+    num_slices smallint NULL,
+    partitioning_func_schema name NULL,
+    partitioning_func name NULL,
+    -- open dimensions (e.g., time)
+    interval_length bigint NULL,
+    -- compress interval for rollup during compression
+    compress_interval_length bigint NULL,
+    integer_now_func_schema name NULL,
+    integer_now_func name NULL,
+    -- table constraints
+    CONSTRAINT dimension_pkey PRIMARY KEY (id),
+    CONSTRAINT dimension_hypertable_id_column_name_key UNIQUE (hypertable_id, column_name),
+    CONSTRAINT dimension_check CHECK ((partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL)),
+    CONSTRAINT dimension_check1 CHECK ((num_slices IS NULL AND interval_length IS NOT NULL) OR (num_slices IS NOT NULL AND interval_length IS NULL)),
+    CONSTRAINT dimension_check2 CHECK ((integer_now_func_schema IS NULL AND integer_now_func IS NULL) OR (integer_now_func_schema IS NOT NULL AND integer_now_func IS NOT NULL)),
+    CONSTRAINT dimension_interval_length_check CHECK (interval_length IS NULL OR interval_length > 0),
+    CONSTRAINT dimension_compress_interval_length_check CHECK (compress_interval_length IS NULL OR compress_interval_length > 0),
+    CONSTRAINT dimension_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+);
+
+-- Copy data from temp table
+INSERT INTO _timescaledb_catalog.dimension
+SELECT * FROM _timescaledb_catalog._tmp_dimension;
+
+-- Drop temp table
+DROP TABLE _timescaledb_catalog._tmp_dimension;
+
+-- Restore sequence value
+SELECT setval(pg_get_serial_sequence('_timescaledb_catalog.dimension', 'id'),
+              max(id), true)
+FROM _timescaledb_catalog.dimension;
+
+-- Re-add foreign key constraint
+ALTER TABLE _timescaledb_catalog.dimension_slice
+    ADD CONSTRAINT dimension_slice_dimension_id_fkey
+        FOREIGN KEY (dimension_id) REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE;
+
+-- Register for pg_dump
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '');
+SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension', 'id'), '');
+
+GRANT SELECT ON TABLE _timescaledb_catalog.dimension TO PUBLIC;
+GRANT SELECT ON SEQUENCE _timescaledb_catalog.dimension_id_seq TO PUBLIC;
+
+ANALYZE _timescaledb_catalog.dimension;
+
+--
+-- END Rebuild the catalog table `_timescaledb_catalog.dimension`
+--
+
 --
 -- Rebuild the catalog table `_timescaledb_catalog.continuous_agg` to add `finalized` column
 --

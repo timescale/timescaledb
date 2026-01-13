@@ -6,8 +6,8 @@ SELECT * from _timescaledb_catalog.hypertable;
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+-------------------+--------------------------+--------
 
 SELECT * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
 
 CREATE TABLE should_drop (time timestamp, temp float8);
 SELECT create_hypertable('should_drop', 'time');
@@ -70,9 +70,9 @@ SELECT * from _timescaledb_catalog.hypertable;
   1 | public      | should_drop | _timescaledb_internal  | _hyper_1                |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
 
 SELECT * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
-  1 |             1 | time        | timestamp without time zone | t       |            |                          |                   |    604800000000 |                          |                         | 
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | timestamp without time zone | t       |            |                          |                   |                 |    604800000000 |                          |                         | 
 
 DROP TABLE should_drop;
 CREATE TABLE should_drop (time timestamp, temp float8);
@@ -89,9 +89,9 @@ SELECT * from _timescaledb_catalog.hypertable;
   4 | public      | should_drop | _timescaledb_internal  | _hyper_4                |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
 
 SELECT * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
-  4 |             4 | time        | timestamp without time zone | t       |            |                          |                   |    604800000000 |                          |                         | 
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
+  4 |             4 | time        | timestamp without time zone | t       |            |                          |                   |                 |    604800000000 |                          |                         | 
 
 -- test dropping multiple objects at once
 CREATE TABLE t1 (time timestamptz) WITH (tsdb.hypertable);

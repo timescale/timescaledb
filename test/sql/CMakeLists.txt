@@ -7,6 +7,7 @@ set(TEST_FILES
     catalog_corruption.sql
     chunks.sql
     chunk_adaptive.sql
+    chunk_origin.sql
     chunk_utils.sql
     cluster.sql
     create_chunks.sql

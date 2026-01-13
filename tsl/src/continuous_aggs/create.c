@@ -283,7 +283,10 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 												  &mat_tbltimecol,
 												  Int64GetDatum(mat_tbltimecol_interval),
 												  INT8OID,
-												  InvalidOid);
+												  InvalidOid,
+												  (Datum) 0,  /* origin */
+												  InvalidOid, /* origin_type */
+												  false);	  /* has_origin */
 	/*
 	 * Ideally would like to change/expand the API so setting the column name manually is
 	 * unnecessary, but not high priority.

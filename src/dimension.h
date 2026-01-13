@@ -19,6 +19,15 @@ typedef struct PartitioningInfo PartitioningInfo;
 typedef struct DimensionSlice DimensionSlice;
 typedef struct DimensionVec DimensionVec;
 
+typedef struct ChunkInterval
+{
+	Oid type;		 /* Interval type (INTERVALOID, INT8OID, etc.) */
+	Datum value;	 /* Interval value */
+	Oid origin_type; /* Origin type (same as partitioning column type) */
+	Datum origin;	 /* Origin value (same type as partitioning column) */
+	bool has_origin; /* True if origin was explicitly specified */
+} ChunkInterval;
+
 typedef enum DimensionType
 {
 	DIMENSION_TYPE_OPEN,
@@ -33,6 +42,7 @@ typedef struct Dimension
 	DimensionType type;
 	AttrNumber column_attno;
 	Oid main_table_relid;
+	ChunkInterval chunk_interval;
 	PartitioningInfo *partitioning;
 } Dimension;
 
@@ -108,6 +118,10 @@ typedef struct DimensionInfo
 	Datum interval_datum;
 	Oid interval_type; /* Type of the interval datum */
 	int64 interval;
+	Datum origin_datum;	   /* Origin value as Datum */
+	Oid origin_type;	   /* Type of origin_datum */
+	int64 interval_origin; /* Origin in internal format */
+	bool has_origin;	   /* True if origin was explicitly specified */
 	int32 num_slices;
 	regproc partitioning_func;
 	bool if_not_exists;
@@ -149,7 +163,9 @@ extern int ts_dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete
 
 extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_open(Oid table_relid, Name column_name,
 																Datum interval, Oid interval_type,
-																regproc partitioning_func);
+																regproc partitioning_func,
+																Datum origin, Oid origin_type,
+																bool has_origin);
 
 extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_closed(Oid table_relid, Name column_name,
 																  int32 num_slices,
@@ -162,10 +178,14 @@ extern TSDLLEXPORT void ts_dimension_update(const Hypertable *ht, const NameData
 											DimensionType dimtype, Datum *interval,
 											Oid *intervaltype, int16 *num_slices,
 											Oid *integer_now_func);
+extern TSDLLEXPORT void ts_dimension_update_with_origin(
+	const Hypertable *ht, const NameData *dimname, DimensionType dimtype, Datum *interval,
+	Oid *intervaltype, int16 *num_slices, Oid *integer_now_func, Datum *origin, Oid *origin_type);
 extern TSDLLEXPORT Point *ts_point_create(int16 num_dimensions);
 extern TSDLLEXPORT bool ts_is_equality_operator(Oid opno, Oid left, Oid right);
 extern TSDLLEXPORT Datum ts_dimension_info_in(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT Datum ts_dimension_info_out(PG_FUNCTION_ARGS);
+extern TSDLLEXPORT int64 ts_dimension_origin_to_internal(Datum origin, Oid origin_type);
 
 #define hyperspace_get_open_dimension(space, i)                                                    \
 	ts_hyperspace_get_dimension(space, DIMENSION_TYPE_OPEN, i)

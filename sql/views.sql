@@ -251,6 +251,26 @@ SELECT ht.schema_name AS hypertable_schema,
       dim.interval_length
     END
   END AS integer_interval,
+  CASE WHEN dim.interval_origin IS NOT NULL THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','uuid']::regtype[]) THEN
+      _timescaledb_functions.to_timestamp(dim.interval_origin)
+    WHEN dim.column_type = 'date'::regtype THEN
+      _timescaledb_functions.to_timestamp(dim.interval_origin)::date::timestamptz
+    ELSE
+      NULL
+    END
+  ELSE
+    NULL
+  END AS time_origin,
+  CASE WHEN dim.interval_origin IS NOT NULL THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date','uuid']::regtype[]) THEN
+      NULL
+    ELSE
+      dim.interval_origin
+    END
+  ELSE
+    NULL
+  END AS integer_origin,
   dim.integer_now_func,
   dim.num_slices AS num_partitions
 FROM _timescaledb_catalog.hypertable ht,

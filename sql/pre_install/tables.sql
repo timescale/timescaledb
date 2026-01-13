@@ -94,7 +94,12 @@ CREATE TABLE _timescaledb_catalog.dimension (
   partitioning_func_schema name NULL,
   partitioning_func name NULL,
   -- open dimensions (e.g., time)
-  interval_length bigint NULL,
+  -- Origin for chunk alignment, stored as Unix epoch microseconds (not PostgreSQL epoch).
+  -- For timestamp types: microseconds since 1970-01-01 00:00:00 UTC.
+  -- For integer types: the raw integer value.
+  -- NULL means use the default origin (0).
+  interval_origin bigint NULL,
+  interval_length bigint NULL, -- fixed-size interval in microseconds for timestamp types, or raw value for integer types.
   -- compress interval is used by rollup procedure during compression
   -- in order to merge multiple chunks into a single one
   compress_interval_length bigint NULL,

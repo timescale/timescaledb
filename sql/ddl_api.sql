@@ -34,7 +34,8 @@ CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     migrate_data            BOOLEAN = FALSE,
     chunk_target_size       TEXT = NULL,
     chunk_sizing_func       REGPROC = '_timescaledb_functions.calculate_chunk_interval'::regproc,
-    time_partitioning_func  REGPROC = NULL
+    time_partitioning_func  REGPROC = NULL,
+    chunk_time_origin       "any" = NULL::timestamptz
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
 
 -- A generalized hypertable creation API that can be used to convert a PostgreSQL table
@@ -73,7 +74,8 @@ CREATE OR REPLACE FUNCTION @extschema@.set_adaptive_chunking(
 CREATE OR REPLACE FUNCTION @extschema@.set_chunk_time_interval(
     hypertable              REGCLASS,
     chunk_time_interval     ANYELEMENT,
-    dimension_name          NAME = NULL
+    dimension_name          NAME = NULL,
+    chunk_time_origin       "any" = NULL::TIMESTAMPTZ
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_interval' LANGUAGE C VOLATILE;
 
 -- Update partition_interval for a hypertable.
@@ -87,7 +89,8 @@ CREATE OR REPLACE FUNCTION @extschema@.set_chunk_time_interval(
 CREATE OR REPLACE FUNCTION @extschema@.set_partitioning_interval(
     hypertable              REGCLASS,
     partition_interval      ANYELEMENT,
-    dimension_name          NAME = NULL
+    dimension_name          NAME = NULL,
+    partition_origin        "any" = NULL::TIMESTAMPTZ
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_interval' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION @extschema@.set_number_partitions(
@@ -127,13 +130,15 @@ LANGUAGE C STABLE PARALLEL SAFE;
 -- chunk_time_interval - Size of intervals for time dimensions (can be integral or INTERVAL)
 -- partitioning_func - Function used to partition the column
 -- if_not_exists - If set, and the dimension already exists, generate a notice instead of an error
+-- origin - The origin for chunk alignment (optional)
 CREATE OR REPLACE FUNCTION @extschema@.add_dimension(
     hypertable              REGCLASS,
     column_name             NAME,
     number_partitions       INTEGER = NULL,
     chunk_time_interval     ANYELEMENT = NULL::BIGINT,
     partitioning_func       REGPROC = NULL,
-    if_not_exists           BOOLEAN = FALSE
+    if_not_exists           BOOLEAN = FALSE,
+    chunk_time_origin       "any" = NULL::timestamptz
 ) RETURNS TABLE(dimension_id INT, schema_name NAME, table_name NAME, column_name NAME, created BOOL)
 AS '@MODULE_PATHNAME@', 'ts_dimension_add' LANGUAGE C VOLATILE;
 
@@ -184,7 +189,8 @@ CREATE OR REPLACE FUNCTION @extschema@.by_hash(column_name NAME, number_partitio
 
 CREATE OR REPLACE FUNCTION @extschema@.by_range(column_name NAME,
                                                 partition_interval ANYELEMENT = NULL::bigint,
-                                                partition_func regproc = NULL)
+                                                partition_func regproc = NULL,
+                                                partition_origin "any" = NULL::TIMESTAMPTZ)
     RETURNS _timescaledb_internal.dimension_info LANGUAGE C
     AS '@MODULE_PATHNAME@', 'ts_range_dimension';
 

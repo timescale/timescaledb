@@ -8,16 +8,25 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <commands/tablecmds.h>
+#include <datatype/timestamp.h>
+#include <fmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
+#include <pgtime.h>
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
+#include <utils/date.h>
+#include <utils/datetime.h>
+#include <utils/elog.h>
+#include <utils/fmgrprotos.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
 
 #include "compat/compat.h"
+#include "annotations.h"
+#include "chunk.h"
 #include "cross_module_fn.h"
 #include "debug_point.h"
 #include "dimension.h"
@@ -25,6 +34,7 @@
 #include "dimension_vector.h"
 #include "error_utils.h"
 #include "errors.h"
+#include "guc.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "indexing.h"
@@ -58,6 +68,8 @@ enum Anum_generic_add_dimension
 };
 
 #define Natts_generic_add_dimension (_Anum_generic_add_dimension_max - 1)
+
+static void validate_origin_type_compatibility(Oid dimtype, Oid origin_type, const char *colname);
 
 static int
 cmp_dimension_id(const void *left, const void *right)
@@ -151,6 +163,49 @@ hyperspace_get_num_dimensions_by_type(Hyperspace *hs, DimensionType type)
 	return n;
 }
 
+/*
+ * Get the default origin as a Datum of the appropriate type.
+ * Uses DEFAULT_ORIGIN_YEAR/MONTH/DAY (2001-01-01) as the default.
+ */
+static Datum
+get_default_origin_datum(Oid type)
+{
+	struct pg_tm tm_o;
+	int tz_origin = 0;
+	Oid origin_type = type;
+	Timestamp origin;
+
+	switch (type)
+	{
+		case UUIDOID:
+			origin_type = TIMESTAMPTZOID;
+			break;
+		case DATEOID:
+			origin_type = TIMESTAMPOID;
+			break;
+		case TIMESTAMPTZOID:
+		case TIMESTAMPOID:
+			break;
+		default:
+			return Int64GetDatum(0);
+	}
+
+	memset(&tm_o, 0, sizeof(struct pg_tm));
+	tm_o.tm_year = 2001;
+	tm_o.tm_mday = 1;
+	tm_o.tm_mon = 1;
+
+	if (origin_type == TIMESTAMPTZOID)
+		tz_origin = DetermineTimeZoneOffset(&tm_o, session_timezone);
+
+	tm2timestamp(&tm_o, 0, &tz_origin, &origin);
+
+	if (origin_type == TIMESTAMPTZOID)
+		return TimestampTzGetDatum(origin);
+	else
+		return TimestampGetDatum(origin);
+}
+
 static inline DimensionType
 dimension_type(TupleInfo *ti)
 {
@@ -234,9 +289,69 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 	{
 		d->fd.interval_length =
 			DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
+
 		if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)])
 			d->fd.compress_interval_length = DatumGetInt64(
 				values[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)]);
+
+		/* Set up chunk_interval for fixed-size intervals */
+		d->chunk_interval.type = INT8OID;
+		d->chunk_interval.value = Int64GetDatum(d->fd.interval_length);
+
+		/* Read origin from catalog */
+		Oid dimtype = ts_dimension_get_partition_type(d);
+		if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)])
+		{
+			d->fd.interval_origin =
+				DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)]);
+			d->chunk_interval.has_origin = true;
+		}
+		else if (IS_TIMESTAMP_TYPE(dimtype) || dimtype == UUIDOID)
+		{
+			/*
+			 * Origin not stored in metadata - compute the default origin.
+			 * The default origin is 2001-01-01 in local time for the dimension type.
+			 * We store it in internal format (Unix epoch microseconds).
+			 */
+			Oid origin_type = dimtype;
+			if (origin_type == UUIDOID || origin_type == DATEOID)
+				origin_type = TIMESTAMPOID;
+
+			Datum default_origin = get_default_origin_datum(dimtype);
+			d->fd.interval_origin = ts_time_value_to_internal(default_origin, origin_type);
+			d->chunk_interval.has_origin = false;
+		}
+		else
+		{
+			/* For integer types and other types, origin is 0 */
+			d->fd.interval_origin = 0;
+			d->chunk_interval.has_origin = false;
+		}
+
+		/*
+		 * Populate chunk_interval origin fields from fd.interval_origin.
+		 * Only convert to Datum for types that support time value conversion.
+		 */
+		d->chunk_interval.origin_type = dimtype;
+		if (IS_TIMESTAMP_TYPE(dimtype) || IS_INTEGER_TYPE(dimtype))
+		{
+			d->chunk_interval.origin = ts_internal_to_time_value(d->fd.interval_origin, dimtype);
+
+			/*
+			 * Verify origin consistency: converting back should yield the same
+			 * internal value. Only check for timestamp types where round-trip
+			 * conversion is meaningful.
+			 */
+			Assert(!IS_TIMESTAMP_TYPE(dimtype) ||
+				   d->fd.interval_origin ==
+					   ts_dimension_origin_to_internal(d->chunk_interval.origin,
+													   d->chunk_interval.origin_type));
+		}
+		else
+		{
+			/* For unsupported types (text, etc.), origin stays as internal value */
+			d->chunk_interval.origin = Int64GetDatum(d->fd.interval_origin);
+		}
 	}
 
 	d->column_attno = get_attnum(main_table_relid, NameStr(d->fd.column_name));
@@ -272,29 +387,51 @@ calculate_open_range_default(const Dimension *dim, int64 value)
 	int64 range_start, range_end;
 	Oid dimtype = ts_dimension_get_partition_type(dim);
 
-	if (value < 0)
+	/*
+	 * Get the origin for chunk alignment. If an explicit origin was set,
+	 * use it; otherwise use 0 as the default.
+	 */
+	int64 origin = dim->chunk_interval.has_origin ? dim->fd.interval_origin : 0;
+
+	/*
+	 * Translate value to origin-relative coordinates for chunk calculation.
+	 * This ensures chunks align to the origin rather than to 0.
+	 */
+	int64 adjusted_value = value - origin;
+
+	if (adjusted_value < 0)
 	{
 		const int64 dim_min = ts_time_get_min(dimtype);
 
-		range_end = ((value + 1) / dim->fd.interval_length) * dim->fd.interval_length;
+		range_end = ((adjusted_value + 1) / dim->fd.interval_length) * dim->fd.interval_length;
 
 		/* prevent integer underflow */
-		if (dim_min - range_end > -dim->fd.interval_length)
+		if (dim_min - origin - range_end > -dim->fd.interval_length)
 			range_start = DIMENSION_SLICE_MINVALUE;
 		else
 			range_start = range_end - dim->fd.interval_length;
+
+		/* Translate back to absolute coordinates (only if not at boundary) */
+		if (range_start != DIMENSION_SLICE_MINVALUE)
+			range_start += origin;
+		range_end += origin;
 	}
 	else
 	{
 		const int64 dim_end = ts_time_get_max(dimtype);
 
-		range_start = (value / dim->fd.interval_length) * dim->fd.interval_length;
+		range_start = (adjusted_value / dim->fd.interval_length) * dim->fd.interval_length;
 
 		/* prevent integer overflow */
-		if (dim_end - range_start < dim->fd.interval_length)
+		if (dim_end - origin - range_start < dim->fd.interval_length)
 			range_end = DIMENSION_SLICE_MAXVALUE;
 		else
 			range_end = range_start + dim->fd.interval_length;
+
+		/* Translate back to absolute coordinates (only if not at boundary) */
+		range_start += origin;
+		if (range_end != DIMENSION_SLICE_MAXVALUE)
+			range_end += origin;
 	}
 
 	return ts_dimension_slice_create(dim->fd.id, range_start, range_end);
@@ -441,8 +578,9 @@ ts_dimension_get_open_slice_ordinal(const Dimension *dim, const DimensionSlice *
  * intervals where repartitioning happens, there might be an unexpected number
  * of slices due to a mix of slices from both the old and the new partitioning
  * configuration. As a result, the ordinal value of a given slice might not
- * actually match the partitioning settings at a given point in time. In this case, we will return
- * the ordinal of current slice most overlapping the given slice (or first fully overlapped slice).
+ * actually match the partitioning settings at a given point in time. In this case, we will
+ * return the ordinal of current slice most overlapping the given slice (or first fully
+ * overlapped slice).
  */
 static int
 ts_dimension_get_closed_slice_ordinal(const Dimension *dim, const DimensionSlice *target_slice)
@@ -456,8 +594,9 @@ ts_dimension_get_closed_slice_ordinal(const Dimension *dim, const DimensionSlice
 	Assert(NULL != target_slice);
 	Assert(dim->fd.num_slices > 0);
 
-	/* Slicing assumes partitioning functions use the range [0, INT32_MAX], though the first slice
-	 * uses INT64_MIN as its lower bound, and the last slice uses INT64_MAX as its upper bound. */
+	/* Slicing assumes partitioning functions use the range [0, INT32_MAX], though the first
+	 * slice uses INT64_MIN as its lower bound, and the last slice uses INT64_MAX as its upper
+	 * bound. */
 	if (target_slice->fd.range_start == DIMENSION_SLICE_MINVALUE)
 		return 0;
 
@@ -467,9 +606,10 @@ ts_dimension_get_closed_slice_ordinal(const Dimension *dim, const DimensionSlice
 	Assert(target_slice->fd.range_start > 0);
 	Assert(target_slice->fd.range_end < DIMENSION_SLICE_CLOSED_MAX);
 
-	/* Given a target slice starting from some point p, determine a candidate slice in the current
-	 * partitioning configuration that contains p. If that slice contains over half of our target
-	 * slice, return it's ordinal. Otherwise return the ordinal for the next slice. */
+	/* Given a target slice starting from some point p, determine a candidate slice in the
+	 * current partitioning configuration that contains p. If that slice contains over half of
+	 * our target slice, return it's ordinal. Otherwise return the ordinal for the next slice.
+	 */
 	current_slice_size = calculate_closed_range_interval(dim);
 	target_slice_size = target_slice->fd.range_end - target_slice->fd.range_start;
 	candidate_slice_ordinal = target_slice->fd.range_start / current_slice_size;
@@ -477,7 +617,7 @@ ts_dimension_get_closed_slice_ordinal(const Dimension *dim, const DimensionSlice
 		current_slice_size - (target_slice->fd.range_start % current_slice_size);
 
 	/* Note that if the candidate slice wholly contains the target slice,
-	 * target_overlap_with_candidate_slice will actually be greater than target_slice_size.  This
+	 * target_overlap_with_candidate_slice will actually be greater than target_slice_size. This
 	 * doesn't affect the correctness of the following check. */
 	if (target_overlap_with_candidate_slice >= target_slice_size / 2)
 		return candidate_slice_ordinal;
@@ -764,6 +904,14 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 		nulls[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)] = true;
 	}
 
+	/* Handle interval_origin for open dimensions */
+	if (dim->chunk_interval.has_origin)
+	{
+		values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] =
+			Int64GetDatum(dim->fd.interval_origin);
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] = false;
+	}
+
 	new_tuple = heap_form_tuple(ts_scanner_get_tupledesc(ti), values, nulls);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
@@ -776,9 +924,38 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 	return SCAN_DONE;
 }
 
+/*
+ * Convert an origin value to internal format (Unix epoch microseconds for timestamps,
+ * raw value for integers).
+ */
+TSDLLEXPORT int64
+ts_dimension_origin_to_internal(Datum origin, Oid origin_type)
+{
+	if (IS_TIMESTAMP_TYPE(origin_type))
+		return ts_time_value_to_internal(origin, origin_type);
+	else if (IS_INTEGER_TYPE(origin_type))
+	{
+		switch (origin_type)
+		{
+			case INT2OID:
+				return DatumGetInt16(origin);
+			case INT4OID:
+				return DatumGetInt32(origin);
+			case INT8OID:
+				return DatumGetInt64(origin);
+			default:
+				elog(ERROR, "unsupported integer type for origin");
+		}
+	}
+
+	elog(ERROR, "unsupported origin type: %u", origin_type);
+	return 0; /* suppress compiler warning */
+}
+
 static int32
 dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid coltype,
-						  int16 num_slices, regproc partitioning_func, int64 interval_length)
+						  int16 num_slices, regproc partitioning_func, int64 interval_length,
+						  int64 interval_origin, bool has_origin)
 {
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_dimension];
@@ -812,6 +989,7 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 		values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)] = Int16GetDatum(num_slices);
 		values[AttrNumberGetAttrOffset(Anum_dimension_aligned)] = BoolGetDatum(false);
 		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] = true;
 	}
 	else
 	{
@@ -821,6 +999,18 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 			Int64GetDatum(interval_length);
 		values[AttrNumberGetAttrOffset(Anum_dimension_aligned)] = BoolGetDatum(true);
 		nulls[AttrNumberGetAttrOffset(Anum_dimension_num_slices)] = true;
+
+		/* Store origin if explicitly provided */
+		if (has_origin)
+		{
+			values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] =
+				Int64GetDatum(interval_origin);
+			nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] = false;
+		}
+		else
+		{
+			nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] = true;
+		}
 	}
 
 	/* no integer_now function by default */
@@ -841,7 +1031,8 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 
 static int32
 dimension_insert(int32 hypertable_id, Name colname, Oid coltype, int16 num_slices,
-				 regproc partitioning_func, int64 interval_length)
+				 regproc partitioning_func, int64 interval_length, int64 interval_origin,
+				 bool has_origin)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -854,7 +1045,9 @@ dimension_insert(int32 hypertable_id, Name colname, Oid coltype, int16 num_slice
 											 coltype,
 											 num_slices,
 											 partitioning_func,
-											 interval_length);
+											 interval_length,
+											 interval_origin,
+											 has_origin);
 	table_close(rel, RowExclusiveLock);
 	return dimension_id;
 }
@@ -1148,6 +1341,23 @@ void
 ts_dimension_update(const Hypertable *ht, const NameData *dimname, DimensionType dimtype,
 					Datum *interval, Oid *intervaltype, int16 *num_slices, Oid *integer_now_func)
 {
+	ts_dimension_update_with_origin(ht,
+									dimname,
+									dimtype,
+									interval,
+									intervaltype,
+									num_slices,
+									integer_now_func,
+									NULL,
+									NULL);
+}
+
+void
+ts_dimension_update_with_origin(const Hypertable *ht, const NameData *dimname,
+								DimensionType dimtype, Datum *interval, Oid *intervaltype,
+								int16 *num_slices, Oid *integer_now_func, Datum *origin,
+								Oid *origin_type)
+{
 	Dimension *dim;
 
 	if (NULL == ht)
@@ -1182,17 +1392,30 @@ ts_dimension_update(const Hypertable *ht, const NameData *dimname, DimensionType
 
 	if (interval)
 	{
-		Oid dimtype = ts_dimension_get_partition_type(dim);
+		Oid parttype = ts_dimension_get_partition_type(dim);
 		Assert(intervaltype);
 
 		Assert(IS_OPEN_DIMENSION(dim));
 
 		dim->fd.interval_length =
 			dimension_interval_to_internal(NameStr(dim->fd.column_name),
-										   dimtype,
+										   parttype,
 										   *intervaltype,
 										   *interval,
 										   hypertable_adaptive_chunking_enabled(ht));
+	}
+
+	/* Handle origin update */
+	if (origin && origin_type && OidIsValid(*origin_type))
+	{
+		Oid parttype = ts_dimension_get_partition_type(dim);
+		Assert(IS_OPEN_DIMENSION(dim));
+
+		validate_origin_type_compatibility(parttype, *origin_type, NameStr(dim->fd.column_name));
+		dim->fd.interval_origin = ts_dimension_origin_to_internal(*origin, *origin_type);
+		dim->chunk_interval.has_origin = true;
+		dim->chunk_interval.origin = *origin;
+		dim->chunk_interval.origin_type = *origin_type;
 	}
 
 	if (num_slices)
@@ -1263,14 +1486,18 @@ TS_FUNCTION_INFO_V1(ts_dimension_set_interval);
  *     TIMESTAMP/TIMESTAMPTZ/DATE type, it can be integral which is treated as
  *     microseconds, or an INTERVAL type.
  * dimension_name - The name of the dimension
+ * origin - The new origin for chunk alignment (optional)
  */
 Datum
 ts_dimension_set_interval(PG_FUNCTION_ARGS)
 {
 	Oid table_relid = PG_GETARG_OID(0);
-	Datum interval = PG_GETARG_DATUM(1);
+	Datum interval_datum = PG_GETARG_DATUM(1);
 	Oid intervaltype = InvalidOid;
 	Name colname = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
+	bool origin_isnull = PG_ARGISNULL(3);
+	Datum origin_datum = origin_isnull ? (Datum) 0 : PG_GETARG_DATUM(3);
+	Oid origin_type = origin_isnull ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3);
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht;
 
@@ -1289,7 +1516,30 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 				 errmsg("invalid interval: an explicit interval must be specified")));
 
 	intervaltype = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	ts_dimension_update(ht, colname, DIMENSION_TYPE_OPEN, &interval, &intervaltype, NULL, NULL);
+
+	if (origin_isnull)
+	{
+		ts_dimension_update(ht,
+							colname,
+							DIMENSION_TYPE_OPEN,
+							&interval_datum,
+							&intervaltype,
+							NULL,
+							NULL);
+	}
+	else
+	{
+		ts_dimension_update_with_origin(ht,
+										colname,
+										DIMENSION_TYPE_OPEN,
+										&interval_datum,
+										&intervaltype,
+										NULL,
+										NULL,
+										&origin_datum,
+										&origin_type);
+	}
+
 	ts_cache_release(&hcache);
 
 	PG_RETURN_VOID();
@@ -1297,7 +1547,8 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 
 DimensionInfo *
 ts_dimension_info_create_open(Oid table_relid, Name column_name, Datum interval, Oid interval_type,
-							  regproc partitioning_func)
+							  regproc partitioning_func, Datum origin, Oid origin_type,
+							  bool has_origin)
 {
 	DimensionInfo *info = palloc(sizeof(*info));
 	*info = (DimensionInfo){
@@ -1306,6 +1557,9 @@ ts_dimension_info_create_open(Oid table_relid, Name column_name, Datum interval,
 		.interval_datum = interval,
 		.interval_type = interval_type,
 		.partitioning_func = partitioning_func,
+		.origin_datum = origin,
+		.origin_type = origin_type,
+		.has_origin = has_origin,
 	};
 	namestrcpy(&info->colname, NameStr(*column_name));
 	return info;
@@ -1325,6 +1579,56 @@ ts_dimension_info_create_closed(Oid table_relid, Name column_name, int32 num_sli
 	};
 	namestrcpy(&info->colname, NameStr(*column_name));
 	return info;
+}
+
+/*
+ * Validate that the origin type is compatible with the dimension type.
+ *
+ * For timestamp-based dimensions, the origin must be a timestamp type.
+ * For integer-based dimensions, the origin must be an integer type.
+ * For UUID dimensions, the origin must be a timestamp type.
+ */
+static void
+validate_origin_type_compatibility(Oid dimtype, Oid origin_type, const char *colname)
+{
+	bool dim_is_timestamp = IS_TIMESTAMP_TYPE(dimtype);
+	bool dim_is_integer = IS_INTEGER_TYPE(dimtype);
+	bool dim_is_uuid = (dimtype == UUIDOID);
+	bool origin_is_timestamp = IS_TIMESTAMP_TYPE(origin_type);
+	bool origin_is_integer = IS_INTEGER_TYPE(origin_type);
+
+	/* UUID dimensions require timestamp origin (they're internally timestamp-based) */
+	if (dim_is_uuid)
+	{
+		if (!origin_is_timestamp)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid origin type for UUID dimension \"%s\"", colname),
+					 errhint("UUID dimensions require a timestamp origin.")));
+		return;
+	}
+
+	/* Timestamp dimensions require timestamp origin */
+	if (dim_is_timestamp)
+	{
+		if (!origin_is_timestamp)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid origin type for timestamp dimension \"%s\"", colname),
+					 errhint("Use a timestamp or timestamptz value for the origin.")));
+		return;
+	}
+
+	/* Integer dimensions require integer origin */
+	if (dim_is_integer)
+	{
+		if (!origin_is_integer)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid origin type for integer dimension \"%s\"", colname),
+					 errhint("Use an integer value for the origin.")));
+		return;
+	}
 }
 
 /* Validate the configuration of an open ("time") dimension */
@@ -1354,6 +1658,14 @@ dimension_info_validate_open(DimensionInfo *info)
 													info->interval_type,
 													info->interval_datum,
 													info->adaptive_chunking);
+
+	/* Validate and convert origin if provided */
+	if (info->has_origin && OidIsValid(info->origin_type))
+	{
+		validate_origin_type_compatibility(dimtype, info->origin_type, NameStr(info->colname));
+		info->interval_origin =
+			ts_dimension_origin_to_internal(info->origin_datum, info->origin_type);
+	}
 }
 
 /* Validate the configuration of a closed ("space") dimension */
@@ -1482,7 +1794,9 @@ ts_dimension_add_from_info(DimensionInfo *info)
 										  info->coltype,
 										  info->num_slices,
 										  info->partitioning_func,
-										  info->interval);
+										  info->interval,
+										  info->interval_origin,
+										  info->has_origin);
 
 	return info->dimension_id;
 }
@@ -1665,6 +1979,9 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		.interval_type = PG_ARGISNULL(3) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3),
 		.partitioning_func = PG_ARGISNULL(4) ? InvalidOid : PG_GETARG_OID(4),
 		.if_not_exists = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5),
+		.origin_datum = PG_ARGISNULL(6) ? (Datum) 0 : PG_GETARG_DATUM(6),
+		.origin_type = PG_ARGISNULL(6) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 6),
+		.has_origin = !PG_ARGISNULL(6),
 	};
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
@@ -1777,13 +2094,19 @@ ts_hash_dimension(PG_FUNCTION_ARGS)
 Datum
 ts_range_dimension(PG_FUNCTION_ARGS)
 {
-	Ensure(PG_NARGS() > 2, "expected at most 3 arguments, invoked with %d arguments", PG_NARGS());
+	Ensure(PG_NARGS() > 2, "expected at least 3 arguments, invoked with %d arguments", PG_NARGS());
 	Name column_name;
 	GETARG_NOTNULL_NULLABLE(column_name, 0, "column_name", NAME);
 	DimensionInfo *info = make_dimension_info(column_name, DIMENSION_TYPE_OPEN);
+	bool origin_isnull = PG_ARGISNULL(3);
+
 	info->interval_datum = PG_ARGISNULL(1) ? Int32GetDatum(-1) : PG_GETARG_DATUM(1);
 	info->interval_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	info->partitioning_func = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2);
+	info->origin_datum = origin_isnull ? (Datum) 0 : PG_GETARG_DATUM(3);
+	info->origin_type = origin_isnull ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3);
+	info->has_origin = !origin_isnull;
+
 	PG_RETURN_POINTER(info);
 }
 
