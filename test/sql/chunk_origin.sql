@@ -361,6 +361,131 @@ WHERE hypertable_name = 'with_chunk_origin';
 DROP TABLE with_chunk_origin;
 
 ---------------------------------------------------------------
+-- SET_CHUNK_TIME_INTERVAL: PRESERVE ORIGIN WHEN NOT SPECIFIED
+---------------------------------------------------------------
+-- Test that a custom origin is preserved when calling set_chunk_time_interval
+-- with a new interval but without specifying an origin (NULL origin).
+-- The existing origin should NOT be reset to default.
+
+CREATE TABLE preserve_origin(time timestamptz NOT NULL, value int);
+SELECT create_hypertable('preserve_origin', 'time',
+    chunk_time_interval => 86400000000,  -- 1 day in microseconds
+    chunk_time_origin => '2020-01-01 06:00:00 UTC'::timestamptz);
+
+-- Verify custom origin is set to 6:00
+SELECT hypertable_name, time_interval, time_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'preserve_origin';
+
+-- Create a chunk with the custom origin
+INSERT INTO preserve_origin VALUES ('2020-01-01 12:00:00 UTC', 1);
+
+-- Verify chunk is aligned to 6:00 (not midnight)
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'preserve_origin'
+ORDER BY range_start;
+
+-- Now change only the interval, NOT specifying origin (should preserve 6:00 origin)
+SELECT set_chunk_time_interval('preserve_origin', 43200000000);  -- 12 hours, no origin
+
+-- Verify origin is still 6:00 (should NOT be reset to midnight/default)
+SELECT hypertable_name, time_interval, time_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'preserve_origin';
+
+-- Insert more data to create new chunks with new interval
+INSERT INTO preserve_origin VALUES ('2020-01-02 12:00:00 UTC', 2);
+
+-- Verify new chunks still align to 6:00 origin (not midnight)
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'preserve_origin'
+ORDER BY range_start;
+
+DROP TABLE preserve_origin;
+
+---------------------------------------------------------------
+-- SET_CHUNK_TIME_INTERVAL: PRESERVE ORIGIN WITH CALENDAR CHUNKING
+---------------------------------------------------------------
+-- Test origin preservation with calendar-based chunking (INTERVAL type)
+
+SET timescaledb.enable_calendar_chunking = true;
+
+CREATE TABLE preserve_origin_calendar(time timestamptz NOT NULL, value int);
+SELECT create_hypertable('preserve_origin_calendar', 'time',
+    chunk_time_interval => interval '1 day',
+    chunk_time_origin => '2020-01-01 06:00:00 UTC'::timestamptz);
+
+-- Verify custom origin is set to 6:00
+SELECT hypertable_name, time_interval, time_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'preserve_origin_calendar';
+
+-- Create a chunk with the custom origin
+INSERT INTO preserve_origin_calendar VALUES ('2020-01-01 12:00:00 UTC', 1);
+
+-- Verify chunk is aligned to 6:00
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'preserve_origin_calendar'
+ORDER BY range_start;
+
+-- Now change only the interval, NOT specifying origin (should preserve 6:00 origin)
+SELECT set_chunk_time_interval('preserve_origin_calendar', interval '12 hours');
+
+-- Verify origin is still 6:00 (should NOT be reset to default midnight)
+SELECT hypertable_name, time_interval, time_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'preserve_origin_calendar';
+
+-- Insert more data to create new chunks with new interval
+INSERT INTO preserve_origin_calendar VALUES ('2020-01-02 12:00:00 UTC', 2);
+
+-- Verify new chunks still align to 6:00 origin
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'preserve_origin_calendar'
+ORDER BY range_start;
+
+DROP TABLE preserve_origin_calendar;
+
+RESET timescaledb.enable_calendar_chunking;
+
+---------------------------------------------------------------
+-- SET_CHUNK_TIME_INTERVAL: CHANGE ONLY ORIGIN (NULL INTERVAL)
+---------------------------------------------------------------
+-- Test that origin can be changed without re-specifying the interval.
+-- Currently this errors - test to document the behavior.
+
+CREATE TABLE change_origin_only(time timestamptz NOT NULL, value int);
+SELECT create_hypertable('change_origin_only', 'time',
+    chunk_time_interval => 86400000000);  -- 1 day in microseconds
+
+-- Verify initial state (default origin)
+SELECT hypertable_name, time_interval, time_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'change_origin_only';
+
+-- Try to change only the origin without specifying interval
+-- This errors due to PostgreSQL polymorphic type inference with NULL
+\set ON_ERROR_STOP 0
+SELECT set_chunk_time_interval('change_origin_only', NULL,
+    chunk_time_origin => '2020-01-01 06:00:00 UTC'::timestamptz);
+
+-- Even with explicit cast, NULL interval is rejected
+SELECT set_chunk_time_interval('change_origin_only', NULL::bigint,
+    chunk_time_origin => '2020-01-01 06:00:00 UTC'::timestamptz);
+\set ON_ERROR_STOP 1
+
+-- Verify origin (check if it changed or remained the same)
+SELECT hypertable_name, time_interval, time_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'change_origin_only';
+
+DROP TABLE change_origin_only;
+
+---------------------------------------------------------------
 -- CLEANUP
 ---------------------------------------------------------------
 RESET timezone;

@@ -225,4 +225,3 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_to_array(_timesca
 DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_column_size(_timescaledb_internal.compressed_data, ANYELEMENT);
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_uncompressed_size;
-

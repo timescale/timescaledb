@@ -28,6 +28,22 @@ typedef struct ChunkInterval
 	bool has_origin; /* True if origin was explicitly specified */
 } ChunkInterval;
 
+/*
+ * Convert a ChunkInterval to microseconds.
+ * For INTERVALOID type, converts using interval_to_usec.
+ * For INT8OID type, returns the value directly.
+ * Returns 0 for invalid types.
+ */
+extern TSDLLEXPORT int64 ts_chunk_interval_to_usec(const ChunkInterval *chunk_interval);
+
+/*
+ * Copy a ChunkInterval, properly handling pass-by-reference types.
+ * On 32-bit platforms, int64 values are pass-by-reference so a simple
+ * struct copy would copy pointers that may become invalid. This function
+ * ensures all values are properly copied into the current memory context.
+ */
+extern TSDLLEXPORT ChunkInterval ts_chunk_interval_copy(const ChunkInterval *src);
+
 typedef enum DimensionType
 {
 	DIMENSION_TYPE_OPEN,
@@ -48,10 +64,22 @@ typedef struct Dimension
 
 #define IS_OPEN_DIMENSION(d) ((d)->type == DIMENSION_TYPE_OPEN)
 #define IS_CLOSED_DIMENSION(d) ((d)->type == DIMENSION_TYPE_CLOSED)
+/*
+ * Check if a dimension uses calendar chunking vs non-calendar (fixed-size) chunking.
+ * Calendar mode: chunk_interval.type == INTERVALOID
+ *   - Catalog: interval IS NOT NULL, interval_length IS NULL
+ *   - In-memory: fd.interval_length == 0
+ * Non-calendar mode: chunk_interval.type == INT8OID
+ *   - Catalog: interval IS NULL, interval_length IS NOT NULL (> 0)
+ *   - In-memory: fd.interval_length > 0
+ * Closed (hash) dimensions: chunk_interval.type == InvalidOid (not applicable)
+ */
+#define IS_CALENDAR_CHUNKING(d) ((d)->chunk_interval.type == INTERVALOID)
 #define IS_VALID_OPEN_DIM_TYPE(type)                                                               \
 	(IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type) || IS_UUID_TYPE(type) ||                     \
 	 ts_type_is_int8_binary_compatible(type))
 
+#define IS_FLAT_INTERVAL(i) ((d)->day == 0 && (d)->month == 0)
 /*
  * A hyperspace defines how to partition in a N-dimensional space.
  */
@@ -115,13 +143,7 @@ typedef struct DimensionInfo
 	NameData colname;
 	Oid coltype;
 	DimensionType type;
-	Datum interval_datum;
-	Oid interval_type; /* Type of the interval datum */
-	int64 interval;
-	Datum origin_datum;	   /* Origin value as Datum */
-	Oid origin_type;	   /* Type of origin_datum */
-	int64 interval_origin; /* Origin in internal format */
-	bool has_origin;	   /* True if origin was explicitly specified */
+	ChunkInterval chunk_interval;
 	int32 num_slices;
 	regproc partitioning_func;
 	bool if_not_exists;
@@ -133,7 +155,8 @@ typedef struct DimensionInfo
 } DimensionInfo;
 
 #define DIMENSION_INFO_IS_SET(di) (di != NULL && OidIsValid((di)->table_relid))
-#define DIMENSION_INFO_IS_VALID(di) (info->num_slices_is_set || OidIsValid(info->interval_type))
+#define DIMENSION_INFO_IS_VALID(di)                                                                \
+	((di)->num_slices_is_set || OidIsValid((di)->chunk_interval.type))
 
 extern Hyperspace *ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension,
 									 MemoryContext mctx);
@@ -167,25 +190,28 @@ extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_open(Oid table_relid,
 																Datum origin, Oid origin_type,
 																bool has_origin);
 
+/*
+ * Convert a user-provided origin value to internal time format (Unix epoch microseconds).
+ * Supports TIMESTAMPOID, TIMESTAMPTZOID, DATEOID, and integer types.
+ * Returns 0 if origin_type is invalid.
+ */
+extern TSDLLEXPORT int64 ts_dimension_origin_to_internal(Datum origin, Oid origin_type);
 extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_closed(Oid table_relid, Name column_name,
 																  int32 num_slices,
 																  regproc partitioning_func);
 
 extern void ts_dimension_info_validate(DimensionInfo *info);
+extern void ts_dimension_info_set_defaults(DimensionInfo *info);
 extern int32 ts_dimension_add_from_info(DimensionInfo *info);
 extern void ts_dimensions_rename_schema_name(const char *old_name, const char *new_name);
 extern TSDLLEXPORT void ts_dimension_update(const Hypertable *ht, const NameData *dimname,
-											DimensionType dimtype, Datum *interval,
-											Oid *intervaltype, int16 *num_slices,
+											DimensionType dimtype,
+											const ChunkInterval *chunk_interval, int16 *num_slices,
 											Oid *integer_now_func);
-extern TSDLLEXPORT void ts_dimension_update_with_origin(
-	const Hypertable *ht, const NameData *dimname, DimensionType dimtype, Datum *interval,
-	Oid *intervaltype, int16 *num_slices, Oid *integer_now_func, Datum *origin, Oid *origin_type);
 extern TSDLLEXPORT Point *ts_point_create(int16 num_dimensions);
 extern TSDLLEXPORT bool ts_is_equality_operator(Oid opno, Oid left, Oid right);
 extern TSDLLEXPORT Datum ts_dimension_info_in(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT Datum ts_dimension_info_out(PG_FUNCTION_ARGS);
-extern TSDLLEXPORT int64 ts_dimension_origin_to_internal(Datum origin, Oid origin_type);
 
 #define hyperspace_get_open_dimension(space, i)                                                    \
 	ts_hyperspace_get_dimension(space, DIMENSION_TYPE_OPEN, i)

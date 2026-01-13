@@ -1,7 +1,7 @@
 DROP VIEW IF EXISTS timescaledb_information.dimensions;
 
 -- Drop old function signatures that are being replaced with new signatures
--- that include origin parameter
+-- that include partition_origin parameter
 DROP FUNCTION IF EXISTS @extschema@.create_hypertable(
     regclass, name, name, integer, name, name, anyelement,
     boolean, boolean, regproc, boolean, text, regproc, regproc
@@ -220,7 +220,11 @@ DELETE FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
 WHERE NOT EXISTS (SELECT FROM _timescaledb_catalog.continuous_agg WHERE mat_hypertable_id = materialization_id);
 
 --
--- Rebuild the catalog table `_timescaledb_catalog.dimension` to add interval_origin column
+-- Rebuild the catalog table `_timescaledb_catalog.dimension` to add calendar-based chunking columns
+--
+-- New columns:
+-- interval_origin: origin timestamp for chunk alignment (stored as bigint microseconds)
+-- interval: calendar-based interval (e.g., '1 month', '1 year')
 --
 
 -- Drop views that depend on the dimension table
@@ -238,7 +242,7 @@ ALTER EXTENSION timescaledb
 ALTER EXTENSION timescaledb
     DROP SEQUENCE _timescaledb_catalog.dimension_id_seq;
 
--- Save existing data with new column
+-- Save existing data
 CREATE TABLE _timescaledb_catalog._tmp_dimension AS
     SELECT
         id,
@@ -250,7 +254,9 @@ CREATE TABLE _timescaledb_catalog._tmp_dimension AS
         partitioning_func_schema,
         partitioning_func,
         NULL::bigint AS interval_origin,
+        NULL::interval AS interval,
         interval_length,
+        NULL::interval AS compress_interval,
         compress_interval_length,
         integer_now_func_schema,
         integer_now_func
@@ -262,7 +268,7 @@ CREATE TABLE _timescaledb_catalog._tmp_dimension AS
 -- Drop old table
 DROP TABLE _timescaledb_catalog.dimension;
 
--- Create new table with interval_origin column
+-- Create new table with correct column order
 CREATE TABLE _timescaledb_catalog.dimension (
     id serial NOT NULL,
     hypertable_id integer NOT NULL,
@@ -275,8 +281,10 @@ CREATE TABLE _timescaledb_catalog.dimension (
     partitioning_func name NULL,
     -- open dimensions (e.g., time)
     interval_origin bigint NULL,
+    interval interval NULL,
     interval_length bigint NULL,
     -- compress interval for rollup during compression
+    compress_interval interval NULL,
     compress_interval_length bigint NULL,
     integer_now_func_schema name NULL,
     integer_now_func name NULL,
@@ -284,7 +292,7 @@ CREATE TABLE _timescaledb_catalog.dimension (
     CONSTRAINT dimension_pkey PRIMARY KEY (id),
     CONSTRAINT dimension_hypertable_id_column_name_key UNIQUE (hypertable_id, column_name),
     CONSTRAINT dimension_check CHECK ((partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL)),
-    CONSTRAINT dimension_check1 CHECK ((num_slices IS NULL AND interval_length IS NOT NULL) OR (num_slices IS NOT NULL AND interval_length IS NULL)),
+    CONSTRAINT dimension_check1 CHECK ((num_slices IS NULL AND (interval_length IS NOT NULL OR interval IS NOT NULL)) OR (num_slices IS NOT NULL AND interval_length IS NULL AND interval IS NULL)),
     CONSTRAINT dimension_check2 CHECK ((integer_now_func_schema IS NULL AND integer_now_func IS NULL) OR (integer_now_func_schema IS NOT NULL AND integer_now_func IS NOT NULL)),
     CONSTRAINT dimension_interval_length_check CHECK (interval_length IS NULL OR interval_length > 0),
     CONSTRAINT dimension_compress_interval_length_check CHECK (compress_interval_length IS NULL OR compress_interval_length > 0),

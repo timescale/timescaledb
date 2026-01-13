@@ -75,10 +75,10 @@ SELECT set_chunk_time_interval('chunk_test', 5::bigint);
  
 
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
-  2 |             1 | tag         | integer     | f       |          3 | _timescaledb_functions   | get_partition_hash |                 |                 |                          |                         | 
-  1 |             1 | time        | integer     | t       |            |                          |                    |                 |               5 |                          |                         | 
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_origin | interval | interval_length | compress_interval | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+----------+-----------------+-------------------+--------------------------+-------------------------+------------------
+  2 |             1 | tag         | integer     | f       |          3 | _timescaledb_functions   | get_partition_hash |                 |          |                 |                   |                          |                         | 
+  1 |             1 | time        | integer     | t       |            |                          |                    |                 |          |               5 |                   |                          |                         | 
 
 INSERT INTO chunk_test VALUES (7, 24.3, 79669, 1);
 INSERT INTO chunk_test VALUES (8, 24.3, 79669, 1);

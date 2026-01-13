@@ -203,6 +203,7 @@ static bool ts_guc_enable_hypertable_create = true;
 static bool ts_guc_enable_hypertable_compression = true;
 static bool ts_guc_enable_cagg_create = true;
 static bool ts_guc_enable_policy_create = true;
+bool ts_guc_enable_calendar_chunking = false;
 
 typedef struct
 {
@@ -1321,6 +1322,20 @@ _guc_init(void)
 							 /* check_hook= */ NULL,
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_calendar_chunking"),
+							 "Create chunks aligned with calendar.",
+							 "When enabled, chunks are created so that they align "
+							 "with the start and end of, e.g., days, months, and years. "
+							 "This only applies to hypertables that use a primary partitioning "
+							 "dimension that uses TIMESTAMPTZ, DATE, and UUID (version 7).",
+							 &ts_guc_enable_calendar_chunking,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("shutdown_bgw_scheduler"),

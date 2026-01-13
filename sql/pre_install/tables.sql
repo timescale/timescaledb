@@ -96,12 +96,14 @@ CREATE TABLE _timescaledb_catalog.dimension (
   -- open dimensions (e.g., time)
   -- Origin for chunk alignment, stored as Unix epoch microseconds (not PostgreSQL epoch).
   -- For timestamp types: microseconds since 1970-01-01 00:00:00 UTC.
-  -- For integer types: the raw integer value.
-  -- NULL means use the default origin (0).
+  -- For integer types: the raw integer value (currently not supported).
+  -- NULL means use the default origin (0 for legacy chunking, 2001-01-01 for calendar chunking).
   interval_origin bigint NULL,
+  interval interval NULL, -- calendar-based interval (variable-length, e.g., '1 month').
   interval_length bigint NULL, -- fixed-size interval in microseconds for timestamp types, or raw value for integer types.
   -- compress interval is used by rollup procedure during compression
   -- in order to merge multiple chunks into a single one
+  compress_interval interval NULL,
   compress_interval_length bigint NULL,
   integer_now_func_schema name NULL,
   integer_now_func name NULL,
@@ -109,7 +111,7 @@ CREATE TABLE _timescaledb_catalog.dimension (
   CONSTRAINT dimension_pkey PRIMARY KEY (id),
   CONSTRAINT dimension_hypertable_id_column_name_key UNIQUE (hypertable_id, column_name),
   CONSTRAINT dimension_check CHECK ((partitioning_func_schema IS NULL AND partitioning_func IS NULL) OR (partitioning_func_schema IS NOT NULL AND partitioning_func IS NOT NULL)),
-  CONSTRAINT dimension_check1 CHECK ((num_slices IS NULL AND interval_length IS NOT NULL) OR (num_slices IS NOT NULL AND interval_length IS NULL)),
+  CONSTRAINT dimension_check1 CHECK ((num_slices IS NULL AND (interval_length IS NOT NULL OR interval IS NOT NULL)) OR (num_slices IS NOT NULL AND interval_length IS NULL AND interval IS NULL)),
   CONSTRAINT dimension_check2 CHECK ((integer_now_func_schema IS NULL AND integer_now_func IS NULL) OR (integer_now_func_schema IS NOT NULL AND integer_now_func IS NOT NULL)),
   CONSTRAINT dimension_interval_length_check CHECK (interval_length IS NULL OR interval_length > 0),
   CONSTRAINT dimension_compress_interval_length_check CHECK (compress_interval_length IS NULL OR compress_interval_length > 0),

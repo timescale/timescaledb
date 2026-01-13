@@ -112,13 +112,13 @@ select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
   2 | test_schema | test_table | chunk_schema           | _hyper_2                |              3 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
 
 select * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
-  1 |             1 | time        | bigint      | t       |            |                          |                    |                 |   2592000000000 |                          |                         | 
-  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                 |                          |                         | 
-  3 |             2 | time        | bigint      | t       |            |                          |                    |                 |   2592000000000 |                          |                         | 
-  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                 |                          |                         | 
-  5 |             2 | location    | text        | f       |          4 | _timescaledb_functions   | get_partition_hash |                 |                 |                          |                         | 
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_origin | interval | interval_length | compress_interval | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+----------+-----------------+-------------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | bigint      | t       |            |                          |                    |                 |          |   2592000000000 |                   |                          |                         | 
+  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |          |                 |                   |                          |                         | 
+  3 |             2 | time        | bigint      | t       |            |                          |                    |                 |          |   2592000000000 |                   |                          |                         | 
+  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |          |                 |                   |                          |                         | 
+  5 |             2 | location    | text        | f       |          4 | _timescaledb_functions   | get_partition_hash |                 |          |                 |                   |                          |                         | 
 
 --test that we can change the number of partitions and that 1 is allowed
 SELECT set_number_partitions('test_schema.test_table', 1, 'location');
@@ -127,9 +127,9 @@ SELECT set_number_partitions('test_schema.test_table', 1, 'location');
  
 
 select * from _timescaledb_catalog.dimension WHERE column_name = 'location';
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
-  5 |             2 | location    | text        | f       |          1 | _timescaledb_functions   | get_partition_hash |                 |                 |                          |                         | 
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_origin | interval | interval_length | compress_interval | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+----------+-----------------+-------------------+--------------------------+-------------------------+------------------
+  5 |             2 | location    | text        | f       |          1 | _timescaledb_functions   | get_partition_hash |                 |          |                 |                   |                          |                         | 
 
 SELECT set_number_partitions('test_schema.test_table', 2, 'location');
  set_number_partitions 
@@ -137,9 +137,9 @@ SELECT set_number_partitions('test_schema.test_table', 2, 'location');
  
 
 select * from _timescaledb_catalog.dimension WHERE column_name = 'location';
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
-  5 |             2 | location    | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                 |                          |                         | 
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_origin | interval | interval_length | compress_interval | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+----------+-----------------+-------------------+--------------------------+-------------------------+------------------
+  5 |             2 | location    | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |          |                 |                   |                          |                         | 
 
 \set ON_ERROR_STOP 0
 --must give an explicit dimension when there are multiple space dimensions
@@ -167,14 +167,14 @@ select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
   2 | test_schema | test_table | chunk_schema           | _hyper_2                |              4 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
 
 select * from _timescaledb_catalog.dimension;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
-  1 |             1 | time        | bigint      | t       |            |                          |                    |                 |   2592000000000 |                          |                         | 
-  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                 |                          |                         | 
-  3 |             2 | time        | bigint      | t       |            |                          |                    |                 |   2592000000000 |                          |                         | 
-  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                 |                          |                         | 
-  5 |             2 | location    | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                 |                          |                         | 
-  6 |             2 | id          | integer     | t       |            |                          |                    |                 |            1000 |                          |                         | 
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_origin | interval | interval_length | compress_interval | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+----------+-----------------+-------------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | bigint      | t       |            |                          |                    |                 |          |   2592000000000 |                   |                          |                         | 
+  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |          |                 |                   |                          |                         | 
+  3 |             2 | time        | bigint      | t       |            |                          |                    |                 |          |   2592000000000 |                   |                          |                         | 
+  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |          |                 |                   |                          |                         | 
+  5 |             2 | location    | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |          |                 |                   |                          |                         | 
+  6 |             2 | id          | integer     | t       |            |                          |                    |                 |          |            1000 |                   |                          |                         | 
 
 -- Test add_dimension: can use interval types for TIMESTAMPTZ columns
 CREATE TABLE dim_test_time(time TIMESTAMPTZ, time2 TIMESTAMPTZ, time3 BIGINT, temp float8, device int, location int);
@@ -699,9 +699,9 @@ select set_integer_now_func('test_table_int', 'dummy_now');
  
 
 select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
- 29 |            17 | time        | bigint      | t       |            |                          |                   |                 |               1 |                          | public                  | dummy_now
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_origin | interval | interval_length | compress_interval | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+----------+-----------------+-------------------+--------------------------+-------------------------+------------------
+ 29 |            17 | time        | bigint      | t       |            |                          |                   |                 |          |               1 |                   |                          | public                  | dummy_now
 
 -- show chunks works with "created_before" and errors out with time used in "older_than"
 SELECT SHOW_CHUNKS('test_table_int', older_than => 10);
@@ -733,9 +733,9 @@ select set_integer_now_func('test_table_int', 'my_user_schema.dummy_now4', repla
 \c :TEST_DBNAME :ROLE_SUPERUSER
 ALTER SCHEMA my_user_schema RENAME TO my_new_schema;
 select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
- 29 |            17 | time        | bigint      | t       |            |                          |                   |                 |               1 |                          | my_new_schema           | dummy_now4
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_origin | interval | interval_length | compress_interval | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+----------+-----------------+-------------------+--------------------------+-------------------------+------------------
+ 29 |            17 | time        | bigint      | t       |            |                          |                   |                 |          |               1 |                   |                          | my_new_schema           | dummy_now4
 
 -- github issue #4650
 CREATE TABLE sample_table (

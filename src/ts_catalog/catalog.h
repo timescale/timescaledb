@@ -185,7 +185,9 @@ enum Anum_dimension
 	Anum_dimension_partitioning_func_schema,
 	Anum_dimension_partitioning_func,
 	Anum_dimension_interval_origin,
+	Anum_dimension_interval,
 	Anum_dimension_interval_length,
+	Anum_dimension_compress_interval,
 	Anum_dimension_compress_interval_length,
 	Anum_dimension_integer_now_func_schema,
 	Anum_dimension_integer_now_func,
@@ -201,13 +203,27 @@ typedef struct FormData_dimension
 	NameData column_name;
 	Oid column_type;
 	bool aligned;
-	/* closed (space) columns */
+	/* Closed (space) dimension information */
 	int16 num_slices;
 	NameData partitioning_func_schema;
 	NameData partitioning_func;
-	/* open (time) columns */
+	/*
+	 * Open (time) dimension information
+	 *
+	 * An open dimension is divided into intervals that can either be plain
+	 * integer intervals or calendar-based intervals (days, months, years). An
+	 * interval has an origin, which for integer intervals is an integer while
+	 * calendar-based intervals have a TimestampTz origin (but encoded into
+	 * the same int64).
+	 *
+	 * Integer intervals are encoded into interval_length.
+	 *
+	 * Calendar-based intervals are encoded into a PostgreSQL interval.
+	 */
 	int64 interval_origin;
+	Interval interval;
 	int64 interval_length;
+	Interval compress_interval;
 	int64 compress_interval_length;
 	NameData integer_now_func_schema;
 	NameData integer_now_func;
