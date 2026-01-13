@@ -51,10 +51,10 @@ HINT:  To access all features and the best time-series experience, try out Times
 -- Test error hint for invalid timescaledb options during CREATE TABLE
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.invalid_option = true);
 ERROR:  unrecognized parameter "tsdb.invalid_option"
-HINT:  Valid timescaledb parameters are: hypertable, columnstore, partition_column, chunk_interval, create_default_indexes, associated_schema, associated_table_prefix, orderby, segmentby, compress_index
+HINT:  Valid timescaledb parameters are: hypertable, columnstore, partition_column, chunk_interval, create_default_indexes, associated_schema, associated_table_prefix, orderby, segmentby, compress_index, chunk_origin
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.nonexistent_param = false);
 ERROR:  unrecognized parameter "timescaledb.nonexistent_param"
-HINT:  Valid timescaledb parameters are: hypertable, columnstore, partition_column, chunk_interval, create_default_indexes, associated_schema, associated_table_prefix, orderby, segmentby, compress_index
+HINT:  Valid timescaledb parameters are: hypertable, columnstore, partition_column, chunk_interval, create_default_indexes, associated_schema, associated_table_prefix, orderby, segmentby, compress_index, chunk_origin
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
 BEGIN;

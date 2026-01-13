@@ -8,6 +8,7 @@ set(TEST_FILES
     chunks.sql
     chunk_adaptive.sql
     chunk_publication.sql
+    chunk_origin.sql
     chunk_utils.sql
     cluster.sql
     create_chunks.sql

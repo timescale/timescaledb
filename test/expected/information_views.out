@@ -234,6 +234,8 @@ column_type       | timestamp with time zone
 dimension_type    | Time
 time_interval     | @ 7 days
 integer_interval  | 
+time_origin       | 
+integer_origin    | 
 integer_now_func  | 
 num_partitions    | 
 -[ RECORD 2 ]-----+-------------------------
@@ -245,6 +247,8 @@ column_type       | timestamp with time zone
 dimension_type    | Time
 time_interval     | @ 7 days
 integer_interval  | 
+time_origin       | 
+integer_origin    | 
 integer_now_func  | 
 num_partitions    | 
 -[ RECORD 3 ]-----+-------------------------
@@ -256,6 +260,8 @@ column_type       | timestamp with time zone
 dimension_type    | Time
 time_interval     | @ 7 days
 integer_interval  | 
+time_origin       | 
+integer_origin    | 
 integer_now_func  | 
 num_partitions    | 
 -[ RECORD 4 ]-----+-------------------------
@@ -267,6 +273,8 @@ column_type       | timestamp with time zone
 dimension_type    | Time
 time_interval     | @ 7 days
 integer_interval  | 
+time_origin       | 
+integer_origin    | 
 integer_now_func  | 
 num_partitions    | 
 -[ RECORD 5 ]-----+-------------------------
@@ -278,6 +286,8 @@ column_type       | bigint
 dimension_type    | Time
 time_interval     | 
 integer_interval  | 10
+time_origin       | 
+integer_origin    | 
 integer_now_func  | table_int_now
 num_partitions    | 
 

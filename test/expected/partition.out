@@ -9,10 +9,10 @@ SELECT create_hypertable('part_legacy', 'time', 'device', 2, partitioning_func =
 
 -- Show legacy partitioning function is used
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------+--------------------------+-------------------------+------------------
-  1 |             1 | time        | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
-  2 |             1 | device      | integer                  | f       |          2 | _timescaledb_functions   | get_partition_for_key |                 |                          |                         | 
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                       |                 |    604800000000 |                          |                         | 
+  2 |             1 | device      | integer                  | f       |          2 | _timescaledb_functions   | get_partition_for_key |                 |                 |                          |                         | 
 
 INSERT INTO part_legacy VALUES ('2017-03-22T09:18:23', 23.4, 1);
 INSERT INTO part_legacy VALUES ('2017-03-22T09:18:23', 23.4, 76);
@@ -46,12 +46,12 @@ SELECT create_hypertable('part_new', 'time', 'device', 2);
  (2,public,part_new,t)
 
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------+--------------------------+-------------------------+------------------
-  1 |             1 | time        | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
-  2 |             1 | device      | integer                  | f       |          2 | _timescaledb_functions   | get_partition_for_key |                 |                          |                         | 
-  3 |             2 | time        | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
-  4 |             2 | device      | integer                  | f       |          2 | _timescaledb_functions   | get_partition_hash    |                 |                          |                         | 
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | timestamp with time zone | t       |            |                          |                       |                 |    604800000000 |                          |                         | 
+  2 |             1 | device      | integer                  | f       |          2 | _timescaledb_functions   | get_partition_for_key |                 |                 |                          |                         | 
+  3 |             2 | time        | timestamp with time zone | t       |            |                          |                       |                 |    604800000000 |                          |                         | 
+  4 |             2 | device      | integer                  | f       |          2 | _timescaledb_functions   | get_partition_hash    |                 |                 |                          |                         | 
 
 INSERT INTO part_new VALUES ('2017-03-22T09:18:23', 23.4, 1);
 INSERT INTO part_new VALUES ('2017-03-22T09:18:23', 23.4, 2);
@@ -115,17 +115,17 @@ SELECT add_dimension('part_add_dim', 'location', 2, partitioning_func => '_times
  (9,public,part_add_dim,location,t)
 
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-----------------------+-----------------+--------------------------+-------------------------+------------------
-  1 |             1 | time        | timestamp with time zone    | t       |            |                          |                       |    604800000000 |                          |                         | 
-  2 |             1 | device      | integer                     | f       |          2 | _timescaledb_functions   | get_partition_for_key |                 |                          |                         | 
-  3 |             2 | time        | timestamp with time zone    | t       |            |                          |                       |    604800000000 |                          |                         | 
-  4 |             2 | device      | integer                     | f       |          2 | _timescaledb_functions   | get_partition_hash    |                 |                          |                         | 
-  6 |             3 | temp        | double precision            | f       |          2 | _timescaledb_functions   | get_partition_hash    |                 |                          |                         | 
-  5 |             3 | time        | timestamp without time zone | t       |            |                          |                       |    604800000000 |                          |                         | 
-  7 |             4 | time        | timestamp with time zone    | t       |            |                          |                       |    604800000000 |                          |                         | 
-  8 |             4 | temp        | double precision            | f       |          2 | _timescaledb_functions   | get_partition_hash    |                 |                          |                         | 
-  9 |             4 | location    | integer                     | f       |          2 | _timescaledb_functions   | get_partition_for_key |                 |                          |                         | 
+ id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-----------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | timestamp with time zone    | t       |            |                          |                       |                 |    604800000000 |                          |                         | 
+  2 |             1 | device      | integer                     | f       |          2 | _timescaledb_functions   | get_partition_for_key |                 |                 |                          |                         | 
+  3 |             2 | time        | timestamp with time zone    | t       |            |                          |                       |                 |    604800000000 |                          |                         | 
+  4 |             2 | device      | integer                     | f       |          2 | _timescaledb_functions   | get_partition_hash    |                 |                 |                          |                         | 
+  6 |             3 | temp        | double precision            | f       |          2 | _timescaledb_functions   | get_partition_hash    |                 |                 |                          |                         | 
+  5 |             3 | time        | timestamp without time zone | t       |            |                          |                       |                 |    604800000000 |                          |                         | 
+  7 |             4 | time        | timestamp with time zone    | t       |            |                          |                       |                 |    604800000000 |                          |                         | 
+  8 |             4 | temp        | double precision            | f       |          2 | _timescaledb_functions   | get_partition_hash    |                 |                 |                          |                         | 
+  9 |             4 | location    | integer                     | f       |          2 | _timescaledb_functions   | get_partition_for_key |                 |                 |                          |                         | 
 
 -- Test that we support custom SQL-based partitioning functions and
 -- that our native partitioning function handles function expressions

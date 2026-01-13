@@ -85,8 +85,8 @@ SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped,
 ----+---------------+-------------+------------+---------------------+---------+--------+-----------
 
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
 
 SELECT * FROM _timescaledb_catalog.dimension_slice;
  id | dimension_id | range_start | range_end 

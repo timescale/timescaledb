@@ -83,9 +83,9 @@ FROM _timescaledb_catalog.hypertable;
 -- Check that adaptive chunking sets a 1 day default chunk time
 -- interval => 86400000000 microseconds
 SELECT * FROM _timescaledb_catalog.dimension;
- id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
-  2 |             2 | time        | timestamp with time zone | t       |            |                          |                   |     86400000000 |                          |                         | 
+ id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_origin | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+-----------------+--------------------------+-------------------------+------------------
+  2 |             2 | time        | timestamp with time zone | t       |            |                          |                   |                 |     86400000000 |                          |                         | 
 
 -- Change the target size
 SELECT * FROM set_adaptive_chunking('test_adaptive', '2MB');
@@ -617,6 +617,8 @@ column_type       | timestamp with time zone
 dimension_type    | Time
 time_interval     | @ 19 days 5 hours 6 mins 50.695333 secs
 integer_interval  | 
+time_origin       | 
+integer_origin    | 
 integer_now_func  | 
 num_partitions    | 
 -[ RECORD 2 ]-----+----------------------------------------
@@ -628,6 +630,8 @@ column_type       | integer
 dimension_type    | Space
 time_interval     | 
 integer_interval  | 
+time_origin       | 
+integer_origin    | 
 integer_now_func  | 
 num_partitions    | 2
 
