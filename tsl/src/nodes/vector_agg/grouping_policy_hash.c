@@ -218,6 +218,99 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 	}
 }
 
+typedef struct
+{
+	const int nrows;
+	const int past_the_end_word;
+	uint64 const *const filter;
+
+	int start_word;
+	int end_word;
+
+	int start_row;
+	int end_row;
+
+	int stats_matched_rows;
+} FilterWordIterator;
+
+static void
+filter_word_iterator_advance(FilterWordIterator *iter)
+{
+	if (iter->filter == NULL)
+	{
+		iter->start_word = iter->end_word;
+		iter->end_word = iter->past_the_end_word;
+		iter->start_row = iter->end_row;
+		iter->end_row = iter->nrows;
+		return;
+	}
+
+	/*
+	 * Skip the bitmap words which are zero.
+	 */
+	for (iter->start_word = iter->end_word;
+		 iter->start_word < iter->past_the_end_word && iter->filter[iter->start_word] == 0;
+		 iter->start_word++)
+		;
+
+	if (iter->start_word >= iter->past_the_end_word)
+	{
+		/*
+		 * Finished. The start_row shouldn't be used because the iterator is
+		 * invalid now, but set it to past-the-end for consistency.
+		 */
+		iter->start_row = iter->nrows;
+		return;
+	}
+
+	/*
+	 * Collect the consecutive bitmap words which are nonzero.
+	 */
+	for (iter->end_word = iter->start_word + 1;
+		 iter->end_word < iter->past_the_end_word && iter->filter[iter->end_word] != 0;
+		 iter->end_word++)
+		;
+
+	Assert(iter->end_word > iter->start_word);
+
+	/*
+	 * Now we have the [start, end] range of bitmap words that are
+	 * nonzero.
+	 *
+	 * Determine starting and ending rows, also skipping the starting
+	 * and trailing zero bits at the ends of the range.
+	 */
+	iter->start_row =
+		iter->start_word * 64 + pg_rightmost_one_pos64(iter->filter[iter->start_word]);
+	Assert(iter->start_row <= iter->nrows);
+
+	/*
+	 * The bits for past-the-end rows must be set to zero, so this
+	 * calculation should yield no more than n.
+	 */
+	iter->end_row =
+		(iter->end_word - 1) * 64 + pg_leftmost_one_pos64(iter->filter[iter->end_word - 1]) + 1;
+	Assert(iter->end_row <= iter->nrows);
+}
+
+static FilterWordIterator
+filter_word_iterator_init(int nrows, uint64 const *filter)
+{
+	FilterWordIterator iter = { .nrows = nrows,
+								.past_the_end_word = (nrows - 1) / 64 + 1,
+								.filter = filter };
+
+	filter_word_iterator_advance(&iter);
+
+	return iter;
+}
+
+static bool
+filter_word_iterator_is_valid(FilterWordIterator const *iter)
+{
+	return iter->start_word < iter->past_the_end_word;
+}
+
 static void
 add_one_range(GroupingPolicyHash *policy, DecompressContext *dcontext, TupleTableSlot *vector_slot,
 			  const int start_row, const int end_row)
@@ -298,8 +391,8 @@ static void
 gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlot *vector_slot)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
-	uint16 n;
-	const uint64 *restrict filter = vector_slot_get_qual_result(vector_slot, &n);
+	uint16 nrows;
+	const uint64 *restrict filter = vector_slot_get_qual_result(vector_slot, &nrows);
 
 	Assert(!policy->returning_results);
 
@@ -308,23 +401,23 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlo
 	 * to a given batch row. We don't need the offsets for the previous batch
 	 * that are currently stored there, so we don't need to use repalloc.
 	 */
-	if ((size_t) n > policy->num_key_index_for_row)
+	if ((size_t) nrows > policy->num_key_index_for_row)
 	{
 		if (policy->key_index_for_row != NULL)
 		{
 			pfree(policy->key_index_for_row);
 		}
-		policy->num_key_index_for_row = n;
+		policy->num_key_index_for_row = nrows;
 		policy->key_index_for_row =
 			palloc(sizeof(policy->key_index_for_row[0]) * policy->num_key_index_for_row);
 	}
-	memset(policy->key_index_for_row, 0, n * sizeof(policy->key_index_for_row[0]));
+	memset(policy->key_index_for_row, 0, nrows * sizeof(policy->key_index_for_row[0]));
 
 	/*
 	 * Allocate the temporary filter array for computing the combined results of
 	 * batch filter, aggregate filter and column validity.
 	 */
-	const size_t num_words = (n + 63) / 64;
+	const size_t num_words = (nrows + 63) / 64;
 	if (num_words > policy->num_tmp_filter_words)
 	{
 		policy->tmp_filter = palloc(sizeof(*policy->tmp_filter) * (num_words * 2 + 1));
@@ -350,75 +443,18 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlo
 	/*
 	 * Add the batch rows to aggregate function states.
 	 */
-	if (filter == NULL)
+	int stats_matched_rows = 0;
+	for (FilterWordIterator iter = filter_word_iterator_init(nrows, filter);
+		 filter_word_iterator_is_valid(&iter);
+		 filter_word_iterator_advance(&iter))
 	{
-		/*
-		 * We don't have a filter on this batch, so aggregate it entirely in one
-		 * go.
-		 */
-		add_one_range(policy, dcontext, vector_slot, 0, n);
-	}
-	else
-	{
-		/*
-		 * If we have a filter, skip the rows for which the entire words of the
-		 * filter bitmap are zero. This improves performance for highly
-		 * selective filters.
-		 */
-		int statistics_range_row = 0;
-		int start_word = 0;
-		int end_word = 0;
-		int past_the_end_word = (n - 1) / 64 + 1;
-		for (;;)
-		{
-			/*
-			 * Skip the bitmap words which are zero.
-			 */
-			for (start_word = end_word; start_word < past_the_end_word && filter[start_word] == 0;
-				 start_word++)
-				;
-
-			if (start_word >= past_the_end_word)
-			{
-				break;
-			}
-
-			/*
-			 * Collect the consecutive bitmap words which are nonzero.
-			 */
-			for (end_word = start_word + 1; end_word < past_the_end_word && filter[end_word] != 0;
-				 end_word++)
-				;
-
-			/*
-			 * Now we have the [start, end] range of bitmap words that are
-			 * nonzero.
-			 *
-			 * Determine starting and ending rows, also skipping the starting
-			 * and trailing zero bits at the ends of the range.
-			 */
-			const int start_row = start_word * 64 + pg_rightmost_one_pos64(filter[start_word]);
-			Assert(start_row <= n);
-
-			/*
-			 * The bits for past-the-end rows must be set to zero, so this
-			 * calculation should yield no more than n.
-			 */
-			Assert(end_word > start_word);
-			const int end_row =
-				(end_word - 1) * 64 + pg_leftmost_one_pos64(filter[end_word - 1]) + 1;
-			Assert(end_row <= n);
-
-			statistics_range_row += end_row - start_row;
-
-			add_one_range(policy, dcontext, vector_slot, start_row, end_row);
-		}
-
-		policy->stat_bulk_filtered_rows += n - statistics_range_row;
+		stats_matched_rows += iter.end_row - iter.start_row;
+		add_one_range(policy, dcontext, vector_slot, iter.start_row, iter.end_row);
 	}
 
-	policy->stat_input_total_rows += n;
-	policy->stat_input_valid_rows += arrow_num_valid(filter, n);
+	policy->stat_input_total_rows += nrows;
+	policy->stat_input_valid_rows += arrow_num_valid(filter, nrows);
+	policy->stat_bulk_filtered_rows += nrows - stats_matched_rows;
 }
 
 static bool
