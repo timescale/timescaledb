@@ -187,7 +187,7 @@ invalidation_threshold_scan_update(TupleInfo *ti, void *const data)
  * This will also lock the row.
  */
 int64
-invalidation_threshold_get(int32 hypertable_id, Oid type)
+invalidation_threshold_get(int32 hypertable_id)
 {
 	InvalidationThresholdGetData data = { .hypertable_id = hypertable_id };
 	ScanKeyData scankey[1];
