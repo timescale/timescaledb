@@ -29,9 +29,8 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-log() { printf "%b[INFO]%b %s\n" "${COLOR_BLUE}" "${RESET}" "$1"; }
-success() { printf "%b[SUCCESS]%b %s\n" "${COLOR_GREEN}" "${RESET}" "$1"; }
-error() { printf "%b[ERROR]%b %s\n" "${COLOR_RED}" "${RESET}" "$1"; exit 1; }
+success() { printf "%b✔%b %s\n" "${COLOR_GREEN}" "${RESET}" "$1"; }
+error() { printf "%b✖%b %s\n" "${COLOR_RED}" "${RESET}" "$1"; exit 1; }
 
 # --- Spinner Function ---
 # Usage: Run command in background, then call: spinner $! "Loading text..."
@@ -97,20 +96,20 @@ header
 printf "%b1. System Check%b\n" "${BOLD}" "${RESET}"
 
 if ! command -v docker > /dev/null 2>&1; then
-    error "${COLOR_RED}✖${RESET} Docker is not found. Please install Docker Desktop (Windows/Mac) or Docker Engine (Linux) first."
+    error "Docker is not found. Please install Docker Desktop (Windows/Mac) or Docker Engine (Linux) first."
 else
-    printf "%b✔%b Docker found\n" "${COLOR_GREEN}" "${RESET}"
+    success "Docker found"
 fi
 
 if ! docker info > /dev/null 2>&1; then
-    error "${COLOR_RED}✖${RESET} Docker is installed but not running. Please start Docker and try again."
+    error "Docker is installed but not running. Please start Docker and try again."
 else
-    printf "%b✔%b Docker is running\n" "${COLOR_GREEN}" "${RESET}"
+    success "Docker is running"
 fi
 
 # Cleanup Old Containers
 if [ "$(docker ps -aq -f name=^/${CONTAINER_NAME}$)" ]; then
-    printf "%b✔%b Found existing container. Removing it ..\n" "${COLOR_GREEN}" "${RESET}"
+    success "Found existing container. Removing it .."
     docker rm -f $CONTAINER_NAME > /dev/null
 fi
 
@@ -138,13 +137,13 @@ else
     exit 1
 fi
 
-printf "%b✔%b Starting TimescaleDB on port $DB_PORT\n" "${COLOR_GREEN}" "${RESET}"
+success "Starting TimescaleDB on port $DB_PORT\n"
 
 docker run -d \
     --name "$CONTAINER_NAME" \
     -p ${DB_PORT}:5432 \
     -e POSTGRES_PASSWORD="$DB_PASSWORD" \
-    -v timescaledb_data:/home/postgres/pgdata/data \
+    -v ${CONTAINER_NAME}_data:/home/postgres/pgdata/data \
     "$IMAGE_NAME" > /dev/null
 
 # --- 4. Wait for Healthcheck ---
@@ -176,7 +175,7 @@ tput cnorm # Restore cursor
 
 if [ $RETRIES -eq 0 ]; then
     printf "\n"
-    error "{COLOR_RED}✖${RESET} Database failed to start in time. Check logs with: docker logs $CONTAINER_NAME"
+    error "Database failed to start in time. Check logs with: docker logs $CONTAINER_NAME"
 fi
 
 # --- 5. Success ---
