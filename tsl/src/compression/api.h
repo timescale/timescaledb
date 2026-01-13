@@ -14,7 +14,9 @@
 extern Datum tsl_create_compressed_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_compress_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_decompress_chunk(PG_FUNCTION_ARGS);
+extern Datum tsl_rebuild_columnstore(PG_FUNCTION_ARGS);
 extern Oid tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress);
+extern Chunk *tsl_compression_chunk_create(Hypertable *compressed_ht, Chunk *src_chunk);
 
 extern Datum tsl_get_compressed_chunk_index_for_recompression(
 	PG_FUNCTION_ARGS); // arg is oid of uncompressed chunk
@@ -25,3 +27,4 @@ extern void compression_chunk_size_catalog_insert(int32 src_chunk_id, const Rela
 												  int64 rowcnt_pre_compression,
 												  int64 rowcnt_post_compression,
 												  int64 rowcnt_frozen);
+extern Datum tsl_estimate_compressed_batch_size(PG_FUNCTION_ARGS);

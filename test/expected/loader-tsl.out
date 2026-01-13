@@ -6,18 +6,15 @@
 CREATE DATABASE :"TEST_DBNAME_2";
 DROP EXTENSION timescaledb;
 --no extension
-\dx
-                 List of installed extensions
+SELECT * FROM test.extension;
   Name   | Version |   Schema   |         Description          
 ---------+---------+------------+------------------------------
  plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
-(1 row)
 
 SELECT 1;
  ?column? 
 ----------
         1
-(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-1';
@@ -27,16 +24,13 @@ WARNING:  mock post_analyze_hook "mock-1"
  ?column? 
 ----------
         1
-(1 row)
 
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock post_analyze_hook "mock-1"
-                                      List of installed extensions
     Name     | Version |   Schema   |                            Description                            
 -------------+---------+------------+-------------------------------------------------------------------
  plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
  timescaledb | mock-1  | public     | Enables scalable inserts and complex queries for time-series data
-(2 rows)
 
 CREATE EXTENSION IF NOT EXISTS timescaledb VERSION 'mock-1';
 WARNING:  mock post_analyze_hook "mock-1"
@@ -53,18 +47,15 @@ ERROR:  extension "timescaledb" has already been loaded with another version
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
 --no extension
-\dx
-                 List of installed extensions
+SELECT * FROM test.extension;
   Name   | Version |   Schema   |         Description          
 ---------+---------+------------+------------------------------
  plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
-(1 row)
 
 SELECT 1;
  ?column? 
 ----------
         1
-(1 row)
 
 CREATE EXTENSION timescaledb VERSION 'mock-1';
 WARNING:  mock init "mock-1"
@@ -74,16 +65,13 @@ WARNING:  mock post_analyze_hook "mock-1"
  ?column? 
 ----------
         1
-(1 row)
 
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock post_analyze_hook "mock-1"
-                                      List of installed extensions
     Name     | Version |   Schema   |                            Description                            
 -------------+---------+------------+-------------------------------------------------------------------
  plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
  timescaledb | mock-1  | public     | Enables scalable inserts and complex queries for time-series data
-(2 rows)
 
 --start new backend;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -93,14 +81,12 @@ WARNING:  mock post_analyze_hook "mock-1"
  ?column? 
 ----------
         1
-(1 row)
 
 SELECT 1;
 WARNING:  mock post_analyze_hook "mock-1"
  ?column? 
 ----------
         1
-(1 row)
 
 --test fn call after load
 SELECT mock_function();
@@ -109,16 +95,13 @@ WARNING:  mock function call "mock-1"
  mock_function 
 ---------------
  
-(1 row)
 
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock post_analyze_hook "mock-1"
-                                      List of installed extensions
     Name     | Version |   Schema   |                            Description                            
 -------------+---------+------------+-------------------------------------------------------------------
  plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
  timescaledb | mock-1  | public     | Enables scalable inserts and complex queries for time-series data
-(2 rows)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 --test fn call as first command
@@ -129,7 +112,6 @@ WARNING:  mock function call "mock-1"
  mock_function 
 ---------------
  
-(1 row)
 
 --use guc to prevent loading
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -138,13 +120,11 @@ SELECT 1;
  ?column? 
 ----------
         1
-(1 row)
 
 SELECT 1;
  ?column? 
 ----------
         1
-(1 row)
 
 SET timescaledb.disable_load = 'off';
 SELECT 1;
@@ -153,7 +133,6 @@ WARNING:  mock post_analyze_hook "mock-1"
  ?column? 
 ----------
         1
-(1 row)
 
 \set ON_ERROR_STOP 0
 SET timescaledb.disable_load = 'not bool';
@@ -169,7 +148,6 @@ WARNING:  mock post_analyze_hook "mock-1"
  ?column? 
 ----------
         1
-(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timescaledb.disable_load TO DEFAULT;
@@ -179,7 +157,6 @@ WARNING:  mock post_analyze_hook "mock-1"
  ?column? 
 ----------
         1
-(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 RESET timescaledb.disable_load;
@@ -189,7 +166,6 @@ WARNING:  mock post_analyze_hook "mock-1"
  ?column? 
 ----------
         1
-(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timescaledb.other = 'on';
@@ -200,7 +176,6 @@ WARNING:  mock post_analyze_hook "mock-1"
  ?column? 
 ----------
         1
-(1 row)
 
 \set ON_ERROR_STOP 0
 --cannot update extension after .so of previous version already loaded
@@ -208,23 +183,19 @@ ALTER EXTENSION timescaledb UPDATE TO 'mock-2';
 ERROR:  extension "timescaledb" cannot be updated after the old version has already been loaded
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
-\dx
-                 List of installed extensions
+SELECT * FROM test.extension;
   Name   | Version |   Schema   |         Description          
 ---------+---------+------------+------------------------------
  plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
-(1 row)
 
 CREATE EXTENSION timescaledb VERSION 'mock-1';
 WARNING:  mock init "mock-1"
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock post_analyze_hook "mock-1"
-                                      List of installed extensions
     Name     | Version |   Schema   |                            Description                            
 -------------+---------+------------+-------------------------------------------------------------------
  plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
  timescaledb | mock-1  | public     | Enables scalable inserts and complex queries for time-series data
-(2 rows)
 
 --start a new backend to update
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
@@ -235,16 +206,13 @@ WARNING:  mock post_analyze_hook "mock-2"
  ?column? 
 ----------
         1
-(1 row)
 
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock post_analyze_hook "mock-2"
-                                      List of installed extensions
     Name     | Version |   Schema   |                            Description                            
 -------------+---------+------------+-------------------------------------------------------------------
  plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
  timescaledb | mock-2  | public     | Enables scalable inserts and complex queries for time-series data
-(2 rows)
 
 --drop extension
 DROP EXTENSION timescaledb;
@@ -253,14 +221,11 @@ SELECT 1;
  ?column? 
 ----------
         1
-(1 row)
 
-\dx
-                 List of installed extensions
+SELECT * FROM test.extension;
   Name   | Version |   Schema   |         Description          
 ---------+---------+------------+------------------------------
  plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
-(1 row)
 
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-2';
@@ -270,16 +235,13 @@ WARNING:  mock post_analyze_hook "mock-2"
  ?column? 
 ----------
         1
-(1 row)
 
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock post_analyze_hook "mock-2"
-                                      List of installed extensions
     Name     | Version |   Schema   |                            Description                            
 -------------+---------+------------+-------------------------------------------------------------------
  plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
  timescaledb | mock-2  | public     | Enables scalable inserts and complex queries for time-series data
-(2 rows)
 
 -- test db 1 still has old version
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -289,28 +251,23 @@ WARNING:  mock post_analyze_hook "mock-1"
  ?column? 
 ----------
         1
-(1 row)
 
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock post_analyze_hook "mock-1"
-                                      List of installed extensions
     Name     | Version |   Schema   |                            Description                            
 -------------+---------+------------+-------------------------------------------------------------------
  plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
  timescaledb | mock-1  | public     | Enables scalable inserts and complex queries for time-series data
-(2 rows)
 
 --try a broken upgrade
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock init "mock-2"
 WARNING:  mock post_analyze_hook "mock-2"
-                                      List of installed extensions
     Name     | Version |   Schema   |                            Description                            
 -------------+---------+------------+-------------------------------------------------------------------
  plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
  timescaledb | mock-2  | public     | Enables scalable inserts and complex queries for time-series data
-(2 rows)
 
 \set ON_ERROR_STOP 0
 ALTER EXTENSION timescaledb UPDATE TO 'mock-3';
@@ -322,16 +279,13 @@ WARNING:  mock post_analyze_hook "mock-2"
  ?column? 
 ----------
         1
-(1 row)
 
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock post_analyze_hook "mock-2"
-                                      List of installed extensions
     Name     | Version |   Schema   |                            Description                            
 -------------+---------+------------+-------------------------------------------------------------------
  plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
  timescaledb | mock-2  | public     | Enables scalable inserts and complex queries for time-series data
-(2 rows)
 
 --drop extension
 DROP EXTENSION timescaledb;
@@ -340,14 +294,11 @@ SELECT 1;
  ?column? 
 ----------
         1
-(1 row)
 
-\dx
-                 List of installed extensions
+SELECT * FROM test.extension;
   Name   | Version |   Schema   |         Description          
 ---------+---------+------------+------------------------------
  plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
-(1 row)
 
 --create extension anew, only upgrade was broken
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
@@ -358,16 +309,13 @@ WARNING:  mock post_analyze_hook "mock-3"
  ?column? 
 ----------
         1
-(1 row)
 
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock post_analyze_hook "mock-3"
-                                      List of installed extensions
     Name     | Version |   Schema   |                            Description                            
 -------------+---------+------------+-------------------------------------------------------------------
  plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
  timescaledb | mock-3  | public     | Enables scalable inserts and complex queries for time-series data
-(2 rows)
 
 DROP EXTENSION timescaledb;
 WARNING:  mock post_analyze_hook "mock-3"
@@ -375,7 +323,6 @@ SELECT 1;
  ?column? 
 ----------
         1
-(1 row)
 
 --mismatched version errors
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
@@ -388,12 +335,10 @@ server closed the connection unexpectedly
 	before or while processing the request.
 connection to server was lost
 --mock-4 not installed.
-\dx
-                 List of installed extensions
+SELECT * FROM test.extension;
   Name   | Version |   Schema   |         Description          
 ---------+---------+------------+------------------------------
  plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
-(1 row)
 
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 --broken version and drop
@@ -401,7 +346,7 @@ CREATE EXTENSION timescaledb VERSION 'mock-broken';
 WARNING:  mock init "mock-broken"
 \set ON_ERROR_STOP 0
 --intentional broken version
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock post_analyze_hook "mock-broken"
 ERROR:  mock broken "mock-broken"
 SELECT 1;
@@ -418,12 +363,10 @@ ERROR:  mock broken "mock-broken"
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 --can drop extension now. Since drop first command.
 DROP EXTENSION timescaledb;
-\dx
-                 List of installed extensions
+SELECT * FROM test.extension;
   Name   | Version |   Schema   |         Description          
 ---------+---------+------------+------------------------------
  plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
-(1 row)
 
 --broken version and update to fixed
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
@@ -447,7 +390,6 @@ WARNING:  mock post_analyze_hook "mock-5"
  ?column? 
 ----------
         1
-(1 row)
 
 SELECT mock_function();
 WARNING:  mock post_analyze_hook "mock-5"
@@ -455,7 +397,6 @@ WARNING:  mock function call "mock-5"
  mock_function 
 ---------------
  
-(1 row)
 
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 ALTER EXTENSION timescaledb UPDATE TO 'mock-6';
@@ -474,60 +415,49 @@ server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
 connection to server was lost
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock post_analyze_hook "mock-6"
-                                      List of installed extensions
     Name     | Version |   Schema   |                            Description                            
 -------------+---------+------------+-------------------------------------------------------------------
  plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
  timescaledb | mock-6  | public     | Enables scalable inserts and complex queries for time-series data
-(2 rows)
 
 --TEST: create extension when old .so already loaded
 \c :TEST_DBNAME :ROLE_SUPERUSER
---force load of extension with (\dx)
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock init "mock-1"
 WARNING:  mock post_analyze_hook "mock-1"
-                                      List of installed extensions
     Name     | Version |   Schema   |                            Description                            
 -------------+---------+------------+-------------------------------------------------------------------
  plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
  timescaledb | mock-1  | public     | Enables scalable inserts and complex queries for time-series data
-(2 rows)
 
 DROP EXTENSION timescaledb;
 WARNING:  mock post_analyze_hook "mock-1"
-\dx
-                 List of installed extensions
+SELECT * FROM test.extension;
   Name   | Version |   Schema   |         Description          
 ---------+---------+------------+------------------------------
  plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
-(1 row)
 
 \set ON_ERROR_STOP 0
 CREATE EXTENSION timescaledb VERSION 'mock-2';
 ERROR:  extension "timescaledb" has already been loaded with another version
 \set ON_ERROR_STOP 1
-\dx
-                 List of installed extensions
+SELECT * FROM test.extension;
   Name   | Version |   Schema   |         Description          
 ---------+---------+------------+------------------------------
  plpgsql | 1.0     | pg_catalog | PL/pgSQL procedural language
-(1 row)
 
 --can create in a new session.
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-2';
 WARNING:  mock init "mock-2"
-\dx
+SELECT * FROM test.extension;
 WARNING:  mock post_analyze_hook "mock-2"
-                                      List of installed extensions
     Name     | Version |   Schema   |                            Description                            
 -------------+---------+------------+-------------------------------------------------------------------
  plpgsql     | 1.0     | pg_catalog | PL/pgSQL procedural language
  timescaledb | mock-2  | public     | Enables scalable inserts and complex queries for time-series data
-(2 rows)
 
 --make sure parallel workers started after a 'DISCARD ALL' work
 CREATE TABLE test (i int, j double precision);
@@ -541,7 +471,6 @@ WARNING:  mock post_analyze_hook "mock-2"
  set_config 
 ------------
  on
-(1 row)
 
 SET max_parallel_workers_per_gather = 1;
 WARNING:  mock post_analyze_hook "mock-2"
@@ -551,7 +480,6 @@ WARNING:  mock init "mock-2"
  count 
 -------
    100
-(1 row)
 
 CREATE EXTENSION timescaledb_osm VERSION 'mock-1';
 WARNING:  mock post_analyze_hook "mock-2"

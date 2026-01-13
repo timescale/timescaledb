@@ -15,6 +15,7 @@
 #include "export.h"
 #include "guc.h"
 #include "hypertable.h"
+#include <storage/lockdefs.h>
 
 /*
  * Constraints created during planning to improve chunk exclusion
@@ -85,18 +86,7 @@ typedef enum TsRelType
 	TS_REL_OTHER,			 /* Anything which is none of the above */
 } TsRelType;
 
-typedef enum PartializeAggFixAggref
-{
-	TS_DO_NOT_FIX_AGGSPLIT = 0,
-	TS_FIX_AGGSPLIT_SIMPLE = 1,
-	TS_FIX_AGGSPLIT_FINAL = 2
-} PartializeAggFixAggref;
-
 extern TSDLLEXPORT Hypertable *ts_planner_get_hypertable(const Oid relid, const unsigned int flags);
-bool has_partialize_function(Node *node, PartializeAggFixAggref fix_aggref);
-bool ts_plan_process_partialize_agg(PlannerInfo *root, RelOptInfo *output_rel);
-
-extern void ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output_rel);
 extern void ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist);
 extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel,
 											 bool include_osm);
@@ -144,8 +134,17 @@ ts_planner_chunk_fetch(const PlannerInfo *root, RelOptInfo *rel)
 	if (NULL == rel_private->cached_chunk_struct)
 	{
 		RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+
+		/*
+		 * Get the chunk and cache it. Do not use a slice tuple lock because
+		 * that will assign a transaction ID, which is not necessary for
+		 * queries.
+		 */
 		rel_private->cached_chunk_struct =
-			ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
+			ts_chunk_get_by_relid_locked(rte->relid,
+										 AccessShareLock,
+										 NULL,
+										 /* fail_if_not_found = */ true);
 	}
 
 	return rel_private->cached_chunk_struct;

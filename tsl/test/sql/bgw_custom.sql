@@ -57,7 +57,7 @@ SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb
 -- exclude internal jobs
 SELECT * FROM timescaledb_information.jobs WHERE job_id >= 1000 ORDER BY 1;
 
-SELECT count(*) FROM _timescaledb_config.bgw_job WHERE config->>'type' IN ('procedure', 'function');
+SELECT count(*) FROM _timescaledb_catalog.bgw_job WHERE config->>'type' IN ('procedure', 'function');
 
 \set ON_ERROR_STOP 0
 -- test bad input
@@ -91,8 +91,8 @@ SELECT count(*) FROM timescaledb_information.jobs WHERE job_id >= 1002;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 -- create a new job with longer id
-SELECT nextval('_timescaledb_config.bgw_job_id_seq') as nextval \gset
-SELECT setval('_timescaledb_config.bgw_job_id_seq', 2147483647, false);
+SELECT nextval('_timescaledb_catalog.bgw_job_id_seq') as nextval \gset
+SELECT setval('_timescaledb_catalog.bgw_job_id_seq', 2147483647, false);
 SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb, job_name := 'custom_job_name');
 
 \set ON_ERROR_STOP 0
@@ -129,7 +129,7 @@ SELECT delete_job(1001);
 SELECT delete_job(2147483647);
 
 -- reset the sequence to its previous value
-SELECT setval('_timescaledb_config.bgw_job_id_seq', :nextval, false);
+SELECT setval('_timescaledb_catalog.bgw_job_id_seq', :nextval, false);
 
 --test for #2793
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -190,7 +190,7 @@ $$;
 
 -- Remove any default jobs, e.g., telemetry
 \c :TEST_DBNAME :ROLE_SUPERUSER
-TRUNCATE _timescaledb_config.bgw_job RESTART IDENTITY CASCADE;
+TRUNCATE _timescaledb_catalog.bgw_job RESTART IDENTITY CASCADE;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -215,6 +215,7 @@ TRUNCATE custom_log;
 
 -- Forced Exception
 SELECT add_job('custom_proc4', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_3 \gset
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT test.wait_for_job_to_run(:job_id_3, 1);
 
 -- Check results
@@ -247,6 +248,7 @@ SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
 
 -- Compression policy
 SELECT add_compression_policy('conditions', interval '1 day') AS job_id_4 \gset
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT test.wait_for_job_to_run(:job_id_4, 1);
 
 -- Chunk compress stats
@@ -263,6 +265,7 @@ order by id;
 
 --running job second time, wait for it to complete
 select t.schedule_interval FROM alter_job(:job_id_4, next_start=> now() ) t;
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT test.wait_for_job_to_run(:job_id_4, 2);
 
 SELECT id, table_name, status from _timescaledb_catalog.chunk
@@ -290,6 +293,7 @@ WITH NO DATA;
 
 -- Refresh Continous Aggregate by Job
 SELECT add_job('custom_proc5', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_5 \gset
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT test.wait_for_job_to_run(:job_id_5, 1);
 SELECT count(*) FROM conditions_summary_daily;
 
@@ -297,7 +301,7 @@ SELECT count(*) FROM conditions_summary_daily;
 
 SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id_5, NULL);
 SELECT id, proc_name, hypertable_id
-FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
+FROM _timescaledb_catalog.bgw_job WHERE id = :job_id_5;
 
 -- error case, try to associate with a PG relation
 \set ON_ERROR_STOP 0
@@ -308,13 +312,13 @@ SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id_5, 'custom_lo
 SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id_5, 'conditions_summary_daily'::regclass);
 
 SELECT id, proc_name, hypertable_id
-FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
+FROM _timescaledb_catalog.bgw_job WHERE id = :job_id_5;
 
 --verify that job is dropped when cagg is dropped
 DROP MATERIALIZED VIEW conditions_summary_daily;
 
 SELECT id, proc_name, hypertable_id
-FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
+FROM _timescaledb_catalog.bgw_job WHERE id = :job_id_5;
 
 -- Cleanup
 DROP TABLE conditions;
@@ -510,6 +514,7 @@ $$;
 
 select add_job('add_scheduled_jobs_with_check', schedule_interval => '1 hour') as last_job_id \gset
 -- wait for enough time
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT test.wait_for_job_to_run(:last_job_id, 1);
 select total_runs, total_successes, last_run_status from timescaledb_information.job_stats where job_id = :last_job_id;
 
@@ -525,7 +530,7 @@ select * from alter_job(:job_id_owner, check_config => 'test_schema.test_config_
 DROP SCHEMA test_schema CASCADE;
 
 -- Delete all jobs with that owner before we can drop the user.
-DELETE FROM _timescaledb_config.bgw_job WHERE owner = 'user_noexec'::regrole;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE owner = 'user_noexec'::regrole;
 DROP ROLE user_noexec;
 
 -- test with aggregate check proc
@@ -547,7 +552,7 @@ CREATE AGGREGATE sum_jsb (jsonb)
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'sum_jsb'::regproc);
 
 -- Cleanup jobs
-TRUNCATE _timescaledb_config.bgw_job CASCADE;
+TRUNCATE _timescaledb_catalog.bgw_job CASCADE;
 
 -- github issue 4610
 CREATE TABLE sensor_data
@@ -599,7 +604,7 @@ update _timescaledb_catalog.chunk set status=3 where table_name = :'new_uncompre
 -- add new compression policy job
 SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
 -- set recompress to true
-SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_catalog.bgw_job WHERE id = :compressjob_id;
 
 -- verify that there are other uncompressed new chunks that need to be compressed
 SELECT count(*) > 1
@@ -660,6 +665,7 @@ $$;
 SELECT add_job('proc_that_sleeps', '1h', initial_start => now()::timestamptz + interval '2s') AS job_id_1 \gset
 SELECT add_job('proc_that_sleeps', '1h', initial_start => now()::timestamptz - interval '2s') AS job_id_2 \gset
 
+SELECT _timescaledb_functions.restart_background_workers();
 -- wait for the jobs to start running job_2 will start running first
 CALL wait_for_job_status(:job_id_2, 'Running');
 CALL wait_for_job_status(:job_id_1, 'Running');
@@ -724,3 +730,27 @@ ROLLBACK;
 
 SELECT delete_job(:job_func);
 SELECT delete_job(:job_proc);
+
+-- Test work_mem config option in job execution
+CREATE TABLE work_mem_log(job_id int, work_mem_value text);
+
+CREATE OR REPLACE PROCEDURE log_work_mem(job_id int, config jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+    INSERT INTO work_mem_log VALUES(job_id, current_setting('work_mem'));
+END
+$$;
+
+-- Add job with work_mem in config
+SELECT add_job('log_work_mem', '1h', config => '{"work_mem": "123MB"}'::jsonb) AS job_work_mem \gset
+
+-- Run the job - work_mem should be set to 123MB before execution
+CALL run_job(:job_work_mem);
+
+-- Verify work_mem was set during job execution
+SELECT * FROM work_mem_log;
+
+-- Cleanup
+SELECT delete_job(:job_work_mem);
+DROP TABLE work_mem_log;
+DROP PROCEDURE log_work_mem;

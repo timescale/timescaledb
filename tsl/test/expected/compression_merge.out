@@ -30,11 +30,9 @@ insert into rand_minstd_state values (321);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE test1 ("Time" timestamptz, i integer, value integer);
 SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 hour');
-NOTICE:  adding not-null constraint to column "Time"
  table_name 
 ------------
  test1
-(1 row)
 
 -- This will generate 24 chunks
 INSERT INTO test1
@@ -57,22 +55,18 @@ psql:include/compression_test_merge.sql:7: NOTICE:  table "merge_result" does no
  count_compressed 
 ------------------
                24
-(1 row)
 
                                      ?column?                                      | count 
 -----------------------------------------------------------------------------------+-------
  Number of rows different between original and query on compressed data (expect 0) |     0
-(1 row)
 
  count 
 -------
     12
-(1 row)
 
                                                    ?column?                                                   | count 
 --------------------------------------------------------------------------------------------------------------+-------
  Number of rows different between original and data that has been compressed and then decompressed (expect 0) |     0
-(1 row)
 
 \set TYPE timestamptz
 \set ORDER_BY_COL_NAME Time
@@ -86,21 +80,17 @@ psql:include/compression_test_merge.sql:7: NOTICE:  table "merge_result" does no
  count 
 -------
     12
-(1 row)
 
  min_correct | max_correct 
 -------------+-------------
  t           | t
-(1 row)
 
 DROP TABLE test1;
 CREATE TABLE test2 ("Time" timestamptz, i integer, loc integer, value integer);
 SELECT table_name from create_hypertable('test2', 'Time', chunk_time_interval=> INTERVAL '1 hour');
-NOTICE:  adding not-null constraint to column "Time"
  table_name 
 ------------
  test2
-(1 row)
 
 -- This will generate 24 1 hour chunks.
 INSERT INTO test2
@@ -118,7 +108,6 @@ BEGIN;
  count 
 -------
     24
-(1 row)
 
   SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
     FROM _timescaledb_catalog.chunk ch
@@ -132,7 +121,6 @@ BEGIN;
  count 
 -------
     10
-(1 row)
 
 ROLLBACK;
 -- Compression is set to merge those 24 chunks into 3 chunks, two 10 hour chunks and a single 4 hour chunk.
@@ -147,7 +135,6 @@ BEGIN;
  count 
 -------
     24
-(1 row)
 
   SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
     FROM _timescaledb_catalog.chunk ch
@@ -162,7 +149,6 @@ BEGIN;
  count 
 -------
      1
-(1 row)
 
 ROLLBACK;
 SELECT
@@ -178,22 +164,18 @@ SELECT 'test2' AS "HYPERTABLE_NAME" \gset
  count_compressed 
 ------------------
                24
-(1 row)
 
                                      ?column?                                      | count 
 -----------------------------------------------------------------------------------+-------
  Number of rows different between original and query on compressed data (expect 0) |     0
-(1 row)
 
  count 
 -------
      3
-(1 row)
 
                                                    ?column?                                                   | count 
 --------------------------------------------------------------------------------------------------------------+-------
  Number of rows different between original and data that has been compressed and then decompressed (expect 0) |     0
-(1 row)
 
 \set TYPE integer
 \set ORDER_BY_COL_NAME loc
@@ -207,27 +189,22 @@ SELECT 'test2' AS "HYPERTABLE_NAME" \gset
  count 
 -------
      3
-(1 row)
 
  min_correct | max_correct 
 -------------+-------------
  t           | t
-(1 row)
 
 DROP TABLE test2;
 CREATE TABLE test3 ("Time" timestamptz, i integer, loc integer, value integer);
 SELECT table_name from create_hypertable('test3', 'Time', chunk_time_interval=> INTERVAL '1 hour');
-NOTICE:  adding not-null constraint to column "Time"
  table_name 
 ------------
  test3
-(1 row)
 
 SELECT table_name from  add_dimension('test3', 'i', number_partitions=> 3);
  table_name 
 ------------
  test3
-(1 row)
 
 -- This will generate 25 1 hour chunks with a closed space dimension.
 INSERT INTO test3 SELECT t, 1, gen_rand_minstd(), gen_rand_minstd() FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 12:59', '1 minute') t;
@@ -252,22 +229,18 @@ SELECT 'test3' AS "HYPERTABLE_NAME" \gset
  count_compressed 
 ------------------
                25
-(1 row)
 
                                      ?column?                                      | count 
 -----------------------------------------------------------------------------------+-------
  Number of rows different between original and query on compressed data (expect 0) |     0
-(1 row)
 
  count 
 -------
     13
-(1 row)
 
                                                    ?column?                                                   | count 
 --------------------------------------------------------------------------------------------------------------+-------
  Number of rows different between original and data that has been compressed and then decompressed (expect 0) |     0
-(1 row)
 
 \set TYPE integer
 \set ORDER_BY_COL_NAME loc
@@ -281,21 +254,17 @@ SELECT 'test3' AS "HYPERTABLE_NAME" \gset
  count 
 -------
     13
-(1 row)
 
  min_correct | max_correct 
 -------------+-------------
  t           | t
-(1 row)
 
 DROP TABLE test3;
 CREATE TABLE test4 ("Time" timestamptz, i integer, loc integer, value integer);
 SELECT table_name from create_hypertable('test4', 'Time', chunk_time_interval=> INTERVAL '1 hour');
-NOTICE:  adding not-null constraint to column "Time"
  table_name 
 ------------
  test4
-(1 row)
 
 -- Setting compress_chunk_time_interval to non-multiple of chunk_time_interval should emit a warning.
 \set VERBOSITY default
@@ -307,11 +276,9 @@ HINT:  consider setting "Time" as first compress_orderby column
 DROP TABLE test4;
 CREATE TABLE test5 ("Time" timestamptz, i integer, value integer);
 SELECT table_name from create_hypertable('test5', 'Time', chunk_time_interval=> INTERVAL '1 hour');
-NOTICE:  adding not-null constraint to column "Time"
  table_name 
 ------------
  test5
-(1 row)
 
 -- This will generate 24 chunks. Note that we are forcing everyting into a single segment so we use table scan to when merging chunks.
 INSERT INTO test5 SELECT t, 1, gen_rand_minstd() FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t;
@@ -328,7 +295,6 @@ SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 4;
  _timescaledb_internal._hyper_9_190_chunk
  _timescaledb_internal._hyper_9_190_chunk
  _timescaledb_internal._hyper_9_190_chunk
-(4 rows)
 
 SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
   FROM _timescaledb_catalog.chunk ch
@@ -350,7 +316,6 @@ NOTICE:  chunk "_hyper_9_190_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_9_190_chunk
  _timescaledb_internal._hyper_9_190_chunk
  _timescaledb_internal._hyper_9_190_chunk
-(5 rows)
 
 SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_merge.sql
@@ -362,31 +327,25 @@ psql:include/compression_test_merge.sql:12: NOTICE:  chunk "_hyper_9_190_chunk" 
  count_compressed 
 ------------------
                17
-(1 row)
 
                                      ?column?                                      | count 
 -----------------------------------------------------------------------------------+-------
  Number of rows different between original and query on compressed data (expect 0) |     0
-(1 row)
 
  count 
 -------
      1
-(1 row)
 
                                                    ?column?                                                   | count 
 --------------------------------------------------------------------------------------------------------------+-------
  Number of rows different between original and data that has been compressed and then decompressed (expect 0) |     0
-(1 row)
 
 DROP TABLE test5;
 CREATE TABLE test6 ("Time" timestamptz, i integer, value integer);
 SELECT table_name from create_hypertable('test6', 'Time', chunk_time_interval=> INTERVAL '1 hour');
-NOTICE:  adding not-null constraint to column "Time"
  table_name 
 ------------
  test6
-(1 row)
 
 -- This will generate 24 chunks
 INSERT INTO test6
@@ -422,13 +381,11 @@ SELECT compress_chunk(i) FROM show_chunks('test6') i;
  _timescaledb_internal._hyper_11_235_chunk
  _timescaledb_internal._hyper_11_237_chunk
  _timescaledb_internal._hyper_11_237_chunk
-(24 rows)
 
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
  number_of_chunks 
 ------------------
                12
-(1 row)
 
 -- This will generate another 24 chunks
 INSERT INTO test6
@@ -488,13 +445,11 @@ NOTICE:  chunk "_hyper_11_237_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_11_269_chunk
  _timescaledb_internal._hyper_11_273_chunk
  _timescaledb_internal._hyper_11_273_chunk
-(36 rows)
 
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
  number_of_chunks 
 ------------------
                18
-(1 row)
 
 -- This will generate another 3 chunks
 INSERT INTO test6
@@ -547,13 +502,11 @@ NOTICE:  chunk "_hyper_11_273_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_11_281_chunk
  _timescaledb_internal._hyper_11_282_chunk
  _timescaledb_internal._hyper_11_283_chunk
-(21 rows)
 
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
  number_of_chunks 
 ------------------
                21
-(1 row)
 
 -- This will generate another 3 chunks
 INSERT INTO test6
@@ -611,13 +564,11 @@ NOTICE:  chunk "_hyper_11_283_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_11_287_chunk
  _timescaledb_internal._hyper_11_288_chunk
  _timescaledb_internal._hyper_11_289_chunk
-(24 rows)
 
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
  number_of_chunks 
 ------------------
                24
-(1 row)
 
 -- Setting compress chunk time to NULL will error out.
 \set ON_ERROR_STOP 0
@@ -627,11 +578,9 @@ ERROR:  invalid value for timescaledb.compress_chunk_time_interval 'null'
 DROP TABLE test6;
 CREATE TABLE test7 ("Time" timestamptz, i integer, j integer, k integer, value integer);
 SELECT table_name from create_hypertable('test7', 'Time', chunk_time_interval=> INTERVAL '1 hour');
-NOTICE:  adding not-null constraint to column "Time"
  table_name 
 ------------
  test7
-(1 row)
 
 -- This will generate 24 chunks
 INSERT INTO test7
@@ -654,22 +603,18 @@ SELECT 'test7' AS "HYPERTABLE_NAME" \gset
  count_compressed 
 ------------------
                24
-(1 row)
 
                                      ?column?                                      | count 
 -----------------------------------------------------------------------------------+-------
  Number of rows different between original and query on compressed data (expect 0) |     0
-(1 row)
 
  count 
 -------
     12
-(1 row)
 
                                                    ?column?                                                   | count 
 --------------------------------------------------------------------------------------------------------------+-------
  Number of rows different between original and data that has been compressed and then decompressed (expect 0) |     0
-(1 row)
 
 DROP TABLE test7;
 --#5090
@@ -678,7 +623,6 @@ SELECT create_hypertable('test8', 'time', chunk_time_interval => INTERVAL '1 h')
   create_hypertable  
 ---------------------
  (15,public,test8,t)
-(1 row)
 
 ALTER TABLE test8 set (timescaledb.compress,
     timescaledb.compress_segmentby = 'series_id',
@@ -692,7 +636,6 @@ SELECT compress_chunk(c, true) FROM show_chunks('test8') c LIMIT 4;
  _timescaledb_internal._hyper_15_341_chunk
  _timescaledb_internal._hyper_15_341_chunk
  _timescaledb_internal._hyper_15_341_chunk
-(4 rows)
 
 SET enable_indexscan TO OFF;
 SET enable_seqscan TO OFF;
@@ -701,7 +644,6 @@ SELECT count(*) FROM test8 WHERE series_id = 1;
  count 
 -------
    481
-(1 row)
 
 -- Verify rollup is prevented when compression settings differ
 CREATE TABLE test9(time TIMESTAMPTZ NOT NULL, value DOUBLE PRECISION NOT NULL, series_id BIGINT NOT NULL);
@@ -709,7 +651,6 @@ SELECT create_hypertable('test9', 'time', chunk_time_interval => INTERVAL '1 h')
   create_hypertable  
 ---------------------
  (17,public,test9,t)
-(1 row)
 
 ALTER TABLE test9 set (timescaledb.compress,
     timescaledb.compress_segmentby = 'series_id',
@@ -721,7 +662,6 @@ SELECT compress_chunk(show_chunks('test9'), true);
               compress_chunk               
 -------------------------------------------
  _timescaledb_internal._hyper_17_347_chunk
-(1 row)
 
 INSERT INTO test9 (time, series_id, value) SELECT '2020-01-01 01:00:00'::TIMESTAMPTZ, 1, 1;
 -- should be 2 chunk before rollup
@@ -730,7 +670,6 @@ SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chun
 -----------------+------------------------------+------------------------------
  test9           | Wed Jan 01 00:00:00 2020 PST | Wed Jan 01 01:00:00 2020 PST
  test9           | Wed Jan 01 01:00:00 2020 PST | Wed Jan 01 02:00:00 2020 PST
-(2 rows)
 
 SELECT compress_chunk(show_chunks('test9'), true);
 NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
@@ -738,14 +677,12 @@ NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
 -------------------------------------------
  _timescaledb_internal._hyper_17_347_chunk
  _timescaledb_internal._hyper_17_347_chunk
-(2 rows)
 
 -- should be 1 chunk because of rollup
 SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
  hypertable_name |         range_start          |          range_end           
 -----------------+------------------------------+------------------------------
  test9           | Wed Jan 01 00:00:00 2020 PST | Wed Jan 01 02:00:00 2020 PST
-(1 row)
 
 INSERT INTO test9 (time, series_id, value) SELECT '2020-01-01 02:00:00'::TIMESTAMPTZ, 1, 1;
 -- should be 2 chunks again
@@ -754,7 +691,6 @@ SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chun
 -----------------+------------------------------+------------------------------
  test9           | Wed Jan 01 00:00:00 2020 PST | Wed Jan 01 02:00:00 2020 PST
  test9           | Wed Jan 01 02:00:00 2020 PST | Wed Jan 01 03:00:00 2020 PST
-(2 rows)
 
 ALTER TABLE test9 SET (timescaledb.compress_segmentby = '');
 BEGIN;
@@ -764,7 +700,6 @@ NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
 -------------------------------------------
  _timescaledb_internal._hyper_17_347_chunk
  _timescaledb_internal._hyper_17_350_chunk
-(2 rows)
 
   -- should not be rolled up
   SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
@@ -772,7 +707,6 @@ NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
 -----------------+------------------------------+------------------------------
  test9           | Wed Jan 01 00:00:00 2020 PST | Wed Jan 01 02:00:00 2020 PST
  test9           | Wed Jan 01 02:00:00 2020 PST | Wed Jan 01 03:00:00 2020 PST
-(2 rows)
 
 ROLLBACK;
 ALTER TABLE test9 SET (timescaledb.compress_segmentby = 'series_id', timescaledb.compress_orderby = 'time DESC');
@@ -783,7 +717,6 @@ NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
 -------------------------------------------
  _timescaledb_internal._hyper_17_347_chunk
  _timescaledb_internal._hyper_17_350_chunk
-(2 rows)
 
   -- should not be rolled up
   SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
@@ -791,7 +724,6 @@ NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
 -----------------+------------------------------+------------------------------
  test9           | Wed Jan 01 00:00:00 2020 PST | Wed Jan 01 02:00:00 2020 PST
  test9           | Wed Jan 01 02:00:00 2020 PST | Wed Jan 01 03:00:00 2020 PST
-(2 rows)
 
 ROLLBACK;
 ALTER TABLE test9 SET (timescaledb.compress_segmentby = 'series_id', timescaledb.compress_orderby = 'time NULLS FIRST');
@@ -802,7 +734,6 @@ NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
 -------------------------------------------
  _timescaledb_internal._hyper_17_347_chunk
  _timescaledb_internal._hyper_17_350_chunk
-(2 rows)
 
   -- should not be rolled up
   SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
@@ -810,7 +741,6 @@ NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
 -----------------+------------------------------+------------------------------
  test9           | Wed Jan 01 00:00:00 2020 PST | Wed Jan 01 02:00:00 2020 PST
  test9           | Wed Jan 01 02:00:00 2020 PST | Wed Jan 01 03:00:00 2020 PST
-(2 rows)
 
 ROLLBACK;
 -- reset back to original settings
@@ -822,24 +752,20 @@ NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
 -------------------------------------------
  _timescaledb_internal._hyper_17_347_chunk
  _timescaledb_internal._hyper_17_347_chunk
-(2 rows)
 
   -- should be rolled up
   SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
  hypertable_name |         range_start          |          range_end           
 -----------------+------------------------------+------------------------------
  test9           | Wed Jan 01 00:00:00 2020 PST | Wed Jan 01 03:00:00 2020 PST
-(1 row)
 
 ROLLBACK;
 -- Test RowExclusiveLock on compressed chunk during chunk rollup using a GUC
 CREATE TABLE test10 ("Time" timestamptz, i integer, value integer);
 SELECT table_name from create_hypertable('test10', 'Time', chunk_time_interval=> INTERVAL '1 hour');
-NOTICE:  adding not-null constraint to column "Time"
  table_name 
 ------------
  test10
-(1 row)
 
 INSERT INTO test10
 SELECT t, i, gen_rand_minstd()
@@ -850,7 +776,6 @@ SHOW timescaledb.enable_rowlevel_compression_locking;
  timescaledb.enable_rowlevel_compression_locking 
 -------------------------------------------------
  off
-(1 row)
 
 SET timescaledb.enable_rowlevel_compression_locking to on;
 SELECT compress_chunk(show_chunks('test10'));
@@ -859,7 +784,70 @@ SELECT compress_chunk(show_chunks('test10'));
  _timescaledb_internal._hyper_19_354_chunk
  _timescaledb_internal._hyper_19_354_chunk
  _timescaledb_internal._hyper_19_356_chunk
-(3 rows)
 
 RESET timescaledb.enable_rowlevel_compression_locking;
 DROP TABLE test10;
+RESET enable_indexscan;
+RESET enable_seqscan;
+RESET enable_bitmapscan;
+-- Test chunk merging with default compression settings
+CREATE TABLE test_defaults ("Time" timestamptz, i integer, value integer) WITH (tsdb.hypertable, tsdb.chunk_interval='1 hour');
+NOTICE:  using column "Time" as partitioning column
+CREATE INDEX ON test_defaults (i);
+ALTER TABLE test_defaults set (timescaledb.compress, timescaledb.compress_chunk_time_interval='2 hours');
+WARNING:  compress_chunk_time_interval configured and primary dimension not first column in compress_orderby
+SELECT delete_job(1000);
+ delete_job 
+------------
+ 
+
+-- This will generate 24 chunks
+INSERT INTO test_defaults
+SELECT t, i, gen_rand_minstd()
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t
+CROSS JOIN generate_series(1, 5, 1) i;
+-- Compression is set to merge those 24 chunks into 12 2 hour chunks
+SELECT
+  $$
+  SELECT * FROM test_defaults ORDER BY i, "Time"
+  $$ AS "QUERY" \gset
+SELECT 'test_defaults' AS "HYPERTABLE_NAME" \gset
+\ir include/compression_test_merge.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ count_compressed 
+------------------
+               24
+
+                                     ?column?                                      | count 
+-----------------------------------------------------------------------------------+-------
+ Number of rows different between original and query on compressed data (expect 0) |     0
+
+ count 
+-------
+    12
+
+                                                   ?column?                                                   | count 
+--------------------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original and data that has been compressed and then decompressed (expect 0) |     0
+
+\set TYPE timestamptz
+\set ORDER_BY_COL_NAME Time
+\set SEGMENT_META_COL_MIN _ts_meta_min_1
+\set SEGMENT_META_COL_MAX _ts_meta_max_1
+\ir include/compression_test_hypertable_segment_meta.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ count 
+-------
+    12
+
+ min_correct | max_correct 
+-------------+-------------
+ t           | t
+
+DROP TABLE test_defaults;

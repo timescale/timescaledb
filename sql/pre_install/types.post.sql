@@ -23,3 +23,11 @@ CREATE TYPE _timescaledb_internal.dimension_info (
     INTERNALLENGTH = VARIABLE
 );
 
+
+-- Type for bloom filters used by the sparse indexes on compressed hypertables.
+CREATE TYPE _timescaledb_internal.bloom1 (
+    INPUT = _timescaledb_functions.bloom1in,
+    OUTPUT = _timescaledb_functions.bloom1out,
+    LIKE = bytea
+);
+

@@ -5,7 +5,7 @@
 -- create a now() function for repeatable testing that always returns
 -- the same timestamp. It needs to be marked STABLE
 CREATE OR REPLACE FUNCTION now_s()
-RETURNS timestamptz LANGUAGE PLPGSQL STABLE AS
+RETURNS timestamptz LANGUAGE PLPGSQL STABLE PARALLEL SAFE AS
 $BODY$
 BEGIN
     RAISE NOTICE 'Stable function now_s() called!';
@@ -30,6 +30,27 @@ BEGIN
     RETURN '2017-08-22T10:00:00'::timestamptz;
 END;
 $BODY$;
+
+CREATE OR REPLACE PROCEDURE force_parallel(on_or_off bool)
+LANGUAGE PLPGSQL AS
+$$
+BEGIN
+    IF current_setting('server_version_num')::int < 160000 THEN
+        IF on_or_off THEN
+            set force_parallel_mode = 'on';
+        ELSE
+            set force_parallel_mode = 'off';
+        END IF;
+    ELSE
+        IF on_or_off THEN
+            set debug_parallel_query = 'on';
+        ELSE
+            set debug_parallel_query = 'off';
+        END IF;
+    END IF;
+END;
+$$;
+
 
 CREATE TABLE append_test(time timestamptz, temp float, colorid integer, attr jsonb);
 SELECT create_hypertable('append_test', 'time', chunk_time_interval => 2628000000000);

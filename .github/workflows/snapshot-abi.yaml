@@ -9,7 +9,7 @@ name: ABI Test Against Snapshot
     - cron: '0 20 * * *'
   push:
     branches:
-      - prerelease_test
+      - ?.*.x
       - trigger/snapshot-abi
   pull_request:
     paths: .github/workflows/snapshot-abi.yaml
@@ -22,6 +22,7 @@ jobs:
       pg15_abi_min: ${{ steps.config.outputs.pg15_abi_min }}
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
       pg17_abi_min: ${{ steps.config.outputs.pg17_abi_min }}
+      pg18_abi_min: ${{ steps.config.outputs.pg18_abi_min }}
 
     steps:
     - name: Checkout source code
@@ -38,12 +39,14 @@ jobs:
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql
-      PG_EXTENSIONS: postgres_fdw test_decoding pageinspect pgstattuple
+      PG_EXTENSIONS: postgres_fdw test_decoding
 
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 15, 16, 17 ]
+        pg: [ 15, 16, 17, 18 ]
+        ignores:
+          - 'net telemetry bgw_launcher'
         include:
           - pg: 15
             abi_min: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
@@ -51,6 +54,8 @@ jobs:
             abi_min: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}
           - pg: 17
             abi_min: ${{ fromJson(needs.config.outputs.pg17_abi_min) }}
+          - pg: 18
+            abi_min: ${{ fromJson(needs.config.outputs.pg18_abi_min) }}
 
     steps:
 
@@ -74,9 +79,9 @@ jobs:
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
           --without-readline --without-zlib --without-libxml --without-llvm
-        make -j $(nproc)
+        make -j $(getconf _NPROCESSORS_ONLN)
         for ext in $PG_EXTENSIONS; do
-          make -j $(nproc) -C contrib/${ext}
+          make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
 
     - name: Install postgresql ${{ matrix.pg }}
@@ -94,7 +99,7 @@ jobs:
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
           -DWARNINGS_AS_ERRORS=OFF -DREQUIRE_ALL_TESTS=ON \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j $(nproc) -C build
+        make -j $(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
         mkdir -p build/install_ext build/install_lib
         cp `pg_config --sharedir`/extension/timescaledb*.{control,sql} build/install_ext
@@ -109,9 +114,9 @@ jobs:
         cd ~/$PG_SRC_DIR-snapshot
         ./configure --prefix=$HOME/$PG_INSTALL_DIR-snapshot --with-openssl \
           --without-readline --without-zlib --without-libxml --without-llvm
-        make -j $(nproc)
+        make -j $(getconf _NPROCESSORS_ONLN)
         for ext in $PG_EXTENSIONS; do
-          make -j $(nproc) -C contrib/${ext}
+          make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
 
     - name: Install PostgreSQL ${{ matrix.pg }}-snapshot
@@ -136,7 +141,7 @@ jobs:
       id: regresscheck
       run: |
           set -o pipefail
-          make -k -C build_snapshot installcheck IGNORES=bgw_launcher | tee installcheck.log
+          make -k -C build_snapshot installcheck IGNORES="${{ matrix.ignores }}" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()

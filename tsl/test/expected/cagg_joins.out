@@ -13,7 +13,6 @@ SELECT table_name FROM create_hypertable('conditions', 'day', chunk_time_interva
  table_name 
 ------------
  conditions
-(1 row)
 
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-06-14', 'Moscow', 26,1),
@@ -32,14 +31,11 @@ INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-06-27', 'Moscow', 31,3);
 CREATE TABLE conditions_dup AS SELECT * FROM conditions;
 SELECT table_name FROM create_hypertable('conditions_dup', 'day', chunk_time_interval => INTERVAL '1 day', migrate_data => true);
-NOTICE:  adding not-null constraint to column "day"
-DETAIL:  Dimensions cannot have NULL values.
 NOTICE:  migrating data to chunks
 DETAIL:  Migration might take a while depending on the amount of data.
    table_name   
 ----------------
  conditions_dup
-(1 row)
 
 CREATE TABLE devices ( device_id int not null, name text, location text);
 INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
@@ -101,7 +97,6 @@ SELECT * FROM cagg_realtime ORDER BY bucket, name;
  Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
  Fri Jun 25 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
-(14 rows)
 
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-06-30', 'Moscow', 28, 3);
@@ -123,7 +118,6 @@ SELECT * FROM cagg_realtime ORDER BY bucket, name;
  Fri Jun 25 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(15 rows)
 
 -- Cagg with inner join + realtime  aggregate + JOIN clause
 CREATE MATERIALIZED VIEW cagg_realtime_join
@@ -180,7 +174,6 @@ SELECT * FROM cagg_realtime_join ORDER BY bucket, name;
  Fri Jun 25 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(15 rows)
 
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-06-30', 'Moscow', 28, 3);
@@ -202,7 +195,6 @@ SELECT * FROM cagg_realtime_join ORDER BY bucket, name;
  Fri Jun 25 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(15 rows)
 
 -- Cagg with inner join + realtime  aggregate + USING clause
 CREATE MATERIALIZED VIEW cagg_realtime_using
@@ -259,7 +251,6 @@ SELECT * FROM cagg_realtime_using ORDER BY bucket;
  Fri Jun 25 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(15 rows)
 
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-06-30', 'Moscow', 28, 3);
@@ -281,7 +272,6 @@ SELECT * FROM cagg_realtime_using ORDER BY bucket, name;
  Fri Jun 25 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(15 rows)
 
 -- Reorder tables in FROM clause
 -- Cagg with inner join + realtime aggregate
@@ -339,7 +329,6 @@ SELECT * FROM cagg_realtime_reorder ORDER BY bucket, name;
  Fri Jun 25 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(15 rows)
 
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-07-01', 'Moscow', 28, 3);
@@ -362,7 +351,6 @@ SELECT * FROM cagg_realtime_reorder ORDER BY bucket, name;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(16 rows)
 
 -- Reorder tables in FROM clause
 -- Cagg with inner join + realtime  aggregate + JOIN clause
@@ -421,7 +409,6 @@ SELECT * FROM cagg_realtime_reorder_join ORDER BY bucket, name;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(16 rows)
 
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-07-01', 'Moscow', 28, 3);
@@ -445,7 +432,6 @@ FROM cagg_realtime_reorder_join;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(16 rows)
 
 -- Reorder tables in FROM clause
 -- Cagg with inner join + realtime  aggregate + USING clause
@@ -504,7 +490,6 @@ SELECT * FROM cagg_realtime_reorder_using ORDER BY bucket, name;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(16 rows)
 
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-07-01', 'Moscow', 28, 3);
@@ -527,7 +512,6 @@ SELECT * FROM cagg_realtime_reorder_using ORDER BY bucket, name;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(16 rows)
 
 -- Cagg with inner joins - realtime aggregate
 CREATE MATERIALIZED VIEW cagg
@@ -561,7 +545,6 @@ SELECT * FROM cagg ORDER BY bucket, name, thermo_id;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3 |         3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3 |         3
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3 |         3
-(16 rows)
 
 -- Cagg with inner joins - realtime aggregate + JOIN clause
 CREATE MATERIALIZED VIEW cagg_join
@@ -593,7 +576,6 @@ SELECT * FROM cagg_join ORDER BY bucket, name;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(16 rows)
 
 -- Cagg with inner joins - realtime aggregate + USING clause
 CREATE MATERIALIZED VIEW cagg_using
@@ -625,7 +607,6 @@ SELECT * FROM cagg_using;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(16 rows)
 
 -- Reorder tables in FROM clause
 -- Cagg with inner joins - realtime aggregate
@@ -659,7 +640,6 @@ SELECT * FROM cagg_reorder ORDER BY bucket, name;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(16 rows)
 
 -- Cagg with inner joins - realtime aggregate + JOIN clause
 CREATE MATERIALIZED VIEW cagg_reorder_join
@@ -691,7 +671,6 @@ SELECT * FROM cagg_reorder_join;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(16 rows)
 
 -- Cagg with inner joins - realtime aggregate + USING clause
 CREATE MATERIALIZED VIEW cagg_reorder_using
@@ -723,7 +702,6 @@ SELECT * FROM cagg_reorder_using;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(16 rows)
 
 -- Cagg join with another table using FROM ONLY
 CREATE MATERIALIZED VIEW cagg_from_only
@@ -755,7 +733,6 @@ SELECT * FROM cagg_from_only;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
-(16 rows)
 
 -- Create CAgg with join and additional WHERE conditions
 CREATE MATERIALIZED VIEW cagg_more_conds
@@ -774,7 +751,6 @@ SELECT * FROM cagg_more_conds ORDER BY bucket;
 ------------------------------+---------------------+----------
  Sat Jun 19 17:00:00 2021 PDT | 30.0000000000000000 | thermo_1
  Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
-(2 rows)
 
 -- Cagg with more conditions and USING clause
 CREATE MATERIALIZED VIEW cagg_more_conds_using
@@ -793,7 +769,6 @@ SELECT * FROM cagg_more_conds_using ORDER BY bucket;
 ------------------------------+---------------------+----------
  Sat Jun 19 17:00:00 2021 PDT | 30.0000000000000000 | thermo_1
  Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
-(2 rows)
 
 -- Hierarchical CAgg with join
 CREATE MATERIALIZED VIEW cagg_on_cagg
@@ -824,7 +799,6 @@ SELECT * FROM cagg_on_cagg;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000
-(16 rows)
 
 DROP MATERIALIZED VIEW cagg_on_cagg CASCADE;
 NOTICE:  drop cascades to 2 other objects
@@ -859,7 +833,6 @@ SELECT * FROM cagg_on_cagg_join;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000
-(16 rows)
 
 DROP MATERIALIZED VIEW cagg_on_cagg_join CASCADE;
 NOTICE:  drop cascades to 2 other objects
@@ -883,7 +856,6 @@ SELECT * FROM cagg_ordered ORDER BY bucket;
 ------------------------------+---------------------+----------
  Sat Jun 19 17:00:00 2021 PDT | 30.0000000000000000 | thermo_1
  Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
-(2 rows)
 
 CREATE MATERIALIZED VIEW cagg_ordered_2
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
@@ -902,7 +874,6 @@ SELECT * FROM cagg_ordered_2 ORDER BY bucket;
 ------------------------------+---------------------+----------
  Sat Jun 19 17:00:00 2021 PDT | 30.0000000000000000 | thermo_1
  Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
-(2 rows)
 
 CREATE MATERIALIZED VIEW cagg_ordered_3
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
@@ -921,7 +892,6 @@ SELECT * FROM cagg_ordered_3 ORDER BY bucket;
 ------------------------------+---------------------+----------
  Sat Jun 19 17:00:00 2021 PDT | 30.0000000000000000 | thermo_1
  Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
-(2 rows)
 
 CREATE MATERIALIZED VIEW cagg_cagg
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -1019,7 +989,7 @@ WHERE conditions.city IN (
 AND conditions.device_id = devices.device_id
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate query
-DETAIL:  CTEs, subqueries and set-returning functions are not supported by continuous aggregates.
+DETAIL:  CTEs and subqueries are not supported by continuous aggregates.
 CREATE MATERIALIZED VIEW conditions_summary_subselect
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -1035,7 +1005,7 @@ WHERE conditions.city IN (
       WHERE currency = 'EUR'))
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate query
-DETAIL:  CTEs, subqueries and set-returning functions are not supported by continuous aggregates.
+DETAIL:  CTEs and subqueries are not supported by continuous aggregates.
 CREATE MATERIALIZED VIEW conditions_summary_subselect
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -1051,7 +1021,7 @@ WHERE conditions.city IN (
       WHERE currency = 'EUR'))
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate query
-DETAIL:  CTEs, subqueries and set-returning functions are not supported by continuous aggregates.
+DETAIL:  CTEs and subqueries are not supported by continuous aggregates.
 DROP TABLE cities CASCADE;
 --Error out when join is between two hypertables
 CREATE MATERIALIZED VIEW cagg_ht
@@ -1185,7 +1155,6 @@ SELECT * FROM conditions_by_day ORDER BY bucket, device, location;
  Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3 | London
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3 | London
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3 | London
-(16 rows)
 
 ALTER MATERIALIZED VIEW conditions_by_day SET (timescaledb.materialized_only = FALSE);
 -- Insert one more row on conditions and check the result (should have one more row)
@@ -1211,7 +1180,6 @@ SELECT * FROM conditions_by_day ORDER BY bucket, device, location;
  Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3 | London
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3 | London
  Sun Jun 30 17:00:00 2024 PDT | 28.0000000000000000 | thermo_3 | London
-(17 rows)
 
 -- JOIN with a foreign table
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -1261,7 +1229,6 @@ SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interv
  table_name 
 ------------
  conditions
-(1 row)
 
 INSERT INTO conditions (time, value, device_id)
 SELECT t, 1, 1 FROM generate_series('2024-01-01 00:00:00-00'::timestamptz, '2024-12-31 00:00:00-00'::timestamptz, '1 hour'::interval) AS t;
@@ -1279,7 +1246,7 @@ FROM conditions
 JOIN devices ON conditions.device_id = devices.device_id
 GROUP BY name, location, bucket
 WITH NO DATA;
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 VACUUM ANALYZE;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT a.* FROM cagg_realtime a WHERE a.location = 'Moscow' ORDER BY bucket LIMIT 2;
@@ -1287,7 +1254,6 @@ SELECT a.* FROM cagg_realtime a WHERE a.location = 'Moscow' ORDER BY bucket LIMI
 ------------------------------+-----+-----+-----+----------+----------
  Sun Dec 31 16:00:00 2023 PST |   1 |   1 |   1 | thermo_1 | Moscow
  Mon Jan 01 16:00:00 2024 PST |   1 |   1 |   1 | thermo_1 | Moscow
-(2 rows)
 
 \set VERBOSITY terse
 SET client_min_messages TO WARNING;

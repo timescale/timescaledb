@@ -2,8 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set EXPLAIN 'EXPLAIN (costs off,timing off,summary off)'
-\set EXPLAIN_ANALYZE 'EXPLAIN (analyze,costs off,timing off,summary off)'
+\set EXPLAIN 'EXPLAIN (buffers off, costs off,timing off,summary off)'
+\set EXPLAIN_ANALYZE 'EXPLAIN (analyze,buffers off, costs off,timing off,summary off)'
 
 CREATE TABLE decompress_tracking(time timestamptz not null, device text, value float, primary key(time, device));
 SELECT table_name FROM create_hypertable('decompress_tracking','time');
@@ -40,9 +40,9 @@ BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking (VALUES ('2020-01-01 1:3
 SET plan_cache_mode TO force_generic_plan;
 PREPARE p1 AS UPDATE decompress_tracking SET value = value + 3 WHERE device = 'd1';
 BEGIN;
-    EXPLAIN (COSTS OFF) EXECUTE p1;
+    EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
     EXECUTE p1;
-    EXPLAIN (COSTS OFF) EXECUTE p1;
+    EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
 ROLLBACK;
 
 DROP TABLE decompress_tracking;

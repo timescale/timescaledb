@@ -31,8 +31,9 @@ FUNCTION_NAME(key_hashing_get_key)(BatchHashingParams params, int row,
 
 	if (unlikely(params.single_grouping_column.decompression_type == DT_Scalar))
 	{
-		*output_key = DATUM_TO_OUTPUT_KEY(*params.single_grouping_column.output_value);
-		*valid = !*params.single_grouping_column.output_isnull;
+		*output_key =
+			DATUM_TO_OUTPUT_KEY(PointerGetDatum(params.single_grouping_column.buffers[1]));
+		*valid = !DatumGetBool(PointerGetDatum(params.single_grouping_column.buffers[0]));
 	}
 	else if (params.single_grouping_column.decompression_type == sizeof(OUTPUT_KEY_TYPE))
 	{

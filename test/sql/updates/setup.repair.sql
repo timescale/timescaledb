@@ -70,6 +70,3 @@ GRANT INSERT ON repair_test_extra TO "Random L User";
 -- pg_authid table.
 DELETE FROM pg_authid WHERE rolname IN ('wizard', 'Random L User');
 
-\ir setup.repair.cagg.sql
-\ir setup.repair.hierarchical_cagg.sql
-\ir setup.repair.cagg_joins.sql

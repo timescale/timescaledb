@@ -26,11 +26,16 @@
 
 #include <math.h>
 
+#include "compat/compat.h"
 #include "loader/lwlocks.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner/planner.h"
 #include "transform.h"
 #include "ts_catalog/chunk_column_stats.h"
+
+#if PG18_GE
+#include <commands/explain_format.h>
+#endif
 
 #define INVALID_SUBPLAN_INDEX (-1)
 #define NO_MATCHING_SUBPLANS (-2)

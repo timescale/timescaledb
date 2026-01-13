@@ -10,6 +10,7 @@
 #include <storage/proc.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/snapmgr.h>
 
 #include "log.h"
 #include "params.h"
@@ -53,11 +54,14 @@ static void
 bgw_log_insert(char *msg)
 {
 	Relation rel;
+	PushActiveSnapshot(GetTransactionSnapshot());
+
 	Oid log_oid = ts_get_relation_relid("public", "bgw_log", false);
 
 	rel = table_open(log_oid, RowExclusiveLock);
 	bgw_log_insert_relation(rel, msg);
 	table_close(rel, RowExclusiveLock);
+	PopActiveSnapshot();
 }
 
 static emit_log_hook_type prev_emit_log_hook = NULL;

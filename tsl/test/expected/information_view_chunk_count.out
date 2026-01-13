@@ -9,7 +9,6 @@ cpu double precision null,
 temperature double precision null);
 SELECT from create_hypertable('sensor_data','time');
 --
-(1 row)
 
 INSERT INTO sensor_data
 SELECT time + (INTERVAL '1 minute' * random()) AS time,
@@ -36,7 +35,6 @@ SELECT count(*) AS num_chunks FROM show_chunks('sensor_data');
  num_chunks 
 ------------
           5
-(1 row)
 
 SELECT drop_chunks('sensor_data','2018-03-28'::timestamp);
               drop_chunks               
@@ -44,25 +42,21 @@ SELECT drop_chunks('sensor_data','2018-03-28'::timestamp);
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
-(3 rows)
 
 SELECT count(*) AS num_chunks from timescaledb_information.chunks where hypertable_name = 'sensor_data';
  num_chunks 
 ------------
           2
-(1 row)
 
 SELECT num_chunks from timescaledb_information.hypertables where hypertable_name = 'sensor_data';
  num_chunks 
 ------------
           2
-(1 row)
 
 SELECT count(*) AS num_chunks FROM show_chunks('sensor_data');
  num_chunks 
 ------------
           2
-(1 row)
 
 DROP TABLE sensor_data CASCADE;
 NOTICE:  drop cascades to 3 other objects

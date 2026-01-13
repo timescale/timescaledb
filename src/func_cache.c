@@ -264,6 +264,38 @@ static FuncInfo funcinfo[] = {
 		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 2,
+		.arg_types = { INTERVALOID, UUIDOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_sort_transform,
+	},
+	/* Interval Bucket with origin */
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
+		.funcname = "time_bucket",
+		.nargs = 3,
+		.arg_types = { INTERVALOID, UUIDOID, TIMESTAMPTZOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_sort_transform,
+	},
+	/* Interval Bucket with offset */
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
+		.funcname = "time_bucket",
+		.nargs = 3,
+		.arg_types = { INTERVALOID, UUIDOID, INTERVALOID },
+		.group_estimate = time_bucket_group_estimate,
+		.sort_transform = time_bucket_sort_transform,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = true,
+		.allowed_in_cagg_definition = true,
+		.funcname = "time_bucket",
+		.nargs = 2,
 		.arg_types = { INTERVALOID, DATEOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
@@ -495,6 +527,27 @@ static FuncInfo funcinfo[] = {
 	},
 
 	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = false,
+		.allowed_in_cagg_definition = false,
+		.funcname = "first",
+		.nargs = 2,
+		.arg_types = { ANYELEMENTOID, ANYOID },
+		.group_estimate = NULL,
+		.sort_transform = NULL,
+	},
+	{
+		.origin = ORIGIN_TIMESCALE,
+		.is_bucketing_func = false,
+		.allowed_in_cagg_definition = false,
+		.funcname = "last",
+		.nargs = 2,
+		.arg_types = { ANYELEMENTOID, ANYOID },
+		.group_estimate = NULL,
+		.sort_transform = NULL,
+	},
+
+	{
 		.origin = ORIGIN_POSTGRES,
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
@@ -518,6 +571,9 @@ static FuncInfo funcinfo[] = {
 
 #define _MAX_CACHE_FUNCTIONS (sizeof(funcinfo) / sizeof(funcinfo[0]))
 
+Oid ts_first_func_oid = InvalidOid;
+Oid ts_last_func_oid = InvalidOid;
+
 static HTAB *func_hash = NULL;
 
 static Oid
@@ -527,9 +583,10 @@ proc_get_oid(HeapTuple tuple)
 	return form->oid;
 }
 
-static void
-initialize_func_info()
+void
+ts_func_cache_init()
 {
+	Ensure(!func_hash, "function cache already initialized");
 	HASHCTL hashctl = {
 		.keysize = sizeof(Oid),
 		.entrysize = sizeof(FuncEntry),
@@ -583,6 +640,12 @@ initialize_func_info()
 
 		funcid = proc_get_oid(tuple);
 
+		/* Special handling for first/last to set up named variables for their oids */
+		if (strcmp(finfo->funcname, "first") == 0)
+			ts_first_func_oid = funcid;
+		else if (strcmp(finfo->funcname, "last") == 0)
+			ts_last_func_oid = funcid;
+
 		fentry = hash_search(func_hash, &funcid, HASH_ENTER, &hash_found);
 		Assert(!hash_found);
 		fentry->funcid = funcid;
@@ -598,8 +661,8 @@ ts_func_cache_get(Oid funcid)
 {
 	FuncEntry *entry;
 
-	if (NULL == func_hash)
-		initialize_func_info();
+	if (!func_hash)
+		ts_func_cache_init();
 
 	entry = hash_search(func_hash, &funcid, HASH_FIND, NULL);
 

@@ -7,7 +7,6 @@ step s1_select_count:
 count
 -----
 16850
-(1 row)
 
 step s2_select_count_and_stats: 
    SELECT count(*) FROM sensor_data;
@@ -16,12 +15,10 @@ step s2_select_count_and_stats:
 count
 -----
 16850
-(1 row)
 
 compression_status|count
 ------------------+-----
 Uncompressed      |    2
-(1 row)
 
 
 starting permutation: s1_select_count s1_compress s1_select_count s2_select_count_and_stats
@@ -31,7 +28,6 @@ step s1_select_count:
 count
 -----
 16850
-(1 row)
 
 step s1_compress: 
    SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
@@ -39,7 +35,6 @@ step s1_compress:
 count
 -----
     2
-(1 row)
 
 step s1_select_count: 
    SELECT count(*) FROM sensor_data;
@@ -47,7 +42,6 @@ step s1_select_count:
 count
 -----
 16850
-(1 row)
 
 step s2_select_count_and_stats: 
    SELECT count(*) FROM sensor_data;
@@ -56,12 +50,10 @@ step s2_select_count_and_stats:
 count
 -----
 16850
-(1 row)
 
 compression_status|count
 ------------------+-----
 Compressed        |    2
-(1 row)
 
 
 starting permutation: s2_lock_compression s2_select_count_and_stats s1_compress s2_select_count_and_stats s2_unlock_compression s2_select_count_and_stats
@@ -71,7 +63,6 @@ step s2_lock_compression:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_select_count_and_stats: 
    SELECT count(*) FROM sensor_data;
@@ -80,12 +71,10 @@ step s2_select_count_and_stats:
 count
 -----
 16850
-(1 row)
 
 compression_status|count
 ------------------+-----
 Uncompressed      |    2
-(1 row)
 
 step s1_compress: 
    SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
@@ -97,12 +86,10 @@ step s2_select_count_and_stats:
 count
 -----
 16850
-(1 row)
 
 compression_status|count
 ------------------+-----
 Uncompressed      |    2
-(1 row)
 
 step s2_unlock_compression: 
     SELECT locktype, mode, granted, objid FROM pg_locks WHERE not granted AND (locktype = 'advisory' or relation::regclass::text LIKE '%chunk') ORDER BY relation, locktype, mode, granted;
@@ -111,18 +98,15 @@ step s2_unlock_compression:
 locktype|mode     |granted|    objid
 --------+---------+-------+---------
 advisory|ShareLock|f      |113732026
-(1 row)
 
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_compress: <... completed>
 count
 -----
     2
-(1 row)
 
 step s2_select_count_and_stats: 
    SELECT count(*) FROM sensor_data;
@@ -131,12 +115,10 @@ step s2_select_count_and_stats:
 count
 -----
 16850
-(1 row)
 
 compression_status|count
 ------------------+-----
 Compressed        |    2
-(1 row)
 
 
 starting permutation: s2_lock_compression_after_truncate s2_select_count_and_stats s1_compress s2_unlock_compression_after_truncate s2_select_count_and_stats
@@ -146,7 +128,6 @@ step s2_lock_compression_after_truncate:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_select_count_and_stats: 
    SELECT count(*) FROM sensor_data;
@@ -155,12 +136,10 @@ step s2_select_count_and_stats:
 count
 -----
 16850
-(1 row)
 
 compression_status|count
 ------------------+-----
 Uncompressed      |    2
-(1 row)
 
 step s1_compress: 
    SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
@@ -174,18 +153,15 @@ locktype|mode               |granted|objid
 relation|AccessExclusiveLock|t      |     
 relation|ExclusiveLock      |t      |     
 relation|ShareLock          |t      |     
-(3 rows)
 
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_compress: <... completed>
 count
 -----
     2
-(1 row)
 
 step s2_select_count_and_stats: 
    SELECT count(*) FROM sensor_data;
@@ -194,12 +170,10 @@ step s2_select_count_and_stats:
 count
 -----
 16850
-(1 row)
 
 compression_status|count
 ------------------+-----
 Compressed        |    2
-(1 row)
 
 
 starting permutation: s2_lock_compression_after_delete s2_select_count_and_stats s1_compress_delete s2_select_count_and_stats s2_unlock_compression_after_delete s2_select_count_and_stats
@@ -209,7 +183,6 @@ step s2_lock_compression_after_delete:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_select_count_and_stats: 
    SELECT count(*) FROM sensor_data;
@@ -218,12 +191,10 @@ step s2_select_count_and_stats:
 count
 -----
 16850
-(1 row)
 
 compression_status|count
 ------------------+-----
 Uncompressed      |    2
-(1 row)
 
 step s1_compress_delete: 
    SET timescaledb.compress_truncate_behaviour TO truncate_disabled;
@@ -236,12 +207,10 @@ step s2_select_count_and_stats:
 count
 -----
 16850
-(1 row)
 
 compression_status|count
 ------------------+-----
 Uncompressed      |    2
-(1 row)
 
 step s2_unlock_compression_after_delete: 
     SELECT locktype, mode, granted, objid FROM pg_locks WHERE granted AND relation::regclass::text LIKE '%hyper%chunk' ORDER BY relation, locktype, mode, granted;
@@ -251,18 +220,15 @@ locktype|mode            |granted|objid
 --------+----------------+-------+-----
 relation|ExclusiveLock   |t      |     
 relation|RowExclusiveLock|t      |     
-(2 rows)
 
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_compress_delete: <... completed>
 count
 -----
     2
-(1 row)
 
 step s2_select_count_and_stats: 
    SELECT count(*) FROM sensor_data;
@@ -271,12 +237,10 @@ step s2_select_count_and_stats:
 count
 -----
 16850
-(1 row)
 
 compression_status|count
 ------------------+-----
 Compressed        |    2
-(1 row)
 
 
 starting permutation: s2_lock_compression_after_truncate_or_delete s2_select_count_and_stats s1_compress_truncate_or_delete s2_unlock_compression_after_truncate_or_delete s2_select_count_and_stats
@@ -286,7 +250,6 @@ step s2_lock_compression_after_truncate_or_delete:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_select_count_and_stats: 
    SELECT count(*) FROM sensor_data;
@@ -295,12 +258,10 @@ step s2_select_count_and_stats:
 count
 -----
 16850
-(1 row)
 
 compression_status|count
 ------------------+-----
 Uncompressed      |    2
-(1 row)
 
 step s1_compress_truncate_or_delete: 
    SET timescaledb.compress_truncate_behaviour TO truncate_or_delete;
@@ -315,18 +276,15 @@ locktype|mode               |granted|objid
 relation|AccessExclusiveLock|t      |     
 relation|ExclusiveLock      |t      |     
 relation|ShareLock          |t      |     
-(3 rows)
 
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_compress_truncate_or_delete: <... completed>
 count
 -----
     2
-(1 row)
 
 step s2_select_count_and_stats: 
    SELECT count(*) FROM sensor_data;
@@ -335,10 +293,8 @@ step s2_select_count_and_stats:
 count
 -----
 16850
-(1 row)
 
 compression_status|count
 ------------------+-----
 Compressed        |    2
-(1 row)
 

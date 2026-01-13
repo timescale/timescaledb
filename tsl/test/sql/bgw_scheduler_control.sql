@@ -39,7 +39,7 @@ CREATE VIEW cleaned_bgw_log AS
       FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
 
 -- Remove all default jobs
-DELETE FROM _timescaledb_config.bgw_job WHERE TRUE;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE TRUE;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 
 --
@@ -49,14 +49,13 @@ TRUNCATE _timescaledb_internal.bgw_job_stat;
 --
 -- We change user to make sure that granting SET and ALTER SYSTEM
 -- privileges to the default user actually works.
---
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 ALTER DATABASE :TEST_DBNAME SET timescaledb.bgw_log_level = 'DEBUG1';
 SELECT pg_reload_conf();
 
 RESET ROLE;
 SELECT ts_bgw_params_reset_time(0, false);
-INSERT INTO _timescaledb_config.bgw_job(
+INSERT INTO _timescaledb_catalog.bgw_job(
        application_name,
        schedule_interval,
        max_runtime,
@@ -83,9 +82,33 @@ INSERT INTO _timescaledb_config.bgw_job(
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 0);
 SELECT * FROM cleaned_bgw_log;
 
+-- We test that we can set it to FATAL, which removed LOG level
+-- entries from the log.
+ALTER DATABASE :TEST_DBNAME SET timescaledb.bgw_log_level = 'FATAL';
+SELECT pg_reload_conf();
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+SELECT ts_bgw_params_reset_time(0, false);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 0);
+SELECT * FROM cleaned_bgw_log;
+
+-- We test that we can set it to ERROR.
+ALTER DATABASE :TEST_DBNAME SET timescaledb.bgw_log_level = 'ERROR';
+SELECT pg_reload_conf();
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+SELECT ts_bgw_params_reset_time(0, false);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 0);
+SELECT * FROM cleaned_bgw_log;
+
+-- Reset the log level and check that normal entries are showing up
+-- again.
 ALTER DATABASE :TEST_DBNAME RESET timescaledb.bgw_log_level;
 SELECT pg_reload_conf();
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
 SELECT ts_bgw_params_reset_time(0, false);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 0);

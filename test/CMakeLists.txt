@@ -20,18 +20,23 @@ if(PG_REGRESS)
     COMMAND
       ${CMAKE_COMMAND} -E env ${PG_REGRESS_ENV}
       TEST_PGPORT=${TEST_PGPORT_TEMP_INSTANCE} TEST_SCHEDULE=${TEST_SCHEDULE}
-      ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh ${PG_REGRESS_OPTS_BASE}
-      ${PG_REGRESS_OPTS_EXTRA} ${PG_REGRESS_OPTS_INOUT}
+      TEST_TIMEOUT=${TEST_TIMEOUT} ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
+      ${PG_REGRESS_OPTS_BASE} ${PG_REGRESS_OPTS_EXTRA} ${PG_REGRESS_OPTS_INOUT}
       ${PG_REGRESS_OPTS_TEMP_INSTANCE}
       --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf
+    USES_TERMINAL)
+
+  add_custom_target(
+    regresscheck-rerun
+    COMMAND ${PRIMARY_TEST_DIR}/ci_rerun.sh regresscheck
     USES_TERMINAL)
 
   add_custom_target(
     regresschecklocal
     COMMAND
       ${CMAKE_COMMAND} -E env ${PG_REGRESS_ENV} TEST_PGPORT=${TEST_PGPORT_LOCAL}
-      ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh ${PG_REGRESS_OPTS_BASE}
-      ${PG_REGRESS_OPTS_EXTRA} ${PG_REGRESS_OPTS_INOUT}
+      TEST_TIMEOUT=${TEST_TIMEOUT} ${CMAKE_CURRENT_SOURCE_DIR}/pg_regress.sh
+      ${PG_REGRESS_OPTS_BASE} ${PG_REGRESS_OPTS_EXTRA} ${PG_REGRESS_OPTS_INOUT}
       ${PG_REGRESS_OPTS_LOCAL_INSTANCE}
     USES_TERMINAL)
 
@@ -55,6 +60,11 @@ if(PG_ISOLATION_REGRESS)
       ${PG_ISOLATION_REGRESS_OPTS_EXTRA} ${PG_ISOLATION_REGRESS_OPTS_INOUT}
       ${PG_REGRESS_OPTS_TEMP_INSTANCE}
       --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf
+    USES_TERMINAL)
+
+  add_custom_target(
+    isolationcheck-rerun
+    COMMAND ${PRIMARY_TEST_DIR}/ci_rerun.sh isolationcheck
     USES_TERMINAL)
 
   add_custom_target(
@@ -107,6 +117,11 @@ add_custom_command(
   POST_BUILD
   COMMAND cmake --build ${CMAKE_CURRENT_BINARY_DIR} --target
           installcheck-post-hook)
+
+add_custom_target(
+  installcheck-rerun
+  COMMAND ${PRIMARY_TEST_DIR}/ci_rerun.sh installcheck
+  USES_TERMINAL)
 
 # installchecklocal tests against an existing postgres instance
 add_custom_target(installchecklocal DEPENDS ${_local_install_checks})

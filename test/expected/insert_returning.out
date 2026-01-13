@@ -14,7 +14,6 @@ select * from create_hypertable('hypertable', 'time');
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | hypertable | t
-(1 row)
 
 INSERT INTO standard_table (standard_id, name)
 VALUES (1, 'standard_1');
@@ -30,7 +29,6 @@ RETURNING *, EXISTS (
              time             |     name     | standard_id | exists 
 ------------------------------+--------------+-------------+--------
  Tue Feb 01 18:02:02 2022 PST | hypertable_2 |           1 | t
-(1 row)
 
 INSERT INTO hypertable (time, name, standard_id)
 VALUES ('2023-03-03 03:03:03+00', 'hypertable_3', 1)
@@ -42,7 +40,6 @@ RETURNING *, EXISTS (
              time             |     name     | standard_id | exists 
 ------------------------------+--------------+-------------+--------
  Thu Mar 02 19:03:03 2023 PST | hypertable_3 |           1 | t
-(1 row)
 
 INSERT INTO hypertable (time, name, standard_id)
 VALUES ('2024-04-04 04:04:04+00', 'hypertable_4', 2)
@@ -54,5 +51,4 @@ RETURNING *, EXISTS (
              time             |     name     | standard_id | exists 
 ------------------------------+--------------+-------------+--------
  Wed Apr 03 21:04:04 2024 PDT | hypertable_4 |           2 | f
-(1 row)
 

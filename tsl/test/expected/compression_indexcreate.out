@@ -3,14 +3,12 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- force index scan to be used when possible
 set enable_seqscan to false;
-\set PREFIX 'EXPLAIN (analyze, costs off, summary off, timing off) '
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, summary off, timing off) '
 create table segind(time timestamptz, a int, b int);
 select create_hypertable('segind', by_range('time'));
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  (1,t)
-(1 row)
 
 -- enable compression on hypertable with no segment by column
 alter table segind set (timescaledb.compress, timescaledb.compress_segmentby='', timescaledb.compress_orderby='time, b');
@@ -21,55 +19,46 @@ select compress_chunk(show_chunks('segind'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
+vacuum analyze segind;
 -- query using orderby columns should use the index
 :PREFIX select * from segind where b = 1;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=5 loops=1)
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=5.00 loops=1)
    Vectorized Filter: (b = 1)
    Rows Removed by Filter: 1
-   ->  Index Scan using compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1__ts__idx on compress_hyper_2_2_chunk (actual rows=1 loops=1)
+   ->  Index Scan using compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1__ts__idx on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
          Index Cond: ((_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1))
-(5 rows)
 
 :PREFIX select * from segind where time = '2024-11-08 10:32:28.436014-07';
-                                                                                            QUERY PLAN                                                                                             
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: ("time" = 'Fri Nov 08 09:32:28.436014 2024 PST'::timestamp with time zone)
    Rows Removed by Filter: 5
-   ->  Index Scan using compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1__ts__idx on compress_hyper_2_2_chunk (actual rows=1 loops=1)
+   ->  Index Scan using compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1__ts__idx on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
          Index Cond: ((_ts_meta_min_1 <= 'Fri Nov 08 09:32:28.436014 2024 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Fri Nov 08 09:32:28.436014 2024 PST'::timestamp with time zone))
-(5 rows)
 
 :PREFIX select * from segind where b = 1 and time = '2024-11-08 10:32:28.436014-07';
-                                                                                                                      QUERY PLAN                                                                                                                       
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: ((b = 1) AND ("time" = 'Fri Nov 08 09:32:28.436014 2024 PST'::timestamp with time zone))
    Rows Removed by Filter: 5
-   ->  Index Scan using compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1__ts__idx on compress_hyper_2_2_chunk (actual rows=1 loops=1)
+   ->  Index Scan using compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1__ts__idx on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
          Index Cond: ((_ts_meta_min_1 <= 'Fri Nov 08 09:32:28.436014 2024 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Fri Nov 08 09:32:28.436014 2024 PST'::timestamp with time zone) AND (_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1))
-(5 rows)
 
 -- a query on another column should perform a seq scan since there is no index on it
 :PREFIX select * from segind where a = 1;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2 loops=1)
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=2.00 loops=1)
    Vectorized Filter: (a = 1)
    Rows Removed by Filter: 4
-   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1 loops=1)
-(4 rows)
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
 
 -- decompress the chunk to drop the index
 select decompress_chunk(show_chunks('segind'));
             decompress_chunk            
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 -- change compression settings to use segmentby column
 alter table segind set (timescaledb.compress, timescaledb.compress_segmentby='a', timescaledb.compress_orderby='time, b');
@@ -79,46 +68,38 @@ select compress_chunk(show_chunks('segind'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
+vacuum analyze segind;
 -- queries using segmentby or orderby columns should use the index
 :PREFIX select * from segind where b = 1;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=5 loops=1)
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=5.00 loops=1)
    Vectorized Filter: (b = 1)
    Rows Removed by Filter: 1
-   ->  Index Scan using compress_hyper_2_3_chunk_a__ts_meta_min_1__ts_meta_max_1__t_idx on compress_hyper_2_3_chunk (actual rows=4 loops=1)
+   ->  Index Scan using compress_hyper_2_3_chunk_a__ts_meta_min_1__ts_meta_max_1__t_idx on compress_hyper_2_3_chunk (actual rows=4.00 loops=1)
          Index Cond: ((_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1))
-(5 rows)
 
 :PREFIX select * from segind where time = '2024-11-08 10:32:28.436014-07';
-                                                                                            QUERY PLAN                                                                                             
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: ("time" = 'Fri Nov 08 09:32:28.436014 2024 PST'::timestamp with time zone)
    Rows Removed by Filter: 3
-   ->  Index Scan using compress_hyper_2_3_chunk_a__ts_meta_min_1__ts_meta_max_1__t_idx on compress_hyper_2_3_chunk (actual rows=2 loops=1)
+   ->  Index Scan using compress_hyper_2_3_chunk_a__ts_meta_min_1__ts_meta_max_1__t_idx on compress_hyper_2_3_chunk (actual rows=2.00 loops=1)
          Index Cond: ((_ts_meta_min_1 <= 'Fri Nov 08 09:32:28.436014 2024 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Fri Nov 08 09:32:28.436014 2024 PST'::timestamp with time zone))
-(5 rows)
 
 :PREFIX select * from segind where b = 1 and time = '2024-11-08 10:32:28.436014-07';
-                                                                                                                      QUERY PLAN                                                                                                                       
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
    Vectorized Filter: ((b = 1) AND ("time" = 'Fri Nov 08 09:32:28.436014 2024 PST'::timestamp with time zone))
    Rows Removed by Filter: 3
-   ->  Index Scan using compress_hyper_2_3_chunk_a__ts_meta_min_1__ts_meta_max_1__t_idx on compress_hyper_2_3_chunk (actual rows=2 loops=1)
+   ->  Index Scan using compress_hyper_2_3_chunk_a__ts_meta_min_1__ts_meta_max_1__t_idx on compress_hyper_2_3_chunk (actual rows=2.00 loops=1)
          Index Cond: ((_ts_meta_min_1 <= 'Fri Nov 08 09:32:28.436014 2024 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Fri Nov 08 09:32:28.436014 2024 PST'::timestamp with time zone) AND (_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1))
-(5 rows)
 
 :PREFIX select * from segind where a = 1;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2 loops=1)
-   ->  Index Scan using compress_hyper_2_3_chunk_a__ts_meta_min_1__ts_meta_max_1__t_idx on compress_hyper_2_3_chunk (actual rows=1 loops=1)
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=2.00 loops=1)
+   ->  Index Scan using compress_hyper_2_3_chunk_a__ts_meta_min_1__ts_meta_max_1__t_idx on compress_hyper_2_3_chunk (actual rows=1.00 loops=1)
          Index Cond: (a = 1)
-(3 rows)
 
 -- cleanup
 RESET enable_seqscan;

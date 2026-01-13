@@ -5,9 +5,9 @@
 -- test query planning with hypertable which contains
 -- compressed chunks that depend on sequence number optimization
 -- which is removed in latest schema revision
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-\set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
+\set EXPLAIN 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 
 CREATE TABLE hyper(
     time INT NOT NULL,
@@ -23,6 +23,7 @@ ALTER TABLE hyper SET (
 INSERT INTO hyper VALUES (1, 1, 1), (2, 2, 1), (3, 3, 1), (10, 3, 2), (11, 4, 2), (11, 5, 2), (21, 2, 3), (22, 3, 3), (23, 4, 3), (30, 1, 4), (31, 3, 4), (31, 5, 4);
 
 SELECT compress_chunk(show_chunks('hyper'));
+VACUUM ANALYZE hyper;
 
 -- output without sequence number chunks, should match output with sequence numbers below
 :EXPLAIN SELECT * FROM hyper
@@ -47,7 +48,7 @@ ORDER BY ch1.id LIMIT 1 \gset
 SELECT schemaname || '.' || indexname AS "CHUNK_INDEX" FROM pg_indexes where tablename = :'CHUNK_NAME'
 LIMIT 1 \gset
 
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -71,7 +72,7 @@ ORDER BY ch1.id OFFSET 2 LIMIT 1 \gset
 SELECT schemaname || '.' || indexname AS "CHUNK_INDEX" FROM pg_indexes where tablename = :'CHUNK_NAME'
 LIMIT 1 \gset
 
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -105,6 +106,7 @@ ORDER BY device_id DESC, time DESC;
 -- while dropping sequence numbers
 INSERT INTO hyper VALUES (20, 1, 1);
 SELECT compress_chunk(show_chunks('hyper'));
+VACUUM ANALYZE hyper;
 -- removal of sequence numbers from the chunk should be
 -- reflected in this plan
 :EXPLAIN SELECT * FROM hyper
@@ -119,6 +121,7 @@ ALTER TABLE hyper SET (
 INSERT INTO hyper VALUES (1, 1, 1), (2, 2, 1), (3, 3, 1), (10, 3, 2), (11, 4, 2), (11, 5, 2), (21, 2, 3), (22, 3, 3), (23, 4, 3), (30, 1, 4), (31, 3, 4), (31, 5, 4);
 
 SELECT compress_chunk(show_chunks('hyper'));
+VACUUM ANALYZE hyper;
 
 :EXPLAIN SELECT * FROM hyper
 ORDER BY time;
@@ -130,7 +133,7 @@ WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 AND ch1.compressed_chunk_id = comp_ch.id
 ORDER BY ch1.id LIMIT 1 \gset
 
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -148,7 +151,7 @@ WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 AND ch1.compressed_chunk_id = comp_ch.id
 ORDER BY ch1.id OFFSET 3 LIMIT 1 \gset
 
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -188,6 +191,7 @@ ALTER TABLE hyper SET (
 INSERT INTO hyper VALUES (1, 1, 1), (2, 2, 1), (3, 3, 1), (10, 3, 2), (11, 4, 2), (11, 5, 2), (21, 2, 3), (22, 3, 3), (23, 4, 3), (30, 1, 4), (31, 3, 4), (31, 5, 4);
 
 SELECT compress_chunk(show_chunks('hyper'));
+VACUUM ANALYZE hyper;
 
 SELECT comp_ch.table_name AS "CHUNK_NAME", comp_ch.schema_name|| '.' || comp_ch.table_name AS "CHUNK_FULL_NAME"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk comp_ch, _timescaledb_catalog.hypertable ht
@@ -195,7 +199,7 @@ WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 AND ch1.compressed_chunk_id = comp_ch.id
 ORDER BY ch1.id LIMIT 1 \gset
 
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SELECT :'CHUNK_FULL_NAME'::regclass::oid as "CHUNK_OID" \gset
 SELECT (power(2,31)+1)::bigint as "CHUNK_NEW_OID" \gset
 UPDATE pg_class SET oid = :CHUNK_NEW_OID

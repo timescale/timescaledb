@@ -5,11 +5,9 @@ CREATE TABLE vacuum_test(time timestamp, temp float);
 -- create hypertable with three chunks
 SELECT create_hypertable('vacuum_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (1,public,vacuum_test,t)
-(1 row)
 
 INSERT INTO vacuum_test VALUES ('2017-01-20T16:00:01', 17.5),
                                ('2017-01-21T16:00:01', 19.1),
@@ -23,14 +21,12 @@ WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
 ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
  tablename | attname | histogram_bounds | n_distinct 
 -----------+---------+------------------+------------
-(0 rows)
 
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = 'public' AND tablename LIKE 'vacuum_test'
 ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
  tablename | attname | histogram_bounds | n_distinct 
 -----------+---------+------------------+------------
-(0 rows)
 
 VACUUM ANALYZE vacuum_test;
 -- stats should exist for all three chunks
@@ -45,7 +41,6 @@ ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
  _hyper_1_2_chunk | time    | {"Thu Apr 20 16:00:01 2017","Fri Apr 21 16:00:01 2017"} |         -1
  _hyper_1_3_chunk | temp    | {11,18.5}                                               |         -1
  _hyper_1_3_chunk | time    | {"Tue Jun 20 16:00:01 2017","Wed Jun 21 16:00:01 2017"} |         -1
-(6 rows)
 
 -- stats should exist on parent hypertable
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
@@ -55,18 +50,15 @@ ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
 -------------+---------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------
  vacuum_test | temp    | {11,17.1,17.5,18.5,19.1,89.5}                                                                                                                                       |         -1
  vacuum_test | time    | {"Fri Jan 20 16:00:01 2017","Sat Jan 21 16:00:01 2017","Thu Apr 20 16:00:01 2017","Fri Apr 21 16:00:01 2017","Tue Jun 20 16:00:01 2017","Wed Jun 21 16:00:01 2017"} |         -1
-(2 rows)
 
 DROP TABLE vacuum_test;
 --test plain analyze (no_vacuum)
 CREATE TABLE analyze_test(time timestamp, temp float);
 SELECT create_hypertable('analyze_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (2,public,analyze_test,t)
-(1 row)
 
 INSERT INTO analyze_test VALUES ('2017-01-20T16:00:01', 17.5),
                                ('2017-01-21T16:00:01', 19.1),
@@ -80,28 +72,14 @@ WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
 ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
  tablename | attname | histogram_bounds | n_distinct 
 -----------+---------+------------------+------------
-(0 rows)
 
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = 'public' AND tablename LIKE 'analyze_test'
 ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
  tablename | attname | histogram_bounds | n_distinct 
 -----------+---------+------------------+------------
-(0 rows)
 
-ANALYZE VERBOSE analyze_test;
-INFO:  analyzing "_timescaledb_internal._hyper_2_4_chunk"
-INFO:  "_hyper_2_4_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  analyzing "_timescaledb_internal._hyper_2_5_chunk"
-INFO:  "_hyper_2_5_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  analyzing "_timescaledb_internal._hyper_2_6_chunk"
-INFO:  "_hyper_2_6_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  analyzing "public.analyze_test"
-INFO:  "analyze_test": scanned 0 of 0 pages, containing 0 live rows and 0 dead rows; 0 rows in sample, 0 estimated total rows
-INFO:  analyzing "public.analyze_test" inheritance tree
-INFO:  "_hyper_2_4_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  "_hyper_2_5_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  "_hyper_2_6_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
+ANALYZE analyze_test;
 -- stats should exist for all three chunks
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
@@ -114,7 +92,6 @@ ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
  _hyper_2_5_chunk | time    | {"Thu Apr 20 16:00:01 2017","Fri Apr 21 16:00:01 2017"} |         -1
  _hyper_2_6_chunk | temp    | {11,18.5}                                               |         -1
  _hyper_2_6_chunk | time    | {"Tue Jun 20 16:00:01 2017","Wed Jun 21 16:00:01 2017"} |         -1
-(6 rows)
 
 -- stats should exist on parent hypertable
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
@@ -124,7 +101,6 @@ ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
 --------------+---------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------
  analyze_test | temp    | {11,17.1,17.5,18.5,19.1,89.5}                                                                                                                                       |         -1
  analyze_test | time    | {"Fri Jan 20 16:00:01 2017","Sat Jan 21 16:00:01 2017","Thu Apr 20 16:00:01 2017","Fri Apr 21 16:00:01 2017","Tue Jun 20 16:00:01 2017","Wed Jun 21 16:00:01 2017"} |         -1
-(2 rows)
 
 DROP TABLE analyze_test;
 -- Run vacuum on a normal (non-hypertable) table
@@ -142,11 +118,9 @@ CREATE TABLE vacuum_test(time timestamp, temp float);
 -- create hypertable with three chunks
 SELECT create_hypertable('vacuum_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (3,public,vacuum_test,t)
-(1 row)
 
 INSERT INTO vacuum_test VALUES ('2017-01-20T16:00:01', 17.5),
                                ('2017-01-21T16:00:01', 19.1),
@@ -157,11 +131,9 @@ INSERT INTO vacuum_test VALUES ('2017-01-20T16:00:01', 17.5),
 CREATE TABLE analyze_test(time timestamp, temp float);
 SELECT create_hypertable('analyze_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (4,public,analyze_test,t)
-(1 row)
 
 INSERT INTO analyze_test VALUES ('2017-01-20T16:00:01', 17.5),
                                ('2017-01-21T16:00:01', 19.1),
@@ -182,14 +154,12 @@ WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'
 ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
  tablename | attname | histogram_bounds | n_distinct 
 -----------+---------+------------------+------------
-(0 rows)
 
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = 'public'
 ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
  tablename | attname | histogram_bounds | n_distinct 
 -----------+---------+------------------+------------
-(0 rows)
 
 VACUUM ANALYZE vacuum_norm, vacuum_test, analyze_test;
 -- stats should exist for all 6 chunks
@@ -210,7 +180,6 @@ ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
  _hyper_4_11_chunk | time    | {"Thu Apr 20 16:00:01 2017","Fri Apr 21 16:00:01 2017"} |         -1
  _hyper_4_12_chunk | temp    | {11,18.5}                                               |         -1
  _hyper_4_12_chunk | time    | {"Tue Jun 20 16:00:01 2017","Wed Jun 21 16:00:01 2017"} |         -1
-(12 rows)
 
 -- stats should exist on parent hypertable and normal table
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
@@ -224,5 +193,4 @@ ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
  vacuum_norm  | time    | {"Fri Jan 20 09:00:01 2017","Sat Jan 21 09:00:01 2017","Thu Apr 20 09:00:01 2017","Fri Apr 21 09:00:01 2017","Tue Jun 20 09:00:01 2017","Wed Jun 21 09:00:01 2017"} |         -1
  vacuum_test  | temp    | {11,17.1,17.5,18.5,19.1,89.5}                                                                                                                                       |         -1
  vacuum_test  | time    | {"Fri Jan 20 16:00:01 2017","Sat Jan 21 16:00:01 2017","Thu Apr 20 16:00:01 2017","Fri Apr 21 16:00:01 2017","Tue Jun 20 16:00:01 2017","Wed Jun 21 16:00:01 2017"} |         -1
-(6 rows)
 

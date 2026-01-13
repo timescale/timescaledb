@@ -18,7 +18,7 @@ SELECT count(*) FROM  many_partitions_test;
 CREATE TABLE many_partitions_test_1m (time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('many_partitions_test_1m', 'time', 'device', 1000);
 
-EXPLAIN (verbose on, costs off)
+EXPLAIN (verbose on, buffers off, costs off)
 INSERT INTO many_partitions_test_1m(time, temp, device)
 SELECT time_bucket('1 minute', time) AS period, avg(temp), device
 FROM many_partitions_test

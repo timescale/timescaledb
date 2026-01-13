@@ -58,6 +58,56 @@ BEGIN
 END
 $BODY$;
 
+-- Extended output about columns analogous to \d+
+CREATE OR REPLACE FUNCTION test.show_columns_ext(rel regclass)
+RETURNS TABLE(
+  "Column" name,
+  "Type" text,
+  "Collation" name,
+  "Nullable" text,
+  "Default" text,
+  "Storage" text,
+  "Stats target" integer,
+  "Description" text
+)
+LANGUAGE SQL
+STABLE
+AS
+$BODY$
+  SELECT
+    a.attname AS "Column",
+    pg_catalog.format_type(a.atttypid, a.atttypmod) AS "Type",
+    c.collname AS "Collation",
+    CASE WHEN a.attnotnull THEN 'not null' ELSE '' END AS "Nullable",
+    pg_catalog.pg_get_expr(ad.adbin, ad.adrelid) AS "Default",
+    CASE a.attstorage
+      WHEN 'p' THEN 'plain'
+      WHEN 'm' THEN 'main'
+      WHEN 'e' THEN 'external'
+      WHEN 'x' THEN 'extended'
+      ELSE NULL
+    END AS "Storage",
+    a.attstattarget AS "Stats target",
+    d.description AS "Description"
+  FROM pg_catalog.pg_attribute a
+  JOIN pg_catalog.pg_type t
+    ON t.oid = a.atttypid
+  LEFT JOIN pg_catalog.pg_collation c
+    ON a.attcollation = c.oid
+   AND a.attcollation <> 0
+  LEFT JOIN pg_catalog.pg_attrdef ad
+    ON ad.adrelid = a.attrelid
+   AND ad.adnum = a.attnum
+  LEFT JOIN pg_catalog.pg_description d
+    ON d.objoid = a.attrelid
+   AND d.objsubid = a.attnum
+  WHERE a.attrelid = rel
+    AND a.attnum > 0
+    AND NOT a.attisdropped
+  ORDER BY a.attnum;
+$BODY$;
+
+
 CREATE OR REPLACE FUNCTION test.show_indexes(rel regclass)
 RETURNS TABLE("Index" regclass,
               "Columns" name[],
@@ -159,6 +209,9 @@ $BODY$
     c.convalidated
     FROM pg_constraint c
     WHERE c.conrelid = rel
+-- to avoid showing not null constraints which are new to PG18
+-- https://github.com/postgres/postgres/commit/14e87ffa
+	AND c.conname NOT LIKE '%not_null%'
     ORDER BY c.conname;
 $BODY$;
 
@@ -194,6 +247,9 @@ BEGIN
     c.convalidated
     FROM pg_class cl, pg_constraint c
     WHERE format('%I.%I', cl.relnamespace::regnamespace::name, cl.relname) LIKE format('%I.%s', schema_name, table_name)
+-- to avoid showing not null constraints which are new to PG18
+-- https://github.com/postgres/postgres/commit/14e87ffa
+	AND c.conname NOT LIKE '%not_null%'
     AND c.conrelid = cl.oid
     ORDER BY cl.relname, c.conname;
 END
@@ -353,3 +409,40 @@ BEGIN
     RETURN false;
 END
 $BODY$;
+
+CREATE OR REPLACE VIEW test.extension AS
+SELECT e.extname AS "Name",
+       e.extversion AS "Version",
+       n.nspname AS "Schema",
+       c.description AS "Description"
+FROM pg_extension e
+LEFT JOIN pg_namespace n ON n.oid = e.extnamespace
+LEFT JOIN pg_description c ON c.objoid = e.oid AND c.classoid = 'pg_extension'::regclass
+ORDER BY 1;
+
+GRANT SELECT ON test.extension TO PUBLIC;
+
+-- View to replace \dt commands in tests for consistent output across PostgreSQL versions
+CREATE OR REPLACE VIEW test.relation AS
+SELECT
+    n.nspname AS schema,
+    c.relname AS name,
+    CASE c.relkind
+        WHEN 'r' THEN 'table'
+        WHEN 'v' THEN 'view'
+        WHEN 'm' THEN 'materialized view'
+        WHEN 'f' THEN 'foreign table'
+        WHEN 'p' THEN 'partitioned table'
+        ELSE c.relkind::text
+    END AS type,
+    pg_catalog.pg_get_userbyid(c.relowner) AS owner
+FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind IN ('r','p','v','m','f','')
+  AND n.nspname <> 'information_schema'
+  AND n.nspname <> 'pg_catalog'
+  AND n.nspname !~ '^pg_toast'
+ORDER BY 1, 2;
+
+GRANT SELECT ON test.relation TO PUBLIC;
+

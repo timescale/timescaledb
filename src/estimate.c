@@ -137,7 +137,7 @@ group_estimate_funcexpr(PlannerInfo *root, FuncExpr *group_estimate_func, double
 {
 	FuncInfo *func_est = ts_func_cache_get_bucketing_func(group_estimate_func->funcid);
 
-	if (NULL != func_est)
+	if (func_est && func_est->group_estimate)
 		return func_est->group_estimate(root, group_estimate_func, path_rows);
 	return INVALID_ESTIMATE;
 }

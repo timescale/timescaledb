@@ -29,7 +29,8 @@ ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE in
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
 
 -- Change should be reflected here
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT * FROM test.show_indexesp('%.%');
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%');
 
 --create column with same name as previously renamed one
 ALTER TABLE PUBLIC."Hypertable_1" ADD COLUMN sensor_3 BIGINT NOT NULL DEFAULT 131;

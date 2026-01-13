@@ -195,8 +195,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 			 */
 			Assert(chunk != NULL);
 
-			if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk) &&
-				!ts_is_hypercore_am(chunk->amoid))
+			if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk))
 			{
 				child_rel->indexlist = NIL;
 			}
@@ -218,6 +217,11 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		 * Child is live, so add it to the live_childrels list for use below.
 		 */
 		live_childrels = lappend(live_childrels, child_rel);
+
+		/* If consider startup costs on chunks because we can apply SkipScan, should also consider
+		 * startup costs on a hypertable */
+		if (child_rel->consider_startup)
+			parent_rel->consider_startup = true;
 	}
 
 	/* Add paths to the append relation. */
@@ -477,6 +481,12 @@ set_rel_consider_parallel(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte
 		case RTE_RESULT:
 			/* RESULT RTEs, in themselves, are no problem. */
 			break;
+#if PG18_GE
+		case RTE_GROUP:
+			/* Shouldn't happen; we're only considering baserels here. */
+			Assert(false);
+			return;
+#endif
 	}
 
 	/*

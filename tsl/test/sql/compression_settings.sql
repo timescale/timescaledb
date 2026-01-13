@@ -93,11 +93,19 @@ SELECT compress_chunk(show_chunks('metrics'), true);
 SELECT * FROM settings;
 SELECT * FROM ht_settings;
 SELECT * FROM chunk_settings;
-ALTER TABLE metrics SET (timescaledb.compress_segmentby='d2');
+ALTER TABLE metrics SET (timescaledb.compress_orderby='"time" desc', timescaledb.compress_segmentby='d2', timescaledb.index='bloom(value)');
 
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL ORDER BY id LIMIT 1 OFFSET 1\gset
 
 -- recompressing chunks should apply current hypertable settings
+SELECT compress_chunk(:'CHUNK', recompress:=true);
+SELECT * FROM settings;
+SELECT compress_chunk(:'CHUNK', recompress:=true);
+SELECT * FROM settings;
+
+ALTER TABLE metrics SET (timescaledb.compress_orderby='"time" desc', timescaledb.compress_segmentby='d2', timescaledb.index='');
+
+SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL ORDER BY id LIMIT 1 OFFSET 1\gset
 SELECT compress_chunk(:'CHUNK', recompress:=true);
 SELECT * FROM settings;
 SELECT * FROM ht_settings;
@@ -139,3 +147,67 @@ SELECT * FROM settings;
 -- hypertable so needs to be tested separately.
 DROP TABLE metrics CASCADE;
 SELECT * FROM settings;
+
+-- Test column limits for orderby and segmentby
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+-- Test CREATE TABLE syntax
+CREATE TABLE test_column_limit_create (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INT,
+    col1 DOUBLE PRECISION,
+    col2 DOUBLE PRECISION,
+    col3 DOUBLE PRECISION,
+    col4 DOUBLE PRECISION,
+    col5 DOUBLE PRECISION,
+    col6 DOUBLE PRECISION,
+    col7 DOUBLE PRECISION,
+    col8 DOUBLE PRECISION,
+    col9 DOUBLE PRECISION,
+    col10 DOUBLE PRECISION,
+    col11 DOUBLE PRECISION,
+    col12 DOUBLE PRECISION,
+    col13 DOUBLE PRECISION,
+    col14 DOUBLE PRECISION,
+    col15 DOUBLE PRECISION
+) WITH (
+    tsdb.hypertable,
+    tsdb.partition_column='time',
+    tsdb.segmentby='device_id',
+    tsdb.orderby= 'col1, col2, col3, col4, col5, col6, col7, col8, col9, col10, col11, col12, col13, col14, col15'
+);
+
+-- Test ALTER TABLE syntax
+CREATE TABLE test_column_limit_alter (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INT,
+    col1 DOUBLE PRECISION,
+    col2 DOUBLE PRECISION,
+    col3 DOUBLE PRECISION,
+    col4 DOUBLE PRECISION,
+    col5 DOUBLE PRECISION,
+    col6 DOUBLE PRECISION,
+    col7 DOUBLE PRECISION,
+    col8 DOUBLE PRECISION,
+    col9 DOUBLE PRECISION,
+    col10 DOUBLE PRECISION,
+    col11 DOUBLE PRECISION,
+    col12 DOUBLE PRECISION,
+    col13 DOUBLE PRECISION,
+    col14 DOUBLE PRECISION,
+    col15 DOUBLE PRECISION,
+    col16 DOUBLE PRECISION
+);
+
+-- Create hypertable
+SELECT create_hypertable('test_column_limit_alter', 'time');
+
+-- Enable compression with 1 segmentby and 20 orderby columns (1 + 40 = 41 keys)
+ALTER TABLE test_column_limit_alter SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'device_id',
+    timescaledb.compress_orderby = 'col1, col2, col3, col4, col5, col6, col7, col8, col9, col10, col11, col12, col13, col14, col15'
+);
+
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse

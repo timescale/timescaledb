@@ -6,9 +6,6 @@
 \set CHUNK_ROWS 100000::int
 \set GROUPING_CARDINALITY 10::int
 
--- Uncomment to run this test with hypercore TAM
---set timescaledb.default_hypercore_use_access_method=true;
-
 create table svagg(t int, f int, s int);
 select create_hypertable('svagg', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
 
@@ -68,7 +65,7 @@ select s, sum(t), count(*) from svagg where f > 10         group by s order by s
 select s, sum(t), count(*) from svagg group by s order by s;
 
 -- another example that we used not to vectorize because of the projection.
-explain (costs off)
+explain (buffers off, costs off)
 select sum(t), s, count(*) from svagg group by s order by s;
 
 select sum(t) from svagg group by s order by 1;

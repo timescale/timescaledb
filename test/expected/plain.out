@@ -17,13 +17,11 @@ SELECT * FROM test.show_columns('regular_table');
  temp   | double precision            | f
  tag    | text                        | f
  color  | bigint                      | f
-(4 rows)
 
 SELECT * FROM test.show_indexes('regular_table');
       Index      |   Columns    | Expr | Unique | Primary | Exclusion | Tablespace 
 -----------------+--------------+------+--------+---------+-----------+------------
  time_color_idx2 | {time,color} |      | f      | f       | f         | 
-(1 row)
 
 -- Renaming types should work
 CREATE TYPE rainbow AS ENUM ('red', 'orange', 'yellow', 'green', 'blue', 'purple');
@@ -38,7 +36,6 @@ ALTER TYPE rainbow RENAME TO colors;
         |        |               |      | green   +|                   |                   | 
         |        |               |      | blue    +|                   |                   | 
         |        |               |      | purple   |                   |                   | 
-(1 row)
 
 REINDEX TABLE regular_table;
 \c :TEST_DBNAME :ROLE_SUPERUSER

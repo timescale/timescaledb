@@ -5,13 +5,11 @@ step s1a: SELECT count (*) FROM drop_chunks('dt',  '2018-12-25 00:00'::timestamp
 count
 -----
    24
-(1 row)
 
 step s1b: COMMIT;
 step s2a: SELECT typ, loc, mtim FROM DT , SL , ST WHERE SL.lid = DT.lid AND ST.sid = DT.sid AND mtim >= '2018-12-01 03:00:00+00' AND mtim <= '2018-12-01 04:00:00+00' AND typ = 'T1' ;
 typ|loc|mtim
 ---+---+----
-(0 rows)
 
 step s2b: COMMIT;
 
@@ -20,14 +18,12 @@ step s1a: SELECT count (*) FROM drop_chunks('dt',  '2018-12-25 00:00'::timestamp
 count
 -----
    24
-(1 row)
 
 step s2a: SELECT typ, loc, mtim FROM DT , SL , ST WHERE SL.lid = DT.lid AND ST.sid = DT.sid AND mtim >= '2018-12-01 03:00:00+00' AND mtim <= '2018-12-01 04:00:00+00' AND typ = 'T1' ; <waiting ...>
 step s1b: COMMIT;
 step s2a: <... completed>
 typ|loc|mtim
 ---+---+----
-(0 rows)
 
 step s2b: COMMIT;
 
@@ -36,7 +32,6 @@ step s1a: SELECT count (*) FROM drop_chunks('dt',  '2018-12-25 00:00'::timestamp
 count
 -----
    24
-(1 row)
 
 step s2a: SELECT typ, loc, mtim FROM DT , SL , ST WHERE SL.lid = DT.lid AND ST.sid = DT.sid AND mtim >= '2018-12-01 03:00:00+00' AND mtim <= '2018-12-01 04:00:00+00' AND typ = 'T1' ; <waiting ...>
 step s2a: <... completed>
@@ -48,7 +43,6 @@ starting permutation: s2a s1a s1b s2b
 step s2a: SELECT typ, loc, mtim FROM DT , SL , ST WHERE SL.lid = DT.lid AND ST.sid = DT.sid AND mtim >= '2018-12-01 03:00:00+00' AND mtim <= '2018-12-01 04:00:00+00' AND typ = 'T1' ;
 typ|loc|mtim
 ---+---+----
-(0 rows)
 
 step s1a: SELECT count (*) FROM drop_chunks('dt',  '2018-12-25 00:00'::timestamptz); <waiting ...>
 step s1a: <... completed>
@@ -60,7 +54,6 @@ starting permutation: s2a s1a s2b s1b
 step s2a: SELECT typ, loc, mtim FROM DT , SL , ST WHERE SL.lid = DT.lid AND ST.sid = DT.sid AND mtim >= '2018-12-01 03:00:00+00' AND mtim <= '2018-12-01 04:00:00+00' AND typ = 'T1' ;
 typ|loc|mtim
 ---+---+----
-(0 rows)
 
 step s1a: SELECT count (*) FROM drop_chunks('dt',  '2018-12-25 00:00'::timestamptz); <waiting ...>
 step s2b: COMMIT;
@@ -68,7 +61,6 @@ step s1a: <... completed>
 count
 -----
    24
-(1 row)
 
 step s1b: COMMIT;
 
@@ -76,13 +68,11 @@ starting permutation: s2a s2b s1a s1b
 step s2a: SELECT typ, loc, mtim FROM DT , SL , ST WHERE SL.lid = DT.lid AND ST.sid = DT.sid AND mtim >= '2018-12-01 03:00:00+00' AND mtim <= '2018-12-01 04:00:00+00' AND typ = 'T1' ;
 typ|loc|mtim
 ---+---+----
-(0 rows)
 
 step s2b: COMMIT;
 step s1a: SELECT count (*) FROM drop_chunks('dt',  '2018-12-25 00:00'::timestamptz);
 count
 -----
    24
-(1 row)
 
 step s1b: COMMIT;

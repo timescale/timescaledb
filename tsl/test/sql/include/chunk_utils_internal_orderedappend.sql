@@ -128,7 +128,7 @@ ALTER TABLE test_chunkapp_fdw_child ADD CHECK (a > 0); -- non-dimensional
 ALTER TABLE test_chunkapp_fdw_child ADD CHECK (time > '1600-01-01'::timestamptz); -- dimensional
 -- but on hypertable, it is allowed
 ALTER TABLE test_chunkapp ADD CHECK (a > 0);
-\d+ test_chunkapp_fdw_child
+SELECT * FROM test.show_constraints('test_chunkapp_fdw_child');
 \set ON_ERROR_STOP 1
 
 -- test error is triggered when time dimension not found

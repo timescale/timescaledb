@@ -84,7 +84,6 @@ SELECT * FROM create_hypertable('hyper', 'time', chunk_time_interval => 10);
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | hyper      | t
-(1 row)
 
 --test triggers before create_hypertable
 INSERT INTO hyper(time, device_id,sensor_1) VALUES
@@ -348,14 +347,12 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
    create_hypertable   
 -----------------------
  (2,public,location,t)
-(1 row)
 
 --make color also a hypertable
 SELECT create_hypertable('color', 'color_id', chunk_time_interval=>10);
  create_hypertable  
 --------------------
  (3,public,color,t)
-(1 row)
 
 -- Test that we can create and use triggers with another user
 GRANT TRIGGER, INSERT, SELECT, UPDATE ON location TO :ROLE_DEFAULT_PERM_USER_2;
@@ -377,7 +374,6 @@ SELECT * FROM location;
  Sun Jan 01 01:02:04 2017 |          1 |       20 | 24.7493226 | -73.9771259
  Sun Jan 01 01:02:03 2017 |         23 |        1 | 40.7493226 | -73.9771269
  Sun Jan 01 01:02:03 2017 |         52 |       20 | 40.7493226 | -73.9771269
-(4 rows)
 
 SELECT * FROM vehicles;
  vehicle_id | vin_number | last_checkup 
@@ -386,14 +382,12 @@ SELECT * FROM vehicles;
          23 |            | 
          53 |            | 
          52 |            | 
-(4 rows)
 
 SELECT * FROM color;
  color_id | notes 
 ----------+-------
         1 | n/a
        20 | n/a
-(2 rows)
 
 -- switch back to default user to run some dropping tests
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER;
@@ -410,7 +404,6 @@ SELECT count(1) FROM pg_depend d WHERE d.classid = 'pg_trigger'::regclass AND NO
  count 
 -------
      0
-(1 row)
 
 DROP TABLE location;
 -- test triggers with transition tables
@@ -429,7 +422,6 @@ SELECT create_hypertable('transition_test','time');
       create_hypertable       
 ------------------------------
  (4,public,transition_test,t)
-(1 row)
 
 -- Insert some rows to create a chunk
 INSERT INTO transition_test values ('2020-01-10');
@@ -457,7 +449,4 @@ CREATE TRIGGER t6 AFTER UPDATE ON transition_test REFERENCING NEW TABLE AS new_t
 ERROR:  ROW triggers with transition tables are not supported on hypertables
 CREATE TRIGGER t7 AFTER DELETE ON transition_test REFERENCING OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
 ERROR:  ROW triggers with transition tables are not supported on hypertables
--- Test insert blocker trigger does not crash when called directly
-SELECT _timescaledb_functions.insert_blocker();
-ERROR:  insert_blocker: not called by trigger manager
 \set ON_ERROR_STOP 1

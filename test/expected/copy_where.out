@@ -35,7 +35,6 @@ SELECT * FROM copy_golden ORDER BY TIME;
    23 |  0.333933369256556
    24 |  0.274582070298493
    25 |  0.602348630782217
-(25 rows)
 
 CREATE TABLE "copy_control" (
     "time" bigint NOT NULL,
@@ -60,7 +59,6 @@ SELECT * FROM copy_control ORDER BY TIME;
    23 |  0.333933369256556
    24 |  0.274582070298493
    25 |  0.602348630782217
-(15 rows)
 
 CREATE TABLE "copy_test" (
     "time" bigint NOT NULL,
@@ -70,7 +68,6 @@ SELECT create_hypertable('copy_test', 'time', chunk_time_interval => 10);
    create_hypertable    
 ------------------------
  (1,public,copy_test,t)
-(1 row)
 
 \COPY copy_test (time, value) FROM data/copy_data.csv WITH CSV HEADER WHERE time > 10;
 SELECT * FROM copy_test ORDER BY TIME;
@@ -91,7 +88,6 @@ SELECT * FROM copy_test ORDER BY TIME;
    23 |  0.333933369256556
    24 |  0.274582070298493
    25 |  0.602348630782217
-(15 rows)
 
 -- Verify attempting to use subqueries fails the same as non-hypertables
 \set ON_ERROR_STOP 0

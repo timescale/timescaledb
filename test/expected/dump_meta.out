@@ -23,7 +23,6 @@ SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCust
  hypertable_id | schema_name |   table_name   | created 
 ---------------+-------------+----------------+---------
              1 | public      | two_Partitions | t
-(1 row)
 
 \set QUIET off
 BEGIN;
@@ -56,12 +55,22 @@ TimescaleDB meta data dump
 </exclude_from_test>
 \echo 'List of tables'
 List of tables
-\dt
-                  List of relations
+SELECT n.nspname as "Schema",
+  c.relname as "Name",
+  CASE c.relkind WHEN 'r' THEN 'table' WHEN 'v' THEN 'view' WHEN 'm' THEN 'materialized view' WHEN 'i' THEN 'index' WHEN 'S' THEN 'sequence' WHEN 't' THEN 'TOAST table' WHEN 'f' THEN 'foreign table' WHEN 'p' THEN 'partitioned table' WHEN 'I' THEN 'partitioned index' END as "Type",
+  pg_catalog.pg_get_userbyid(c.relowner) as "Owner"
+FROM pg_catalog.pg_class c
+     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+     LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+WHERE c.relkind IN ('r','p','')
+      AND n.nspname <> 'pg_catalog'
+      AND n.nspname !~ '^pg_toast'
+      AND n.nspname <> 'information_schema'
+  AND pg_catalog.pg_table_is_visible(c.oid)
+ORDER BY 1,2;
  Schema |      Name      | Type  |       Owner       
 --------+----------------+-------+-------------------
  public | two_Partitions | table | default_perm_user
-(1 row)
 
 \echo 'List of hypertables'
 List of hypertables
@@ -69,42 +78,44 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
 ----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
   1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
-(1 row)
 
 \echo 'List of chunk indexes'
 List of chunk indexes
-SELECT * FROM _timescaledb_catalog.chunk_index;
- chunk_id |                         index_name                         | hypertable_id |           hypertable_index_name           
-----------+------------------------------------------------------------+---------------+-------------------------------------------
-        1 | _hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-        2 | _hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-        3 | _hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-        4 | _hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-(28 rows)
+SELECT ch.id AS chunk_id, ci.indexrelid::regclass::text AS index_name, h.id AS hypertable_id
+FROM _timescaledb_catalog.hypertable h
+JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = h.id
+JOIN pg_index ci ON ci.indrelid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+ORDER BY h.id, ch.id, ci.indrelid::regclass::text;
+ chunk_id |                                     index_name                                     | hypertable_id 
+----------+------------------------------------------------------------------------------------+---------------
+        1 | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_idx"             |             1
+        1 | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx"   |             1
+        1 | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx" |             1
+        1 | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx"    |             1
+        1 | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx"    |             1
+        1 | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx"    |             1
+        1 | _timescaledb_internal."_hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx"   |             1
+        2 | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_idx"             |             1
+        2 | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx"   |             1
+        2 | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_bool_idx" |             1
+        2 | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_2_idx"    |             1
+        2 | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx"    |             1
+        2 | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_timeCustom_series_0_idx"    |             1
+        2 | _timescaledb_internal."_hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx"   |             1
+        3 | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_idx"             |             1
+        3 | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx"   |             1
+        3 | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_bool_idx" |             1
+        3 | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_2_idx"    |             1
+        3 | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx"    |             1
+        3 | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_timeCustom_series_0_idx"    |             1
+        3 | _timescaledb_internal."_hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx"   |             1
+        4 | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_idx"             |             1
+        4 | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx"   |             1
+        4 | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx" |             1
+        4 | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_2_idx"    |             1
+        4 | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx"    |             1
+        4 | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_0_idx"    |             1
+        4 | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"   |             1
 
 \echo 'Size of hypertables'
 Size of hypertables
@@ -137,7 +148,6 @@ SELECT hypertable,
     hypertable    | table_bytes | index_bytes | toast_bytes | total_bytes 
 ------------------+-------------+-------------+-------------+-------------
  "two_Partitions" |       32768 |      417792 |       32768 |      483328
-(1 row)
 
 \echo 'Chunk sizes:'
 Chunk sizes:
@@ -192,34 +202,25 @@ SELECT *,
         2 | "_timescaledb_internal"."_hyper_1_2_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_functions.get_partition_hash} | {"['1257897600000000000','1257900192000000000')","[1073741823,)"} |        8192 |      106496 |        8192 |      122880
         3 | "_timescaledb_internal"."_hyper_1_3_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_functions.get_partition_hash} | {"['1257985728000000000','1257988320000000000')","[1073741823,)"} |        8192 |       98304 |        8192 |      114688
         4 | "_timescaledb_internal"."_hyper_1_4_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_functions.get_partition_hash} | {"['1257892416000000000','1257895008000000000')","[,1073741823)"} |        8192 |       98304 |        8192 |      114688
-(4 rows)
 
 \echo 'Hypertable index sizes'
 Hypertable index sizes
-SELECT h.schema_name || '.' || h.table_name AS hypertable,
-       h.schema_name || '.' || ci.hypertable_index_name AS index_name,
-       sum(pg_relation_size(c.oid))::bigint AS index_bytes
-FROM
-pg_class c,
-pg_namespace n,
-_timescaledb_catalog.hypertable h,
-_timescaledb_catalog.chunk ch,
-_timescaledb_catalog.chunk_index ci
-WHERE ch.schema_name = n.nspname
-      AND c.relnamespace = n.oid
-      AND c.relname = ci.index_name
-      AND ch.id = ci.chunk_id
-      AND h.id = ci.hypertable_id
-GROUP BY h.schema_name, h.table_name, ci.hypertable_index_name
-ORDER BY h.schema_name, h.table_name, ci.hypertable_index_name;
-      hypertable       |                    index_name                    | index_bytes 
------------------------+--------------------------------------------------+-------------
- public.two_Partitions | public.two_Partitions_device_id_timeCustom_idx   |       65536
- public.two_Partitions | public.two_Partitions_timeCustom_device_id_idx   |       65536
- public.two_Partitions | public.two_Partitions_timeCustom_idx             |       65536
- public.two_Partitions | public.two_Partitions_timeCustom_series_0_idx    |       65536
- public.two_Partitions | public.two_Partitions_timeCustom_series_1_idx    |       65536
- public.two_Partitions | public.two_Partitions_timeCustom_series_2_idx    |       40960
- public.two_Partitions | public.two_Partitions_timeCustom_series_bool_idx |       49152
-(7 rows)
+SET search_path TO pg_catalog, pg_temp;
+SELECT
+  i.indrelid::regclass AS hypertable,
+  i.indexrelid::regclass AS index_name,
+  public.hypertable_index_size(i.indexrelid::regclass) AS index_bytes
+FROM _timescaledb_catalog.hypertable h
+JOIN pg_index i ON i.indrelid = format('%I.%I',h.schema_name,h.table_name)::regclass
+ORDER BY i.indrelid::regclass::text, i.indexrelid::regclass::text;
+       hypertable        |                     index_name                     | index_bytes 
+-------------------------+----------------------------------------------------+-------------
+ public."two_Partitions" | public."two_Partitions_device_id_timeCustom_idx"   |       73728
+ public."two_Partitions" | public."two_Partitions_timeCustom_device_id_idx"   |       73728
+ public."two_Partitions" | public."two_Partitions_timeCustom_idx"             |       73728
+ public."two_Partitions" | public."two_Partitions_timeCustom_series_0_idx"    |       73728
+ public."two_Partitions" | public."two_Partitions_timeCustom_series_1_idx"    |       73728
+ public."two_Partitions" | public."two_Partitions_timeCustom_series_2_idx"    |       49152
+ public."two_Partitions" | public."two_Partitions_timeCustom_series_bool_idx" |       57344
 
+RESET search_path;

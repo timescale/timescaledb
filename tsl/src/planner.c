@@ -18,34 +18,17 @@
 #include "chunkwise_agg.h"
 #include "continuous_aggs/planner.h"
 #include "guc.h"
-#include "hypercore/hypercore_handler.h"
 #include "hypertable.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/columnar_scan/columnar_scan.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
-#include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"
 #include "nodes/gapfill/gapfill.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/vector_agg/plan.h"
 #include "planner.h"
-#include "planner/partialize.h"
 
 #include <math.h>
 
 #define OSM_EXTENSION_NAME "timescaledb_osm"
-
-static int osm_present = -1;
-
-static bool
-is_osm_present()
-{
-	if (osm_present == -1)
-	{
-		Oid osm_oid = get_extension_oid(OSM_EXTENSION_NAME, true);
-		osm_present = OidIsValid(osm_oid);
-	}
-	return osm_present;
-}
 
 static bool
 involves_hypertable(PlannerInfo *root, RelOptInfo *parent)
@@ -68,7 +51,7 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *parent)
 }
 
 /*
- * Try to disable bulk decompression on DecompressChunkPath, skipping the above
+ * Try to disable bulk decompression on ColumnarScanPath, skipping the above
  * Projection path and also handling Lists.
  */
 static Node *
@@ -139,13 +122,13 @@ try_disable_bulk_decompression(PlannerInfo *root, Node *node, List *required_pat
 		return node;
 	}
 
-	DecompressChunkPath *dcpath = (DecompressChunkPath *) custom_child;
+	ColumnarScanPath *dcpath = (ColumnarScanPath *) custom_child;
 	if (!dcpath->enable_bulk_decompression)
 	{
 		return node;
 	}
 
-	DecompressChunkPath *path_copy = copy_decompress_chunk_path(dcpath);
+	ColumnarScanPath *path_copy = copy_columnar_scan_path(dcpath);
 	path_copy->enable_bulk_decompression = false;
 	return (Node *) path_copy;
 }
@@ -260,7 +243,7 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 }
 
 /*
- * Check if a chunk should be decompressed via a DecompressChunk plan.
+ * Check if a chunk should be decompressed via a ColumnarScan plan.
  *
  * Check first that it is a compressed chunk. Then, decompress unless it is
  * SELECT * FROM ONLY <chunk>. We check if it is the ONLY case by calling
@@ -268,19 +251,9 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
  * break postgres tools like pg_dump.
  */
 static inline bool
-use_decompress_chunk_node(const RelOptInfo *rel, const RangeTblEntry *rte, const Chunk *chunk)
+use_columnar_scan(const RelOptInfo *rel, const RangeTblEntry *rte, const Chunk *chunk)
 {
-	/*
-	 * The transparent_decompression GUC settings:
-	 *
-	 * 0 = Disabled.
-	 * 1 = Use only with "regular" compressed chunks.
-	 * 2 = Use with both "regular" compressed chunks and hypercore chunks.
-	 */
-	if (ts_guc_enable_transparent_decompression == 0)
-		return false;
-
-	if (ts_is_hypercore_am(chunk->amoid) && ts_guc_enable_transparent_decompression != 2)
+	if (!ts_guc_enable_columnarscan)
 		return false;
 
 	/* Check that the chunk is actually compressed */
@@ -311,21 +284,9 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	if (chunk == NULL)
 		return;
 
-	if (use_decompress_chunk_node(rel, rte, chunk))
+	if (use_columnar_scan(rel, rte, chunk))
 	{
-		ts_decompress_chunk_generate_paths(root, rel, ht, chunk);
-	}
-	/*
-	 * If using our own access method on the chunk, we might want to add
-	 * alternative paths. This should not be compatible with transparent
-	 * decompression, so only add if we didn't add decompression paths above.
-	 */
-	else if (ts_is_hypercore_am(chunk->amoid))
-	{
-		if (ts_guc_enable_columnarscan)
-			columnar_scan_set_rel_pathlist(root, rel, ht);
-
-		hypercore_set_rel_pathlist(root, rel, ht);
+		ts_columnar_scan_generate_paths(root, rel, ht, chunk);
 	}
 }
 
@@ -333,23 +294,9 @@ void
 tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
 						 Hypertable *ht)
 {
-	if (is_osm_present())
-	{
-		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
-		if (chunk && ts_chunk_is_frozen(chunk))
-		{
-			ListCell *lc;
-			foreach (lc, rel->pathlist)
-			{
-				Path **pathptr = (Path **) &lfirst(lc);
-				*pathptr = frozen_chunk_dml_generate_path(*pathptr, chunk);
-			}
-			return;
-		}
-	}
 	/*
 	 * We do not support MERGE command with UPDATE/DELETE merge actions on
-	 * compressed hypertables, because Custom Scan (HypertableModify) node is
+	 * compressed hypertables, because Custom Scan (ModifyHypertable) node is
 	 * not generated in the plan for MERGE command on compressed hypertables
 	 */
 	if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
@@ -386,6 +333,30 @@ tsl_preprocess_query(Query *parse, int *cursor_opts)
 }
 
 /*
+ * Replaces pathkeys in tsl-specific custom path types during sort transformation.
+ *
+ * This hook is called from ts_sort_transform_replace_pathkeys() in sort_transform.c
+ * after the basic pathkey replacement has been performed. It handles tsl-specific
+ * path types (such as ColumnarScan) that contain additional pathkey fields beyond
+ * the standard path.pathkeys field.
+ */
+void
+tsl_sort_transform_replace_pathkeys(void *path, List *transformed_pathkeys, List *original_pathkeys)
+{
+	if (!path)
+		return;
+	if (ts_is_columnar_scan_path(path))
+	{
+		ColumnarScanPath *dcpath = (ColumnarScanPath *) path;
+		if (compare_pathkeys(dcpath->required_compressed_pathkeys, transformed_pathkeys) ==
+			PATHKEYS_EQUAL)
+		{
+			dcpath->required_compressed_pathkeys = original_pathkeys;
+		}
+	}
+}
+
+/*
  * Run plan postprocessing optimizations.
  */
 void
@@ -399,19 +370,31 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 #ifdef TS_DEBUG
 	if (ts_guc_debug_require_vector_agg != DRO_Allow)
 	{
-		bool has_normal_agg = false;
-		const bool has_vector_agg = has_vector_agg_node(stmt->planTree, &has_normal_agg);
-		const bool should_have_vector_agg = (ts_guc_debug_require_vector_agg == DRO_Require);
+		bool has_postgres_partial_agg = false;
+		const bool has_vector_partial_agg =
+			has_vector_agg_node(stmt->planTree, &has_postgres_partial_agg);
 
 		/*
 		 * For convenience, we don't complain about queries that don't have
 		 * aggregation at all.
 		 */
-		if ((has_normal_agg || has_vector_agg) && (has_vector_agg != should_have_vector_agg))
+		if (has_postgres_partial_agg || has_vector_partial_agg)
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-					 errmsg("vector aggregation inconsistent with debug_require_vector_agg GUC")));
+			if (has_postgres_partial_agg && ts_guc_debug_require_vector_agg == DRO_Require)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+						 errmsg("postgres partial aggregation nodes inconsistent with "
+								"debug_require_vector_agg GUC")));
+			}
+
+			if (has_vector_partial_agg && ts_guc_debug_require_vector_agg == DRO_Forbid)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+						 errmsg("vectorized partial aggregation nodes inconsistent with "
+								"debug_require_vector_agg GUC")));
+			}
 		}
 	}
 #endif

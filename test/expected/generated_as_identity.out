@@ -9,7 +9,6 @@ CREATE table test_gen (
    create_hypertable   
 -----------------------
  (1,public,test_gen,t)
-(1 row)
 
 insert into test_gen (payload) select generate_series(1,15) returning *;
  id | payload 
@@ -29,7 +28,6 @@ insert into test_gen (payload) select generate_series(1,15) returning *;
  13 | 13
  14 | 14
  15 | 15
-(15 rows)
 
 select * from test_gen;
  id | payload 
@@ -49,7 +47,6 @@ select * from test_gen;
  13 | 13
  14 | 14
  15 | 15
-(15 rows)
 
 \set ON_ERROR_STOP 0
 insert into test_gen values('1', 'a');
@@ -75,7 +72,6 @@ insert into test_gen (payload) select generate_series(15,20) returning *;
  103 | 18
  104 | 19
  105 | 20
-(6 rows)
 
 select * from test_gen;
  id  | payload 
@@ -101,7 +97,6 @@ select * from test_gen;
  103 | 18
  104 | 19
  105 | 20
-(21 rows)
 
 SELECT * FROM test.show_subtables('test_gen');
                  Child                  | Tablespace 
@@ -109,5 +104,4 @@ SELECT * FROM test.show_subtables('test_gen');
  _timescaledb_internal._hyper_1_1_chunk | 
  _timescaledb_internal._hyper_1_2_chunk | 
  _timescaledb_internal._hyper_1_3_chunk | 
-(3 rows)
 

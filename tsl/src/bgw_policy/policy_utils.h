@@ -7,11 +7,8 @@
 
 #include <postgres.h>
 #include "job.h"
-bool policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_label,
-												 Oid dim_type, Oid lag_type, Datum lag_datum,
-												 bool isnull);
+
 int64 subtract_integer_from_now_internal(int64 interval, Oid time_dim_type, Oid now_func,
 										 bool *overflow);
-Datum subtract_interval_from_now(Interval *lag, Oid time_dim_type);
 const Dimension *get_open_dimension_for_hypertable(const Hypertable *ht, bool fail_if_not_found);
 bool policy_get_verbose_log(const Jsonb *config);

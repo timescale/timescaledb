@@ -13,7 +13,7 @@ on:
       # You can run and debug new versions of the backport script by pushing it
       # to this branch. workflow_dispatch can only be run through github cli for
       # branches that are not main, so it's inconvenient.
-      - backport/trigger
+      - trigger/backport
 
 # The workflow needs the permission to push branches
 permissions:

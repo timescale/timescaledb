@@ -333,7 +333,7 @@ static void
 add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 {
 	int res;
-	StringInfo command;
+	StringInfoData command;
 	MemoryContext orig_context = CurrentMemoryContext;
 
 	const char *command_string = "SELECT "
@@ -367,10 +367,10 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 	int save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
 
-	command = makeStringInfo();
+	initStringInfo(&command);
 
-	appendStringInfoString(command, command_string);
-	res = SPI_execute(command->data, true /*read only*/, 0 /* count */);
+	appendStringInfoString(&command, command_string);
+	res = SPI_execute(command.data, true /*read only*/, 0 /* count */);
 	if (res < 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -435,7 +435,7 @@ add_job_stats_internal(JsonbParseState *state, const char *job_type, TelemetryJo
 static void
 add_job_stats_by_job_type(JsonbParseState *parse_state)
 {
-	StringInfo command;
+	StringInfoData command;
 	int res;
 	MemoryContext orig_context = CurrentMemoryContext;
 	SPITupleTable *tuptable = NULL;
@@ -460,7 +460,7 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		"	MAX(consecutive_crashes) AS max_consecutive_crashes "
 		"FROM "
 		"	_timescaledb_internal.bgw_job_stat s "
-		"	JOIN _timescaledb_config.bgw_job j on j.id = s.job_id "
+		"	JOIN _timescaledb_catalog.bgw_job j on j.id = s.job_id "
 		"GROUP BY job_type "
 		"ORDER BY job_type";
 
@@ -471,10 +471,10 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 	int save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
 
-	command = makeStringInfo();
+	initStringInfo(&command);
 
-	appendStringInfoString(command, command_string);
-	res = SPI_execute(command->data, true /* read_only */, 0 /*count*/);
+	appendStringInfoString(&command, command_string);
+	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 	if (res < 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -561,7 +561,7 @@ add_related_extensions(JsonbParseState *state)
 static char *
 get_pgversion_string()
 {
-	StringInfo buf = makeStringInfo();
+	StringInfoData buf;
 	int major, patch;
 
 	/*
@@ -577,9 +577,10 @@ get_pgversion_string()
 	patch = server_version_num % 100;
 
 	Assert(major >= PG_MAJOR_MIN);
-	appendStringInfo(buf, "%d.%d", major, patch);
+	initStringInfo(&buf);
+	appendStringInfo(&buf, "%d.%d", major, patch);
 
-	return buf->data;
+	return buf.data;
 }
 
 #define ISO8601_FORMAT "YYYY-MM-DD\"T\"HH24:MI:SSOF"
@@ -979,11 +980,13 @@ build_telemetry_report()
 	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
 	/* add tuned info, which is optional */
-	if (ts_last_tune_time != NULL)
-		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_TIME, ts_last_tune_time);
+	char *last_tune_time = GetConfigOptionByName("timescaledb.last_tune_time", NULL, true);
+	if (last_tune_time != NULL)
+		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_TIME, last_tune_time);
 
-	if (ts_last_tune_version != NULL)
-		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_VERSION, ts_last_tune_version);
+	char *last_tune_version = GetConfigOptionByName("timescaledb.last_tune_version", NULL, true);
+	if (last_tune_version != NULL)
+		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_VERSION, last_tune_version);
 
 	/* add cloud to telemetry when set */
 	if (ts_telemetry_cloud != NULL)

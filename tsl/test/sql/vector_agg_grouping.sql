@@ -77,7 +77,7 @@ select
             function, variable)
 from
     unnest(array[
-        'explain (costs off) ',
+        'explain (buffers off, costs off) ',
         null]) explain,
     unnest(array[
         'cint2',
@@ -141,6 +141,11 @@ select sum(t) from long group by a order by 1;
 
 -- No scalar columns
 select sum(t) from long group by b, c, d order by 1 limit 10;
+
+-- No functions
+select a, b, c, d from long group by a, b, c, d order by a, b, c, d limit 10;
+
+select a, b, c, d from long group by a, b, c, d order by d, c, b, a limit 10;
 
 reset timescaledb.debug_require_vector_agg;
 

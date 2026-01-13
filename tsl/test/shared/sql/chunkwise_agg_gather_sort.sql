@@ -4,7 +4,7 @@
 
 -- Exercise the GatherMerge -> Sort -> Append -> Partial Aggregate plan.
 
-\set prefix 'explain (costs off, timing off, summary off)'
+\set prefix 'explain (buffers off, costs off, timing off, summary off)'
 
 set parallel_setup_cost = 0;
 set parallel_tuple_cost = 0;

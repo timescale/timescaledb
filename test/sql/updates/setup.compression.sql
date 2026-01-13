@@ -40,7 +40,7 @@ BEGIN
     ALTER TABLE compress DROP COLUMN dropped;
   END IF;
 
-  ALTER TABLE compress SET (timescaledb.compress, timescaledb.compress_segmentby='small_cardinality');
+  ALTER TABLE compress SET (timescaledb.compress, timescaledb.compress_segmentby='small_cardinality', timescaledb.compress_orderby='"time" desc');
   PERFORM count(compress_chunk(ch, true)) FROM show_chunks('compress') ch;
 
   IF ts_minor >= 10 THEN

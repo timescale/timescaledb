@@ -12,7 +12,6 @@ SELECT test.setup_tss_hook_v1();
  setup_tss_hook_v1 
 -------------------
  
-(1 row)
 
 CREATE TABLE copy_test (
     "time" timestamptz NOT NULL,
@@ -22,7 +21,6 @@ SELECT create_hypertable('copy_test', 'time');
    create_hypertable    
 ------------------------
  (1,public,copy_test,t)
-(1 row)
 
 -- We should se a mock message
 COPY copy_test FROM STDIN DELIMITER ',';
@@ -31,7 +29,6 @@ SELECT test.teardown_tss_hook_v1();
  teardown_tss_hook_v1 
 ----------------------
  
-(1 row)
 
 -- Without the hook registered we cannot see the mock message
 COPY copy_test FROM STDIN DELIMITER ',';
@@ -40,7 +37,6 @@ SELECT test.setup_tss_hook_v0();
  setup_tss_hook_v0 
 -------------------
  
-(1 row)
 
 -- Warning because the mismatch versions
 COPY copy_test FROM STDIN DELIMITER ',';

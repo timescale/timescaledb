@@ -5,7 +5,7 @@
 CREATE TABLE policy_test_timestamptz(time timestamptz not null, device_id int, value float);
 SELECT table_name FROM create_hypertable('policy_test_timestamptz','time');
 
-ALTER TABLE policy_test_timestamptz SET (timescaledb.compress);
+ALTER TABLE policy_test_timestamptz SET (timescaledb.compress, timescaledb.compress_orderby = '"time" desc');
 
 INSERT INTO policy_test_timestamptz(time, device_id, value) VALUES ('3020-01-01 00:00:00', 1, 1.0);
 SELECT compress_chunk(show_chunks('policy_test_timestamptz'));

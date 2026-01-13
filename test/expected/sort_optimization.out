@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
-\set PREFIX 'EXPLAIN (COSTS OFF) '
+\set PREFIX 'EXPLAIN (BUFFERS OFF, COSTS OFF) '
 CREATE TABLE order_test(time int NOT NULL, device_id int, value float);
 CREATE INDEX ON order_test(time,device_id);
 CREATE INDEX ON order_test(device_id,time);
@@ -9,7 +9,6 @@ SELECT create_hypertable('order_test','time',chunk_time_interval:=1000);
     create_hypertable    
 -------------------------
  (1,public,order_test,t)
-(1 row)
 
 INSERT INTO order_test SELECT 0,10,0.5;
 INSERT INTO order_test SELECT 1,9,0.5;
@@ -25,15 +24,12 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1;
            0 |        10 |   0.5
            0 |         9 |   0.5
            0 |         8 |   0.5
-(3 rows)
 
 -- should use index scan
 :PREFIX SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result
    ->  Index Scan Backward using _hyper_1_1_chunk_order_test_time_idx on _hyper_1_1_chunk
-(2 rows)
 
 -- test sort optimization with ordering by multiple columns and time_bucket not last
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
@@ -42,18 +38,17 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
            0 |         8 |   0.5
            0 |         9 |   0.5
            0 |        10 |   0.5
-(3 rows)
 
+SET enable_seqscan TO default;
 -- must not use index scan
 :PREFIX SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Sort Key: (time_bucket(10, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device_id
    ->  Result
          ->  Seq Scan on _hyper_1_1_chunk
-(4 rows)
 
+SET enable_seqscan TO off;
 -- test sort optimization with ordering by multiple columns and time_bucket as last member
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;
  time_bucket | device_id | value 
@@ -61,15 +56,12 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;
            0 |         8 |   0.5
            0 |         9 |   0.5
            0 |        10 |   0.5
-(3 rows)
 
 -- should use index scan
 :PREFIX SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result
    ->  Index Scan using _hyper_1_1_chunk_order_test_device_id_time_idx on _hyper_1_1_chunk
-(2 rows)
 
 -- test sort optimization with interval calculation with non-fixed interval
 -- #7097
@@ -81,13 +73,11 @@ SELECT table_name FROM create_hypertable('i7097_1', 'time', create_default_index
  table_name 
 ------------
  i7097_1
-(1 row)
 
 SELECT table_name FROM create_hypertable('i7097_2', 'time', create_default_indexes => false);
  table_name 
 ------------
  i7097_2
-(1 row)
 
 INSERT INTO i7097_1(time, quantity)
 SELECT time, round((random() * (100-3) + 3)::NUMERIC) AS quantity
@@ -104,5 +94,4 @@ SELECT count(*) FROM (SELECT time, cte1.quantity + cte2.quantity FROM cte1 FULL 
  count 
 -------
    138
-(1 row)
 

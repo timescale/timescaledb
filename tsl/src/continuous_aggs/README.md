@@ -80,12 +80,17 @@ underlying continuous aggregate.
 
 ## The Invalidation Log and Threshold ##
 
+There are two mechanisms for collecting hypertable invalidations:
+1. Using ModifyHypertable hooks for INSERT / UPDATE / DELETE
+2. Using a hook in our custom COPY implementation
+
+### Invalidation Log Table
+
 Mutating transactions must record their mutations in the invalidation
 log, so that a refresh knows to re-materialize the invalidated
-range. This happens by installing a trigger on the source hypertable
-when the first continuous aggregate on that hypertable is created.
+range.
 
-To reduce the extra writes by the trigger, only one invalidation range
+To reduce the extra writes by invalidations, only one invalidation range
 (lowest and highest modified value) is written at the end of a
 mutating transaction. As a result, a refresh might materialize more
 data than necessary, but the insert incurs a smaller overhead
@@ -116,18 +121,25 @@ refresh window does not match any invalidations, there is nothing to
 refresh either.
 
 ## Distribution of functions across files
-common.c
-This file contains the functions common in all scenarios of creating a continuous aggregates.
 
-create.c
-This file contains the functions that are directly responsible for the creation of the continuous aggregates,
-like creating hypertable, catalog_entry, view, etc.
+Each source file has an associated header file that should be included
+to use functions from the corresponding file.
 
-finalize.c
-This file contains the specific functions for the case when continous aggregates are created in old format.
+<dl>
+<dt>`common.c`</dt>
+<dd>This file contains the functions common in all scenarios of creating a continuous aggregates.</dd>
 
-materialize.c
-This file contains the functions directly dealing with the materialization of the continuous aggregates.
+<dt>`create.c`</dt>
+<dd>This file contains the functions that are directly responsible for the creation of the continuous aggregates,
+like creating hypertable, catalog_entry, view, etc.</dd>
 
-repair.c
-The repair and rebuilding related functions are put together in this file
+<dt>`finalize.c`</dt>
+<dd>This file contains the specific functions for the case when continous aggregates are created in old format.</dd>
+
+<dt>`materialize.c`</dt>
+<dd>This file contains the functions directly dealing with the materialization of the continuous aggregates.</dd>
+
+<dt>`invalidation.c`</dt>
+<dd>Functions related to invalidation processing for continuous aggregates.</dd>
+</dl>
+

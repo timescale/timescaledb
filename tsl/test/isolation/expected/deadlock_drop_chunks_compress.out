@@ -8,7 +8,6 @@ step s1_drop:
 count
 -----
     2
-(1 row)
 
 step s1_commit: COMMIT;
 step s2_compress_chunk_1: 
@@ -31,7 +30,6 @@ step s1_drop:
 count
 -----
     2
-(1 row)
 
 step s2_compress_chunk_1: 
 	SELECT count(compress_chunk(chunk))
@@ -55,7 +53,6 @@ step s1_drop:
 count
 -----
     2
-(1 row)
 
 step s2_compress_chunk_1: 
 	SELECT count(compress_chunk(chunk))
@@ -79,7 +76,6 @@ step s1_drop:
 count
 -----
     2
-(1 row)
 
 step s2_compress_chunk_1: 
 	SELECT count(compress_chunk(chunk))
@@ -103,7 +99,6 @@ step s2_compress_chunk_1:
 count
 -----
     1
-(1 row)
 
 step s1_drop: 
 	SELECT count (*)
@@ -119,7 +114,6 @@ step s2_compress_chunk_2:
 count
 -----
     1
-(1 row)
 
 step s2_commit: COMMIT;
 
@@ -131,7 +125,6 @@ step s2_compress_chunk_1:
 count
 -----
     1
-(1 row)
 
 step s1_drop: 
 	SELECT count (*)
@@ -144,7 +137,6 @@ step s2_compress_chunk_2:
 count
 -----
     1
-(1 row)
 
 step s1_drop: <... completed>
 ERROR:  some chunks could not be read since they are being concurrently updated
@@ -159,7 +151,6 @@ step s2_compress_chunk_1:
 count
 -----
     1
-(1 row)
 
 step s1_drop: 
 	SELECT count (*)
@@ -172,14 +163,12 @@ step s2_compress_chunk_2:
 count
 -----
     1
-(1 row)
 
 step s2_commit: COMMIT;
 step s1_drop: <... completed>
 count
 -----
     2
-(1 row)
 
 step s1_commit: COMMIT;
 
@@ -191,7 +180,6 @@ step s2_compress_chunk_1:
 count
 -----
     1
-(1 row)
 
 step s2_compress_chunk_2: 
 	SELECT count(compress_chunk(chunk))
@@ -200,7 +188,6 @@ step s2_compress_chunk_2:
 count
 -----
     1
-(1 row)
 
 step s1_drop: 
 	SELECT count (*)
@@ -219,7 +206,6 @@ step s2_compress_chunk_1:
 count
 -----
     1
-(1 row)
 
 step s2_compress_chunk_2: 
 	SELECT count(compress_chunk(chunk))
@@ -228,7 +214,6 @@ step s2_compress_chunk_2:
 count
 -----
     1
-(1 row)
 
 step s1_drop: 
 	SELECT count (*)
@@ -239,7 +224,6 @@ step s1_drop: <... completed>
 count
 -----
     2
-(1 row)
 
 step s1_commit: COMMIT;
 
@@ -251,7 +235,6 @@ step s2_compress_chunk_1:
 count
 -----
     1
-(1 row)
 
 step s2_compress_chunk_2: 
 	SELECT count(compress_chunk(chunk))
@@ -260,7 +243,6 @@ step s2_compress_chunk_2:
 count
 -----
     1
-(1 row)
 
 step s2_commit: COMMIT;
 step s1_drop: 
@@ -270,6 +252,5 @@ step s1_drop:
 count
 -----
     2
-(1 row)
 
 step s1_commit: COMMIT;

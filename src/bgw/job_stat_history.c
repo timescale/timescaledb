@@ -155,34 +155,12 @@ bgw_job_stat_history_mark_start(BgwJobStatHistoryContext *context)
 	bgw_job_stat_history_insert(context, false);
 }
 
-static bool
-bgw_job_stat_history_scan_one(int indexid, ScanKeyData scankey[], int nkeys,
-							  tuple_found_func tuple_found, tuple_filter_func tuple_filter,
-							  void *data, LOCKMODE lockmode)
-{
-	Catalog *catalog = ts_catalog_get();
-	ScannerCtx scanctx = {
-		.table = catalog_get_table_id(catalog, BGW_JOB_STAT_HISTORY),
-		.index = catalog_get_index(catalog, BGW_JOB_STAT_HISTORY, indexid),
-		.nkeys = nkeys,
-		.scankey = scankey,
-		.flags = SCANNER_F_KEEPLOCK,
-		.tuple_found = tuple_found,
-		.filter = tuple_filter,
-		.data = data,
-		.lockmode = lockmode,
-		.scandirection = ForwardScanDirection,
-	};
-
-	return ts_scanner_scan_one(&scanctx, false, "bgw job stat");
-}
-
-static inline bool
-bgw_job_stat_history_scan_id(int64 bgw_job_history_id, tuple_found_func tuple_found,
-							 tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode)
+static void
+bgw_job_stat_history_update_entry(int64 bgw_job_history_id, tuple_found_func tuple_found,
+								  tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode)
 {
 	if (bgw_job_history_id == INVALID_BGW_JOB_STAT_HISTORY_ID)
-		return true;
+		return;
 
 	ScanKeyData scankey[1];
 
@@ -192,13 +170,32 @@ bgw_job_stat_history_scan_id(int64 bgw_job_history_id, tuple_found_func tuple_fo
 				F_INT8EQ,
 				Int64GetDatum(bgw_job_history_id));
 
-	return bgw_job_stat_history_scan_one(BGW_JOB_STAT_HISTORY_PKEY_IDX,
-										 scankey,
-										 1,
-										 tuple_found,
-										 tuple_filter,
-										 data,
-										 lockmode);
+	Catalog *catalog = ts_catalog_get();
+	ScannerCtx scanctx = {
+		.table = catalog_get_table_id(catalog, BGW_JOB_STAT_HISTORY),
+		.index = catalog_get_index(catalog, BGW_JOB_STAT_HISTORY, BGW_JOB_STAT_HISTORY_PKEY_IDX),
+		.nkeys = 1,
+		.scankey = scankey,
+		.flags = SCANNER_F_KEEPLOCK,
+		.tuple_found = tuple_found,
+		.filter = tuple_filter,
+		.data = data,
+		.lockmode = lockmode,
+		.scandirection = ForwardScanDirection,
+	};
+
+	int num_found = ts_scanner_scan(&scanctx);
+
+	/* We do not want to raise an error in case there is something wrong with history entries */
+	if (num_found == 0)
+		/* This might happen due to job history retention deleting entries */
+		ereport(DEBUG1,
+				(errmsg("could not find job stat history entry with id " INT64_FORMAT,
+						bgw_job_history_id)));
+	else if (num_found > 1)
+		ereport(DEBUG1,
+				(errmsg("found multiple job stat history entries with id " INT64_FORMAT,
+						bgw_job_history_id)));
 }
 
 static ScanTupleResult
@@ -291,14 +288,11 @@ bgw_job_stat_history_update(BgwJobStatHistoryContext *context)
 	else
 	{
 		/* Mark the end of the previous inserted start execution */
-		if (!bgw_job_stat_history_scan_id(new_job->job_history.id,
+		bgw_job_stat_history_update_entry(new_job->job_history.id,
 										  bgw_job_stat_history_tuple_update,
 										  NULL,
 										  context,
-										  RowExclusiveLock))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("unable to find job history " INT64_FORMAT, new_job->job_history.id)));
+										  RowExclusiveLock);
 	}
 }
 

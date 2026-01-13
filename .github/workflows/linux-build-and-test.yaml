@@ -10,7 +10,8 @@ name: Regression
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
+      - trigger/regression
     paths-ignore:
       - '**.md'
       - 'LICENSE*'
@@ -82,6 +83,7 @@ jobs:
         # Disable the automatic dependency upgrade executed by `brew install`
         # https://docs.brew.sh/Manpage#install-options-formulacask-
         HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gawk
+        brew --prefix openssl@3
         # Install perl modules after last Homebew call, since Homebrew can change the perl version
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
@@ -112,12 +114,11 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       id: cache-postgresql
-      if: matrix.snapshot != 'snapshot'
+      if: matrix.snapshot != 'snapshot' && runner.os == 'Linux'
       uses: actions/cache@v4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
-          -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
+        key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
 
     - name: Build PostgreSQL ${{ matrix.pg }}${{ matrix.snapshot }}
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
@@ -134,9 +135,9 @@ jobs:
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
           --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
-        make -j $(nproc)
+        make -j $(getconf _NPROCESSORS_ONLN)
         for ext in ${{ matrix.pg_extensions }}; do
-          make -j $(nproc) -C contrib/${ext}
+          make -j $(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
 
     - name: Install PostgreSQL ${{ matrix.pg }}
@@ -162,7 +163,7 @@ jobs:
           -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j $(nproc) -C nossl
+        make -j $(getconf _NPROCESSORS_ONLN) -C nossl
         make -C nossl install
         make -C nossl regresscheck TESTS=telemetry
 
@@ -175,7 +176,7 @@ jobs:
           -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j $(nproc) -C build
+        make -j $(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
 
     - name: Upload CMake Logs
@@ -194,7 +195,7 @@ jobs:
       run: ./build/scripts/export_prefix_check.sh
 
     - name: make installcheck
-      id: installcheck
+      if: matrix.installcheck
       run: |
         set -o pipefail
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
@@ -207,7 +208,7 @@ jobs:
 
     - name: coverage
       if: matrix.coverage
-      run: make -j $(nproc) -k -C build coverage
+      run: make -j $(getconf _NPROCESSORS_ONLN) -k -C build coverage
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
@@ -327,7 +328,7 @@ jobs:
     - name: Upload test results to the database
       # Don't upload the results of the flaky check, because the db schema only
       # supports running one test once per job.
-      if: always() && (! contains(matrix.name, 'Flaky'))
+      if: always() && matrix.installcheck && (! contains(matrix.name, 'Flaky'))
       env:
         # GitHub Actions allow you neither to use the env context for the job name,
         # nor to access the job name from the step context, so we have to
@@ -350,3 +351,71 @@ jobs:
         fi
         export GITHUB_PR_NUMBER
         scripts/upload_ci_stats.sh
+
+  # Analyze test failures with Claude Code and create a fix PR
+  # This job only runs on scheduled (nightly) builds when tests fail
+  claude-analyze-failures:
+    name: Analyze Failures with Claude Code
+    needs: regress
+    # Only run on nightly (scheduled) builds when regress job fails
+    # Also requires ANTHROPIC_API_KEY to be configured
+    if: always() && github.event_name == 'schedule' && needs.regress.result == 'failure'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+    - name: Check for API key
+      id: check-key
+      run: |
+        if [[ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]]; then
+          echo "ANTHROPIC_API_KEY secret is not configured, skipping Claude analysis"
+          echo "skip=true" >> $GITHUB_OUTPUT
+        else
+          echo "skip=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Checkout TimescaleDB
+      if: steps.check-key.outputs.skip != 'true'
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Configure Git
+      if: steps.check-key.outputs.skip != 'true'
+      run: |
+        git config user.name "timescale-automation"
+        git config user.email "123763385+github-actions[bot]@users.noreply.github.com"
+
+    - name: Setup Node.js
+      if: steps.check-key.outputs.skip != 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+
+    - name: Install Claude Code
+      if: steps.check-key.outputs.skip != 'true'
+      run: |
+        npm install -g @anthropic-ai/claude-code
+
+    - name: Analyze failures and create fix PR
+      if: steps.check-key.outputs.skip != 'true'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        ANALYSIS_OUTPUT_DIR: ${{ github.workspace }}/claude-analysis-output
+      run: |
+        .github/scripts/claude-analyze-failures.sh
+
+    - name: Upload Claude analysis output
+      if: always() && steps.check-key.outputs.skip != 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Claude analysis output
+        path: claude-analysis-output/
+        if-no-files-found: ignore
+        retention-days: 30

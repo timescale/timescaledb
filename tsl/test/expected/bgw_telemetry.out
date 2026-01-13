@@ -5,7 +5,7 @@
 -- Check that we can use run_job() with the telemetry job, so first
 -- locate the job id for it (should be 1, but who knows, and it is not
 -- important for this test).
-SELECT id AS job_id FROM _timescaledb_config.bgw_job
+SELECT id AS job_id FROM _timescaledb_catalog.bgw_job
  WHERE proc_schema = '_timescaledb_functions'
    AND proc_name = 'policy_telemetry' \gset
 -- It should be possible to run it twice and running it should change
@@ -19,7 +19,6 @@ SELECT pg_sleep(1);
  pg_sleep 
 ----------
  
-(1 row)
 
 CALL run_job(:job_id);
 SELECT last_finish > :'last_finish' AS job_executed,
@@ -29,7 +28,6 @@ SELECT last_finish > :'last_finish' AS job_executed,
  job_executed | last_run_success 
 --------------+------------------
  t            | f
-(1 row)
 
 -- Running it as the default user should fail since they do not own
 -- the job. This should be the case also for the telemetry job, which

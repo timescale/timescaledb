@@ -10,21 +10,34 @@
 #include <parser/parse_coerce.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
+#include <utils/fmgrprotos.h>
 #include <utils/rangetypes.h>
 #include <utils/timestamp.h>
+#include <utils/uuid.h>
 
 #include "guc.h"
 #include "time_utils.h"
 #include "utils.h"
+#include "uuid.h"
 
 TS_FUNCTION_INFO_V1(ts_make_range_from_internal_time);
 TS_FUNCTION_INFO_V1(ts_get_internal_time_min);
 TS_FUNCTION_INFO_V1(ts_get_internal_time_max);
 
-static Datum
-subtract_interval_from_now(Oid timetype, const Interval *interval)
+/*
+ * Subtract an interval from the current time and return the result as a Datum
+ * of the specified time type.
+ *
+ * In debug mode, uses mock time if configured for testing purposes.
+ */
+TSDLLEXPORT Datum
+ts_subtract_interval_from_now(const Interval *interval, Oid timetype)
 {
-	Datum res = DirectFunctionCall1(now, 0);
+#ifdef TS_DEBUG
+	Datum res = ts_get_mock_time_or_current_time();
+#else
+	Datum res = TimestampTzGetDatum(GetCurrentTransactionStartTimestamp());
+#endif
 
 	switch (timetype)
 	{
@@ -37,13 +50,23 @@ subtract_interval_from_now(Oid timetype, const Interval *interval)
 			res = DirectFunctionCall1(timestamptz_timestamp, res);
 			res = DirectFunctionCall2(timestamp_mi_interval, res, IntervalPGetDatum(interval));
 			return DirectFunctionCall1(timestamp_date, res);
+		case UUIDOID:
+		{
+			/*
+			 * For UUIDv7-partitioned hypertables, compute (now - interval) and convert
+			 * to a UUIDv7 boundary value suitable for range comparisons.
+			 */
+			res = DirectFunctionCall2(timestamptz_mi_interval, res, IntervalPGetDatum(interval));
+			TimestampTz boundary_ts = DatumGetTimestampTz(res);
+			pg_uuid_t *uuid = ts_create_uuid_v7_from_unixtime_us(boundary_ts, true, true);
+			return UUIDPGetDatum(uuid);
+		}
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("unknown time type %s", format_type_be(timetype))));
+					 errmsg("unsupported time type %s", format_type_be(timetype))));
+			pg_unreachable();
 	}
-
-	return res;
 }
 
 Datum
@@ -136,14 +159,14 @@ ts_time_value_from_arg(Datum arg, Oid argtype, Oid timetype, bool need_now_func)
 		 * as TIMESTAMPTZ, the input argument should be typecast to TIMESTAMPTZ.
 		 */
 		if (argtype == INTERVALOID)
-			arg = subtract_interval_from_now(TIMESTAMPTZOID, DatumGetIntervalP(arg));
+			arg = ts_subtract_interval_from_now(DatumGetIntervalP(arg), TIMESTAMPTZOID);
 
 		return DatumGetInt64(arg);
 	}
 
 	if (argtype == INTERVALOID)
 	{
-		arg = subtract_interval_from_now(timetype, DatumGetIntervalP(arg));
+		arg = ts_subtract_interval_from_now(DatumGetIntervalP(arg), timetype);
 		argtype = timetype;
 	}
 	else if (argtype != timetype && !can_coerce_type(1, &argtype, &timetype, COERCION_IMPLICIT))
@@ -172,7 +195,10 @@ coerce_to_time_type(Oid type)
 	if (ts_type_is_int8_binary_compatible(type))
 		return INT8OID;
 
-	elog(ERROR, "unsupported time type \"%s\"", format_type_be(type));
+	ereport(ERROR,
+			errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+			errmsg("unsupported time type \"%s\"",
+				   DatumGetPointer(DirectFunctionCall1(regtypeout, type))));
 	pg_unreachable();
 }
 
@@ -199,6 +225,8 @@ ts_time_datum_get_min(Oid timetype)
 			return Int32GetDatum(PG_INT32_MIN);
 		case INT8OID:
 			return Int64GetDatum(PG_INT64_MIN);
+		case UUIDOID:
+			return Int64GetDatum(TS_TIME_UUID_MIN);
 		default:
 			break;
 	}
@@ -229,6 +257,7 @@ ts_time_datum_get_end(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "END is not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -255,7 +284,8 @@ ts_time_datum_get_max(Oid timetype)
 			return Int32GetDatum(PG_INT32_MAX);
 		case INT8OID:
 			return Int64GetDatum(PG_INT64_MAX);
-			break;
+		case UUIDOID:
+			return Int64GetDatum(TS_TIME_UUID_MAX);
 		default:
 			break;
 	}
@@ -277,6 +307,7 @@ ts_time_datum_get_nobegin(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "NOBEGIN is not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -309,6 +340,7 @@ ts_time_datum_get_noend(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "NOEND is not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -338,6 +370,8 @@ ts_time_get_min(Oid timetype)
 			return PG_INT32_MIN;
 		case INT8OID:
 			return PG_INT64_MIN;
+		case UUIDOID:
+			return TS_TIME_UUID_MIN;
 		default:
 			break;
 	}
@@ -365,6 +399,8 @@ ts_time_get_max(Oid timetype)
 			return PG_INT32_MAX;
 		case INT8OID:
 			return PG_INT64_MAX;
+		case UUIDOID:
+			return TS_TIME_UUID_MAX;
 		default:
 			break;
 	}
@@ -391,6 +427,7 @@ ts_time_get_end(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "END is not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -426,6 +463,7 @@ ts_time_get_nobegin(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "-Infinity not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -456,6 +494,7 @@ ts_time_get_noend(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "+Infinity not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -566,7 +605,7 @@ ts_get_mock_time_or_current_time(void)
 								  Int32GetDatum(-1));
 		return res;
 	}
-	res = TimestampTzGetDatum(GetCurrentTimestamp());
+	res = TimestampTzGetDatum(GetCurrentTransactionStartTimestamp());
 	return res;
 }
 #endif
@@ -615,11 +654,7 @@ ts_make_range_from_internal_time(PG_FUNCTION_ARGS)
 
 	/* Need to check the types of the lower and upper values. They should
 	 * match the returned range. */
-#if PG16_LT
-	PG_RETURN_RANGE_P(make_range(typcache, &lower, &upper, false));
-#else
-	PG_RETURN_RANGE_P(make_range(typcache, &lower, &upper, false, escontext));
-#endif
+	PG_RETURN_RANGE_P(make_range_compat(typcache, &lower, &upper, false, escontext));
 }
 
 Datum

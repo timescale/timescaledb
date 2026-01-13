@@ -62,12 +62,14 @@ DROP TABLE approx_count;
 -- Regular table with basic inheritance
 --
 CREATE TABLE approx_count(id int);
-CREATE TABLE approx_count_child(id2 int) INHERITS (approx_count);
-INSERT INTO approx_count_child VALUES(0);
 INSERT INTO approx_count VALUES(1);
 SELECT count(*) FROM approx_count;
 SELECT * FROM approximate_row_count('approx_count');
 ANALYZE approx_count;
+SELECT * FROM approximate_row_count('approx_count');
+CREATE TABLE approx_count_child(id2 int) INHERITS (approx_count);
+INSERT INTO approx_count_child VALUES(0);
+SELECT count(*) FROM approx_count;
 SELECT * FROM approximate_row_count('approx_count');
 ANALYZE approx_count_child;
 SELECT * FROM approximate_row_count('approx_count');

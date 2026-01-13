@@ -4,9 +4,6 @@
 
 -- Test parameterized vector aggregation plans.
 
--- Uncomment to run this test with hypercore TAM
---set timescaledb.default_hypercore_use_access_method=true;
-
 create table pvagg(s int, a int);
 
 select create_hypertable('pvagg', 'a', chunk_time_interval => 1000);
@@ -25,12 +22,12 @@ analyze pvagg;
 -- Postgres aggregation by uncommenting the below GUC.
 -- set timescaledb.enable_vectorized_aggregation to off;
 
-explain (verbose, costs off)
+explain (verbose, buffers off, costs off)
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg where s = x) xx;
 
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg where s = x) xx;
 
-explain (verbose, costs off)
+explain (verbose, buffers off, costs off)
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a + x) from pvagg) xx;
 
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a + x) from pvagg) xx;

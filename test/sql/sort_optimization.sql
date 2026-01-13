@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\set PREFIX 'EXPLAIN (COSTS OFF) '
+\set PREFIX 'EXPLAIN (BUFFERS OFF, COSTS OFF) '
 
 CREATE TABLE order_test(time int NOT NULL, device_id int, value float);
 CREATE INDEX ON order_test(time,device_id);
@@ -26,8 +26,10 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1;
 
 -- test sort optimization with ordering by multiple columns and time_bucket not last
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
+SET enable_seqscan TO default;
 -- must not use index scan
 :PREFIX SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
+SET enable_seqscan TO off;
 
 -- test sort optimization with ordering by multiple columns and time_bucket as last member
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;

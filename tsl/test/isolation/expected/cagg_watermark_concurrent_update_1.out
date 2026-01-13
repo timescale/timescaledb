@@ -13,7 +13,6 @@ step s3_lock_invalidation:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_select: 
    EXPLAIN (COSTS OFF) EXECUTE pstmt;
@@ -38,7 +37,6 @@ Merge Append
                     Group Key: time_bucket('@ 4 hours'::interval, _hyper_X_X_chunk."time")                 
                     ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk
                           Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone) 
-(18 rows)
 
 step s1_run_update: 
    CALL refresh_continuous_aggregate('cagg', '2020-01-01 00:00:00', '2021-01-01 00:00:00');
@@ -66,7 +64,6 @@ Merge Append
                     Group Key: time_bucket('@ 4 hours'::interval, _hyper_X_X_chunk."time")                 
                     ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk
                           Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone) 
-(18 rows)
 
 step s3_release_invalidation: 
    SELECT debug_waitpoint_release('cagg_watermark_update_internal_before_refresh');
@@ -74,7 +71,6 @@ step s3_release_invalidation:
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_run_update: <... completed>
 step s2_select: 
@@ -96,7 +92,6 @@ Merge Append
               Sort Key: (time_bucket('@ 4 hours'::interval, "time"))                                                 
               ->  Result                                                                                             
                     One-Time Filter: false                                                                           
-(14 rows)
 
 step s1_select: 
    EXPLAIN (COSTS OFF) EXECUTE pstmt;
@@ -117,7 +112,6 @@ Merge Append
               Sort Key: (time_bucket('@ 4 hours'::interval, "time"))                                                 
               ->  Result                                                                                             
                     One-Time Filter: false                                                                           
-(14 rows)
 
 
 starting permutation: s3_lock_invalidation s2_select s1_run_update s2_select s3_release_invalidation s3_lock_invalidation s1_insert_more_data s1_run_update s2_select s3_release_invalidation s2_select
@@ -127,7 +121,6 @@ step s3_lock_invalidation:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_select: 
    EXPLAIN (COSTS OFF) EXECUTE pstmt;
@@ -152,7 +145,6 @@ Merge Append
                     Group Key: time_bucket('@ 4 hours'::interval, _hyper_X_X_chunk."time")                 
                     ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk
                           Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone) 
-(18 rows)
 
 step s1_run_update: 
    CALL refresh_continuous_aggregate('cagg', '2020-01-01 00:00:00', '2021-01-01 00:00:00');
@@ -180,7 +172,6 @@ Merge Append
                     Group Key: time_bucket('@ 4 hours'::interval, _hyper_X_X_chunk."time")                 
                     ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk
                           Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone) 
-(18 rows)
 
 step s3_release_invalidation: 
    SELECT debug_waitpoint_release('cagg_watermark_update_internal_before_refresh');
@@ -188,7 +179,6 @@ step s3_release_invalidation:
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_run_update: <... completed>
 step s3_lock_invalidation: 
@@ -197,7 +187,6 @@ step s3_lock_invalidation:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1_insert_more_data: 
   INSERT INTO temperature VALUES('2020-01-02 23:59:59+0', 22);
@@ -223,7 +212,6 @@ Merge Append
         ->  Result                                                                                                   
               ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk                
                     Index Cond: ("time" >= 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                 
-(13 rows)
 
 step s3_release_invalidation: 
    SELECT debug_waitpoint_release('cagg_watermark_update_internal_before_refresh');
@@ -231,7 +219,6 @@ step s3_release_invalidation:
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_run_update: <... completed>
 step s2_select: 
@@ -252,5 +239,4 @@ Merge Append
         ->  Result                                                                                                   
               ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk                
                     Index Cond: ("time" >= 'Thu Jan 02 16:00:00 2020 PST'::timestamp with time zone)                 
-(13 rows)
 

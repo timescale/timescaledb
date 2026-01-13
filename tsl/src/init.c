@@ -12,6 +12,7 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/job_api.h"
 #include "bgw_policy/policies_v2.h"
+#include "bgw_policy/process_hyper_inval_api.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
 #include "chunk.h"
@@ -21,33 +22,27 @@
 #include "compression/algorithms/deltadelta.h"
 #include "compression/algorithms/dictionary.h"
 #include "compression/algorithms/gorilla.h"
+#include "compression/algorithms/uuid_compress.h"
 #include "compression/api.h"
 #include "compression/compression.h"
 #include "compression/create.h"
 #include "compression/recompress.h"
-#include "config.h"
+#include "compression/sparse_index_bloom1.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/invalidation.h"
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
-#include "continuous_aggs/repair.h"
 #include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
 #include "export.h"
-#include "hypercore/arrow_cache_explain.h"
-#include "hypercore/arrow_tts.h"
-#include "hypercore/attr_capture.h"
-#include "hypercore/hypercore_handler.h"
-#include "hypercore/hypercore_proxy.h"
 #include "hypertable.h"
 #include "license_guc.h"
-#include "nodes/columnar_scan/columnar_scan.h"
-#include "nodes/decompress_chunk/planner.h"
+#include "nodes/columnar_index_scan/columnar_index_scan.h"
+#include "nodes/columnar_scan/planner.h"
 #include "nodes/gapfill/gapfill_functions.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/vector_agg/plan.h"
-#include "partialize_finalize.h"
 #include "planner.h"
 #include "process_utility.h"
 #include "reorder.h"
@@ -64,12 +59,6 @@ PG_MODULE_MAGIC;
 extern void PGDLLEXPORT _PG_init(void);
 #endif
 
-static void
-tsl_xact_event(XactEvent event, void *arg)
-{
-	hypercore_xact_event(event, arg);
-}
-
 /*
  * Cross module function initialization.
  *
@@ -85,7 +74,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,
 	.set_rel_pathlist_query = tsl_set_rel_pathlist_query,
-	.process_explain_def = tsl_process_explain_def,
+	.sort_transform_replace_pathkeys = tsl_sort_transform_replace_pathkeys,
 
 	/* bgw policies */
 	.policy_compression_add = policy_compression_add,
@@ -96,6 +85,10 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policy_refresh_cagg_proc = policy_refresh_cagg_proc,
 	.policy_refresh_cagg_check = policy_refresh_cagg_check,
 	.policy_refresh_cagg_remove = policy_refresh_cagg_remove,
+	.policy_process_hyper_inval_add = policy_process_hyper_inval_add,
+	.policy_process_hyper_inval_proc = policy_process_hyper_inval_proc,
+	.policy_process_hyper_inval_check = policy_process_hyper_inval_check,
+	.policy_process_hyper_inval_remove = policy_process_hyper_inval_remove,
 	.policy_reorder_add = policy_reorder_add,
 	.policy_reorder_proc = policy_reorder_proc,
 	.policy_reorder_check = policy_reorder_check,
@@ -135,25 +128,23 @@ CrossModuleFunctions tsl_cm_functions = {
 	.tsl_postprocess_plan = tsl_postprocess_plan,
 
 	/* Continuous Aggregates */
-	.partialize_agg = tsl_partialize_agg,
-	.finalize_agg_sfunc = tsl_finalize_agg_sfunc,
-	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
-	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
-	.continuous_agg_call_invalidation_trigger = execute_cagg_trigger,
 	.continuous_agg_refresh = continuous_agg_refresh,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
+	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_validate_query = continuous_agg_validate_query,
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
 	.continuous_agg_migrate_to_time_bucket = continuous_agg_migrate_to_time_bucket,
-	.cagg_try_repair = tsl_cagg_try_repair,
+	.continuous_agg_get_grouping_columns = continuous_agg_get_grouping_columns,
 
 	/* Compression */
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,
 	.compressed_data_decompress_reverse = tsl_compressed_data_decompress_reverse,
+	.compressed_data_column_size = tsl_compressed_data_column_size,
+	.compressed_data_to_array = tsl_compressed_data_to_array,
 	.compressed_data_send = tsl_compressed_data_send,
 	.compressed_data_recv = tsl_compressed_data_recv,
 	.compressed_data_in = tsl_compressed_data_in,
@@ -170,20 +161,27 @@ CrossModuleFunctions tsl_cm_functions = {
 	.array_compressor_finish = tsl_array_compressor_finish,
 	.bool_compressor_append = tsl_bool_compressor_append,
 	.bool_compressor_finish = tsl_bool_compressor_finish,
+	.uuid_compressor_append = tsl_uuid_compressor_append,
+	.uuid_compressor_finish = tsl_uuid_compressor_finish,
+	.bloom1_contains = bloom1_contains,
+	.bloom1_contains_any = bloom1_contains_any,
+	.bloom1_get_hash_function = bloom1_get_hash_function,
 	.process_compress_table = tsl_process_compress_table,
 	.process_altertable_cmd = tsl_process_altertable_cmd,
 	.process_rename_cmd = tsl_process_rename_cmd,
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
+	.rebuild_columnstore = tsl_rebuild_columnstore,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
+	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,
-	.hypercore_handler = hypercore_handler,
-	.hypercore_proxy_handler = hypercore_proxy_handler,
-	.hypercore_decompress_update_segment = hypercore_decompress_update_segment,
-	.is_compressed_tid = tsl_is_compressed_tid,
-	.compression_enable = tsl_compression_enable,
-	.ddl_command_start = tsl_ddl_command_start,
-	.ddl_command_end = tsl_ddl_command_end,
+	.columnstore_setup = tsl_columnstore_setup,
+	.compressor_init = tsl_compressor_init,
+	.compressor_set_invalidation = tsl_compressor_set_invalidation,
+	.compressor_add_slot = tsl_compressor_add_slot,
+	.compressor_flush = tsl_compressor_flush,
+	.compressor_free = tsl_compressor_free,
+	.compression_chunk_create = tsl_compression_chunk_create,
 	.show_chunk = chunk_show,
 	.create_compressed_chunk = tsl_create_compressed_chunk,
 	.create_chunk = chunk_create,
@@ -195,13 +193,15 @@ CrossModuleFunctions tsl_cm_functions = {
 	.preprocess_query_tsl = tsl_preprocess_query,
 	.merge_chunks = chunk_merge_chunks,
 	.split_chunk = chunk_split_chunk,
+	.detach_chunk = chunk_detach,
+	.attach_chunk = chunk_attach,
+	.estimate_compressed_batch_size = tsl_estimate_compressed_batch_size,
 };
 
 static void
 ts_module_cleanup_on_pg_exit(int code, Datum arg)
 {
 	_continuous_aggs_cache_inval_fini();
-	UnregisterXactCallback(tsl_xact_event, NULL);
 }
 
 TS_FUNCTION_INFO_V1(ts_module_init);
@@ -215,18 +215,47 @@ ts_module_init(PG_FUNCTION_ARGS)
 	ts_cm_functions = &tsl_cm_functions;
 
 	_continuous_aggs_cache_inval_init();
-	_decompress_chunk_init();
+	_columnar_index_scan_init();
 	_columnar_scan_init();
-	_arrow_cache_explain_init();
-	_attr_capture_init();
 	_skip_scan_init();
 	_vector_agg_init();
 
 	/* Register a cleanup function to be called when the backend exits */
 	if (register_proc_exit)
+	{
 		on_proc_exit(ts_module_cleanup_on_pg_exit, 0);
 
-	RegisterXactCallback(tsl_xact_event, NULL);
+		/*
+		 * We also register some GUCs here which are impossible to register in
+		 * the Apache module, because the default value is only known in the TSL
+		 * module. It is done in this branch to avoid being called multiple
+		 * times in the parallel workers.
+		 */
+
+		/*
+		 * The read-only GUC to query the current metadata column prefix used
+		 * for bloom filter sparse indexes. It can be different depending on the
+		 * hashing schema we use, that is determined at build time. In debug
+		 * builds, it can be changed for testing.
+		 */
+		bloom1_column_prefix = default_bloom1_column_prefix;
+		DefineCustomStringVariable(MAKE_EXTOPTION("bloom1_column_prefix"),
+								   "bloom filter column prefix",
+								   "The prefix used for the metadata columns storing the sparse "
+								   "bloom filter indexes.",
+								   (char **) &bloom1_column_prefix,
+								   default_bloom1_column_prefix,
+#ifndef NDEBUG
+								   PGC_USERSET,
+#else
+								   PGC_INTERNAL,
+#endif
+								   0,
+								   NULL,
+								   NULL,
+								   NULL);
+	}
+
 	PG_RETURN_BOOL(true);
 }
 

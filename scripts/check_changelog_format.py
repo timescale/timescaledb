@@ -16,7 +16,7 @@ def run_query(query):
     request = requests.post(
         "https://api.github.com/graphql",
         json={"query": query},
-        headers={"Authorization": f'Bearer {os.environ.get("GITHUB_TOKEN")}'},
+        headers={"Authorization": f'Bearer {os.environ.get("GH_TOKEN")}'},
         timeout=20,
     )
     response = request.json()
@@ -69,7 +69,12 @@ def get_referenced_issues(pr_number):
 
 # Check if a line matches any of the specified patterns
 def is_valid_line(line):
-    patterns = [r"^Fixes:\s*.*$", r"^Implements:\s*.*$", r"^Thanks:\s*.*$"]
+    patterns = [
+        r"^Fixes:\s*.*$",
+        r"^Implements:\s*.*$",
+        r"^Thanks:\s*.*$",
+        r"^Backward-Incompatible Change:\s*.*$",
+    ]
     for pattern in patterns:
         if re.match(pattern, line):
             return True
@@ -77,10 +82,10 @@ def is_valid_line(line):
 
 
 def main():
-    github_token = os.environ.get("GITHUB_TOKEN")
+    github_token = os.environ.get("GH_TOKEN")
 
     if not github_token:
-        print("Please populate the GITHUB_TOKEN environment variable.")
+        print("Please populate the GH_TOKEN environment variable.")
         sys.exit(1)
 
     github_obj = github.Github(github_token)
@@ -91,6 +96,12 @@ def main():
         sys.exit(1)
 
     file_name = sys.argv[1]
+
+    # Check if the file exists
+    if not os.path.exists(file_name):
+        print(f"{file_name} does not exist")
+        sys.exit(1)
+
     this_pr_number = int(os.environ["PR_NUMBER"])
     pr_issues = set(get_referenced_issues(this_pr_number))
 

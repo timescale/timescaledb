@@ -24,6 +24,7 @@
 #include <commands/trigger.h>
 #include <executor/spi.h>
 #include <funcapi.h>
+#include <lib/stringinfo.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/memnodes.h>
@@ -53,12 +54,14 @@
 #include "dimension_vector.h"
 #include "error_utils.h"
 #include "errors.h"
+#include "extension.h"
 #include "guc.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
 #include "indexing.h"
 #include "license_guc.h"
 #include "osm_callbacks.h"
+#include "partition_chunk.h"
 #include "scan_iterator.h"
 #include "scanner.h"
 #include "subspace_store.h"
@@ -240,7 +243,6 @@ Hypertable *
 ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 {
 	Hypertable *h = MemoryContextAllocZero(ti->mctx, sizeof(Hypertable));
-	char relkind;
 
 	ts_hypertable_formdata_fill(&h->fd, ti);
 	h->main_table_relid =
@@ -249,9 +251,6 @@ ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 	h->chunk_cache =
 		ts_subspace_store_init(h->space, ti->mctx, ts_guc_max_cached_chunks_per_hypertable);
 	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);
-
-	if (OidIsValid(h->main_table_relid))
-		ts_get_rel_info(h->main_table_relid, &h->amoid, &relkind);
 
 	if (ts_guc_enable_chunk_skipping)
 	{
@@ -321,7 +320,7 @@ ts_resolve_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_ma
 
 		if (!ht)
 			ereport(ERROR,
-					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("no materialized table for continuous aggregate"),
 					 errdetail("Continuous aggregate \"%s\" had a materialized hypertable"
 							   " with id %d but it was not found in the hypertable "
@@ -605,6 +604,17 @@ ts_hypertable_create_trigger(const Hypertable *ht, CreateTrigStmt *stmt, const c
 		SetUserIdAndSecContext(saved_uid, sec_ctx);
 
 	return root_trigger_addr;
+}
+
+TSDLLEXPORT void
+ts_hypertable_drop_invalidation_replication_slot(const char *slot_name)
+{
+	CatalogSecurityContext sec_ctx;
+	NameData slot;
+	namestrcpy(&slot, slot_name);
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	DirectFunctionCall1(pg_drop_replication_slot, NameGetDatum(&slot));
+	ts_catalog_restore_user(&sec_ctx);
 }
 
 /* based on RemoveObjects */
@@ -982,8 +992,8 @@ hypertable_chunk_store_free(void *entry)
  * Add the chunk to the cache that allows fast lookup of chunks
  * for a given hyperspace Point.
  */
-static Chunk *
-hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
+Chunk *
+ts_hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
 {
 	MemoryContext old_mcxt;
 
@@ -1001,48 +1011,69 @@ hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
 
 /*
  * Create a chunk for the point, given that it does not exist yet.
+ *
+ * If the chunk already exists (i.e., another process beat us to it), then
+ * lock the chunk with the specified lockmode. If the chunk is created, it
+ * will always be locked with AccessExclusivelock.
  */
 Chunk *
-ts_hypertable_create_chunk_for_point(const Hypertable *h, const Point *point, bool *found)
+ts_hypertable_create_chunk_for_point(const Hypertable *h, const Point *point,
+									 LOCKMODE chunk_lockmode)
 {
 	Assert(ts_subspace_store_get(h->chunk_cache, point) == NULL);
 
 	Chunk *chunk = ts_chunk_create_for_point(h,
 											 point,
-											 found,
 											 NameStr(h->fd.associated_schema_name),
-											 NameStr(h->fd.associated_table_prefix));
+											 NameStr(h->fd.associated_table_prefix),
+											 chunk_lockmode);
 
 	/* Also add the chunk to the hypertable's chunk store */
-	Chunk *cached_chunk = hypertable_chunk_store_add(h, chunk);
+	Chunk *cached_chunk = ts_hypertable_chunk_store_add(h, chunk);
 	return cached_chunk;
 }
 
 /*
- * Find the chunk containing the given point, locking all its dimension slices
- * for share. NULL if not found.
- * Also uses hypertable chunk cache. The returned chunk is owned by the cache
- * and may become invalid after some subsequent call to this function.
+ * Find the chunk responsible for the given point.
+ *
+ * In case of a cache miss, a point scan will try to find a matching chunk. A
+ * matching chunk will be locked in the given lockmode (unless NoLock is
+ * specified) and added to the cache.
+ *
+ * If lockmode is higher than NoLock, all dimension slices will also be locked
+ * in LockTupleKeyShare.
+ *
+ * If no chunk is found, NULL is returned. The returned chunk is owned by the
+ * cache and may become invalid after some subsequent call to this function.
  * Leaks memory, so call in a short-lived context.
  */
 Chunk *
-ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point)
+ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point, LOCKMODE lockmode)
 {
 	Chunk *chunk = ts_subspace_store_get(h->chunk_cache, point);
-	if (chunk != NULL)
-	{
-		return chunk;
-	}
 
-	chunk = ts_chunk_find_for_point(h, point);
-	if (chunk == NULL)
+	if (!chunk)
+	{
+		chunk = ts_chunk_find_for_point(h, point, lockmode);
+
+		if (chunk)
+			chunk = ts_hypertable_chunk_store_add(h, chunk);
+	}
+	else if (!ts_chunk_lock_if_exists(chunk->table_id, lockmode))
 	{
 		return NULL;
 	}
 
-	/* Also add the chunk to the hypertable's chunk store */
-	Chunk *cached_chunk = hypertable_chunk_store_add(h, chunk);
-	return cached_chunk;
+#ifdef USE_ASSERT_CHECKING
+	if (chunk)
+	{
+		Relation chunk_rel = RelationIdGetRelation(chunk->table_id);
+		Assert(CheckRelationLockedByMe(chunk_rel, lockmode, true));
+		RelationClose(chunk_rel);
+	}
+#endif
+
+	return chunk;
 }
 
 bool
@@ -1231,12 +1262,6 @@ hypertable_check_associated_schema_permissions(const char *schema_name, Oid user
 	return schema_oid;
 }
 
-static bool
-table_is_logged(Oid table_relid)
-{
-	return get_rel_persistence(table_relid) == RELPERSISTENCE_PERMANENT;
-}
-
 inline static bool
 table_has_rules(Relation rel)
 {
@@ -1295,7 +1320,8 @@ hypertable_validate_constraints(Oid relid)
 
 		if (form->contype == CONSTRAINT_FOREIGN)
 		{
-			if (ts_hypertable_relid_to_id(form->confrelid) != INVALID_HYPERTABLE_ID)
+			if (ts_hypertable_relid_to_id(form->confrelid) != INVALID_HYPERTABLE_ID &&
+				!is_partitioning_allowed(form->confrelid))
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("hypertables cannot be used as foreign key references of "
@@ -1343,113 +1369,6 @@ hypertable_validate_constraints(Oid relid)
 
 	systable_endscan(scan);
 	table_close(catalog, AccessShareLock);
-}
-
-/*
- * Functionality to block INSERTs on the hypertable's root table.
- *
- * The design considered implementing this either with RULES, constraints, or
- * triggers. A visible trigger was found to have the best trade-offs:
- *
- * - A RULE doesn't work since it rewrites the query and thus blocks INSERTs
- *   also on the hypertable.
- *
- * - A constraint is not transparent, i.e., viewing the hypertable with \d+
- *   <table> would list the constraint and that breaks the abstraction of
- *   "hypertables being like regular tables." Further, a constraint remains on
- *   the table after the extension is dropped, which prohibits running
- *   create_hypertable() on the same table once the extension is created again
- *   (you can work around this, but is messy). This issue, b.t.w., broke one
- *   of the tests.
- *
- * - An internal trigger is transparent (doesn't show up
- *	 on \d+ <table>) and is automatically removed when the extension is
- *	 dropped (since it is part of the extension). Internal triggers aren't
- *	 inherited by chunks either, so we need no special handling to _not_
- *	 inherit the blocking trigger. However, internal triggers are not exported
- *   via pg_dump. Because a critical use case for this trigger is to ensure
- *   no rows are inserted into hypertables by accident when a user forgets to
- *   turn restoring off, having this trigger exported in pg_dump is essential.
- *
- * - A visible trigger unfortunately shows up in \d+ <table>, but is
- *   included in a pg_dump. We also add logic to make sure this trigger is not
- *   propagated to chunks.
- */
-TS_FUNCTION_INFO_V1(ts_hypertable_insert_blocker);
-
-Datum
-ts_hypertable_insert_blocker(PG_FUNCTION_ARGS)
-{
-	if (!CALLED_AS_TRIGGER(fcinfo))
-		elog(ERROR, "insert_blocker: not called by trigger manager");
-
-	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-	Ensure(trigdata != NULL, "trigdata has to be set");
-	Ensure(trigdata->tg_relation != NULL, "tg_relation has to be set");
-
-	const char *relname = get_rel_name(trigdata->tg_relation->rd_id);
-
-	if (ts_guc_restoring)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot INSERT into hypertable \"%s\" during restore", relname),
-				 errhint("Set 'timescaledb.restoring' to 'off' after the restore process has "
-						 "finished.")));
-	else
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("invalid INSERT on the root table of hypertable \"%s\"", relname),
-				 errhint("Make sure the TimescaleDB extension has been preloaded.")));
-
-	PG_RETURN_NULL();
-}
-
-/*
- * Add an INSERT blocking trigger to a table.
- *
- * The blocking trigger is used to block accidental INSERTs on a hypertable's
- * root table.
- */
-static Oid
-insert_blocker_trigger_add(Oid relid)
-{
-	ObjectAddress objaddr;
-	char *relname = get_rel_name(relid);
-	Oid schemaid = get_rel_namespace(relid);
-	char *schema = get_namespace_name(schemaid);
-	CreateTrigStmt stmt = {
-		.type = T_CreateTrigStmt,
-		.row = true,
-		.timing = TRIGGER_TYPE_BEFORE,
-		.trigname = INSERT_BLOCKER_NAME,
-		.relation = makeRangeVar(schema, relname, -1),
-		.funcname =
-			list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(OLD_INSERT_BLOCKER_NAME)),
-		.args = NIL,
-		.events = TRIGGER_TYPE_INSERT,
-	};
-
-	/*
-	 * We create a user-visible trigger, so that it will get pg_dump'd with
-	 * the hypertable. This call will error out if a trigger with the same
-	 * name already exists. (This is the desired behavior.)
-	 */
-	objaddr = CreateTrigger(&stmt,
-							NULL,
-							relid,
-							InvalidOid,
-							InvalidOid,
-							InvalidOid,
-							InvalidOid,
-							InvalidOid,
-							NULL,
-							false,
-							false);
-
-	if (!OidIsValid(objaddr.objectId))
-		elog(ERROR, "could not create insert blocker trigger");
-
-	return objaddr.objectId;
 }
 
 static Datum
@@ -1699,9 +1618,12 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 	 * earlier "ts_hypertable_create" implementation.
 	 */
 	if (IS_CLOSED_DIMENSION(dim_info))
+	{
 		ereport(ERROR,
-				(errmsg("cannot partition using a closed dimension on primary column"),
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("cannot partition using a closed dimension on primary column"),
 				 errhint("Use range partitioning on the primary column.")));
+	}
 
 	/*
 	 * Current implementation requires to provide a valid chunk sizing function
@@ -1852,10 +1774,13 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	switch (get_rel_relkind(table_relid))
 	{
 		case RELKIND_PARTITIONED_TABLE:
-			ereport(ERROR,
-					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
-					 errdetail("It is not possible to turn partitioned tables into hypertables.")));
+			if (!ts_guc_enable_partitioned_hypertables)
+				ereport(ERROR,
+						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+						 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
+						 errdetail(
+							 "It is not possible to turn partitioned tables into hypertables.")));
+			break;
 		case RELKIND_MATVIEW:
 		case RELKIND_RELATION:
 			break;
@@ -1879,7 +1804,10 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	/* Check that the table doesn't have any unsupported constraints */
 	hypertable_validate_constraints(table_relid);
 
-	table_has_data = ts_relation_has_tuples(rel);
+	/* No need to check for data in partitioned tables */
+	table_has_data = get_rel_relkind(table_relid) == RELKIND_PARTITIONED_TABLE ?
+						 false :
+						 ts_relation_has_tuples(rel);
 
 	if ((flags & HYPERTABLE_CREATE_MIGRATE_DATA) == 0 && table_has_data)
 		ereport(ERROR,
@@ -1895,12 +1823,11 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 				 errdetail(
 					 "It is not possible to turn tables that use inheritance into hypertables.")));
 
-	if (!table_is_logged(table_relid))
+	if (rel->rd_rel->relpersistence == RELPERSISTENCE_TEMP)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("table \"%s\" has to be logged", get_rel_name(table_relid)),
-				 errdetail(
-					 "It is not possible to turn temporary or unlogged tables into hypertables.")));
+				 errmsg("table \"%s\" cannot be temporary", get_rel_name(table_relid)),
+				 errdetail("It is not supported to turn temporary tables into hypertables.")));
 
 	if (table_has_rules(rel))
 		ereport(ERROR,
@@ -1910,6 +1837,11 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 						   get_rel_name(table_relid)),
 				 errhint("Remove the rules before creating a hypertable.")));
 
+	/*
+	 * Must close the relation to decrease the reference count for the relation
+	 * as PG18+ will check the reference count when adding constraints for the table.
+	 */
+	table_close(rel, NoLock);
 	/*
 	 * Create the associated schema where chunks are stored, or, check
 	 * permissions if it already exists
@@ -2012,12 +1944,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 
 	/*
 	 * Migrate data from the main table to chunks
-	 *
-	 * Note: we do not unlock here. We wait till the end of the txn instead.
-	 * Must close the relation before migrating data.
 	 */
-	table_close(rel, NoLock);
-
 	if (table_has_data)
 	{
 		ereport(NOTICE,
@@ -2026,8 +1953,6 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 
 		timescaledb_move_from_table_to_chunks(ht, RowExclusiveLock);
 	}
-
-	insert_blocker_trigger_add(table_relid);
 
 	ts_cache_release(&hcache);
 
@@ -2105,6 +2030,19 @@ ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno)
 	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
 		if (column_attno == ht->space->dimensions[i].column_attno)
+			return true;
+	}
+	return false;
+}
+
+bool
+ts_is_partitioning_column_name(const Hypertable *ht, NameData column_name)
+{
+	uint16 i;
+
+	for (i = 0; i < ht->space->num_dimensions; i++)
+	{
+		if (namestrcmp(&ht->space->dimensions[i].fd.column_name, NameStr(column_name)) == 0)
 			return true;
 	}
 	return false;
@@ -2330,8 +2268,30 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 		ts_tablespace_attach_internal(&tspc_name, table_relid, false);
 	}
 
-	insert_blocker_trigger_add(table_relid);
 	return true;
+}
+
+/*
+ * Construct an expression for a dimensional column which is compatible with the max() function.
+ * Normally, this is just the column name, but in the case of UUIDv7 there is no max() function
+ * defined for the type so in that case the expression extracts the timestamp from the UUID.
+ */
+static const char *
+get_expr_for_dim_max(const char *colname, Oid timetype)
+{
+	if (timetype == UUIDOID)
+	{
+		StringInfoData expr;
+
+		initStringInfo(&expr);
+		appendStringInfo(&expr,
+						 "%s.uuid_timestamp(%s)",
+						 ts_extension_schema_name(),
+						 quote_identifier(colname));
+		return expr.data;
+	}
+
+	return quote_identifier(colname);
 }
 
 /*
@@ -2340,7 +2300,7 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 int64
 ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, bool *isnull)
 {
-	StringInfo command;
+	StringInfoData command;
 	const Dimension *dim;
 	int res;
 	bool max_isnull;
@@ -2361,17 +2321,17 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	 * search_path and instead have to fully schema-qualify
 	 * everything.
 	 */
-	command = makeStringInfo();
-	appendStringInfo(command,
+	initStringInfo(&command);
+	appendStringInfo(&command,
 					 "SELECT pg_catalog.max(%s) FROM %s.%s",
-					 quote_identifier(NameStr(dim->fd.column_name)),
+					 get_expr_for_dim_max(NameStr(dim->fd.column_name), timetype),
 					 quote_identifier(NameStr(ht->fd.schema_name)),
 					 quote_identifier(NameStr(ht->fd.table_name)));
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
 
-	res = SPI_execute(command->data, true /* read_only */, 0 /*count*/);
+	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
 	if (res < 0)
 		ereport(ERROR,
@@ -2379,7 +2339,11 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 				 (errmsg("could not find the maximum time value for hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 
-	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == timetype,
+	/* In most cases the result type is the same as the time type. However, with UUIDs we first
+	 * extract the timestamptz so the result type is timestamptz instead. */
+	Oid result_type = timetype == UUIDOID ? TIMESTAMPTZOID : timetype;
+
+	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == result_type,
 		   "partition types for result (%d) and dimension (%d) do not match",
 		   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
 		   ts_dimension_get_partition_type(dim));
@@ -2389,7 +2353,7 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 		*isnull = max_isnull;
 
 	int64 max_value =
-		max_isnull ? ts_time_get_min(timetype) : ts_time_value_to_internal(maxdat, timetype);
+		max_isnull ? ts_time_get_min(result_type) : ts_time_value_to_internal(maxdat, result_type);
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
@@ -2546,19 +2510,21 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	if (time_dim == NULL)
-		elog(ERROR,
-			 "could not find time dimension for hypertable %s.%s",
-			 quote_identifier(NameStr(ht->fd.schema_name)),
-			 quote_identifier(NameStr(ht->fd.table_name)));
+		ereport(ERROR,
+				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				errmsg("could not find time dimension for hypertable %s.%s",
+					   quote_identifier(NameStr(ht->fd.schema_name)),
+					   quote_identifier(NameStr(ht->fd.table_name))));
 
 	time_type = ts_dimension_get_partition_type(time_dim);
 
 	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 	if (osm_chunk_id == INVALID_CHUNK_ID)
-		elog(ERROR,
-			 "no OSM chunk found for hypertable %s.%s",
-			 quote_identifier(NameStr(ht->fd.schema_name)),
-			 quote_identifier(NameStr(ht->fd.table_name)));
+		ereport(ERROR,
+				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				errmsg("no OSM chunk found for hypertable %s.%s",
+					   quote_identifier(NameStr(ht->fd.schema_name)),
+					   quote_identifier(NameStr(ht->fd.table_name))));
 	/*
 	 * range_start, range_end arguments must be converted to internal representation
 	 * a NULL start value is interpreted as INT64_MAX - 1 and a NULL end value is
@@ -2567,7 +2533,9 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	 * OSM chunk is given upon creation, which is [INT64_MAX - 1, INT64_MAX]
 	 */
 	if ((PG_ARGISNULL(1) && !PG_ARGISNULL(2)) || (!PG_ARGISNULL(1) && PG_ARGISNULL(2)))
-		elog(ERROR, "range_start and range_end parameters must be both NULL or both non-NULL");
+		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("range_start and range_end parameters must be both NULL or both non-NULL"));
 
 	Oid argtypes[2];
 	for (int i = 0; i < 2; i++)
@@ -2594,7 +2562,9 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 			ts_time_value_to_internal(PG_GETARG_DATUM(2), get_fn_expr_argtype(fcinfo->flinfo, 2));
 
 	if (range_start_internal > range_end_internal)
-		ereport(ERROR, errmsg("dimension slice range_end cannot be less than range_start"));
+		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("dimension slice range_end cannot be less than range_start"));
 
 	bool osm_chunk_empty = PG_GETARG_BOOL(3);
 
@@ -2623,6 +2593,7 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	 */
 	if (overlap)
 		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				errmsg("attempting to set overlapping range for tiered chunk of %s.%s",
 					   NameStr(ht->fd.schema_name),
 					   NameStr(ht->fd.table_name)),
@@ -2652,4 +2623,28 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	ts_dimension_slice_range_update(slice);
 
 	PG_RETURN_BOOL(overlap);
+}
+
+TSDLLEXPORT bool
+ts_hypertable_has_continuous_aggregates(int32 hypertable_id)
+{
+	bool found = false;
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+
+	iterator.ctx.limit = 1; /* we only need to know if there is at least one */
+	iterator.ctx.index =
+		catalog_get_index(ts_catalog_get(), CONTINUOUS_AGG, CONTINUOUS_AGG_RAW_HYPERTABLE_ID_IDX);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_agg_raw_hypertable_id_idx_raw_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(hypertable_id));
+
+	ts_scan_iterator_start_scan(&iterator);
+	if (ts_scan_iterator_next(&iterator))
+		found = true;
+	ts_scan_iterator_close(&iterator);
+
+	return found;
 }

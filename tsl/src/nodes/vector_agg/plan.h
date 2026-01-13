@@ -7,7 +7,7 @@
 #include <nodes/plannodes.h>
 #include <utils/relcache.h>
 
-#include "nodes/decompress_chunk/vector_quals.h"
+#include "nodes/columnar_scan/vector_quals.h"
 
 /*
  * The indexes of settings that we have to pass through the custom_private list.
@@ -19,7 +19,6 @@ typedef enum
 } VectorAggSettingsIndex;
 
 extern void _vector_agg_init(void);
-extern void vectoragg_plan_decompress_chunk(Plan *childplan, VectorQualInfo *vqi);
-extern void vectoragg_plan_tam(Plan *childplan, const List *rtable, VectorQualInfo *vqi);
+extern void vectoragg_plan_columnar_scan(Plan *childplan, VectorQualInfo *vqi);
 Plan *try_insert_vector_agg_node(Plan *plan, List *rtable);
 bool has_vector_agg_node(Plan *plan, bool *has_normal_agg);

@@ -166,6 +166,15 @@ TsExtension extensions[] = {
 		.soversion = "",
 		.post_parse_analyze_hook = NULL,
 	},
+	{
+		.name = "timescaledb_lake",
+		.schema_name = "_timescaledb_lake_catalog",
+		.table_name = "metadata",
+		.guc_disable_load_name = "timescaledb_lake.disable_load",
+		.guc_disable_load = false,
+		.soversion = "",
+		.post_parse_analyze_hook = NULL,
+	},
 };
 
 inline static void extension_check(TsExtension * /*ext*/);

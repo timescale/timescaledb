@@ -29,26 +29,6 @@ END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.cagg_migrate_plan_exists(_hypertable_id integer) RETURNS boolean LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.cagg_migrate_plan_exists(integer) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN _timescaledb_functions.cagg_migrate_plan_exists($1);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.cagg_migrate_pre_validation(_cagg_schema text,_cagg_name text,_cagg_name_new text) RETURNS _timescaledb_catalog.continuous_agg LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.cagg_migrate_pre_validation(text,text,text) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN _timescaledb_functions.cagg_migrate_pre_validation($1,$2,$3);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.cagg_watermark(hypertable_id integer) RETURNS bigint LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
@@ -99,26 +79,6 @@ END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_clone(chunk_index_oid oid) RETURNS oid LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.chunk_index_clone(oid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN _timescaledb_functions.chunk_index_clone($1);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_replace(chunk_index_oid_old oid,chunk_index_oid_new oid) RETURNS void LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.chunk_index_replace(oid,oid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  PERFORM _timescaledb_functions.chunk_index_replace($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_status(regclass) RETURNS integer LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
@@ -158,9 +118,6 @@ BEGIN
 END$$
 SET search_path TO pg_catalog,pg_temp;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.continuous_agg_invalidation_trigger() RETURNS TRIGGER
-AS '@MODULE_PATHNAME@', 'ts_continuous_agg_invalidation_trigger' LANGUAGE C;
-
 -- we have to prefix slices, schema_name and table_name parameter with _ here to not clash with output names otherwise plpgsql will complain
 CREATE OR REPLACE FUNCTION _timescaledb_internal.create_chunk(hypertable regclass,_slices jsonb,_schema_name name=NULL,_table_name name=NULL,chunk_table regclass=NULL) RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, schema_name NAME, table_name NAME, relkind "char", slices JSONB, created BOOLEAN) LANGUAGE PLPGSQL AS $$
 BEGIN
@@ -188,31 +145,6 @@ BEGIN
   RETURN _timescaledb_functions.drop_chunk($1);
 END$$
 SET search_path TO pg_catalog,pg_temp;
-
-
--- We cannot create a wrapper function in plpgsql for the aggregate transition
--- functions because plpgsql cannot deal with datatype internal but since these
--- are used in an aggregation context and cannot be called directly and will
--- be used in conjunction with partialize_agg it is sufficient to have the
--- warning there.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.finalize_agg_ffunc(
-tstate internal, aggfn TEXT, inner_agg_collation_schema NAME, inner_agg_collation_name NAME, inner_agg_input_types NAME[][], inner_agg_serialized_state BYTEA, return_type_dummy_val ANYELEMENT)
-RETURNS anyelement
-AS '@MODULE_PATHNAME@', 'ts_finalize_agg_ffunc'
-LANGUAGE C IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.finalize_agg_sfunc(
-tstate internal, aggfn TEXT, inner_agg_collation_schema NAME, inner_agg_collation_name NAME, inner_agg_input_types NAME[][], inner_agg_serialized_state BYTEA, return_type_dummy_val ANYELEMENT)
-RETURNS internal
-AS '@MODULE_PATHNAME@', 'ts_finalize_agg_sfunc'
-LANGUAGE C IMMUTABLE;
-
-CREATE OR REPLACE AGGREGATE _timescaledb_internal.finalize_agg(agg_name TEXT, inner_agg_collation_schema NAME, inner_agg_collation_name NAME, inner_agg_input_types NAME[][], inner_agg_serialized_state BYTEA, return_type_dummy_val anyelement) (
-    SFUNC = _timescaledb_functions.finalize_agg_sfunc,
-    STYPE = internal,
-    FINALFUNC = _timescaledb_functions.finalize_agg_ffunc,
-    FINALFUNC_EXTRA
-);
 
 CREATE OR REPLACE FUNCTION _timescaledb_internal.freeze_chunk(chunk regclass) RETURNS boolean LANGUAGE PLPGSQL AS $$
 BEGIN
@@ -314,42 +246,12 @@ END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.indexes_local_size(schema_name_in name,table_name_in name) RETURNS TABLE (hypertable_id INTEGER, total_bytes BIGINT) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.indexes_local_size(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN QUERY SELECT * FROM _timescaledb_functions.indexes_local_size($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.insert_blocker() RETURNS trigger LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.insert_blocker() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN _timescaledb_functions.insert_blocker();
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.interval_to_usec(chunk_interval interval) RETURNS bigint LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
     RAISE WARNING 'function _timescaledb_internal.interval_to_usec(interval) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
   END IF;
   RETURN _timescaledb_functions.interval_to_usec($1);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.partialize_agg(arg anyelement) RETURNS bytea LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.partialize_agg(anyelement) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN _timescaledb_functions.partialize_agg($1);
 END$$
 SET search_path TO pg_catalog,pg_temp;
 
@@ -584,122 +486,12 @@ END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_create_plan(_cagg_data _timescaledb_catalog.continuous_agg,_cagg_name_new text,_override boolean=false,_drop_old boolean=false) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'procedure _timescaledb_internal.cagg_migrate_create_plan(_timescaledb_catalog.continuous_agg,text,boolean,boolean) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  CALL _timescaledb_functions.cagg_migrate_create_plan($1,$2,$3,$4);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_copy_data(_cagg_data _timescaledb_catalog.continuous_agg,_plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'procedure _timescaledb_internal.cagg_migrate_execute_copy_data(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  CALL _timescaledb_functions.cagg_migrate_execute_copy_data($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_copy_policies(_cagg_data _timescaledb_catalog.continuous_agg,_plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'procedure _timescaledb_internal.cagg_migrate_execute_copy_policies(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  CALL _timescaledb_functions.cagg_migrate_execute_copy_policies($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_create_new_cagg(_cagg_data _timescaledb_catalog.continuous_agg,_plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'procedure _timescaledb_internal.cagg_migrate_execute_create_new_cagg(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  CALL _timescaledb_functions.cagg_migrate_execute_create_new_cagg($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_disable_policies(_cagg_data _timescaledb_catalog.continuous_agg,_plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'procedure _timescaledb_internal.cagg_migrate_execute_disable_policies(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  CALL _timescaledb_functions.cagg_migrate_execute_disable_policies($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_drop_old_cagg(_cagg_data _timescaledb_catalog.continuous_agg,_plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'procedure _timescaledb_internal.cagg_migrate_execute_drop_old_cagg(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  CALL _timescaledb_functions.cagg_migrate_execute_drop_old_cagg($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_enable_policies(_cagg_data _timescaledb_catalog.continuous_agg,_plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'procedure _timescaledb_internal.cagg_migrate_execute_enable_policies(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  CALL _timescaledb_functions.cagg_migrate_execute_enable_policies($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_override_cagg(_cagg_data _timescaledb_catalog.continuous_agg,_plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'procedure _timescaledb_internal.cagg_migrate_execute_override_cagg(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  CALL _timescaledb_functions.cagg_migrate_execute_override_cagg($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_plan(_cagg_data _timescaledb_catalog.continuous_agg) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'procedure _timescaledb_internal.cagg_migrate_execute_plan(_timescaledb_catalog.continuous_agg) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  CALL _timescaledb_functions.cagg_migrate_execute_plan($1);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_refresh_new_cagg(_cagg_data _timescaledb_catalog.continuous_agg,_plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'procedure _timescaledb_internal.cagg_migrate_execute_refresh_new_cagg(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  CALL _timescaledb_functions.cagg_migrate_execute_refresh_new_cagg($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
 CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_compression(job_id integer,config jsonb) LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
     RAISE WARNING 'procedure _timescaledb_internal.policy_compression(integer,jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
   END IF;
   CALL _timescaledb_functions.policy_compression($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean,use_creation_time boolean) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'procedure _timescaledb_internal.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean,boolean) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  CALL _timescaledb_functions.policy_compression_execute($1,$2,$3,$4,$5,$6,$7);
 END$$
 SET search_path TO pg_catalog,pg_temp;
 

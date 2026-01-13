@@ -35,16 +35,14 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.create_compressed_chunk(
 CREATE OR REPLACE FUNCTION @extschema@.compress_chunk(
     uncompressed_chunk REGCLASS,
     if_not_compressed BOOLEAN = true,
-    recompress BOOLEAN = false,
-    hypercore_use_access_method BOOL = NULL
+    recompress BOOLEAN = false
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C VOLATILE;
 
 -- Alias for compress_chunk above.
 CREATE OR REPLACE PROCEDURE @extschema@.convert_to_columnstore(
     chunk REGCLASS,
     if_not_columnstore BOOLEAN = true,
-    recompress BOOLEAN = false,
-    hypercore_use_access_method BOOL = NULL
+    recompress BOOLEAN = false
 ) AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C;
 
 CREATE OR REPLACE FUNCTION @extschema@.decompress_chunk(
@@ -57,13 +55,24 @@ CREATE OR REPLACE PROCEDURE @extschema@.convert_to_rowstore(
     if_columnstore BOOLEAN = true
 ) AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C;
 
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.rebuild_columnstore(
+    chunk REGCLASS
+) AS '@MODULE_PATHNAME@', 'ts_rebuild_columnstore' LANGUAGE C;
+
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.chunk_rewrite_cleanup()
+LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_chunk_rewrite_cleanup';
+
 CREATE OR REPLACE PROCEDURE @extschema@.merge_chunks(
-   chunk1 REGCLASS, chunk2 REGCLASS
+   chunk1 REGCLASS, chunk2 REGCLASS, concurrently BOOLEAN = false
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_merge_two_chunks';
 
 CREATE OR REPLACE PROCEDURE @extschema@.merge_chunks(
     chunks REGCLASS[]
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_merge_chunks';
+
+CREATE OR REPLACE PROCEDURE @extschema@.merge_chunks_concurrently(
+    chunks REGCLASS[]
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_merge_chunks_concurrently';
 
 CREATE OR REPLACE PROCEDURE @extschema@.split_chunk(
     chunk REGCLASS,
@@ -155,13 +164,6 @@ BEGIN
         WHERE tables.table_schema = chunk.schema_name
         AND tables.table_name = chunk.table_name
     )
-    AND NOT EXISTS (
-        SELECT FROM _timescaledb_catalog.hypertable
-        JOIN _timescaledb_catalog.continuous_agg ON continuous_agg.raw_hypertable_id = hypertable.id
-        WHERE hypertable.id = chunk.hypertable_id
-        -- for the old caggs format we need to keep chunk metadata for dropped chunks
-        AND continuous_agg.finalized IS FALSE
-    )
   LOOP
     _removed := _removed + 1;
     RAISE INFO 'Removing metadata of chunk % from hypertable %', _chunk_id, _hypertable_id;
@@ -187,9 +189,6 @@ BEGIN
 
     DELETE FROM _timescaledb_internal.bgw_policy_chunk_stats
     WHERE bgw_policy_chunk_stats.chunk_id = _chunk_id;
-
-    DELETE FROM _timescaledb_catalog.chunk_index
-    WHERE chunk_index.chunk_id = _chunk_id;
 
     DELETE FROM _timescaledb_catalog.compression_chunk_size
     WHERE compression_chunk_size.chunk_id = _chunk_id

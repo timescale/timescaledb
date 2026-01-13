@@ -259,11 +259,9 @@ SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
 SELECT _timescaledb_functions.stop_background_workers();
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE backend_type = 'TimescaleDB Background Worker Launcher';
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
-
 -- make sure nobody is using it
 REVOKE CONNECT ON DATABASE :TEST_DBNAME FROM public;
 CALL kill_database_backends(:'TEST_DBNAME');
-SELECT * FROM pg_stat_activity WHERE datname = :'TEST_DBNAME';
 
 -- Change tablespace
 ALTER DATABASE :TEST_DBNAME SET TABLESPACE tablespace1;

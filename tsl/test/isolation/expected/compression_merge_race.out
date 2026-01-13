@@ -7,7 +7,6 @@ step s3_count_chunks_pre_compression:
 count|expected
 -----+--------
    48|      48
-(1 row)
 
 step s3_lock_compression: 
     SELECT debug_waitpoint_enable('compress_chunk_impl_start');
@@ -15,7 +14,6 @@ step s3_lock_compression:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1_compress_first_half_of_chunks: 
    call compress_chunks_in_individual_transactions(
@@ -36,7 +34,6 @@ step s3_unlock_compression: <... completed>
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s3_count_chunks_post_compression: 
     select count(*), 24 as expected from show_chunks('sensor_data');
@@ -44,7 +41,6 @@ step s3_count_chunks_post_compression:
 count|expected
 -----+--------
    24|      24
-(1 row)
 
 
 starting permutation: s3_count_chunks_pre_compression s3_lock_compression s1_compress_first_two_by_two s2_compress_second_two_by_two s3_unlock_compression s3_count_chunks_post_compression
@@ -54,7 +50,6 @@ step s3_count_chunks_pre_compression:
 count|expected
 -----+--------
    48|      48
-(1 row)
 
 step s3_lock_compression: 
     SELECT debug_waitpoint_enable('compress_chunk_impl_start');
@@ -62,7 +57,6 @@ step s3_lock_compression:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1_compress_first_two_by_two: 
    call compress_chunks_in_individual_transactions(
@@ -93,7 +87,6 @@ step s3_unlock_compression: <... completed>
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s3_count_chunks_post_compression: 
     select count(*), 24 as expected from show_chunks('sensor_data');
@@ -101,7 +94,6 @@ step s3_count_chunks_post_compression:
 count|expected
 -----+--------
    24|      24
-(1 row)
 
 
 starting permutation: s1_compress_single_chunk s1_compress_all_chunks_single_transaction s3_select_on_compressed_chunk s3_wait_for_finish s1_compress_finish
@@ -111,7 +103,6 @@ step s1_compress_single_chunk:
 compress_chunk                            
 ------------------------------------------
 _timescaledb_internal._hyper_X_X_chunk
-(1 row)
 
 step s1_compress_all_chunks_single_transaction: 
     BEGIN;
@@ -121,7 +112,6 @@ s1: NOTICE:  chunk "_hyper_X_X_chunk" is already converted to columnstore
 count
 -----
    48
-(1 row)
 
 step s3_select_on_compressed_chunk: 
     DO $$

@@ -4,7 +4,6 @@ starting permutation: recompress_insert_rows lock_after_decompress recompress_ch
 count
 -----
     1
-(1 row)
 
 step recompress_insert_rows: 
     INSERT INTO hyper
@@ -27,7 +26,6 @@ step lock_after_decompress:
 count
 -----
     1
-(1 row)
 
 step recompress_chunks_start: 
     DO $$
@@ -50,5 +48,4 @@ step query_start: <... completed>
 count
 -----
  1102
-(1 row)
 

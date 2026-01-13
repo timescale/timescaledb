@@ -85,7 +85,8 @@ FROM _timescaledb_internal.bgw_job_stat_history
 WHERE succeeded IS FALSE;
 -- drop all job_stats for the retention job
 DELETE FROM _timescaledb_internal.bgw_job_stat WHERE job_id = 3;
-SELECT  next_start FROM alter_job(3, next_start => now() + interval '2 seconds') \gset
+SELECT FROM alter_job(3, next_start => now());
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT test.wait_for_job_to_run(3, 1);
 -- only the last row remains
 SELECT job_id, pid, succeeded, execution_start, execution_finish, data
@@ -114,7 +115,7 @@ ORDER BY job_id;
 
 DELETE FROM _timescaledb_internal.bgw_job_stat;
 DELETE FROM _timescaledb_internal.bgw_job_stat_history;
-DELETE FROM _timescaledb_config.bgw_job CASCADE;
+DELETE FROM _timescaledb_catalog.bgw_job CASCADE;
 
 SELECT _timescaledb_functions.start_background_workers();
 
@@ -139,6 +140,8 @@ BEGIN
 END;
 $TEST$;
 
+SELECT _timescaledb_functions.restart_background_workers();
+
 -- Wait for jobs to run
 DO
 $TEST$
@@ -147,7 +150,7 @@ DECLARE
 BEGIN
   RAISE INFO 'Waiting for the % jobs to run', njobs;
   SET LOCAL client_min_messages TO WARNING;
-  PERFORM test.wait_for_job_to_run_or_fail(id) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
+  PERFORM test.wait_for_job_to_run_or_fail(id) FROM _timescaledb_catalog.bgw_job WHERE id >= 1000;
 END;
 $TEST$;
 

@@ -21,7 +21,6 @@ SELECT cl.relname, amname
   relname   | amname 
 ------------+--------
  test_table | heap
-(1 row)
 
 -- Check that setting default access method of a normal table works.
 ALTER TABLE test_table SET ACCESS METHOD DEFAULT;
@@ -34,7 +33,6 @@ SELECT create_hypertable('test_table', by_range('time'));
  create_hypertable 
 -------------------
  (1,t)
-(1 row)
 
 ALTER TABLE test_table SET ACCESS METHOD DEFAULT;
 SELECT cl.relname, amname
@@ -43,7 +41,6 @@ SELECT cl.relname, amname
   relname   | amname 
 ------------+--------
  test_table | heap
-(1 row)
 
 -- Test setting the access method together with other options. This
 -- should not generate an error.
@@ -61,7 +58,6 @@ SELECT * FROM chunk_info WHERE hypertable = 'test_table';
  test_table | _hyper_1_1_chunk | testam
  test_table | _hyper_1_2_chunk | testam
  test_table | _hyper_1_3_chunk | testam
-(3 rows)
 
 -- Setting it to the default method after we have set it to a test
 -- access method should work fine also on a hypertable.
@@ -71,7 +67,6 @@ SELECT cl.relname, amname
   relname   | amname 
 ------------+--------
  test_table | testam
-(1 row)
 
 ALTER TABLE test_table SET ACCESS METHOD DEFAULT;
 SELECT cl.relname, amname
@@ -80,7 +75,6 @@ SELECT cl.relname, amname
   relname   | amname 
 ------------+--------
  test_table | heap
-(1 row)
 
 SELECT chunk FROM show_chunks('test_table') t(chunk) limit 1 \gset
 ALTER TABLE :chunk SET ACCESS METHOD DEFAULT;
@@ -90,5 +84,4 @@ SELECT * FROM chunk_info WHERE hypertable = 'test_table';
  test_table | _hyper_1_1_chunk | heap
  test_table | _hyper_1_2_chunk | testam
  test_table | _hyper_1_3_chunk | testam
-(3 rows)
 

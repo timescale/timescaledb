@@ -18,7 +18,6 @@ SELECT create_hypertable('test_table', by_range('time'));
  create_hypertable 
 -------------------
  (1,t)
-(1 row)
 
 INSERT INTO test_table
 SELECT ts, 10 * random(), 100 * random()
@@ -29,7 +28,6 @@ SELECT cl.relname, amname
   relname   | amname 
 ------------+--------
  test_table | heap
-(1 row)
 
 SELECT * FROM chunk_info WHERE hypertable = 'test_table';
  hypertable |      chunk       | amname 
@@ -40,7 +38,6 @@ SELECT * FROM chunk_info WHERE hypertable = 'test_table';
  test_table | _hyper_1_4_chunk | heap
  test_table | _hyper_1_5_chunk | heap
  test_table | _hyper_1_6_chunk | heap
-(6 rows)
 
 -- Test setting the access method together with other options. This
 -- should not generate an error.
@@ -58,7 +55,6 @@ SELECT cl.relname, amname
   relname   | amname 
 ------------+--------
  test_table | testam
-(1 row)
 
 SELECT * FROM chunk_info WHERE hypertable = 'test_table';
  hypertable |       chunk       | amname 
@@ -73,5 +69,4 @@ SELECT * FROM chunk_info WHERE hypertable = 'test_table';
  test_table | _hyper_1_8_chunk  | testam
  test_table | _hyper_1_9_chunk  | testam
  test_table | _hyper_1_10_chunk | testam
-(10 rows)
 

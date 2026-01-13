@@ -6,8 +6,11 @@
 -- batch.
 create table t(ts int);
 select create_hypertable('t', 'ts');
+\set ON_ERROR_STOP 0
 alter table t set(timescaledb.compress, timescaledb.compress_segmentby = 'ts',
     timescaledb.compress_orderby = '');
+\set ON_ERROR_STOP 1
+alter table t set(timescaledb.compress, timescaledb.compress_segmentby = 'ts');
 insert into t select generate_series(1, 10000);
 select count(*) from t;
 

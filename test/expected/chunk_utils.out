@@ -24,44 +24,35 @@ SELECT show_chunks(NULL);
 ERROR:  invalid hypertable or continuous aggregate
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('public.drop_chunk_test1', 'time', chunk_time_interval => 1, create_default_indexes=>false);
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable       
 -------------------------------
  (1,public,drop_chunk_test1,t)
-(1 row)
 
 SELECT create_hypertable('public.drop_chunk_test2', 'time', chunk_time_interval => 1, create_default_indexes=>false);
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable       
 -------------------------------
  (2,public,drop_chunk_test2,t)
-(1 row)
 
 SELECT create_hypertable('public.drop_chunk_test3', 'time', chunk_time_interval => 1, create_default_indexes=>false);
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable       
 -------------------------------
  (3,public,drop_chunk_test3,t)
-(1 row)
 
 -- Add space dimensions to ensure chunks share dimension slices
 SELECT add_dimension('public.drop_chunk_test1', 'device_id', 2);
               add_dimension              
 -----------------------------------------
  (4,public,drop_chunk_test1,device_id,t)
-(1 row)
 
 SELECT add_dimension('public.drop_chunk_test2', 'device_id', 2);
               add_dimension              
 -----------------------------------------
  (5,public,drop_chunk_test2,device_id,t)
-(1 row)
 
 SELECT add_dimension('public.drop_chunk_test3', 'device_id', 2);
               add_dimension              
 -----------------------------------------
  (6,public,drop_chunk_test3,device_id,t)
-(1 row)
 
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
@@ -73,25 +64,20 @@ WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table
 ORDER BY c.id;
  chunk_id | hypertable_id | chunk_schema | chunk_table | range_start | range_end 
 ----------+---------------+--------------+-------------+-------------+-----------
-(0 rows)
 
-\dt "_timescaledb_internal"._hyper*
-      List of relations
- Schema | Name | Type | Owner 
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+ schema | name | type | owner 
 --------+------+------+-------
-(0 rows)
 
 SELECT  _timescaledb_functions.get_partition_for_key('dev1'::text);
  get_partition_for_key 
 -----------------------
             1129986420
-(1 row)
 
 SELECT  _timescaledb_functions.get_partition_for_key('dev7'::varchar(5));
  get_partition_for_key 
 -----------------------
              449729092
-(1 row)
 
 INSERT INTO PUBLIC.drop_chunk_test1 VALUES(1, 1.0, 'dev1');
 INSERT INTO PUBLIC.drop_chunk_test1 VALUES(2, 2.0, 'dev1');
@@ -133,11 +119,9 @@ ORDER BY c.id;
        10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
        11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
-(12 rows)
 
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_1_1_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_1_2_chunk  | table | default_perm_user
@@ -157,7 +141,6 @@ ORDER BY c.id;
  _timescaledb_internal | _hyper_3_16_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_3_17_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_3_18_chunk | table | default_perm_user
-(18 rows)
 
 -- next two calls of show_chunks should give same set of chunks as above when combined
 SELECT show_chunks('drop_chunk_test1');
@@ -169,7 +152,6 @@ SELECT show_chunks('drop_chunk_test1');
  _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_1_5_chunk
  _timescaledb_internal._hyper_1_6_chunk
-(6 rows)
 
 SELECT * FROM show_chunks('drop_chunk_test2');
                show_chunks               
@@ -180,7 +162,6 @@ SELECT * FROM show_chunks('drop_chunk_test2');
  _timescaledb_internal._hyper_2_10_chunk
  _timescaledb_internal._hyper_2_11_chunk
  _timescaledb_internal._hyper_2_12_chunk
-(6 rows)
 
 CREATE VIEW dependent_view AS SELECT * FROM _timescaledb_internal._hyper_1_1_chunk;
 \set ON_ERROR_STOP 0
@@ -247,7 +228,6 @@ ORDER BY c.id;
  _hyper_3_17_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
  _hyper_3_18_chunk | constraint_24   |                 24 |                    6 |                   7
  _hyper_3_18_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
-(36 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  id | dimension_id |     range_start      |      range_end      
@@ -276,21 +256,18 @@ SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  22 |            6 | -9223372036854775808 |          1073741823
  23 |            3 |                    5 |                   6
  24 |            3 |                    6 |                   7
-(24 rows)
 
 -- Test that truncating chunks works
 SELECT count(*) FROM _timescaledb_internal._hyper_2_7_chunk;
  count 
 -------
      1
-(1 row)
 
 TRUNCATE TABLE _timescaledb_internal._hyper_2_7_chunk;
 SELECT count(*) FROM _timescaledb_internal._hyper_2_7_chunk;
  count 
 -------
      0
-(1 row)
 
 -- Drop one chunk "manually" and verify that dimension slices and
 -- constraints are cleaned up. Each chunk has two constraints and two
@@ -340,7 +317,6 @@ ORDER BY c.id;
  _hyper_3_17_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
  _hyper_3_18_chunk | constraint_24   |                 24 |                    6 |                   7
  _hyper_3_18_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
-(34 rows)
 
 -- Only one dimension slice deleted
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
@@ -369,7 +345,6 @@ SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  22 |            6 | -9223372036854775808 |          1073741823
  23 |            3 |                    5 |                   6
  24 |            3 |                    6 |                   7
-(23 rows)
 
 -- We drop all chunks older than timestamp 2 in all hypertable. This
 -- is added only to avoid making the diff for this commit larger than
@@ -380,7 +355,6 @@ SELECT drop_chunks(format('%1$I.%2$I', schema_name, table_name)::regclass, older
 -----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_3_13_chunk
-(2 rows)
 
 SELECT c.table_name, cc.constraint_name, ds.id AS dimension_slice_id, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
@@ -419,7 +393,6 @@ ORDER BY c.id;
  _hyper_3_17_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
  _hyper_3_18_chunk | constraint_24   |                 24 |                    6 |                   7
  _hyper_3_18_chunk | constraint_22   |                 22 | -9223372036854775808 |          1073741823
-(30 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  id | dimension_id |     range_start      |      range_end      
@@ -445,7 +418,6 @@ SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
  22 |            6 | -9223372036854775808 |          1073741823
  23 |            3 |                    5 |                   6
  24 |            3 |                    6 |                   7
-(21 rows)
 
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
@@ -467,7 +439,6 @@ ORDER BY c.id;
        10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
        11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
-(10 rows)
 
 -- next two calls of show_chunks should give same set of chunks as above when combined
 SELECT show_chunks('drop_chunk_test1');
@@ -478,7 +449,6 @@ SELECT show_chunks('drop_chunk_test1');
  _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_1_5_chunk
  _timescaledb_internal._hyper_1_6_chunk
-(5 rows)
 
 SELECT * FROM show_chunks('drop_chunk_test2');
                show_chunks               
@@ -488,11 +458,9 @@ SELECT * FROM show_chunks('drop_chunk_test2');
  _timescaledb_internal._hyper_2_10_chunk
  _timescaledb_internal._hyper_2_11_chunk
  _timescaledb_internal._hyper_2_12_chunk
-(5 rows)
 
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_1_2_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
@@ -509,7 +477,6 @@ SELECT * FROM show_chunks('drop_chunk_test2');
  _timescaledb_internal | _hyper_3_16_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_3_17_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_3_18_chunk | table | default_perm_user
-(15 rows)
 
 -- show_chunks and drop_chunks output should be the same
 \set QUERY1 'SELECT show_chunks(\'drop_chunk_test1\', older_than => 3)::NAME'
@@ -518,7 +485,6 @@ SELECT * FROM show_chunks('drop_chunk_test2');
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
@@ -539,30 +505,24 @@ ORDER BY c.id;
        10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
        11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
-(9 rows)
 
-\dt "_timescaledb_internal".*
-                             List of relations
-        Schema         |          Name          | Type  |       Owner       
------------------------+------------------------+-------+-------------------
- _timescaledb_internal | _hyper_1_3_chunk       | table | default_perm_user
- _timescaledb_internal | _hyper_1_4_chunk       | table | default_perm_user
- _timescaledb_internal | _hyper_1_5_chunk       | table | default_perm_user
- _timescaledb_internal | _hyper_1_6_chunk       | table | default_perm_user
- _timescaledb_internal | _hyper_2_10_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_2_11_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_2_12_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_2_8_chunk       | table | default_perm_user
- _timescaledb_internal | _hyper_2_9_chunk       | table | default_perm_user
- _timescaledb_internal | _hyper_3_14_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_3_15_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_3_16_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_3_17_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_3_18_chunk      | table | default_perm_user
- _timescaledb_internal | bgw_job_stat           | table | super_user
- _timescaledb_internal | bgw_job_stat_history   | table | super_user
- _timescaledb_internal | bgw_policy_chunk_stats | table | super_user
-(17 rows)
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
+-----------------------+-------------------+-------+-------------------
+ _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_4_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_5_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_6_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_2_10_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_11_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_8_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_2_9_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_3_14_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_3_15_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_3_16_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_3_17_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_3_18_chunk | table | default_perm_user
 
 -- next two calls of show_chunks should give same set of chunks as above when combined
 SELECT show_chunks('drop_chunk_test1');
@@ -572,7 +532,6 @@ SELECT show_chunks('drop_chunk_test1');
  _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_1_5_chunk
  _timescaledb_internal._hyper_1_6_chunk
-(4 rows)
 
 SELECT * FROM show_chunks('drop_chunk_test2');
                show_chunks               
@@ -582,7 +541,6 @@ SELECT * FROM show_chunks('drop_chunk_test2');
  _timescaledb_internal._hyper_2_10_chunk
  _timescaledb_internal._hyper_2_11_chunk
  _timescaledb_internal._hyper_2_12_chunk
-(5 rows)
 
 -- 2,147,483,647 is the largest int so this tests that BIGINTs work
 -- show_chunks and drop_chunks output should be the same
@@ -592,7 +550,6 @@ SELECT * FROM show_chunks('drop_chunk_test2');
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       5 |                       5
-(1 row)
 
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
@@ -613,11 +570,9 @@ ORDER BY c.id;
        10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
        11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
-(9 rows)
 
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_1_4_chunk  | table | default_perm_user
@@ -628,7 +583,6 @@ ORDER BY c.id;
  _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_2_8_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_2_9_chunk  | table | default_perm_user
-(9 rows)
 
 \set ON_ERROR_STOP 0
 -- should error because no hypertable
@@ -658,11 +612,9 @@ ORDER BY c.id;
        10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
        11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
-(8 rows)
 
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_1_4_chunk  | table | default_perm_user
@@ -672,7 +624,6 @@ ORDER BY c.id;
  _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_2_8_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_2_9_chunk  | table | default_perm_user
-(8 rows)
 
 -- newer_than tests
 -- show_chunks and drop_chunks output should be the same
@@ -683,7 +634,6 @@ psql:include/query_result_test_equal.sql:16: INFO:  dropping chunk _timescaledb_
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
@@ -697,18 +647,15 @@ ORDER BY c.id;
 ----------+---------------+-----------------------+------------------+-------------+-----------
         3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |           3 |         4
         4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |           4 |         5
-(2 rows)
 
 SELECT show_chunks('drop_chunk_test1');
               show_chunks               
 ----------------------------------------
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(2 rows)
 
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_1_4_chunk  | table | default_perm_user
@@ -717,7 +664,6 @@ SELECT show_chunks('drop_chunk_test1');
  _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_2_8_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_2_9_chunk  | table | default_perm_user
-(7 rows)
 
 -- show_chunks and drop_chunks output should be the same
 \set QUERY1 'SELECT show_chunks(\'drop_chunk_test1\', older_than=>4, newer_than=>3)::NAME'
@@ -726,7 +672,6 @@ SELECT show_chunks('drop_chunk_test1');
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
@@ -739,14 +684,12 @@ ORDER BY c.id;
  chunk_id | hypertable_id |     chunk_schema      |   chunk_table    | range_start | range_end 
 ----------+---------------+-----------------------+------------------+-------------+-----------
         4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |           4 |         5
-(1 row)
 
 -- the call of show_chunks should give same set of chunks as above
 SELECT show_chunks('drop_chunk_test1');
               show_chunks               
 ----------------------------------------
  _timescaledb_internal._hyper_1_4_chunk
-(1 row)
 
 SELECT c.id AS chunk_id, c.hypertable_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
 FROM _timescaledb_catalog.chunk c
@@ -764,7 +707,6 @@ ORDER BY c.id;
        10 |             2 | _timescaledb_internal | _hyper_2_10_chunk |           4 |         5
        11 |             2 | _timescaledb_internal | _hyper_2_11_chunk |           5 |         6
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
-(6 rows)
 
 -- We support show/drop chunks using timestamps/interval even with integer partitioning
 -- the chunk creation time gets used for these. But we need to use "created_before, created_after"
@@ -789,7 +731,6 @@ ERROR:  invalid time argument type "interval"
 SELECT show_chunks('drop_chunk_test3', created_before => now() + INTERVAL '1 hour');
  show_chunks 
 -------------
-(0 rows)
 
 SELECT show_chunks('drop_chunk_test2', created_before => now() + INTERVAL '1 hour');
                show_chunks               
@@ -799,49 +740,40 @@ SELECT show_chunks('drop_chunk_test2', created_before => now() + INTERVAL '1 hou
  _timescaledb_internal._hyper_2_10_chunk
  _timescaledb_internal._hyper_2_11_chunk
  _timescaledb_internal._hyper_2_12_chunk
-(5 rows)
 
 SELECT show_chunks('drop_chunk_test1', created_after => INTERVAL '15 minutes');
               show_chunks               
 ----------------------------------------
  _timescaledb_internal._hyper_1_4_chunk
-(1 row)
 
 SELECT show_chunks('drop_chunk_test1', created_before => now() + INTERVAL '1 hour', created_after => INTERVAL '1 hour');
               show_chunks               
 ----------------------------------------
  _timescaledb_internal._hyper_1_4_chunk
-(1 row)
 
 SELECT drop_chunks('drop_chunk_test1', created_before => now() + INTERVAL '1 hour');
               drop_chunks               
 ----------------------------------------
  _timescaledb_internal._hyper_1_4_chunk
-(1 row)
 
 SELECT drop_chunks(format('%1$I.%2$I', schema_name, table_name)::regclass, older_than => 5, newer_than => 4)
   FROM _timescaledb_catalog.hypertable WHERE schema_name = 'public';
                drop_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_2_10_chunk
-(1 row)
 
 CREATE TABLE PUBLIC.drop_chunk_test_ts(time timestamp, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_ts', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (4,public,drop_chunk_test_ts,t)
-(1 row)
 
 CREATE TABLE PUBLIC.drop_chunk_test_tstz(time timestamptz, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_tstz', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);
-NOTICE:  adding not-null constraint to column "time"
          create_hypertable         
 -----------------------------------
  (5,public,drop_chunk_test_tstz,t)
-(1 row)
 
 SET timezone = '+1';
 INSERT INTO PUBLIC.drop_chunk_test_ts VALUES(now()-INTERVAL '5 minutes', 1.0, 'dev1');
@@ -853,14 +785,12 @@ SELECT * FROM test.show_subtables('drop_chunk_test_ts');
 -----------------------------------------+------------
  _timescaledb_internal._hyper_4_19_chunk | 
  _timescaledb_internal._hyper_4_20_chunk | 
-(2 rows)
 
 SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
                   Child                  | Tablespace 
 -----------------------------------------+------------
  _timescaledb_internal._hyper_5_21_chunk | 
  _timescaledb_internal._hyper_5_22_chunk | 
-(2 rows)
 
 BEGIN;
     SELECT show_chunks('drop_chunk_test_ts');
@@ -868,13 +798,11 @@ BEGIN;
 -----------------------------------------
  _timescaledb_internal._hyper_4_19_chunk
  _timescaledb_internal._hyper_4_20_chunk
-(2 rows)
 
     SELECT show_chunks('drop_chunk_test_ts', now()::timestamp-interval '1 minute');
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_4_19_chunk
-(1 row)
 
 -- show_chunks and drop_chunks output should be the same
     \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_ts\', newer_than => interval \'1 minute\')::NAME'
@@ -883,7 +811,6 @@ BEGIN;
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
     \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_ts\', older_than => interval \'6 minute\')::NAME'
     \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_ts\', older_than => interval \'6 minute\')::NAME'
@@ -891,13 +818,11 @@ BEGIN;
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       0 |                       0
-(1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_ts');
                   Child                  | Tablespace 
 -----------------------------------------+------------
  _timescaledb_internal._hyper_4_19_chunk | 
-(1 row)
 
     \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_ts\', older_than => interval \'1 minute\')::NAME'
     \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_ts\', interval \'1 minute\')::NAME'
@@ -905,37 +830,31 @@ BEGIN;
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_ts');
  Child | Tablespace 
 -------+------------
-(0 rows)
 
     SELECT show_chunks('drop_chunk_test_tstz');
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_5_21_chunk
  _timescaledb_internal._hyper_5_22_chunk
-(2 rows)
 
     SELECT show_chunks('drop_chunk_test_tstz', older_than => now() - interval '1 minute', newer_than => now() - interval '6 minute');
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_5_21_chunk
-(1 row)
 
     SELECT show_chunks('drop_chunk_test_tstz', newer_than => now() - interval '1 minute');
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_5_22_chunk
-(1 row)
 
     SELECT show_chunks('drop_chunk_test_tstz', older_than => now() - interval '1 minute');
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_5_21_chunk
-(1 row)
 
     \set QUERY1 'SELECT show_chunks(older_than => interval \'1 minute\', relation => \'drop_chunk_test_tstz\')::NAME'
     \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_tstz\', interval \'1 minute\')::NAME'
@@ -943,13 +862,11 @@ BEGIN;
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
                   Child                  | Tablespace 
 -----------------------------------------+------------
  _timescaledb_internal._hyper_5_22_chunk | 
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -960,12 +877,10 @@ BEGIN;
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       2 |                       2
-(1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_ts');
  Child | Tablespace 
 -------+------------
-(0 rows)
 
 ROLLBACK;
 BEGIN;
@@ -976,13 +891,11 @@ BEGIN;
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_ts');
                   Child                  | Tablespace 
 -----------------------------------------+------------
  _timescaledb_internal._hyper_4_20_chunk | 
-(1 row)
 
     \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_tstz\', older_than => interval \'1 minute\')::NAME'
     \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_tstz\', older_than => interval \'1 minute\')::NAME'
@@ -990,13 +903,11 @@ BEGIN;
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
                   Child                  | Tablespace 
 -----------------------------------------+------------
  _timescaledb_internal._hyper_5_22_chunk | 
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -1007,13 +918,11 @@ BEGIN;
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_ts');
                   Child                  | Tablespace 
 -----------------------------------------+------------
  _timescaledb_internal._hyper_4_20_chunk | 
-(1 row)
 
     \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_tstz\', older_than => now()-interval \'1 minute\')::NAME'
     \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_tstz\', older_than => now()-interval \'1 minute\')::NAME'
@@ -1021,18 +930,15 @@ BEGIN;
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
                   Child                  | Tablespace 
 -----------------------------------------+------------
  _timescaledb_internal._hyper_5_22_chunk | 
-(1 row)
 
 ROLLBACK;
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_2_11_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
@@ -1042,7 +948,6 @@ ROLLBACK;
  _timescaledb_internal | _hyper_4_20_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_5_21_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_5_22_chunk | table | default_perm_user
-(8 rows)
 
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(interval '1 minute');
@@ -1059,11 +964,9 @@ ERROR:  invalid time argument type "interval"
 SELECT drop_chunks('drop_chunk_test3', created_after => interval '1 minute');
  drop_chunks 
 -------------
-(0 rows)
 
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_2_11_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
@@ -1073,15 +976,12 @@ SELECT drop_chunks('drop_chunk_test3', created_after => interval '1 minute');
  _timescaledb_internal | _hyper_4_20_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_5_21_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_5_22_chunk | table | default_perm_user
-(8 rows)
 
 CREATE TABLE PUBLIC.drop_chunk_test_date(time date, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_date', 'time', chunk_time_interval => interval '1 day', create_default_indexes=>false);
-NOTICE:  adding not-null constraint to column "time"
          create_hypertable         
 -----------------------------------
  (6,public,drop_chunk_test_date,t)
-(1 row)
 
 SET timezone = '+100';
 INSERT INTO PUBLIC.drop_chunk_test_date VALUES(now()-INTERVAL '2 day', 1.0, 'dev1');
@@ -1093,12 +993,10 @@ BEGIN;
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_date');
  Child | Tablespace 
 -------+------------
-(0 rows)
 
 ROLLBACK;
 BEGIN;
@@ -1109,18 +1007,15 @@ BEGIN;
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
     SELECT * FROM test.show_subtables('drop_chunk_test_date');
  Child | Tablespace 
 -------+------------
-(0 rows)
 
 ROLLBACK;
 SET timezone TO '-5';
 CREATE TABLE chunk_id_from_relid_test(time bigint, temp float8, device_id int);
 SELECT hypertable_id FROM create_hypertable('chunk_id_from_relid_test', 'time', chunk_time_interval => 10) \gset
-NOTICE:  adding not-null constraint to column "time"
 INSERT INTO chunk_id_from_relid_test VALUES (0, 1.1, 0), (0, 1.3, 11), (12, 2.0, 0), (12, 0.1, 11);
 SELECT _timescaledb_functions.chunk_id_from_relid(tableoid) FROM chunk_id_from_relid_test;
  chunk_id_from_relid 
@@ -1129,7 +1024,6 @@ SELECT _timescaledb_functions.chunk_id_from_relid(tableoid) FROM chunk_id_from_r
                   24
                   25
                   25
-(4 rows)
 
 DROP TABLE chunk_id_from_relid_test;
 CREATE TABLE chunk_id_from_relid_test(time bigint, temp float8, device_id int);
@@ -1137,7 +1031,6 @@ SELECT hypertable_id FROM  create_hypertable('chunk_id_from_relid_test',
     'time', chunk_time_interval => 10,
     partitioning_column => 'device_id',
     number_partitions => 3) \gset
-NOTICE:  adding not-null constraint to column "time"
 INSERT INTO chunk_id_from_relid_test VALUES (0, 1.1, 2), (0, 1.3, 11), (12, 2.0, 2), (12, 0.1, 11);
 SELECT _timescaledb_functions.chunk_id_from_relid(tableoid) FROM chunk_id_from_relid_test;
  chunk_id_from_relid 
@@ -1146,7 +1039,6 @@ SELECT _timescaledb_functions.chunk_id_from_relid(tableoid) FROM chunk_id_from_r
                   27
                   28
                   29
-(4 rows)
 
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.chunk_id_from_relid('pg_type'::regclass);
@@ -1162,11 +1054,9 @@ CREATE TABLE test_weird_type(a jsonb);
 SELECT create_hypertable('test_weird_type', 'a',
     time_partitioning_func=>'extract_time'::regproc,
     chunk_time_interval=>'2 hours'::interval);
-NOTICE:  adding not-null constraint to column "a"
       create_hypertable       
 ------------------------------
  (9,public,test_weird_type,t)
-(1 row)
 
 INSERT INTO test_weird_type VALUES ('{"time":"2019/06/06 1:00+0"}'), ('{"time":"2019/06/06 5:00+0"}');
 SELECT * FROM test.show_subtables('test_weird_type');
@@ -1174,20 +1064,17 @@ SELECT * FROM test.show_subtables('test_weird_type');
 -----------------------------------------+------------
  _timescaledb_internal._hyper_9_30_chunk | 
  _timescaledb_internal._hyper_9_31_chunk | 
-(2 rows)
 
 SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 4:00+0'::TIMESTAMPTZ);
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_9_30_chunk
-(1 row)
 
 SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 10:00+0'::TIMESTAMPTZ);
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_9_30_chunk
  _timescaledb_internal._hyper_9_31_chunk
-(2 rows)
 
 -- show_chunks and drop_chunks output should be the same
 \set QUERY1 'SELECT show_chunks(\'test_weird_type\', older_than => \'2019/06/06 5:00+0\'::TIMESTAMPTZ)::NAME'
@@ -1196,24 +1083,20 @@ SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 10:00+0'::TIMESTAM
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
 SELECT * FROM test.show_subtables('test_weird_type');
                   Child                  | Tablespace 
 -----------------------------------------+------------
  _timescaledb_internal._hyper_9_31_chunk | 
-(1 row)
 
 SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 4:00+0'::TIMESTAMPTZ);
  show_chunks 
 -------------
-(0 rows)
 
 SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 10:00+0'::TIMESTAMPTZ);
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_9_31_chunk
-(1 row)
 
 -- show_chunks and drop_chunks output should be the same
 \set QUERY1 'SELECT show_chunks(\'test_weird_type\', older_than => \'2019/06/06 6:00+0\'::TIMESTAMPTZ)::NAME'
@@ -1222,17 +1105,14 @@ SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 10:00+0'::TIMESTAM
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
 SELECT * FROM test.show_subtables('test_weird_type');
  Child | Tablespace 
 -------+------------
-(0 rows)
 
 SELECT show_chunks('test_weird_type', older_than=>'2019/06/06 10:00+0'::TIMESTAMPTZ);
  show_chunks 
 -------------
-(0 rows)
 
 DROP TABLE test_weird_type;
 CREATE FUNCTION extract_int_time(a jsonb)
@@ -1243,11 +1123,9 @@ CREATE TABLE test_weird_type_i(a jsonb);
 SELECT create_hypertable('test_weird_type_i', 'a',
     time_partitioning_func=>'extract_int_time'::regproc,
     chunk_time_interval=>5);
-NOTICE:  adding not-null constraint to column "a"
         create_hypertable        
 ---------------------------------
  (10,public,test_weird_type_i,t)
-(1 row)
 
 INSERT INTO test_weird_type_i VALUES ('{"time":"0"}'), ('{"time":"5"}');
 SELECT * FROM test.show_subtables('test_weird_type_i');
@@ -1255,20 +1133,17 @@ SELECT * FROM test.show_subtables('test_weird_type_i');
 ------------------------------------------+------------
  _timescaledb_internal._hyper_10_32_chunk | 
  _timescaledb_internal._hyper_10_33_chunk | 
-(2 rows)
 
 SELECT show_chunks('test_weird_type_i', older_than=>5);
                show_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_10_32_chunk
-(1 row)
 
 SELECT show_chunks('test_weird_type_i', older_than=>10);
                show_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_10_32_chunk
  _timescaledb_internal._hyper_10_33_chunk
-(2 rows)
 
 -- show_chunks and drop_chunks output should be the same
 \set QUERY1 'SELECT show_chunks(\'test_weird_type_i\', older_than=>5)::NAME'
@@ -1277,24 +1152,20 @@ SELECT show_chunks('test_weird_type_i', older_than=>10);
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
 SELECT * FROM test.show_subtables('test_weird_type_i');
                   Child                   | Tablespace 
 ------------------------------------------+------------
  _timescaledb_internal._hyper_10_33_chunk | 
-(1 row)
 
 SELECT show_chunks('test_weird_type_i', older_than=>5);
  show_chunks 
 -------------
-(0 rows)
 
 SELECT show_chunks('test_weird_type_i', older_than=>10);
                show_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_10_33_chunk
-(1 row)
 
 -- show_chunks and drop_chunks output should be the same
 \set QUERY1 'SELECT show_chunks(\'test_weird_type_i\', older_than=>10)::NAME'
@@ -1303,17 +1174,14 @@ SELECT show_chunks('test_weird_type_i', older_than=>10);
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
 SELECT * FROM test.show_subtables('test_weird_type_i');
  Child | Tablespace 
 -------+------------
-(0 rows)
 
 SELECT show_chunks('test_weird_type_i', older_than=>10);
  show_chunks 
 -------------
-(0 rows)
 
 DROP TABLE test_weird_type_i CASCADE;
 \c  :TEST_DBNAME :ROLE_SUPERUSER
@@ -1341,7 +1209,6 @@ ERROR:  must be owner of hypertable "drop_chunk_test1"
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       1 |                       1
-(1 row)
 
 \set VERBOSITY default
 --this fails because there are dependent objects
@@ -1372,11 +1239,9 @@ GRANT USAGE ON SCHEMA try_schema, test1, test2, test3 TO :ROLE_DEFAULT_PERM_USER
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE try_schema.drop_chunk_test_date(time date, temp float8, device_id text);
 SELECT create_hypertable('try_schema.drop_chunk_test_date', 'time', chunk_time_interval => interval '1 day', create_default_indexes=>false);
-NOTICE:  adding not-null constraint to column "time"
            create_hypertable            
 ----------------------------------------
  (11,try_schema,drop_chunk_test_date,t)
-(1 row)
 
 INSERT INTO public.drop_chunk_test_date VALUES( '2020-01-10', 100, 'hello');
 INSERT INTO try_schema.drop_chunk_test_date VALUES( '2020-01-10', 100, 'hello');
@@ -1385,36 +1250,29 @@ SELECT show_chunks('public.drop_chunk_test_date', older_than=>'1 day'::interval)
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_6_35_chunk
-(1 row)
 
 SELECT show_chunks('try_schema.drop_chunk_test_date', older_than=>'1 day'::interval);
                show_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_11_36_chunk
-(1 row)
 
 SELECT drop_chunks('drop_chunk_test_date', older_than=> '1 day'::interval);
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_11_36_chunk
-(1 row)
 
 -- test drop chunks across two tables within the same schema
 CREATE TABLE test1.hyper1 (time bigint, temp float);
 CREATE TABLE test1.hyper2 (time bigint, temp float);
 SELECT create_hypertable('test1.hyper1', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable  
 ---------------------
  (12,test1,hyper1,t)
-(1 row)
 
 SELECT create_hypertable('test1.hyper2', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable  
 ---------------------
  (13,test1,hyper2,t)
-(1 row)
 
 INSERT INTO test1.hyper1 VALUES (10, 0.5);
 INSERT INTO test1.hyper2 VALUES (10, 0.7);
@@ -1422,30 +1280,24 @@ SELECT show_chunks('test1.hyper1');
                show_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_12_37_chunk
-(1 row)
 
 SELECT show_chunks('test1.hyper2');
                show_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_13_38_chunk
-(1 row)
 
 -- test drop chunks for given table name across all schemas
 CREATE TABLE test2.hyperx (time bigint, temp float);
 CREATE TABLE test3.hyperx (time bigint, temp float);
 SELECT create_hypertable('test2.hyperx', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable  
 ---------------------
  (14,test2,hyperx,t)
-(1 row)
 
 SELECT create_hypertable('test3.hyperx', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable  
 ---------------------
  (15,test3,hyperx,t)
-(1 row)
 
 INSERT INTO test2.hyperx VALUES (10, 0.5);
 INSERT INTO test3.hyperx VALUES (10, 0.7);
@@ -1453,13 +1305,11 @@ SELECT show_chunks('test2.hyperx');
                show_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_14_39_chunk
-(1 row)
 
 SELECT show_chunks('test3.hyperx');
                show_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_15_40_chunk
-(1 row)
 
 -- This will only drop from one of the tables since the one that is
 -- first in the search path will hide the other one.
@@ -1467,24 +1317,20 @@ SELECT drop_chunks('hyperx', older_than => 100);
                drop_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_14_39_chunk
-(1 row)
 
 SELECT show_chunks('test2.hyperx');
  show_chunks 
 -------------
-(0 rows)
 
 SELECT show_chunks('test3.hyperx');
                show_chunks                
 ------------------------------------------
  _timescaledb_internal._hyper_15_40_chunk
-(1 row)
 
 -- Check CTAS behavior when internal ALTER TABLE gets fired
 CREATE TABLE PUBLIC.drop_chunk_test4(time bigint, temp float8, device_id text);
 CREATE TABLE drop_chunks_table_id AS SELECT hypertable_id
       FROM create_hypertable('public.drop_chunk_test4', 'time', chunk_time_interval => 1);
-NOTICE:  adding not-null constraint to column "time"
 -- TEST for internal api that drops a single chunk
 -- this drops the table and removes entry from the catalog.
 -- does not affect any materialized cagg data
@@ -1497,7 +1343,6 @@ ORDER BY chunk_name ;
 -----------------------+--------------------
  _timescaledb_internal | _hyper_12_37_chunk
  _timescaledb_internal | _hyper_12_41_chunk
-(2 rows)
 
 --drop one of the chunks
 SELECT chunk_schema || '.' || chunk_name as "CHNAME"
@@ -1509,7 +1354,6 @@ SELECT  _timescaledb_functions.drop_chunk(:'CHNAME');
  drop_chunk 
 ------------
  t
-(1 row)
 
 SELECT chunk_schema as "CHSCHEMA",  chunk_name as "CHNAME"
 FROM timescaledb_information.chunks
@@ -1518,27 +1362,23 @@ ORDER BY chunk_name ;
        CHSCHEMA        |       CHNAME       
 -----------------------+--------------------
  _timescaledb_internal | _hyper_12_41_chunk
-(1 row)
 
 -- "created_before/after" can be used with time partitioning in drop/show chunks
 SELECT show_chunks('drop_chunk_test_tstz', created_before => now() - INTERVAL '1 hour');
  show_chunks 
 -------------
-(0 rows)
 
 SELECT drop_chunks('drop_chunk_test_tstz', created_before => now() + INTERVAL '1 hour');
                drop_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_5_21_chunk
  _timescaledb_internal._hyper_5_22_chunk
-(2 rows)
 
 SELECT show_chunks('drop_chunk_test_ts');
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_4_19_chunk
  _timescaledb_internal._hyper_4_20_chunk
-(2 rows)
 
 -- "created_before/after" accept timestamptz even though partitioning col is just
 -- timestamp
@@ -1547,14 +1387,12 @@ SELECT show_chunks('drop_chunk_test_ts', created_after => now() - INTERVAL '1 ho
 -----------------------------------------
  _timescaledb_internal._hyper_4_19_chunk
  _timescaledb_internal._hyper_4_20_chunk
-(2 rows)
 
 SELECT drop_chunks('drop_chunk_test_ts', created_after => INTERVAL '1 hour', created_before => now());
                drop_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_4_19_chunk
  _timescaledb_internal._hyper_4_20_chunk
-(2 rows)
 
 -- Test views on top of hypertables
 CREATE TABLE view_test (project_id INT, ts TIMESTAMPTZ NOT NULL);
@@ -1562,15 +1400,12 @@ SELECT create_hypertable('view_test', by_range('ts', INTERVAL '1 day'));
  create_hypertable 
 -------------------
  (17,t)
-(1 row)
 
 -- exactly one partition per project_id
 SELECT * FROM add_dimension('view_test', 'project_id', chunk_time_interval => 1); -- exactly one partition per project; works for *integer* types
-NOTICE:  adding not-null constraint to column "project_id"
  dimension_id | schema_name | table_name | column_name | created 
 --------------+-------------+------------+-------------+---------
            22 | try_schema  | view_test  | project_id  | t
-(1 row)
 
 INSERT INTO view_test (project_id, ts)
 SELECT g % 25 + 1 AS project_id, i.ts + (g * interval '1 week') / i.total AS ts
@@ -1599,5 +1434,62 @@ SELECT * FROM test_view_part_few WHERE ts BETWEEN '2024-01-04 00:00:00+00'AND '2
           5 | Thu Jan 04 19:07:12 2024 PST
          10 | Thu Jan 04 20:31:12 2024 PST
          15 | Thu Jan 04 21:55:12 2024 PST
-(14 rows)
+
+-- Test chunk_status_text function
+CREATE TABLE chunk_status_test(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=false);
+INSERT INTO chunk_status_test VALUES ('2025-01-01'),('2025-02-01'),('2025-03-01');
+SELECT _timescaledb_functions.chunk_status_text(i) FROM generate_series(0,15) i;
+           chunk_status_text           
+---------------------------------------
+ {}
+ {COMPRESSED}
+ {UNORDERED}
+ {COMPRESSED,UNORDERED}
+ {FROZEN}
+ {COMPRESSED,FROZEN}
+ {UNORDERED,FROZEN}
+ {COMPRESSED,UNORDERED,FROZEN}
+ {PARTIAL}
+ {COMPRESSED,PARTIAL}
+ {UNORDERED,PARTIAL}
+ {COMPRESSED,UNORDERED,PARTIAL}
+ {FROZEN,PARTIAL}
+ {COMPRESSED,FROZEN,PARTIAL}
+ {UNORDERED,FROZEN,PARTIAL}
+ {COMPRESSED,UNORDERED,FROZEN,PARTIAL}
+
+SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('chunk_status_test') chunk;
+                   chunk                   | chunk_status_text 
+-------------------------------------------+-------------------
+ _timescaledb_internal._hyper_18_218_chunk | {}
+ _timescaledb_internal._hyper_18_219_chunk | {}
+ _timescaledb_internal._hyper_18_220_chunk | {}
+
+SELECT _timescaledb_functions.chunk_status_text(NULL::int);
+ chunk_status_text 
+-------------------
+ 
+
+SELECT _timescaledb_functions.chunk_status_text(NULL::regclass);
+ chunk_status_text 
+-------------------
+ 
+
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.chunk_status_text(-1);
+ERROR:  invalid chunk status -1
+SELECT _timescaledb_functions.chunk_status_text(16);
+ERROR:  invalid chunk status 16
+SELECT _timescaledb_functions.chunk_status_text(1000);
+ERROR:  invalid chunk status 1000
+SELECT _timescaledb_functions.chunk_status_text(0::regclass);
+ERROR:  invalid Oid
+SELECT _timescaledb_functions.chunk_status_text('pg_class'::regclass);
+ERROR:  chunk not found
+\set ON_ERROR_STOP 1
+-- Test that function exists and returns an array type
+SELECT pg_typeof(_timescaledb_functions.chunk_status_text(0));
+ pg_typeof 
+-----------
+ text[]
 

@@ -21,6 +21,7 @@
 #include "hypertable_cache.h"
 #include "job.h"
 #include "job_api.h"
+#include "policies_v2.h"
 
 /* Default max runtime for a custom job is unlimited for now */
 #define DEFAULT_MAX_RUNTIME 0
@@ -398,6 +399,45 @@ job_alter(PG_FUNCTION_ARGS)
 				 "%s.%s",
 				 NameStr(job->fd.check_schema),
 				 NameStr(job->fd.check_name));
+
+	/*
+	 * If the CAgg refresh policy job is being altered, then always check for overlap.
+	 * There is probably a better place to do this, but we choose to do this here since we need
+	 * access to the job_id, which we don't have inside the `policy_check` function called above.
+	 */
+	if (namestrcmp(&job->fd.proc_name, POLICY_REFRESH_CAGG_PROC_NAME) == 0)
+	{
+		int32 materialization_id =
+			policy_continuous_aggregate_get_mat_hypertable_id(job->fd.config);
+		ContinuousAgg *cagg =
+			ts_continuous_agg_find_by_mat_hypertable_id(materialization_id, false);
+		PolicyRefreshOffsetOverlapResult res =
+			policy_refresh_cagg_check_for_overlaps(cagg, job->fd.config, job->fd.id);
+		switch (res)
+		{
+			case POLICY_REFRESH_OFFSET_OVERLAP_NONE:
+				break;
+			case POLICY_REFRESH_OFFSET_OVERLAP_EQUAL:
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+
+						 errmsg("continuous aggregate refresh policy already exists for "
+								"\"%s\"",
+								get_rel_name(cagg->relid)),
+						 errdetail("A refresh policy with the same start and end offset already "
+								   "exists for "
+								   "continuous aggregate \"%s\".",
+								   get_rel_name(cagg->relid))));
+				break;
+			case POLICY_REFRESH_OFFSET_OVERLAP:
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("refresh interval overlaps with an existing continuous aggregate "
+								"policy on \"%s\"",
+								get_rel_name(cagg->relid))));
+				break;
+		}
+	}
 
 	if (unregister_check)
 	{

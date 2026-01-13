@@ -58,6 +58,7 @@ set(TEST_FILES
     update.sql
     upsert.sql
     util.sql
+    uuid.sql
     vacuum.sql
     vacuum_parallel.sql
     version.sql
@@ -94,10 +95,10 @@ set(SOLO_TESTS
     bgw_launcher
     chunk_utils
     index
-    net
     pg_dump_unprivileged
     tablespace
-    telemetry)
+    telemetry
+    net)
 
 list(APPEND SOLO_TESTS ${LOADER_TEST_FILE})
 
@@ -111,6 +112,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     metadata.sql
     multi_transaction_index.sql
     net.sql
+    partitioned_hypertable.sql
     pg_dump.sql
     symbol_conflict.sql
     test_tss_callbacks.sql

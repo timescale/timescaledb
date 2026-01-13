@@ -30,6 +30,7 @@ DROP TABLE IF EXISTS repair_test_extra;
 DROP TABLE IF EXISTS repair_test_timestamp;
 DROP TABLE IF EXISTS repair_test_date;
 DROP TABLE IF EXISTS compress;
+DROP TABLE IF EXISTS skip;
 DROP TABLE IF EXISTS devices;
 DROP TABLE IF EXISTS disthyper;
 DROP TABLE IF EXISTS policy_test_timestamptz;

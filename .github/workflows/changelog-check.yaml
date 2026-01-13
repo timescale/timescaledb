@@ -22,10 +22,10 @@ jobs:
     name: Check for file with CHANGELOG entry
     runs-on: timescaledb-runner-arm64
     steps:
-      - name: Install Linux Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install pip
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
 
       - name: Install Python Dependencies
         run: |
@@ -41,41 +41,53 @@ jobs:
         shell: bash --norc --noprofile {0}
         env:
           BODY: ${{ github.event.pull_request.body }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          set -euo pipefail
+
           folder=".unreleased"
 
-          # Get the list of modified files in this pull request
-          files=$(git --no-pager diff --diff-filter=ACMR --name-only $(git merge-base HEAD ${{ github.event.pull_request.base.sha }}) HEAD ':!.unreleased/*.j2')
+          # Get the list of modified files as a bash array. Exclude the
+          # development-related files because they don't require a changelog.
+          mapfile -t modified_files < <(gh pr view $PR_NUMBER --json files --jq '
+            [.files.[].path | select(
+                    (startswith(".github") or startswith("test")
+                        or startswith("tsl/test") or startswith("scripts"))
+                | not)] | .[]')
+          echo "Modified files: ${modified_files[@]}"
 
-          if  echo "$BODY" | egrep -qsi "Disable-check:[[:space:]]*force-changelog-file"; then
+          # Get the changelog files as a bash array
+          mapfile -t changelog_files < <(gh pr view $PR_NUMBER --json files --jq "
+            [.files.[].path | select(startswith(\"${folder}\"))] | .[]")
+          echo "Changelog files: ${changelog_files[@]}"
+
+          if echo "$BODY" | egrep -qsi "Disable-check:[[:space:]]*force-changelog-file"
+          then
             # skip changelog checks if forced
-            exit 0
-          else
+            :
+          elif (( ${#modified_files[@]} > 0 && ${#changelog_files[@]} == 0 ))
+          then
             # if no changelog files found, and the PR does not have the force disable check option
-            if ! echo "${files}" | grep -Eq "^(${folder})/.+$"; then
-              echo "PR does not add a change log file in .unreleased/ folder"
-              echo "Check .unreleased/template.rfc822 for the format of the change log file."
-              echo
-              echo "To disable changelog updated check, add this trailer to pull request message:"
-              echo
-              echo "Disable-check: force-changelog-file"
-              echo
-              echo "Trailers follow RFC2822 conventions, so no whitespace"
-              echo "before field name and the check is case-insensitive for"
-              echo "both the field name and the field body."
-              exit 1
-            else
-              # check the format of the files in .unreleased folder
-              for file in $files; do
-                if echo "${file}" | grep -Eq "^(${folder})/.+$"; then
-                  if ! python scripts/check_changelog_format.py "$file"; then
-                    echo "Not valid CHANGELOG entries in $file."
-                    exit 1
-                  fi
-                fi
-              done
-              exit 0
-            fi
+            echo "PR does not add a change log file in .unreleased/ folder"
+            echo "Check .unreleased/template.rfc822 for the format of the change log file."
+            echo
+            echo "To disable changelog updated check, add this trailer to pull request message:"
+            echo
+            echo "Disable-check: force-changelog-file"
+            echo
+            echo "Trailers follow RFC2822 conventions, so no whitespace"
+            echo "before field name and the check is case-insensitive for"
+            echo "both the field name and the field body."
+            exit 1
+          else
+            # check the format of the files in .unreleased folder
+            for file in "${changelog_files[@]}"
+            do
+              if ! scripts/check_changelog_format.py "${file}"
+              then
+                echo "Invalid CHANGELOG entries in ${file}."
+                exit 1
+              fi
+            done
           fi

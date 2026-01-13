@@ -530,7 +530,7 @@ CREATE TRIGGER merge_ard AFTER DELETE ON target FOR EACH ROW EXECUTE PROCEDURE m
 -- now the classic UPSERT, with a DELETE
 BEGIN;
 UPDATE target SET balance = 0 WHERE tid = 3;
---EXPLAIN (ANALYZE ON, COSTS OFF, SUMMARY OFF, TIMING OFF)
+--EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)
 MERGE INTO target t
 USING source AS s
 ON t.tid = s.sid
@@ -693,7 +693,7 @@ USING (SELECT 1) s
 ON t.tid = $1
 WHEN MATCHED THEN
 UPDATE SET balance = $2;
---EXPLAIN (ANALYZE ON, COSTS OFF, SUMMARY OFF, TIMING OFF)
+--EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)
 execute foom2 (1, 1);
 ROLLBACK;
 
@@ -860,7 +860,7 @@ $$
 DECLARE ln text;
 BEGIN
     FOR ln IN
-        EXECUTE 'explain (analyze, timing off, summary off, costs off) ' ||
+        EXECUTE 'explain (analyze, timing off, summary off, buffers off, costs off) ' ||
 		  query
     LOOP
         ln := regexp_replace(ln, '(Memory( Usage)?|Buckets|Batches): \S*',  '\1: xxx', 'g');

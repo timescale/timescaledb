@@ -97,8 +97,12 @@ index_scanner_beginscan(ScannerCtx *ctx)
 {
 	InternalScannerCtx *ictx = &ctx->internal;
 
-	ictx->scan.index_scan =
-		index_beginscan(ctx->tablerel, ctx->indexrel, ctx->snapshot, ctx->nkeys, ctx->norderbys);
+	ictx->scan.index_scan = index_beginscan_compat(ctx->tablerel,
+												   ctx->indexrel,
+												   ctx->snapshot,
+												   NULL,
+												   ctx->nkeys,
+												   ctx->norderbys);
 	ictx->scan.index_scan->xs_want_itup = ctx->want_itup;
 	index_rescan(ictx->scan.index_scan, ctx->scankey, ctx->nkeys, NULL, ctx->norderbys);
 	return ictx->scan;
@@ -220,21 +224,29 @@ prepare_scan(ScannerCtx *ctx)
 		 * mode.
 		 */
 		MemoryContext oldmcxt = MemoryContextSwitchTo(ctx->internal.scan_mcxt);
-		ctx->snapshot = RegisterSnapshot(GetSnapshotData(SnapshotSelf));
-		/*
-		 * Invalidate the PG catalog snapshot to ensure it is refreshed and
-		 * up-to-date with the snapshot used to scan TimescaleDB
-		 * metadata. Since TimescaleDB metadata is often joined with PG
-		 * catalog data (e.g., calling get_relname_relid() to fill in chunk
-		 * table Oid), this avoids any potential problems where the different
-		 * snapshots used to scan TimescaleDB metadata and PG catalog metadata
-		 * aren't in sync.
-		 *
-		 * Ideally, a catalog snapshot would be used to scan TimescaleDB
-		 * metadata, but that will change the behavior of chunk creation in
-		 * SERIALIZED mode, as described above.
-		 */
-		InvalidateCatalogSnapshot();
+
+		if (ctx->use_catalog_snapshot)
+		{
+			ctx->snapshot = RegisterSnapshot(GetCatalogSnapshot(ctx->table));
+		}
+		else
+		{
+			ctx->snapshot = RegisterSnapshot(GetSnapshotData(SnapshotSelf));
+			/*
+			 * Invalidate the PG catalog snapshot to ensure it is refreshed and
+			 * up-to-date with the snapshot used to scan TimescaleDB
+			 * metadata. Since TimescaleDB metadata is often joined with PG
+			 * catalog data (e.g., calling get_relname_relid() to fill in chunk
+			 * table Oid), this avoids any potential problems where the different
+			 * snapshots used to scan TimescaleDB metadata and PG catalog metadata
+			 * aren't in sync.
+			 *
+			 * Ideally, a catalog snapshot would be used to scan TimescaleDB
+			 * metadata, but that will change the behavior of chunk creation in
+			 * SERIALIZED mode, as described above.
+			 */
+			InvalidateCatalogSnapshot();
+		}
 		ctx->internal.registered_snapshot = true;
 		MemoryContextSwitchTo(oldmcxt);
 	}
@@ -479,8 +491,14 @@ ts_scanner_scan(ScannerCtx *ctx)
 			{
 				ts_scanner_end_scan(ctx);
 				ctx->internal.tinfo.count = 0;
-				ctx->snapshot = GetLatestSnapshot();
+				ctx->snapshot = RegisterSnapshot(GetLatestSnapshot());
 				ts_scanner_start_scan(ctx);
+				/* Since we register the snapshot manually above,
+				 * we need to mark it as registered in the scanner but only after we
+				 * start the scan since the scanner resets this flag and sets it only
+				 * if the snapshot gets registered during scan preparation phase.
+				 */
+				ctx->internal.registered_snapshot = true;
 			}
 		}
 	}

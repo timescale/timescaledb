@@ -9,7 +9,7 @@
 -- We're testing the MergeAppend here which is not compatible with parallel plans.
 set max_parallel_workers_per_gather = 0;
 set timescaledb.enable_decompression_sorted_merge = off;
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 
 CREATE TABLE ht_metrics_compressed(time timestamptz, device int, value float);
 SELECT create_hypertable('ht_metrics_compressed','time');
@@ -17,17 +17,27 @@ ALTER TABLE ht_metrics_compressed SET (timescaledb.compress, timescaledb.compres
 
 INSERT INTO ht_metrics_compressed
 SELECT time, device, device * 0.1
-FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'6 hour') time,
+FROM generate_series('2020-01-02 00:00:00+00'::timestamptz,'2020-01-18 00:00:00+00'::timestamptz,'6 hour') time,
 generate_series(1,3) device;
 
 SELECT compress_chunk(c) FROM show_chunks('ht_metrics_compressed') c;
+
 -- make them partially compressed
 INSERT INTO ht_metrics_compressed
 SELECT time, device, device * 0.1
-FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'9 hour') time,
+FROM generate_series('2020-01-02 00:00:00+00'::timestamptz,'2020-01-18 00:00:00+00'::timestamptz,'9 hour') time,
 generate_series(1,3) device;
 
 VACUUM ANALYZE ht_metrics_compressed;
+
+SELECT tableoid::regclass, min(time), max(time) from ht_metrics_compressed group by 1 order by 2;
+SELECT show_chunks('ht_metrics_compressed') AS "CHUNK" LIMIT 1 \gset
+
+-- test UNION with partially compressed chunks
+:PREFIX SELECT * FROM :CHUNK UNION ALL SELECT * FROM :CHUNK;
+:PREFIX SELECT * FROM :CHUNK UNION ALL SELECT * FROM :CHUNK ORDER BY time DESC;
+:PREFIX SELECT device FROM :CHUNK UNION ALL SELECT device FROM :CHUNK ORDER BY device DESC;
+:PREFIX SELECT value FROM :CHUNK UNION ALL SELECT value FROM :CHUNK ORDER BY value DESC;
 
 -- chunkAppend eligible queries (from tsbench)
 -- sort is not pushed down
@@ -49,19 +59,18 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY device, time DESC LIMIT 1; -- with pushdown
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY device, time DESC LIMIT 1; -- with pushdown
 
--- -- Test direct ordered select from a single partially compressed chunk
--- -- Note that this currently doesn't work: https://github.com/timescale/timescaledb/issues/7084
--- select * from show_chunks('ht_metrics_compressed') chunk order by chunk limit 1 \gset
---
--- :PREFIX
--- SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
---
--- SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
---
--- :PREFIX
--- SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
---
--- SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
+-- Test direct ordered select from a single partially compressed chunk
+select * from show_chunks('ht_metrics_compressed') chunk order by chunk limit 1 \gset
+
+:PREFIX
+SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
+
+SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
+
+:PREFIX
+SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
+
+SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
 
 
 CREATE TABLE test1 (
@@ -81,6 +90,12 @@ INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 01:00:00-00', 1,
 INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:00:00-00', 2, 1, 3, 3, 0);
 INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 03:00:00-00', 1, 2, 4, 4, 0);
 
+-- Insert some dummy rows to inflate the cost estimates to get it to actually
+-- use the MergeAppend. We will filter them out using the "x4 % 11 != 0" which
+-- thwarts the normal selectivity estimation.
+INSERT INTO test1 select '2000-01-01 04:00:00-00', /* x1 = */ 0, /* x2 = */ 0,
+    /* x3 = */ 0, /* x4 = */ 11 * (11 + x), 0 from generate_series(1, 10000) x;
+
 SELECT compress_chunk(i) FROM show_chunks('test1') i;
 
 -- make all the chunks partially compressed
@@ -92,66 +107,66 @@ ANALYZE test1;
 
 -- requires resorting, no pushdown can happen
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time DESC LIMIT 10;
 
 -- requires resorting
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST LIMIT 10;
 
 -- all these require resorting, no pushdown can happen
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NULLS LAST LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NULLS LAST LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time ASC NULLS LAST LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC NULLS FIRST LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC NULLS FIRST LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC LIMIT 10;
 
 set enable_hashagg to off; -- different on PG13
 
 :PREFIX
-SELECT x1, x2, max(time) FROM (SELECT * FROM test1 ORDER BY time, x1, x2 LIMIT 10) t
+SELECT x1, x2, max(time) FROM (SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time, x1, x2 LIMIT 10) t
 GROUP BY x1, x2, time ORDER BY time limit 10;
 
 reset enable_hashagg;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY x1, x2, x5, x4, time LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x4, time LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY x1, x2, x5, time, x4 LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x4 LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY x1, x2, x5, time, x3 LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x3 LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY x1, x2, x5, time, x3, x4 LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x3, x4 LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY x1, x2, x5, time, x4 DESC LIMIT 10; -- no pushdown because orderby does not match
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x4 DESC LIMIT 10; -- no pushdown because orderby does not match
 
 -- queries with pushdown
 :PREFIX
-SELECT * FROM test1 ORDER BY x1, x2, x5, time LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time LIMIT 10;
 
 :PREFIX
-SELECT * FROM test1 ORDER BY x1, x2, x5, time DESC, x3 ASC, x4 ASC LIMIT 10; -- pushdown
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time DESC, x3 ASC, x4 ASC LIMIT 10; -- pushdown
 
 :PREFIX
-SELECT * FROM test1 ORDER BY x1, x2, x5, time ASC, x3 DESC, x4 DESC LIMIT 10; -- pushdown
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time ASC, x3 DESC, x4 DESC LIMIT 10; -- pushdown
 
 :PREFIX
-SELECT * FROM test1 ORDER BY x1, x2, x5, time, x3 DESC LIMIT 10;
+SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x3 DESC LIMIT 10;
 
 -- test append with join column in orderby
 -- #6975
@@ -192,6 +207,13 @@ INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-10 01:00:00-00', 1,
 INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-10 02:00:00-00', 2, 1, 7, 7, 0);
 INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-10 03:00:00-00', 1, 2, 8, 8, 0);
 
+-- Insert some dummy rows to inflate the cost estimates to get it to actually
+-- use the MergeAppend. We will filter them out using the "x4 % 11 != 0" which
+-- thwarts the normal selectivity estimation.
+INSERT INTO test2 select unnest(array['2000-01-01 04:00:00-00', '2000-01-10 04:00:00-00']::timestamptz[]),
+    /* x1 = */ 0, /* x2 = */ 0,
+    /* x3 = */ 0, /* x4 = */ 11 * (11 + x), 0 from generate_series(1, 10000) x;
+
 SELECT compress_chunk(i) FROM show_chunks('test2') i;
 -- make them partially compressed
 INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:02:01-00', 1, 2,  9,  9, 0);
@@ -201,18 +223,18 @@ ANALYZE test2;
 
 set enable_indexscan = off;
 -- queries where sort is pushed down
-:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x3 LIMIT 10;
-SELECT * FROM test2 ORDER BY x1, x2, x5, x3 LIMIT 10;
-:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
-SELECT * FROM test2 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
+:PREFIX SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
+SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
+:PREFIX SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
+SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
 
 -- queries where sort is not pushed down
-:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x3 LIMIT 10;
-SELECT * FROM test2 ORDER BY x1, x2, x3 LIMIT 10;
-:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, x4 LIMIT 10;
-SELECT * FROM test2 ORDER BY x1, x2, x5, x4 LIMIT 10;
-:PREFIX SELECT * FROM test2 ORDER BY x1, x2, x5, time LIMIT 10;
-SELECT * FROM test2 ORDER BY x1, x2, x5, time LIMIT 10;
+:PREFIX SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x3 LIMIT 10;
+SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x3 LIMIT 10;
+:PREFIX SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x4 LIMIT 10;
+SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x4 LIMIT 10;
+:PREFIX SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time LIMIT 10;
+SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time LIMIT 10;
 
 -----------------------------
 -- tests with space partitioning
@@ -240,27 +262,39 @@ INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-10 01:00:00-00', 1,
 INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-10 02:00:00-00', 2, 1, 7, 7, 0);
 INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-10 03:00:00-00', 1, 2, 8, 8, 0);
 
+-- Insert some dummy rows to inflate the cost estimates to get it to actually
+-- use the MergeAppend. We will filter them out using the "x4 % 11 != 0" which
+-- thwarts the normal selectivity estimation.
+INSERT INTO test3 select time, x1,
+    /* x2 = */ 0, /* x3 = */ 0, /* x4 = */ 11 * (11 + x), 0
+from generate_series(1, 10000) x,
+    unnest(array['2000-01-01 04:00:00-00', '2000-01-10 04:00:00-00']::timestamptz[]) time,
+    unnest(array[1, 2]::int[]) x1
+;
+
 SELECT compress_chunk(i) FROM show_chunks('test3') i;
 -- make them partially compressed
 INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:02:01-00', 1, 2,  9,  9, 0);
 INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-10 00:02:01-00', 1, 2, 10, 10, 0);
+INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:02:01-00', 2, 2,  9,  9, 0);
+INSERT INTO test3 (time, x1, x2, x3, x4, x5) values('2000-01-10 00:02:01-00', 2, 2, 10, 10, 0);
 
 ANALYZE test3;
 
 set enable_indexscan = off;
 -- queries where sort is pushed down
-:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x3 LIMIT 10;
-SELECT * FROM test3 ORDER BY x1, x2, x5, x3 LIMIT 10;
-:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
-SELECT * FROM test3 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
+:PREFIX SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
+SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
+:PREFIX SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
+SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
 
 -- queries where sort is not pushed down
-:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x3 LIMIT 10;
-SELECT * FROM test3 ORDER BY x1, x2, x3 LIMIT 10;
-:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, x4 LIMIT 10;
-SELECT * FROM test3 ORDER BY x1, x2, x5, x4 LIMIT 10;
-:PREFIX SELECT * FROM test3 ORDER BY x1, x2, x5, time LIMIT 10;
-SELECT * FROM test3 ORDER BY x1, x2, x5, time LIMIT 10;
+:PREFIX SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x3 LIMIT 10;
+SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x3 LIMIT 10;
+:PREFIX SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x4 LIMIT 10;
+SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x4 LIMIT 10;
+:PREFIX SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time LIMIT 10;
+SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time LIMIT 10;
 
 reset enable_indexscan;
 
@@ -275,10 +309,11 @@ INSERT INTO test4 SELECT '2025-01-02', NULL, 0.1;
 INSERT INTO test4 SELECT '2025-01-02', 'd', 0.1;
 SELECT count(compress_chunk(ch)) FROM show_chunks('test4') ch;
 INSERT INTO test4 SELECT '2025-01-02', 'd', 0.1;
+VACUUM ANALYZE test4;
 
 set enable_hashagg TO false;
 SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
-EXPLAIN (costs off, analyze, timing off, summary off) SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
+EXPLAIN (buffers off, costs off, analyze, timing off, summary off) SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
 
 reset timescaledb.enable_decompression_sorted_merge;
 reset max_parallel_workers_per_gather;

@@ -25,14 +25,15 @@ WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 ORDER BY ch1.id LIMIT 1 \gset
 
 SELECT compress_chunk(:'CHUNK_FULL_NAME');
+VACUUM FULL ANALYZE hyper;
 
 -- test for qual pushdown
-explain (costs off, verbose)
+explain (buffers off, costs off, verbose)
 SELECT
 FROM hyper
 WHERE time > 2::bigint and time < 4;
 
-explain (costs off, verbose)
+explain (buffers off, costs off, verbose)
 SELECT
 FROM hyper
 WHERE time = 3::bigint;
@@ -44,22 +45,24 @@ WHERE time > 2::bigint and time < 4;
 SELECT *
 FROM hyper
 WHERE time = 3::bigint;
+
+SELECT * FROM hyper where time = val + 1;
 
 -- Test some volatile and stable functions
 SET timescaledb.enable_chunk_append TO OFF;
 SET timescaledb.enable_constraint_aware_append TO OFF;
 
-EXPLAIN (COSTS OFF)
+EXPLAIN (BUFFERS OFF, COSTS OFF)
 SELECT * FROM hyper WHERE time = device_id;
 
-EXPLAIN (COSTS OFF)
+EXPLAIN (BUFFERS OFF, COSTS OFF)
 SELECT * FROM hyper WHERE time = random()::int;
 
-EXPLAIN (COSTS OFF)
+EXPLAIN (BUFFERS OFF, COSTS OFF)
 SELECT * FROM hyper WHERE time
     = CASE WHEN now() > '1970-01-01' THEN random()::int ELSE device_id END;
 
-EXPLAIN (COSTS OFF)
+EXPLAIN (BUFFERS OFF, COSTS OFF)
 SELECT * FROM hyper WHERE time
     = CASE WHEN now() > '1970-01-01' THEN 1 ELSE device_id END;
 
@@ -83,13 +86,15 @@ ALTER TABLE metaseg_tab SET (timescaledb.compress, timescaledb.compress_orderby=
 INSERT INTO metaseg_tab values (56,0,'2012-12-10 09:45:00','2012-12-10 09:50:00',1,0.1,'2012-12-10');
 
 SELECT compress_chunk(i) from show_chunks('metaseg_tab') i;
+VACUUM FULL ANALYZE metaseg_tab;
+
 select factorid, end_dt, logret
 from metaseg_tab
 where fmid = 56
 and end_dt between '2012-12-10'::date and '2012-12-11'::date
 order by factorid, end_dt;
 
-explain (costs off, verbose)
+explain (buffers off, costs off, verbose)
 select factorid, end_dt, logret
 from metaseg_tab
 where fmid = 56
@@ -103,7 +108,7 @@ where fmid = 56
 and end_dt::date between '2012-12-10'::timestamp and '2012-12-11'::date
 order by factorid, end_dt;
 
-explain (costs off, verbose)
+explain (buffers off, costs off, verbose)
 select factorid, end_dt, logret
 from metaseg_tab
 where fmid = 56
@@ -129,19 +134,19 @@ ALTER TABLE pushdown_relabel SET (timescaledb.compress, timescaledb.compress_seg
 
 INSERT INTO pushdown_relabel SELECT '2000-01-01','varchar','char';
 SELECT compress_chunk(i) from show_chunks('pushdown_relabel') i;
-ANALYZE pushdown_relabel;
+VACUUM FULL ANALYZE pushdown_relabel;
 
-EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
-EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
-EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
-EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
+EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
+EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
+EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
+EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
 
 -- test again with index scans
 SET enable_seqscan TO false;
-EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
-EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
-EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
-EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
+EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
+EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
+EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
+EXPLAIN (buffers off, costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
 RESET enable_seqscan;
 
 -- github issue #5286
@@ -158,9 +163,10 @@ ALTER TABLE deleteme SET (
 );
 
 SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
-VACUUM ANALYZE deleteme;
-EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
-EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
+VACUUM FULL ANALYZE deleteme;
+
+EXPLAIN (buffers off, costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
+EXPLAIN (buffers off, costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
 
 CREATE TABLE deleteme_with_bytea(time bigint NOT NULL, bdata bytea);
 SELECT create_hypertable('deleteme_with_bytea', 'time', chunk_time_interval => 1000000);
@@ -173,8 +179,10 @@ ALTER TABLE deleteme_with_bytea SET (
 );
 
 SELECT compress_chunk(i) FROM show_chunks('deleteme_with_bytea') i;
-EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata = E'\\x';
-EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata::text = '123';
+VACUUM FULL ANALYZE deleteme_with_bytea;
+
+EXPLAIN (buffers off, costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata = E'\\x';
+EXPLAIN (buffers off, costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata::text = '123';
 
 DROP table deleteme;
 DROP table deleteme_with_bytea;
@@ -186,31 +194,31 @@ ALTER TABLE svf_pushdown SET (timescaledb.compress,timescaledb.compress_segmentb
 
 INSERT INTO svf_pushdown SELECT '2020-01-01';
 SELECT compress_chunk(show_chunks('svf_pushdown'));
-VACUUM ANALYZE svf_pushdown;
+VACUUM FULL ANALYZE svf_pushdown;
 
 -- constraints should be pushed down into scan below decompresschunk in all cases
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_date = CURRENT_DATE;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timetz = CURRENT_TIME;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timetz = CURRENT_TIME(1);
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = CURRENT_TIMESTAMP;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = CURRENT_TIMESTAMP(1);
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_time = LOCALTIME;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_time = LOCALTIME(1);
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = LOCALTIMESTAMP;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = LOCALTIMESTAMP(1);
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = USER;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_USER;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = SESSION_USER;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_USER OR c_name = SESSION_USER;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_CATALOG;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_SCHEMA;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool = true;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool = false;
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE NOT c_bool;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_date = CURRENT_DATE;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_timetz = CURRENT_TIME;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_timetz = CURRENT_TIME(1);
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = CURRENT_TIMESTAMP;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = CURRENT_TIMESTAMP(1);
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_time = LOCALTIME;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_time = LOCALTIME(1);
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = LOCALTIMESTAMP;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = LOCALTIMESTAMP(1);
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = USER;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_USER;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = SESSION_USER;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_USER OR c_name = SESSION_USER;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_CATALOG;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_SCHEMA;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_bool;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_bool = true;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_bool = false;
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE NOT c_bool;
 
 -- current_query() is not a sqlvaluefunction and volatile so should not be pushed down
-EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = current_query();
+EXPLAIN (buffers off, costs off) SELECT * FROM svf_pushdown WHERE c_name = current_query();
 
 -- test or constraints in lateral query #6912
 SELECT FROM svf_pushdown m1,
@@ -223,3 +231,41 @@ LATERAL(
 ) l;
 
 DROP TABLE svf_pushdown;
+
+-- Test bool segmentby column to cover bool-returning operator deeper in the
+-- expression tree.
+create table booltab(ts int, segmentby bool, flag bool, value int);
+select create_hypertable('booltab', 'ts');
+alter table booltab set (timescaledb.compress, timescaledb.compress_segmentby = 'segmentby',
+    timescaledb.compress_orderby = 'ts, flag');
+insert into booltab values
+    (  1,  true,  true,   1),
+    ( 99, false, false,  99),
+    (100, false, false, 100),
+    (101, false, false, 101)
+;
+select count(compress_chunk(x)) from show_chunks('booltab') x;
+vacuum analyze booltab;
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from booltab where segmentby = (value = 1);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from booltab where segmentby = (ts = 1);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from booltab where segmentby != (ts = 1);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from booltab where (value = 1) = (ts = 1);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from booltab where flag = (ts = 1);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from booltab where flag = (ts = 99);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from booltab where flag = (ts = 99);
+
+drop table booltab;

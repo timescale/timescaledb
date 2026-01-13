@@ -8,7 +8,7 @@ name: SQLsmith
     branches:
       - sqlsmith
       - main
-      - prerelease_test
+      - ?.*.x
   pull_request:
     paths: .github/workflows/sqlsmith.yaml
 
@@ -21,7 +21,7 @@ jobs:
     strategy:
       matrix:
         os: ["ubuntu-22.04"]
-        pg: [ "15", "16", "17" ]
+        pg: [ "15", "16", "17", "18" ]
         build_type: ["Debug"]
       fail-fast: false
     env:
@@ -34,7 +34,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install gnupg systemd-coredump gdb postgresql-common \
-            libkrb5-dev build-essential autoconf autoconf-archive \
+            build-essential autoconf autoconf-archive \
             libboost-regex-dev libsqlite3-dev jq
 
         yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
@@ -52,7 +52,7 @@ jobs:
     - name: Build TimescaleDB
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DWARNINGS_AS_ERRORS=OFF
-        make -j$(nproc) -C build
+        make -j$(getconf _NPROCESSORS_ONLN) -C build
         sudo make -C build install
 
     - name: Checkout sqlsmith
@@ -67,7 +67,7 @@ jobs:
         cd sqlsmith
         autoreconf -i
         ./configure
-        make -j$(nproc)
+        make -j$(getconf _NPROCESSORS_ONLN)
 
     - name: Setup test environment
       run: |

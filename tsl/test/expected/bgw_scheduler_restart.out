@@ -58,7 +58,6 @@ SHOW timescaledb.bgw_scheduler_restart_time;
  timescaledb.bgw_scheduler_restart_time 
 ----------------------------------------
  -1
-(1 row)
 
 -- Test that it cannot be set to something between -1 and 10
 \set ON_ERROR_STOP 0
@@ -76,7 +75,6 @@ SELECT pg_reload_conf();
  pg_reload_conf 
 ----------------
  t
-(1 row)
 
 -- Reconnect and check the restart time to make sure that it is
 -- correct.
@@ -85,7 +83,6 @@ SHOW timescaledb.bgw_scheduler_restart_time;
  timescaledb.bgw_scheduler_restart_time 
 ----------------------------------------
  10s
-(1 row)
 
 -- Launcher is running, so we need to restart it for the scheduler
 -- restart time to take effect.
@@ -93,7 +90,6 @@ SELECT datname, application_name FROM tsdb_bgw;
  datname |            application_name            
 ---------+----------------------------------------
          | TimescaleDB Background Worker Launcher
-(1 row)
 
 CALL ts_terminate_launcher();
 -- It will restart automatically, but we wait for it to start.
@@ -104,7 +100,6 @@ SHOW timescaledb.bgw_scheduler_restart_time;
  timescaledb.bgw_scheduler_restart_time 
 ----------------------------------------
  10s
-(1 row)
 
 -- Verify that launcher is running. If it is not, the rest of the test
 -- will fail.
@@ -113,14 +108,12 @@ SELECT datname, application_name FROM tsdb_bgw;
 --------------------------+-----------------------------------------
  db_bgw_scheduler_restart | TimescaleDB Background Worker Scheduler
                           | TimescaleDB Background Worker Launcher
-(2 rows)
 
 -- Now we can start the background workers.
 SELECT _timescaledb_functions.start_background_workers();
  start_background_workers 
 --------------------------
  t
-(1 row)
 
 -- They should start immediately, but let's wait for them to start.
 CALL wait_for_some_started(1, 50, '%Scheduler%');
@@ -131,7 +124,6 @@ SELECT datname, application_name FROM tsdb_bgw;
 --------------------------+-----------------------------------------
  db_bgw_scheduler_restart | TimescaleDB Background Worker Scheduler
                           | TimescaleDB Background Worker Launcher
-(2 rows)
 
 -- Kill the schedulers and check that they restart.
 SELECT pg_terminate_backend(pid) FROM tsdb_bgw
@@ -139,7 +131,6 @@ SELECT pg_terminate_backend(pid) FROM tsdb_bgw
  pg_terminate_backend 
 ----------------------
  t
-(1 row)
 
 -- Wait for scheduler to exit, they should exit immediately.
 CALL wait_for_all_stopped(1, 50, '%Scheduler%');
@@ -148,7 +139,6 @@ SELECT datname, application_name FROM tsdb_bgw;
  datname |            application_name            
 ---------+----------------------------------------
          | TimescaleDB Background Worker Launcher
-(1 row)
 
 -- Wait for scheduler to restart.
 CALL wait_for_some_started(10, 100, '%Scheduler%');
@@ -159,7 +149,6 @@ SELECT datname, application_name FROM tsdb_bgw;
 --------------------------+-----------------------------------------
  db_bgw_scheduler_restart | TimescaleDB Background Worker Scheduler
                           | TimescaleDB Background Worker Launcher
-(2 rows)
 
 -- Now, we had a previous bug where killing the launcher at this point
 -- would leave the schedulers running (because the launcher did not
@@ -186,7 +175,6 @@ SELECT (pid != :orig_pid) AS different_pid,
 ---------------+--------------------------+-----------------------------------------
  t             | db_bgw_scheduler_restart | TimescaleDB Background Worker Scheduler
  t             |                          | TimescaleDB Background Worker Launcher
-(2 rows)
 
 ALTER SYSTEM RESET timescaledb.bgw_scheduler_restart_time;
 ALTER SYSTEM RESET timescaledb.debug_bgw_scheduler_exit_status;
@@ -194,13 +182,11 @@ SELECT pg_reload_conf();
  pg_reload_conf 
 ----------------
  t
-(1 row)
 
 SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-(1 row)
 
 -- We need to restart the launcher as well to read the reset
 -- configuration or it will affect other tests.

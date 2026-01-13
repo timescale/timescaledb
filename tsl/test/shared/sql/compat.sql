@@ -8,15 +8,11 @@ SET timezone TO PST8PDT;
 
 SELECT _timescaledb_internal.alter_job_set_hypertable_id(0,0);
 SELECT _timescaledb_internal.attach_osm_table_chunk(0,0);
-SELECT _timescaledb_internal.cagg_migrate_plan_exists(0);
-SELECT _timescaledb_internal.cagg_migrate_pre_validation(NULL,NULL,NULL);
 SELECT _timescaledb_internal.cagg_watermark(0);
 SELECT _timescaledb_internal.cagg_watermark_materialized(0);
 SELECT _timescaledb_internal.calculate_chunk_interval(0,0,0);
 SELECT _timescaledb_internal.chunk_constraint_add_table_constraint(NULL);
 SELECT _timescaledb_internal.chunk_id_from_relid(0);
-SELECT _timescaledb_internal.chunk_index_clone(0);
-SELECT _timescaledb_internal.chunk_index_replace(0,0);
 SELECT _timescaledb_internal.chunk_status(0);
 SELECT _timescaledb_internal.chunks_local_size(NULL,NULL);
 SELECT _timescaledb_internal.compressed_chunk_local_stats(NULL,NULL);
@@ -34,9 +30,7 @@ SELECT pg_typeof(_timescaledb_internal.get_os_info());
 SELECT _timescaledb_internal.get_partition_for_key(NULL::text);
 SELECT _timescaledb_internal.get_partition_hash(NULL::text);
 SELECT _timescaledb_internal.hypertable_local_size(NULL,NULL);
-SELECT _timescaledb_internal.indexes_local_size(NULL,NULL);
 SELECT _timescaledb_internal.interval_to_usec(NULL);
-SELECT _timescaledb_internal.partialize_agg(NULL::text);
 SELECT _timescaledb_internal.policy_compression_check(NULL);
 SELECT _timescaledb_internal.policy_job_stat_history_retention(0,NULL);
 SELECT _timescaledb_internal.policy_job_stat_history_retention_check(NULL);
@@ -59,18 +53,7 @@ SELECT _timescaledb_internal.to_timestamp_without_timezone(0);
 SELECT _timescaledb_internal.to_unix_microseconds(NULL);
 SELECT _timescaledb_internal.tsl_loaded();
 SELECT _timescaledb_internal.unfreeze_chunk(0);
-CALL _timescaledb_internal.cagg_migrate_create_plan(NULL,NULL,true,true);
-CALL _timescaledb_internal.cagg_migrate_execute_copy_data(NULL,NULL);
-CALL _timescaledb_internal.cagg_migrate_execute_copy_policies(NULL,NULL);
-CALL _timescaledb_internal.cagg_migrate_execute_create_new_cagg(NULL,NULL);
-CALL _timescaledb_internal.cagg_migrate_execute_disable_policies(NULL,NULL);
-CALL _timescaledb_internal.cagg_migrate_execute_drop_old_cagg(NULL,NULL);
-CALL _timescaledb_internal.cagg_migrate_execute_enable_policies(NULL,NULL);
-CALL _timescaledb_internal.cagg_migrate_execute_override_cagg(NULL,NULL);
-CALL _timescaledb_internal.cagg_migrate_execute_plan(NULL);
-CALL _timescaledb_internal.cagg_migrate_execute_refresh_new_cagg(NULL,NULL);
 CALL _timescaledb_internal.policy_compression(0,NULL);
-CALL _timescaledb_internal.policy_compression_execute(0,0,NULL::interval,0,true,true,true);
 CALL _timescaledb_internal.policy_recompression(0,NULL);
 CALL _timescaledb_internal.policy_refresh_continuous_aggregate(0,NULL);
 CALL _timescaledb_internal.policy_reorder(0,NULL);
@@ -93,12 +76,6 @@ SELECT time_bucket(INTERVAL '1 hour', time),
 FROM sensor_data
 GROUP BY 1
 WITH DATA;
-
-DROP TRIGGER ts_cagg_invalidation_trigger ON sensor_data;
-
-CREATE TRIGGER ts_cagg_invalidation_trigger
-    AFTER INSERT OR DELETE OR UPDATE ON sensor_data
-    FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.continuous_agg_invalidation_trigger(:'hypertable_id');
 
 INSERT INTO sensor_data values('1980-01-01 00:00:00-00', 1);
 CALL refresh_continuous_aggregate('sensor_data_hourly', NULL, NULL);

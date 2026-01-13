@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include <datatype/timestamp.h>
 #include <nodes/execnodes.h>
 
 /*
@@ -123,5 +124,5 @@ typedef struct GapFillState
 
 Node *gapfill_state_create(CustomScan *);
 Expr *gapfill_adjust_varnos(GapFillState *state, Expr *expr);
-Datum gapfill_exec_expr(GapFillState *state, Expr *expr, bool *isnull);
+Datum gapfill_exec_expr(GapFillState *state, TupleTableSlot *, Expr *expr, bool *isnull);
 int64 gapfill_datum_get_internal(Datum, Oid);

@@ -72,7 +72,6 @@ INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time
 
 -- Show constraints on main tables
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
-SELECT * FROM _timescaledb_catalog.chunk_index;
 SELECT * FROM test.show_constraints('hyper');
 SELECT * FROM test.show_constraints('hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name');
 --should have unique constraint not just unique index
@@ -81,8 +80,6 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key;
 -- The constraint should have been removed from the chunk as well
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
--- The index should also have been removed
-SELECT * FROM _timescaledb_catalog.chunk_index;
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 --uniqueness not enforced

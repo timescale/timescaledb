@@ -19,11 +19,9 @@ CREATE TABLE tab2 (
 --Hypertable creation
 SELECT FROM create_hypertable('tab1', 'time');
 --
-(1 row)
 
 SELECT FROM create_hypertable('tab2', 'time');
 --
-(1 row)
 
 --Data generation
 INSERT INTO tab1
@@ -47,7 +45,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | t           | t
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using index "_hyper_1_1_chunk_idx_asc_null_first" to scan rows for converting to columnstore
@@ -60,7 +57,6 @@ INFO:  using index "_hyper_1_4_chunk_idx_asc_null_first" to scan rows for conver
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 1.1
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -70,7 +66,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Test Set 1.2 [Index(ASC, Null_First), Compression(ASC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time');
@@ -79,7 +74,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | t           | f
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -92,7 +86,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 1.2
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -102,7 +95,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Test Set 1.3 [Index(ASC, Null_First), Compression(DESC,Null_First)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC');
@@ -111,7 +103,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | f           | t
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -124,7 +115,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 1.3
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -134,7 +124,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --DROP INDEX idx_asc_null_last
 --Test Set 1.4 [Index(ASC, Null_First), Compression(DESC,Null_Last)]
@@ -144,7 +133,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | f           | f
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -157,7 +145,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 1.4
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -167,7 +154,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 DROP INDEX idx_asc_null_first;
 --Test Set 2.1 [Index(ASC, Null_Last), Compression(ASC,Null_First)]
@@ -178,7 +164,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | t           | t
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -191,7 +176,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 2.1
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -201,7 +185,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Test Set 2.2 [Index(ASC, Null_Last), Compression(ASC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time');
@@ -210,7 +193,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | t           | f
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using index "_hyper_1_1_chunk_idx_asc_null_last" to scan rows for converting to columnstore
@@ -223,7 +205,6 @@ INFO:  using index "_hyper_1_4_chunk_idx_asc_null_last" to scan rows for convert
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 2.2
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -233,7 +214,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Test Set 2.3 [Index(ASC, Null_Last), Compression(DESC,Null_First)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC');
@@ -242,7 +222,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | f           | t
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -255,7 +234,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 2.3
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -265,7 +243,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --DROP INDEX idx_asc_null_last
 --Test Set 2.4 [Index(ASC, Null_Last), Compression(DESC,Null_Last)]
@@ -275,7 +252,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | f           | f
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -288,7 +264,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 2.4
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -298,7 +273,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 DROP INDEX idx_asc_null_last;
 --Test Set 3.1 [Index(DESC, Null_First), Compression(ASC,Null_First)]
@@ -309,7 +283,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | t           | t
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -322,7 +295,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 3.1
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -332,7 +304,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Test Set 3.2 [Index(DESC, Null_First), Compression(ASC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time');
@@ -341,7 +312,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | t           | f
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -354,7 +324,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 3.2
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -364,7 +333,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Test Set 3.3 [Index(DESC, Null_First), Compression(DESC,Null_First)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC');
@@ -373,7 +341,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | f           | t
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using index "_hyper_1_1_chunk_idx_desc_null_first" to scan rows for converting to columnstore
@@ -386,7 +353,6 @@ INFO:  using index "_hyper_1_4_chunk_idx_desc_null_first" to scan rows for conve
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 3.3
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -396,7 +362,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --DROP INDEX idx_asc_null_last
 --Test Set 3.4 [Index(DESC, Null_First), Compression(DESC,Null_Last)]
@@ -406,7 +371,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | f           | f
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -419,7 +383,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 3.4
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -429,7 +392,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 DROP INDEX idx_desc_null_first;
 --Test Set 4.1 [Index(DESC, Null_Last), Compression(ASC,Null_First)]
@@ -440,7 +402,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | t           | t
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -453,7 +414,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 4.1
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -463,7 +423,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Test Set 4.2 [Index(DESC, Null_Last), Compression(ASC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time');
@@ -472,7 +431,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | t           | f
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -485,7 +443,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 4.2
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -495,7 +452,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Test Set 4.3 [Index(DESC, Null_Last), Compression(DESC,Null_First)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC');
@@ -504,7 +460,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | f           | t
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using index "_hyper_1_1_chunk_idx_desc_null_last" to scan rows for converting to columnstore
@@ -517,7 +472,6 @@ INFO:  using index "_hyper_1_4_chunk_idx_desc_null_last" to scan rows for conver
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 4.3
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -527,7 +481,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Test Set 4.4 [Index(DESC, Null_Last), Compression(DESC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC NULLS LAST');
@@ -536,7 +489,6 @@ SELECT * FROM timescaledb_information.compression_settings;
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | tab1            | id      |                      1 |                      |             | 
  public            | tab1            | time    |                        |                    1 | f           | f
-(2 rows)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -549,7 +501,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 SELECT decompress_chunk(show_chunks('tab1'));
             decompress_chunk            
@@ -558,7 +509,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'time');
 SELECT compress_chunk(show_chunks('tab1'));
@@ -572,7 +522,6 @@ INFO:  using index "_hyper_1_4_chunk_tab1_time_idx" to scan rows for converting 
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Cleanup 4.4
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -582,7 +531,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 DROP INDEX idx_desc_null_last;
 --Test Set 5 GUC SET timescaledb.enable_compression_indexscan
@@ -592,7 +540,6 @@ SHOW timescaledb.enable_compression_indexscan;
  timescaledb.enable_compression_indexscan 
 ------------------------------------------
  off
-(1 row)
 
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -605,7 +552,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 SELECT decompress_chunk(show_chunks('tab1'));
             decompress_chunk            
@@ -614,7 +560,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Test with this guc enabled
 SET timescaledb.enable_compression_indexscan = 'ON';
@@ -629,7 +574,6 @@ INFO:  using index "_hyper_1_4_chunk_tab1_time_idx" to scan rows for converting 
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 SELECT decompress_chunk(show_chunks('tab1'));
             decompress_chunk            
@@ -638,7 +582,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 --Test Set 6 Compare two compression paths
 INSERT into tab2 SELECT * from tab1;
@@ -658,7 +601,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 SET timescaledb.enable_compression_indexscan = 'ON';
 SELECT compress_chunk(show_chunks('tab2'));
@@ -672,12 +614,10 @@ INFO:  using index "_hyper_2_84_chunk_idx2_asc_null_first" to scan rows for conv
  _timescaledb_internal._hyper_2_82_chunk
  _timescaledb_internal._hyper_2_83_chunk
  _timescaledb_internal._hyper_2_84_chunk
-(4 rows)
 
 SELECT id, time from tab1 EXCEPT SELECT id, time from tab2;
  id | time 
 ----+------
-(0 rows)
 
 SELECT decompress_chunk(show_chunks('tab1'));
             decompress_chunk            
@@ -686,7 +626,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 SELECT decompress_chunk(show_chunks('tab2'));
             decompress_chunk             
@@ -695,7 +634,6 @@ SELECT decompress_chunk(show_chunks('tab2'));
  _timescaledb_internal._hyper_2_82_chunk
  _timescaledb_internal._hyper_2_83_chunk
  _timescaledb_internal._hyper_2_84_chunk
-(4 rows)
 
 DROP INDEX idx2_asc_null_first;
 DROP INDEX idx_asc_null_first;
@@ -707,7 +645,6 @@ CREATE TABLE tab3 (
 );
 SELECT FROM create_hypertable('tab3', 'time');
 --
-(1 row)
 
 --Data generation
 INSERT INTO tab3
@@ -732,7 +669,6 @@ INFO:  using tuplesort to scan rows from "_hyper_5_96_chunk" for converting to c
  _timescaledb_internal._hyper_5_94_chunk
  _timescaledb_internal._hyper_5_95_chunk
  _timescaledb_internal._hyper_5_96_chunk
-(4 rows)
 
 SELECT decompress_chunk(show_chunks('tab3'));
             decompress_chunk             
@@ -741,7 +677,6 @@ SELECT decompress_chunk(show_chunks('tab3'));
  _timescaledb_internal._hyper_5_94_chunk
  _timescaledb_internal._hyper_5_95_chunk
  _timescaledb_internal._hyper_5_96_chunk
-(4 rows)
 
 CREATE INDEX idxcol_asc_null_first ON tab3(name, time ASC NULLS FIRST);
 SELECT compress_chunk(show_chunks('tab3'));
@@ -755,7 +690,6 @@ INFO:  using index "_hyper_5_96_chunk_idxcol_asc_null_first" to scan rows for co
  _timescaledb_internal._hyper_5_94_chunk
  _timescaledb_internal._hyper_5_95_chunk
  _timescaledb_internal._hyper_5_96_chunk
-(4 rows)
 
 SELECT decompress_chunk(show_chunks('tab3'));
             decompress_chunk             
@@ -764,7 +698,6 @@ SELECT decompress_chunk(show_chunks('tab3'));
  _timescaledb_internal._hyper_5_94_chunk
  _timescaledb_internal._hyper_5_95_chunk
  _timescaledb_internal._hyper_5_96_chunk
-(4 rows)
 
 DROP INDEX idx_asc_null_first;
 DROP INDEX idxcol_asc_null_first;
@@ -782,7 +715,6 @@ INFO:  using tuplesort to scan rows from "_hyper_5_96_chunk" for converting to c
  _timescaledb_internal._hyper_5_94_chunk
  _timescaledb_internal._hyper_5_95_chunk
  _timescaledb_internal._hyper_5_96_chunk
-(4 rows)
 
 SELECT decompress_chunk(show_chunks('tab3'));
             decompress_chunk             
@@ -791,7 +723,6 @@ SELECT decompress_chunk(show_chunks('tab3'));
  _timescaledb_internal._hyper_5_94_chunk
  _timescaledb_internal._hyper_5_95_chunk
  _timescaledb_internal._hyper_5_96_chunk
-(4 rows)
 
 CREATE INDEX idxcol_asc_null_first ON tab3(name, time ASC NULLS FIRST);
 SELECT compress_chunk(show_chunks('tab3'));
@@ -805,7 +736,6 @@ INFO:  using index "_hyper_5_96_chunk_idxcol_asc_null_first" to scan rows for co
  _timescaledb_internal._hyper_5_94_chunk
  _timescaledb_internal._hyper_5_95_chunk
  _timescaledb_internal._hyper_5_96_chunk
-(4 rows)
 
 SELECT decompress_chunk(show_chunks('tab3'));
             decompress_chunk             
@@ -814,7 +744,6 @@ SELECT decompress_chunk(show_chunks('tab3'));
  _timescaledb_internal._hyper_5_94_chunk
  _timescaledb_internal._hyper_5_95_chunk
  _timescaledb_internal._hyper_5_96_chunk
-(4 rows)
 
 DROP INDEX idx_asc_null_first;
 DROP INDEX idxcol_asc_null_first;
@@ -832,7 +761,6 @@ INFO:  using index "_hyper_1_4_chunk_idx_asc_null_first" to scan rows for conver
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 SELECT decompress_chunk(show_chunks('tab1'));
             decompress_chunk            
@@ -841,7 +769,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 DROP INDEX idx_asc_null_first;
 CREATE INDEX idx_asc_null_first ON tab1(id, c1 DESC, time ASC NULLS FIRST);
@@ -857,7 +784,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 SELECT decompress_chunk(show_chunks('tab1'));
             decompress_chunk            
@@ -866,7 +792,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 DROP INDEX idx_asc_null_first;
 --Test Set 9
@@ -884,7 +809,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 SELECT decompress_chunk(show_chunks('tab1'));
             decompress_chunk            
@@ -893,7 +817,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 DROP INDEX idx_asc_null_first;
 --Index Column out of order
@@ -909,7 +832,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 SELECT decompress_chunk(show_chunks('tab1'));
             decompress_chunk            
@@ -918,7 +840,6 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 DROP INDEX idx_asc_null_first;
 -- Can't use partial indexes for compression because they refer only to a subset of the table.
@@ -927,7 +848,6 @@ select count(*) from tab1;
  count 
 -------
  62400
-(1 row)
 
 select compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -940,7 +860,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_4_chunk" for converting to co
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 select decompress_chunk(show_chunks('tab1'));
             decompress_chunk            
@@ -949,13 +868,11 @@ select decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 select count(*) from tab1;
  count 
 -------
  62400
-(1 row)
 
 -- Check compression progression messages
 SET client_min_messages TO LOG;
@@ -965,7 +882,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to co
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
@@ -989,7 +905,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for converting to co
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_2_chunk
-(1 row)
 
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;

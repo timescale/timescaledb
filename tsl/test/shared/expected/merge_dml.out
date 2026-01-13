@@ -40,8 +40,8 @@ SELECT CASE WHEN EXISTS (TABLE metrics EXCEPT TABLE metrics_pg)
             ELSE 'same'
        END AS result;
  result 
+--------
  same
-(1 row)
 
 -- MERGE DELETE matched rows for normal PG tables
 MERGE INTO metrics_pg t
@@ -61,8 +61,8 @@ SELECT CASE WHEN EXISTS (TABLE metrics EXCEPT TABLE metrics_pg)
             ELSE 'same'
        END AS result;
  result 
+--------
  same
-(1 row)
 
 -- MERGE INSERT/DELETE matched rows for normal PG tables
 MERGE INTO metrics_pg t
@@ -87,8 +87,8 @@ SELECT CASE WHEN EXISTS (TABLE metrics EXCEPT TABLE metrics_pg)
             ELSE 'same'
        END AS result;
  result 
+--------
  same
-(1 row)
 
 -- MERGE INSERT/DELETE matched rows for normal PG tables
 MERGE INTO metrics_pg t
@@ -113,8 +113,8 @@ SELECT CASE WHEN EXISTS (TABLE metrics EXCEPT TABLE metrics_pg)
             ELSE 'same'
        END AS result;
  result 
+--------
  same
-(1 row)
 
 -- MERGE UDPATE matched rows for normal PG tables
 MERGE INTO metrics_space_pg t
@@ -135,8 +135,8 @@ SELECT CASE WHEN EXISTS (TABLE metrics_space EXCEPT TABLE metrics_space_pg)
             ELSE 'same'
        END AS result;
  result 
+--------
  same
-(1 row)
 
 -- MERGE DELETE matched rows for normal PG tables
 MERGE INTO metrics_space_pg t
@@ -157,8 +157,8 @@ SELECT CASE WHEN EXISTS (TABLE metrics_space EXCEPT TABLE metrics_space_pg)
             ELSE 'same'
        END AS result;
  result 
+--------
  same
-(1 row)
 
 -- MERGE INSERT matched rows for normal PG tables
 MERGE INTO metrics_space_pg t
@@ -181,8 +181,8 @@ SELECT CASE WHEN EXISTS (TABLE metrics_space EXCEPT TABLE metrics_space_pg)
             ELSE 'same'
        END AS result;
  result 
+--------
  same
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- MERGE UDPATE matched rows for compressed hypertable

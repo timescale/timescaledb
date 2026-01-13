@@ -22,12 +22,14 @@
 #include "hypertable_cache.h"
 #include "options.h"
 #include "scan_iterator.h"
+#include "ts_catalog/array_utils.h"
 #include "ts_catalog/continuous_agg.h"
 #include "with_clause/alter_table_with_clause.h"
 #include "with_clause/create_materialized_view_with_clause.h"
 
 static void cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only);
-static List *cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht);
+static List *cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht,
+										 WithClauseResult *with_clause_options);
 static void cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_defelems);
 
 static void
@@ -76,50 +78,54 @@ cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 /* get the compression parameters for cagg. The parameters are
  * derived from the cagg view definition.
  * Computes:
- * compress_segmentby = GROUP BY columns from cagg query
- * compress_orderby = time_bucket column from cagg query
+ * compress_orderby = time_bucket column from cagg query followed by remaining grouping columns
  */
 static List *
-cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht)
+cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht,
+							WithClauseResult *with_clause_options)
 {
-	List *defelems = NIL;
 	const Dimension *mat_ht_dim = hyperspace_get_open_dimension(mat_ht->space, 0);
-	const char *mat_ht_timecolname = quote_identifier(NameStr(mat_ht_dim->fd.column_name));
-	DefElem *ordby = makeDefElemExtended(EXTENSION_NAMESPACE,
-										 "compress_orderby",
-										 (Node *) makeString((char *) mat_ht_timecolname),
-										 DEFELEM_UNSPEC,
-										 -1);
-	defelems = lappend(defelems, ordby);
+	StringInfoData info;
+	initStringInfo(&info);
+	ArrayType *segmentby_columns = NULL;
+
+	/* add time column as first entry */
+	appendStringInfoString(&info, quote_identifier(NameStr(mat_ht_dim->fd.column_name)));
+
+	if (with_clause_options[AlterTableFlagSegmentBy].parsed)
+	{
+		segmentby_columns =
+			ts_compress_hypertable_parse_segment_by(with_clause_options[AlterTableFlagSegmentBy],
+													mat_ht);
+	}
+
 	List *grp_colnames = cagg_find_groupingcols(agg, mat_ht);
 	if (grp_colnames)
 	{
-		StringInfo info = makeStringInfo();
 		ListCell *lc;
 		foreach (lc, grp_colnames)
 		{
 			char *grpcol = (char *) lfirst(lc);
-			/* skip time dimension col if it appears in group-by list */
+			/* skip time dimension since we put it as first entry */
 			if (namestrcmp((Name) & (mat_ht_dim->fd.column_name), grpcol) == 0)
 				continue;
-			if (info->len > 0)
-				appendStringInfoString(info, ",");
-			appendStringInfoString(info, quote_identifier(grpcol));
-		}
 
-		if (info->len > 0)
-		{
-			DefElem *segby;
-			segby = makeDefElemExtended(EXTENSION_NAMESPACE,
-										"compress_segmentby",
-										(Node *) makeString(info->data),
-										DEFELEM_UNSPEC,
-										-1);
-			defelems = lappend(defelems, segby);
+			if (segmentby_columns && ts_array_is_member(segmentby_columns, grpcol))
+				continue;
+
+			if (info.len > 0)
+				appendStringInfoString(&info, ",");
+			appendStringInfoString(&info, quote_identifier(grpcol));
 		}
 	}
 
-	return defelems;
+	DefElem *ordby = makeDefElemExtended(EXTENSION_NAMESPACE,
+										 "compress_orderby",
+										 (Node *) makeString(info.data),
+										 DEFELEM_UNSPEC,
+										 -1);
+
+	return list_make1(ordby);
 }
 
 /* forwards compression related changes via an alter statement to the underlying HT */
@@ -129,9 +135,10 @@ cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_de
 	Assert(mat_ht != NULL);
 	WithClauseResult *with_clause_options = ts_alter_table_with_clause_parse(compress_defelems);
 
-	if (with_clause_options[AlterTableFlagCompressEnabled].parsed)
+	if (with_clause_options[AlterTableFlagColumnstore].parsed)
 	{
-		List *default_compress_defelems = cagg_get_compression_params(agg, mat_ht);
+		List *default_compress_defelems =
+			cagg_get_compression_params(agg, mat_ht, with_clause_options);
 		WithClauseResult *default_with_clause_options =
 			ts_alter_table_with_clause_parse(default_compress_defelems);
 		/* Merge defaults if there's any. */
@@ -179,6 +186,7 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		cagg_update_materialized_only(agg, materialized_only);
 		ts_cache_release(&hcache);
 	}
+
 	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
 	{
 		Cache *hcache = ts_hypertable_cache_pin();
@@ -192,6 +200,7 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		ts_dimension_set_chunk_interval(dim, interval);
 		ts_cache_release(&hcache);
 	}
+
 	List *compression_options = ts_continuous_agg_get_compression_defelems(with_clause_options);
 
 	if (list_length(compression_options) > 0)
@@ -204,12 +213,11 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		cagg_alter_compression(agg, mat_ht, compression_options);
 		ts_cache_release(&hcache);
 	}
+
 	if (!with_clause_options[CreateMaterializedViewFlagCreateGroupIndexes].is_default)
 	{
-		elog(ERROR, "cannot alter create_group_indexes option for continuous aggregates");
-	}
-	if (!with_clause_options[CreateMaterializedViewFlagFinalized].is_default)
-	{
-		elog(ERROR, "cannot alter finalized option for continuous aggregates");
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot alter create_group_indexes option for continuous aggregates")));
 	}
 }

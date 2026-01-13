@@ -156,6 +156,20 @@ ts_hypertable_cache_invalidate_callback(void)
 	hypertable_cache_current = hypertable_cache_create();
 }
 
+#ifdef TS_DEBUG
+TS_FUNCTION_INFO_V1(ts_hypertable_cache_clear);
+
+/*
+ * Force a cache clearing. This function is used for debugging purposes.
+ */
+Datum
+ts_hypertable_cache_clear(PG_FUNCTION_ARGS)
+{
+	ts_hypertable_cache_invalidate_callback();
+	PG_RETURN_VOID();
+}
+#endif
+
 /* Get hypertable cache entry. If the entry is not in the cache, add it. */
 Hypertable *
 ts_hypertable_cache_get_entry(Cache *const cache, const Oid relid, const unsigned int flags)

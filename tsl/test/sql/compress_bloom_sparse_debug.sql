@@ -1,0 +1,160 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- helper function: float -> pseudorandom float [-0.5..0.5]
+CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
+    SELECT hashfloat8(x::float8) / pow(2, 32)
+$$ LANGUAGE SQL;
+
+create table test(ts int, s text, c text);
+select create_hypertable('test', 'ts');
+alter table test set (timescaledb.compress, timescaledb.compress_segmentby = 's',
+    timescaledb.compress_orderby = 'ts');
+
+insert into test
+select ts, ts % 10 s, mix(ts)::text c from generate_series(1, 10000) ts;
+
+insert into test
+select ts, 10 + ts % 10 s, mix(ts % 100)::text c from generate_series(10001, 15000) ts;
+
+insert into test
+select ts, 20 + ts % 10 s, mix(ts % 10)::text c from generate_series(15001, 20000) ts;
+
+
+create index on test using brin(c text_bloom_ops);
+select count(compress_chunk(x)) from show_chunks('test') x;
+
+
+-- Test the debug function
+create or replace function ts_bloom1_debug_info(in _timescaledb_internal.bloom1,
+    out toast_header int, out toasted_bytes int, out compressed_bytes int,
+    out detoasted_bytes int, out bits_total int, out bits_set int,
+    out estimated_elements int)
+as :TSL_MODULE_PATHNAME, 'ts_bloom1_debug_info' language c immutable parallel safe;
+
+select schema_name || '.' || table_name chunk, 'c' column from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'test') limit 1)
+\gset
+
+with col as (
+    select _ts_meta_count rows, _ts_meta_v2_bloomh_:column f, :column cc
+    from :chunk),
+blooms as (
+    select *, (ts_bloom1_debug_info(f)).*, pg_column_compression(f) filter_column_compression,
+        pg_column_size(f) filter_column_size
+    from col)
+select (toast_header::bit(16), bits_total, filter_column_compression) kind,
+    avg(rows)::int rows,
+    count(*),
+    count(*) filter (where _timescaledb_functions.bloom1_contains(f, mix(1)::text)) h,
+    array_agg(distinct bits_total) filter_bit_sizes,
+    array_agg(distinct filter_column_compression) filter_compression_algorithms,
+    round(avg(detoasted_bytes / compressed_bytes::numeric), 2) filter_compression_ratio,
+    avg(estimated_elements)::int estimated_elements,
+    avg(bits_set)::int bits_set,
+    round(avg(pg_column_size(cc)) / (avg(bits_total) / 8.), 2) column_to_filter_ratio
+from blooms
+group by 1 order by min(bits_total);
+
+
+-- One way to inspect the IO efficiency: ratio of bytes that would have been
+-- read w/o the index to the sum of bytes read by the bloom filter check
+-- and the actual column check.
+with col as (
+    select _ts_meta_count b, _ts_meta_v2_bloomh_:column f, :column cc
+    from :chunk)
+select
+    round(
+        sum(pg_column_size(cc))::numeric / (sum(pg_column_size(f))
+            + sum(pg_column_size(cc)) filter (where _timescaledb_functions.bloom1_contains(f, '0.4067781441845'::text))),
+        2)
+from col;
+
+
+-- Compressed bytes-per-value vs bloom filter bytes-per-value.
+with col as (
+    select _ts_meta_count rows, _ts_meta_v2_bloomh_:column f, :column cc
+    from :chunk)
+select
+    round(sum(pg_column_size(cc))::numeric / sum(rows), 2) compressed_bytes_per_row,
+    round(sum(pg_column_size(f))::numeric / sum(rows), 2) filter_bytes_per_row
+from col;
+
+
+-- Test the debug hash function.
+create or replace function ts_bloom1_debug_hash(in anyelement, out int8)
+as :TSL_MODULE_PATHNAME, 'ts_bloom1_debug_hash' language c immutable parallel safe;
+
+select min(ts_bloom1_debug_hash(c)) from test;
+
+
+-- This shouldn't change compared to what was released in 2.20, not to break the
+-- binary compatibility.
+select ts_bloom1_debug_hash('test'::text);
+select ts_bloom1_debug_hash('test'::varchar);
+select ts_bloom1_debug_hash('test'::bpchar);
+select ts_bloom1_debug_hash('c9757a73-7632-462e-bcfa-d5d9659e498f'::uuid);
+select ts_bloom1_debug_hash(1::int4);
+select ts_bloom1_debug_hash(1::int8);
+select ts_bloom1_debug_hash(1::float4);
+select ts_bloom1_debug_hash(1::float8);
+select ts_bloom1_debug_hash('2025-05-05'::date);
+select ts_bloom1_debug_hash('2025-05-05'::timestamp);
+select ts_bloom1_debug_hash('2025-05-05'::timestamptz);
+
+
+-- The "contains" functions should error out when called with wrong arguments.
+\set ON_ERROR_STOP 0
+
+select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb_internal.bloom1, 1::bit) ;
+
+select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, array[1::bit]) ;
+
+\set ON_ERROR_STOP 1
+
+
+-- Test that the "contains" function cope with different source chunks.
+create table detoaster(ts int, tag text) with (tsdb.hypertable,
+    tsdb.partition_column = 'ts', tsdb.compress, tsdb.compress_orderby = 'ts')
+;
+
+insert into detoaster select ts, ts::text from generate_series(1, 1000) ts;
+insert into detoaster select ts, ts::text from generate_series(1000001, 1001000) ts;
+
+create index on detoaster(tag);
+
+select count(compress_chunk(x)) from show_chunks('detoaster') x;
+
+with chunks as (
+  select
+    row_number() over (order by table_name) index,
+    schema_name || '.' || table_name chunk
+  from _timescaledb_catalog.chunk
+    where id in (select compressed_chunk_id from _timescaledb_catalog.chunk
+      where hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'detoaster'))
+)
+select max(chunk) filter (where index = 1) chunk1,
+    max(chunk) filter (where index = 2) chunk2
+from chunks
+\gset
+
+select attname column from pg_attribute where attrelid = :'chunk1'::regclass
+  and attname like '_ts_meta_v2_bl%_tag'
+\gset
+
+create view v(f) as (select :column from :chunk1
+    union all select :column from :chunk2);
+
+select
+    _timescaledb_functions.bloom1_contains(f, '1'::text),
+    _timescaledb_functions.bloom1_contains(f, '1000001'::text)
+from v
+;
+
+select (ts_bloom1_debug_info(f)).* from v;

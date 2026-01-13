@@ -7,7 +7,6 @@ step s3_lock_compression:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s3_lock_decompression: 
     SELECT debug_waitpoint_enable('decompress_chunk_impl_start');
@@ -15,7 +14,6 @@ step s3_lock_decompression:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1_compress: 
    SELECT compression_status FROM chunk_compression_stats('sensor_data');
@@ -42,42 +40,35 @@ locktype|mode         |granted|     objid
 --------+-------------+-------+----------
 relation|ExclusiveLock|f      |          
 advisory|ShareLock    |f      |3379597659
-(2 rows)
 
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_compress: <... completed>
 compression_status
 ------------------
 Uncompressed      
 Uncompressed      
-(2 rows)
 
 count
 -----
     2
-(1 row)
 
 compression_status
 ------------------
 Compressed        
 Compressed        
-(2 rows)
 
   count
 -------
 1008050
-(1 row)
 
 step s2_compress: <... completed>
 compression_status
 ------------------
 Uncompressed      
 Uncompressed      
-(2 rows)
 
 ERROR:  chunk "_hyper_X_X_chunk" is already compressed
 step s1_decompress: 
@@ -103,29 +94,24 @@ locktype|mode         |granted|     objid
 --------+-------------+-------+----------
 relation|ExclusiveLock|f      |          
 advisory|ShareLock    |f      |2415054640
-(2 rows)
 
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_decompress: <... completed>
 count
 -----
     2
-(1 row)
 
 compression_status
 ------------------
 Uncompressed      
 Uncompressed      
-(2 rows)
 
   count
 -------
 1008050
-(1 row)
 
 step s2_decompress: <... completed>
 ERROR:  chunk "_hyper_X_X_chunk" is already decompressed

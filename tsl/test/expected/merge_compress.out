@@ -14,7 +14,6 @@ SELECT table_name FROM create_hypertable(
  table_name 
 ------------
  target
-(1 row)
 
 -- enable compression
 ALTER TABLE target SET (
@@ -31,7 +30,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('target') ch;
  count 
 -------
      4
-(1 row)
 
 CREATE TABLE source (
         time TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -45,7 +43,6 @@ SELECT table_name FROM create_hypertable(
  table_name 
 ------------
  source
-(1 row)
 
 SELECT '2022-10-10 10:00:00.0123+05:30' as start_date \gset
 INSERT INTO source (time, series_id, value)
@@ -91,7 +88,6 @@ SELECT count(*) AS "total compressed_chunks", is_compressed FROM timescaledb_inf
  total compressed_chunks | is_compressed 
 -------------------------+---------------
                        4 | t
-(1 row)
 
 -- Merge INSERT on compressed hypertables should work
 MERGE INTO target t
@@ -106,7 +102,6 @@ SELECT count(*) AS "total compressed_chunks", is_compressed FROM timescaledb_inf
 -------------------------+---------------
                        1 | f
                        4 | t
-(2 rows)
 
 DROP TABLE target;
 DROP TABLE source;

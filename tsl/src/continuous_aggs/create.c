@@ -16,20 +16,23 @@
  * cagg_create.
  */
 #include <postgres.h>
+
 #include <access/reloptions.h>
 #include <access/sysattr.h>
 #include <access/xact.h>
+#include <access/xlogutils.h>
 #include <catalog/index.h>
 #include <catalog/indexing.h>
 #include <catalog/pg_namespace.h>
-#include <catalog/pg_trigger.h>
 #include <catalog/pg_type.h>
 #include <catalog/toasting.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
-#include <commands/trigger.h>
 #include <commands/view.h>
+#include <executor/spi.h>
+#include <fmgr.h>
+#include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/nodes.h>
@@ -45,58 +48,61 @@
 #include <parser/parse_relation.h>
 #include <parser/parse_type.h>
 #include <parser/parsetree.h>
+#include <replication/logical.h>
+#include <replication/slot.h>
+#include <storage/lwlocknames.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/catcache.h>
+#include <utils/elog.h>
+#include <utils/pg_lsn.h>
 #include <utils/rel.h>
+#include <utils/resowner.h>
 #include <utils/ruleutils.h>
+#include <utils/snapshot.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
 #include "common.h"
+#include "config.h"
 #include "create.h"
 #include "finalize.h"
 #include "invalidation_threshold.h"
 
 #include "debug_assert.h"
 #include "dimension.h"
-#include "errors.h"
 #include "extension_constants.h"
-#include "func_cache.h"
 #include "guc.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "invalidation.h"
-#include "options.h"
 #include "refresh.h"
 #include "time_utils.h"
-#include "timezones.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
-#include "utils.h"
 #include "with_clause/create_materialized_view_with_clause.h"
 
 static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 									  const char *user_view, const char *partial_schema,
 									  const char *partial_view, bool materialized_only,
 									  const char *direct_schema, const char *direct_view,
-									  const bool finalized, const int32 parent_mat_hypertable_id);
+									  const int32 parent_mat_hypertable_id);
 static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function,
 												 const char *bucket_width, const char *origin,
 												 const char *offset, const char *timezone,
 												 const bool bucket_fixed_width);
 static void cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartcolname,
 								   int64 mat_tbltimecol_interval);
-static void cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id);
-static void mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable *ht);
+static void mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matcolinfo,
+												  Hypertable *ht);
 static ObjectAddress create_view_for_query(Query *selquery, RangeVar *viewrel);
 static void fixup_userview_query_tlist(Query *userquery, List *tlist_aliases);
 static void cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
-						CAggTimebucketInfo *bucket_info, WithClauseResult *with_clause_options);
+						ContinuousAggTimeBucketInfo *bucket_info,
+						WithClauseResult *with_clause_options);
 
 #define MATPARTCOL_INTERVAL_FACTOR 10
-#define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"
 
 static void
 makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
@@ -111,11 +117,12 @@ makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
 
 /* STATIC functions defined on the structs above. */
 static int32 mattablecolumninfo_create_materialization_table(
-	MatTableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
-	CAggTimebucketInfo *bucket_info, bool create_addl_index, char *tablespacename,
+	MaterializationHypertableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
+	ContinuousAggTimeBucketInfo *bucket_info, bool create_addl_index, char *tablespacename,
 	char *table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress);
-static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo,
-														  Query *userview_query, bool finalized);
+static Query *
+mattablecolumninfo_get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo,
+											Query *userview_query);
 
 /*
  * Create a entry for the materialization table in table CONTINUOUS_AGGS.
@@ -124,7 +131,7 @@ static void
 create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 						  const char *user_view, const char *partial_schema,
 						  const char *partial_view, bool materialized_only,
-						  const char *direct_schema, const char *direct_view, const bool finalized,
+						  const char *direct_schema, const char *direct_view,
 						  const int32 parent_mat_hypertable_id)
 {
 	Catalog *catalog = ts_catalog_get();
@@ -170,7 +177,6 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 		NameGetDatum(&direct_viewnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(materialized_only);
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_finalized)] = BoolGetDatum(finalized);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -299,49 +305,6 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 }
 
 /*
- * Add continuous agg invalidation trigger to hypertable
- * relid - oid of hypertable
- * hypertableid - argument to pass to trigger
- * (the hypertable id from timescaledb catalog)
- */
-static void
-cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
-{
-	char hypertable_id_str[12];
-	ObjectAddress objaddr;
-	char *relname = get_rel_name(relid);
-	Oid schemaid = get_rel_namespace(relid);
-	char *schema = get_namespace_name(schemaid);
-	Cache *hcache;
-	Hypertable *ht;
-
-	CreateTrigStmt stmt_template = {
-		.type = T_CreateTrigStmt,
-		.row = true,
-		/* Using OR REPLACE option introduced on Postgres 14 */
-		.replace = true,
-		.timing = TRIGGER_TYPE_AFTER,
-		.trigname = CAGGINVAL_TRIGGER_NAME,
-		.relation = makeRangeVar(schema, relname, -1),
-		.funcname =
-			list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(CAGG_INVALIDATION_TRIGGER)),
-		.args = NIL, /* to be filled in later */
-		.events = TRIGGER_TYPE_INSERT | TRIGGER_TYPE_UPDATE | TRIGGER_TYPE_DELETE,
-	};
-
-	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_NONE, &hcache);
-	CreateTrigStmt local_stmt = stmt_template;
-	pg_ltoa(hypertable_id, hypertable_id_str);
-	local_stmt.args = list_make1(makeString(hypertable_id_str));
-	objaddr = ts_hypertable_create_trigger(ht, &local_stmt, NULL);
-	if (!OidIsValid(objaddr.objectId))
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not create continuous aggregate trigger")));
-	ts_cache_release(&hcache);
-}
-
-/*
  * Add additional indexes to materialization table for the columns derived from
  * the group-by column list of the partial select query.
  * If partial select query has:
@@ -350,7 +313,8 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
  * i.e. #indexes =(  #grp-cols - 1)
  */
 static void
-mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable *ht)
+mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matcolinfo,
+									  Hypertable *ht)
 {
 	IndexStmt stmt = {
 		.type = T_IndexStmt,
@@ -416,19 +380,21 @@ mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable
  *        materialization table
  */
 static int32
-mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, int32 hypertable_id,
-												RangeVar *mat_rel, CAggTimebucketInfo *bucket_info,
-												bool create_addl_index, char *const tablespacename,
-												char *const table_access_method,
-												int64 matpartcol_interval,
-												ObjectAddress *mataddress)
+mattablecolumninfo_create_materialization_table(
+	MaterializationHypertableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
+	ContinuousAggTimeBucketInfo *bucket_info, bool create_addl_index, char *const tablespacename,
+	char *const table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress)
 {
 	Oid uid, saved_uid;
 	int sec_ctx;
 	char *matpartcolname = matcolinfo->matpartcolname;
 	CreateStmt *create;
 	Datum toast_options;
-	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+#if PG18_LT
+	char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+#else
+	const char *const validnsps[] = HEAP_RELOPT_NAMESPACES;
+#endif
 	int32 mat_htid;
 	Oid mat_relid;
 	Cache *hcache;
@@ -487,31 +453,15 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
  * the materialization columns and remove HAVING clause and ORDER BY.
  */
 static Query *
-mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo, Query *userview_query,
-											bool finalized)
+mattablecolumninfo_get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo,
+											Query *userview_query)
 {
 	Query *partial_selquery = NULL;
 
-	if (!finalized)
-	{
-		CAGG_MAKEQUERY(partial_selquery, userview_query);
-		partial_selquery->rtable = copyObject(userview_query->rtable);
-		partial_selquery->jointree = copyObject(userview_query->jointree);
-#if PG16_GE
-		partial_selquery->rteperminfos = copyObject(userview_query->rteperminfos);
-#endif
-		partial_selquery->targetList = mattblinfo->partial_seltlist;
-		partial_selquery->groupClause = mattblinfo->partial_grouplist;
-		partial_selquery->havingQual = NULL;
-		partial_selquery->sortClause = NULL;
-	}
-	else
-	{
-		partial_selquery = copyObject(userview_query);
-		/* Partial view should always include the time dimension column */
-		partial_selquery->targetList = mattblinfo->partial_seltlist;
-		partial_selquery->groupClause = mattblinfo->partial_grouplist;
-	}
+	partial_selquery = copyObject(userview_query);
+	/* Partial view should always include the time dimension column */
+	partial_selquery->targetList = mattblinfo->partial_seltlist;
+	partial_selquery->groupClause = mattblinfo->partial_grouplist;
 
 	return partial_selquery;
 }
@@ -630,7 +580,6 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
  *
  * Notes: ViewStmt->query is the raw parse tree
  * panquery is the output of running parse_anlayze( ViewStmt->query)
- *               so don't recreate invalidation trigger.
 
  * Since 1.7, we support real time aggregation.
  * If real time aggregation is off i.e. materialized only, the mcagg view is as described in Step 2.
@@ -653,11 +602,11 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
  */
 static void
 cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
-			CAggTimebucketInfo *bucket_info, WithClauseResult *with_clause_options)
+			ContinuousAggTimeBucketInfo *bucket_info, WithClauseResult *with_clause_options)
 {
 	ObjectAddress mataddress;
 	char relnamebuf[NAMEDATALEN];
-	MatTableColumnInfo mattblinfo;
+	MaterializationHypertableColumnInfo mattblinfo;
 	FinalizeQueryInfo finalqinfo;
 	CatalogSecurityContext sec_ctx;
 	bool is_create_mattbl_index;
@@ -670,7 +619,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	int32 materialize_hypertable_id;
 	bool materialized_only =
 		DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
-	bool finalized = DatumGetBool(with_clause_options[CreateMaterializedViewFlagFinalized].parsed);
 
 	int64 matpartcol_interval = 0;
 	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
@@ -686,8 +634,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
 			matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;
 	}
-
-	finalqinfo.finalized = finalized;
 
 	/*
 	 * Assign the column_name aliases in CREATE VIEW to the query.
@@ -725,6 +671,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 													create_stmt->into->accessMethod,
 													matpartcol_interval,
 													&mataddress);
+
 	/*
 	 * Step 2: Create view with select finalize from materialization table.
 	 */
@@ -747,8 +694,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	/*
 	 * Step 3: create the internal view with select partialize(..).
 	 */
-	partial_selquery =
-		mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery, finalqinfo.finalized);
+	partial_selquery = mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery);
 
 	makeMaterializedTableName(relnamebuf, "_partial_view_%d", materialize_hypertable_id);
 	part_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
@@ -780,7 +726,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 							  materialized_only,
 							  dum_rel->schemaname,
 							  dum_rel->relname,
-							  finalized,
 							  bucket_info->parent_mat_hypertable_id);
 
 	char *bucket_origin = NULL;
@@ -832,9 +777,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 										 bucket_offset,
 										 bucket_info->bf->bucket_time_timezone,
 										 bucket_info->bf->bucket_fixed_interval);
-
-	/* Step 5: Create trigger on raw hypertable -specified in the user view query. */
-	cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
 }
 
 DDLResult
@@ -842,13 +784,12 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 									WithClauseResult *with_clause_options)
 {
 	const CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, node);
-	CAggTimebucketInfo timebucket_exprinfo;
+	ContinuousAggTimeBucketInfo timebucket_exprinfo;
 	Oid nspid;
-	bool finalized = with_clause_options[CreateMaterializedViewFlagFinalized].parsed;
 	ViewStmt viewstmt = {
 		.type = T_ViewStmt,
 		.view = stmt->into->rel,
-		.query = stmt->into->viewQuery,
+		.query = (Node *) stmt->into->viewQuery,
 		.options = stmt->into->options,
 		.aliases = stmt->into->colNames,
 	};
@@ -882,7 +823,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		}
 	}
 
-	if (!with_clause_options[CreateMaterializedViewFlagCompress].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagColumnstore].is_default)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -892,7 +833,6 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 
 	schema_name = get_namespace_name(nspid);
 	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery,
-											  finalized,
 											  schema_name,
 											  stmt->into->rel->relname,
 											  true);
@@ -950,8 +890,16 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		refresh_window.start = cagg_get_time_min(cagg);
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
-		CaggRefreshContext context = { .callctx = CAGG_REFRESH_CREATION };
-		continuous_agg_refresh_internal(cagg, &refresh_window, context, true, true, false);
+		ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_CREATION };
+		continuous_agg_refresh_internal(cagg,
+										&refresh_window,
+										context,
+										true,  /* start_isnull */
+										true,  /* end_isnull */
+										true,  /* bucketing_refresh_window */
+										false, /* force */
+										true,  /* process_hypertable_invalidations */
+										false /*extend_last_bucket*/);
 	}
 
 	return DDL_DONE;
@@ -988,9 +936,8 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	relation_close(direct_view_rel, NoLock);
 	RemoveRangeTableEntries(direct_query);
 
-	CAggTimebucketInfo timebucket_exprinfo =
+	ContinuousAggTimeBucketInfo timebucket_exprinfo =
 		cagg_validate_query(direct_query,
-							agg->data.finalized,
 							NameStr(agg->data.user_view_schema),
 							NameStr(agg->data.user_view_name),
 							false);

@@ -4,13 +4,14 @@
 
 SET enable_memoize TO false;
 SET enable_indexscan TO false;
+SET max_parallel_workers_per_gather = 0;
 
 -- test join on compressed time column
 -- #3079, #4465
 CREATE TABLE compressed_join_temp AS SELECT * FROM metrics ORDER BY time DESC LIMIT 10;
 ANALYZE compressed_join_temp;
 
-EXPLAIN (analyze,costs off,timing off,summary off) SELECT *
+EXPLAIN (analyze,buffers off, costs off,timing off,summary off) SELECT *
 FROM compressed_join_temp t
 INNER JOIN metrics_compressed m ON t.time = m.time AND t.device_id = m.device_id
 LIMIT 1;

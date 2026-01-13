@@ -1,0 +1,57 @@
+Parsed test spec with 2 sessions
+
+starting permutation: s2_begin s2_insert s2_count s1_retention s2_commit
+expected_count
+--------------
+             4
+
+step s2_begin: 
+    BEGIN;
+
+step s2_insert: 
+    INSERT INTO _timescaledb_internal.bgw_job_stat_history
+    (job_id, pid, succeeded, execution_start, execution_finish)
+    VALUES
+    (201, 2001, true, now() - interval '1 week', now() - interval '1 week' + interval '5 minutes');
+
+step s2_count: 
+    SELECT count(*) as s2_count FROM _timescaledb_internal.bgw_job_stat_history;
+
+s2_count
+--------
+      10
+
+step s1_retention: 
+    CALL run_job(3);
+    SELECT count(*) as s1_count FROM _timescaledb_internal.bgw_job_stat_history;
+ <waiting ...>
+step s2_commit: 
+    COMMIT;
+
+step s1_retention: <... completed>
+s1_count
+--------
+       5
+
+
+starting permutation: s2_lock_table s1_retention s2_unlock_table
+expected_count
+--------------
+             4
+
+step s2_lock_table: 
+    BEGIN;
+    LOCK TABLE _timescaledb_internal.bgw_job_stat_history IN ACCESS SHARE MODE;
+
+step s1_retention: 
+    CALL run_job(3);
+    SELECT count(*) as s1_count FROM _timescaledb_internal.bgw_job_stat_history;
+ <waiting ...>
+step s2_unlock_table: 
+    ROLLBACK;
+
+step s1_retention: <... completed>
+s1_count
+--------
+       4
+

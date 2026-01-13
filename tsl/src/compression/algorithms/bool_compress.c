@@ -34,6 +34,7 @@ typedef struct BoolCompressor
 	Simple8bRleCompressor validity_bitmap;
 	bool has_nulls;
 	bool last_value;
+	uint32 num_nulls;
 } BoolCompressor;
 
 typedef struct ExtendedCompressor
@@ -54,6 +55,7 @@ static void *bool_compressor_finish_and_reset(Compressor *compressor);
 const Compressor bool_compressor_initializer = {
 	.append_val = bool_compressor_append_bool,
 	.append_null = bool_compressor_append_null_value,
+	.is_full = NULL,
 	.finish = bool_compressor_finish_and_reset,
 };
 
@@ -88,6 +90,7 @@ bool_compressor_append_null(BoolCompressor *compressor)
 	compressor->has_nulls = true;
 	simple8brle_compressor_append(&compressor->values, compressor->last_value);
 	simple8brle_compressor_append(&compressor->validity_bitmap, 0);
+	compressor->num_nulls++;
 }
 
 extern void
@@ -106,6 +109,9 @@ bool_compressor_finish(BoolCompressor *compressor)
 
 	Simple8bRleSerialized *values = simple8brle_compressor_finish(&compressor->values);
 	if (values == NULL)
+		return NULL;
+
+	if (compressor->num_nulls == compressor->values.num_elements)
 		return NULL;
 
 	Simple8bRleSerialized *validity_bitmap =
@@ -163,6 +169,7 @@ extern DecompressionIterator *
 bool_decompression_iterator_from_datum_forward(Datum bool_compressed, Oid element_type)
 {
 	BoolDecompressionIterator *iterator = palloc(sizeof(*iterator));
+	CheckCompressedData(DatumGetPointer(bool_compressed) != NULL);
 	decompression_iterator_init(iterator,
 								(void *) PG_DETOAST_DATUM(bool_compressed),
 								element_type,
@@ -208,6 +215,7 @@ extern DecompressionIterator *
 bool_decompression_iterator_from_datum_reverse(Datum bool_compressed, Oid element_type)
 {
 	BoolDecompressionIterator *iterator = palloc(sizeof(*iterator));
+	CheckCompressedData(DatumGetPointer(bool_compressed) != NULL);
 	decompression_iterator_init(iterator,
 								(void *) PG_DETOAST_DATUM(bool_compressed),
 								element_type,
@@ -332,6 +340,8 @@ bool_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 	ArrowArray *result = NULL;
 	uint64 *validity_bitmap = NULL;
 	uint64 *decompressed_values = NULL;
+
+	CheckCompressedData(DatumGetPointer(compressed) != NULL);
 
 	void *detoasted = PG_DETOAST_DATUM(compressed);
 	StringInfoData si = { .data = detoasted, .len = VARSIZE(compressed) };

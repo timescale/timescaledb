@@ -27,3 +27,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_get_bucket_function_info(
     -- fixed or variable sized bucket
     OUT bucket_fixed_width BOOLEAN
 ) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_continuous_agg_get_bucket_function_info' LANGUAGE C STRICT VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_get_grouping_columns(
+    cagg REGCLASS )
+    RETURNS TEXT[] AS '@MODULE_PATHNAME@', 'ts_continuous_agg_get_grouping_columns'
+LANGUAGE C STRICT VOLATILE;

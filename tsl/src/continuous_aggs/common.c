@@ -6,35 +6,35 @@
 
 #include "common.h"
 
+#include <utils/acl.h>
 #include <utils/date.h>
 #include <utils/timestamp.h>
 
 #include "guc.h"
 
 static Const *check_time_bucket_argument(Node *arg, char *position, bool process_checks);
-static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
+static void caggtimebucketinfo_init(ContinuousAggTimeBucketInfo *src, int32 hypertable_id,
 									Oid hypertable_oid, AttrNumber hypertable_partition_colno,
 									Oid hypertable_partition_coltype,
 									int64 hypertable_partition_col_interval,
 									int32 parent_mat_hypertable_id);
-static void process_additional_timebucket_parameter(ContinuousAggsBucketFunction *bf, Const *arg,
+static void process_additional_timebucket_parameter(ContinuousAggBucketFunction *bf, Const *arg,
 													bool *custom_origin);
-static void process_timebucket_parameters(FuncExpr *fe, ContinuousAggsBucketFunction *bf,
+static void process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf,
 										  bool process_checks, bool is_cagg_create,
 										  AttrNumber htpartcolno);
-static void caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *targetList,
-									bool is_cagg_create);
-static bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
-								 const bool finalized);
-static Datum get_bucket_width_datum(CAggTimebucketInfo bucket_info);
-static int64 get_bucket_width(CAggTimebucketInfo bucket_info);
+static void caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause,
+									List *targetList, List *rtable, bool is_cagg_create);
+static bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail);
+static Datum get_bucket_width_datum(ContinuousAggTimeBucketInfo bucket_info);
+static int64 get_bucket_width(ContinuousAggTimeBucketInfo bucket_info);
 static FuncExpr *build_conversion_call(Oid type, FuncExpr *boundary);
 static FuncExpr *build_boundary_call(int32 ht_id, Oid type);
 static Const *cagg_boundary_make_lower_bound(Oid type);
 static Node *build_union_query_quals(int32 ht_id, Oid partcoltype, Oid opno, int varno,
 									 AttrNumber attno);
 static RangeTblEntry *makeRangeTblEntry(Query *subquery, const char *aliasname);
-static bool time_bucket_info_has_fixed_width(const ContinuousAggsBucketFunction *bf);
+static bool time_bucket_info_has_fixed_width(const ContinuousAggBucketFunction *bf);
 
 #define INTERNAL_TO_DATE_FUNCTION "to_date"
 #define INTERNAL_TO_TSTZ_FUNCTION "to_timestamp"
@@ -63,7 +63,7 @@ check_time_bucket_argument(Node *arg, char *position, bool process_checks)
  * Initialize caggtimebucket.
  */
 static void
-caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypertable_oid,
+caggtimebucketinfo_init(ContinuousAggTimeBucketInfo *src, int32 hypertable_id, Oid hypertable_oid,
 						AttrNumber hypertable_partition_colno, Oid hypertable_partition_coltype,
 						int64 hypertable_partition_col_interval, int32 parent_mat_hypertable_id)
 {
@@ -76,7 +76,7 @@ caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypert
 	src->htpartcol_interval_len = hypertable_partition_col_interval;
 
 	/* Initialize bucket function data structure */
-	src->bf = palloc0(sizeof(ContinuousAggsBucketFunction));
+	src->bf = palloc0(sizeof(ContinuousAggBucketFunction));
 	src->bf->bucket_function = InvalidOid;
 	src->bf->bucket_width_type = InvalidOid;
 
@@ -92,10 +92,10 @@ caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypert
 }
 
 /*
- * Initialize MatTableColumnInfo.
+ * Initialize MaterializationHypertableColumnInfo.
  */
 void
-mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist)
+mattablecolumninfo_init(MaterializationHypertableColumnInfo *matcolinfo, List *grouplist)
 {
 	matcolinfo->matcollist = NIL;
 	matcolinfo->partial_seltlist = NIL;
@@ -182,7 +182,7 @@ destroy_union_query(Query *q)
  * Handle additional parameter of the timebucket function such as timezone, offset, or origin
  */
 static void
-process_additional_timebucket_parameter(ContinuousAggsBucketFunction *bf, Const *arg,
+process_additional_timebucket_parameter(ContinuousAggBucketFunction *bf, Const *arg,
 										bool *custom_origin)
 {
 	char *tz_name;
@@ -235,7 +235,7 @@ process_additional_timebucket_parameter(ContinuousAggsBucketFunction *bf, Const 
 			break;
 		default:
 			ereport(ERROR,
-					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("unable to handle time_bucket parameter of type: %s",
 							format_type_be(exprType((Node *) arg)))));
 			pg_unreachable();
@@ -248,7 +248,7 @@ process_additional_timebucket_parameter(ContinuousAggsBucketFunction *bf, Const 
  * when invalid parameters are passed to the time bucket function when creating a cagg.
  */
 static void
-process_timebucket_parameters(FuncExpr *fe, ContinuousAggsBucketFunction *bf, bool process_checks,
+process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, bool process_checks,
 							  bool is_cagg_create, AttrNumber htpartcolno)
 {
 	Node *width_arg;
@@ -383,8 +383,8 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggsBucketFunction *bf, bo
  * the `bucket_width` and other fields of `tbinfo`.
  */
 static void
-caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *targetList,
-						bool is_cagg_create)
+caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause, List *targetList,
+						List *rtable, bool is_cagg_create)
 {
 	ListCell *l;
 	bool found = false;
@@ -394,14 +394,33 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 	Assert(tbinfo->bf->bucket_time_timezone == NULL);
 	Assert(TIMESTAMP_NOT_FINITE(tbinfo->bf->bucket_time_origin));
 
-	foreach (l, groupClause)
-	{
-		SortGroupClause *sgc = (SortGroupClause *) lfirst(l);
-		TargetEntry *tle = get_sortgroupclause_tle(sgc, targetList);
+	List *group_exprs = get_sortgrouplist_exprs(groupClause, targetList);
 
-		if (IsA(tle->expr, FuncExpr))
+#if PG18_GE
+	/* PG18 introduced RTEs for group clauses so
+	 * we can just use rtable to look for GROUP BY expressions.
+	 *
+	 * https://github.com/postgres/postgres/commit/247dea89
+	 */
+	List *group_rte_exprs = NIL;
+	foreach (l, rtable)
+	{
+		RangeTblEntry *rte = (RangeTblEntry *) lfirst(l);
+
+		if (rte->rtekind == RTE_GROUP)
+			group_rte_exprs = list_concat(group_rte_exprs, rte->groupexprs);
+	}
+
+	group_exprs = group_rte_exprs;
+#endif
+
+	foreach (l, group_exprs)
+	{
+		Expr *expr = (Expr *) lfirst(l);
+
+		if (IsA(expr, FuncExpr))
 		{
-			FuncExpr *fe = castNode(FuncExpr, tle->expr);
+			FuncExpr *fe = castNode(FuncExpr, expr);
 
 			/* Filter any non bucketing functions */
 			FuncInfo *finfo = ts_func_cache_get_bucketing_func(fe->funcid);
@@ -481,7 +500,9 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 	}
 
 	if (!found)
-		elog(ERROR, "continuous aggregate view must include a valid time bucket function");
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("continuous aggregate view must include a valid time bucket function")));
 }
 
 /*
@@ -492,18 +513,8 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
  *   added.
  */
 static bool
-cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, const bool finalized)
+cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail)
 {
-	if (!finalized)
-	{
-		/* continuous aggregates with old format will not be allowed */
-		appendStringInfoString(detail,
-							   "Continuous Aggregates with partials is not supported anymore.");
-		appendStringInfoString(hint,
-							   "Define the Continuous Aggregate with \"finalized\" parameter set "
-							   "to true.");
-		return false;
-	}
 	if (!query->jointree->fromlist)
 	{
 		appendStringInfoString(hint, "FROM clause missing in the query");
@@ -552,10 +563,10 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, con
 		return false;
 	}
 
-	if (query->hasRecursive || query->hasSubLinks || query->hasTargetSRFs || query->cteList)
+	if (query->hasRecursive || query->hasSubLinks || query->cteList)
 	{
 		appendStringInfoString(detail,
-							   "CTEs, subqueries and set-returning functions are not supported by "
+							   "CTEs and subqueries are not supported by "
 							   "continuous aggregates.");
 		return false;
 	}
@@ -611,7 +622,7 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, con
 }
 
 static Datum
-get_bucket_width_datum(CAggTimebucketInfo bucket_info)
+get_bucket_width_datum(ContinuousAggTimeBucketInfo bucket_info)
 {
 	Datum width = (Datum) 0;
 
@@ -634,7 +645,7 @@ get_bucket_width_datum(CAggTimebucketInfo bucket_info)
 }
 
 static int64
-get_bucket_width(CAggTimebucketInfo bucket_info)
+get_bucket_width(ContinuousAggTimeBucketInfo bucket_info)
 {
 	int64 width = 0;
 
@@ -675,27 +686,30 @@ get_bucket_width(CAggTimebucketInfo bucket_info)
 	return width;
 }
 
-CAggTimebucketInfo
-cagg_validate_query(const Query *query, const bool finalized, const char *cagg_schema,
-					const char *cagg_name, const bool is_cagg_create)
+ContinuousAggTimeBucketInfo
+cagg_validate_query(const Query *query, const char *cagg_schema, const char *cagg_name,
+					const bool is_cagg_create)
 {
-	CAggTimebucketInfo bucket_info = { 0 };
-	CAggTimebucketInfo bucket_info_parent = { 0 };
+	ContinuousAggTimeBucketInfo bucket_info = { 0 };
+	ContinuousAggTimeBucketInfo bucket_info_parent = { 0 };
 	Hypertable *ht = NULL, *ht_parent = NULL;
 	RangeTblEntry *rte = NULL;
-	StringInfo hint = makeStringInfo();
-	StringInfo detail = makeStringInfo();
+	StringInfoData hint;
+	StringInfoData detail;
 	bool is_hierarchical = false;
 	Query *prev_query = NULL;
 	ContinuousAgg *cagg_parent = NULL;
 
-	if (!cagg_query_supported(query, hint, detail, finalized))
+	initStringInfo(&hint);
+	initStringInfo(&detail);
+
+	if (!cagg_query_supported(query, &hint, &detail))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("invalid continuous aggregate query"),
-				 hint->len > 0 ? errhint("%s", hint->data) : 0,
-				 detail->len > 0 ? errdetail("%s", detail->data) : 0));
+				 hint.len > 0 ? errhint("%s", hint.data) : 0,
+				 detail.len > 0 ? errdetail("%s", detail.data) : 0));
 	}
 
 	int num_hypertables = 0;
@@ -789,18 +803,6 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 							 "continuous aggregate.")));
 		}
 
-		if (!ContinuousAggIsFinalized(cagg_parent))
-		{
-			ts_cache_release(&hcache);
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("old format of continuous aggregate is not supported"),
-					 errhint("Run \"CALL cagg_migrate('%s.%s');\" to migrate to the new "
-							 "format.",
-							 NameStr(cagg_parent->data.user_view_schema),
-							 NameStr(cagg_parent->data.user_view_name))));
-		}
-
 		parent_mat_hypertable_id = cagg_parent->data.mat_hypertable_id;
 		ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.mat_hypertable_id);
 
@@ -815,6 +817,23 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		/* Get the querydef for the source cagg. */
 		is_hierarchical = true;
 		prev_query = ts_continuous_agg_get_query(cagg_parent);
+	}
+
+	/*
+	 * Check if user can refresh continuous aggregate
+	 * We only check for SELECT on the hypertable here but there
+	 * could be other permissions needed depending on the query.
+	 * For WITH DATA this is not a problem since we try a refresh
+	 * immediately but for WITH NO DATA the refresh might still
+	 * fail due to other permissions being needed.
+	 */
+	AclResult aclresult = pg_class_aclcheck(ht->main_table_relid, GetUserId(), ACL_SELECT);
+	if (aclresult != ACLCHECK_OK)
+	{
+		/* User doesn't have permission */
+		aclcheck_error(aclresult,
+					   get_relkind_objtype(get_rel_relkind(ht->main_table_relid)),
+					   get_rel_name(ht->main_table_relid));
 	}
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
@@ -913,7 +932,11 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	 * column of the hypertable
 	 */
 	Assert(query->groupClause);
-	caggtimebucket_validate(&bucket_info, query->groupClause, query->targetList, is_cagg_create);
+	caggtimebucket_validate(&bucket_info,
+							query->groupClause,
+							query->targetList,
+							query->rtable,
+							is_cagg_create);
 
 	/* Check row security settings for the table. */
 	if (ts_has_row_security(rte->relid))
@@ -939,6 +962,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		caggtimebucket_validate(&bucket_info_parent,
 								prev_query->groupClause,
 								prev_query->targetList,
+								prev_query->rtable,
 								is_cagg_create);
 
 		/* Cannot create cagg with fixed bucket on top of variable bucket. */
@@ -978,19 +1002,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		/* Proceed with validation errors. */
 		if (!is_greater_or_equal_than_parent || !is_multiple_of_parent)
 		{
-			Datum width, width_parent;
-			Oid outfuncid = InvalidOid;
-			bool isvarlena;
-			char *width_out, *width_out_parent;
 			char *message = NULL;
-
-			getTypeOutputInfo(bucket_info.bf->bucket_width_type, &outfuncid, &isvarlena);
-			width = get_bucket_width_datum(bucket_info);
-			width_out = DatumGetCString(OidFunctionCall1(outfuncid, width));
-
-			getTypeOutputInfo(bucket_info_parent.bf->bucket_width_type, &outfuncid, &isvarlena);
-			width_parent = get_bucket_width_datum(bucket_info_parent);
-			width_out_parent = DatumGetCString(OidFunctionCall1(outfuncid, width_parent));
 
 			/* New bucket should be multiple of the parent. */
 			if (!is_multiple_of_parent)
@@ -1007,25 +1019,18 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 							   "bucket width of \"%s.%s\" [%s].",
 							   cagg_schema,
 							   cagg_name,
-							   width_out,
+							   ts_datum_to_string(get_bucket_width_datum(bucket_info),
+												  bucket_info.bf->bucket_width_type),
 							   message,
 							   NameStr(cagg_parent->data.user_view_schema),
 							   NameStr(cagg_parent->data.user_view_name),
-							   width_out_parent)));
+							   ts_datum_to_string(get_bucket_width_datum(bucket_info_parent),
+												  bucket_info_parent.bf->bucket_width_type))));
 		}
 
 		/* Test compatible time origin values */
 		if (bucket_info.bf->bucket_time_origin != bucket_info_parent.bf->bucket_time_origin)
 		{
-			char *origin = DatumGetCString(
-				DirectFunctionCall1(timestamptz_out,
-									TimestampTzGetDatum(bucket_info.bf->bucket_time_origin)));
-
-			char *origin_parent = DatumGetCString(
-				DirectFunctionCall1(timestamptz_out,
-									TimestampTzGetDatum(
-										bucket_info_parent.bf->bucket_time_origin)));
-
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg(
@@ -1034,10 +1039,14 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 							   "same.",
 							   cagg_schema,
 							   cagg_name,
-							   origin,
+							   ts_datum_to_string(TimestampTzGetDatum(
+													  bucket_info.bf->bucket_time_origin),
+												  TIMESTAMPTZOID),
 							   NameStr(cagg_parent->data.user_view_schema),
 							   NameStr(cagg_parent->data.user_view_name),
-							   origin_parent)));
+							   ts_datum_to_string(TimestampTzGetDatum(
+													  bucket_info_parent.bf->bucket_time_origin),
+												  TIMESTAMPTZOID))));
 		}
 
 		/* Test compatible time offset values */
@@ -1137,7 +1146,7 @@ cagg_get_boundary_converter_funcoid(Oid typoid)
 			 * should be caught at much earlier stages.
 			 */
 			ereport(ERROR,
-					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("no converter function defined for datatype: %s",
 							format_type_be(typoid))));
 			pg_unreachable();
@@ -1200,7 +1209,7 @@ build_conversion_call(Oid type, FuncExpr *boundary)
 			 * should catch this.
 			 */
 			ereport(ERROR,
-					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("unsupported datatype for continuous aggregates: %s",
 							format_type_be(type))));
 			pg_unreachable();
@@ -1326,7 +1335,7 @@ makeRangeTblEntry(Query *query, const char *aliasname)
  * See build_union_query_quals for COALESCE clauses.
  */
 Query *
-build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query *q2,
+build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *q1, Query *q2,
 				  int materialize_htid)
 {
 	ListCell *lc1, *lc2;
@@ -1454,7 +1463,7 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
  * Returns true if the time bucket size is fixed
  */
 static bool
-time_bucket_info_has_fixed_width(const ContinuousAggsBucketFunction *bf)
+time_bucket_info_has_fixed_width(const ContinuousAggBucketFunction *bf)
 {
 	if (!IS_TIME_BUCKET_INFO_TIME_BASED(bf))
 	{
@@ -1497,7 +1506,7 @@ cagg_get_by_relid_or_fail(const Oid cagg_relid)
 }
 
 /* Get time bucket function info based on the view definition */
-ContinuousAggsBucketFunction *
+ContinuousAggBucketFunction *
 ts_cagg_get_bucket_function_info(Oid view_oid)
 {
 	Relation view_rel = relation_open(view_oid, AccessShareLock);
@@ -1507,7 +1516,7 @@ ts_cagg_get_bucket_function_info(Oid view_oid)
 	Assert(query != NULL);
 	Assert(query->commandType == CMD_SELECT);
 
-	ContinuousAggsBucketFunction *bf = palloc0(sizeof(ContinuousAggsBucketFunction));
+	ContinuousAggBucketFunction *bf = palloc0(sizeof(ContinuousAggBucketFunction));
 
 	ListCell *l;
 	foreach (l, query->groupClause)
@@ -1515,9 +1524,29 @@ ts_cagg_get_bucket_function_info(Oid view_oid)
 		SortGroupClause *sgc = lfirst_node(SortGroupClause, l);
 		TargetEntry *tle = get_sortgroupclause_tle(sgc, query->targetList);
 
-		if (IsA(tle->expr, FuncExpr))
+		Expr *expr = tle->expr;
+#if PG18_GE
+		/* PG18 introduced RTEs for group clauses so
+		 * we can use rtable to look up GROUP BY expressions.
+		 *
+		 * https://github.com/postgres/postgres/commit/247dea89
+		 */
+		if (IsA(expr, Var))
 		{
-			FuncExpr *fe = castNode(FuncExpr, tle->expr);
+			Var *var = castNode(Var, tle->expr);
+			Assert((int) var->varno <= list_length(query->rtable));
+			RangeTblEntry *rte = list_nth(query->rtable, var->varno - 1);
+			Assert(rte->rtekind == RTE_GROUP);
+			Assert(var->varattno > 0);
+			Expr *node = list_nth(rte->groupexprs, var->varattno - 1);
+			if (IsA(node, FuncExpr))
+				expr = node;
+		}
+#endif
+
+		if (IsA(expr, FuncExpr))
+		{
+			FuncExpr *fe = castNode(FuncExpr, expr);
 
 			/* Filter any non bucketing functions */
 			FuncInfo *finfo = ts_func_cache_get_bucketing_func(fe->funcid);
@@ -1539,30 +1568,15 @@ ts_cagg_get_bucket_function_info(Oid view_oid)
  * GROUP BY clause of the cagg query. It behaves a bit different depending
  * of the type of the Continuous Aggregate.
  *
- * 1) Partials form (finalized=false)
+ * Retrieve the "direct view query" and find the GROUP BY clause and
+ * "time_bucket" clause. We use the "direct view query" because in the
+ * "user view query" we removed the re-aggregation in the part that query
+ * the materialization hypertable so we don't have a GROUP BY clause
+ * anymore.
  *
- *    Retrieve the "user view query" and find the GROUP BY clause and
- *    "time_bucket" clause. Map them to the column names (of mat.hypertable)
- *
- *    Note that the "user view query" has 2 forms:
- *    - with UNION
- *    - without UNION
- *
- *    We have to extract the part of the query that has "finalize_agg" on
- *    the materialized hypertable to find the GROUP BY clauses.
- *    (see continuous_aggs/create.c for more info on the query structure)
- *
- * 2) Finals form (finalized=true) (>= 2.7)
- *
- *    Retrieve the "direct view query" and find the GROUP BY clause and
- *    "time_bucket" clause. We use the "direct view query" because in the
- *    "user view query" we removed the re-aggregation in the part that query
- *    the materialization hypertable so we don't have a GROUP BY clause
- *    anymore.
- *
- *    Get the column name from the GROUP BY clause because all the column
- *    names are the same in all underlying objects (user view, direct view,
- *    partial view and materialization hypertable).
+ * Get the column name from the GROUP BY clause because all the column
+ * names are the same in all underlying objects (user view, direct view,
+ * partial view and materialization hypertable).
  */
 List *
 cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
@@ -1607,18 +1621,9 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 		SortGroupClause *cagg_gc = (SortGroupClause *) lfirst(lc);
 		TargetEntry *cagg_tle = get_sortgroupclause_tle(cagg_gc, finalize_query->targetList);
 
-		if (ContinuousAggIsFinalized(agg))
-		{
-			/* "resname" is the same as "mat column names" in the finalized version */
-			if (!cagg_tle->resjunk && cagg_tle->resname)
-				retlist = lappend(retlist, get_attname(mat_relid, cagg_tle->resno, false));
-		}
-		else
-		{
-			/* groupby clauses are columns from the mat hypertable */
-			Var *mat_var = castNode(Var, cagg_tle->expr);
-			retlist = lappend(retlist, get_attname(mat_relid, mat_var->varattno, false));
-		}
+		/* "resname" is the same as "mat column names" */
+		if (!cagg_tle->resjunk && cagg_tle->resname)
+			retlist = lappend(retlist, get_attname(mat_relid, cagg_tle->resno, false));
 	}
 	return retlist;
 }

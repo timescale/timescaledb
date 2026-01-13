@@ -358,7 +358,7 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 			{
 				/*
 				 * The custom plan node is a scan itself. This handles the
-				 * DecompressChunk node.
+				 * ColumnarScan node.
 				 */
 				return (Scan *) plan;
 			}

@@ -12,7 +12,7 @@ SELECT format('\! diff %s %s', :'TEST_RESULTS_VIEW', :'TEST_RESULTS_TABLE') as "
 \gset
 
 
-\set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
+\set EXPLAIN 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 
 SET client_min_messages TO NOTICE;
 
@@ -558,7 +558,7 @@ CREATE MATERIALIZED VIEW cagg_bigint_offset2
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_bigint_offset2';
 
 -- mess with the bucket_func signature to make sure it will raise an exception
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 \set ON_ERROR_STOP 0
 BEGIN;
 UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_func = 'func_does_not_exist()';

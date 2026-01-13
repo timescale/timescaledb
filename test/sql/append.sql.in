@@ -19,7 +19,7 @@ SET enable_memoize TO 'off';
 -- disable index only scans to avoid some flaky results
 SET enable_indexonlyscan TO FALSE;
 
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 
 \ir :TEST_LOAD_NAME
 \ir :TEST_QUERY_NAME

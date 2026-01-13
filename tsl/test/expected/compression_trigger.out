@@ -16,13 +16,11 @@ select create_hypertable('readings', by_range('created_at'));
  create_hypertable 
 -------------------
  (1,t)
-(1 row)
 
 select setseed(1);
  setseed 
 ---------
  
-(1 row)
 
 insert into readings(created_at, location_id, device_id, owner_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
@@ -41,7 +39,6 @@ select compress_chunk(show_chunks('readings'));
  _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_1_5_chunk
  _timescaledb_internal._hyper_1_6_chunk
-(6 rows)
 
 create table saved_rows (like readings, new_row bool not null, kind text);
 create function save_transition_table() returns trigger as $$
@@ -70,7 +67,6 @@ select * from saved_rows order by metric_id;
 -----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
       8642 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14 | t       | INSERT
       8643 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |     3.14 | t       | INSERT
-(2 rows)
 
 truncate saved_rows;
 select compress_chunk(show_chunks('readings'));
@@ -82,14 +78,12 @@ select compress_chunk(show_chunks('readings'));
  _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_1_5_chunk
  _timescaledb_internal._hyper_1_6_chunk
-(6 rows)
 
 copy readings(created_at, location_id, device_id, owner_id, temp, humidity) from stdin with (format csv);
 select * from saved_rows order by metric_id;
  metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
 -----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
       8644 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14 | t       | INSERT
-(1 row)
 
 truncate saved_rows;
 select compress_chunk(show_chunks('readings'));
@@ -101,7 +95,6 @@ select compress_chunk(show_chunks('readings'));
  _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_1_5_chunk
  _timescaledb_internal._hyper_1_6_chunk
-(6 rows)
 
 create trigger save_update_transition_table_trg
        after update on readings
@@ -113,7 +106,6 @@ select * from readings where location_id = 999 order by metric_id;
       8642 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14
       8643 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |     3.14
       8644 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14
-(3 rows)
 
 update readings set humidity = 99.99 where location_id = 999;
 select * from saved_rows order by metric_id;
@@ -125,7 +117,6 @@ select * from saved_rows order by metric_id;
       8643 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |     3.14 | f       | UPDATE
       8644 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |    99.99 | t       | UPDATE
       8644 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14 | f       | UPDATE
-(6 rows)
 
 truncate saved_rows;
 select compress_chunk(show_chunks('readings'));
@@ -137,7 +128,6 @@ select compress_chunk(show_chunks('readings'));
  _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_1_5_chunk
  _timescaledb_internal._hyper_1_6_chunk
-(6 rows)
 
 -- This is not supported since it is possible to delete an entire
 -- segment without executing the trigger.
@@ -160,7 +150,6 @@ select create_hypertable('test2', by_range('created_at'));
  create_hypertable 
 -------------------
  (3,t)
-(1 row)
 
 create trigger save_test2_insert_trg
        after insert on test2

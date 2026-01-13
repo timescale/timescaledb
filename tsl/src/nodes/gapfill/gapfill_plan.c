@@ -7,6 +7,7 @@
 #include <postgres.h>
 #include <nodes/execnodes.h>
 #include <nodes/extensible.h>
+#include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <optimizer/clauses.h>
 #include <optimizer/optimizer.h>
@@ -37,6 +38,22 @@ typedef struct gapfill_walker_context
 	} call;
 	int count;
 } gapfill_walker_context;
+
+/*
+ * Replace Aggref with const NULL
+ */
+static Node *
+gapfill_aggref_mutator(Node *node, void *context)
+{
+	if (node == NULL)
+		return NULL;
+
+	if (IsA(node, Aggref))
+		return (Node *)
+			makeConst(((Aggref *) node)->aggtype, -1, InvalidOid, -2, (Datum) 0, true, false);
+
+	return expression_tree_mutator(node, gapfill_aggref_mutator, context);
+}
 
 /*
  * FuncExpr is time_bucket_gapfill function call
@@ -142,7 +159,7 @@ gapfill_correct_order(PlannerInfo *root, Path *subpath, FuncExpr *func)
 		EquivalenceMember *em = linitial(pk->pk_eclass->ec_members);
 
 		/* time_bucket_gapfill is last element */
-		if (BTLessStrategyNumber == pk->pk_strategy && IsA(em->em_expr, FuncExpr) &&
+		if (pk->pk_cmptype == COMPARE_LT && IsA(em->em_expr, FuncExpr) &&
 			((FuncExpr *) em->em_expr)->funcid == func->funcid)
 		{
 			int i;
@@ -181,6 +198,30 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *
 	cscan->scan.plan.targetlist = tlist;
 	cscan->custom_plans = custom_plans;
 	cscan->custom_scan_tlist = tlist;
+
+	/* When we have original target entries like (agg + group_expr)
+	 * we will replace agg with NULL and put resulting expression into exec-fixed "targetlist",
+	 * but we need to fix "group_expr" to refer to exec targetlist group column.
+	 * Only then we can safely put (NULL + group_column_exec) entry into exec-fixed targetlist.
+	 */
+	List *mutated_agg_exprs = NIL;
+	if (contain_agg_clause((Node *) tlist))
+	{
+		TargetEntry *tle;
+		ListCell *lc;
+		foreach (lc, tlist)
+		{
+			tle = lfirst(lc);
+			if (contain_agg_clause((Node *) tle))
+			{
+				Node *entry = copyObject((Node *) tle);
+				entry = gapfill_aggref_mutator(entry, NULL);
+				mutated_agg_exprs = lappend(mutated_agg_exprs, entry);
+			}
+		}
+	}
+	cscan->custom_exprs = list_make1(mutated_agg_exprs);
+
 	cscan->flags = path->flags;
 	cscan->methods = &gapfill_plan_methods;
 
@@ -376,7 +417,7 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 			if (!pk_func && IsA(em->em_expr, FuncExpr) &&
 				((FuncExpr *) em->em_expr)->funcid == func->funcid)
 			{
-				if (BTLessStrategyNumber == pk->pk_strategy)
+				if (pk->pk_cmptype == COMPARE_LT)
 					pk_func = pk;
 				else
 					pk_func = make_canonical_pathkey(root,

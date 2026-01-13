@@ -4,7 +4,6 @@ starting permutation: s2_explain_update s1_begin s1_decompress s2_explain_update
 compression_status
 ------------------
 Compressed        
-(1 row)
 
 step s2_explain_update: 
     UPDATE sensor_data SET cpu = cpu + 1 WHERE cpu = 0.1111111;
@@ -19,12 +18,10 @@ step s1_decompress:
 count
 -----
     1
-(1 row)
 
 compression_status
 ------------------
 Uncompressed      
-(1 row)
 
 step s2_explain_update: 
     UPDATE sensor_data SET cpu = cpu + 1 WHERE cpu = 0.1111111;

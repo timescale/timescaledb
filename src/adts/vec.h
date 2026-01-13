@@ -103,23 +103,35 @@ VEC_SCOPE void
 VEC_RESERVE(VEC_TYPE *vec, uint32 additional)
 {
 	uint64 num_new_elements = additional;
+	uint64 max_element_limit = MaxAllocSize / sizeof(VEC_ELEMENT_TYPE);
 	uint64 num_elements;
 	uint64 num_bytes;
 
-	/* this doesn't handle integer overflow or >4GB allocations */
+	/* this doesn't handle integer overflow or >MaxAllocSize allocations */
 	if (num_new_elements == 0 || vec->num_elements + num_new_elements <= vec->max_elements)
 		return;
 
+	num_elements = vec->num_elements + num_new_elements;
 	if (num_new_elements < vec->num_elements)
 	{
 		/* Follow the usual doubling progression of allocation sizes. */
-		num_new_elements = vec->num_elements;
+		num_elements = vec->num_elements * 2;
 	}
 
-	num_elements = vec->num_elements + num_new_elements;
+	if (num_elements >= max_element_limit)
+	{
+		if (vec->num_elements + num_new_elements >= max_element_limit)
+			ereport(ERROR,
+					(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+					 errmsg("vector allocation overflow when trying to allocate %ld bytes",
+							(long) ((vec->num_elements + num_new_elements) *
+									sizeof(VEC_ELEMENT_TYPE)))));
+
+		/* Clamp num_elements to max allocation size if they can fit*/
+		num_elements = max_element_limit;
+	}
+
 	Assert(num_elements > vec->num_elements);
-	if (num_elements >= PG_UINT32_MAX / sizeof(VEC_ELEMENT_TYPE))
-		elog(ERROR, "vector allocation overflow");
 	vec->max_elements = num_elements;
 
 	num_bytes = vec->max_elements * sizeof(VEC_ELEMENT_TYPE);

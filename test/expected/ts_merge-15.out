@@ -33,7 +33,6 @@ SELECT t.ctid is not null as matched, t.*, s.* FROM source s FULL OUTER JOIN tar
  t       |   1 |      10 |     |      
  t       |   2 |      20 |     |      
  t       |   3 |      30 |     |      
-(3 rows)
 
 ALTER TABLE target OWNER TO regress_merge_privs;
 ALTER TABLE source OWNER TO regress_merge_privs;
@@ -615,7 +614,7 @@ CREATE TRIGGER merge_ard AFTER DELETE ON target FOR EACH ROW EXECUTE PROCEDURE m
 -- now the classic UPSERT, with a DELETE
 BEGIN;
 UPDATE target SET balance = 0 WHERE tid = 3;
---EXPLAIN (ANALYZE ON, COSTS OFF, SUMMARY OFF, TIMING OFF)
+--EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)
 MERGE INTO target t
 USING source AS s
 ON t.tid = s.sid
@@ -766,7 +765,7 @@ USING (SELECT 1) s
 ON t.tid = $1
 WHEN MATCHED THEN
 UPDATE SET balance = $2;
---EXPLAIN (ANALYZE ON, COSTS OFF, SUMMARY OFF, TIMING OFF)
+--EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)
 execute foom2 (1, 1);
 ROLLBACK;
 -- subqueries in source relation
@@ -929,7 +928,7 @@ $$
 DECLARE ln text;
 BEGIN
     FOR ln IN
-        EXECUTE 'explain (analyze, timing off, summary off, costs off) ' ||
+        EXECUTE 'explain (analyze, timing off, summary off, buffers off, costs off) ' ||
 		  query
     LOOP
         ln := regexp_replace(ln, '(Memory( Usage)?|Buckets|Batches): \S*',  '\1: xxx', 'g');
@@ -1354,7 +1353,6 @@ SELECT create_hypertable('target', 'tid', chunk_time_interval => 3);
   create_hypertable  
 ---------------------
  (1,public,target,t)
-(1 row)
 
 CREATE TABLE source (sid integer, delta integer) -- no index
   WITH (autovacuum_enabled=off);
@@ -1367,7 +1365,6 @@ SELECT t.ctid is not null as matched, t.*, s.* FROM source s FULL OUTER JOIN tar
  t       |   1 |      10 |     |      
  t       |   2 |      20 |     |      
  t       |   3 |      30 |     |      
-(3 rows)
 
 ALTER TABLE target OWNER TO regress_merge_privs;
 ALTER TABLE source OWNER TO regress_merge_privs;
@@ -1377,7 +1374,6 @@ SELECT create_hypertable('target2', 'tid', chunk_time_interval => 3);
   create_hypertable   
 ----------------------
  (2,public,target2,t)
-(1 row)
 
 CREATE TABLE source2 (sid integer, delta integer)
   WITH (autovacuum_enabled=off);
@@ -1392,7 +1388,6 @@ SELECT create_hypertable('sq_target', 'tid', chunk_time_interval => 3);
    create_hypertable    
 ------------------------
  (3,public,sq_target,t)
-(1 row)
 
 CREATE TABLE sq_source (delta integer, sid integer, balance integer DEFAULT 0)
   WITH (autovacuum_enabled=off);
@@ -1405,7 +1400,6 @@ SELECT create_hypertable('wq_target', 'tid', chunk_time_interval => 3);
    create_hypertable    
 ------------------------
  (4,public,wq_target,t)
-(1 row)
 
 CREATE TABLE wq_source (balance integer, sid integer)
   WITH (autovacuum_enabled=off);
@@ -1417,7 +1411,6 @@ SELECT create_hypertable('cj_target', 'tid', chunk_time_interval => 3);
    create_hypertable    
 ------------------------
  (5,public,cj_target,t)
-(1 row)
 
 CREATE TABLE cj_source1 (sid1 integer, scat integer, delta integer)
   WITH (autovacuum_enabled=off);
@@ -1436,7 +1429,6 @@ SELECT create_hypertable('fs_target', 'a', chunk_time_interval => 3);
    create_hypertable    
 ------------------------
  (6,public,fs_target,t)
-(1 row)
 
 -- run tests on hypertable
 \o :TEST_RESULTS_WITH_HYPERTABLE
@@ -1981,7 +1973,7 @@ CREATE TRIGGER merge_ard AFTER DELETE ON target FOR EACH ROW EXECUTE PROCEDURE m
 -- now the classic UPSERT, with a DELETE
 BEGIN;
 UPDATE target SET balance = 0 WHERE tid = 3;
---EXPLAIN (ANALYZE ON, COSTS OFF, SUMMARY OFF, TIMING OFF)
+--EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)
 MERGE INTO target t
 USING source AS s
 ON t.tid = s.sid
@@ -2135,7 +2127,7 @@ ON t.tid = $1
 WHEN MATCHED THEN
 UPDATE SET balance = $2;
 psql:include/ts_merge_query.sql:695: ERROR:  prepared statement "foom2" already exists
---EXPLAIN (ANALYZE ON, COSTS OFF, SUMMARY OFF, TIMING OFF)
+--EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)
 execute foom2 (1, 1);
 psql:include/ts_merge_query.sql:697: ERROR:  current transaction is aborted, commands ignored until end of transaction block
 ROLLBACK;
@@ -2299,7 +2291,7 @@ $$
 DECLARE ln text;
 BEGIN
     FOR ln IN
-        EXECUTE 'explain (analyze, timing off, summary off, costs off) ' ||
+        EXECUTE 'explain (analyze, timing off, summary off, buffers off, costs off) ' ||
 		  query
     LOOP
         ln := regexp_replace(ln, '(Memory( Usage)?|Buckets|Batches): \S*',  '\1: xxx', 'g');

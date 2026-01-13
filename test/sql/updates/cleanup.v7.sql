@@ -8,4 +8,3 @@
 \ir cleanup.continuous_aggs.v2.sql
 \ir cleanup.compression.sql
 \ir cleanup.policies.sql
-

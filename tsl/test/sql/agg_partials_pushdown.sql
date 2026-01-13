@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 
 -- Make parallel plans predictable
 SET max_parallel_workers_per_gather = 1;

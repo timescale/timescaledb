@@ -1,3 +1,5 @@
+Backward-Incompatible Change: #NNNNN <one line description of the feature>
+
 Implements: #NNNNN <one line description of the feature>
 
 Fixes: #NNNNN <one line description of the Issue>

@@ -8,6 +8,7 @@
 #include <postgres.h>
 
 #include "hypertable.h"
+#include "import/planner.h"
 
 extern Expr *ts_sort_transform_expr(Expr *expr);
 

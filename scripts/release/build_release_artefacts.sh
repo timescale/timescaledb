@@ -27,21 +27,24 @@ LAST_UPDATE_FILE=$(find sql/updates/*--${CURRENT_VERSION}.sql | head -1 | cut -d
 LAST_DOWNGRADE_FILE=$(find sql/updates/${CURRENT_VERSION}--*.sql | head -1 | cut -d '/' -f 3)
 
 # prepare next up & down files
-echo "Generate upgrade and downgrade files"
+echo "generate up and downgrade files"
 cp ./sql/updates/latest-dev.sql ./sql/updates/$UPDATE_FILE
 cp ./sql/updates/reverse-dev.sql ./sql/updates/$DOWNGRADE_FILE
 
+echo "truncate dev up & downgrade paths"
 truncate -s 0 ./sql/updates/latest-dev.sql
 truncate -s 0 ./sql/updates/reverse-dev.sql
 
 # CMakeLists
-echo "Adding update & downgrade sql file to CMakeLists.txt"
+echo "register upgrade sql file"
 gawk -i inplace '/'${LAST_UPDATE_FILE}')/ { print; print "    updates/'${UPDATE_FILE}')"; next }1' ./sql/CMakeLists.txt
 sed -i.bak "s/${LAST_UPDATE_FILE})/${LAST_UPDATE_FILE}/g" ./sql/CMakeLists.txt
 
-gawk -i inplace '/ '${LAST_DOWNGRADE_FILE}')/ { print; print "    '${DOWNGRADE_FILE}')"; next }1' ./sql/CMakeLists.txt
-sed -i.bak "s/${LAST_DOWNGRADE_FILE})/  ${LAST_DOWNGRADE_FILE}/g" ./sql/CMakeLists.txt
+echo "register downgrade sql file"
+gawk -i inplace '/'${LAST_DOWNGRADE_FILE}')/ { print; print "    '${DOWNGRADE_FILE}')"; next }1' ./sql/CMakeLists.txt
+sed -i.bak "s/${LAST_DOWNGRADE_FILE})/${LAST_DOWNGRADE_FILE}/g" ./sql/CMakeLists.txt
 
+echo "register reverse path"
 sed -i.bak "s/FILE reverse-dev.sql)/FILE ${DOWNGRADE_FILE})/g" ./sql/CMakeLists.txt
 
 # Set only next minor release version in version.config 

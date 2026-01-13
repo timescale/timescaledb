@@ -15,12 +15,14 @@
 # In particular, we cannot create new roles and we cannot create new
 # databases.
 #
-# The following environment variables can be set:
-# - CURRENT_VERSION is the version to update from (required).
+# Info on the parameters:
+# - current_version is the version to update from
 #
-# - NEXT_VERSION is the version to update to (required).
+# - next_version is the version to update to 
 #
-# - CONNECTION_STRING is the URL to use for the connection (required).
+# - connection_string is the URL to use for the connection
+#
+# - dbname if not defined use "tsdb" as database name
 #
 
 if [ "$#" -ne 3 ]; then
@@ -32,9 +34,11 @@ CURRENT_VERSION=$1
 NEXT_VERSION=$2
 CONNECTION_STRING=$3
 
+echo "testing upgrade path from v${CURRENT_VERSION} to ${NEXT_VERSION} .."
+
 SCRIPT_DIR=$(dirname $0)
 BASE_DIR=${PWD}/${SCRIPT_DIR}/..
-SCRATCHDIR=$(mktemp -d -t 'smoketest-XXXX')
+SCRATCHDIR=$(mktemp -d -t "smoketest-${CURRENT_VERSION}-${NEXT_VERSION}-XXXX")
 LOGFILE="$SCRATCHDIR/update-test.log"
 DUMPFILE="$SCRATCHDIR/smoke.dump"
 UPGRADE_OUT="$SCRATCHDIR/upgrade.out"
@@ -63,25 +67,23 @@ PSQL="psql -a -qX $PGOPTS"
 # is available and leave it unset otherwise. If the user has either
 # set PGPASSWORD or has the password in a .pgpass file, it will be
 # picked up and used for the connection.
-if [[ $# -gt 0 ]]; then
-    # shellcheck disable=SC2207 # Prefer mapfile or read -a to split command output (or quote to avoid splitting).
-    parts=($(echo $CONNECTION_STRING | perl -mURI::Split=uri_split -ne '@F = uri_split($_); print join(" ", split(qr/[:@]/, $F[1]), substr($F[2], 1))'))
-    export PGUSER=${parts[0]}
-    if [[ ${#parts[@]} -eq 5 ]]; then
+# shellcheck disable=SC2207 # Prefer mapfile or read -a to split command output (or quote to avoid splitting).
+parts=($(echo $CONNECTION_STRING | perl -mURI::Split=uri_split -ne '@F = uri_split($_); print join(" ", split(qr/[:@]/, $F[1]), substr($F[2], 1))'))
+export PGUSER=${parts[0]}
+if [[ ${#parts[@]} -eq 5 ]]; then
     # Cloud has 5 fields
-	export PGPASSWORD=${parts[1]}
-	export PGHOST=${parts[2]}
-	export PGPORT=${parts[3]}
-	export PGDATABASE=${parts[4]}
-    elif [[ ${#parts[@]} -eq 4 ]]; then
+    export PGPASSWORD=${parts[1]}
+    export PGHOST=${parts[2]}
+    export PGPORT=${parts[3]}
+    export PGDATABASE=${parts[4]}
+elif [[ ${#parts[@]} -eq 4 ]]; then
     # Forge has 4 fields
-	export PGHOST=${parts[1]}
-	export PGPORT=${parts[2]}
-	export PGDATABASE=${parts[3]}
-    else
-	echo "Malformed URL '$CONNECTION_STRING'" 1>&2
-	exit 2
-    fi
+    export PGHOST=${parts[1]}
+    export PGPORT=${parts[2]}
+    export PGDATABASE=${parts[3]}
+else
+    echo "Malformed URL '$CONNECTION_STRING'" 1>&2
+    exit 2
 fi
 
 err_trap() {
@@ -112,12 +114,12 @@ missing_versions() {
 	EOF
 }
 
-
 echo "**** Scratch directory: ${SCRATCHDIR}"
 echo "**** Update files in directory ${BASE_DIR}/test/sql/updates"
 cd ${BASE_DIR}/test/sql/updates
 
 $PSQL -c '\conninfo'
+$PSQL -c "ALTER DATABASE ${PGDATABASE} SET timescaledb.enable_compression_ratio_warnings = 'off'";
 
 # shellcheck disable=SC2207 # Prefer mapfile or read -a to split command output (or quote to avoid splitting).
 missing=($(missing_versions $CURRENT_VERSION $NEXT_VERSION))

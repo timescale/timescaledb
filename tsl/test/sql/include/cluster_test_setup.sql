@@ -15,7 +15,7 @@ $BODY$
             SET LOCAL enable_seqscan=%1$s;
             SET LOCAL enable_indexscan=%2$s;
             SET LOCAL enable_bitmapscan=%3$s;
-            EXPLAIN (costs off) SELECT * FROM %4$I WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM %4$I WHERE time=7
         $INNER$, seqscan, indexscan, bitmapscan, table_name) as a,
         format($INNER$
             WITH T1 as (SELECT * FROM %1$I WHERE time=7),
@@ -35,7 +35,7 @@ $BODY$
             SET LOCAL enable_seqscan=%1$s;
             SET LOCAL enable_indexscan=%2$s;
             SET LOCAL enable_bitmapscan=%3$s;
-            EXPLAIN (costs off) SELECT * FROM %4$I WHERE time=6
+            EXPLAIN (buffers off, costs off) SELECT * FROM %4$I WHERE time=6
         $INNER$, seqscan, indexscan, bitmapscan, table_name) as a,
         format($INNER$
             WITH T1 as (SELECT * FROM %1$I WHERE time=7),

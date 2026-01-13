@@ -118,7 +118,7 @@ create_trigger_handler(const Trigger *trigger, void *arg)
 				 errmsg("ROW triggers with transition tables are not supported on hypertable "
 						"chunks")));
 
-	if (trigger_is_chunk_trigger(trigger))
+	if (trigger && TRIGGER_FOR_ROW(trigger->tgtype) && !trigger->tgisinternal)
 		ts_trigger_create_on_chunk(trigger->tgoid,
 								   NameStr(chunk->fd.schema_name),
 								   NameStr(chunk->fd.table_name));

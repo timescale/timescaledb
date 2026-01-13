@@ -13,7 +13,7 @@
 #include <common/hashfn.h>
 
 #include "compression/arrow_c_data_interface.h"
-#include "nodes/decompress_chunk/compressed_batch.h"
+#include "nodes/columnar_scan/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
 #include "nodes/vector_agg/grouping_policy_hash.h"
 #include "template_helper.h"
@@ -85,7 +85,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 
 		if (column_values->decompression_type == DT_Scalar)
 		{
-			if (!*column_values->output_isnull)
+			if (!DatumGetBool(PointerGetDatum(column_values->buffers[0])))
 			{
 				const GroupingColumn *def = &params.policy->grouping_columns[column_index];
 				if (def->value_bytes > 0)
@@ -98,7 +98,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 					 * The default value always has a long varlena header, but
 					 * we are going to use short if it fits.
 					 */
-					const int32 value_bytes = VARSIZE_ANY_EXHDR(*column_values->output_value);
+					const int32 value_bytes = VARSIZE_ANY_EXHDR(column_values->buffers[1]);
 					if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
 					{
 						/* Short varlena, unaligned. */
@@ -126,32 +126,37 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 		if (column_values->decompression_type > 0)
 		{
 			num_bytes += column_values->decompression_type;
+			continue;
+		}
+
+		if (column_values->decompression_type == DT_ArrowBits)
+		{
+			num_bytes += 1;
+			continue;
+		}
+
+		Assert(column_values->decompression_type == DT_ArrowText ||
+			   column_values->decompression_type == DT_ArrowTextDict);
+		Assert((column_values->decompression_type == DT_ArrowTextDict) ==
+			   (column_values->buffers[3] != NULL));
+
+		const uint32 data_row = (column_values->decompression_type == DT_ArrowTextDict) ?
+									((int16 *) column_values->buffers[3])[row] :
+									row;
+		const uint32 start = ((uint32 *) column_values->buffers[1])[data_row];
+		const int32 value_bytes = ((uint32 *) column_values->buffers[1])[data_row + 1] - start;
+
+		if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
+		{
+			/* Short varlena, unaligned. */
+			const int total_bytes = value_bytes + VARHDRSZ_SHORT;
+			num_bytes += total_bytes;
 		}
 		else
 		{
-			Assert(column_values->decompression_type == DT_ArrowText ||
-				   column_values->decompression_type == DT_ArrowTextDict);
-			Assert((column_values->decompression_type == DT_ArrowTextDict) ==
-				   (column_values->buffers[3] != NULL));
-
-			const uint32 data_row = (column_values->decompression_type == DT_ArrowTextDict) ?
-										((int16 *) column_values->buffers[3])[row] :
-										row;
-			const uint32 start = ((uint32 *) column_values->buffers[1])[data_row];
-			const int32 value_bytes = ((uint32 *) column_values->buffers[1])[data_row + 1] - start;
-
-			if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
-			{
-				/* Short varlena, unaligned. */
-				const int total_bytes = value_bytes + VARHDRSZ_SHORT;
-				num_bytes += total_bytes;
-			}
-			else
-			{
-				/* Long varlena, requires alignment. */
-				const int total_bytes = value_bytes + VARHDRSZ;
-				num_bytes = TYPEALIGN(4, num_bytes) + total_bytes;
-			}
+			/* Long varlena, requires alignment. */
+			const int total_bytes = value_bytes + VARHDRSZ;
+			num_bytes = TYPEALIGN(4, num_bytes) + total_bytes;
 		}
 	}
 
@@ -207,23 +212,22 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 
 		if (column_values->decompression_type == DT_Scalar)
 		{
-			const bool is_valid = !*column_values->output_isnull;
+			const bool is_valid = !DatumGetBool(PointerGetDatum(column_values->buffers[0]));
+			Datum value = PointerGetDatum(column_values->buffers[1]);
 			byte_bitmap_set_row_validity(serialized_key_validity_bitmap, column_index, is_valid);
 			if (is_valid)
 			{
 				const GroupingColumn *def = &params.policy->grouping_columns[column_index];
 				if (def->by_value)
 				{
-					memcpy(&serialized_key_storage[offset],
-						   column_values->output_value,
-						   def->value_bytes);
+					memcpy(&serialized_key_storage[offset], &value, def->value_bytes);
 
 					offset += def->value_bytes;
 				}
 				else if (def->value_bytes > 0)
 				{
 					memcpy(&serialized_key_storage[offset],
-						   DatumGetPointer(*column_values->output_value),
+						   DatumGetPointer(value),
 						   def->value_bytes);
 
 					offset += def->value_bytes;
@@ -234,7 +238,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 					 * The default value always has a long varlena header, but
 					 * we are going to use short if it fits.
 					 */
-					const int32 value_bytes = VARSIZE_ANY_EXHDR(*column_values->output_value);
+					const int32 value_bytes = VARSIZE_ANY_EXHDR(value);
 					if (value_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX)
 					{
 						/* Short varlena, no alignment. */
@@ -252,9 +256,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 						offset += VARHDRSZ;
 					}
 
-					memcpy(&serialized_key_storage[offset],
-						   VARDATA_ANY(*column_values->output_value),
-						   value_bytes);
+					memcpy(&serialized_key_storage[offset], VARDATA_ANY(value), value_bytes);
 
 					offset += value_bytes;
 				}
@@ -291,6 +293,11 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 						   row + (int64 *) column_values->buffers[1],
 						   8);
 					break;
+				case 16:
+					memcpy(&serialized_key_storage[offset],
+						   (row * 2) + (int64 *) column_values->buffers[1],
+						   16);
+					break;
 				default:
 					pg_unreachable();
 					break;
@@ -298,6 +305,13 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 
 			offset += column_values->decompression_type;
 
+			continue;
+		}
+
+		if (column_values->decompression_type == DT_ArrowBits)
+		{
+			serialized_key_storage[offset] = arrow_row_is_valid(column_values->buffers[1], row);
+			offset += 1;
 			continue;
 		}
 

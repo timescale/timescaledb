@@ -1,9 +1,11 @@
 # Test installation of our homebrew tap for latest version
-name: Homebrew
+name: "Packaging tests: Homebrew"
 "on":
   schedule:
     # run daily 20:00 on main branch
     - cron: '0 20 * * *'
+  pull_request:
+    paths: .github/workflows/homebrew.yaml
   push:
     tags:
     - '*'
@@ -36,6 +38,7 @@ jobs:
 
     - name: Install timescaledb
       run: |
+        brew uninstall cmake
         brew install timescaledb ${{ matrix.install_options }}
         timescaledb-tune --quiet --yes
         timescaledb_move.sh
@@ -45,15 +48,12 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Test Installation
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         psql -X -c "CREATE EXTENSION timescaledb;" postgres
         psql -X -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';" postgres
-        # read expected version from version.config
-        if grep '^version = [0-9.]\+$' version.config; then
-          version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
-        else
-          version=$(grep '^previous_version = ' version.config | sed -e 's!^previous_version = !!')
-        fi
+        version=$(gh release list --json tagName,isLatest --jq '.[] | select(.isLatest) | .tagName')
         installed_version=$(psql -X -t \
             -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" \
             postgres | sed -e 's! !!g')

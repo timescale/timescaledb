@@ -4,7 +4,6 @@ starting permutation: s1a s1c s2a s2b
 table_name     
 ---------------
 ts_cluster_test
-(1 row)
 
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090001', 23.4, 1);
 step s1c: COMMIT;
@@ -15,7 +14,6 @@ starting permutation: s1a s2a s1c s2b
 table_name     
 ---------------
 ts_cluster_test
-(1 row)
 
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090001', 23.4, 1);
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090002', 0.72, 1); <waiting ...>
@@ -27,7 +25,6 @@ starting permutation: s1a s2a s2b s1c
 table_name     
 ---------------
 ts_cluster_test
-(1 row)
 
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090001', 23.4, 1);
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090002', 0.72, 1); <waiting ...>
@@ -40,7 +37,6 @@ starting permutation: s2a s1a s1c s2b
 table_name     
 ---------------
 ts_cluster_test
-(1 row)
 
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090002', 0.72, 1);
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090001', 23.4, 1); <waiting ...>
@@ -53,7 +49,6 @@ starting permutation: s2a s1a s2b s1c
 table_name     
 ---------------
 ts_cluster_test
-(1 row)
 
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090002', 0.72, 1);
 step s1a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090001', 23.4, 1); <waiting ...>
@@ -65,7 +60,6 @@ starting permutation: s2a s2b s1a s1c
 table_name     
 ---------------
 ts_cluster_test
-(1 row)
 
 step s2a: INSERT INTO ts_cluster_test VALUES ('2017-01-20T090002', 0.72, 1);
 step s2b: COMMIT;

@@ -12,6 +12,7 @@ TEST_INPUT_DIR=${TEST_INPUT_DIR:-${EXE_DIR}}
 TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
 TEST_SUPPORT_FILE=${CURRENT_DIR}/sql/utils/testsupport.sql
 TEST_SUPPORT_FILE_INIT=${CURRENT_DIR}/sql/utils/testsupport_init.sql
+TEST_TIMEOUT=${TEST_TIMEOUT:-120}
 
 # Read the extension version from version.config
 read -r VERSION < ${CURRENT_DIR}/../version.config
@@ -25,6 +26,18 @@ TEST_BASE_NAME=${PGAPPNAME##pg_regress/}
 # so we cut off suffix to get base name
 if [[ ${TEST_BASE_NAME} == *-1[0-9] ]]; then
   TEST_BASE_NAME=${TEST_BASE_NAME%???}
+fi
+
+# on macos check if proper timeout is available
+if [ "$(uname)" == "Darwin" ]; then
+  if ! command -v gtimeout >/dev/null 2>&1
+    then
+      TIMEOUT_CMD=""
+    else
+      TIMEOUT_CMD="gtimeout -v ${TEST_TIMEOUT}s"
+  fi
+else
+  TIMEOUT_CMD="timeout -v ${TEST_TIMEOUT}s"
 fi
 
 #docker doesn't set user
@@ -66,7 +79,7 @@ cd ${EXE_DIR}/sql
 # we strip out any output between <exclude_from_test></exclude_from_test>
 # and the part about memory usage in EXPLAIN ANALYZE output of Sort nodes
 # also ignore the Postgres rehashing catalog debug messages from 'src/backend/utils/cache/catcache.c'
-${PSQL} -U ${TEST_PGUSER} \
+${TIMEOUT_CMD} ${PSQL} -U ${TEST_PGUSER} \
      -v ON_ERROR_STOP=1 \
      -v VERBOSITY=terse \
      -v ECHO=all \

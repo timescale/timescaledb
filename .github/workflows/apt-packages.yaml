@@ -1,5 +1,5 @@
 # Test installing our ubuntu and debian packages for the latest version.
-name: APT packages
+name: "Packaging tests: APT"
 "on":
   schedule:
     # run daily 0:00 on main branch
@@ -15,8 +15,8 @@ name: APT packages
   workflow_dispatch:
 jobs:
   apt_tests:
-    name: APT ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
-    runs-on: ubuntu-latest
+    name: APT ${{ matrix.arch }} ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
+    runs-on: ${{ matrix.runner }}
     container:
       image: ${{ matrix.image }}
       env:
@@ -24,23 +24,37 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "debian:11-slim", "debian:12-slim", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04" ]
-        pg: [ 15, 16, 17 ]
+        arch: [ "x86", "ARM" ]
+        image: [ "debian:11-slim", "debian:12-slim", "debian:13-slim", "ubuntu:22.04", "ubuntu:24.04" ]
+        pg: [ 15, 16, 17, 18 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
             pkg_suffix: "-oss"
+          - arch: "x86"
+            runner: "ubuntu-latest"
+          - arch: "ARM"
+            runner: "cloud-image-runner-ubuntu-24-arm64"
+        exclude:
+          - image: "debian:11-slim"
+            pg: 18
+
 
     steps:
     - name: Add repositories
       run: |
         apt-get update
-        apt-get install -y wget lsb-release gnupg apt-transport-https sudo postgresql-common
+        apt-get install -y wget lsb-release gnupg apt-transport-https sudo postgresql-common jq
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         image_type=$(lsb_release -i -s | tr '[:upper:]' '[:lower:]')
         echo "deb https://packagecloud.io/timescale/timescaledb/${image_type}/ $(lsb_release -c -s) main" \
           > /etc/apt/sources.list.d/timescaledb.list
-        wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
+        if [ "${image_type}" = "ubuntu" ]; then
+          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
+        else
+          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
+        fi
+
 
     - name: Install timescaledb
       run: |
@@ -60,17 +74,11 @@ jobs:
 
     - uses: actions/checkout@v4
 
-    - name: Read versions
+    - name: Get version of latest release
       id: versions
       run: |
-        # read expected version from version.config
-        # version will only be a proper version in a release branch so we use previous_version
-        # as fallback for main
-        if grep '^version = [0-9.]\+$' version.config; then
-          version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
-        else
-          version=$(grep '^previous_version = ' version.config | sed -e 's!^previous_version = !!')
-        fi
+        version=$(wget -q https://api.github.com/repos/timescale/timescaledb/releases/latest -O - | jq -r .tag_name)
+        echo "version=${version}"
         echo "version=${version}" >>$GITHUB_OUTPUT
 
     - name: Test Installation
@@ -85,13 +93,12 @@ jobs:
         fi
 
     - name: Test Downgrade
-      if: matrix.pg != '17'
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.
         prev_version=$(wget --quiet -O - \
         https://raw.githubusercontent.com/timescale/timescaledb/${{ steps.versions.outputs.version }}/version.config \
-          | grep update_from_version | sed -e 's!update_from_version = !!')
+          | grep previous_version | sed -e 's!previous_version = !!')
         sudo -u postgres psql -X -c "ALTER EXTENSION timescaledb UPDATE TO '${prev_version}'" \
           -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb'"
         installed_version=$(sudo -u postgres psql -X -t \
@@ -99,6 +106,15 @@ jobs:
         if [ "$prev_version" != "$installed_version" ];then
           false
         fi
+
+    - name: Install toolkit
+      run: |
+        apt-get install -y --no-install-recommends \
+          timescaledb-toolkit-postgresql-${{ matrix.pg }}
+
+    - name: List available toolkit versions
+      run: |
+        apt-cache show timescaledb-toolkit-postgresql-${{ matrix.pg }} | grep -e Version: -e Depends: | tr '\n' ' ' | sed -e 's! Version: !\n!g' -e 's!Version: !!' -e 's!$!\n!'
 
     - name: PostgreSQL log
       if: always()

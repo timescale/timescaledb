@@ -17,20 +17,7 @@ CREATE INDEX ON metrics_ordered(device_id_peer,time);
 -- compress all chunks
 SELECT count(compress_chunk(ch)) FROM show_chunks('metrics_ordered') ch;
 
--- reindexing compressed hypertable to update statistics
-DO
-$$
-DECLARE
-  hyper_id int;
-BEGIN
-  SELECT h.compressed_hypertable_id
-  INTO hyper_id
-  FROM _timescaledb_catalog.hypertable h
-  WHERE h.table_name = 'metrics_ordered';
-  EXECUTE format('REINDEX TABLE _timescaledb_internal._compressed_hypertable_%s',
-    hyper_id);
-END;
-$$;
+VACUUM ANALYZE metrics_ordered;
 
 -- should not have ordered DecompressChunk path because segmentby columns are not part of pathkeys
 :PREFIX SELECT * FROM metrics_ordered ORDER BY time DESC LIMIT 10;

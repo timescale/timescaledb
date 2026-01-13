@@ -58,7 +58,7 @@ SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = 'public' AND tablename LIKE 'analyze_test'
 ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
 
-ANALYZE VERBOSE analyze_test;
+ANALYZE analyze_test;
 
 -- stats should exist for all three chunks
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats

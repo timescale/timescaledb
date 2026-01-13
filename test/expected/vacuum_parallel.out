@@ -13,7 +13,6 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
     create_hypertable     
 --------------------------
  (1,public,vacuum_test,t)
-(1 row)
 
 -- parallel vacuum needs the index size to be larger than min_parallel_index_scan_size to kick in
 SET min_parallel_index_scan_size TO 0;

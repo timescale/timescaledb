@@ -40,6 +40,7 @@
 #include "config.h"
 #include "cross_module_fn.h"
 #include "debug_assert.h"
+#include "debug_point.h"
 #include "extension.h"
 #include "job.h"
 #include "job_stat.h"
@@ -327,7 +328,8 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 {
 	MemoryContext old_ctx;
 	List *jobs = NIL;
-	ScanIterator iterator = ts_scan_iterator_create(BGW_JOB, AccessShareLock, mctx);
+	ScanIterator iterator =
+		ts_scan_iterator_create_with_catalog_snapshot(BGW_JOB, AccessShareLock, mctx);
 
 	iterator.ctx.index = catalog_get_index(ts_catalog_get(), BGW_JOB, BGW_JOB_PKEY_IDX);
 	iterator.ctx.filter = bgw_job_filter_scheduled;
@@ -410,6 +412,7 @@ ts_bgw_job_get_all(size_t alloc_size, MemoryContext mctx)
 		.lockmode = AccessShareLock,
 		.result_mctx = mctx,
 		.scandirection = ForwardScanDirection,
+		.use_catalog_snapshot = true,
 	};
 
 	ts_scanner_scan(&scanctx);
@@ -465,6 +468,7 @@ ts_bgw_job_find_by_proc_and_hypertable_id(const char *proc_name, const char *pro
 		.tuple_found = bgw_job_accum_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
+		.use_catalog_snapshot = true,
 	};
 
 	init_scan_by_proc_schema(&scankey[0], proc_schema);
@@ -493,6 +497,7 @@ ts_bgw_job_find_by_hypertable_id(int32 hypertable_id)
 		.tuple_found = bgw_job_accum_tuple_found,
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
+		.use_catalog_snapshot = true,
 	};
 
 	init_scan_by_hypertable_id(&scankey[0], hypertable_id);
@@ -547,7 +552,7 @@ ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_l
 {
 	/* Take a share lock on the table to prevent concurrent data changes during scan. This lock will
 	 * be released after the scan */
-	ScanIterator iterator = ts_scan_iterator_create(BGW_JOB, ShareLock, mctx);
+	ScanIterator iterator = ts_scan_iterator_create_with_catalog_snapshot(BGW_JOB, ShareLock, mctx);
 	List *jobs = NIL;
 	BgwJob *job = NULL;
 	LOCKTAG tag;
@@ -630,7 +635,8 @@ ts_bgw_job_get_share_lock(int32 bgw_job_id, MemoryContext mctx)
 BgwJob *
 ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 {
-	ScanIterator iterator = ts_scan_iterator_create(BGW_JOB, AccessShareLock, mctx);
+	ScanIterator iterator =
+		ts_scan_iterator_create_with_catalog_snapshot(BGW_JOB, AccessShareLock, mctx);
 	int num_found = 0;
 	BgwJob *job = NULL;
 
@@ -641,6 +647,7 @@ ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 		Assert(num_found == 0);
 		job = bgw_job_from_tupleinfo(ts_scan_iterator_tuple_info(&iterator), sizeof(BgwJob));
 		num_found++;
+		DEBUG_WAITPOINT("bgw_job_find_during_scan");
 	}
 
 	if (num_found == 0 && fail_if_not_found)
@@ -672,7 +679,13 @@ get_job_lock_for_delete(int32 job_id)
 		if (VirtualTransactionIdIsValid(*vxid))
 		{
 			proc = VirtualTransactionGetProcCompat(vxid);
-			if (proc != NULL && proc->isBackgroundWorker)
+			if (proc != NULL
+#if PG18_LT
+				&& proc->isBackgroundWorker
+#else
+				&& !proc->isRegularBackend
+#endif
+			)
 			{
 				/* Simply assuming that this pid corresponds to the background worker
 				 * running the job is not sufficient. The scheduler could also be the
@@ -746,6 +759,7 @@ bgw_job_delete_scan(ScanKeyData *scankey, int32 job_id)
 		.lockmode = RowExclusiveLock,
 		.scandirection = ForwardScanDirection,
 		.result_mctx = CurrentMemoryContext,
+		.use_catalog_snapshot = true,
 	};
 
 	return ts_scanner_scan(&scanctx);
@@ -922,7 +936,8 @@ ts_bgw_job_update_by_id(int32 job_id, BgwJob *job)
 						   .lockmode = RowExclusiveLock,
 						   .scandirection = ForwardScanDirection,
 						   .result_mctx = CurrentMemoryContext,
-						   .tuplock = &scantuplock };
+						   .tuplock = &scantuplock,
+						   .use_catalog_snapshot = true };
 
 	ScanKeyInit(&scankey[0],
 				Anum_bgw_job_pkey_idx_id,
@@ -1102,7 +1117,8 @@ ts_bgw_job_function_call_string(BgwJob *job)
 	Oid funcid = ts_bgw_job_get_funcid(job);
 	/* If do not found the function or procedure then fallback to PROKIND_FUNCTION */
 	char prokind = OidIsValid(funcid) ? get_func_prokind(funcid) : PROKIND_FUNCTION;
-	StringInfo stmt = makeStringInfo();
+	StringInfoData stmt;
+	initStringInfo(&stmt);
 	char *jsonb_str = "NULL";
 
 	if (job->fd.config)
@@ -1112,7 +1128,7 @@ ts_bgw_job_function_call_string(BgwJob *job)
 	switch (prokind)
 	{
 		case PROKIND_FUNCTION:
-			appendStringInfo(stmt,
+			appendStringInfo(&stmt,
 							 "SELECT %s.%s('%d', %s)",
 							 quote_identifier(NameStr(job->fd.proc_schema)),
 							 quote_identifier(NameStr(job->fd.proc_name)),
@@ -1120,7 +1136,7 @@ ts_bgw_job_function_call_string(BgwJob *job)
 							 jsonb_str);
 			break;
 		case PROKIND_PROCEDURE:
-			appendStringInfo(stmt,
+			appendStringInfo(&stmt,
 							 "CALL %s.%s('%d', %s)",
 							 quote_identifier(NameStr(job->fd.proc_schema)),
 							 quote_identifier(NameStr(job->fd.proc_name)),
@@ -1134,7 +1150,7 @@ ts_bgw_job_function_call_string(BgwJob *job)
 			break;
 	}
 
-	return stmt->data;
+	return stmt.data;
 }
 
 extern Datum
@@ -1143,7 +1159,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	Oid db_oid = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
 	BgwParams params;
 	BgwJob *job;
-	JobResult res = JOB_FAILURE_IN_EXECUTION;
+	JobResult volatile res = JOB_FAILURE_IN_EXECUTION;
 	bool got_lock;
 	instr_time start;
 	instr_time duration;
@@ -1185,6 +1201,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	INSTR_TIME_SET_CURRENT(start);
 
 	StartTransactionCommand();
+	PushActiveSnapshot(GetTransactionSnapshot());
 
 	/* Grab a session lock on the job row to prevent concurrent deletes. Lock is released
 	 * when the job process exits */
@@ -1205,6 +1222,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	job->job_history.execution_start = params.job_history_execution_start;
 	ts_bgw_job_stat_history_update(JOB_STAT_HISTORY_UPDATE_PID, job, JOB_SUCCESS, NULL);
 
+	PopActiveSnapshot();
 	CommitTransactionCommand();
 
 	elog(DEBUG2, "job %d (%s) found", params.job_id, NameStr(job->fd.application_name));
@@ -1244,6 +1262,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 			/* If there was an error, rollback what was done before the error */
 			AbortCurrentTransaction();
 		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
 
 		/* Free the old job if it exists, it's no longer needed, and since it's
 		 * in the TopMemoryContext it won't be freed otherwise.
@@ -1293,6 +1312,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		 */
 		elog(LOG, "job %d threw an error", params.job_id);
 
+		PopActiveSnapshot();
 		CommitTransactionCommand();
 		ReThrowError(edata);
 	}
@@ -1301,6 +1321,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	Assert(!IsTransactionState());
 
 	StartTransactionCommand();
+	PushActiveSnapshot(GetTransactionSnapshot());
 
 	/*
 	 * Note that the mark_start happens in the scheduler right before the job
@@ -1314,6 +1335,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		ts_end_tss_store_callback(stmt, -1, (int) strlen(stmt), 0, 0);
 	}
 
+	PopActiveSnapshot();
 	CommitTransactionCommand();
 
 	INSTR_TIME_SET_CURRENT(duration);

@@ -88,7 +88,9 @@ debug_point_enable(const DebugPoint *point)
 			LockRelease(&point->tag, ExclusiveLock, true);
 			TS_FALLTHROUGH;
 		case LOCKACQUIRE_NOT_AVAIL:
-			ereport(ERROR, (errmsg("debug point \"%s\" already enabled", point->name)));
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("debug point \"%s\" already enabled", point->name)));
 			break;
 		case LOCKACQUIRE_OK:
 			break;
@@ -101,7 +103,9 @@ debug_point_release(const DebugPoint *point)
 	ereport(DEBUG1, (errmsg("releasing debug point \"%s\"", point->name)));
 
 	if (!LockRelease(&point->tag, ExclusiveLock, true))
-		ereport(ERROR, (errmsg("cannot release debug point \"%s\"", point->name)));
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("cannot release debug point \"%s\"", point->name)));
 }
 
 /*
@@ -266,5 +270,7 @@ ts_debug_point_raise_error_if_enabled(const char *name)
 			break;
 	}
 
-	ereport(ERROR, (errmsg("error injected at debug point '%s'", point.name)));
+	ereport(ERROR,
+			(errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION),
+			 errmsg("error injected at debug point '%s'", point.name)));
 }

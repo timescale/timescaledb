@@ -2,29 +2,33 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Disable background workers since we are testing manual refresh
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-(1 row)
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET datestyle TO 'ISO, YMD';
 SET timezone TO 'UTC';
+CREATE VIEW hypertable_invalidation_thresholds AS
+SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
+       watermark AS threshold
+  FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+  JOIN _timescaledb_catalog.hypertable ht
+    ON hypertable_id = ht.id
+ORDER BY 1;
 CREATE TABLE conditions (time bigint NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions', 'time', chunk_time_interval => 10);
     create_hypertable    
 -------------------------
  (1,public,conditions,t)
-(1 row)
 
 CREATE TABLE measurements (time int NOT NULL, device int, temp float);
 SELECT create_hypertable('measurements', 'time', chunk_time_interval => 10);
      create_hypertable     
 ---------------------------
  (2,public,measurements,t)
-(1 row)
 
 CREATE OR REPLACE FUNCTION bigint_now()
 RETURNS bigint LANGUAGE SQL STABLE AS
@@ -42,13 +46,11 @@ SELECT set_integer_now_func('conditions', 'bigint_now');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 SELECT set_integer_now_func('measurements', 'int_now');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 INSERT INTO conditions
 SELECT t, ceil(abs(timestamp_hash(to_timestamp(t)::timestamp))%4)::int,
@@ -74,7 +76,6 @@ LIMIT 10;
    93 |      0 |    4
    92 |      0 |   32
    91 |      3 |   15
-(10 rows)
 
 -- Create two continuous aggregates on the same hypertable to test
 -- that invalidations are handled correctly across both of them.
@@ -108,26 +109,22 @@ FROM _timescaledb_catalog.continuous_agg;
                  3 |                 1 | cond_10
                  4 |                 1 | cond_20
                  5 |                 2 | measure_10
-(3 rows)
 
 -- The continuous aggregates should be empty
 SELECT * FROM cond_10
 ORDER BY 1 DESC, 2;
  bucket | device | avg_temp 
 --------+--------+----------
-(0 rows)
 
 SELECT * FROM cond_20
 ORDER BY 1 DESC, 2;
  bucket | device | avg_temp 
 --------+--------+----------
-(0 rows)
 
 SELECT * FROM measure_10
 ORDER BY 1 DESC, 2;
  bucket | device | avg_temp 
 --------+--------+----------
-(0 rows)
 
 CREATE OR REPLACE FUNCTION get_hyper_invals() RETURNS  TABLE (
       "hyper_id" INT,
@@ -166,7 +163,6 @@ ORDER BY 1,2;
 ---------------+----------------------
              1 | -9223372036854775808
              2 |          -2147483648
-(2 rows)
 
 -- There should be only "infinite" invalidations in the cagg
 -- invalidation log:
@@ -176,7 +172,6 @@ SELECT * FROM cagg_invals;
        3 | -9223372036854775808 | 9223372036854775807
        4 | -9223372036854775808 | 9223372036854775807
        5 | -9223372036854775808 | 9223372036854775807
-(3 rows)
 
 -- Now refresh up to 50 without the first bucket, and the threshold should be updated accordingly:
 CALL refresh_continuous_aggregate('cond_10', 1, 50);
@@ -186,7 +181,6 @@ ORDER BY 1,2;
 ---------------+-------------
              1 |          50
              2 | -2147483648
-(2 rows)
 
 -- Invalidations should be cleared inside the refresh window:
 SELECT * FROM cagg_invals;
@@ -196,7 +190,6 @@ SELECT * FROM cagg_invals;
        3 |                   50 | 9223372036854775807
        4 | -9223372036854775808 | 9223372036854775807
        5 | -9223372036854775808 | 9223372036854775807
-(4 rows)
 
 -- Refresh up to 50 from the beginning
 CALL refresh_continuous_aggregate('cond_10', 0, 50);
@@ -207,7 +200,6 @@ SELECT * FROM cagg_invals;
        3 |                   50 | 9223372036854775807
        4 | -9223372036854775808 | 9223372036854775807
        5 | -9223372036854775808 | 9223372036854775807
-(4 rows)
 
 -- Refreshing below the threshold does not move it:
 CALL refresh_continuous_aggregate('cond_10', 20, 49);
@@ -218,7 +210,6 @@ ORDER BY 1,2;
 ---------------+-------------
              1 |          50
              2 | -2147483648
-(2 rows)
 
 -- Nothing changes with invalidations either since the region was
 -- already refreshed and no new invalidations have been generated:
@@ -229,7 +220,6 @@ SELECT * FROM cagg_invals;
        3 |                   50 | 9223372036854775807
        4 | -9223372036854775808 | 9223372036854775807
        5 | -9223372036854775808 | 9223372036854775807
-(4 rows)
 
 -- Refreshing measure_10 moves the threshold only for the other hypertable:
 CALL refresh_continuous_aggregate('measure_10', 0, 30);
@@ -239,7 +229,6 @@ ORDER BY 1,2;
 ---------------+-----------
              1 |        50
              2 |        30
-(2 rows)
 
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
@@ -249,7 +238,6 @@ SELECT * FROM cagg_invals;
        4 | -9223372036854775808 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
-(5 rows)
 
 -- Refresh on the second continuous aggregate, cond_20, on the first
 -- hypertable moves the same threshold as when refreshing cond_10:
@@ -260,7 +248,6 @@ ORDER BY 1,2;
 ---------------+-----------
              1 |       100
              2 |        30
-(2 rows)
 
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
@@ -271,13 +258,11 @@ SELECT * FROM cagg_invals;
        4 |                  100 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
-(6 rows)
 
 -- There should be no hypertable invalidations initially:
 SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
-(0 rows)
 
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
@@ -288,7 +273,6 @@ SELECT * FROM cagg_invals;
        4 |                  100 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
-(6 rows)
 
 -- Create invalidations across different ranges. Some of these should
 -- be deleted and others cut in different ways when a refresh is
@@ -304,8 +288,8 @@ SELECT * FROM hyper_invals;
 ----------+-------+-----
         1 |    10 |  10
         1 |    10 |  19
-        1 |    60 |  70
-(3 rows)
+        1 |    60 |  60
+        1 |    70 |  70
 
 -- Generate some invalidations for the other hypertable
 INSERT INTO measurements VALUES (20, 4, 23.7);
@@ -316,9 +300,9 @@ SELECT * FROM hyper_invals;
 ----------+-------+-----
         1 |    10 |  10
         1 |    10 |  19
-        1 |    60 |  70
+        1 |    60 |  60
+        1 |    70 |  70
         2 |    20 |  20
-(4 rows)
 
 -- First refresh a window where we don't have any invalidations. This
 -- allows us to see only the copying of the invalidations to the per
@@ -331,7 +315,6 @@ ORDER BY 1,2;
 ---------------+-----------
              1 |       100
              2 |        30
-(2 rows)
 
 -- Invalidations should be moved from the hypertable invalidation log
 -- to the continuous aggregate log, but only for the hypertable that
@@ -340,7 +323,6 @@ SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
         2 |    20 |  20
-(1 row)
 
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
@@ -354,7 +336,6 @@ SELECT * FROM cagg_invals;
        4 |                  100 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
-(9 rows)
 
 -- Now add more invalidations to test a refresh that overlaps with them.
 -- Entries that should be deleted:
@@ -376,16 +357,22 @@ INSERT INTO conditions VALUES (20, 5, 23.8), (100, 3, 23.6);
 SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
-        1 |     1 |  25
-        1 |     2 |  60
-        1 |     3 |  80
-        1 |    19 |  59
-        1 |    20 |  30
-        1 |    20 | 100
-        1 |    30 |  59
-        1 |    60 |  90
+        1 |     1 |   1
+        1 |     2 |   2
+        1 |     3 |   3
+        1 |    19 |  19
+        1 |    20 |  20
+        1 |    20 |  20
+        1 |    25 |  25
+        1 |    30 |  30
+        1 |    30 |  30
+        1 |    59 |  59
+        1 |    59 |  59
+        1 |    60 |  60
+        1 |    60 |  60
+        1 |    80 |  80
+        1 |    90 |  90
         2 |    20 |  20
-(9 rows)
 
 -- But nothing has yet changed in the cagg invalidation log:
 SELECT * FROM cagg_invals;
@@ -400,7 +387,6 @@ SELECT * FROM cagg_invals;
        4 |                  100 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
-(9 rows)
 
 -- Refresh to process invalidations for daily temperature:
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
@@ -410,7 +396,6 @@ SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
         2 |    20 |  20
-(1 row)
 
 -- Only the cond_10 cagg should have its entries cut:
 SELECT * FROM cagg_invals;
@@ -420,12 +405,11 @@ SELECT * FROM cagg_invals;
        3 |                   60 | 9223372036854775807
        4 | -9223372036854775808 |                  59
        4 |                    0 |                  19
-       4 |                    0 |                 119
+       4 |                    0 |                  99
        4 |                   60 |                  79
        4 |                  100 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
-(9 rows)
 
 -- Refresh also cond_20:
 CALL refresh_continuous_aggregate('cond_20', 20, 60);
@@ -439,7 +423,6 @@ SELECT * FROM cagg_invals;
        4 |                   60 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
-(6 rows)
 
 -- Refresh cond_10 to completely remove an invalidation:
 CALL refresh_continuous_aggregate('cond_10', 0, 20);
@@ -453,7 +436,6 @@ SELECT * FROM cagg_invals;
        4 |                   60 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
-(6 rows)
 
 -- Clear everything between 0 and 100 to make way for new
 -- invalidations
@@ -473,7 +455,6 @@ SELECT * FROM cagg_invals;
        4 |                   60 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
-(8 rows)
 
 -- Refresh whithout cutting (in area where there are no
 -- invalidations). Merging of overlapping entries should still happen:
@@ -484,15 +465,16 @@ SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
-       3 |                   10 |                  49
+       3 |                   10 |                  19
+       3 |                   40 |                  49
        3 |                  100 | 9223372036854775807
        4 | -9223372036854775808 |                  19
-       4 |                    0 |                  59
+       4 |                    0 |                  19
        4 |                   20 |                  59
+       4 |                   40 |                  59
        4 |                   60 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
-(9 rows)
 
 -- Test max refresh window
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
@@ -501,18 +483,17 @@ SELECT * FROM cagg_invals;
 ---------+----------------------+---------------------
        3 |                  110 | 9223372036854775807
        4 | -9223372036854775808 |                  19
-       4 |                    0 |                  59
+       4 |                    0 |                  19
        4 |                   20 |                  59
+       4 |                   40 |                  59
        4 |                   60 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
-(7 rows)
 
 SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
         2 |    20 |  20
-(1 row)
 
 -- Pick the first chunk of conditions to TRUNCATE
 SELECT show_chunks AS chunk_to_truncate
@@ -536,7 +517,6 @@ ORDER BY 1;
     7 |      3 |   35
     8 |      1 |   37
     9 |      3 |    7
-(12 rows)
 
 -- Truncate one chunk
 TRUNCATE TABLE :chunk_to_truncate;
@@ -546,7 +526,6 @@ SELECT * FROM hyper_invals;
 ----------+-------+-----
         1 |     0 |  10
         2 |    20 |  20
-(2 rows)
 
 -- TRUNCATE the hypertable to invalidate all its continuous aggregates
 TRUNCATE conditions;
@@ -554,7 +533,6 @@ TRUNCATE conditions;
 SELECT * FROM conditions;
  time | device | temp 
 ------+--------+------
-(0 rows)
 
 -- Should see an infinite invalidation entry for conditions
 SELECT * FROM hyper_invals;
@@ -563,7 +541,6 @@ SELECT * FROM hyper_invals;
         1 | -9223372036854775808 | 9223372036854775807
         1 |                    0 |                  10
         2 |                   20 |                  20
-(3 rows)
 
 -- Aggregates still hold data
 SELECT * FROM cond_10
@@ -576,7 +553,6 @@ LIMIT 5;
       0 |      2 |    20.75
       0 |      3 |       21
       0 |      4 |     23.7
-(5 rows)
 
 SELECT * FROM cond_20
 ORDER BY 1,2
@@ -588,7 +564,6 @@ LIMIT 5;
      20 |      2 |               26
      20 |      3 |               23
      20 |      5 |             23.8
-(5 rows)
 
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
 CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
@@ -597,13 +572,11 @@ SELECT * FROM cond_10
 ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
-(0 rows)
 
 SELECT * FROM cond_20
 ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
-(0 rows)
 
 -- Insert new data again and refresh
 INSERT INTO conditions VALUES
@@ -627,7 +600,6 @@ ORDER BY 1,2;
      20 |      1 |     15.3
      20 |      2 |     12.3
      20 |      3 |     16.3
-(9 rows)
 
 SELECT * FROM cond_20
 ORDER BY 1,2;
@@ -639,7 +611,6 @@ ORDER BY 1,2;
      20 |      1 |             15.3
      20 |      2 |             12.3
      20 |      3 |             16.3
-(6 rows)
 
 -- Truncate one of the aggregates, but first test that we block
 -- TRUNCATE ONLY
@@ -653,7 +624,6 @@ SELECT * FROM cond_20
 ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
-(0 rows)
 
 -- Other aggregate is not affected
 SELECT * FROM cond_10
@@ -669,7 +639,6 @@ ORDER BY 1,2;
      20 |      1 |     15.3
      20 |      2 |     12.3
      20 |      3 |     16.3
-(9 rows)
 
 -- Refresh again to bring data back
 CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
@@ -684,7 +653,6 @@ ORDER BY 1,2;
      20 |      1 |             15.3
      20 |      2 |             12.3
      20 |      3 |             16.3
-(6 rows)
 
 -------------------------------------------------------
 -- Test corner cases against a minimal bucket aggregate
@@ -694,14 +662,12 @@ TRUNCATE conditions;
 SELECT * FROM conditions;
  time | device | temp 
 ------+--------+------
-(0 rows)
 
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
 SELECT * FROM cond_10
 ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
-(0 rows)
 
 CREATE MATERIALIZED VIEW cond_1
 WITH (timescaledb.continuous,
@@ -720,7 +686,6 @@ SELECT * FROM hyper_invals;
 ----------+-------+-----
         1 |     0 |   0
         2 |    20 |  20
-(2 rows)
 
 -- Refreshing around the bucket should not update the aggregate
 CALL refresh_continuous_aggregate('cond_1', -1, 0);
@@ -728,14 +693,12 @@ SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
-(0 rows)
 
 CALL refresh_continuous_aggregate('cond_1', 1, 2);
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
-(0 rows)
 
 -- Refresh only the invalidated bucket
 CALL refresh_continuous_aggregate('cond_1', 0, 1);
@@ -745,14 +708,12 @@ WHERE cagg_id = :cond_1_id;
 ---------+----------------------+---------------------
        6 | -9223372036854775808 |                  -2
        6 |                    2 | 9223372036854775807
-(2 rows)
 
 SELECT * FROM cond_1
 ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
       0 |      1 |        1
-(1 row)
 
 -- Refresh 1 extra bucket on the left
 INSERT INTO conditions VALUES (0, 1, 2.0);
@@ -762,7 +723,6 @@ ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
       0 |      1 |      1.5
-(1 row)
 
 -- Refresh 1 extra bucket on the right
 INSERT INTO conditions VALUES (0, 1, 3.0);
@@ -772,7 +732,6 @@ ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
       0 |      1 |        2
-(1 row)
 
 -- Refresh 1 extra bucket on each side
 INSERT INTO conditions VALUES (0, 1, 4.0);
@@ -782,7 +741,6 @@ ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
       0 |      1 |      2.5
-(1 row)
 
 -- Clear to reset aggregate
 TRUNCATE conditions;
@@ -796,7 +754,6 @@ ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
       0 |      1 |        1
-(1 row)
 
 CALL refresh_continuous_aggregate('cond_1', 1, 2);
 SELECT * FROM cond_1
@@ -805,7 +762,6 @@ ORDER BY 1,2;
 --------+--------+----------
       0 |      1 |        1
       1 |      1 |        2
-(2 rows)
 
 -- Repeat the same thing but refresh the whole invalidation at once
 TRUNCATE conditions;
@@ -818,7 +774,6 @@ ORDER BY 1,2;
 --------+--------+----------
       0 |      1 |        1
       1 |      1 |        2
-(2 rows)
 
 -- Test invalidation of size 3
 TRUNCATE conditions;
@@ -831,7 +786,6 @@ ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
       1 |      1 |        2
-(1 row)
 
 -- Should leave one invalidation on each side of the refresh window
 SELECT * FROM cagg_invals
@@ -841,7 +795,6 @@ WHERE cagg_id = :cond_1_id;
        6 |     0 |                   0
        6 |     2 |                   2
        6 |   110 | 9223372036854775807
-(3 rows)
 
 -- Refresh the two remaining invalidations
 CALL refresh_continuous_aggregate('cond_1', 0, 1);
@@ -851,7 +804,6 @@ ORDER BY 1,2;
 --------+--------+----------
       0 |      1 |        1
       1 |      1 |        2
-(2 rows)
 
 CALL refresh_continuous_aggregate('cond_1', 2, 3);
 SELECT * FROM cond_1
@@ -861,7 +813,6 @@ ORDER BY 1,2;
       0 |      1 |        1
       1 |      1 |        2
       2 |      1 |        3
-(3 rows)
 
 -- Clear and repeat but instead refresh the whole range in one go. The
 -- result should be the same as the three partial refreshes. Use
@@ -877,24 +828,20 @@ ORDER BY 1,2;
       0 |      1 |        1
       1 |      1 |        2
       2 |      1 |        3
-(3 rows)
 
 ----------------------------------------------
 -- Test that invalidation threshold is capped
 ----------------------------------------------
 CREATE table threshold_test (time int, value int);
 SELECT create_hypertable('threshold_test', 'time', chunk_time_interval => 4);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (7,public,threshold_test,t)
-(1 row)
 
 SELECT set_integer_now_func('threshold_test', 'int_now');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 CREATE MATERIALIZED VIEW thresh_2
 WITH (timescaledb.continuous,
@@ -913,7 +860,6 @@ ORDER BY 1,2;
  hypertable_id |  watermark  
 ---------------+-------------
              7 | -2147483648
-(1 row)
 
 -- Test that threshold is initilized to min value when there's no data
 -- and we specify an infinite end. Note that the min value may differ
@@ -926,7 +872,6 @@ ORDER BY 1,2;
  hypertable_id |  watermark  
 ---------------+-------------
              7 | -2147483648
-(1 row)
 
 INSERT INTO threshold_test
 SELECT v, v FROM generate_series(1, 10) v;
@@ -940,7 +885,6 @@ ORDER BY 1,2;
  hypertable_id | watermark 
 ---------------+-----------
              7 |         4
-(1 row)
 
 -- Refresh where both the start and end of the window is above the
 -- max data value
@@ -961,7 +905,6 @@ ORDER BY 1,2;
  hypertable_id | watermark 
 ---------------+-----------
              7 |        12
-(1 row)
 
 -- Should not have processed invalidations beyond the invalidation
 -- threshold.
@@ -971,7 +914,6 @@ WHERE cagg_id = :thresh_cagg_id;
 ---------+----------------------+---------------------
        8 | -9223372036854775808 |                  -1
        8 |                   12 | 9223372036854775807
-(2 rows)
 
 -- Check that things are properly materialized
 SELECT * FROM thresh_2
@@ -984,7 +926,6 @@ ORDER BY 1;
       6 |   7
       8 |   9
      10 |  10
-(6 rows)
 
 -- Delete the last data
 SELECT show_chunks AS chunk_to_drop
@@ -1004,7 +945,6 @@ ORDER BY 1;
       2 |   3
       4 |   5
       6 |   6
-(4 rows)
 
 -- The aggregate still holds data
 SELECT * FROM thresh_2
@@ -1017,7 +957,6 @@ ORDER BY 1;
       6 |   7
       8 |   9
      10 |  10
-(6 rows)
 
 -- Refresh the aggregate to bring it up-to-date
 CALL refresh_continuous_aggregate('thresh_2', 0, NULL);
@@ -1030,7 +969,6 @@ ORDER BY 1;
       2 |   3
       4 |   5
       6 |   6
-(4 rows)
 
 -- The invalidation threshold remains the same
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
@@ -1039,7 +977,6 @@ ORDER BY 1,2;
  hypertable_id | watermark 
 ---------------+-----------
              7 |        12
-(1 row)
 
 -- Insert new data beyond the invalidation threshold to move it
 -- forward
@@ -1059,7 +996,6 @@ ORDER BY 1;
      10 |  11
      12 |  13
      14 |  15
-(8 rows)
 
 -- The invalidation threshold should have moved forward to the end of
 -- the new data
@@ -1069,7 +1005,6 @@ ORDER BY 1,2;
  hypertable_id | watermark 
 ---------------+-----------
              7 |        16
-(1 row)
 
 -- The aggregate remains invalid beyond the invalidation threshold
 SELECT * FROM cagg_invals
@@ -1078,7 +1013,6 @@ WHERE cagg_id = :thresh_cagg_id;
 ---------+----------------------+---------------------
        8 | -9223372036854775808 |                  -1
        8 |                   16 | 9223372036854775807
-(2 rows)
 
 ----------------------------------------------------------------------
 -- Test that dropping a chunk invalidates the dropped region. First
@@ -1093,7 +1027,6 @@ FROM show_chunks('conditions');
 -----------------------------------------
  _timescaledb_internal._hyper_1_35_chunk
  _timescaledb_internal._hyper_1_41_chunk
-(2 rows)
 
 -- Pick the first one to drop
 SELECT show_chunks AS chunk_to_drop
@@ -1109,7 +1042,6 @@ ORDER BY 1,2;
     1 |      1 |    2
     2 |      1 |    3
    10 |      1 |   10
-(4 rows)
 
 -- Drop one chunk
 DROP TABLE :chunk_to_drop;
@@ -1119,7 +1051,6 @@ ORDER BY 1,2;
  time | device | temp 
 ------+--------+------
    10 |      1 |   10
-(1 row)
 
 -- Aggregate still remains in continuous aggregate, however
 SELECT * FROM cond_1
@@ -1129,7 +1060,6 @@ ORDER BY 1,2;
       0 |      1 |        1
       1 |      1 |        2
       2 |      1 |        3
-(3 rows)
 
 -- Refresh the continuous aggregate to make the dropped data be
 -- reflected in the aggregate
@@ -1140,7 +1070,6 @@ ORDER BY 1,2;
  bucket | device | avg_temp 
 --------+--------+----------
      10 |      1 |       10
-(1 row)
 
 -- Test that adjacent invalidations are merged
 INSERT INTO conditions VALUES(1, 1, 1.0), (2, 1, 2.0);
@@ -1156,7 +1085,6 @@ WHERE cagg_id = :cond_1_id;
        6 |     1 |                   4
        6 |     6 |                   6
        6 |   110 | 9223372036854775807
-(3 rows)
 
 ---------------------------------------------------------------------
 -- Test that single timestamp invalidations are expanded to buckets,
@@ -1185,12 +1113,9 @@ WHERE cagg_id = :cond_10_id;
        3 |                    0 |                  29
        3 |                   40 |                  49
        3 |                   60 | 9223372036854775807
-(4 rows)
 
 -- should trigger two individual refreshes
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
--- Allow at most 5 individual invalidations per refresh
-SET timescaledb.materializations_per_refresh_window=5;
 -- Insert into every second bucket
 INSERT INTO conditions VALUES (20, 1, 1.0);
 INSERT INTO conditions VALUES (40, 1, 1.0);
@@ -1200,34 +1125,6 @@ INSERT INTO conditions VALUES (100, 1, 1.0);
 INSERT INTO conditions VALUES (120, 1, 1.0);
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-\set VERBOSITY default
-\set ON_ERROR_STOP 0
--- Test acceptable values for materializations per refresh
-SET timescaledb.materializations_per_refresh_window=' 5 ';
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
--- Large value will be treated as LONG_MAX
-SET timescaledb.materializations_per_refresh_window=342239897234023842394249234766923492347;
-ERROR:  invalid value for parameter "timescaledb.materializations_per_refresh_window": "342239897234023842394249234766923492347"
-HINT:  Value exceeds integer range.
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
--- Test bad values for materializations per refresh
-SET timescaledb.materializations_per_refresh_window='foo';
-ERROR:  invalid value for parameter "timescaledb.materializations_per_refresh_window": "foo"
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
-SET timescaledb.materializations_per_refresh_window='2bar';
-ERROR:  invalid value for parameter "timescaledb.materializations_per_refresh_window": "2bar"
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
-SET timescaledb.materializations_per_refresh_window='-';
-ERROR:  invalid value for parameter "timescaledb.materializations_per_refresh_window": "-"
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
-\set VERBOSITY terse
-RESET timescaledb.materializations_per_refresh_window;
-\set ON_ERROR_STOP 1
 -- Test refresh with undefined invalidation threshold and variable sized buckets
 CREATE TABLE timestamp_ht (
   time timestamptz NOT NULL,
@@ -1237,7 +1134,6 @@ SELECT create_hypertable('timestamp_ht', 'time');
      create_hypertable     
 ---------------------------
  (9,public,timestamp_ht,t)
-(1 row)
 
 CREATE MATERIALIZED VIEW temperature_4h
   WITH  (timescaledb.continuous) AS
@@ -1289,7 +1185,6 @@ SELECT create_hypertable('i5474','time');
   create_hypertable  
 ---------------------
  (16,public,i5474,t)
-(1 row)
 
 CREATE MATERIALIZED VIEW i5474_summary_daily
     WITH (timescaledb.continuous) AS
@@ -1315,3 +1210,139 @@ CALL refresh_continuous_aggregate('i5474_summary_daily', NULL, '2023-01-01 01:00
 -- CAgg should be up-to-date now
 CALL refresh_continuous_aggregate('i5474_summary_daily', NULL, '2023-01-01 01:00:00+00');
 NOTICE:  continuous aggregate "i5474_summary_daily" is already up-to-date
+--
+-- Test the invalidation move function
+--
+-- Make sure to move the threshold for the insertions we are going to
+-- do.
+CALL refresh_continuous_aggregate('measure_10', 0, 200);
+SELECT * FROM hypertable_invalidation_thresholds
+ WHERE hypertable IN ('conditions'::regclass, 'measurements'::regclass);
+  hypertable  | threshold 
+--------------+-----------
+ conditions   |       200
+ measurements |       200
+
+SELECT * FROM hyper_invals;
+ hyper_id | start | end 
+----------+-------+-----
+
+-- Save away the contents of some materialized views so that we can
+-- check that they are not updated when we move invalidations.
+SELECT * INTO saved_measure_10 FROM measure_10;
+SELECT * INTO saved_cond_10 FROM cond_10;
+-- Generate some invalidations for the hypertables
+INSERT INTO conditions VALUES (110, 14, 23.7);
+INSERT INTO conditions VALUES (110, 15, 23.8), (119, 3, 23.6);
+INSERT INTO conditions VALUES (160, 13, 23.7), (170, 4, 23.7);
+INSERT INTO measurements VALUES (120, 14, 23.7);
+INSERT INTO measurements VALUES (130, 15, 23.8), (180, 3, 23.6);
+-- test direct compress insert invalidation
+CREATE TABLE direct_compress_insert(time timestamptz) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+INSERT INTO direct_compress_insert SELECT '2025-01-01';
+CREATE MATERIALIZED VIEW cagg_insert WITH (tsdb.continuous) AS SELECT time_bucket('1day', time) FROM direct_compress_insert GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "cagg_insert"
+SET timescaledb.enable_direct_compress_insert = true;
+EXPLAIN (analyze,buffers off,costs off,timing off,summary off) INSERT INTO direct_compress_insert SELECT '2024-01-01'::timestamptz + format('%sm',i)::interval FROM generate_series(1,1000) g(i);
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Direct Compress: true
+   ->  Insert on direct_compress_insert (actual rows=0.00 loops=1)
+         ->  Function Scan on generate_series g (actual rows=1000.00 loops=1)
+
+EXPLAIN (analyze,buffers off,costs off,timing off,summary off) INSERT INTO direct_compress_insert SELECT '2024-01-01'::timestamptz - format('%sm',i)::interval FROM generate_series(1,1000) g(i);
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Direct Compress: true
+   ->  Insert on direct_compress_insert (actual rows=0.00 loops=1)
+         ->  Function Scan on generate_series g (actual rows=1000.00 loops=1)
+
+-- should have 2 entries
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 18 ORDER BY 1,2;
+         start          |          end           
+------------------------+------------------------
+ 2023-12-31 07:20:00+00 | 2023-12-31 23:59:00+00
+ 2024-01-01 00:01:00+00 | 2024-01-01 16:40:00+00
+
+EXPLAIN (analyze,buffers off,costs off,timing off,summary off) INSERT INTO direct_compress_insert SELECT '2023-12-31'::timestamptz + format('%sm',i)::interval FROM generate_series(1,2000) g(i);
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Direct Compress: true
+   ->  Insert on direct_compress_insert (actual rows=0.00 loops=1)
+         ->  Function Scan on generate_series g (actual rows=2000.00 loops=1)
+
+-- should have 3 entries
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 18 ORDER BY 1,2;
+         start          |          end           
+------------------------+------------------------
+ 2023-12-31 00:01:00+00 | 2024-01-01 09:20:00+00
+ 2023-12-31 07:20:00+00 | 2023-12-31 23:59:00+00
+ 2024-01-01 00:01:00+00 | 2024-01-01 16:40:00+00
+
+-- should have 1 uncompressed and 1 compressed chunk
+EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_insert;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_18_59_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_18_61_chunk
+         ->  Seq Scan on compress_hyper_19_62_chunk
+
+-- test direct compress copy invalidation
+CREATE TABLE direct_compress_copy(time timestamptz) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+INSERT INTO direct_compress_copy SELECT '2025-01-01';
+WARNING:  disabling direct compress because of too small batch size
+CREATE MATERIALIZED VIEW cagg_copy WITH (tsdb.continuous) AS SELECT time_bucket('1day', time) FROM direct_compress_copy GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "cagg_copy"
+SET timescaledb.enable_direct_compress_copy = true;
+COPY direct_compress_copy FROM STDIN;
+-- should have 1 entries now
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 21 ORDER BY 1,2;
+         start          |          end           
+------------------------+------------------------
+ 2023-01-01 00:00:00+00 | 2023-01-03 00:00:00+00
+
+COPY direct_compress_copy FROM STDIN;
+-- should have 2 entries now
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 21 ORDER BY 1,2;
+         start          |          end           
+------------------------+------------------------
+ 2022-12-31 00:00:00+00 | 2023-01-03 00:00:00+00
+ 2023-01-01 00:00:00+00 | 2023-01-03 00:00:00+00
+
+-- range spanning multiple chunks
+COPY direct_compress_copy FROM STDIN;
+-- should have 3 entries now
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 21 ORDER BY 1,2;
+         start          |          end           
+------------------------+------------------------
+ 2022-01-01 00:00:00+00 | 2022-01-01 00:00:00+00
+ 2022-02-28 00:00:00+00 | 2022-02-28 00:00:00+00
+ 2022-12-31 00:00:00+00 | 2023-01-03 00:00:00+00
+ 2023-01-01 00:00:00+00 | 2023-01-03 00:00:00+00
+
+-- should have 1 uncompressed and 3 compressed chunk
+EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_copy;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_21_63_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_21_65_chunk
+         ->  Seq Scan on compress_hyper_22_66_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_21_67_chunk
+         ->  Seq Scan on compress_hyper_22_68_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_21_69_chunk
+         ->  Seq Scan on compress_hyper_22_70_chunk
+
+-- test direct compress invalidation with custom partitioning function (not supported atm)
+CREATE OR REPLACE FUNCTION f_month(timestamptz) returns int language sql AS $$ SELECT 12 * extract(year from $1) + extract(month from $1);$$ immutable;
+CREATE TABLE part_cagg (time timestamptz);
+SELECT create_hypertable('part_cagg', 'time', time_partitioning_func => 'f_month', chunk_time_interval => 1);
+    create_hypertable    
+-------------------------
+ (24,public,part_cagg,t)
+
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW part_cagg1 WITH (tsdb.continuous) AS SELECT time_bucket('1day', time) FROM part_cagg GROUP BY 1;
+ERROR:  custom partitioning functions not supported with continuous aggregates
+\set ON_ERROR_STOP 1

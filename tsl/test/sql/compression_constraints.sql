@@ -358,4 +358,29 @@ INSERT INTO metrics SELECT '2025-01-01','d1',1,42;
 \set ON_ERROR_STOP 1
 ROLLBACK;
 
+-- test unique expression indexes
+BEGIN;
+-- should succeed since no conflict
+CREATE UNIQUE INDEX metrics_unique ON metrics(time, device, md5(value::text));
+ROLLBACK;
+
+BEGIN;
+INSERT INTO metrics SELECT '2025-01-01','d1',1;
+-- partially compressed chunk
+-- should fail because there is conflict
+\set ON_ERROR_STOP 0
+CREATE UNIQUE INDEX metrics_unique ON metrics(time, device, md5(value::text));
+\set ON_ERROR_STOP 1
+ROLLBACK;
+
+BEGIN;
+INSERT INTO metrics SELECT '2025-01-01','d1',1;
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
+-- fully compressed chunk
+-- should fail because there is conflict
+\set ON_ERROR_STOP 0
+CREATE UNIQUE INDEX metrics_unique ON metrics(time, device, md5(value::text));
+\set ON_ERROR_STOP 1
+ROLLBACK;
+
 

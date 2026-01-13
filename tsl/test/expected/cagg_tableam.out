@@ -29,7 +29,6 @@ SELECT set_integer_now_func('whatever', 'integer_now_test');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 INSERT INTO whatever SELECT i, i FROM generate_series(0, 29) AS i;
 -- Checking that the access method for the materialized hypertable is
@@ -51,18 +50,15 @@ WHERE user_view::text IN ('tableam_view', 'notableam_view');
 ----------------+----------------------------+--------
  tableam_view   | _materialized_hypertable_2 | heap2
  notableam_view | _materialized_hypertable_3 | heap
-(2 rows)
 
 -- Check that the view with the other access method actually works.
 SELECT * FROM notableam_view ORDER BY 1;
  time_bucket | count 
 -------------+-------
-(0 rows)
 
 SELECT * FROM tableam_view ORDER BY 1;
  time_bucket | count 
 -------------+-------
-(0 rows)
 
 CALL refresh_continuous_aggregate('notableam_view', NULL, NULL);
 CALL refresh_continuous_aggregate('tableam_view', NULL, NULL);
@@ -75,7 +71,6 @@ SELECT * FROM notableam_view ORDER BY 1;
           15 |     5
           20 |     5
           25 |     5
-(6 rows)
 
 SELECT * FROM tableam_view ORDER BY 1;
  time_bucket | count 
@@ -86,7 +81,6 @@ SELECT * FROM tableam_view ORDER BY 1;
           15 |     5
           20 |     5
           25 |     5
-(6 rows)
 
 DROP MATERIALIZED VIEW notableam_view;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_4_chunk

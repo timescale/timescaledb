@@ -30,7 +30,6 @@ SELECT table_name FROM create_hypertable('int2_tbl','ts');
  table_name 
 ------------
  int2_tbl
-(1 row)
 
 INSERT INTO INT2_TBL(f1) VALUES ('0   ');
 INSERT INTO INT2_TBL(f1) VALUES ('  1234 ');
@@ -43,7 +42,6 @@ SELECT table_name FROM create_hypertable('int4_tbl','ts');
  table_name 
 ------------
  int4_tbl
-(1 row)
 
 INSERT INTO INT4_TBL(f1) VALUES ('   0  ');
 INSERT INTO INT4_TBL(f1) VALUES ('123456     ');
@@ -56,7 +54,6 @@ SELECT table_name FROM create_hypertable('int8_tbl','ts');
  table_name 
 ------------
  int8_tbl
-(1 row)
 
 INSERT INTO INT8_TBL VALUES('  123   ','  456');
 INSERT INTO INT8_TBL VALUES('123   ','4567890123456789');
@@ -68,7 +65,6 @@ SELECT table_name FROM create_hypertable('float8_tbl','ts');
  table_name 
 ------------
  float8_tbl
-(1 row)
 
 INSERT INTO FLOAT8_TBL(f1) VALUES ('    0.0   ');
 INSERT INTO FLOAT8_TBL(f1) VALUES ('1004.30  ');
@@ -80,7 +76,6 @@ SELECT table_name FROM create_hypertable('text_tbl','ts');
  table_name 
 ------------
  text_tbl
-(1 row)
 
 INSERT INTO TEXT_TBL VALUES ('doh!');
 INSERT INTO TEXT_TBL VALUES ('hi de ho neighbor');
@@ -134,7 +129,6 @@ SELECT table_name FROM create_hypertable('onek','unique2',chunk_time_interval:=1
  table_name 
 ------------
  onek
-(1 row)
 
 \copy onek FROM 'data/onek.data'
 CREATE TABLE tenk1 (
@@ -159,7 +153,6 @@ SELECT table_name FROM create_hypertable('tenk1','unique2',chunk_time_interval:=
  table_name 
 ------------
  tenk1
-(1 row)
 
 \copy tenk1 FROM 'data/tenk.data'
 CREATE TABLE tenk2 (
@@ -184,7 +177,6 @@ SELECT table_name FROM create_hypertable('tenk2','unique2',chunk_time_interval:=
  table_name 
 ------------
  tenk2
-(1 row)
 
 INSERT INTO tenk2 SELECT * FROM tenk1;
 \set PREFIX ''
@@ -196,6 +188,5 @@ INSERT INTO tenk2 SELECT * FROM tenk1;
  ----------------------------------+-------
 - timescaledb.enable_optimizations | off
 + timescaledb.enable_optimizations | on
- (1 row)
  
   table_name 

@@ -7,7 +7,6 @@ SELECT create_hypertable('ht', 'time');
  create_hypertable 
 -------------------
  (1,public,ht,t)
-(1 row)
 
 INSERT INTO ht(time) select timestamp 'epoch' + (i * interval '1 second') from generate_series(1, 100) as T(i);
 INSERT INTO regular_table values('name', 'junk');
@@ -15,13 +14,11 @@ SELECT * FROM regular_table ik LEFT JOIN LATERAL (select max(time::timestamptz) 
  name | junk |             max              
 ------+------+------------------------------
  name | junk | Thu Jan 01 00:01:40 1970 PST
-(1 row)
 
 select * from regular_table ik LEFT JOIN LATERAL (select max(time::timestamptz) from ht s where ik.name='name' and s.time > now()) s on true;
  name | junk | max 
 ------+------+-----
  name | junk | 
-(1 row)
 
 DROP TABLE regular_table;
 DROP TABLE ht;
@@ -30,7 +27,6 @@ SELECT create_hypertable('orders', 'time');
   create_hypertable  
 ---------------------
  (2,public,orders,t)
-(1 row)
 
 INSERT INTO orders values(1,1,timestamp 'epoch' + '1 second');
 INSERT INTO orders values(2,1,timestamp 'epoch' + '2 second');
@@ -56,7 +52,6 @@ ORDER BY user_id, first_order_time, max_time;
        2 | Thu Jan 01 00:00:04 1970 PST | 
        3 | Thu Jan 01 00:00:06 1970 PST | 
        4 | Thu Jan 01 00:00:08 1970 PST | 
-(4 rows)
 
 SELECT user_id, first_order_time, max_time FROM
 (SELECT user_id, min(time) AS first_order_time FROM orders GROUP BY user_id) o1
@@ -69,7 +64,6 @@ ORDER BY user_id, first_order_time, max_time;
        2 | Thu Jan 01 00:00:04 1970 PST | Thu Jan 01 00:00:09 1970 PST
        3 | Thu Jan 01 00:00:06 1970 PST | 
        4 | Thu Jan 01 00:00:08 1970 PST | 
-(4 rows)
 
 -- Nested LATERALs
 SELECT user_id, first_order_time, time1, min_time FROM
@@ -93,7 +87,6 @@ ORDER BY user_id, first_order_time, time1, min_time;
        2 | Thu Jan 01 00:00:04 1970 PST | Thu Jan 01 00:00:09 1970 PST | 
        3 | Thu Jan 01 00:00:06 1970 PST |                              | 
        4 | Thu Jan 01 00:00:08 1970 PST |                              | 
-(12 rows)
 
 -- Cleanup
 DROP TABLE orders;
@@ -102,11 +95,9 @@ DROP TABLE orders;
 CREATE TABLE t1_timescale (a int, b int);
 CREATE TABLE t2 (a int, b int);
 SELECT create_hypertable('t1_timescale', 'a', chunk_time_interval=>1000);
-NOTICE:  adding not-null constraint to column "a"
      create_hypertable     
 ---------------------------
  (3,public,t1_timescale,t)
-(1 row)
 
 INSERT into t2 values (3, 3), (15 , 15);
 INSERT into t1_timescale select generate_series(5, 25, 1), 77;
@@ -138,7 +129,6 @@ ORDER BY 1, 2, 3, 4;
  24 | 77 |    |   
  25 | 77 |    |   
     |    |  3 |  3
-(22 rows)
 
 SELECT * FROM t1_timescale
 LEFT OUTER JOIN  t2 on t1_timescale.b=t2.b and t2.b between 10 and 20
@@ -147,7 +137,6 @@ ORDER BY 1, 2, 3, 4;
  a | b  | a | b 
 ---+----+---+---
  5 | 77 |   |  
-(1 row)
 
 SELECT * FROM t1_timescale
 RIGHT JOIN  t2 on t1_timescale.b=t2.b and t2.b between 10 and 20
@@ -156,7 +145,6 @@ ORDER BY 1, 2, 3, 4;
 ----+----+----+----
  15 | 15 | 15 | 15
     |    |  3 |  3
-(2 rows)
 
 SELECT * FROM t1_timescale
 RIGHT JOIN  t2 on t1_timescale.b=t2.b and t2.b between 10 and 20
@@ -164,7 +152,6 @@ WHERE t1_timescale.a=5
 ORDER BY 1, 2, 3, 4;
  a | b | a | b 
 ---+---+---+---
-(0 rows)
 
 SELECT * FROM t1_timescale
 LEFT OUTER JOIN  t2 on t1_timescale.a=t2.a and t2.b between 10 and 20
@@ -176,7 +163,6 @@ ORDER BY 1, 2, 3, 4;
  15 | 15 | 15 | 15
  20 | 77 |    |   
  25 | 77 |    |   
-(4 rows)
 
 SELECT * FROM t1_timescale
 RIGHT OUTER JOIN  t2 on t1_timescale.a=t2.a and t2.b between 10 and 20
@@ -185,5 +171,4 @@ ORDER BY 1, 2, 3, 4;
 ----+----+----+----
  15 | 15 | 15 | 15
     |    |  3 |  3
-(2 rows)
 

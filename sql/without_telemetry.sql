@@ -7,6 +7,6 @@
 DROP FUNCTION IF EXISTS @extschema@.get_telemetry_report;
 
 -- We delete the telemetry job since this is a non-telemetry build.
-DELETE FROM _timescaledb_config.bgw_job WHERE id = 1;
+DELETE FROM _timescaledb_catalog.bgw_job WHERE id = 1;
 
 

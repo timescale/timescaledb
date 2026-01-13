@@ -18,9 +18,6 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/tablespace.h"
 
-#define OLD_INSERT_BLOCKER_NAME "insert_blocker"
-#define INSERT_BLOCKER_NAME "ts_insert_blocker"
-
 #define INVALID_HYPERTABLE_ID 0
 
 typedef struct SubspaceStore SubspaceStore;
@@ -47,7 +44,6 @@ typedef struct Hypertable
 	FormData_hypertable fd;
 	Oid main_table_relid;
 	Oid chunk_sizing_func;
-	Oid amoid;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
 	ChunkRangeSpace *range_space;
@@ -116,6 +112,7 @@ extern int ts_hypertable_delete_by_id(int32 hypertable_id);
 extern TSDLLEXPORT ObjectAddress ts_hypertable_create_trigger(const Hypertable *ht,
 															  CreateTrigStmt *stmt,
 															  const char *query);
+extern TSDLLEXPORT void ts_hypertable_drop_invalidation_replication_slot(const char *slot_name);
 extern TSDLLEXPORT void ts_hypertable_drop_trigger(Oid relid, const char *trigger_name);
 extern TSDLLEXPORT void ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior);
 
@@ -123,9 +120,12 @@ extern int ts_hypertable_reset_associated_schema_name(const char *associated_sch
 extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid);
 extern TSDLLEXPORT int32 ts_hypertable_relid_to_id(Oid relid);
 extern TSDLLEXPORT Chunk *ts_hypertable_find_chunk_for_point(const Hypertable *h,
-															 const Point *point);
+															 const Point *point, LOCKMODE lockmode);
+extern TSDLLEXPORT Chunk *ts_hypertable_chunk_store_add(const Hypertable *h,
+														const Chunk *input_chunk);
 extern TSDLLEXPORT Chunk *ts_hypertable_create_chunk_for_point(const Hypertable *h,
-															   const Point *point, bool *found);
+															   const Point *point,
+															   LOCKMODE chunk_lockmode);
 extern Oid ts_hypertable_relid(RangeVar *rv);
 extern TSDLLEXPORT bool ts_is_hypertable(Oid relid);
 extern bool ts_hypertable_has_tablespace(const Hypertable *ht, Oid tspc_oid);
@@ -136,6 +136,7 @@ extern Tablespace *ts_hypertable_get_tablespace_at_offset_from(int32 hypertable_
 extern TSDLLEXPORT bool ts_hypertable_has_chunks(Oid table_relid, LOCKMODE lockmode);
 extern void ts_hypertables_rename_schema_name(const char *old_name, const char *new_name);
 extern bool ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno);
+extern bool ts_is_partitioning_column_name(const Hypertable *ht, NameData column_name);
 extern TSDLLEXPORT bool ts_hypertable_set_compressed(Hypertable *ht,
 													 int32 compressed_hypertable_id);
 extern TSDLLEXPORT bool ts_hypertable_unset_compressed(Hypertable *ht);
@@ -145,6 +146,7 @@ extern TSDLLEXPORT int64 ts_hypertable_get_open_dim_max_value(const Hypertable *
 															  int dimension_index, bool *isnull);
 
 extern TSDLLEXPORT bool ts_hypertable_has_compression_table(const Hypertable *ht);
+extern TSDLLEXPORT bool ts_hypertable_has_continuous_aggregates(int32 hypertable_id);
 extern TSDLLEXPORT void ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode)                                \

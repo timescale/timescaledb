@@ -92,7 +92,7 @@ gapfill_fetch_sample(GapFillState *state, GapFillInterpolateColumnState *column,
 	TupleDesc tupdesc;
 	Datum value;
 	bool isnull;
-	Datum datum = gapfill_exec_expr(state, lookup, &isnull);
+	Datum datum = gapfill_exec_expr(state, state->scanslot, lookup, &isnull);
 
 	if (isnull)
 	{

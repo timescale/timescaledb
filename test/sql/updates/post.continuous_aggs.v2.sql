@@ -31,4 +31,5 @@ WHERE lowest_modified_value = -9223372036854775808 ORDER BY 1;
 
 SELECT count(*) FROM mat_inval;
 CALL refresh_continuous_aggregate('mat_inval',NULL,NULL);
+SELECT pg_sleep(0.1); -- ensure refresh completes
 SELECT count(*) FROM mat_inval;

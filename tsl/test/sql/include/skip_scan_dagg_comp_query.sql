@@ -18,6 +18,10 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC NULLS FIRST;
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev;
+
 -- NULLS FIRST doesn't match segmentby NULL direction
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev NULLS FIRST;
 
@@ -29,6 +33,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -- multicolumn compressed index with dev as leading column
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC;
 
 -- multicolumn compressed index with dev as leading column and with extra distinct column pinned
 -- TODO: should be able to apply SkipScan here, issue created: #7998
@@ -118,6 +124,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 
 -- DISTINCT aggs grouped on their TEXT args
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_1' FROM :TABLE GROUP BY dev_name;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_11' FROM :TABLE WHERE dev_name IS NOT NULL GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_2', NULL FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_3', length(md5(now()::text)) FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_4', length(md5(random()::text)) FROM :TABLE GROUP BY dev_name;

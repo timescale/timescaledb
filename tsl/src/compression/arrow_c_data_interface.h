@@ -184,12 +184,18 @@ arrow_set_row_validity(uint64 *bitmap, size_t row_number, bool value)
 }
 
 /*
- * Combine the validity bitmaps into the given storage.
+ * Combine the validity bitmaps into the given storage. Can return one of the
+ * input filters if the others are NULL.
  */
-static inline const uint64 *
+static inline pg_nodiscard const uint64 *
 arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 *filter1,
 					   const uint64 *filter2, const uint64 *filter3)
 {
+	Assert(num_words != 0);
+	Assert(storage != filter1);
+	Assert(storage != filter2);
+	Assert(storage != filter3);
+
 	/*
 	 * Any and all of the filters can be null. For simplicity, move the non-null
 	 * filters to the leading positions.
@@ -257,6 +263,23 @@ arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 
 }
 
 /*
+ * Do the &= operation on bitmaps. The right argument can be NULL.
+ */
+static inline void
+arrow_validity_and(int num_words, uint64 *restrict left, const uint64 *right)
+{
+	if (right == NULL)
+	{
+		return;
+	}
+
+	for (int i = 0; i < num_words; i++)
+	{
+		left[i] &= right[i];
+	}
+}
+
+/*
  * Increase the `source_value` to be an even multiple of `pad_to`.
  */
 static inline uint64
@@ -265,9 +288,11 @@ pad_to_multiple(uint64 pad_to, uint64 source_value)
 	return ((source_value + pad_to - 1) / pad_to) * pad_to;
 }
 
-static inline size_t
+static inline int
 arrow_num_valid(const uint64 *bitmap, size_t total_rows)
 {
+	Assert(total_rows != 0);
+
 	if (bitmap == NULL)
 	{
 		return total_rows;

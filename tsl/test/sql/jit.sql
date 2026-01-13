@@ -23,7 +23,7 @@ SET jit_tuple_deforming=on;
 SET enable_hashagg=off;
 
 \ir :TEST_LOAD_NAME
-\set PREFIX 'EXPLAIN (VERBOSE, TIMING OFF, COSTS OFF, SUMMARY OFF)'
+\set PREFIX 'EXPLAIN (VERBOSE, TIMING OFF, BUFFERS OFF, COSTS OFF, SUMMARY OFF)'
 \ir :TEST_QUERY_NAME
 
 -- generate the results into two different files

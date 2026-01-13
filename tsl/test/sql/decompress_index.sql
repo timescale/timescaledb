@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
 
 CREATE TABLE ht_metrics_compressed(time timestamptz, device int, value float, tag text);
 ALTER TABLE ht_metrics_compressed SET (autovacuum_enabled = false);
@@ -57,8 +57,62 @@ select distinct on (device) device, time from :CHUNK order by 1, 2;
 SET timescaledb.enable_skipscan_for_distinct_aggregates TO false;
 
 -- check that the indexes are used
-explain (costs off) select count(distinct tag) from :CHUNK;
-explain (costs off) select distinct on (device) device, time from :CHUNK order by 1, 2;
+explain (buffers off, costs off) select count(distinct tag) from :CHUNK;
+explain (buffers off, costs off) select distinct on (device) device, time from :CHUNK order by 1, 2;
 
 RESET timescaledb.enable_skipscan_for_distinct_aggregates;
 drop table ht_metrics_compressed;
+
+-- Fix for issue #8681: IndexScan is not chosen for columnstore segmented on varchar column
+-- We should chose IndexScan now, and use SkipScan as well
+CREATE TABLE record (time timestamptz not null, data varchar);
+SELECT table_name FROM create_hypertable('record','time');
+ALTER TABLE record SET (timescaledb.compress,timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='data');
+
+INSERT INTO record
+SELECT time, (array['Yes', 'No', 'Maybe'])[floor(random() * 3 + 1)]
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03'::timestamptz, '10 minute'::interval) AS g1(time);
+
+analyze record;
+SELECT compress_chunk(ch) FROM show_chunks('record') ch;
+
+-- enable_seqscan is OFF, should see IndexScan
+explain (buffers off, costs off) SELECT * FROM record ORDER BY data;
+-- SkipScan is chosen because IndexScan is chosen
+explain (buffers off, costs off) SELECT DISTINCT ON(data) * FROM record;
+-- (seg_col = const) condition is checked even when seg_col is coerced
+explain (buffers off, costs off) SELECT * FROM record WHERE data='Yes' ORDER BY data;
+explain (buffers off, costs off) SELECT * FROM record WHERE 'Yes' <= data ORDER BY data;
+
+drop table record cascade;
+
+-- Fix for issue #9066: IndexScan is not chosen for columnstore segmented on several keys
+-- for a query sorted on columnstore keys
+-- but where one numeric key is pinned to a Const of different but compatible type.
+-- We should chose IndexScan now, and use SkipScan as well.
+CREATE TABLE log_numeric(
+	"time"       timestamp with time zone NOT NULL,
+	device_id    integer                  NOT NULL,
+	parameter_id smallint                 NOT NULL,
+	value        double precision
+);
+
+SELECT create_hypertable('log_numeric', 'time', chunk_time_interval => interval '1 days', create_default_indexes => false);
+
+ALTER TABLE log_numeric SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id, parameter_id', timescaledb.compress_orderby='"time" DESC');
+
+INSERT INTO log_numeric
+SELECT time, device_id, parameter_id, device_id*parameter_id
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03'::timestamptz, '10 minute'::interval) AS g1(time),
+generate_series(1,4) device_id, generate_series(1,4) parameter_id;
+
+select compress_chunk(ch) from show_chunks('log_numeric') ch;
+
+-- enable_seqscan is OFF, should see IndexScan
+explain (buffers off, costs off) SELECT * FROM log_numeric WHERE parameter_id = 1 ORDER BY device_id, parameter_id, time DESC;
+-- SkipScan is chosen because IndexScan is chosen
+explain (buffers off, costs off) SELECT DISTINCT ON(device_id, parameter_id) * FROM log_numeric WHERE parameter_id = 1 ORDER BY device_id, parameter_id, time DESC;
+
+drop table log_numeric cascade;
+
+

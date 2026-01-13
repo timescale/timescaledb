@@ -27,3 +27,5 @@ typedef enum ConstraintProcessStatus
 
 typedef ConstraintProcessStatus (*constraint_func)(HeapTuple constraint_tuple, void *ctx);
 extern TSDLLEXPORT int ts_constraint_process(Oid relid, constraint_func process_func, void *ctx);
+extern TSDLLEXPORT Form_pg_constraint ts_constraint_find_matching(HeapTuple ht_tup,
+																  Relation chunk_rel);

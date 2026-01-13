@@ -16,7 +16,6 @@ step LockCagg1: BEGIN; SELECT lock_cagg('continuous_view_1');
 lock_cagg
 ---------
          
-(1 row)
 
 step I1: INSERT INTO ts_continuous_test_1 VALUES (1, 1);
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
@@ -30,7 +29,6 @@ step LockCagg1: BEGIN; SELECT lock_cagg('continuous_view_1');
 lock_cagg
 ---------
          
-(1 row)
 
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
 step I1: INSERT INTO ts_continuous_test_1 VALUES (1, 1);
@@ -44,7 +42,6 @@ step LockCagg2: BEGIN; SELECT lock_cagg('continuous_view_2');
 lock_cagg
 ---------
          
-(1 row)
 
 step I21: INSERT INTO ts_continuous_test_2 VALUES (1, 1);
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15);
@@ -59,7 +56,6 @@ step LockCagg2: BEGIN; SELECT lock_cagg('continuous_view_2');
 lock_cagg
 ---------
          
-(1 row)
 
 step Refresh3: CALL refresh_continuous_aggregate('continuous_view_2', NULL, 15); <waiting ...>
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
@@ -75,14 +71,12 @@ step LockCagg1: BEGIN; SELECT lock_cagg('continuous_view_1');
 lock_cagg
 ---------
          
-(1 row)
 
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
 step S1: SELECT count(*) FROM ts_continuous_test_1;
 count
 -----
    30
-(1 row)
 
 step Sc: COMMIT;
 step UnLockCagg1: ROLLBACK;
@@ -94,13 +88,11 @@ step LockCagg1: BEGIN; SELECT lock_cagg('continuous_view_1');
 lock_cagg
 ---------
          
-(1 row)
 
 step S1: SELECT count(*) FROM ts_continuous_test_1;
 count
 -----
    30
-(1 row)
 
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
 step Sc: COMMIT;
@@ -169,7 +161,6 @@ time_bucket|count
           0|    5
           5|    5
          10|    5
-(3 rows)
 
 step LockMatInval: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
@@ -188,7 +179,6 @@ time_bucket|count
           0|    5
           5|    5
          10|    5
-(3 rows)
 
 
 starting permutation: I1 Refresh LockInval Refresh Sb S1 Sc UnlockInval
@@ -201,7 +191,6 @@ step S1: SELECT count(*) FROM ts_continuous_test_1;
 count
 -----
    31
-(1 row)
 
 step Sc: COMMIT;
 step UnlockInval: ROLLBACK;
@@ -216,7 +205,6 @@ step S1: SELECT count(*) FROM ts_continuous_test_1;
 count
 -----
    31
-(1 row)
 
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
 step Sc: COMMIT;

@@ -21,7 +21,7 @@ BEGIN;
 -- For plan stability between versions
 SET LOCAL enable_bitmapscan = false;
 SET LOCAL enable_indexscan = false;
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_legacy WHERE device = 1;
 COMMIT;
 
@@ -43,7 +43,7 @@ BEGIN;
 -- For plan stability between versions
 SET LOCAL enable_bitmapscan = false;
 SET LOCAL enable_indexscan = false;
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_new WHERE device = 1;
 COMMIT;
 
@@ -272,16 +272,16 @@ FROM test.show_subtables('part_time_func');
 -- function (scan only one chunk)
 
 -- No exclusion
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_time_func;
 
 -- Exclude using the function on time
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_time_func WHERE time_partfunc(time) < '2018-07-01';
 
 -- Exclude using the same date but as a UNIX timestamp. Won't do an
 -- index scan since the index is on the time function expression
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_time_func WHERE time < 1530403200.0;
 
 -- Check that inserts will fail if we use a time partitioning function

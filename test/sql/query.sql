@@ -11,7 +11,7 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 SELECT format('\! diff -u  --label "Unoptimized result" --label "Optimized result" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
 \gset
 
-\set PREFIX 'EXPLAIN (costs OFF)'
+\set PREFIX 'EXPLAIN (buffers OFF, costs OFF)'
 \ir :TEST_LOAD_NAME
 \ir :TEST_QUERY_NAME
 

@@ -7,7 +7,7 @@ name: Sanitizer test
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
       - trigger/sanitizer
   pull_request:
     paths: .github/workflows/sanitizer-build-and-test.yaml
@@ -48,9 +48,14 @@ env:
     print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer_logs/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
 
-  IGNORES: "bgw_db_scheduler bgw_db_scheduler_fixed"
+  IGNORES: >-
+    bgw_db_scheduler
+    bgw_db_scheduler_fixed
+    merge_append_partially_compressed
+    net
+    telemetry
 
-  EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
+  EXTENSIONS: "postgres_fdw test_decoding"
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -118,13 +123,18 @@ jobs:
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
         # Add instrumentation to the Postgres memory contexts. For more details, see
         # https://github.com/timescale/eng-database/wiki/Using-Address-Sanitizer#adding-more-instrumentation
-        patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation.patch
+        PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
+        if [ ${PG_MAJOR} -lt 18 ]; then
+          patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation.patch
+        else
+          patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation-PG18GE.patch
+        fi
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
           --with-openssl --without-readline --without-zlib --without-libxml
-        make -j$(nproc)
+        make -j$(getconf _NPROCESSORS_ONLN)
         for ext in ${EXTENSIONS}; do
-          make -j$(nproc) -C contrib/${ext}
+          make -j$(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
 
     - name: Upload config.log
@@ -147,8 +157,8 @@ jobs:
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
           -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON \
-          -DTEST_GROUP_SIZE=5 -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -j$(nproc) -C build
+          -DTEST_GROUP_SIZE=5 -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)" -DTEST_TIMEOUT=240
+        make -j$(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
 
     - name: make installcheck

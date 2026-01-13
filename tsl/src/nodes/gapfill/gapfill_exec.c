@@ -66,10 +66,10 @@ static bool gapfill_state_is_new_group(GapFillState *state, TupleTableSlot *slot
 static void gapfill_state_set_next(GapFillState *state, TupleTableSlot *subslot);
 static TupleTableSlot *gapfill_state_return_subplan_slot(GapFillState *state);
 static TupleTableSlot *gapfill_fetch_next_tuple(GapFillState *state);
-static void gapfill_state_initialize_columns(GapFillState *state);
+static void gapfill_state_initialize_columns(GapFillState *state, List *exec_tlist);
 static GapFillColumnState *gapfill_column_state_create(GapFillColumnType ctype, Oid typeid);
 static bool gapfill_is_group_column(GapFillState *state, TargetEntry *tle);
-static Node *gapfill_aggref_mutator(Node *node, void *context);
+static TargetEntry *gapfill_get_fixed_agg_expr_column(GapFillState *state, TargetEntry *tle);
 
 static CustomExecMethods gapfill_state_methods = {
 	.BeginCustomScan = gapfill_begin,
@@ -368,7 +368,7 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 	{
 		time_bucket->args = list_make2(linitial(time_bucket->args), expr);
 	}
-	value = gapfill_exec_expr(state, (Expr *) time_bucket, &isnull);
+	value = gapfill_exec_expr(state, state->scanslot, (Expr *) time_bucket, &isnull);
 
 	/* start expression must not evaluate to NULL */
 	if (isnull)
@@ -401,7 +401,7 @@ get_boundary_expr_value(GapFillState *state, GapFillBoundary boundary, Expr *exp
 									 0);
 	}
 
-	arg_value = gapfill_exec_expr(state, expr, &isnull);
+	arg_value = gapfill_exec_expr(state, state->scanslot, expr, &isnull);
 
 	if (isnull)
 		ereport(ERROR,
@@ -662,7 +662,8 @@ gapfill_advance_timestamp(GapFillState *state)
 			{
 				bool isnull;
 				/* TODO: optimize by constifying and caching the datum if possible */
-				Datum tzname = gapfill_exec_expr(state, get_timezone_arg(state), &isnull);
+				Datum tzname =
+					gapfill_exec_expr(state, state->scanslot, get_timezone_arg(state), &isnull);
 				Assert(!isnull);
 
 				/* Convert to local timestamp */
@@ -716,10 +717,8 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	FuncExpr *func = linitial(cscan->custom_private);
 	TupleDesc tupledesc = state->csstate.ss.ps.ps_ResultTupleSlot->tts_tupleDescriptor;
 	List *targetlist = copyObject(state->csstate.ss.ps.plan->targetlist);
-	Node *entry;
 	bool isnull;
 	Datum arg_value;
-	int i;
 
 	state->gapfill_typid = func->funcresulttype;
 	state->state = FETCHED_NONE;
@@ -733,7 +732,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 				 errmsg("invalid time_bucket_gapfill argument: bucket_width must be a simple "
 						"expression")));
 
-	arg_value = gapfill_exec_expr(state, linitial(state->args), &isnull);
+	arg_value = gapfill_exec_expr(state, NULL, linitial(state->args), &isnull);
 	if (isnull)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -786,7 +785,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("invalid time_bucket_gapfill argument: finish must be a simple "
 							"expression")));
-		arg_value = gapfill_exec_expr(state, get_finish_arg(state), &isnull);
+		arg_value = gapfill_exec_expr(state, NULL, get_finish_arg(state), &isnull);
 
 		/*
 		 * the default value for finish is NULL but this is checked above,
@@ -801,27 +800,11 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 		state->gapfill_end = gapfill_datum_get_internal(arg_value, func->funcresulttype);
 	}
 
-	gapfill_state_initialize_columns(state);
+	gapfill_state_initialize_columns(state, targetlist);
 
 	/*
 	 * Build ProjectionInfo that will be used for gap filled tuples only.
-	 *
-	 * For every NULL_COLUMN we take the original expression tree from the
-	 * subplan and replace Aggref nodes with Const NULL nodes. This is
-	 * necessary because the expression might be evaluated below the
-	 * aggregation so we need to pull up expression from subplan into
-	 * projection for gapfilled tuples so expressions like COALESCE work
-	 * correctly for gapfilled tuples.
 	 */
-	for (i = 0; i < state->ncolumns; i++)
-	{
-		if (state->columns[i]->ctype == NULL_COLUMN)
-		{
-			entry = copyObject(list_nth(cscan->custom_scan_tlist, i));
-			entry = gapfill_aggref_mutator(entry, NULL);
-			lfirst(list_nth_cell(targetlist, i)) = entry;
-		}
-	}
 	state->pi = ExecBuildProjectionInfo(targetlist,
 										state->csstate.ss.ps.ps_ExprContext,
 										MakeSingleTupleTableSlot(tupledesc, &TTSOpsVirtual),
@@ -1022,8 +1005,10 @@ gapfill_state_gaptuple_create(GapFillState *state, int64 time)
 		switch (column.base->ctype)
 		{
 			case LOCF_COLUMN:
+				/* We may execute lookup expression over a generated tuple which fills the gap */
 				gapfill_locf_calculate(column.locf,
 									   state,
+									   slot,
 									   time,
 									   &slot->tts_values[i],
 									   &slot->tts_isnull[i]);
@@ -1105,9 +1090,14 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 		{
 			case LOCF_COLUMN:
 				value = slot_getattr(state->subslot, AttrOffsetGetAttrNumber(i), &isnull);
+				/* We may execute lookup expression over an input tuple from the subplan to override
+				 * NULL value when NULLs are treated as missing. Use the correct tuple for the
+				 * purpose.
+				 */
 				if (isnull && column.locf->treat_null_as_missing)
 					gapfill_locf_calculate(column.locf,
 										   state,
+										   state->subslot,
 										   state->subslot_time,
 										   &state->subslot->tts_values[i],
 										   &state->subslot->tts_isnull[i]);
@@ -1197,7 +1187,7 @@ gapfill_fetch_next_tuple(GapFillState *state)
  * Initialize column meta data
  */
 static void
-gapfill_state_initialize_columns(GapFillState *state)
+gapfill_state_initialize_columns(GapFillState *state, List *exec_tlist)
 {
 	TupleDesc tupledesc = state->csstate.ss.ps.ps_ResultTupleSlot->tts_tupleDescriptor;
 	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
@@ -1270,12 +1260,48 @@ gapfill_state_initialize_columns(GapFillState *state)
 		 * column so we treat those similar to GROUP BY column for gapfill
 		 * purposes.
 		 */
-		if (!contain_agg_clause((Node *) expr) && contain_var_clause((Node *) expr))
+		bool column_contains_aggs = contain_agg_clause((Node *) expr);
+		if (!column_contains_aggs && contain_var_clause((Node *) expr))
 		{
 			state->columns[i] =
 				gapfill_column_state_create(DERIVED_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
 			state->multigroup = true;
 			state->groups_initialized = false;
+			continue;
+		}
+
+		/*
+		 * For every column with Aggrefs we take the original expression tree from the
+		 * subplan and replace Aggref nodes with Const NULL nodes. This is
+		 * necessary because the expression might be evaluated below the
+		 * aggregation so we need to pull up expression from subplan into
+		 * projection for gapfilled tuples so expressions like COALESCE work
+		 * correctly for gapfilled tuples.
+		 */
+		if (column_contains_aggs)
+		{
+			TargetEntry *agg_expr_tle = gapfill_get_fixed_agg_expr_column(state, tle);
+			Assert(agg_expr_tle);
+			Node *entry = copyObject((Node *) agg_expr_tle);
+
+			/* Fix for #4894 when we have expressions like (agg + group_expr):
+			 * after getting fixed entry where aggs are replaced with NULLs
+			 * and group expressions are replaced with exec group columns,
+			 * check whether this column contains group columns and needs to be DERIVED or NULL.
+			 */
+			if (contain_var_clause(entry))
+			{
+				state->columns[i] =
+					gapfill_column_state_create(DERIVED_COLUMN,
+												TupleDescAttr(tupledesc, i)->atttypid);
+				state->multigroup = true;
+				state->groups_initialized = false;
+			}
+			else
+				state->columns[i] =
+					gapfill_column_state_create(NULL_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
+
+			lfirst(list_nth_cell(exec_tlist, i)) = entry;
 			continue;
 		}
 
@@ -1356,31 +1382,39 @@ gapfill_is_group_column(GapFillState *state, TargetEntry *tle)
 }
 
 /*
- * Replace Aggref with const NULL
+ * If the target entry contains an aggregate, it has been fixed in "custom_exprs"
+ * so that the aggregate is replaced with NULL
+ * and any group expressions are replaced with exec group vars.
+ * We will get the fixed aggregate expression here and use it in exec tlist.
  */
-static Node *
-gapfill_aggref_mutator(Node *node, void *context)
+static TargetEntry *
+gapfill_get_fixed_agg_expr_column(GapFillState *state, TargetEntry *tle)
 {
-	if (node == NULL)
-		return NULL;
+	ListCell *lc;
+	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
+	List *mutated_agg_exprs_list = castNode(List, cscan->custom_exprs);
+	Assert(list_length(mutated_agg_exprs_list) == 1);
+	List *mutated_agg_exprs = castNode(List, linitial(mutated_agg_exprs_list));
 
-	if (IsA(node, Aggref))
-		return (Node *)
-			makeConst(((Aggref *) node)->aggtype, -1, InvalidOid, -2, (Datum) 0, true, false);
-
-	return expression_tree_mutator(node, gapfill_aggref_mutator, context);
+	foreach (lc, mutated_agg_exprs)
+	{
+		TargetEntry *mutated_agg_expr_tle = castNode(TargetEntry, lfirst(lc));
+		if (tle->resno == mutated_agg_expr_tle->resno)
+			return mutated_agg_expr_tle;
+	}
+	return NULL;
 }
 
 /*
  * Execute expression and return result of expression
  */
 Datum
-gapfill_exec_expr(GapFillState *state, Expr *expr, bool *isnull)
+gapfill_exec_expr(GapFillState *state, TupleTableSlot *ecxt_slot, Expr *expr, bool *isnull)
 {
 	ExprState *exprstate = ExecInitExpr(expr, &state->csstate.ss.ps);
 	ExprContext *exprcontext = GetPerTupleExprContext(state->csstate.ss.ps.state);
 
-	exprcontext->ecxt_scantuple = state->scanslot;
+	exprcontext->ecxt_scantuple = ecxt_slot;
 
 	return ExecEvalExprSwitchContext(exprstate, exprcontext, isnull);
 }
@@ -1412,6 +1446,7 @@ gapfill_adjust_varnos(GapFillState *state, Expr *expr)
 			if (IsA(tle->expr, Var) && castNode(Var, tle->expr)->varattno == var->varattno)
 			{
 				var->varattno = tle->resno;
+				break;
 			}
 		}
 	}

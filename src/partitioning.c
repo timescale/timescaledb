@@ -246,10 +246,13 @@ ts_partitioning_func_apply(PartitioningInfo *pinfo, Oid collation, Datum value)
 	result = FunctionCallInvoke(fcinfo);
 
 	if (fcinfo->isnull)
-		elog(ERROR,
-			 "partitioning function \"%s.%s\" returned NULL",
-			 NameStr(pinfo->partfunc.schema),
-			 NameStr(pinfo->partfunc.name));
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+				 errmsg("partitioning function \"%s.%s\" returned NULL",
+						NameStr(pinfo->partfunc.schema),
+						NameStr(pinfo->partfunc.name))));
+	}
 
 	return result;
 }

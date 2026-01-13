@@ -396,9 +396,6 @@ CREATE TABLE "table_without_bf_trigger" (
 
 SELECT create_hypertable('table_without_bf_trigger', 'time', chunk_time_interval => 1);
 
--- Drop the default insert block trigger
-DROP TRIGGER ts_insert_blocker ON table_without_bf_trigger;
-
 \copy table_without_bf_trigger from data/copy_data.csv with csv header;
 
 SET client_min_messages TO DEBUG1;
@@ -547,4 +544,18 @@ COPY table_with_layout_change (value7, time) FROM STDIN DELIMITER ',' NULL AS 'n
 \.
 
 SELECT * FROM table_with_layout_change ORDER BY time, value7;
+
+-- verify check constraints work
+CREATE TABLE test_check(a INT, b TIMESTAMPTZ);
+ALTER TABLE test_check ADD CONSTRAINT c1 CHECK (a > 7);
+SELECT table_name FROM create_hypertable('test_check', 'b');
+COPY test_check(a,b) FROM STDIN (delimiter ',', null 'N');
+8,'2020-01-01'
+\.
+\set ON_ERROR_STOP 0
+COPY test_check(a,b) FROM STDIN (delimiter ',', null 'N');
+3,'2020-01-01'
+\.
+\set ON_ERROR_STOP 1
+
 

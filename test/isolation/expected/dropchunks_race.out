@@ -5,7 +5,6 @@ step s3_chunks_found_wait: SELECT debug_waitpoint_enable('drop_chunks_chunks_fou
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1_drop_chunks: SELECT count(*) FROM drop_chunks('dropchunks_race_t1', TIMESTAMPTZ '2020-03-01'); <waiting ...>
 step s2_drop_chunks: SELECT count(*) FROM drop_chunks('dropchunks_race_t1', TIMESTAMPTZ '2020-03-01'); <waiting ...>
@@ -13,36 +12,30 @@ step s3_chunks_found_release: SELECT debug_waitpoint_release('drop_chunks_chunks
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_drop_chunks: <... completed>
 count
 -----
     1
-(1 row)
 
 step s2_drop_chunks: <... completed>
 count
 -----
     0
-(1 row)
 
 step s3_show_missing_slices: SELECT count(*) FROM _timescaledb_catalog.chunk_constraint WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice);
 count
 -----
     0
-(1 row)
 
 step s3_show_num_chunks: SELECT count(*) FROM show_chunks('dropchunks_race_t1') ORDER BY 1;
 count
 -----
     0
-(1 row)
 
 step s3_show_data: SELECT * FROM dropchunks_race_t1 ORDER BY 1;
 time|device|temp
 ----+------+----
-(0 rows)
 
 
 starting permutation: s4_chunks_dropped_wait s1_drop_chunks s5_insert_new_chunk s4_chunks_dropped_release s3_show_missing_slices s3_show_num_chunks s3_show_data
@@ -50,7 +43,6 @@ step s4_chunks_dropped_wait: SELECT debug_waitpoint_enable('drop_chunks_end');
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1_drop_chunks: SELECT count(*) FROM drop_chunks('dropchunks_race_t1', TIMESTAMPTZ '2020-03-01'); <waiting ...>
 step s5_insert_new_chunk: INSERT INTO dropchunks_race_t1 VALUES ('2020-03-01 10:30', 1, 2.2); <waiting ...>
@@ -58,32 +50,27 @@ step s4_chunks_dropped_release: SELECT debug_waitpoint_release('drop_chunks_end'
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_drop_chunks: <... completed>
 count
 -----
     1
-(1 row)
 
 step s5_insert_new_chunk: <... completed>
 step s3_show_missing_slices: SELECT count(*) FROM _timescaledb_catalog.chunk_constraint WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice);
 count
 -----
     0
-(1 row)
 
 step s3_show_num_chunks: SELECT count(*) FROM show_chunks('dropchunks_race_t1') ORDER BY 1;
 count
 -----
     1
-(1 row)
 
 step s3_show_data: SELECT * FROM dropchunks_race_t1 ORDER BY 1;
 time                        |device|temp
 ----------------------------+------+----
 Sun Mar 01 10:30:00 2020 PST|     1| 2.2
-(1 row)
 
 
 starting permutation: s4_chunks_dropped_wait s1_drop_chunks s5_insert_old_chunk s4_chunks_dropped_release s3_show_missing_slices s3_show_num_chunks s3_show_data
@@ -91,7 +78,6 @@ step s4_chunks_dropped_wait: SELECT debug_waitpoint_enable('drop_chunks_end');
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s1_drop_chunks: SELECT count(*) FROM drop_chunks('dropchunks_race_t1', TIMESTAMPTZ '2020-03-01'); <waiting ...>
 step s5_insert_old_chunk: INSERT INTO dropchunks_race_t1 VALUES ('2020-01-02 10:31', 1, 1.1); <waiting ...>
@@ -99,30 +85,25 @@ step s4_chunks_dropped_release: SELECT debug_waitpoint_release('drop_chunks_end'
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_drop_chunks: <... completed>
 count
 -----
     1
-(1 row)
 
 step s5_insert_old_chunk: <... completed>
 step s3_show_missing_slices: SELECT count(*) FROM _timescaledb_catalog.chunk_constraint WHERE dimension_slice_id NOT IN (SELECT id FROM _timescaledb_catalog.dimension_slice);
 count
 -----
     0
-(1 row)
 
 step s3_show_num_chunks: SELECT count(*) FROM show_chunks('dropchunks_race_t1') ORDER BY 1;
 count
 -----
     1
-(1 row)
 
 step s3_show_data: SELECT * FROM dropchunks_race_t1 ORDER BY 1;
 time                        |device|temp
 ----------------------------+------+----
 Thu Jan 02 10:31:00 2020 PST|     1| 1.1
-(1 row)
 

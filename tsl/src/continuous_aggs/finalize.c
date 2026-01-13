@@ -4,22 +4,16 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-/*
- * This file contains the code related to the *NOT* finalized version of
- * Continuous Aggregates (with partials)
- */
 #include "finalize.h"
 
 #include <parser/parse_relation.h>
 
 #include "common.h"
 #include "create.h"
-#include <partialize_finalize.h>
 
 /* Static function prototypes */
-static Var *mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input,
-										int original_query_resno, bool finalized,
-										bool *skip_adding);
+static Var *mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *input,
+										List *rtable, int original_query_resno, bool *skip_adding);
 static inline void makeMaterializeColumnName(char *colbuf, const char *type,
 											 int original_query_resno, int colno);
 
@@ -44,7 +38,8 @@ makeMaterializeColumnName(char *colbuf, const char *type, int original_query_res
  * materialize table columns and partialize exprs.
  */
 void
-finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo *mattblinfo)
+finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,
+				   MaterializationHypertableColumnInfo *mattblinfo)
 {
 	ListCell *lc;
 	int resno = 1;
@@ -80,8 +75,8 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 			bool skip_adding = false;
 			var = mattablecolumninfo_addentry(mattblinfo,
 											  (Node *) tle,
+											  orig_query->rtable,
 											  resno,
-											  inp->finalized,
 											  &skip_adding);
 
 			/* Skip adding this column for finalized form. */
@@ -109,7 +104,7 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 		 * final_selquery and origquery. So tleSortGroupReffor the targetentry
 		 * can be reused, only table info needs to be modified.
 		 */
-		Assert(inp->finalized && modte->resno >= resno);
+		Assert(modte->resno >= resno);
 		resno++;
 		if (IsA(modte->expr, Var))
 		{
@@ -136,7 +131,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	Query *final_selquery = NULL;
 
 	CAGG_MAKEQUERY(final_selquery, inp->final_userquery);
-	final_selquery->hasAggs = !inp->finalized;
+	final_selquery->hasAggs = false;
 
 	/* New RangeTblEntry for the materialization hypertable */
 	RangeTblEntry *rte = makeNode(RangeTblEntry);
@@ -207,10 +202,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 
 /*
  * Add Information required to create and populate the materialization table columns
- * a) create a columndef for the materialization table
- * b) create the corresponding expr to populate the column of the materialization table (e..g for a
- *    column that is an aggref, we create a partialize_agg expr to populate the column Returns: the
- *    Var corresponding to the newly created column of the materialization table
+ * creating a columndef for the materialization table.
  *
  * Notes: make sure the materialization table columns do not save
  *        values computed by mutable function.
@@ -223,8 +215,8 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
  *
  */
 static Var *
-mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_query_resno,
-							bool finalized, bool *skip_adding)
+mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *input, List *rtable,
+							int original_query_resno, bool *skip_adding)
 {
 	int matcolno = list_length(out->matcollist) + 1;
 	char colbuf[NAMEDATALEN];
@@ -254,6 +246,35 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			if (IsA(tle->expr, FuncExpr))
 				timebkt_chk = function_allowed_in_cagg_definition(((FuncExpr *) tle->expr)->funcid);
 
+#if PG18_GE
+			/* PG18 introduced RTEs for group clauses so
+			 * we use rtable to look up GROUP BY expressions.
+			 *
+			 * https://github.com/postgres/postgres/commit/247dea89
+			 */
+			if (IsA(tle->expr, Var))
+			{
+				Var *var = castNode(Var, tle->expr);
+				Assert((int) var->varno <= list_length(rtable));
+				RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
+				Assert(rte->rtekind == RTE_GROUP);
+				Assert(var->varattno > 0);
+				Node *node = list_nth(rte->groupexprs, var->varattno - 1);
+				if (IsA(node, FuncExpr))
+				{
+					if (contain_mutable_functions(node))
+					{
+						ereport(WARNING,
+								(errmsg("using non-immutable functions in continuous aggregate "
+										"view may lead to "
+										"inconsistent results on rematerialization")));
+					}
+					FuncExpr *expr = (FuncExpr *) node;
+					timebkt_chk = function_allowed_in_cagg_definition(((FuncExpr *) expr)->funcid);
+				}
+			}
+#endif
+
 			if (tle->resname)
 				colname = pstrdup(tle->resname);
 			else
@@ -266,7 +287,7 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 					colname = colbuf;
 
 					/* For finalized form we skip adding extra group by columns. */
-					*skip_adding = finalized;
+					*skip_adding = true;
 				}
 			}
 
@@ -340,7 +361,7 @@ mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_q
 			elog(ERROR, "invalid node type %d", nodeTag(input));
 			break;
 	}
-	Assert(finalized && list_length(out->matcollist) <= list_length(out->partial_seltlist));
+	Assert(list_length(out->matcollist) <= list_length(out->partial_seltlist));
 	Assert(col != NULL);
 	Assert(part_te != NULL);
 

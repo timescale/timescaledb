@@ -6,6 +6,7 @@
 -- We have support for a dedicated type whos only purpose is to
 -- generate error. You pass in the error code you want and it will be
 -- raised from inside the input function.
+SET client_min_messages TO WARNING;
 CREATE TYPE sqlstate_raise;
 CREATE FUNCTION ts_sqlstate_raise_in(cstring)
     RETURNS sqlstate_raise
@@ -17,6 +18,7 @@ CREATE TYPE sqlstate_raise (
     input = ts_sqlstate_raise_in,
     output = ts_sqlstate_raise_out
 );
+SET client_min_messages TO DEFAULT;
 
 CREATE OR REPLACE FUNCTION test_with_clause_filter(with_clauses TEXT[][])
     RETURNS TABLE(namespace TEXT, name TEXT, value TEXT, filtered BOOLEAN)
