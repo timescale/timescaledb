@@ -218,6 +218,10 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 	}
 }
 
+/*
+ * Iterator that skips the bitmap words that are fully zero. It helps us do less
+ * work when most of the batch rows are filtered out.
+ */
 typedef struct
 {
 	const int nrows;
@@ -441,7 +445,8 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlo
 	policy->hashing.prepare_for_batch(policy, vector_slot);
 
 	/*
-	 * Add the batch rows to aggregate function states.
+	 * Add the batch rows to aggregate function states, skipping the sequences
+	 * of rows that are filtered out by the batch filter.
 	 */
 	int stats_matched_rows = 0;
 	for (FilterWordIterator iter = filter_word_iterator_init(nrows, filter);
