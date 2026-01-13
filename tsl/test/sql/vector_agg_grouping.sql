@@ -145,6 +145,11 @@ select sum(t) from long group by b, c, d order by 1 limit 10;
 -- Expressions with scalar column
 select substr(a || b, 1, 10), sum(t) from long group by a || b order by 1, 2 limit 10;
 
+-- No functions
+select a, b, c, d from long group by a, b, c, d order by a, b, c, d limit 10;
+
+select a, b, c, d from long group by a, b, c, d order by d, c, b, a limit 10;
+
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
 
