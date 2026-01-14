@@ -4,8 +4,12 @@
 
 -- Expressions in vectorized aggregation.
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
 \pset null $
 
+create function always_null(x int4) returns int4 as $$ select null::int4 $$
+language sql strict immutable parallel safe;
 
 create table aggexpr(ts int, i int, x text, b bool, v float4) with (tsdb.hypertable,
     tsdb.compress, tsdb.compress_orderby = 'ts', tsdb.compress_segmentby = 'i, x, b',
@@ -41,8 +45,9 @@ vacuum full analyze aggexpr;
 
 
 set timescaledb.debug_require_vector_agg = 'require';
----- Uncomment to generate reference
---set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
+-- /* Uncomment to generate reference. */ set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
+
+select always_null(i) from aggexpr group by 1;
 
 select
     format('select %s%s from aggexpr%s%s%s;',

@@ -139,8 +139,11 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 			memset(columnar_result->validity,
 				   -1,
 				   num_validity_words * sizeof(*columnar_result->validity));
-			const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
-			columnar_result->validity[nrows / 64] &= tail_mask;
+			if (nrows % 64 != 0)
+			{
+				const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
+				columnar_result->validity[nrows / 64] &= tail_mask;
+			}
 		}
 
 		arrow_set_row_validity(columnar_result->validity, row, false);
