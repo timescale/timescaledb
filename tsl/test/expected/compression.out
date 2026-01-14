@@ -1872,22 +1872,19 @@ ORDER BY timestamp desc  LIMIT 1 ) a ON true;
                Runtime Exclusion: true
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_43_83_chunk
                      Output: _hyper_43_83_chunk."timestamp", _hyper_43_83_chunk.attr_id, _hyper_43_83_chunk.number_val
-                     Vectorized Filter: ((_hyper_43_83_chunk."timestamp" > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (_hyper_43_83_chunk."timestamp" < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
                      ->  Index Scan using compress_hyper_44_86_chunk_attr_id__ts_meta_min_1__ts_meta__idx on _timescaledb_internal.compress_hyper_44_86_chunk
                            Output: compress_hyper_44_86_chunk._ts_meta_count, compress_hyper_44_86_chunk.attr_id, compress_hyper_44_86_chunk._ts_meta_min_1, compress_hyper_44_86_chunk._ts_meta_max_1, compress_hyper_44_86_chunk."timestamp", compress_hyper_44_86_chunk.number_val
-                           Index Cond: ((compress_hyper_44_86_chunk.attr_id = "*VALUES*".column1) AND (compress_hyper_44_86_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_86_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone))
+                           Index Cond: (compress_hyper_44_86_chunk.attr_id = "*VALUES*".column1)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_43_82_chunk
                      Output: _hyper_43_82_chunk."timestamp", _hyper_43_82_chunk.attr_id, _hyper_43_82_chunk.number_val
-                     Vectorized Filter: ((_hyper_43_82_chunk."timestamp" > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (_hyper_43_82_chunk."timestamp" < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
                      ->  Index Scan using compress_hyper_44_85_chunk_attr_id__ts_meta_min_1__ts_meta__idx on _timescaledb_internal.compress_hyper_44_85_chunk
                            Output: compress_hyper_44_85_chunk._ts_meta_count, compress_hyper_44_85_chunk.attr_id, compress_hyper_44_85_chunk._ts_meta_min_1, compress_hyper_44_85_chunk._ts_meta_max_1, compress_hyper_44_85_chunk."timestamp", compress_hyper_44_85_chunk.number_val
-                           Index Cond: ((compress_hyper_44_85_chunk.attr_id = "*VALUES*".column1) AND (compress_hyper_44_85_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_85_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone))
+                           Index Cond: (compress_hyper_44_85_chunk.attr_id = "*VALUES*".column1)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_43_81_chunk
                      Output: _hyper_43_81_chunk."timestamp", _hyper_43_81_chunk.attr_id, _hyper_43_81_chunk.number_val
-                     Vectorized Filter: ((_hyper_43_81_chunk."timestamp" > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (_hyper_43_81_chunk."timestamp" < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
                      ->  Index Scan using compress_hyper_44_84_chunk_attr_id__ts_meta_min_1__ts_meta__idx on _timescaledb_internal.compress_hyper_44_84_chunk
                            Output: compress_hyper_44_84_chunk._ts_meta_count, compress_hyper_44_84_chunk.attr_id, compress_hyper_44_84_chunk._ts_meta_min_1, compress_hyper_44_84_chunk._ts_meta_max_1, compress_hyper_44_84_chunk."timestamp", compress_hyper_44_84_chunk.number_val
-                           Index Cond: ((compress_hyper_44_84_chunk.attr_id = "*VALUES*".column1) AND (compress_hyper_44_84_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_84_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone))
+                           Index Cond: (compress_hyper_44_84_chunk.attr_id = "*VALUES*".column1)
 
 SELECT * FROM ( VALUES(1),(2),(3),(4),(5),(6),(7),(8),(9),(10) ) AS attr_ids(attr_id)
 INNER JOIN LATERAL (

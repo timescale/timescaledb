@@ -226,7 +226,6 @@ SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_2_chunk
-                                       Filter: (i > 1)
 
 SELECT count(*) FROM "test" WHERE i > 1 AND length(version()) > 0;
  count 
@@ -270,7 +269,6 @@ SET enable_indexscan = OFF;
                            ->  Sort
                                  Sort Key: _hyper_1_1_chunk_1.i
                                  ->  Parallel Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1
-                                       Filter: (i < 500000)
 
 SELECT * FROM (SELECT * FROM "test" WHERE length(version()) > 0 ORDER BY I LIMIT 10) AS t1 LEFT JOIN (SELECT * FROM "test" WHERE i < 500000 ORDER BY I LIMIT 10) AS t2 ON (t1.i = t2.i) ORDER BY t1.i, t2.i;
  i  |  j   |             ts              | i  |  j   |             ts              
@@ -306,7 +304,6 @@ SET enable_indexscan = ON;
                                  ->  Index Scan Backward using _hyper_1_1_chunk_test_i_idx on _hyper_1_1_chunk
                                        Index Cond: (i >= 400000)
                                  ->  Index Scan Backward using _hyper_1_2_chunk_test_i_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1
-                                       Index Cond: (i >= 400000)
 
 SELECT * FROM (SELECT * FROM "test" WHERE i >= 999000 ORDER BY i) AS t1 JOIN (SELECT * FROM "test" WHERE i >= 400000 ORDER BY i) AS t2 ON (TRUE) ORDER BY t1.i, t2.i LIMIT 10;
    i    |    j     |            ts            |   i    |    j     |             ts              
@@ -349,71 +346,48 @@ generate_series('2000-01-01 00:00:30', '2022-01-01 00:00:30', INTERVAL '1 year')
 ORDER BY time;
 :PREFIX SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
 --- QUERY PLAN ---
- Incremental Sort
+ Sort
    Sort Key: s2."time", s1."time", s1.sensor_id, s2.sensor_id
-   Presorted Key: s2."time"
    ->  Nested Loop
-         ->  Custom Scan (ChunkAppend) on sensor_data s2
-               Order: s2."time"
-               ->  Index Scan Backward using _hyper_2_83_chunk_sensor_data_time_idx on _hyper_2_83_chunk s2_1
-                     Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
-               ->  Index Scan Backward using _hyper_2_84_chunk_sensor_data_time_idx on _hyper_2_84_chunk s2_2
-                     Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
-               ->  Index Scan Backward using _hyper_2_85_chunk_sensor_data_time_idx on _hyper_2_85_chunk s2_3
-                     Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
-               ->  Index Scan Backward using _hyper_2_86_chunk_sensor_data_time_idx on _hyper_2_86_chunk s2_4
-                     Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
-               ->  Index Scan Backward using _hyper_2_87_chunk_sensor_data_time_idx on _hyper_2_87_chunk s2_5
-                     Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
+         ->  Custom Scan (ChunkAppend) on sensor_data s1
+               Chunks excluded during startup: 80
+               ->  Index Scan using _hyper_2_83_chunk_sensor_data_time_idx on _hyper_2_83_chunk s1_1
+                     Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     Filter: (sensor_id > 50)
+               ->  Index Scan using _hyper_2_84_chunk_sensor_data_time_idx on _hyper_2_84_chunk s1_2
+                     Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     Filter: (sensor_id > 50)
+               ->  Index Scan using _hyper_2_85_chunk_sensor_data_time_idx on _hyper_2_85_chunk s1_3
+                     Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     Filter: (sensor_id > 50)
+               ->  Index Scan using _hyper_2_86_chunk_sensor_data_time_idx on _hyper_2_86_chunk s1_4
+                     Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     Filter: (sensor_id > 50)
+               ->  Index Scan using _hyper_2_87_chunk_sensor_data_time_idx on _hyper_2_87_chunk s1_5
+                     Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     Filter: (sensor_id > 50)
+               ->  Index Scan using _hyper_2_88_chunk_sensor_data_time_idx on _hyper_2_88_chunk s1_6
+                     Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     Filter: (sensor_id > 50)
+               ->  Index Scan using _hyper_2_89_chunk_sensor_data_time_idx on _hyper_2_89_chunk s1_7
+                     Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     Filter: (sensor_id > 50)
+               ->  Index Scan using _hyper_2_90_chunk_sensor_data_time_idx on _hyper_2_90_chunk s1_8
+                     Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     Filter: (sensor_id > 50)
+               ->  Index Scan using _hyper_2_91_chunk_sensor_data_time_idx on _hyper_2_91_chunk s1_9
+                     Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+                     Filter: (sensor_id > 50)
          ->  Gather
-               Workers Planned: 4
-               ->  Parallel Custom Scan (ChunkAppend) on sensor_data s1
-                     Chunks excluded during startup: 80
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_83_chunk s1_1
-                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                           Filter: (sensor_id > 50)
-                           ->  Bitmap Index Scan on _hyper_2_83_chunk_sensor_data_time_idx
-                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_84_chunk s1_2
-                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                           Filter: (sensor_id > 50)
-                           ->  Bitmap Index Scan on _hyper_2_84_chunk_sensor_data_time_idx
-                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_85_chunk s1_3
-                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                           Filter: (sensor_id > 50)
-                           ->  Bitmap Index Scan on _hyper_2_85_chunk_sensor_data_time_idx
-                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_86_chunk s1_4
-                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                           Filter: (sensor_id > 50)
-                           ->  Bitmap Index Scan on _hyper_2_86_chunk_sensor_data_time_idx
-                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_87_chunk s1_5
-                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                           Filter: (sensor_id > 50)
-                           ->  Bitmap Index Scan on _hyper_2_87_chunk_sensor_data_time_idx
-                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_88_chunk s1_6
-                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                           Filter: (sensor_id > 50)
-                           ->  Bitmap Index Scan on _hyper_2_88_chunk_sensor_data_time_idx
-                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_89_chunk s1_7
-                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                           Filter: (sensor_id > 50)
-                           ->  Bitmap Index Scan on _hyper_2_89_chunk_sensor_data_time_idx
-                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_90_chunk s1_8
-                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                           Filter: (sensor_id > 50)
-                           ->  Bitmap Index Scan on _hyper_2_90_chunk_sensor_data_time_idx
-                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                     ->  Parallel Bitmap Heap Scan on _hyper_2_91_chunk s1_9
-                           Recheck Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
-                           Filter: (sensor_id > 50)
-                           ->  Bitmap Index Scan on _hyper_2_91_chunk_sensor_data_time_idx
-                                 Index Cond: ("time" > ('2020-01-01 00:00:30'::cstring)::timestamp with time zone)
+               Workers Planned: 3
+               ->  Parallel Append
+                     ->  Parallel Index Scan Backward using _hyper_2_83_chunk_sensor_data_time_idx on _hyper_2_83_chunk s2_1
+                           Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
+                     ->  Parallel Index Scan Backward using _hyper_2_87_chunk_sensor_data_time_idx on _hyper_2_87_chunk s2_5
+                           Index Cond: (("time" > 'Wed Jan 01 00:00:30 2020 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 01 00:00:30 2021 PST'::timestamp with time zone))
+                     ->  Parallel Seq Scan on _hyper_2_84_chunk s2_2
+                     ->  Parallel Seq Scan on _hyper_2_85_chunk s2_3
+                     ->  Parallel Seq Scan on _hyper_2_86_chunk s2_4
 
 -- Check query result
 SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
@@ -505,7 +479,6 @@ SET max_parallel_workers_per_gather TO 2;
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_2_chunk
-                                       Filter: (i >= 400000)
 
 SELECT count(*) FROM "test" WHERE i >= 400000 AND length(version()) > 0;
  count 
@@ -531,7 +504,6 @@ SELECT count(*) FROM "test" WHERE i >= 400000 AND length(version()) > 0;
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_1_chunk
-                                       Filter: (i < 600000)
 
 SELECT count(*) FROM "test" WHERE i < 600000 AND length(version()) > 0;
  count 
@@ -577,7 +549,6 @@ SET max_parallel_workers_per_gather TO 2;
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_2_chunk
-                                       Filter: (i >= 500000)
 
 SELECT count(*) FROM "test" WHERE i >= 500000 AND length(version()) > 0;
  count 
@@ -606,7 +577,6 @@ ALTER TABLE :CHUNK2 SET (parallel_workers=2);
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_2_chunk
-                                       Filter: (i > 400000)
 
 ALTER TABLE :CHUNK1 SET (parallel_workers=2);
 ALTER TABLE :CHUNK2 SET (parallel_workers=0);
@@ -627,7 +597,6 @@ ALTER TABLE :CHUNK2 SET (parallel_workers=0);
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_1_chunk
-                                       Filter: (i < 600000)
 
 ALTER TABLE :CHUNK1 RESET (parallel_workers);
 ALTER TABLE :CHUNK2 RESET (parallel_workers);

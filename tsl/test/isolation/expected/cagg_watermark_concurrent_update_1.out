@@ -36,7 +36,6 @@ Merge Append
               ->  Partial GroupAggregate                                                                   
                     Group Key: time_bucket('@ 4 hours'::interval, _hyper_X_X_chunk."time")                 
                     ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk
-                          Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone) 
 
 step s1_run_update: 
    CALL refresh_continuous_aggregate('cagg', '2020-01-01 00:00:00', '2021-01-01 00:00:00');
@@ -63,7 +62,6 @@ Merge Append
               ->  Partial GroupAggregate                                                                   
                     Group Key: time_bucket('@ 4 hours'::interval, _hyper_X_X_chunk."time")                 
                     ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk
-                          Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone) 
 
 step s3_release_invalidation: 
    SELECT debug_waitpoint_release('cagg_watermark_update_internal_before_refresh');
@@ -83,7 +81,6 @@ Merge Append
   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_X                                                        
         Order: _materialized_hypertable_X.time_bucket                                                                
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_idx on _hyper_X_X_chunk
-              Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                   
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_idx on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                   
   ->  GroupAggregate                                                                                                 
@@ -103,7 +100,6 @@ Merge Append
   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_X                                                        
         Order: _materialized_hypertable_X.time_bucket                                                                
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_idx on _hyper_X_X_chunk
-              Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                   
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_idx on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                   
   ->  GroupAggregate                                                                                                 
@@ -144,7 +140,6 @@ Merge Append
               ->  Partial GroupAggregate                                                                   
                     Group Key: time_bucket('@ 4 hours'::interval, _hyper_X_X_chunk."time")                 
                     ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk
-                          Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone) 
 
 step s1_run_update: 
    CALL refresh_continuous_aggregate('cagg', '2020-01-01 00:00:00', '2021-01-01 00:00:00');
@@ -171,7 +166,6 @@ Merge Append
               ->  Partial GroupAggregate                                                                   
                     Group Key: time_bucket('@ 4 hours'::interval, _hyper_X_X_chunk."time")                 
                     ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk
-                          Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone) 
 
 step s3_release_invalidation: 
    SELECT debug_waitpoint_release('cagg_watermark_update_internal_before_refresh');
@@ -204,14 +198,12 @@ Merge Append
   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_X                                                        
         Order: _materialized_hypertable_X.time_bucket                                                                
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_idx on _hyper_X_X_chunk
-              Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                   
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_idx on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                   
   ->  GroupAggregate                                                                                                 
         Group Key: (time_bucket('@ 4 hours'::interval, _hyper_X_X_chunk."time"))                                     
         ->  Result                                                                                                   
               ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk                
-                    Index Cond: ("time" >= 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                 
 
 step s3_release_invalidation: 
    SELECT debug_waitpoint_release('cagg_watermark_update_internal_before_refresh');
@@ -231,7 +223,6 @@ Merge Append
   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_X                                                        
         Order: _materialized_hypertable_X.time_bucket                                                                
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_idx on _hyper_X_X_chunk
-              Index Cond: (time_bucket < 'Thu Jan 02 16:00:00 2020 PST'::timestamp with time zone)                   
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_idx on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Thu Jan 02 16:00:00 2020 PST'::timestamp with time zone)                   
   ->  GroupAggregate                                                                                                 

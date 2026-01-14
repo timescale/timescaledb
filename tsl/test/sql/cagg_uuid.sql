@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- this test has implicit dependencies on the plans generated with quals
+-- (plans favoring index scans over seq scans), so disable the optimization
+SET timescaledb.enable_qual_filtering = off;
+
 --
 --
 -- Test caggs with "time" partitioning on UUIDv7
