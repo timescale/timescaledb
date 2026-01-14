@@ -508,3 +508,27 @@ SELECT count(compress_chunk(x)) FROM show_chunks('test_exclude_datetype') x;
 SELECT * FROM timescaledb_information.chunk_compression_settings WHERE hypertable = 'test_exclude_datetype'::regclass ORDER BY chunk LIMIT 1;
 
 DROP TABLE test_exclude_datetype;
+
+-- test that continuous aggregate materialized hypertables DELETE settings on disable
+-- (unlike regular hypertables which retain them)
+CREATE TABLE cagg_test (time TIMESTAMPTZ NOT NULL, device_id TEXT, val FLOAT);
+SELECT create_hypertable('cagg_test', 'time');
+INSERT INTO cagg_test SELECT t, 'dev1', random() FROM generate_series('2020-01-01'::timestamptz, '2020-01-10'::timestamptz, '1 hour') t;
+CREATE MATERIALIZED VIEW cagg_test_agg WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, device_id, avg(val) FROM cagg_test GROUP BY 1, 2 WITH NO DATA;
+CALL refresh_continuous_aggregate('cagg_test_agg', NULL, NULL);
+-- enable compression on the cagg with specific settings
+ALTER MATERIALIZED VIEW cagg_test_agg SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'device_id');
+-- verify settings exist (join through hypertable to get the mat_hypertable's relid)
+SELECT count(*) FROM _timescaledb_catalog.compression_settings cs
+  JOIN _timescaledb_catalog.hypertable h ON cs.relid = format('%I.%I', h.schema_name, h.table_name)::regclass
+  JOIN _timescaledb_catalog.continuous_agg ca ON h.id = ca.mat_hypertable_id
+  WHERE ca.user_view_name = 'cagg_test_agg';
+-- disable compression on the cagg
+ALTER MATERIALIZED VIEW cagg_test_agg SET (timescaledb.compress = false);
+-- verify settings are deleted for caggs (unlike regular hypertables)
+SELECT count(*) FROM _timescaledb_catalog.compression_settings cs
+  JOIN _timescaledb_catalog.hypertable h ON cs.relid = format('%I.%I', h.schema_name, h.table_name)::regclass
+  JOIN _timescaledb_catalog.continuous_agg ca ON h.id = ca.mat_hypertable_id
+  WHERE ca.user_view_name = 'cagg_test_agg';
+DROP TABLE cagg_test CASCADE;
