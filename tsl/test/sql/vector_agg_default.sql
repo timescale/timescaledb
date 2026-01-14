@@ -71,6 +71,8 @@ select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
 
 explain (buffers off, costs off) select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
 
+reset timescaledb.enable_vectorized_aggregation;
+
 
 -- The runtime chunk exclusion should work.
 explain (buffers off, costs off) select sum(c) from dvagg where a < stable_abs(1000);

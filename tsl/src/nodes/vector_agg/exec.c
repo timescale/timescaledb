@@ -101,26 +101,24 @@ columnar_result_init_for_type(ColumnarResult *columnar_result,
 	const size_t num_validity_words = (nrows + 63) / 64;
 	if (columnar_result->type == DT_ArrowBits)
 	{
-		columnar_result->body_buffer = MemoryContextAllocZero(batch_state->per_batch_context,
-															  sizeof(uint64) * num_validity_words);
+		columnar_result->allocated_body_bytes = sizeof(uint64) * num_validity_words;
 	}
 	else if (columnar_result->type == DT_ArrowText)
 	{
 		columnar_result->offset_buffer =
 			MemoryContextAllocZero(batch_state->per_batch_context,
-								   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1)));
+								   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1) + 1));
 		columnar_result->allocated_body_bytes = pad_to_multiple(64, 10);
-		columnar_result->body_buffer =
-			MemoryContextAllocZero(batch_state->per_batch_context,
-								   columnar_result->allocated_body_bytes);
 	}
 	else
 	{
 		Assert(columnar_result->type > 0);
-		columnar_result->body_buffer =
-			MemoryContextAllocZero(batch_state->per_batch_context,
-								   pad_to_multiple(64, columnar_result->type * nrows));
+		columnar_result->allocated_body_bytes =
+			pad_to_multiple(64, 1 + columnar_result->type * nrows);
 	}
+
+	columnar_result->body_buffer = MemoryContextAllocZero(batch_state->per_batch_context,
+														  columnar_result->allocated_body_bytes);
 }
 
 static pg_attribute_always_inline void
@@ -128,20 +126,24 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 						int row, Datum datum, bool isnull)
 {
 	const int nrows = batch_state->total_batch_rows;
-	const int num_validity_words = (nrows + 63) / 64;
+	Assert(row < nrows);
 
 	if (isnull)
 	{
 		if (columnar_result->validity == NULL)
 		{
+			const int num_validity_words = (nrows + 63) / 64;
 			columnar_result->validity =
 				MemoryContextAlloc(batch_state->per_batch_context,
 								   num_validity_words * sizeof(*columnar_result->validity));
 			memset(columnar_result->validity,
 				   -1,
 				   num_validity_words * sizeof(*columnar_result->validity));
-			const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
-			columnar_result->validity[nrows / 64] &= tail_mask;
+			if (nrows % 64 != 0)
+			{
+				const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
+				columnar_result->validity[nrows / 64] &= tail_mask;
+			}
 		}
 
 		arrow_set_row_validity(columnar_result->validity, row, false);
@@ -165,6 +167,13 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 				pad_to_multiple(64, columnar_result->current_offset + result_bytes);
 			if (required_body_bytes > columnar_result->allocated_body_bytes)
 			{
+				/*
+				 * We reallocate based on how many rows in the batch we have
+				 * left, not to overshoot too much. At the same time, we
+				 * shouldn't reallocate too often either. The parameters were
+				 * tuned manually on a few real data sets until this balance
+				 * looked somewhat acceptable.
+				 */
 				const int new_body_bytes =
 					required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) row + 1))) + 1;
 				//				fprintf(stderr,
@@ -247,9 +256,6 @@ columnar_result_finalize(ColumnarResult *columnar_result, DecompressBatchState c
 	arrow_result->null_count =
 		arrow_result->length - arrow_num_valid(arrow_result->buffers[0], nrows);
 
-	//	fprintf(stderr, "length %ld, null count %ld\n", arrow_result->length,
-	// arrow_result->null_count);
-
 	CompressedColumnValues result = {
 		.decompression_type = columnar_result->type,
 		.buffers = { arrow_result->buffers[0],
@@ -271,10 +277,10 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 
 	FmgrInfo flinfo;
 	fmgr_info(funcoid, &flinfo);
-	LOCAL_FCINFO(fcinfo, 5);
+	FunctionCallInfo fcinfo = palloc0(SizeForFunctionCallInfo(nargs));
 	InitFunctionCallInfoData(*fcinfo, &flinfo, nargs, inputcollid, NULL, NULL);
 
-	CompressedColumnValues arg_values[5] = { 0 };
+	CompressedColumnValues *arg_values = palloc0(nargs * sizeof(*arg_values));
 	bool have_null_bitmap = false;
 	bool have_null_scalars = false;
 	ListCell *lc;
@@ -319,6 +325,8 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	 */
 	if (have_null_scalars)
 	{
+		pfree(fcinfo);
+		pfree(arg_values);
 		return (CompressedColumnValues){ .decompression_type = DT_Scalar,
 										 .buffers[0] = DatumGetPointer(BoolGetDatum(true)) };
 	}
@@ -364,7 +372,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 		}
 
 		/*
-		 * Do not the function on null inputs because it is strict.
+		 * Do not evaluate the function on null inputs because it is strict.
 		 */
 		if (!arrow_row_is_valid(input_validity, row))
 		{
@@ -387,8 +395,6 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	MemoryContextSwitchTo(old);
 	MemoryContextDelete(function_call_context);
 
-	// MemoryContextStats(CurrentMemoryContext);
-
 	/*
 	 * Figure out the validity bitmap of the result rows. Besides the null
 	 * inputs, the function itself can return nulls for some rows.
@@ -401,6 +407,9 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	{
 		columnar_result.validity = (uint64 *) input_validity;
 	}
+
+	pfree(fcinfo);
+	pfree(arg_values);
 
 	return columnar_result_finalize(&columnar_result, batch_state);
 }
@@ -696,10 +705,6 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 				Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
 
 				def->argument = castNode(TargetEntry, linitial(aggref->args))->expr;
-				//				Var *var = castNode(Var, ;
-				//				def->input_offset =
-				//					get_input_offset((const ColumnarScanState *) childstate,
-				// var);
 			}
 			else
 			{

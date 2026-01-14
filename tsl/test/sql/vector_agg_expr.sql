@@ -15,6 +15,12 @@ insert into aggexpr select 1, null, null, null, generate_series(1, 1499);
 
 insert into aggexpr select 2, 2, '2', false, generate_series(1, 1493);
 
+-- Batch divisible by 64 to test proper padding.
+insert into aggexpr select 3, case when x % 3 = 1 then 3 else 0 end,
+    case when x % 3 = 2 then '3' else '0' end,
+    case when x % 3 = 0 then true else false end
+from generate_series(1, 960) x;
+
 select count(compress_chunk(x)) from show_chunks('aggexpr') x;
 
 alter table aggexpr set (tsdb.compress_segmentby = '');
@@ -35,8 +41,7 @@ vacuum full analyze aggexpr;
 
 
 set timescaledb.debug_require_vector_agg = 'require';
----- Uncomment to generate reference
---set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
+-- /* Uncomment to generate reference. */ set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
 
 select
     format('select %s%s from aggexpr%s%s%s;',
@@ -79,8 +84,7 @@ reset timescaledb.enable_vectorized_aggregation;
 
 -- Not all CASE statements are vectorized yet.
 set timescaledb.debug_require_vector_agg = 'require';
----- Uncomment to generate reference
---set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
+-- /* Uncomment to generate reference. */ set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
 
 select sum(case when i > 10 then i else -i end) from aggexpr group by b order by 1;
 
@@ -90,6 +94,6 @@ select sum(case when i > 10 then (case when i > 12 then length(x) else -length(x
 
 select avg(case when v > 500 then v - 500 else 500 - v end) from aggexpr group by x order by 1 limit 10;
 
-select count(*), case when v > 503 then x else 'something-else' end from aggexpr group by 2 order by 1 limit 10;
+select count(*), case when v > 503 then x else 'something-else' end from aggexpr group by 2 order by 1, 2 limit 10;
 
 reset timescaledb.debug_require_vector_agg;

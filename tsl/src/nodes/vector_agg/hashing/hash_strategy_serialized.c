@@ -174,8 +174,6 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 	const bool key_uses_short_header = num_bytes + VARHDRSZ_SHORT <= VARATT_SHORT_MAX;
 	num_bytes += key_uses_short_header ? VARHDRSZ_SHORT : VARHDRSZ;
 
-	// fprintf(stderr, "[%d]: %ld bytes needed\n", row, num_bytes);
-
 	/*
 	 * Use temporary storage for the new key, reallocate if it's too small.
 	 */

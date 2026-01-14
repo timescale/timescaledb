@@ -104,7 +104,9 @@ insert into uuid_table values
 	(9, '0197a7a9-b48b-7c78-ab14-78b3dd81dbbc'), (10, '0197a7a9-b48b-7c78-ab14-78b3dd81dbbc'), (11, '0197a7a9-b48b-7c7a-8d9e-5afc3bf15234'), (12, '0197a7a9-b48b-7c7b-bc49-7150f16d8d63'),
 	(13, '0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9'), (14, '0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9'), (15, '0197a7a9-b48b-7c7e-9ebb-acf63f5b625e'), (16, '0197a7a9-b48b-7c7f-a0c1-ba4adf950a2a'),
     (17, '01941f29-7c00-706a-bea9-105dad841304'), (18, '01941f2a-665f-7722-b4b5-cf4e70e666d0'),
-	(19, NULL::uuid), (20, NULL::uuid), (21, NULL::uuid);
+    (19, NULL::uuid), (20, NULL::uuid), (21, NULL::uuid),
+    (22, 'b71b048c-e63a-4322-bcb9-5b5a10eaf29c'), (23, '32c0036a-f9ae-4ad4-b948-ad351033d523'), (24, 'b1af1cc0-c96c-4bbc-9b96-d25e5ff277cd')
+;
 
 -- add a few derived columns
 alter table uuid_table add column ver int;

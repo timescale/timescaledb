@@ -214,11 +214,6 @@ static bool
 is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid resulttype,
 				   Oid inputcollid)
 {
-	if (list_length(args) > 5)
-	{
-		return false;
-	}
-
 	if (!is_vector_type(resulttype))
 	{
 		return false;
@@ -366,7 +361,6 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 		}
 
 		default:
-			// my_print(expr);
 			return false;
 	}
 }
@@ -456,9 +450,6 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 		{
 			continue;
 		}
-
-		//		fprintf(stderr, "considering grouping column:\n");
-		// my_print(target_entry);
 
 		num_grouping_columns++;
 
