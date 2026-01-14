@@ -120,104 +120,6 @@ gp_hash_reset(GroupingPolicy *obj)
 	policy->stat_consecutive_keys = 0;
 }
 
-static void
-compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext,
-						 TupleTableSlot *vector_slot, int start_row, int end_row,
-						 const VectorAggDef *agg_def, void *agg_states)
-{
-	const uint32 *offsets = policy->key_index_for_row;
-	MemoryContext agg_extra_mctx = policy->agg_extra_mctx;
-
-	/*
-	 * We have functions with one argument, and one function with no arguments
-	 * (count(*)). Collect the arguments.
-	 */
-	const ArrowArray *arg_arrow = NULL;
-	const uint64 *arg_validity_bitmap = NULL;
-	Datum arg_datum = 0;
-	bool arg_isnull = true;
-	if (agg_def->argument != NULL)
-	{
-		const CompressedColumnValues values =
-			vector_slot_evaluate_expression(dcontext,
-											vector_slot,
-											agg_def->effective_batch_filter,
-											agg_def->argument);
-
-		Assert(values.decompression_type != DT_Invalid);
-		Ensure(values.decompression_type != DT_Iterator, "expected arrow array but got iterator");
-
-		if (values.arrow != NULL)
-		{
-			arg_arrow = values.arrow;
-			arg_validity_bitmap = values.buffers[0];
-		}
-		else
-		{
-			Assert(values.decompression_type == DT_Scalar);
-			arg_isnull = DatumGetBool(PointerGetDatum(values.buffers[0]));
-			arg_datum = PointerGetDatum(values.buffers[1]);
-		}
-	}
-
-	/*
-	 * Compute the combined validity bitmap that includes the argument validity.
-	 */
-	DecompressBatchState *batch_state = (DecompressBatchState *) vector_slot;
-	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
-	const uint64 *combined_validity = arrow_combine_validity(num_words,
-															 policy->tmp_filter,
-															 agg_def->effective_batch_filter,
-															 arg_validity_bitmap,
-															 NULL);
-
-	/*
-	 * Now call the function.
-	 */
-	if (arg_arrow != NULL)
-	{
-		/* Arrow argument. */
-		agg_def->func.agg_many_vector(agg_states,
-									  offsets,
-									  combined_validity,
-									  start_row,
-									  end_row,
-									  arg_arrow,
-									  agg_extra_mctx);
-	}
-	else
-	{
-		/*
-		 * Scalar argument, or count(*). The latter has an optimized
-		 * implementation.
-		 */
-		if (agg_def->func.agg_many_scalar != NULL)
-		{
-			agg_def->func.agg_many_scalar(agg_states,
-										  offsets,
-										  combined_validity,
-										  start_row,
-										  end_row,
-										  arg_datum,
-										  arg_isnull,
-										  agg_extra_mctx);
-		}
-		else
-		{
-			for (int i = start_row; i < end_row; i++)
-			{
-				if (!arrow_row_is_valid(combined_validity, i))
-				{
-					continue;
-				}
-
-				void *state = (offsets[i] * agg_def->func.state_bytes + (char *) agg_states);
-				agg_def->func.agg_scalar(state, arg_datum, arg_isnull, 1, agg_extra_mctx);
-			}
-		}
-	}
-}
-
 /*
  * Iterator that skips the bitmap words that are fully zero. It helps us do less
  * work when most of the batch rows are filtered out.
@@ -316,78 +218,106 @@ filter_word_iterator_is_valid(FilterWordIterator const *iter)
 }
 
 static void
-add_one_range(GroupingPolicyHash *policy, DecompressContext *dcontext, TupleTableSlot *vector_slot,
-			  const int start_row, const int end_row)
+compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext,
+						 TupleTableSlot *vector_slot, const VectorAggDef *agg_def, void *agg_states)
 {
-	const int num_fns = policy->num_agg_defs;
-	Assert(start_row < end_row);
+	const uint32 *offsets = policy->key_index_for_row;
+	MemoryContext agg_extra_mctx = policy->agg_extra_mctx;
 
 	/*
-	 * Remember which aggregation states have already existed, and which we
-	 * have to initialize. State index zero is invalid.
+	 * We have functions with one argument, and one function with no arguments
+	 * (count(*)). Collect the arguments.
 	 */
-	const uint32 last_initialized_key_index = policy->hashing.last_used_key_index;
-	Assert(last_initialized_key_index <= policy->num_allocated_per_key_agg_states);
-
-	/*
-	 * Match rows to aggregation states using a hash table.
-	 */
-	Assert((size_t) end_row <= policy->num_key_index_for_row);
-	policy->hashing.fill_offsets(policy, vector_slot, start_row, end_row);
-
-	/*
-	 * Process the aggregate function states. We are processing single aggregate
-	 * function for the entire batch to improve the memory locality.
-	 */
-	const uint64 new_aggstate_rows = policy->num_allocated_per_key_agg_states * 2 + 1;
-	for (int agg_index = 0; agg_index < num_fns; agg_index++)
+	const ArrowArray *arg_arrow = NULL;
+	const uint64 *arg_validity_bitmap = NULL;
+	Datum arg_datum = 0;
+	bool arg_isnull = true;
+	if (agg_def->argument != NULL)
 	{
-		const VectorAggDef *agg_def = &policy->agg_defs[agg_index];
-		/*
-		 * If we added new keys, initialize the aggregate function states for
-		 * them.
-		 */
-		if (policy->hashing.last_used_key_index > last_initialized_key_index)
+		const CompressedColumnValues values =
+			vector_slot_evaluate_expression(dcontext,
+											vector_slot,
+											agg_def->effective_batch_filter,
+											agg_def->argument);
+
+		Assert(values.decompression_type != DT_Invalid);
+		Ensure(values.decompression_type != DT_Iterator, "expected arrow array but got iterator");
+
+		if (values.arrow != NULL)
 		{
-			/*
-			 * If the aggregate function states don't fit into the existing
-			 * storage, reallocate it.
-			 */
-			if (policy->hashing.last_used_key_index >= policy->num_allocated_per_key_agg_states)
-			{
-				policy->per_agg_per_key_states[agg_index] =
-					repalloc(policy->per_agg_per_key_states[agg_index],
-							 new_aggstate_rows * agg_def->func.state_bytes);
-			}
-
-			void *first_uninitialized_state =
-				agg_def->func.state_bytes * (last_initialized_key_index + 1) +
-				(char *) policy->per_agg_per_key_states[agg_index];
-			agg_def->func.agg_init(first_uninitialized_state,
-								   policy->hashing.last_used_key_index -
-									   last_initialized_key_index);
+			arg_arrow = values.arrow;
+			arg_validity_bitmap = values.buffers[0];
 		}
-
-		/*
-		 * Add this batch to the states of this aggregate function.
-		 */
-		compute_single_aggregate(policy,
-								 dcontext,
-								 vector_slot,
-								 start_row,
-								 end_row,
-								 agg_def,
-								 policy->per_agg_per_key_states[agg_index]);
+		else
+		{
+			Assert(values.decompression_type == DT_Scalar);
+			arg_isnull = DatumGetBool(PointerGetDatum(values.buffers[0]));
+			arg_datum = PointerGetDatum(values.buffers[1]);
+		}
 	}
 
 	/*
-	 * Record the newly allocated number of aggregate function states in case we
-	 * had to reallocate.
+	 * Compute the combined validity bitmap that includes the argument validity.
 	 */
-	if (policy->hashing.last_used_key_index >= policy->num_allocated_per_key_agg_states)
+	DecompressBatchState *batch_state = (DecompressBatchState *) vector_slot;
+	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+	const uint64 *combined_validity = arrow_combine_validity(num_words,
+															 policy->tmp_filter,
+															 agg_def->effective_batch_filter,
+															 arg_validity_bitmap,
+															 NULL);
+
+	/*
+	 * Now call the function, skipping the sequences of rows that didn't pass
+	 * the filters.
+	 */
+	for (FilterWordIterator iter =
+			 filter_word_iterator_init(batch_state->total_batch_rows, combined_validity);
+		 filter_word_iterator_is_valid(&iter);
+		 filter_word_iterator_advance(&iter))
 	{
-		Assert(new_aggstate_rows > policy->num_allocated_per_key_agg_states);
-		policy->num_allocated_per_key_agg_states = new_aggstate_rows;
+		if (arg_arrow != NULL)
+		{
+			/* Arrow argument. */
+			agg_def->func.agg_many_vector(agg_states,
+										  offsets,
+										  combined_validity,
+										  iter.start_row,
+										  iter.end_row,
+										  arg_arrow,
+										  agg_extra_mctx);
+		}
+		else
+		{
+			/*
+			 * Scalar argument, or count(*). The latter has an optimized
+			 * implementation.
+			 */
+			if (agg_def->func.agg_many_scalar != NULL)
+			{
+				agg_def->func.agg_many_scalar(agg_states,
+											  offsets,
+											  combined_validity,
+											  iter.start_row,
+											  iter.end_row,
+											  arg_datum,
+											  arg_isnull,
+											  agg_extra_mctx);
+			}
+			else
+			{
+				for (int i = iter.start_row; i < iter.end_row; i++)
+				{
+					if (!arrow_row_is_valid(combined_validity, i))
+					{
+						continue;
+					}
+
+					void *state = (offsets[i] * agg_def->func.state_bytes + (char *) agg_states);
+					agg_def->func.agg_scalar(state, arg_datum, arg_isnull, 1, agg_extra_mctx);
+				}
+			}
+		}
 	}
 }
 
@@ -445,7 +375,14 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlo
 	policy->hashing.prepare_for_batch(policy, vector_slot);
 
 	/*
-	 * Add the batch rows to aggregate function states, skipping the sequences
+	 * Remember which grouping keys have already existed, and which we
+	 * have to initialize. State index zero is invalid.
+	 */
+	const uint32 last_initialized_key_index = policy->hashing.last_used_key_index;
+	Assert(last_initialized_key_index <= policy->num_allocated_per_key_agg_states);
+
+	/*
+	 * Add the grouping keys to the hash table, skipping the sequences
 	 * of rows that are filtered out by the batch filter.
 	 */
 	int stats_matched_rows = 0;
@@ -454,12 +391,71 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlo
 		 filter_word_iterator_advance(&iter))
 	{
 		stats_matched_rows += iter.end_row - iter.start_row;
-		add_one_range(policy, dcontext, vector_slot, iter.start_row, iter.end_row);
+		Assert((size_t) iter.end_row <= policy->num_key_index_for_row);
+		policy->hashing.fill_offsets(policy, vector_slot, iter.start_row, iter.end_row);
 	}
 
 	policy->stat_input_total_rows += nrows;
 	policy->stat_input_valid_rows += arrow_num_valid(filter, nrows);
 	policy->stat_bulk_filtered_rows += nrows - stats_matched_rows;
+
+	/*
+	 * Process the aggregate function states. We are processing single aggregate
+	 * function for the entire batch to improve the memory locality.
+	 */
+	const uint64 new_aggstate_rows = policy->num_allocated_per_key_agg_states * 2 + 1;
+	const int num_fns = policy->num_agg_defs;
+	for (int agg_index = 0; agg_index < num_fns; agg_index++)
+	{
+		const VectorAggDef *agg_def = &policy->agg_defs[agg_index];
+
+		/*
+		 * If we added new keys for this batch, initialize the states for these
+		 * keys for this aggregate function.
+		 */
+		if (policy->hashing.last_used_key_index > last_initialized_key_index)
+		{
+			/*
+			 * If the aggregate function states don't fit into the existing
+			 * storage, reallocate it. We will record the allocated size later,
+			 * and before that, the allocation needs to be done for every
+			 * aggregate function.
+			 */
+			if (policy->hashing.last_used_key_index >= policy->num_allocated_per_key_agg_states)
+			{
+				policy->per_agg_per_key_states[agg_index] =
+					repalloc(policy->per_agg_per_key_states[agg_index],
+							 new_aggstate_rows * agg_def->func.state_bytes);
+			}
+
+			void *first_uninitialized_state =
+				agg_def->func.state_bytes * (last_initialized_key_index + 1) +
+				(char *) policy->per_agg_per_key_states[agg_index];
+			agg_def->func.agg_init(first_uninitialized_state,
+								   policy->hashing.last_used_key_index -
+									   last_initialized_key_index);
+		}
+
+		/*
+		 * Add this batch to the states of this aggregate function.
+		 */
+		compute_single_aggregate(policy,
+								 dcontext,
+								 vector_slot,
+								 agg_def,
+								 policy->per_agg_per_key_states[agg_index]);
+	}
+
+	/*
+	 * If we got new grouping keys in this batch, this means we had to
+	 * reallocate the aggregate function states for them, and now have to record
+	 * the new allocated size.
+	 */
+	if (policy->hashing.last_used_key_index >= policy->num_allocated_per_key_agg_states)
+	{
+		Assert(new_aggstate_rows > policy->num_allocated_per_key_agg_states);
+		policy->num_allocated_per_key_agg_states = new_aggstate_rows;
+	}
 }
 
 static bool
