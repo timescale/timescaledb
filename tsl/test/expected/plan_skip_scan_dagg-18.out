@@ -2017,16 +2017,16 @@ ordered append on skip_scan_ht
          Sort Key: skip_scan_ht."time"
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=250.00 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_time_dev_idx on _hyper_1_1_chunk (actual rows=250.00 loops=1)
-                     Index Cond: (("time" > NULL::integer) AND ("time" >= 0) AND ("time" <= 5000))
+                     Index Cond: ("time" > NULL::integer)
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=250.00 loops=1)
                ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_time_dev_idx on _hyper_1_2_chunk (actual rows=250.00 loops=1)
-                     Index Cond: (("time" > NULL::integer) AND ("time" >= 0) AND ("time" <= 5000))
+                     Index Cond: ("time" > NULL::integer)
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=250.00 loops=1)
                ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_time_dev_idx on _hyper_1_3_chunk (actual rows=250.00 loops=1)
-                     Index Cond: (("time" > NULL::integer) AND ("time" >= 0) AND ("time" <= 5000))
+                     Index Cond: ("time" > NULL::integer)
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=250.00 loops=1)
                ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_time_dev_idx on _hyper_1_4_chunk (actual rows=250.00 loops=1)
-                     Index Cond: (("time" > NULL::integer) AND ("time" >= 0) AND ("time" <= 5000))
+                     Index Cond: ("time" > NULL::integer)
 
 \qecho SUBSELECTS on :TABLE
 SUBSELECTS on skip_scan_ht
@@ -2372,14 +2372,14 @@ WHERE CLAUSES
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=5.00 loops=1)
                      Index Cond: ((dev > NULL::integer) AND (dev > 5) AND ("time" > 200))
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=5.00 loops=1)
-               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=5.00 loops=1)
-                     Index Cond: ((dev > NULL::integer) AND (dev > 5) AND ("time" > 200))
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=5.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev > 5))
          ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=5.00 loops=1)
-               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (actual rows=5.00 loops=1)
-                     Index Cond: ((dev > NULL::integer) AND (dev > 5) AND ("time" > 200))
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=5.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev > 5))
          ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=5.00 loops=1)
-               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=5.00 loops=1)
-                     Index Cond: ((dev > NULL::integer) AND (dev > 5) AND ("time" > 200))
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=5.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev > 5))
 
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE dev >= 5 AND dev < 7 AND dev >= 2;
 --- QUERY PLAN ---
@@ -4577,19 +4577,16 @@ WHERE CLAUSES
                            Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
          ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=5.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=5.00 loops=1)
-                     Vectorized Filter: ("time" > 200)
                      ->  Index Scan using compress_hyper_4_35_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_35_chunk (actual rows=5.00 loops=1)
-                           Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
+                           Index Cond: (dev > 5)
          ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=5.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=5.00 loops=1)
-                     Vectorized Filter: ("time" > 200)
                      ->  Index Scan using compress_hyper_4_36_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_36_chunk (actual rows=5.00 loops=1)
-                           Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
+                           Index Cond: (dev > 5)
          ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=5.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=5.00 loops=1)
-                     Vectorized Filter: ("time" > 200)
                      ->  Index Scan using compress_hyper_4_37_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_37_chunk (actual rows=5.00 loops=1)
-                           Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
+                           Index Cond: (dev > 5)
 
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE dev >= 5 AND dev < 7 AND dev >= 2;
 --- QUERY PLAN ---
@@ -5938,19 +5935,16 @@ WHERE CLAUSES
                            Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
          ->  Custom Scan (SkipScan) on _hyper_5_11_chunk (actual rows=5.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_5_11_chunk (actual rows=5.00 loops=1)
-                     Vectorized Filter: ("time" > 200)
                      ->  Index Scan using compress_hyper_6_14_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_14_chunk (actual rows=5.00 loops=1)
-                           Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
+                           Index Cond: (dev > 5)
          ->  Custom Scan (SkipScan) on _hyper_5_12_chunk (actual rows=5.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_5_12_chunk (actual rows=5.00 loops=1)
-                     Vectorized Filter: ("time" > 200)
                      ->  Index Scan using compress_hyper_6_15_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_15_chunk (actual rows=5.00 loops=1)
-                           Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
+                           Index Cond: (dev > 5)
          ->  Custom Scan (SkipScan) on _hyper_5_13_chunk (actual rows=5.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_5_13_chunk (actual rows=5.00 loops=1)
-                     Vectorized Filter: ("time" > 200)
                      ->  Index Scan using compress_hyper_6_16_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_16_chunk (actual rows=5.00 loops=1)
-                           Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
+                           Index Cond: (dev > 5)
 
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE dev >= 5 AND dev < 7 AND dev >= 2;
 --- QUERY PLAN ---

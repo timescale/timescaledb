@@ -98,9 +98,8 @@ select * from mat_m1 order by sumh, sumt, minl, timec ;
    Sort Key: _materialized_hypertable_2.sumh, _materialized_hypertable_2.sumt, _materialized_hypertable_2.minl, _materialized_hypertable_2.timec
    ->  Append
          ->  Append
-               ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+               ->  Seq Scan on _timescaledb_internal._hyper_2_3_chunk
                      Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-                     Index Cond: (_hyper_2_3_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
                ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
                      Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
                      Index Cond: (_hyper_2_4_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
@@ -158,9 +157,8 @@ select * from mat_m1 order by timec desc, location;
    Sort Key: _materialized_hypertable_2.timec DESC, _materialized_hypertable_2.location
    ->  Append
          ->  Append
-               ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+               ->  Seq Scan on _timescaledb_internal._hyper_2_3_chunk
                      Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-                     Index Cond: (_hyper_2_3_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
                ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
                      Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
                      Index Cond: (_hyper_2_4_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
@@ -184,9 +182,8 @@ select * from mat_m1 order by location, timec desc;
    Sort Key: _materialized_hypertable_2.location, _materialized_hypertable_2.timec DESC
    ->  Append
          ->  Append
-               ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+               ->  Seq Scan on _timescaledb_internal._hyper_2_3_chunk
                      Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-                     Index Cond: (_hyper_2_3_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
                ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
                      Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
                      Index Cond: (_hyper_2_4_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
@@ -210,9 +207,8 @@ select * from mat_m1 order by location, timec asc;
    Sort Key: _materialized_hypertable_2.location, _materialized_hypertable_2.timec
    ->  Append
          ->  Append
-               ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+               ->  Seq Scan on _timescaledb_internal._hyper_2_3_chunk
                      Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-                     Index Cond: (_hyper_2_3_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
                ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
                      Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
                      Index Cond: (_hyper_2_4_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
@@ -393,9 +389,8 @@ select * from mat_m1, mat_m2 where mat_m1.timec > '2018-10-01' and mat_m1.timec 
          Hash Cond: (_materialized_hypertable_3.timec = _hyper_2_4_chunk.timec)
          ->  Append
                ->  Append
-                     ->  Index Scan using _hyper_3_5_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_5_chunk
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_5_chunk
                            Output: _hyper_3_5_chunk.location, _hyper_3_5_chunk.timec, _hyper_3_5_chunk.firsth, _hyper_3_5_chunk.lasth, _hyper_3_5_chunk.maxtemp, _hyper_3_5_chunk.mintemp
-                           Index Cond: (_hyper_3_5_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
                      ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_6_chunk
                            Output: _hyper_3_6_chunk.location, _hyper_3_6_chunk.timec, _hyper_3_6_chunk.firsth, _hyper_3_6_chunk.lasth, _hyper_3_6_chunk.maxtemp, _hyper_3_6_chunk.mintemp
                            Index Cond: (_hyper_3_6_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
@@ -509,9 +504,8 @@ select * from mat_m1 order by timec desc, location;
    Sort Key: _materialized_hypertable_2.timec DESC, _materialized_hypertable_2.location
    ->  Append
          ->  Append
-               ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
+               ->  Seq Scan on _timescaledb_internal._hyper_2_3_chunk
                      Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-                     Index Cond: (_hyper_2_3_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)
                ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_4_chunk
                      Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
                      Index Cond: (_hyper_2_4_chunk.timec < 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone)

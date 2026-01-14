@@ -4,6 +4,8 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+SET timescaledb.enable_qual_filtering = off;
+
 create function stable_abs(x int4) returns int4 as 'int4abs' language internal stable;
 
 create table vectorqual(metric1 int8, ts timestamp, metric2 int8, device int8);

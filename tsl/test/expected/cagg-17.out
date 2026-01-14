@@ -1900,23 +1900,20 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1;
    ->  Merge Append
          Sort Key: _materialized_hypertable_59.sum DESC
          ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
-               Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
          ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
                Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
    ->  Sort
          Sort Key: (sum(conditions.temperature)) DESC
-         ->  Finalize GroupAggregate
+         ->  Finalize HashAggregate
                Group Key: (time_bucket('@ 7 days'::interval, conditions.timec))
-               ->  Merge Append
-                     Sort Key: (time_bucket('@ 7 days'::interval, conditions.timec))
-                     ->  Partial GroupAggregate
+               ->  Append
+                     ->  Partial HashAggregate
                            Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
                            ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
                                  Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
-                     ->  Partial GroupAggregate
+                     ->  Partial HashAggregate
                            Group Key: time_bucket('@ 7 days'::interval, _hyper_52_125_chunk.timec)
-                           ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
-                                 Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
+                           ->  Seq Scan on _hyper_52_125_chunk
 
 -- Ordering by another column
 SELECT * FROM mat_m1 ORDER BY count;
@@ -1936,23 +1933,20 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
          ->  Merge Append
                Sort Key: _materialized_hypertable_59.sum DESC
                ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
-                     Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
                ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
                      Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
          ->  Sort
                Sort Key: (sum(conditions.temperature)) DESC
-               ->  Finalize GroupAggregate
+               ->  Finalize HashAggregate
                      Group Key: (time_bucket('@ 7 days'::interval, conditions.timec))
-                     ->  Merge Append
-                           Sort Key: (time_bucket('@ 7 days'::interval, conditions.timec))
-                           ->  Partial GroupAggregate
+                     ->  Append
+                           ->  Partial HashAggregate
                                  Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
                                  ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
                                        Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
-                           ->  Partial GroupAggregate
+                           ->  Partial HashAggregate
                                  Group Key: time_bucket('@ 7 days'::interval, _hyper_52_125_chunk.timec)
-                                 ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
-                                       Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
+                                 ->  Seq Scan on _hyper_52_125_chunk
 
 -- Change the type of cagg
 ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.materialized_only=true);
@@ -2124,12 +2118,11 @@ EXPLAIN (BUFFERS OFF, COSTS OFF, TIMING OFF) SELECT * FROM conditions_daily WHER
          ->  Sort
                Sort Key: _materialized_hypertable_63.sum DESC
                ->  Parallel Append
-                     ->  Parallel Index Scan using _hyper_63_183_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_183_chunk
+                     ->  Parallel Index Scan using _hyper_63_185_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_185_chunk
                            Index Cond: ((time_bucket < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
                      ->  Parallel Index Scan using _hyper_63_187_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_187_chunk
                            Index Cond: ((time_bucket < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
-                     ->  Parallel Index Scan using _hyper_63_188_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_188_chunk
-                           Index Cond: ((time_bucket < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
+                     ->  Parallel Seq Scan on _hyper_63_184_chunk
    ->  Sort
          Sort Key: (sum(_hyper_62_182_chunk.temperature)) DESC
          ->  HashAggregate

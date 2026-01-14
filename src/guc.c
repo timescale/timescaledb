@@ -82,6 +82,7 @@ bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
+bool ts_guc_enable_qual_filtering = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
 bool ts_guc_enable_now_constify = true;
@@ -625,6 +626,18 @@ _guc_init(void)
 							 "Enable foreign key propagation",
 							 "Adjust foreign key lookup queries to target whole hypertable",
 							 &ts_guc_enable_foreign_key_propagation,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_qual_filtering"),
+							 "Enable qualifier filtering for chunks",
+							 "Filter qualifiers on chunks when complete chunk would be included by "
+							 "filter",
+							 &ts_guc_enable_qual_filtering,
 							 true,
 							 PGC_USERSET,
 							 0,
