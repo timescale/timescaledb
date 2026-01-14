@@ -2410,7 +2410,6 @@ static void
 create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 							 const CompressionInfo *compression_info, const SortInfo *sort_info)
 {
-	mybt();
 	Path *compressed_path;
 	Relids required_outer = compressed_rel->lateral_relids;
 
