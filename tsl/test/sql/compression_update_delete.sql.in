@@ -1025,6 +1025,7 @@ CREATE TABLE join_table AS SELECT repeat('t', d) FROM generate_series(1,3,1) d;
 ANALYZE tab1;
 SET enable_seqscan = off;
 SET enable_indexscan = off;
+SET enable_hashjoin = off;
 EXPLAIN (buffers off, costs off) UPDATE tab1
 SET v0 = 0 FROM
 	(SELECT repeat, count(*)
