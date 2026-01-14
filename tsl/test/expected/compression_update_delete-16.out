@@ -1708,10 +1708,8 @@ EXPLAIN (buffers off, costs off) DELETE FROM tab1 WHERE tab1.device_id = 1;
          Delete on _hyper_21_40_chunk tab1_2
          Delete on _hyper_21_41_chunk tab1_3
          ->  Append
-               ->  Bitmap Heap Scan on _hyper_21_39_chunk tab1_1
-                     Recheck Cond: (device_id = 1)
-                     ->  Bitmap Index Scan on _hyper_21_39_chunk_tab1_device_id_time_idx
-                           Index Cond: (device_id = 1)
+               ->  Seq Scan on _hyper_21_39_chunk tab1_1
+                     Filter: (device_id = 1)
                ->  Seq Scan on _hyper_21_40_chunk tab1_2
                      Filter: (device_id = 1)
                ->  Seq Scan on _hyper_21_41_chunk tab1_3
@@ -1734,6 +1732,7 @@ CREATE TABLE join_table AS SELECT repeat('t', d) FROM generate_series(1,3,1) d;
 ANALYZE tab1;
 SET enable_seqscan = off;
 SET enable_indexscan = off;
+SET enable_hashjoin = off;
 EXPLAIN (buffers off, costs off) UPDATE tab1
 SET v0 = 0 FROM
 	(SELECT repeat, count(*)
@@ -1747,20 +1746,16 @@ WHERE repeat('t', device_id) = devices.repeat;
          Update on _hyper_21_40_chunk tab1_2
          Update on _hyper_21_41_chunk tab1_3
          ->  Nested Loop
+               Join Filter: (repeat('t'::text, tab1.device_id) = devices.repeat)
                ->  Subquery Scan on devices
                      ->  HashAggregate
                            Group Key: repeat
                            ->  Result
                                  One-Time Filter: false
                ->  Append
-                     ->  Bitmap Heap Scan on _hyper_21_39_chunk tab1_1
-                           Recheck Cond: (repeat('t'::text, device_id) = devices.repeat)
-                           ->  Bitmap Index Scan on _hyper_21_39_chunk_test
-                                 Index Cond: (repeat('t'::text, device_id) = devices.repeat)
+                     ->  Index Scan using _hyper_21_39_chunk_test on _hyper_21_39_chunk tab1_1
                      ->  Seq Scan on _hyper_21_40_chunk tab1_2
-                           Filter: (devices.repeat = repeat('t'::text, device_id))
                      ->  Seq Scan on _hyper_21_41_chunk tab1_3
-                           Filter: (devices.repeat = repeat('t'::text, device_id))
 
 UPDATE tab1
 SET v0 = 0 FROM
