@@ -49,33 +49,9 @@ _columnar_index_scan_init(void)
 	TryRegisterCustomScanMethods(&columnar_index_scan_plan_methods);
 }
 
-/*
- * Check if an aggregate function can use compressed chunk sparse index.
- *
- * Currently supported aggregates are min and max
- */
-static bool
-is_supported_aggregate(const CompressionInfo *info, Aggref *aggref, AttrNumber *aggregate_attno,
-					   AttrNumber *metadata_attno)
+char *
+get_supported_aggregate_type(Aggref *aggref)
 {
-	/* No DISTINCT, ORDER BY, or FILTER */
-	if (aggref->args == NIL || aggref->aggdistinct != NIL || aggref->aggorder != NIL ||
-		aggref->aggfilter != NULL)
-		return false;
-
-	/* Get the argument - must be a Var referencing orderby column */
-	TargetEntry *arg_te = linitial_node(TargetEntry, aggref->args);
-
-	Node *arg_expr = strip_implicit_coercions((Node *) arg_te->expr);
-	if (!IsA(arg_expr, Var))
-		return false;
-
-	Var *var = castNode(Var, arg_expr);
-
-	/* Reject any system columns */
-	if (var->varattno <= 0)
-		return false;
-
 	char *meta_type = NULL;
 
 	switch (aggref->aggfnoid)
@@ -152,14 +128,47 @@ is_supported_aggregate(const CompressionInfo *info, Aggref *aggref, AttrNumber *
 				 * Check for eligible first/last aggregate
 				 * For now we only support first/last with both arguments referencing same column
 				 */
+				TargetEntry *tle1 = castNode(TargetEntry, linitial(aggref->args));
 				TargetEntry *tle2 = castNode(TargetEntry, lsecond(aggref->args));
-				if (!equal(var, tle2->expr))
-					return false;
+				if (!equal(tle1->expr, tle2->expr))
+					return NULL;
 
 				meta_type = (aggref->aggfnoid == ts_first_func_oid) ? "min" : "max";
 			}
 			break;
 	}
+	return meta_type;
+}
+
+/*
+ * Check if an aggregate function can use compressed chunk sparse index.
+ *
+ * Currently supported aggregates are min and max
+ */
+static bool
+is_supported_aggregate(const CompressionInfo *info, Aggref *aggref, AttrNumber *aggregate_attno,
+					   AttrNumber *metadata_attno)
+{
+	/* No DISTINCT, ORDER BY, or FILTER */
+	if (aggref->args == NIL || aggref->aggdistinct != NIL || aggref->aggorder != NIL ||
+		aggref->aggfilter != NULL)
+		return false;
+
+	/* Get the argument - must be a Var referencing orderby column */
+	TargetEntry *arg_te = linitial_node(TargetEntry, aggref->args);
+
+	Node *arg_expr = strip_implicit_coercions((Node *) arg_te->expr);
+	if (!IsA(arg_expr, Var))
+		return false;
+
+	Var *var = castNode(Var, arg_expr);
+
+	/* Reject any system columns */
+	if (var->varattno <= 0)
+		return false;
+
+	char *meta_type = get_supported_aggregate_type(aggref);
+
 	if (meta_type)
 	{
 		/* var references hypertable attnums so we have to use hypertable relid for column name

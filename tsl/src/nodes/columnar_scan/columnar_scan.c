@@ -1205,7 +1205,7 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 		if (!chunk_rel->consider_startup && IsA(compressed_path, IndexPath))
 		{
 			/* Candidate for SELECT DISTINCT SkipScan */
-			if (list_length(root->distinct_pathkeys) == 1
+			if (list_length(root->distinct_pathkeys) >= 1
 				/* Candidate for DISTINCT aggregate SkipScan */
 				|| (root->numOrderedAggs >= 1 && list_length(root->group_pathkeys) == 1))
 			{
@@ -2751,6 +2751,141 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 	return true;
 }
 
+static bool
+is_expr_on_segmentby_columns(Node *node, const CompressionInfo *info, int varno)
+{
+	Assert(varno == (int) info->chunk_rel->relid || varno == (int) info->ht_rel->relid);
+	List *vars = pull_var_clause(node, 0);
+
+	ListCell *lv;
+	foreach (lv, vars)
+	{
+		Var *var = castNode(Var, lfirst(lv));
+
+		/* Has to be an expression on this hypertable */
+		if (var->varno != varno)
+			return false;
+
+		AttrNumber chunk_attno =
+			(varno == (int) info->chunk_rel->relid ?
+				 var->varattno :
+				 ts_map_attno(info->ht_rte->relid, info->chunk_rte->relid, var->varattno));
+		if (!bms_is_member(chunk_attno, info->chunk_segmentby_attnos))
+			return false;
+	}
+	return true;
+}
+
+/* Can push down sort into compressed unordered chunk if all pathkeys are on segmentby columns, and:
+ *
+ * There are group or distinct keys, no filters on non-segmentby columns,
+ * no aggregates on non-segmentby columns unless they are min/max on orderby columns.
+ *
+ * If there is Order By with no aggregation with only segmentby columns in the query,
+ * we would still need to visit all tuples in batches and display segmentby column values for each
+ * tuple. This case is of no interest to us as it's unlikely to be of interest to users.
+ */
+static bool
+can_use_unordered_compressed_index(PlannerInfo *root, RelOptInfo *chunk_rel,
+								   const CompressionInfo *info)
+{
+	if (!ts_guc_enable_compressed_unordered_sort)
+		return false;
+
+	/* We call this method when all pathkeys are segmentby columns,
+	 * if we have groupby/distinct keys, Having and GroupBy targets will be consistent with those
+	 * keys, i.e. we only need to check if aggregates, filters and order by expressions are
+	 * eligible.
+	 */
+	Assert(info->num_segmentby_columns);
+	if (root->group_pathkeys || root->distinct_pathkeys)
+	{
+		if (root->agginfos || chunk_rel->baserestrictinfo || root->sort_pathkeys)
+		{
+			ListCell *lc;
+
+			List *aggrefs = ts_find_aggrefs((Node *) root->parse->targetList);
+			foreach (lc, aggrefs)
+			{
+				Aggref *aggref = castNode(Aggref, lfirst(lc));
+				/* Aggregate should be on segmentby columns or min/max on orderby columns */
+				if (is_expr_on_segmentby_columns((Node *) aggref->args,
+												 info,
+												 (int) info->ht_rel->relid))
+					continue;
+
+				/* Aggregate not on segmentby columns: has to be min/max on simple orderby column */
+				if (get_supported_aggregate_type(aggref))
+				{
+					/* Get the argument - must be a Var referencing orderby column */
+					TargetEntry *arg_te = linitial_node(TargetEntry, aggref->args);
+
+					Node *arg_expr = strip_implicit_coercions((Node *) arg_te->expr);
+					if (!IsA(arg_expr, Var))
+						return false;
+
+					Var *var = castNode(Var, arg_expr);
+
+					/* Reject any system columns */
+					if (var->varattno <= 0)
+						return false;
+
+					char *column_name = get_attname(info->ht_rte->relid, var->varattno, false);
+					int16 index = ts_array_position(info->settings->fd.orderby, column_name);
+					if (!index)
+						return false;
+				}
+				else
+					return false;
+			}
+			/* At this point we haven't pushed quals into compressed chunks yet
+			 */
+			foreach (lc, chunk_rel->baserestrictinfo)
+			{
+				RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+				if (!is_expr_on_segmentby_columns((Node *) rinfo->clause,
+												  info,
+												  (int) info->chunk_rel->relid))
+					return false;
+			}
+
+			/*
+			 * Check that only simple segmentby columns are in ORDER BY columns,
+			 * as GROUP BY columns have been checked before calling this method
+			 */
+			foreach (lc, root->parse->sortClause)
+			{
+				SortGroupClause *sgc = (SortGroupClause *) lfirst(lc);
+				TargetEntry *tle = get_sortgroupclause_tle(sgc, root->parse->targetList);
+
+				/* Must be a simple Var */
+				Node *node = strip_implicit_coercions((Node *) tle->expr);
+				if (!IsA(node, Var))
+					return false;
+
+				Var *var = castNode(Var, node);
+				if (var->varattno <= 0)
+				{
+					/* Reject any system columns except tableoid */
+					if (var->varattno != TableOidAttributeNumber)
+						return false;
+				}
+				else
+				{
+					/* ORDER BY references hypertable attnums so we have to translate to chunk */
+					AttrNumber chunk_attno =
+						ts_map_attno(info->ht_rte->relid, info->chunk_rte->relid, var->varattno);
+					if (!bms_is_member(chunk_attno, info->chunk_segmentby_attnos))
+						return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	return false;
+}
+
 /*
  * Check if we can push down the sort below the ColumnarSacn node and fill
  * SortInfo accordingly
@@ -2820,11 +2955,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 
 	/*
 	 * Next, check if we can push the sort down to the uncompressed part.
-	 *
-	 * Not possible if the chunk is unordered.
 	 */
-	if (ts_chunk_is_unordered(chunk))
-		return sort_info;
 
 	/* all segmentby columns need to be prefix of pathkeys */
 	int i = 0;
@@ -2863,6 +2994,28 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 			segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
 		}
 
+		if (i == list_length(pathkeys))
+		{
+			/*
+			 * Check if we can push down sort on segmentby columns into unordered chunks
+			 */
+			if (ts_chunk_is_unordered(chunk) &&
+				!can_use_unordered_compressed_index(root, chunk_rel, compression_info))
+				return sort_info;
+
+			/*
+			 * Pathkeys satisfied by sorting the compressed data on segmentby columns.
+			 */
+			sort_info.use_compressed_sort = true;
+			return sort_info;
+		}
+
+		/* Cannot push down sort if the chunk is unordered
+		 * and pathkeys contain keys other than segmentby columns
+		 */
+		if (ts_chunk_is_unordered(chunk))
+			return sort_info;
+
 		/*
 		 * If pathkeys still has items, but we didn't find all segmentby columns,
 		 * we cannot satisfy these pathkeys by sorting the compressed chunk table.
@@ -2885,15 +3038,6 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 			}
 			return sort_info;
 		}
-	}
-
-	if (i == list_length(pathkeys))
-	{
-		/*
-		 * Pathkeys satisfied by sorting the compressed data on segmentby columns.
-		 */
-		sort_info.use_compressed_sort = true;
-		return sort_info;
 	}
 
 	/*

@@ -142,6 +142,8 @@ bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 
+TSDLLEXPORT bool ts_guc_enable_compressed_unordered_sort = true;
+
 bool ts_guc_enable_partitioned_hypertables = false;
 
 /* default value of ts_guc_max_open_chunks_per_insert and
@@ -759,6 +761,17 @@ _guc_init(void)
 							 "Print debug info about SkipScan distinct columns",
 							 &ts_guc_debug_skip_scan_info,
 							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_unordered_sort"),
+							 "Enable pushing sort into compressed unordered chunks if possible",
+							 "Enable pushing sort into compressed unordered chunks if possible",
+							 &ts_guc_enable_compressed_unordered_sort,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,

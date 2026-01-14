@@ -2860,6 +2860,10 @@ psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on compress_hype
 psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
 -- RowCompareExpr
 :PREFIX SELECT DISTINCT ON (status, dev) * FROM :TABLE WHERE region = 'reg_1' and (status, dev) > (1,2);
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL)
 -- always false expr similar to our initial skip qual
 :PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > NULL and status > NULL and region > NULL;
 -- no tuples matching

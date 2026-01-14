@@ -416,3 +416,4 @@ extern TSDLLEXPORT void ts_relation_set_reloption(Relation rel, List *options, L
 extern TSDLLEXPORT Jsonb *ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name);
 extern TSDLLEXPORT char *ts_get_attr_expr(Relation rel, AttrNumber attno);
 extern TSDLLEXPORT char *ts_list_to_string(List *list, append_cell_func append);
+extern TSDLLEXPORT List *ts_find_aggrefs(Node *node);

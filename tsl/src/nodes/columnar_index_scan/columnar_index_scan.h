@@ -22,6 +22,8 @@ extern void _columnar_index_scan_init(void);
 extern bool ts_is_columnar_index_scan_path(Path *path);
 extern bool ts_is_columnar_index_scan_plan(Plan *plan);
 
+extern char *get_supported_aggregate_type(Aggref *aggref);
+
 extern ColumnarIndexScanPath *
 ts_columnar_index_scan_path_create(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 								   const CompressionInfo *info, Path *compressed_path);

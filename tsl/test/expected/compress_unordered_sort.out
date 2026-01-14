@@ -1,0 +1,469 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE TABLE metrics(
+    time timestamptz NOT NULL,
+    device text NOT NULL,
+    sensor text NOT NULL,
+    value float,
+    value2 float
+) WITH (tsdb.hypertable,tsdb.orderby='time desc',tsdb.segmentby='device,sensor');
+NOTICE:  using column "time" as partitioning column
+-- create unordered chunks
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO metrics VALUES
+('2025-01-01 00:00:00 PST', 'd1', 'A', 10.0, 10.0),
+('2025-01-01 01:00:00 PST', 'd1', 'A', 20.0, 20.0),
+('2025-01-01 02:00:00 PST', 'd1', 'A', 15.0, 15.0),
+('2025-01-01 00:30:00 PST', 'd1', 'B', 5.0, 5.0),
+('2025-01-01 01:30:00 PST', 'd1', 'B', 25.0, 25.0),
+('2025-01-01 02:30:00 PST', 'd1', 'B', 30.0, 30.0),
+('2025-01-01 00:00:00 PST', 'd2', 'A', 10.0, 10.0),
+('2025-01-01 01:00:00 PST', 'd2', 'A', 20.0, 20.0),
+('2025-01-01 02:00:00 PST', 'd2', 'A', 15.0, 15.0),
+('2025-01-01 00:30:00 PST', 'd2', 'C', 5.0, 5.0),
+('2025-01-01 01:30:00 PST', 'd2', 'C', 25.0, 25.0),
+('2025-01-01 02:30:00 PST', 'd2', 'C', 30.0, 30.0);
+INSERT INTO metrics VALUES
+('2025-01-01 03:00:00 PST', 'd1', 'A', 11.0, 11.0),
+('2025-01-01 01:00:00 PST', 'd1', 'A', 21.0, 21.0),
+('2025-01-01 02:00:00 PST', 'd1', 'A', 15.1, 15.1),
+('2025-01-01 03:30:00 PST', 'd1', 'B', 5.1, 5.1),
+('2025-01-01 01:30:00 PST', 'd1', 'B', 25.1, 25.0),
+('2025-01-01 02:30:00 PST', 'd1', 'B', 31.0, 31.0),
+('2025-01-01 03:00:00 PST', 'd2', 'A', 11.0, 11.0),
+('2025-01-01 01:00:00 PST', 'd2', 'A', 21.0, 21.0),
+('2025-01-01 02:00:00 PST', 'd2', 'A', 15.2, 15.2),
+('2025-01-01 03:30:00 PST', 'd2', 'C', 5.3, 5.3),
+('2025-01-01 01:30:00 PST', 'd2', 'C', 25.3, 25.3),
+('2025-01-01 02:30:00 PST', 'd2', 'C', 32.0, 32.0);
+SELECT _timescaledb_functions.chunk_status_text(ch.status)
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk ch
+WHERE h.id = ch.hypertable_id AND h.table_name = 'metrics';
+   chunk_status_text    
+------------------------
+ {COMPRESSED,UNORDERED}
+
+\set PREFIX 'EXPLAIN (buffers off, costs off, timing off, summary off)'
+SET timescaledb.enable_compressed_unordered_sort = 1;
+SET max_parallel_workers_per_gather = 0;
+SET enable_bitmapscan=0;
+SET enable_seqscan=0;
+SET timezone TO PST8PDT;
+-- Can use SkipScan on unordered chunks if only segmentby columns are involved
+:PREFIX select distinct device, sensor from metrics order by 1,2;
+--- QUERY PLAN ---
+ Unique
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select distinct device, sensor from metrics order by 1,2;
+ device | sensor 
+--------+--------
+ d1     | A
+ d1     | B
+ d2     | A
+ d2     | C
+
+:PREFIX select distinct on(device) device from metrics order by device;
+--- QUERY PLAN ---
+ Unique
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select distinct on(device) device from metrics order by device;
+ device 
+--------
+ d1
+ d2
+
+:PREFIX select distinct on(device,sensor) device, sensor from metrics order by 1,2;
+--- QUERY PLAN ---
+ Unique
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select distinct on(device,sensor) device, sensor from metrics order by 1,2;
+ device | sensor 
+--------+--------
+ d1     | A
+ d1     | B
+ d2     | A
+ d2     | C
+
+:PREFIX select distinct on(device, sensor) device, sensor from metrics where sensor='A' order by 1,2;
+--- QUERY PLAN ---
+ Unique
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+                     Index Cond: (sensor = 'A'::text)
+
+select distinct on(device, sensor) device, sensor from metrics where sensor='A' order by 1,2;
+ device | sensor 
+--------+--------
+ d1     | A
+ d2     | A
+
+:PREFIX select distinct on(device) device from metrics where sensor='A' order by device;
+--- QUERY PLAN ---
+ Unique
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+                     Index Cond: (sensor = 'A'::text)
+
+select distinct on(device) device from metrics where sensor='A' order by device;
+ device 
+--------
+ d1
+ d2
+
+:PREFIX select distinct on(device, sensor) device, sensor from metrics where sensor>'A' order by 1,2;
+--- QUERY PLAN ---
+ Unique
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+                     Index Cond: (sensor > 'A'::text)
+
+select distinct on(device, sensor) device, sensor from metrics where sensor>'A' order by 1,2;
+ device | sensor 
+--------+--------
+ d1     | B
+ d2     | C
+
+:PREFIX select distinct on(device, sensor) device, sensor from metrics where device = 'd2' order by device, sensor;
+--- QUERY PLAN ---
+ Unique
+   ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+                     Index Cond: (device = 'd2'::text)
+
+select distinct on(device, sensor) device, sensor from metrics where device = 'd2' order by device, sensor;
+ device | sensor 
+--------+--------
+ d2     | A
+ d2     | C
+
+-- If nonsegmentby columns are involved we cannot use compressed index as is and therefore cannot use SkipScan
+:PREFIX select distinct device, sensor from metrics where value > 5 order by 1,2;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  HashAggregate
+         Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Vectorized Filter: (value > '5'::double precision)
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select distinct device, sensor from metrics where value > 5 order by 1,2;
+ device | sensor 
+--------+--------
+ d1     | A
+ d1     | B
+ d2     | A
+ d2     | C
+
+:PREFIX select distinct device, sensor from metrics where time > '2025-01-01 01:00:00 PST' order by 1,2;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  HashAggregate
+         Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Vectorized Filter: ("time" > 'Wed Jan 01 01:00:00 2025 PST'::timestamp with time zone)
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+                     Index Cond: (_ts_meta_max_1 > 'Wed Jan 01 01:00:00 2025 PST'::timestamp with time zone)
+
+select distinct device, sensor from metrics where time > '2025-01-01 01:00:00 PST' order by 1,2;
+ device | sensor 
+--------+--------
+ d1     | A
+ d1     | B
+ d2     | A
+ d2     | C
+
+-- Can use compressed index when we need ordered aggregation results
+:PREFIX select device, sensor from metrics group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ Group
+   Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor from metrics group by device, sensor order by 1,2;
+ device | sensor 
+--------+--------
+ d1     | A
+ d1     | B
+ d2     | A
+ d2     | C
+
+:PREFIX select device, sensor, count(*), max(sensor) from metrics group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor, count(*), max(sensor) from metrics group by device, sensor order by 1,2;
+ device | sensor | count | max 
+--------+--------+-------+-----
+ d1     | A      |     6 | A
+ d1     | B      |     6 | B
+ d2     | A      |     6 | A
+ d2     | C      |     6 | C
+
+:PREFIX select device, sensor, first(time,time), last(time,time) from metrics group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor, first(time,time), last(time,time) from metrics group by device, sensor order by 1,2;
+ device | sensor |            first             |             last             
+--------+--------+------------------------------+------------------------------
+ d1     | A      | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 03:00:00 2025 PST
+ d1     | B      | Wed Jan 01 00:30:00 2025 PST | Wed Jan 01 03:30:00 2025 PST
+ d2     | A      | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 03:00:00 2025 PST
+ d2     | C      | Wed Jan 01 00:30:00 2025 PST | Wed Jan 01 03:30:00 2025 PST
+
+-- Can use expressions on aggregates as it won't affect grouping/sorting
+:PREFIX select device, sensor, max(sensor||'1'), min(time), max(time) + interval '1 day' from metrics group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor, max(sensor||'1'), min(time), max(time) + interval '1 day' from metrics group by device, sensor order by 1,2;
+ device | sensor | max |             min              |           ?column?           
+--------+--------+-----+------------------------------+------------------------------
+ d1     | A      | A1  | Wed Jan 01 00:00:00 2025 PST | Thu Jan 02 03:00:00 2025 PST
+ d1     | B      | B1  | Wed Jan 01 00:30:00 2025 PST | Thu Jan 02 03:30:00 2025 PST
+ d2     | A      | A1  | Wed Jan 01 00:00:00 2025 PST | Thu Jan 02 03:00:00 2025 PST
+ d2     | C      | C1  | Wed Jan 01 00:30:00 2025 PST | Thu Jan 02 03:30:00 2025 PST
+
+:PREFIX select device, sensor, min(time), max(time) + make_interval(days => length(sensor)) from metrics group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor, min(time), max(time) + make_interval(days => length(sensor)) from metrics group by device, sensor order by 1,2;
+ device | sensor |             min              |           ?column?           
+--------+--------+------------------------------+------------------------------
+ d1     | A      | Wed Jan 01 00:00:00 2025 PST | Thu Jan 02 03:00:00 2025 PST
+ d1     | B      | Wed Jan 01 00:30:00 2025 PST | Thu Jan 02 03:30:00 2025 PST
+ d2     | A      | Wed Jan 01 00:00:00 2025 PST | Thu Jan 02 03:00:00 2025 PST
+ d2     | C      | Wed Jan 01 00:30:00 2025 PST | Thu Jan 02 03:30:00 2025 PST
+
+-- Can aggregate on expression over segmentby
+:PREFIX select device, sensor, max(sensor||'1'), avg(length(device)) from metrics group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor, max(sensor||'1'), avg(length(device)) from metrics group by device, sensor order by 1,2;
+ device | sensor | max |        avg         
+--------+--------+-----+--------------------
+ d1     | A      | A1  | 2.0000000000000000
+ d1     | B      | B1  | 2.0000000000000000
+ d2     | A      | A1  | 2.0000000000000000
+ d2     | C      | C1  | 2.0000000000000000
+
+-- Can use Having as it filters on aggregate outputs without changing sort
+:PREFIX select device, sensor, count(*) from metrics group by device, sensor having count(*) > length(sensor) order by 1,2;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   Filter: (count(*) > length(_hyper_1_1_chunk.sensor))
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor, count(*) from metrics group by device, sensor having count(*) > length(sensor) order by 1,2;
+ device | sensor | count 
+--------+--------+-------
+ d1     | A      |     6
+ d1     | B      |     6
+ d2     | A      |     6
+ d2     | C      |     6
+
+-- Cannot use expressions on order by keys as sort might be broken
+:PREFIX select device, sensor||'1', min(time), max(time) from metrics group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.device, ((_hyper_1_1_chunk.sensor || '1'::text))
+   ->  HashAggregate
+         Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor||'1', min(time), max(time) from metrics group by device, sensor order by 1,2;
+ device | ?column? |             min              |             max              
+--------+----------+------------------------------+------------------------------
+ d1     | A1       | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 03:00:00 2025 PST
+ d1     | B1       | Wed Jan 01 00:30:00 2025 PST | Wed Jan 01 03:30:00 2025 PST
+ d2     | A1       | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 03:00:00 2025 PST
+ d2     | C1       | Wed Jan 01 00:30:00 2025 PST | Wed Jan 01 03:30:00 2025 PST
+
+-- Cannot pushdown sort on non-var keys
+:PREFIX select device, sensor||'1', min(time), max(time) from metrics group by device, sensor||'1' order by 1,2;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.device, ((_hyper_1_1_chunk.sensor || '1'::text))
+   ->  HashAggregate
+         Group Key: _hyper_1_1_chunk.device, (_hyper_1_1_chunk.sensor || '1'::text)
+         ->  Result
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor||'1', min(time), max(time) from metrics group by device, sensor||'1' order by 1,2;
+ device | ?column? |             min              |             max              
+--------+----------+------------------------------+------------------------------
+ d1     | A1       | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 03:00:00 2025 PST
+ d1     | B1       | Wed Jan 01 00:30:00 2025 PST | Wed Jan 01 03:30:00 2025 PST
+ d2     | A1       | Wed Jan 01 00:00:00 2025 PST | Wed Jan 01 03:00:00 2025 PST
+ d2     | C1       | Wed Jan 01 00:30:00 2025 PST | Wed Jan 01 03:30:00 2025 PST
+
+-- Cannot use non-segmentby columns outside of eligible aggregates
+:PREFIX select device, sensor from metrics where value > length(sensor) group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  HashAggregate
+         Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Filter: (value > (length(sensor))::double precision)
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor from metrics where value > length(sensor) group by device, sensor order by 1,2;
+ device | sensor 
+--------+--------
+ d1     | A
+ d1     | B
+ d2     | A
+ d2     | C
+
+:PREFIX select device, sensor from metrics where time > '2025-01-01 01:00:00 PST' group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  HashAggregate
+         Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Vectorized Filter: ("time" > 'Wed Jan 01 01:00:00 2025 PST'::timestamp with time zone)
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+                     Index Cond: (_ts_meta_max_1 > 'Wed Jan 01 01:00:00 2025 PST'::timestamp with time zone)
+
+select device, sensor from metrics where time > '2025-01-01 01:00:00 PST' group by device, sensor order by 1,2;
+ device | sensor 
+--------+--------
+ d1     | A
+ d1     | B
+ d2     | A
+ d2     | C
+
+:PREFIX select device, sensor, avg(EXTRACT(epoch FROM time)::integer) from metrics group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  HashAggregate
+         Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor, avg(EXTRACT(epoch FROM time)::integer) from metrics group by device, sensor order by 1,2;
+ device | sensor |         avg         
+--------+--------+---------------------
+ d1     | A      | 1735723800.00000000
+ d1     | B      | 1735725600.00000000
+ d2     | A      | 1735723800.00000000
+ d2     | C      | 1735725600.00000000
+
+:PREFIX select device, sensor, max(value) from metrics group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  HashAggregate
+         Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor, count(*), max(value) from metrics group by device, sensor order by 1,2;
+ device | sensor | count | max 
+--------+--------+-------+-----
+ d1     | A      |     6 |  21
+ d1     | B      |     6 |  31
+ d2     | A      |     6 |  21
+ d2     | C      |     6 |  32
+
+-- Min/max over expression on orderby column is also not permissible
+:PREFIX select device, sensor, max(EXTRACT(epoch FROM time)::integer) from metrics group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  HashAggregate
+         Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor, max(EXTRACT(epoch FROM time)::integer) from metrics group by device, sensor order by 1,2;
+ device | sensor |    max     
+--------+--------+------------
+ d1     | A      | 1735729200
+ d1     | B      | 1735731000
+ d2     | A      | 1735729200
+ d2     | C      | 1735731000
+
+-- Columnar Index Scan produces unsorted output currently,
+-- so Columnar Index Scan eligible queries will not benefit from unordered sort, yet
+:PREFIX select device, sensor, min(time) from metrics group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  Sort
+         Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor, min(time) from metrics group by device, sensor order by 1,2;
+ device | sensor |             min              
+--------+--------+------------------------------
+ d1     | A      | Wed Jan 01 00:00:00 2025 PST
+ d1     | B      | Wed Jan 01 00:30:00 2025 PST
+ d2     | A      | Wed Jan 01 00:00:00 2025 PST
+ d2     | C      | Wed Jan 01 00:30:00 2025 PST
+
+:PREFIX select device, sensor, first(time,time) from metrics group by device, sensor order by 1,2;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  Sort
+         Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+select device, sensor, first(time,time) from metrics group by device, sensor order by 1,2;
+ device | sensor |            first             
+--------+--------+------------------------------
+ d1     | A      | Wed Jan 01 00:00:00 2025 PST
+ d1     | B      | Wed Jan 01 00:30:00 2025 PST
+ d2     | A      | Wed Jan 01 00:00:00 2025 PST
+ d2     | C      | Wed Jan 01 00:30:00 2025 PST
+
+drop table metrics cascade;
+RESET timescaledb.enable_direct_compress_insert;
+RESET timescaledb.enable_compressed_unordered_sort;
+RESET max_parallel_workers_per_gather;
+RESET enable_bitmapscan;
+RESET enable_seqscan;
