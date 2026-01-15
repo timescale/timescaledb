@@ -576,31 +576,99 @@ DROP TABLE table1;
 -- 2. disable compression (settings retained)
 -- 3. re-enable without explicit settings
 -- 4. compress and verify device_id appears in orderby (from fresh defaults)
-CREATE TABLE test_retained (time timestamptz NOT NULL, device_id text, val float);
-SELECT create_hypertable('test_retained', 'time');
-      create_hypertable      
------------------------------
- (18,public,test_retained,t)
+CREATE TABLE test_retained_orderby (time timestamptz NOT NULL, device_id text, val float);
+SELECT create_hypertable('test_retained_orderby', 'time');
+          create_hypertable          
+-------------------------------------
+ (18,public,test_retained_orderby,t)
 
-CREATE INDEX ON test_retained(device_id, time);
-INSERT INTO test_retained SELECT t, 'dev1', 1.0 FROM generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 hour') t;
-ANALYZE test_retained;
-ALTER TABLE test_retained SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
-ALTER TABLE test_retained SET (timescaledb.compress = false);
-ALTER TABLE test_retained SET (timescaledb.compress = true);
-SELECT count(compress_chunk(x)) FROM show_chunks('test_retained') x;
+CREATE INDEX ON test_retained_orderby(device_id, time);
+INSERT INTO test_retained_orderby SELECT t, 'dev1', 1.0 FROM generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 hour') t;
+ANALYZE test_retained_orderby;
+ALTER TABLE test_retained_orderby SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+ALTER TABLE test_retained_orderby SET (timescaledb.compress = false);
+ALTER TABLE test_retained_orderby SET (timescaledb.compress = true);
+SELECT count(compress_chunk(x)) FROM show_chunks('test_retained_orderby') x;
  count 
 -------
      2
 
 -- verify device_id appears in orderby from fresh defaults
 SELECT orderby FROM timescaledb_information.chunk_compression_settings
-WHERE hypertable = 'test_retained'::regclass LIMIT 1;
+WHERE hypertable = 'test_retained_orderby'::regclass LIMIT 1;
         orderby        
 -----------------------
  "time" DESC,device_id
 
-DROP TABLE test_retained;
+DROP TABLE test_retained_orderby;
+-- test that retained segmentby settings don't block defaults when re-enabling:
+-- use a table where default segmentby function returns device_id
+CREATE TABLE test_retained_segmentby (time timestamptz NOT NULL, device_id text, val float);
+SELECT create_hypertable('test_retained_segmentby', 'time');
+           create_hypertable           
+---------------------------------------
+ (21,public,test_retained_segmentby,t)
+
+CREATE UNIQUE INDEX ON test_retained_segmentby(device_id, time);
+-- insert data with multiple device_ids to get good cardinality for segmentby
+INSERT INTO test_retained_segmentby SELECT t + (i || ' seconds')::interval, 'dev' || (i % 10), i FROM generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 hour') t, generate_series(1, 100) i;
+ANALYZE test_retained_segmentby;
+-- verify default segmentby would return device_id
+SELECT _timescaledb_functions.get_segmentby_defaults('test_retained_segmentby'::regclass);
+            get_segmentby_defaults            
+----------------------------------------------
+ {"columns": ["device_id"], "confidence": 10}
+
+-- enable with explicit different segmentby (val instead of device_id)
+ALTER TABLE test_retained_segmentby SET (timescaledb.compress, timescaledb.compress_segmentby = 'val');
+ALTER TABLE test_retained_segmentby SET (timescaledb.compress = false);
+ALTER TABLE test_retained_segmentby SET (timescaledb.compress = true);
+SELECT count(compress_chunk(x)) FROM show_chunks('test_retained_segmentby') x;
+ count 
+-------
+     2
+
+-- verify segmentby is device_id from fresh defaults, not val from retained
+SELECT segmentby FROM timescaledb_information.chunk_compression_settings
+WHERE hypertable = 'test_retained_segmentby'::regclass LIMIT 1;
+ segmentby 
+-----------
+ device_id
+
+DROP TABLE test_retained_segmentby;
+-- test that retained index settings don't block defaults when re-enabling
+CREATE TABLE test_retained_index (time timestamptz NOT NULL, device_id text, val float);
+SELECT create_hypertable('test_retained_index', 'time');
+         create_hypertable         
+-----------------------------------
+ (24,public,test_retained_index,t)
+
+CREATE INDEX ON test_retained_index(device_id, time);
+INSERT INTO test_retained_index SELECT t, 'dev' || (i % 10), i FROM generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 hour') t, generate_series(1, 10) i;
+ANALYZE test_retained_index;
+-- enable with explicit empty index (no sparse indexes)
+ALTER TABLE test_retained_index SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC', timescaledb.compress_index = '');
+-- verify no index settings
+SELECT index FROM _timescaledb_catalog.compression_settings WHERE relid = 'test_retained_index'::regclass;
+                                       index                                       
+-----------------------------------------------------------------------------------
+ [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+
+ALTER TABLE test_retained_index SET (timescaledb.compress = false);
+ALTER TABLE test_retained_index SET (timescaledb.compress = true);
+SELECT count(compress_chunk(x)) FROM show_chunks('test_retained_index') x;
+ count 
+-------
+     2
+
+-- verify index is populated from fresh defaults (auto sparse indexes)
+SELECT index IS NOT NULL as has_index FROM timescaledb_information.chunk_compression_settings
+WHERE hypertable = 'test_retained_index'::regclass LIMIT 1;
+ has_index 
+-----------
+ t
+
+DROP TABLE test_retained_index;
 \set ON_ERROR_STOP 0
 SET timescaledb.compression_segmentby_default_function = 'function_does_not_exist';
 ERROR:  invalid value for parameter "timescaledb.compression_segmentby_default_function": "function_does_not_exist"
@@ -622,7 +690,7 @@ CREATE TABLE public.t1 (time timestamptz NOT NULL, segment_value text NOT NULL);
 SELECT public.create_hypertable('public.t1', 'time');
  create_hypertable 
 -------------------
- (21,public,t1,t)
+ (27,public,t1,t)
 
 ALTER TABLE public.t1 SET (timescaledb.compress, timescaledb.compress_orderby = 'segment_value');
 RESET search_path;
@@ -640,7 +708,7 @@ CREATE TABLE schema1.page_events2 (
 SELECT create_hypertable('schema1.page_events2', 'time');
       create_hypertable      
 -----------------------------
- (23,schema1,page_events2,t)
+ (29,schema1,page_events2,t)
 
 ALTER TABLE schema1.page_events2 SET (
  timescaledb.compress,
@@ -653,7 +721,7 @@ CREATE TABLE schema2.page_events2 (
 SELECT create_hypertable('schema2.page_events2', 'time');
       create_hypertable      
 -----------------------------
- (25,schema2,page_events2,t)
+ (31,schema2,page_events2,t)
 
 ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress,
@@ -670,7 +738,7 @@ CREATE TABLE schema1.page_events2 (
 SELECT create_hypertable('schema1.page_events2', 'time');
       create_hypertable      
 -----------------------------
- (27,schema1,page_events2,t)
+ (33,schema1,page_events2,t)
 
 ALTER TABLE schema1.page_events2 SET (
  timescaledb.compress,
@@ -684,7 +752,7 @@ CREATE TABLE schema2.page_events2 (
 SELECT create_hypertable('schema2.page_events2', 'time');
       create_hypertable      
 -----------------------------
- (29,schema2,page_events2,t)
+ (35,schema2,page_events2,t)
 
 ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress,
@@ -704,7 +772,7 @@ SELECT create_hypertable(
 );
     create_hypertable     
 --------------------------
- (31,public,test_table,t)
+ (37,public,test_table,t)
 
 INSERT INTO test_table (ts, uuid, val) VALUES
   (1, 1001, 10.1),
@@ -844,7 +912,7 @@ SELECT count(compress_chunk(x)) FROM show_chunks('test_exclude_datetype') x;
 SELECT * FROM timescaledb_information.chunk_compression_settings WHERE hypertable = 'test_exclude_datetype'::regclass ORDER BY chunk LIMIT 1;
       hypertable       |                   chunk                   | segmentby |      orderby       |                                                           index                                                            
 -----------------------+-------------------------------------------+-----------+--------------------+----------------------------------------------------------------------------------------------------------------------------
- test_exclude_datetype | _timescaledb_internal._hyper_33_285_chunk | device_id | event_date,ts DESC | [{"type": "minmax", "column": "event_date", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+ test_exclude_datetype | _timescaledb_internal._hyper_39_293_chunk | device_id | event_date,ts DESC | [{"type": "minmax", "column": "event_date", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
 
 DROP TABLE test_exclude_datetype;
 -- test that continuous aggregate materialized hypertables DELETE settings on disable
@@ -853,7 +921,7 @@ CREATE TABLE cagg_test (time TIMESTAMPTZ NOT NULL, device_id TEXT, val FLOAT);
 SELECT create_hypertable('cagg_test', 'time');
     create_hypertable    
 -------------------------
- (35,public,cagg_test,t)
+ (41,public,cagg_test,t)
 
 INSERT INTO cagg_test SELECT t, 'dev1', random() FROM generate_series('2020-01-01'::timestamptz, '2020-01-10'::timestamptz, '1 hour') t;
 CREATE MATERIALIZED VIEW cagg_test_agg WITH (timescaledb.continuous) AS

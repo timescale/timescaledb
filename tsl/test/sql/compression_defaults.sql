@@ -333,19 +333,57 @@ DROP TABLE table1;
 -- 2. disable compression (settings retained)
 -- 3. re-enable without explicit settings
 -- 4. compress and verify device_id appears in orderby (from fresh defaults)
-CREATE TABLE test_retained (time timestamptz NOT NULL, device_id text, val float);
-SELECT create_hypertable('test_retained', 'time');
-CREATE INDEX ON test_retained(device_id, time);
-INSERT INTO test_retained SELECT t, 'dev1', 1.0 FROM generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 hour') t;
-ANALYZE test_retained;
-ALTER TABLE test_retained SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
-ALTER TABLE test_retained SET (timescaledb.compress = false);
-ALTER TABLE test_retained SET (timescaledb.compress = true);
-SELECT count(compress_chunk(x)) FROM show_chunks('test_retained') x;
+CREATE TABLE test_retained_orderby (time timestamptz NOT NULL, device_id text, val float);
+SELECT create_hypertable('test_retained_orderby', 'time');
+CREATE INDEX ON test_retained_orderby(device_id, time);
+INSERT INTO test_retained_orderby SELECT t, 'dev1', 1.0 FROM generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 hour') t;
+ANALYZE test_retained_orderby;
+ALTER TABLE test_retained_orderby SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+ALTER TABLE test_retained_orderby SET (timescaledb.compress = false);
+ALTER TABLE test_retained_orderby SET (timescaledb.compress = true);
+SELECT count(compress_chunk(x)) FROM show_chunks('test_retained_orderby') x;
 -- verify device_id appears in orderby from fresh defaults
 SELECT orderby FROM timescaledb_information.chunk_compression_settings
-WHERE hypertable = 'test_retained'::regclass LIMIT 1;
-DROP TABLE test_retained;
+WHERE hypertable = 'test_retained_orderby'::regclass LIMIT 1;
+DROP TABLE test_retained_orderby;
+
+-- test that retained segmentby settings don't block defaults when re-enabling:
+-- use a table where default segmentby function returns device_id
+CREATE TABLE test_retained_segmentby (time timestamptz NOT NULL, device_id text, val float);
+SELECT create_hypertable('test_retained_segmentby', 'time');
+CREATE UNIQUE INDEX ON test_retained_segmentby(device_id, time);
+-- insert data with multiple device_ids to get good cardinality for segmentby
+INSERT INTO test_retained_segmentby SELECT t + (i || ' seconds')::interval, 'dev' || (i % 10), i FROM generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 hour') t, generate_series(1, 100) i;
+ANALYZE test_retained_segmentby;
+-- verify default segmentby would return device_id
+SELECT _timescaledb_functions.get_segmentby_defaults('test_retained_segmentby'::regclass);
+-- enable with explicit different segmentby (val instead of device_id)
+ALTER TABLE test_retained_segmentby SET (timescaledb.compress, timescaledb.compress_segmentby = 'val');
+ALTER TABLE test_retained_segmentby SET (timescaledb.compress = false);
+ALTER TABLE test_retained_segmentby SET (timescaledb.compress = true);
+SELECT count(compress_chunk(x)) FROM show_chunks('test_retained_segmentby') x;
+-- verify segmentby is device_id from fresh defaults, not val from retained
+SELECT segmentby FROM timescaledb_information.chunk_compression_settings
+WHERE hypertable = 'test_retained_segmentby'::regclass LIMIT 1;
+DROP TABLE test_retained_segmentby;
+
+-- test that retained index settings don't block defaults when re-enabling
+CREATE TABLE test_retained_index (time timestamptz NOT NULL, device_id text, val float);
+SELECT create_hypertable('test_retained_index', 'time');
+CREATE INDEX ON test_retained_index(device_id, time);
+INSERT INTO test_retained_index SELECT t, 'dev' || (i % 10), i FROM generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 hour') t, generate_series(1, 10) i;
+ANALYZE test_retained_index;
+-- enable with explicit empty index (no sparse indexes)
+ALTER TABLE test_retained_index SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC', timescaledb.compress_index = '');
+-- verify no index settings
+SELECT index FROM _timescaledb_catalog.compression_settings WHERE relid = 'test_retained_index'::regclass;
+ALTER TABLE test_retained_index SET (timescaledb.compress = false);
+ALTER TABLE test_retained_index SET (timescaledb.compress = true);
+SELECT count(compress_chunk(x)) FROM show_chunks('test_retained_index') x;
+-- verify index is populated from fresh defaults (auto sparse indexes)
+SELECT index IS NOT NULL as has_index FROM timescaledb_information.chunk_compression_settings
+WHERE hypertable = 'test_retained_index'::regclass LIMIT 1;
+DROP TABLE test_retained_index;
 
 \set ON_ERROR_STOP 0
 SET timescaledb.compression_segmentby_default_function = 'function_does_not_exist';
