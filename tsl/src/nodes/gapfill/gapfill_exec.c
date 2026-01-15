@@ -232,8 +232,8 @@ get_origin_arg(GapFillState *state)
 {
 	int nargs = list_length(state->args);
 
-	if (nargs <= 5)
-		return NULL; /* old 4-arg or integer variant has no origin */
+	if (nargs <= 4)
+		return NULL; /* integer variant (4 args) has no origin */
 	else if (nargs == 6)
 		return list_nth(state->args, 4); /* timestamp variant */
 	else
@@ -242,8 +242,7 @@ get_origin_arg(GapFillState *state)
 
 /*
  * Get the offset argument expression, or NULL if not provided.
- * For old 4-arg variants: no offset (returns NULL)
- * For integer variants (5 args): offset is arg[4]
+ * For integer variants (4 args): no offset support (returns NULL)
  * For timestamp variants (6 args): offset is arg[5]
  * For timezone variant (7 args): offset is arg[6]
  */
@@ -252,23 +251,12 @@ get_offset_arg(GapFillState *state)
 {
 	int nargs = list_length(state->args);
 
-	if (nargs == 4)
-		return NULL; /* old 4-arg variant has no offset */
-	else if (nargs == 5)
-		return list_nth(state->args, 4); /* integer variant */
+	if (nargs <= 4)
+		return NULL; /* integer variant (4 args) has no offset */
 	else if (nargs == 6)
 		return list_nth(state->args, 5); /* timestamp variant */
 	else
 		return list_nth(state->args, 6); /* timezone variant */
-}
-
-/*
- * Helper to check if a type is one of the integer types (int2, int4, int8)
- */
-static bool
-is_integer_type(Oid typid)
-{
-	return typid == INT2OID || typid == INT4OID || typid == INT8OID;
 }
 
 /*
@@ -288,22 +276,13 @@ gapfill_state_create(CustomScan *cscan)
 	nargs = list_length(state->args);
 
 	/*
-	 * Determine if this is a timezone variant by checking argument count and types.
+	 * Determine if this is a timezone variant by checking argument count.
 	 * Argument counts:
-	 *   Old 4 args: non-timezone (integer or timestamp)
-	 *   Old 5 args: timezone variant (bucket_width, ts, timezone TEXT, start, finish)
-	 *   New 5 args: integer with offset (bucket_width, ts, start, finish, offset)
-	 *   New 6 args: timestamp with origin/offset
-	 *   New 7 args: timezone with origin/offset
-	 *
-	 * For 5-arg case, distinguish by checking if arg[2] is TEXT (timezone) vs INT (start).
+	 *   4 args: integer variant (bucket_width, ts, start, finish)
+	 *   6 args: timestamp variant (bucket_width, ts, start, finish, origin, offset)
+	 *   7 args: timezone variant (bucket_width, ts, timezone, start, finish, origin, offset)
 	 */
-	if (nargs == 7)
-		state->have_timezone = true;
-	else if (nargs == 5 && !is_integer_type(exprType((Node *) lthird(state->args))))
-		state->have_timezone = true; /* old 5-arg timezone variant */
-	else
-		state->have_timezone = false;
+	state->have_timezone = (nargs == 7);
 
 	/* Check if origin is provided (non-NULL) */
 	Expr *origin_expr = get_origin_arg(state);
@@ -462,17 +441,16 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 	else
 	{
 		int nargs = list_length(state->args);
-		if (nargs == 5)
+		if (nargs == 4)
 		{
 			/*
-			 * For integer variant (5 args): bucket_width, ts, start, finish, offset
+			 * For integer variant (4 args): bucket_width, ts, start, finish
+			 * No origin/offset support.
 			 */
-			Expr *offset_arg = get_offset_arg(state);
 			Node *null_const = (Node *) makeBoolConst(true, true);
 			List *args = list_make2(linitial(time_bucket->args), expr);
 			args = lappend(args, null_const); /* start placeholder */
 			args = lappend(args, null_const); /* finish placeholder */
-			args = lappend(args, offset_arg ? (Node *) offset_arg : null_const); /* offset */
 			time_bucket->args = args;
 		}
 		else

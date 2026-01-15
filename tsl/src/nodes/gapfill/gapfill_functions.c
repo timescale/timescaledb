@@ -21,22 +21,14 @@ gapfill_marker(PG_FUNCTION_ARGS)
 
 /*
  * Integer gapfill wrappers.
- * Old 4-arg form: (bucket_width, ts, start, finish)
- * New 5-arg form: (bucket_width, ts, start, finish, offset)
+ * 4-arg form: (bucket_width, ts, start, finish)
+ * Note: offset is not supported for integer variants due to function resolution conflicts.
  */
 #define GAPFILL_INT_WRAPPER(datatype)                                                              \
-	Datum gapfill_##datatype##_time_bucket(PG_FUNCTION_ARGS)                    \
+	Datum gapfill_##datatype##_time_bucket(PG_FUNCTION_ARGS)                                       \
 	{                                                                                              \
 		if (PG_ARGISNULL(0) || PG_ARGISNULL(1))                                                    \
 			PG_RETURN_NULL();                                                                      \
-		/* Check if offset is provided (5-arg form) */                                             \
-		if (PG_NARGS() >= 5 && !PG_ARGISNULL(4))                                                   \
-		{                                                                                          \
-			return DirectFunctionCall3(ts_##datatype##_bucket,                                     \
-									   PG_GETARG_DATUM(0),                                         \
-									   PG_GETARG_DATUM(1),                                         \
-									   PG_GETARG_DATUM(4));                                        \
-		}                                                                                          \
 		return DirectFunctionCall2(ts_##datatype##_bucket,                                         \
 								   PG_GETARG_DATUM(0),                                             \
 								   PG_GETARG_DATUM(1));                                            \

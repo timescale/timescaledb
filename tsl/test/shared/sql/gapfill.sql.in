@@ -1640,19 +1640,6 @@ SELECT time_bucket_gapfill('1 week'::interval, time,
 FROM (VALUES ('2024-01-10'::date), ('2024-01-25'::date)) v(time)
 GROUP BY 1 ORDER BY 1;
 
--- Test offset with integer types
-SELECT time_bucket_gapfill(10, ts, 0, 50, "offset" => 5), count(*)
-FROM (VALUES (12), (37)) v(ts)
-GROUP BY 1 ORDER BY 1;
-
-SELECT time_bucket_gapfill(10::smallint, ts, 0::smallint, 50::smallint, "offset" => 5::smallint), count(*)
-FROM (VALUES (12::smallint), (37::smallint)) v(ts)
-GROUP BY 1 ORDER BY 1;
-
-SELECT time_bucket_gapfill(10::bigint, ts, 0::bigint, 50::bigint, "offset" => 5::bigint), count(*)
-FROM (VALUES (12::bigint), (37::bigint)) v(ts)
-GROUP BY 1 ORDER BY 1;
-
 -- Test offset with timezone variant
 SELECT time_bucket_gapfill('1 day'::interval, time, 'Europe/Berlin',
     '2024-01-01'::timestamptz,

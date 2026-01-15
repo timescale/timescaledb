@@ -116,24 +116,16 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_uncompressed_size;
 
 
 -- Revert time_bucket_gapfill functions to old signatures
--- Drop the new functions with offset/origin parameters
-DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(SMALLINT, SMALLINT, SMALLINT, SMALLINT, SMALLINT);
-DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INT, INT, INT, INT, INT);
-DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+-- Integer variants stay at 4 args (unchanged between versions)
+-- Only timestamp and timezone variants need to be reverted
+
+-- Drop the new timestamp functions with origin/offset parameters (6 params)
 DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INTERVAL, DATE, DATE, DATE, DATE, INTERVAL);
 DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INTERVAL, TIMESTAMP, TIMESTAMP, TIMESTAMP, TIMESTAMP, INTERVAL);
 DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INTERVAL, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, INTERVAL);
+
+-- Drop the new timezone function with origin/offset parameters (7 params)
 DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INTERVAL, TIMESTAMPTZ, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, INTERVAL);
-
--- Recreate old integer variants (4 params)
-CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width SMALLINT, ts SMALLINT, start SMALLINT=NULL, finish SMALLINT=NULL) RETURNS SMALLINT
-	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;
-
-CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width INT, ts INT, start INT=NULL, finish INT=NULL) RETURNS INT
-	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;
-
-CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width BIGINT, ts BIGINT, start BIGINT=NULL, finish BIGINT=NULL) RETURNS BIGINT
-	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;
 
 -- Recreate old timestamp variants (4 params)
 CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width INTERVAL, ts DATE, start DATE=NULL, finish DATE=NULL) RETURNS DATE

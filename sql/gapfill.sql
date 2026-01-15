@@ -2,14 +2,14 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
--- Integer variants with optional offset (2-5 args)
-CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width SMALLINT, ts SMALLINT, start SMALLINT=NULL, finish SMALLINT=NULL, "offset" SMALLINT=NULL) RETURNS SMALLINT
+-- Integer variants (4 args, no offset support due to function resolution conflicts)
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width SMALLINT, ts SMALLINT, start SMALLINT=NULL, finish SMALLINT=NULL) RETURNS SMALLINT
 	AS '@MODULE_PATHNAME@', 'ts_gapfill_int16_bucket' LANGUAGE C VOLATILE PARALLEL SAFE;
 
-CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width INT, ts INT, start INT=NULL, finish INT=NULL, "offset" INT=NULL) RETURNS INT
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width INT, ts INT, start INT=NULL, finish INT=NULL) RETURNS INT
 	AS '@MODULE_PATHNAME@', 'ts_gapfill_int32_bucket' LANGUAGE C VOLATILE PARALLEL SAFE;
 
-CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width BIGINT, ts BIGINT, start BIGINT=NULL, finish BIGINT=NULL, "offset" BIGINT=NULL) RETURNS BIGINT
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width BIGINT, ts BIGINT, start BIGINT=NULL, finish BIGINT=NULL) RETURNS BIGINT
 	AS '@MODULE_PATHNAME@', 'ts_gapfill_int64_bucket' LANGUAGE C VOLATILE PARALLEL SAFE;
 
 -- Timestamp variants with optional origin and offset (2-6 args)

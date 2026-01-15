@@ -69,25 +69,16 @@ date_trunc_sort_transform(FuncExpr *func)
 
 /*
  * Check if a time_bucket_gapfill function has a timezone argument.
- * Timezone variants have TEXT as the third argument type.
- * For 5-arg functions, need to distinguish between:
- *   - timezone variant: (bucket_width, ts, timezone TEXT, start, finish)
- *   - integer with offset: (bucket_width, ts, start INT, finish, offset)
+ * The 7-arg timezone variant is the only one with a timezone argument.
+ * Arg counts:
+ *   - 4 args: integer variants (bucket_width, ts, start, finish)
+ *   - 6 args: timestamp variants (bucket_width, ts, start, finish, origin, offset)
+ *   - 7 args: timezone variant (bucket_width, ts, timezone, start, finish, origin, offset)
  */
 static bool
 gapfill_has_timezone_arg(FuncExpr *func)
 {
-	int nargs = list_length(func->args);
-	if (nargs == 7)
-		return true; /* 7-arg is always timezone variant */
-	if (nargs == 5)
-	{
-		/* Check if arg[2] (third arg) is TEXT type */
-		Expr *third = lthird(func->args);
-		Oid type = exprType((Node *) third);
-		return type == TEXTOID;
-	}
-	return false;
+	return list_length(func->args) == 7;
 }
 
 static Expr *
@@ -111,13 +102,12 @@ time_bucket_gapfill_sort_transform(FuncExpr *func)
 	 * > time2
 	 *
 	 * Arg counts:
-	 *   Old 4 args: integer/timestamp variants (bucket_width, ts, start, finish)
-	 *   Old 5 args: timezone variant (bucket_width, ts, timezone, start, finish)
-	 *   New 5 args: integer variants with offset (bucket_width, ts, start, finish, offset)
-	 *   New 6 args: timestamp variants with origin/offset
-	 *   New 7 args: timezone variant with origin/offset
+	 *   4 args: integer variants (bucket_width, ts, start, finish)
+	 *   6 args: timestamp variants (bucket_width, ts, start, finish, origin, offset)
+	 *   7 args: timezone variant (bucket_width, ts, timezone, start, finish, origin, offset)
 	 */
-	Assert(list_length(func->args) >= 4 && list_length(func->args) <= 7);
+	Assert(list_length(func->args) == 4 || list_length(func->args) == 6 ||
+		   list_length(func->args) == 7);
 
 	if (!time_bucket_has_const_period(func) ||
 		(gapfill_has_timezone_arg(func) && !time_bucket_has_const_timezone(func)))
@@ -550,35 +540,35 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
-		/* time_bucket_gapfill(SMALLINT, SMALLINT, SMALLINT, SMALLINT, SMALLINT) */
+		/* time_bucket_gapfill(SMALLINT, SMALLINT, SMALLINT, SMALLINT) */
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
-		.nargs = 5,
-		.arg_types = { INT2OID, INT2OID, INT2OID, INT2OID, INT2OID },
+		.nargs = 4,
+		.arg_types = { INT2OID, INT2OID, INT2OID, INT2OID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
-		/* time_bucket_gapfill(INT, INT, INT, INT, INT) */
+		/* time_bucket_gapfill(INT, INT, INT, INT) */
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
-		.nargs = 5,
-		.arg_types = { INT4OID, INT4OID, INT4OID, INT4OID, INT4OID },
+		.nargs = 4,
+		.arg_types = { INT4OID, INT4OID, INT4OID, INT4OID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
-		/* time_bucket_gapfill(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) */
+		/* time_bucket_gapfill(BIGINT, BIGINT, BIGINT, BIGINT) */
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
-		.nargs = 5,
-		.arg_types = { INT8OID, INT8OID, INT8OID, INT8OID, INT8OID },
+		.nargs = 4,
+		.arg_types = { INT8OID, INT8OID, INT8OID, INT8OID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
