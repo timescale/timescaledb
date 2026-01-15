@@ -5,10 +5,12 @@ DROP FUNCTION IF EXISTS @extschema@.create_hypertable(
     regclass, name, name, integer, name, name, anyelement,
     boolean, boolean, regproc, boolean, text, regproc, regproc, "any"
 );
-DROP FUNCTION IF EXISTS @extschema@.set_chunk_time_interval(regclass, anyelement, name, "any");
-DROP FUNCTION IF EXISTS @extschema@.set_partitioning_interval(regclass, anyelement, name, "any");
 DROP FUNCTION IF EXISTS @extschema@.add_dimension(regclass, name, integer, anyelement, regproc, boolean, "any");
 DROP FUNCTION IF EXISTS @extschema@.by_range(name, anyelement, regproc, "any");
+
+-- Drop new function signatures that include calendar_chunking parameter
+DROP FUNCTION IF EXISTS @extschema@.set_chunk_time_interval(regclass, anyelement, name, "any", bool);
+DROP FUNCTION IF EXISTS @extschema@.set_partitioning_interval(regclass, anyelement, name, "any", bool);
 
 --
 -- Rebuild the catalog table `_timescaledb_catalog.dimension` to remove interval_origin column

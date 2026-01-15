@@ -11,6 +11,11 @@ DROP FUNCTION IF EXISTS @extschema@.set_partitioning_interval(regclass, anyeleme
 DROP FUNCTION IF EXISTS @extschema@.add_dimension(regclass, name, integer, anyelement, regproc, boolean);
 DROP FUNCTION IF EXISTS @extschema@.by_range(name, anyelement, regproc);
 
+-- Drop old function signatures that are being replaced with new signatures
+-- that include calendar_chunking parameter
+DROP FUNCTION IF EXISTS @extschema@.set_chunk_time_interval(regclass, anyelement, name, "any");
+DROP FUNCTION IF EXISTS @extschema@.set_partitioning_interval(regclass, anyelement, name, "any");
+
 -- Block update if CAggs in old format are found
 DO
 $$
