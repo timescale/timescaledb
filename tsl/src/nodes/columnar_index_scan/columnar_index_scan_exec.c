@@ -64,33 +64,30 @@ columnar_index_scan_exec(CustomScanState *node)
 {
 	ColumnarIndexScanState *state = (ColumnarIndexScanState *) node;
 
-	for (;;)
+	TupleTableSlot *compressed_slot = ExecProcNode(linitial(node->custom_ps));
+
+	if (TupIsNull(compressed_slot))
+		return NULL;
+
+	/* Build output tuple */
+	TupleTableSlot *result_slot = state->custom_scan_slot;
+	ExecClearTuple(result_slot);
+
+	ListCell *lc;
+	int i = 0;
+	foreach (lc, state->output_map)
 	{
-		TupleTableSlot *compressed_slot = ExecProcNode(linitial(node->custom_ps));
-
-		if (TupIsNull(compressed_slot))
-			return NULL;
-
-		/* Build output tuple */
-		TupleTableSlot *result_slot = state->custom_scan_slot;
-		ExecClearTuple(result_slot);
-
-		ListCell *lc;
-		int i = 0;
-		foreach (lc, state->output_map)
-		{
-			bool isnull;
-			AttrNumber attno = lfirst_int(lc);
-			Datum value = slot_getattr(compressed_slot, attno, &isnull);
-			result_slot->tts_values[i] = isnull ? (Datum) 0 : value;
-			result_slot->tts_isnull[i] = isnull;
-			i++;
-		}
-
-		ExecStoreVirtualTuple(result_slot);
-
-		return result_slot;
+		bool isnull;
+		AttrNumber attno = lfirst_int(lc);
+		Datum value = slot_getattr(compressed_slot, attno, &isnull);
+		result_slot->tts_values[i] = isnull ? (Datum) 0 : value;
+		result_slot->tts_isnull[i] = isnull;
+		i++;
 	}
+
+	ExecStoreVirtualTuple(result_slot);
+
+	return result_slot;
 }
 
 static void
