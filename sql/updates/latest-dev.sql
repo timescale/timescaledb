@@ -206,3 +206,29 @@ DROP PROCEDURE IF EXISTS _timescaledb_functions.process_hypertable_invalidations
 -- Remove orphaned entries in materialization ranges table
 DELETE FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
 WHERE NOT EXISTS (SELECT FROM _timescaledb_catalog.continuous_agg WHERE mat_hypertable_id = materialization_id);
+
+-- Add new time_bucket_gapfill variants with offset and origin parameters
+
+-- Integer variants with offset (5 args)
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width SMALLINT, ts SMALLINT, start SMALLINT, finish SMALLINT, "offset" SMALLINT) RETURNS SMALLINT
+	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width INT, ts INT, start INT, finish INT, "offset" INT) RETURNS INT
+	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width BIGINT, ts BIGINT, start BIGINT, finish BIGINT, "offset" BIGINT) RETURNS BIGINT
+	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;
+
+-- Timestamp variants with origin and offset (6 args)
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width INTERVAL, ts DATE, start DATE, finish DATE, origin DATE, "offset" INTERVAL) RETURNS DATE
+	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width INTERVAL, ts TIMESTAMP, start TIMESTAMP, finish TIMESTAMP, origin TIMESTAMP, "offset" INTERVAL) RETURNS TIMESTAMP
+	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width INTERVAL, ts TIMESTAMPTZ, start TIMESTAMPTZ, finish TIMESTAMPTZ, origin TIMESTAMPTZ, "offset" INTERVAL) RETURNS TIMESTAMPTZ
+	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;
+
+-- Timezone variant with origin and offset (7 args)
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width INTERVAL, ts TIMESTAMPTZ, timezone TEXT, start TIMESTAMPTZ, finish TIMESTAMPTZ, origin TIMESTAMPTZ, "offset" INTERVAL) RETURNS TIMESTAMPTZ
+	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;

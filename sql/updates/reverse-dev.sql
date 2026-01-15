@@ -114,3 +114,12 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_column_size(_time
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_uncompressed_size;
 
+
+-- Drop new time_bucket_gapfill variants with offset and origin parameters
+DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(SMALLINT, SMALLINT, SMALLINT, SMALLINT, SMALLINT);
+DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INT, INT, INT, INT, INT);
+DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INTERVAL, DATE, DATE, DATE, DATE, INTERVAL);
+DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INTERVAL, TIMESTAMP, TIMESTAMP, TIMESTAMP, TIMESTAMP, INTERVAL);
+DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INTERVAL, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, INTERVAL);
+DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INTERVAL, TIMESTAMPTZ, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, INTERVAL);
