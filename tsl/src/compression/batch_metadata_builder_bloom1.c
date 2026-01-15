@@ -14,13 +14,12 @@
 
 #include <math.h>
 
-#include "compression.h"
-
-#include "batch_metadata_builder.h"
+#include "sparse_index_bloom1.h"
 
 #include "arrow_c_data_interface.h"
-
-#include "sparse_index_bloom1.h"
+#include "batch_metadata_builder.h"
+#include "compression.h"
+#include "guc.h"
 
 #ifdef TS_USE_UMASH
 #include "import/umash.h"
