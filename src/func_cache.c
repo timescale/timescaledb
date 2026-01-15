@@ -10,6 +10,7 @@
 #include <catalog/pg_proc.h>
 #include <catalog/pg_type.h>
 #include <miscadmin.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/pathnodes.h>
 #include <optimizer/optimizer.h>
 #include <parser/parse_oper.h>
@@ -66,6 +67,29 @@ date_trunc_sort_transform(FuncExpr *func)
 #define time_bucket_has_const_period(func) IsA(linitial((func)->args), Const)
 #define time_bucket_has_const_timezone(func) IsA(lthird((func)->args), Const)
 
+/*
+ * Check if a time_bucket_gapfill function has a timezone argument.
+ * Timezone variants have TEXT as the third argument type.
+ * For 5-arg functions, need to distinguish between:
+ *   - timezone variant: (bucket_width, ts, timezone TEXT, start, finish)
+ *   - integer with offset: (bucket_width, ts, start INT, finish, offset)
+ */
+static bool
+gapfill_has_timezone_arg(FuncExpr *func)
+{
+	int nargs = list_length(func->args);
+	if (nargs == 7)
+		return true; /* 7-arg is always timezone variant */
+	if (nargs == 5)
+	{
+		/* Check if arg[2] (third arg) is TEXT type */
+		Expr *third = lthird(func->args);
+		Oid type = exprType((Node *) third);
+		return type == TEXTOID;
+	}
+	return false;
+}
+
 static Expr *
 do_sort_transform(FuncExpr *func)
 {
@@ -87,14 +111,16 @@ time_bucket_gapfill_sort_transform(FuncExpr *func)
 	 * > time2
 	 *
 	 * Arg counts:
-	 *   5 args: integer variants (bucket_width, ts, start, finish, offset)
-	 *   6 args: timestamp variants (bucket_width, ts, start, finish, origin, offset)
-	 *   7 args: timezone variant (bucket_width, ts, timezone, start, finish, origin, offset)
+	 *   Old 4 args: integer/timestamp variants (bucket_width, ts, start, finish)
+	 *   Old 5 args: timezone variant (bucket_width, ts, timezone, start, finish)
+	 *   New 5 args: integer variants with offset (bucket_width, ts, start, finish, offset)
+	 *   New 6 args: timestamp variants with origin/offset
+	 *   New 7 args: timezone variant with origin/offset
 	 */
-	Assert(list_length(func->args) >= 5 && list_length(func->args) <= 7);
+	Assert(list_length(func->args) >= 4 && list_length(func->args) <= 7);
 
 	if (!time_bucket_has_const_period(func) ||
-		(list_length(func->args) == 7 && !time_bucket_has_const_timezone(func)))
+		(gapfill_has_timezone_arg(func) && !time_bucket_has_const_timezone(func)))
 		return (Expr *) func;
 
 	return do_sort_transform(func);

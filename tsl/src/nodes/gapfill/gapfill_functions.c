@@ -21,16 +21,16 @@ gapfill_marker(PG_FUNCTION_ARGS)
 
 /*
  * Integer gapfill wrappers.
- * Args: (bucket_width, ts, start, finish, offset)
- * Indices:  0           1     2       3      4
+ * Old 4-arg form: (bucket_width, ts, start, finish)
+ * New 5-arg form: (bucket_width, ts, start, finish, offset)
  */
 #define GAPFILL_INT_WRAPPER(datatype)                                                              \
 	Datum gapfill_##datatype##_time_bucket(PG_FUNCTION_ARGS)                    \
 	{                                                                                              \
 		if (PG_ARGISNULL(0) || PG_ARGISNULL(1))                                                    \
 			PG_RETURN_NULL();                                                                      \
-		/* Check if offset is provided */                                                          \
-		if (!PG_ARGISNULL(4))                                                                      \
+		/* Check if offset is provided (5-arg form) */                                             \
+		if (PG_NARGS() >= 5 && !PG_ARGISNULL(4))                                                   \
 		{                                                                                          \
 			return DirectFunctionCall3(ts_##datatype##_bucket,                                     \
 									   PG_GETARG_DATUM(0),                                         \
@@ -48,8 +48,8 @@ GAPFILL_INT_WRAPPER(int64);
 
 /*
  * Timestamp gapfill wrappers (date, timestamp, timestamptz without timezone).
- * Args: (bucket_width, ts, start, finish, origin, offset)
- * Indices:  0           1     2       3      4       5
+ * Old 4-arg form: (bucket_width, ts, start, finish)
+ * New 6-arg form: (bucket_width, ts, start, finish, origin, offset)
  */
 Datum
 gapfill_date_time_bucket(PG_FUNCTION_ARGS)
@@ -57,21 +57,25 @@ gapfill_date_time_bucket(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_NULL();
 
-	/* Check if origin is provided */
-	if (!PG_ARGISNULL(4))
+	/* New 6-arg form with origin and offset */
+	if (PG_NARGS() >= 6)
 	{
-		return DirectFunctionCall3(ts_date_bucket,
-								   PG_GETARG_DATUM(0),
-								   PG_GETARG_DATUM(1),
-								   PG_GETARG_DATUM(4));
-	}
-	/* Check if offset is provided */
-	if (!PG_ARGISNULL(5))
-	{
-		return DirectFunctionCall3(ts_date_offset_bucket,
-								   PG_GETARG_DATUM(0),
-								   PG_GETARG_DATUM(1),
-								   PG_GETARG_DATUM(5));
+		/* Check if origin is provided */
+		if (!PG_ARGISNULL(4))
+		{
+			return DirectFunctionCall3(ts_date_bucket,
+									   PG_GETARG_DATUM(0),
+									   PG_GETARG_DATUM(1),
+									   PG_GETARG_DATUM(4));
+		}
+		/* Check if offset is provided */
+		if (!PG_ARGISNULL(5))
+		{
+			return DirectFunctionCall3(ts_date_offset_bucket,
+									   PG_GETARG_DATUM(0),
+									   PG_GETARG_DATUM(1),
+									   PG_GETARG_DATUM(5));
+		}
 	}
 	return DirectFunctionCall2(ts_date_bucket, PG_GETARG_DATUM(0), PG_GETARG_DATUM(1));
 }
@@ -82,21 +86,25 @@ gapfill_timestamp_time_bucket(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_NULL();
 
-	/* Check if origin is provided */
-	if (!PG_ARGISNULL(4))
+	/* New 6-arg form with origin and offset */
+	if (PG_NARGS() >= 6)
 	{
-		return DirectFunctionCall3(ts_timestamp_bucket,
-								   PG_GETARG_DATUM(0),
-								   PG_GETARG_DATUM(1),
-								   PG_GETARG_DATUM(4));
-	}
-	/* Check if offset is provided */
-	if (!PG_ARGISNULL(5))
-	{
-		return DirectFunctionCall3(ts_timestamp_offset_bucket,
-								   PG_GETARG_DATUM(0),
-								   PG_GETARG_DATUM(1),
-								   PG_GETARG_DATUM(5));
+		/* Check if origin is provided */
+		if (!PG_ARGISNULL(4))
+		{
+			return DirectFunctionCall3(ts_timestamp_bucket,
+									   PG_GETARG_DATUM(0),
+									   PG_GETARG_DATUM(1),
+									   PG_GETARG_DATUM(4));
+		}
+		/* Check if offset is provided */
+		if (!PG_ARGISNULL(5))
+		{
+			return DirectFunctionCall3(ts_timestamp_offset_bucket,
+									   PG_GETARG_DATUM(0),
+									   PG_GETARG_DATUM(1),
+									   PG_GETARG_DATUM(5));
+		}
 	}
 	return DirectFunctionCall2(ts_timestamp_bucket, PG_GETARG_DATUM(0), PG_GETARG_DATUM(1));
 }
@@ -107,29 +115,33 @@ gapfill_timestamptz_time_bucket(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0) || PG_ARGISNULL(1))
 		PG_RETURN_NULL();
 
-	/* Check if origin is provided */
-	if (!PG_ARGISNULL(4))
+	/* New 6-arg form with origin and offset */
+	if (PG_NARGS() >= 6)
 	{
-		return DirectFunctionCall3(ts_timestamptz_bucket,
-								   PG_GETARG_DATUM(0),
-								   PG_GETARG_DATUM(1),
-								   PG_GETARG_DATUM(4));
-	}
-	/* Check if offset is provided */
-	if (!PG_ARGISNULL(5))
-	{
-		return DirectFunctionCall3(ts_timestamptz_offset_bucket,
-								   PG_GETARG_DATUM(0),
-								   PG_GETARG_DATUM(1),
-								   PG_GETARG_DATUM(5));
+		/* Check if origin is provided */
+		if (!PG_ARGISNULL(4))
+		{
+			return DirectFunctionCall3(ts_timestamptz_bucket,
+									   PG_GETARG_DATUM(0),
+									   PG_GETARG_DATUM(1),
+									   PG_GETARG_DATUM(4));
+		}
+		/* Check if offset is provided */
+		if (!PG_ARGISNULL(5))
+		{
+			return DirectFunctionCall3(ts_timestamptz_offset_bucket,
+									   PG_GETARG_DATUM(0),
+									   PG_GETARG_DATUM(1),
+									   PG_GETARG_DATUM(5));
+		}
 	}
 	return DirectFunctionCall2(ts_timestamptz_bucket, PG_GETARG_DATUM(0), PG_GETARG_DATUM(1));
 }
 
 /*
  * Timestamptz with timezone gapfill wrapper.
- * Args: (bucket_width, ts, timezone, start, finish, origin, offset)
- * Indices:  0           1      2       3       4      5       6
+ * Old 5-arg form: (bucket_width, ts, timezone, start, finish)
+ * New 7-arg form: (bucket_width, ts, timezone, start, finish, origin, offset)
  */
 Datum
 gapfill_timestamptz_timezone_time_bucket(PG_FUNCTION_ARGS)
@@ -137,10 +149,9 @@ gapfill_timestamptz_timezone_time_bucket(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
 		PG_RETURN_NULL();
 
-	/* Check if origin is provided */
-	bool have_origin = !PG_ARGISNULL(5);
-	/* Check if offset is provided */
-	bool have_offset = !PG_ARGISNULL(6);
+	/* Check if using new 7-arg form with origin and offset */
+	bool have_origin = (PG_NARGS() >= 7) && !PG_ARGISNULL(5);
+	bool have_offset = (PG_NARGS() >= 7) && !PG_ARGISNULL(6);
 
 	/*
 	 * ts_timestamptz_timezone_bucket takes 5 args: (bucket_width, ts, timezone, origin, offset)
