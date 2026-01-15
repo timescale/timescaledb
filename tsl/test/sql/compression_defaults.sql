@@ -306,9 +306,8 @@ SELECT * FROM _timescaledb_catalog.compression_settings;
 ALTER TABLE table1 SET (timescaledb.compress = false);
 
 -- test that compression settings are retained when disabling columnstore (issue #8841)
--- settings should still exist after disabling
 SELECT * FROM _timescaledb_catalog.compression_settings;
--- re-enable without specifying settings, should use retained settings
+-- re-enable without specifying settings - settings cleared if default functions available
 ALTER TABLE table1 SET (timescaledb.compress = true);
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ALTER TABLE table1 SET (timescaledb.compress = false);
@@ -320,13 +319,32 @@ SELECT * FROM table1 ORDER BY col1;
 SELECT compression_state FROM _timescaledb_catalog.hypertable WHERE table_name = 'table1';
 SELECT count(*) FROM _timescaledb_catalog.compression_settings WHERE relid = 'table1'::regclass;
 
--- test that re-enabling with explicit NEW settings clears retained settings
+-- test that re-enabling with explicit NEW settings uses those settings
 ALTER TABLE table1 SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'col2');
 SELECT segmentby FROM _timescaledb_catalog.compression_settings WHERE relid = 'table1'::regclass;
 ALTER TABLE table1 SET (timescaledb.compress = false);
 
--- verify settings updated to new value (col2, not col1)
+-- verify settings are retained on disable
 SELECT segmentby FROM _timescaledb_catalog.compression_settings WHERE relid = 'table1'::regclass;
+DROP TABLE table1;
+
+-- test that retained settings don't block defaults when re-enabling:
+-- 1. enable compression with explicit orderby (only time, no device_id)
+-- 2. disable compression (settings retained)
+-- 3. re-enable without explicit settings
+-- 4. compress and verify device_id appears in orderby (from fresh defaults)
+CREATE TABLE test_retained (time timestamptz NOT NULL, device_id text, val float);
+SELECT create_hypertable('test_retained', 'time');
+CREATE INDEX ON test_retained(device_id, time);
+INSERT INTO test_retained SELECT t, 'dev1', 1.0 FROM generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 hour') t;
+ANALYZE test_retained;
+ALTER TABLE test_retained SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+ALTER TABLE test_retained SET (timescaledb.compress = false);
+ALTER TABLE test_retained SET (timescaledb.compress = true);
+SELECT count(compress_chunk(x)) FROM show_chunks('test_retained') x;
+SELECT segmentby, orderby FROM timescaledb_information.chunk_compression_settings
+WHERE hypertable = 'test_retained'::regclass LIMIT 1;
+DROP TABLE test_retained;
 
 \set ON_ERROR_STOP 0
 SET timescaledb.compression_segmentby_default_function = 'function_does_not_exist';
