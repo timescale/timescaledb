@@ -2820,11 +2820,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 
 	/*
 	 * Next, check if we can push the sort down to the uncompressed part.
-	 *
-	 * Not possible if the chunk is unordered.
 	 */
-	if (ts_chunk_is_unordered(chunk))
-		return sort_info;
 
 	/* all segmentby columns need to be prefix of pathkeys */
 	int i = 0;
@@ -2864,6 +2860,27 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		}
 
 		/*
+		 * Pathkeys satisfied by sorting the compressed data on segmentby columns.
+		 */
+		if (i == list_length(pathkeys))
+		{
+			/* Can use compressed sort on segmentby cols for unordered chunks as well,
+			 * unless this option is turned OFF
+			 */
+			if (!ts_guc_enable_compressed_unordered_sort && ts_chunk_is_unordered(chunk))
+				return sort_info;
+
+			sort_info.use_compressed_sort = true;
+			return sort_info;
+		}
+
+		/*
+		 * Cannot push down sort on (segmentby + non-segmentby) columns if the chunk is unordered
+		 */
+		if (ts_chunk_is_unordered(chunk))
+			return sort_info;
+
+		/*
 		 * If pathkeys still has items, but we didn't find all segmentby columns,
 		 * we cannot satisfy these pathkeys by sorting the compressed chunk table.
 		 */
@@ -2887,14 +2904,11 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		}
 	}
 
-	if (i == list_length(pathkeys))
-	{
-		/*
-		 * Pathkeys satisfied by sorting the compressed data on segmentby columns.
-		 */
-		sort_info.use_compressed_sort = true;
+	/*
+	 * Cannot push down sort on non-segmentby columns if the chunk is unordered
+	 */
+	if (ts_chunk_is_unordered(chunk))
 		return sort_info;
-	}
 
 	/*
 	 * Pathkeys includes columns past segmentby columns, so we need sequence_num

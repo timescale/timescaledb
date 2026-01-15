@@ -77,6 +77,8 @@ extern TSDLLEXPORT bool ts_guc_enable_multikey_skip_scan;
 extern TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier;
 extern TSDLLEXPORT bool ts_guc_debug_skip_scan_info;
 
+extern TSDLLEXPORT bool ts_guc_enable_compressed_unordered_sort;
+
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;
 extern TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings;
