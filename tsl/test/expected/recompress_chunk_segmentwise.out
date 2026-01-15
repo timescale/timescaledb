@@ -423,7 +423,8 @@ SELECT decompress_chunk(show_chunks('mytab'));
  _timescaledb_internal._hyper_11_12_chunk
 
 alter table mytab set (timescaledb.compress = false);
-alter table mytab set (timescaledb.compress);
+-- explicit segmentby to avoid relying on retained settings from previous enable
+alter table mytab set (timescaledb.compress, timescaledb.compress_segmentby = 'a, c');
 select compress_chunk(show_chunks('mytab'));
 INFO:  using tuplesort to scan rows from "_hyper_11_12_chunk" for converting to columnstore
               compress_chunk              

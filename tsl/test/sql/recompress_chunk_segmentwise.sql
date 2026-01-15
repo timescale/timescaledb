@@ -242,7 +242,8 @@ RESET enable_seqscan;
 
 SELECT decompress_chunk(show_chunks('mytab'));
 alter table mytab set (timescaledb.compress = false);
-alter table mytab set (timescaledb.compress);
+-- explicit segmentby to avoid relying on retained settings from previous enable
+alter table mytab set (timescaledb.compress, timescaledb.compress_segmentby = 'a, c');
 select compress_chunk(show_chunks('mytab'));
 select compressed_chunk_name as compressed_chunk_name_before_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
 INSERT INTO mytab VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
