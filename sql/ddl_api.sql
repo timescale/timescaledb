@@ -74,7 +74,8 @@ CREATE OR REPLACE FUNCTION @extschema@.set_chunk_time_interval(
     hypertable              REGCLASS,
     chunk_time_interval     ANYELEMENT,
     dimension_name          NAME = NULL,
-    chunk_time_origin       "any" = NULL::TIMESTAMPTZ
+    chunk_time_origin       "any" = NULL::TIMESTAMPTZ,
+    calendar_chunking       BOOL = NULL
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_interval' LANGUAGE C VOLATILE;
 
 -- Update partition_interval for a hypertable.
@@ -89,7 +90,8 @@ CREATE OR REPLACE FUNCTION @extschema@.set_partitioning_interval(
     hypertable              REGCLASS,
     partition_interval      ANYELEMENT,
     dimension_name          NAME = NULL,
-    partition_origin        "any" = NULL::TIMESTAMPTZ
+    partition_origin        "any" = NULL::TIMESTAMPTZ,
+    calendar_chunking       BOOL = NULL
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_interval' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION @extschema@.set_number_partitions(

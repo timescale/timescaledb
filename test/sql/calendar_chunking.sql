@@ -687,7 +687,8 @@ SELECT create_hypertable('calendar_no_integer', 'time', chunk_time_interval => i
 
 -- Verify calendar chunking is active
 SELECT d.column_name,
-       d.interval IS NOT NULL AS has_interval
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'calendar_no_integer';
@@ -699,7 +700,8 @@ SELECT set_chunk_time_interval('calendar_no_integer', 86400000000::bigint);
 
 -- Verify calendar chunking is still active (unchanged)
 SELECT d.column_name,
-       d.interval IS NOT NULL AS has_interval
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'calendar_no_integer';
@@ -736,10 +738,11 @@ SET timescaledb.enable_calendar_chunking = false;
 CREATE TABLE non_calendar_ht(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('non_calendar_ht', 'time', chunk_time_interval => interval '1 day');
 
--- Verify initial state: non-calendar mode (interval_length > 0, interval IS NULL)
+-- Verify initial state: non-calendar mode (has_integer_interval=t, has_time_interval=f)
 SELECT d.column_name,
-       d.interval_length,
-       d.interval IS NULL AS interval_is_null
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval_length
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'non_calendar_ht';
@@ -748,8 +751,9 @@ WHERE h.table_name = 'non_calendar_ht';
 SET timescaledb.enable_calendar_chunking = false;
 SELECT set_chunk_time_interval('non_calendar_ht', 172800000000::bigint);  -- 2 days in microseconds
 
-SELECT d.interval_length,
-       d.interval IS NULL AS interval_is_null
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval_length
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'non_calendar_ht';
@@ -758,8 +762,9 @@ WHERE h.table_name = 'non_calendar_ht';
 SET timescaledb.enable_calendar_chunking = false;
 SELECT set_chunk_time_interval('non_calendar_ht', interval '3 days');
 
-SELECT d.interval_length,
-       d.interval IS NULL AS interval_is_null
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval_length
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'non_calendar_ht';
@@ -768,8 +773,9 @@ WHERE h.table_name = 'non_calendar_ht';
 SET timescaledb.enable_calendar_chunking = true;
 SELECT set_chunk_time_interval('non_calendar_ht', 345600000000::bigint);  -- 4 days in microseconds
 
-SELECT d.interval_length,
-       d.interval IS NULL AS interval_is_null
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval_length
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'non_calendar_ht';
@@ -778,8 +784,9 @@ WHERE h.table_name = 'non_calendar_ht';
 SET timescaledb.enable_calendar_chunking = true;
 SELECT set_chunk_time_interval('non_calendar_ht', interval '5 days');
 
-SELECT d.interval_length,
-       d.interval IS NULL AS interval_is_null
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval_length
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'non_calendar_ht';
@@ -798,10 +805,10 @@ SET timescaledb.enable_calendar_chunking = true;
 CREATE TABLE calendar_ht(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('calendar_ht', 'time', chunk_time_interval => interval '1 day');
 
--- Verify initial state: calendar mode (interval_length = 0, interval IS NOT NULL)
+-- Verify initial state: calendar mode (interval_length IS NULL, interval IS NOT NULL)
 SELECT d.column_name,
-       d.interval_length = 0 AS interval_length_is_zero,
-       d.interval IS NOT NULL AS has_interval,
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
        d.interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
@@ -811,8 +818,8 @@ WHERE h.table_name = 'calendar_ht';
 SET timescaledb.enable_calendar_chunking = true;
 SELECT set_chunk_time_interval('calendar_ht', interval '2 days');
 
-SELECT d.interval_length = 0 AS interval_length_is_zero,
-       d.interval IS NOT NULL AS has_interval,
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
        d.interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
@@ -822,8 +829,8 @@ WHERE h.table_name = 'calendar_ht';
 SET timescaledb.enable_calendar_chunking = false;
 SELECT set_chunk_time_interval('calendar_ht', interval '3 days');
 
-SELECT d.interval_length = 0 AS interval_length_is_zero,
-       d.interval IS NOT NULL AS has_interval,
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
        d.interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
@@ -836,8 +843,8 @@ SELECT set_chunk_time_interval('calendar_ht', 86400000000::bigint);
 \set ON_ERROR_STOP 1
 
 -- Verify unchanged after error
-SELECT d.interval_length = 0 AS interval_length_is_zero,
-       d.interval IS NOT NULL AS has_interval,
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
        d.interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
@@ -850,14 +857,120 @@ SELECT set_chunk_time_interval('calendar_ht', 172800000000::bigint);
 \set ON_ERROR_STOP 1
 
 -- Verify unchanged after error
-SELECT d.interval_length = 0 AS interval_length_is_zero,
-       d.interval IS NOT NULL AS has_interval,
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
        d.interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'calendar_ht';
 
 DROP TABLE calendar_ht;
+
+---------------------------------------------------------------
+-- MODE SWITCHING TESTS
+-- Test switching between calendar and non-calendar modes
+-- using the calendar_chunking parameter
+---------------------------------------------------------------
+
+-- Use a non-UTC timezone to make calendar vs non-calendar differences visible
+-- In UTC, chunks would align nicely even without calendar chunking
+SET timezone = 'America/New_York';
+SET timescaledb.enable_calendar_chunking = false;
+
+CREATE TABLE mode_switch(time timestamptz NOT NULL, value int);
+SELECT create_hypertable('mode_switch', 'time', chunk_time_interval => interval '1 day');
+
+-- 1. Initial state: non-calendar mode
+SELECT d.column_name,
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval
+FROM _timescaledb_catalog.dimension d
+JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
+WHERE h.table_name = 'mode_switch';
+
+INSERT INTO mode_switch VALUES
+    ('2025-01-01 12:00:00 UTC', 1),
+    ('2025-01-02 12:00:00 UTC', 2);
+
+-- Non-calendar: chunk boundaries at 19:00 EST (midnight UTC), not local midnight
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'mode_switch' ORDER BY range_start;
+
+-- 2. Switch to calendar mode using set_chunk_time_interval
+SELECT set_chunk_time_interval('mode_switch', '1 week'::interval, calendar_chunking => true);
+
+SELECT d.column_name,
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval
+FROM _timescaledb_catalog.dimension d
+JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
+WHERE h.table_name = 'mode_switch';
+
+INSERT INTO mode_switch VALUES
+    ('2025-02-10 12:00:00 UTC', 3),
+    ('2025-02-17 12:00:00 UTC', 4);
+
+-- Calendar: new chunks aligned to local Monday midnight (00:00 EST)
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'mode_switch' ORDER BY range_start;
+
+-- 3. Switch back to non-calendar using set_partitioning_interval
+SELECT set_partitioning_interval('mode_switch', '2 days'::interval, calendar_chunking => false);
+
+SELECT d.column_name,
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval_length
+FROM _timescaledb_catalog.dimension d
+JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
+WHERE h.table_name = 'mode_switch';
+
+INSERT INTO mode_switch VALUES
+    ('2025-06-15 12:00:00 UTC', 5),
+    ('2025-06-18 12:00:00 UTC', 6);
+
+-- Non-calendar: fixed 2-day intervals, boundaries at odd hours
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'mode_switch' ORDER BY range_start;
+
+-- 4. Switch back to calendar using set_chunk_time_interval
+SELECT set_chunk_time_interval('mode_switch', '1 month'::interval, calendar_chunking => true);
+
+SELECT d.column_name,
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval
+FROM _timescaledb_catalog.dimension d
+JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
+WHERE h.table_name = 'mode_switch';
+
+INSERT INTO mode_switch VALUES
+    ('2025-09-15 12:00:00 UTC', 7),
+    ('2025-10-15 12:00:00 UTC', 8);
+
+-- Calendar: new chunks aligned to local month start (00:00 EST on 1st)
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'mode_switch' ORDER BY range_start;
+
+DROP TABLE mode_switch;
+
+-- Test error: calendar_chunking => true with integer interval
+CREATE TABLE calendar_switch_error(time timestamptz NOT NULL, value int);
+SELECT create_hypertable('calendar_switch_error', 'time', chunk_time_interval => interval '1 day');
+
+\set ON_ERROR_STOP 0
+SELECT set_chunk_time_interval('calendar_switch_error', 86400000000::bigint, calendar_chunking => true);
+\set ON_ERROR_STOP 1
+
+SELECT d.column_name,
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval
+FROM _timescaledb_catalog.dimension d
+JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
+WHERE h.table_name = 'calendar_switch_error';
+
+DROP TABLE calendar_switch_error;
 
 RESET timescaledb.enable_calendar_chunking;
 

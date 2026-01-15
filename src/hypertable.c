@@ -2158,7 +2158,8 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 						DIMENSION_TYPE_OPEN,
 						NULL,
 						NULL,
-						&now_func_oid);
+						&now_func_oid,
+						NULL);
 	ts_cache_release(&hcache);
 	PG_RETURN_NULL();
 }

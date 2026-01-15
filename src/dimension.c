@@ -1728,7 +1728,8 @@ dimension_add_not_null_on_column(Oid table_relid, char *colname)
 
 void
 ts_dimension_update(const Hypertable *ht, const NameData *dimname, DimensionType dimtype,
-					const ChunkInterval *chunk_interval, int16 *num_slices, Oid *integer_now_func)
+					const ChunkInterval *chunk_interval, int16 *num_slices, Oid *integer_now_func,
+					bool *use_calendar_chunking)
 {
 	Dimension *dim;
 
@@ -1765,10 +1766,21 @@ ts_dimension_update(const Hypertable *ht, const NameData *dimname, DimensionType
 	if (chunk_interval)
 	{
 		Oid partition_type = ts_dimension_get_partition_type(dim);
+		bool should_use_calendar;
 
 		Assert(IS_OPEN_DIMENSION(dim));
 
-		if (chunk_interval->type == INTERVALOID && IS_CALENDAR_CHUNKING(dim))
+		/*
+		 * Determine whether to use calendar chunking:
+		 * - If use_calendar_chunking is explicitly set, use that value (overrides everything)
+		 * - Otherwise, use existing mode (sticky behavior)
+		 */
+		if (use_calendar_chunking != NULL)
+			should_use_calendar = *use_calendar_chunking;
+		else
+			should_use_calendar = IS_CALENDAR_CHUNKING(dim);
+
+		if (chunk_interval->type == INTERVALOID && should_use_calendar)
 		{
 			/*
 			 * Calendar chunking: store the Interval value and origin.
@@ -1806,7 +1818,7 @@ ts_dimension_update(const Hypertable *ht, const NameData *dimname, DimensionType
 		else
 		{
 			/*
-			 * Legacy chunking: convert interval to integer microseconds.
+			 * Non-calendar chunking: convert interval to integer microseconds.
 			 * If origin is explicitly provided, store it for chunk alignment.
 			 */
 			dim->fd.interval_length =
@@ -1880,7 +1892,7 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 	 * num_slices cannot be > INT16_MAX.
 	 */
 	num_slices = num_slices_arg & 0xffff;
-	ts_dimension_update(ht, colname, DIMENSION_TYPE_CLOSED, NULL, &num_slices, NULL);
+	ts_dimension_update(ht, colname, DIMENSION_TYPE_CLOSED, NULL, &num_slices, NULL, NULL);
 	ts_cache_release(&hcache);
 
 	PG_RETURN_VOID();
@@ -1909,6 +1921,9 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 	bool origin_isnull = PG_ARGISNULL(3);
 	Datum origin_datum = origin_isnull ? UnassignedDatum : PG_GETARG_DATUM(3);
 	Oid origin_type = origin_isnull ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3);
+	bool calendar_chunking_isnull = PG_ARGISNULL(4);
+	bool calendar_chunking_value = calendar_chunking_isnull ? false : PG_GETARG_BOOL(4);
+	bool *use_calendar_chunking = calendar_chunking_isnull ? NULL : &calendar_chunking_value;
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht;
 	ChunkInterval chunk_interval;
@@ -1929,7 +1944,8 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 
 	/*
 	 * Check if the hypertable uses calendar chunking and validate interval type.
-	 * Calendar-based hypertables require an INTERVAL type for the chunk interval.
+	 * Calendar-based hypertables require an INTERVAL type for the chunk interval,
+	 * unless the user is explicitly switching to non-calendar mode.
 	 */
 	{
 		Oid interval_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
@@ -1940,13 +1956,27 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 		if (dim == NULL)
 			dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
 
-		if (dim != NULL && dim->chunk_interval.type == INTERVALOID && interval_type != INTERVALOID)
+		/*
+		 * Error if using integer interval on calendar hypertable, unless explicitly
+		 * switching to non-calendar mode via calendar_chunking => false.
+		 */
+		if (dim != NULL && IS_CALENDAR_CHUNKING(dim) && interval_type != INTERVALOID &&
+			(use_calendar_chunking == NULL || *use_calendar_chunking == true))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("cannot use integer interval on calendar-based hypertable"),
 					 errhint("Use an INTERVAL type value (e.g., INTERVAL '1 day') "
-							 "or disable calendar chunking with "
-							 "SET timescaledb.enable_calendar_chunking = false.")));
+							 "or set calendar_chunking => false to switch to non-calendar mode.")));
+
+		/*
+		 * Error if trying to enable calendar chunking with an integer interval.
+		 */
+		if (use_calendar_chunking != NULL && *use_calendar_chunking == true &&
+			interval_type != INTERVALOID)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("cannot enable calendar chunking with an integer interval"),
+					 errhint("Use an INTERVAL type value (e.g., INTERVAL '1 day').")));
 
 		/* Validate origin type compatibility with dimension type */
 		if (!origin_isnull && dim != NULL)
@@ -1965,7 +1995,13 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 									   !origin_isnull);
 	}
 
-	ts_dimension_update(ht, colname, DIMENSION_TYPE_OPEN, &chunk_interval, NULL, NULL);
+	ts_dimension_update(ht,
+						colname,
+						DIMENSION_TYPE_OPEN,
+						&chunk_interval,
+						NULL,
+						NULL,
+						use_calendar_chunking);
 	ts_cache_release(&hcache);
 
 	PG_RETURN_VOID();

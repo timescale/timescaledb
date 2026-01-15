@@ -991,13 +991,14 @@ SELECT create_hypertable('calendar_no_integer', 'time', chunk_time_interval => i
 
 -- Verify calendar chunking is active
 SELECT d.column_name,
-       d.interval IS NOT NULL AS has_interval
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'calendar_no_integer';
- column_name | has_interval 
--------------+--------------
- time        | t
+ column_name | has_integer_interval | has_time_interval 
+-------------+----------------------+-------------------
+ time        | f                    | t
 
 -- Try to change to integer interval - this should error
 \set ON_ERROR_STOP 0
@@ -1006,13 +1007,14 @@ ERROR:  cannot use integer interval on calendar-based hypertable
 \set ON_ERROR_STOP 1
 -- Verify calendar chunking is still active (unchanged)
 SELECT d.column_name,
-       d.interval IS NOT NULL AS has_interval
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'calendar_no_integer';
- column_name | has_interval 
--------------+--------------
- time        | t
+ column_name | has_integer_interval | has_time_interval 
+-------------+----------------------+-------------------
+ time        | f                    | t
 
 -- But changing to another Interval value should work
 SELECT set_chunk_time_interval('calendar_no_integer', interval '1 week');
@@ -1051,16 +1053,17 @@ SELECT create_hypertable('non_calendar_ht', 'time', chunk_time_interval => inter
 -------------------------------
  (23,public,non_calendar_ht,t)
 
--- Verify initial state: non-calendar mode (interval_length > 0, interval IS NULL)
+-- Verify initial state: non-calendar mode (has_integer_interval=t, has_time_interval=f)
 SELECT d.column_name,
-       d.interval_length,
-       d.interval IS NULL AS interval_is_null
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval_length
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'non_calendar_ht';
- column_name | interval_length | interval_is_null 
--------------+-----------------+------------------
- time        |     86400000000 | t
+ column_name | has_integer_interval | has_time_interval | interval_length 
+-------------+----------------------+-------------------+-----------------
+ time        | t                    | f                 |     86400000000
 
 -- GUC OFF + integer input → stays non-calendar
 SET timescaledb.enable_calendar_chunking = false;
@@ -1069,14 +1072,15 @@ SELECT set_chunk_time_interval('non_calendar_ht', 172800000000::bigint);  -- 2 d
 -------------------------
  
 
-SELECT d.interval_length,
-       d.interval IS NULL AS interval_is_null
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval_length
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'non_calendar_ht';
- interval_length | interval_is_null 
------------------+------------------
-    172800000000 | t
+ has_integer_interval | has_time_interval | interval_length 
+----------------------+-------------------+-----------------
+ t                    | f                 |    172800000000
 
 -- GUC OFF + INTERVAL input → stays non-calendar (converted to microseconds)
 SET timescaledb.enable_calendar_chunking = false;
@@ -1085,14 +1089,15 @@ SELECT set_chunk_time_interval('non_calendar_ht', interval '3 days');
 -------------------------
  
 
-SELECT d.interval_length,
-       d.interval IS NULL AS interval_is_null
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval_length
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'non_calendar_ht';
- interval_length | interval_is_null 
------------------+------------------
-    259200000000 | t
+ has_integer_interval | has_time_interval | interval_length 
+----------------------+-------------------+-----------------
+ t                    | f                 |    259200000000
 
 -- GUC ON + integer input → stays non-calendar
 SET timescaledb.enable_calendar_chunking = true;
@@ -1101,14 +1106,15 @@ SELECT set_chunk_time_interval('non_calendar_ht', 345600000000::bigint);  -- 4 d
 -------------------------
  
 
-SELECT d.interval_length,
-       d.interval IS NULL AS interval_is_null
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval_length
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'non_calendar_ht';
- interval_length | interval_is_null 
------------------+------------------
-    345600000000 | t
+ has_integer_interval | has_time_interval | interval_length 
+----------------------+-------------------+-----------------
+ t                    | f                 |    345600000000
 
 -- GUC ON + INTERVAL input → stays non-calendar (converted to microseconds)
 SET timescaledb.enable_calendar_chunking = true;
@@ -1117,14 +1123,15 @@ SELECT set_chunk_time_interval('non_calendar_ht', interval '5 days');
 -------------------------
  
 
-SELECT d.interval_length,
-       d.interval IS NULL AS interval_is_null
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval_length
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'non_calendar_ht';
- interval_length | interval_is_null 
------------------+------------------
-    432000000000 | t
+ has_integer_interval | has_time_interval | interval_length 
+----------------------+-------------------+-----------------
+ t                    | f                 |    432000000000
 
 DROP TABLE non_calendar_ht;
 ---------------------------------------------------------------
@@ -1140,17 +1147,17 @@ SELECT create_hypertable('calendar_ht', 'time', chunk_time_interval => interval 
 ---------------------------
  (24,public,calendar_ht,t)
 
--- Verify initial state: calendar mode (interval_length = 0, interval IS NOT NULL)
+-- Verify initial state: calendar mode (interval_length IS NULL, interval IS NOT NULL)
 SELECT d.column_name,
-       d.interval_length = 0 AS interval_length_is_zero,
-       d.interval IS NOT NULL AS has_interval,
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
        d.interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'calendar_ht';
- column_name | interval_length_is_zero | has_interval | interval 
--------------+-------------------------+--------------+----------
- time        |                         | t            | @ 1 day
+ column_name | has_integer_interval | has_time_interval | interval 
+-------------+----------------------+-------------------+----------
+ time        | f                    | t                 | @ 1 day
 
 -- GUC ON + INTERVAL input → stays calendar
 SET timescaledb.enable_calendar_chunking = true;
@@ -1159,15 +1166,15 @@ SELECT set_chunk_time_interval('calendar_ht', interval '2 days');
 -------------------------
  
 
-SELECT d.interval_length = 0 AS interval_length_is_zero,
-       d.interval IS NOT NULL AS has_interval,
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
        d.interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'calendar_ht';
- interval_length_is_zero | has_interval | interval 
--------------------------+--------------+----------
-                         | t            | @ 2 days
+ has_integer_interval | has_time_interval | interval 
+----------------------+-------------------+----------
+ f                    | t                 | @ 2 days
 
 -- GUC OFF + INTERVAL input → stays calendar
 SET timescaledb.enable_calendar_chunking = false;
@@ -1176,15 +1183,15 @@ SELECT set_chunk_time_interval('calendar_ht', interval '3 days');
 -------------------------
  
 
-SELECT d.interval_length = 0 AS interval_length_is_zero,
-       d.interval IS NOT NULL AS has_interval,
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
        d.interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'calendar_ht';
- interval_length_is_zero | has_interval | interval 
--------------------------+--------------+----------
-                         | t            | @ 3 days
+ has_integer_interval | has_time_interval | interval 
+----------------------+-------------------+----------
+ f                    | t                 | @ 3 days
 
 -- GUC ON + integer input → ERROR (cannot use integer on calendar hypertable)
 SET timescaledb.enable_calendar_chunking = true;
@@ -1193,15 +1200,15 @@ SELECT set_chunk_time_interval('calendar_ht', 86400000000::bigint);
 ERROR:  cannot use integer interval on calendar-based hypertable
 \set ON_ERROR_STOP 1
 -- Verify unchanged after error
-SELECT d.interval_length = 0 AS interval_length_is_zero,
-       d.interval IS NOT NULL AS has_interval,
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
        d.interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'calendar_ht';
- interval_length_is_zero | has_interval | interval 
--------------------------+--------------+----------
-                         | t            | @ 3 days
+ has_integer_interval | has_time_interval | interval 
+----------------------+-------------------+----------
+ f                    | t                 | @ 3 days
 
 -- GUC OFF + integer input → ERROR (cannot use integer on calendar hypertable)
 SET timescaledb.enable_calendar_chunking = false;
@@ -1210,17 +1217,173 @@ SELECT set_chunk_time_interval('calendar_ht', 172800000000::bigint);
 ERROR:  cannot use integer interval on calendar-based hypertable
 \set ON_ERROR_STOP 1
 -- Verify unchanged after error
-SELECT d.interval_length = 0 AS interval_length_is_zero,
-       d.interval IS NOT NULL AS has_interval,
+SELECT d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
        d.interval
 FROM _timescaledb_catalog.dimension d
 JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
 WHERE h.table_name = 'calendar_ht';
- interval_length_is_zero | has_interval | interval 
--------------------------+--------------+----------
-                         | t            | @ 3 days
+ has_integer_interval | has_time_interval | interval 
+----------------------+-------------------+----------
+ f                    | t                 | @ 3 days
 
 DROP TABLE calendar_ht;
+---------------------------------------------------------------
+-- MODE SWITCHING TESTS
+-- Test switching between calendar and non-calendar modes
+-- using the calendar_chunking parameter
+---------------------------------------------------------------
+-- Use a non-UTC timezone to make calendar vs non-calendar differences visible
+-- In UTC, chunks would align nicely even without calendar chunking
+SET timezone = 'America/New_York';
+SET timescaledb.enable_calendar_chunking = false;
+CREATE TABLE mode_switch(time timestamptz NOT NULL, value int);
+SELECT create_hypertable('mode_switch', 'time', chunk_time_interval => interval '1 day');
+     create_hypertable     
+---------------------------
+ (25,public,mode_switch,t)
+
+-- 1. Initial state: non-calendar mode
+SELECT d.column_name,
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval
+FROM _timescaledb_catalog.dimension d
+JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
+WHERE h.table_name = 'mode_switch';
+ column_name | has_integer_interval | has_time_interval 
+-------------+----------------------+-------------------
+ time        | t                    | f
+
+INSERT INTO mode_switch VALUES
+    ('2025-01-01 12:00:00 UTC', 1),
+    ('2025-01-02 12:00:00 UTC', 2);
+-- Non-calendar: chunk boundaries at 19:00 EST (midnight UTC), not local midnight
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'mode_switch' ORDER BY range_start;
+     chunk_name     |         range_start          |          range_end           
+--------------------+------------------------------+------------------------------
+ _hyper_25_60_chunk | Tue Dec 31 19:00:00 2024 EST | Wed Jan 01 19:00:00 2025 EST
+ _hyper_25_61_chunk | Wed Jan 01 19:00:00 2025 EST | Thu Jan 02 19:00:00 2025 EST
+
+-- 2. Switch to calendar mode using set_chunk_time_interval
+SELECT set_chunk_time_interval('mode_switch', '1 week'::interval, calendar_chunking => true);
+ set_chunk_time_interval 
+-------------------------
+ 
+
+SELECT d.column_name,
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval
+FROM _timescaledb_catalog.dimension d
+JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
+WHERE h.table_name = 'mode_switch';
+ column_name | has_integer_interval | has_time_interval | interval 
+-------------+----------------------+-------------------+----------
+ time        | f                    | t                 | @ 7 days
+
+INSERT INTO mode_switch VALUES
+    ('2025-02-10 12:00:00 UTC', 3),
+    ('2025-02-17 12:00:00 UTC', 4);
+-- Calendar: new chunks aligned to local Monday midnight (00:00 EST)
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'mode_switch' ORDER BY range_start;
+     chunk_name     |         range_start          |          range_end           
+--------------------+------------------------------+------------------------------
+ _hyper_25_60_chunk | Tue Dec 31 19:00:00 2024 EST | Wed Jan 01 19:00:00 2025 EST
+ _hyper_25_61_chunk | Wed Jan 01 19:00:00 2025 EST | Thu Jan 02 19:00:00 2025 EST
+ _hyper_25_62_chunk | Mon Feb 10 00:00:00 2025 EST | Mon Feb 17 00:00:00 2025 EST
+ _hyper_25_63_chunk | Mon Feb 17 00:00:00 2025 EST | Mon Feb 24 00:00:00 2025 EST
+
+-- 3. Switch back to non-calendar using set_partitioning_interval
+SELECT set_partitioning_interval('mode_switch', '2 days'::interval, calendar_chunking => false);
+ set_partitioning_interval 
+---------------------------
+ 
+
+SELECT d.column_name,
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval_length
+FROM _timescaledb_catalog.dimension d
+JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
+WHERE h.table_name = 'mode_switch';
+ column_name | has_integer_interval | has_time_interval | interval_length 
+-------------+----------------------+-------------------+-----------------
+ time        | t                    | f                 |    172800000000
+
+INSERT INTO mode_switch VALUES
+    ('2025-06-15 12:00:00 UTC', 5),
+    ('2025-06-18 12:00:00 UTC', 6);
+-- Non-calendar: fixed 2-day intervals, boundaries at odd hours
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'mode_switch' ORDER BY range_start;
+     chunk_name     |         range_start          |          range_end           
+--------------------+------------------------------+------------------------------
+ _hyper_25_60_chunk | Tue Dec 31 19:00:00 2024 EST | Wed Jan 01 19:00:00 2025 EST
+ _hyper_25_61_chunk | Wed Jan 01 19:00:00 2025 EST | Thu Jan 02 19:00:00 2025 EST
+ _hyper_25_62_chunk | Mon Feb 10 00:00:00 2025 EST | Mon Feb 17 00:00:00 2025 EST
+ _hyper_25_63_chunk | Mon Feb 17 00:00:00 2025 EST | Mon Feb 24 00:00:00 2025 EST
+ _hyper_25_64_chunk | Sat Jun 14 01:00:00 2025 EDT | Mon Jun 16 01:00:00 2025 EDT
+ _hyper_25_65_chunk | Wed Jun 18 01:00:00 2025 EDT | Fri Jun 20 01:00:00 2025 EDT
+
+-- 4. Switch back to calendar using set_chunk_time_interval
+SELECT set_chunk_time_interval('mode_switch', '1 month'::interval, calendar_chunking => true);
+ set_chunk_time_interval 
+-------------------------
+ 
+
+SELECT d.column_name,
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval,
+       d.interval
+FROM _timescaledb_catalog.dimension d
+JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
+WHERE h.table_name = 'mode_switch';
+ column_name | has_integer_interval | has_time_interval | interval 
+-------------+----------------------+-------------------+----------
+ time        | f                    | t                 | @ 1 mon
+
+INSERT INTO mode_switch VALUES
+    ('2025-09-15 12:00:00 UTC', 7),
+    ('2025-10-15 12:00:00 UTC', 8);
+-- Calendar: new chunks aligned to local month start (00:00 EST on 1st)
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'mode_switch' ORDER BY range_start;
+     chunk_name     |         range_start          |          range_end           
+--------------------+------------------------------+------------------------------
+ _hyper_25_60_chunk | Tue Dec 31 19:00:00 2024 EST | Wed Jan 01 19:00:00 2025 EST
+ _hyper_25_61_chunk | Wed Jan 01 19:00:00 2025 EST | Thu Jan 02 19:00:00 2025 EST
+ _hyper_25_62_chunk | Mon Feb 10 00:00:00 2025 EST | Mon Feb 17 00:00:00 2025 EST
+ _hyper_25_63_chunk | Mon Feb 17 00:00:00 2025 EST | Mon Feb 24 00:00:00 2025 EST
+ _hyper_25_64_chunk | Sat Jun 14 01:00:00 2025 EDT | Mon Jun 16 01:00:00 2025 EDT
+ _hyper_25_65_chunk | Wed Jun 18 01:00:00 2025 EDT | Fri Jun 20 01:00:00 2025 EDT
+ _hyper_25_66_chunk | Mon Sep 01 00:00:00 2025 EDT | Wed Oct 01 00:00:00 2025 EDT
+ _hyper_25_67_chunk | Wed Oct 01 00:00:00 2025 EDT | Sat Nov 01 00:00:00 2025 EDT
+
+DROP TABLE mode_switch;
+-- Test error: calendar_chunking => true with integer interval
+CREATE TABLE calendar_switch_error(time timestamptz NOT NULL, value int);
+SELECT create_hypertable('calendar_switch_error', 'time', chunk_time_interval => interval '1 day');
+          create_hypertable          
+-------------------------------------
+ (26,public,calendar_switch_error,t)
+
+\set ON_ERROR_STOP 0
+SELECT set_chunk_time_interval('calendar_switch_error', 86400000000::bigint, calendar_chunking => true);
+ERROR:  cannot enable calendar chunking with an integer interval
+\set ON_ERROR_STOP 1
+SELECT d.column_name,
+       d.interval_length IS NOT NULL AS has_integer_interval,
+       d.interval IS NOT NULL AS has_time_interval
+FROM _timescaledb_catalog.dimension d
+JOIN _timescaledb_catalog.hypertable h ON d.hypertable_id = h.id
+WHERE h.table_name = 'calendar_switch_error';
+ column_name | has_integer_interval | has_time_interval 
+-------------+----------------------+-------------------
+ time        | t                    | f
+
+DROP TABLE calendar_switch_error;
 RESET timescaledb.enable_calendar_chunking;
 ---------------------------------------------------------------
 -- CHUNK POSITION RELATIVE TO ORIGIN
@@ -1235,7 +1398,7 @@ SELECT create_hypertable('origin_position',
     by_range('time', interval '1 month', partition_origin => '2020-01-15 00:00:00 UTC'::timestamptz));
  create_hypertable 
 -------------------
- (25,t)
+ (27,t)
 
 -- Insert data: before origin, enclosing origin, after origin
 INSERT INTO origin_position VALUES
@@ -1254,23 +1417,23 @@ WHERE hypertable_name = 'origin_position'
 ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_25_60_chunk | Fri Nov 15 00:00:00 2019 UTC | Sun Dec 15 00:00:00 2019 UTC
- _hyper_25_61_chunk | Sun Dec 15 00:00:00 2019 UTC | Wed Jan 15 00:00:00 2020 UTC
- _hyper_25_62_chunk | Wed Jan 15 00:00:00 2020 UTC | Sat Feb 15 00:00:00 2020 UTC
- _hyper_25_63_chunk | Sat Feb 15 00:00:00 2020 UTC | Sun Mar 15 00:00:00 2020 UTC
- _hyper_25_64_chunk | Sun Mar 15 00:00:00 2020 UTC | Wed Apr 15 00:00:00 2020 UTC
+ _hyper_27_68_chunk | Fri Nov 15 00:00:00 2019 UTC | Sun Dec 15 00:00:00 2019 UTC
+ _hyper_27_69_chunk | Sun Dec 15 00:00:00 2019 UTC | Wed Jan 15 00:00:00 2020 UTC
+ _hyper_27_70_chunk | Wed Jan 15 00:00:00 2020 UTC | Sat Feb 15 00:00:00 2020 UTC
+ _hyper_27_71_chunk | Sat Feb 15 00:00:00 2020 UTC | Sun Mar 15 00:00:00 2020 UTC
+ _hyper_27_72_chunk | Sun Mar 15 00:00:00 2020 UTC | Wed Apr 15 00:00:00 2020 UTC
 
 -- Verify data is in correct chunks
 SELECT tableoid::regclass as chunk, time, value
 FROM origin_position ORDER BY time;
                   chunk                   |             time             | value 
 ------------------------------------------+------------------------------+-------
- _timescaledb_internal._hyper_25_60_chunk | Wed Nov 20 12:00:00 2019 UTC |     1
- _timescaledb_internal._hyper_25_61_chunk | Fri Dec 20 12:00:00 2019 UTC |     2
- _timescaledb_internal._hyper_25_62_chunk | Wed Jan 15 00:00:00 2020 UTC |     3
- _timescaledb_internal._hyper_25_62_chunk | Mon Jan 20 12:00:00 2020 UTC |     4
- _timescaledb_internal._hyper_25_63_chunk | Thu Feb 20 12:00:00 2020 UTC |     5
- _timescaledb_internal._hyper_25_64_chunk | Fri Mar 20 12:00:00 2020 UTC |     6
+ _timescaledb_internal._hyper_27_68_chunk | Wed Nov 20 12:00:00 2019 UTC |     1
+ _timescaledb_internal._hyper_27_69_chunk | Fri Dec 20 12:00:00 2019 UTC |     2
+ _timescaledb_internal._hyper_27_70_chunk | Wed Jan 15 00:00:00 2020 UTC |     3
+ _timescaledb_internal._hyper_27_70_chunk | Mon Jan 20 12:00:00 2020 UTC |     4
+ _timescaledb_internal._hyper_27_71_chunk | Thu Feb 20 12:00:00 2020 UTC |     5
+ _timescaledb_internal._hyper_27_72_chunk | Fri Mar 20 12:00:00 2020 UTC |     6
 
 DROP TABLE origin_position;
 -- Test with daily chunks and origin at noon
@@ -1280,7 +1443,7 @@ SELECT create_hypertable('origin_daily',
     by_range('time', interval '1 day', partition_origin => '2020-06-15 12:00:00 UTC'::timestamptz));
  create_hypertable 
 -------------------
- (26,t)
+ (28,t)
 
 INSERT INTO origin_daily VALUES
     -- Before origin date (chunks before origin)
@@ -1297,10 +1460,10 @@ WHERE hypertable_name = 'origin_daily'
 ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_26_65_chunk | Sat Jun 13 12:00:00 2020 UTC | Sun Jun 14 12:00:00 2020 UTC
- _hyper_26_66_chunk | Sun Jun 14 12:00:00 2020 UTC | Mon Jun 15 12:00:00 2020 UTC
- _hyper_26_67_chunk | Mon Jun 15 12:00:00 2020 UTC | Tue Jun 16 12:00:00 2020 UTC
- _hyper_26_68_chunk | Tue Jun 16 12:00:00 2020 UTC | Wed Jun 17 12:00:00 2020 UTC
+ _hyper_28_73_chunk | Sat Jun 13 12:00:00 2020 UTC | Sun Jun 14 12:00:00 2020 UTC
+ _hyper_28_74_chunk | Sun Jun 14 12:00:00 2020 UTC | Mon Jun 15 12:00:00 2020 UTC
+ _hyper_28_75_chunk | Mon Jun 15 12:00:00 2020 UTC | Tue Jun 16 12:00:00 2020 UTC
+ _hyper_28_76_chunk | Tue Jun 16 12:00:00 2020 UTC | Wed Jun 17 12:00:00 2020 UTC
 
 DROP TABLE origin_daily;
 ---------------------------------------------------------------
@@ -1346,7 +1509,7 @@ CREATE TABLE extreme_ancient(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('extreme_ancient', 'time', chunk_time_interval => interval '100 years');
        create_hypertable       
 -------------------------------
- (27,public,extreme_ancient,t)
+ (29,public,extreme_ancient,t)
 
 INSERT INTO extreme_ancient VALUES
     ('4700-06-15 00:00:00 BC', 1),
@@ -1358,16 +1521,16 @@ WHERE hypertable_name = 'extreme_ancient'
 ORDER BY range_start;
      chunk_name     |           range_start           |            range_end            
 --------------------+---------------------------------+---------------------------------
- _hyper_27_69_chunk | Sat Jan 01 00:00:00 4700 UTC BC | Thu Jan 01 00:00:00 4600 UTC BC
- _hyper_27_70_chunk | Thu Jan 01 00:00:00 4600 UTC BC | Tue Jan 01 00:00:00 4500 UTC BC
+ _hyper_29_77_chunk | Sat Jan 01 00:00:00 4700 UTC BC | Thu Jan 01 00:00:00 4600 UTC BC
+ _hyper_29_78_chunk | Thu Jan 01 00:00:00 4600 UTC BC | Tue Jan 01 00:00:00 4500 UTC BC
 
 -- Show CHECK constraints on chunks with chunk size
 -- Chunk size should be close to 100 years when not clamped
 SELECT * FROM show_chunk_constraints('extreme_ancient');
        chunk        |                                                                        constraint_def                                                                        |  chunk_size  
 --------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------
- _hyper_27_69_chunk | CHECK ((("time" >= 'Sat Jan 01 00:00:00 4700 UTC BC'::timestamp with time zone) AND ("time" < 'Thu Jan 01 00:00:00 4600 UTC BC'::timestamp with time zone))) | @ 36524 days
- _hyper_27_70_chunk | CHECK ((("time" >= 'Thu Jan 01 00:00:00 4600 UTC BC'::timestamp with time zone) AND ("time" < 'Tue Jan 01 00:00:00 4500 UTC BC'::timestamp with time zone))) | @ 36524 days
+ _hyper_29_77_chunk | CHECK ((("time" >= 'Sat Jan 01 00:00:00 4700 UTC BC'::timestamp with time zone) AND ("time" < 'Thu Jan 01 00:00:00 4600 UTC BC'::timestamp with time zone))) | @ 36524 days
+ _hyper_29_78_chunk | CHECK ((("time" >= 'Thu Jan 01 00:00:00 4600 UTC BC'::timestamp with time zone) AND ("time" < 'Tue Jan 01 00:00:00 4500 UTC BC'::timestamp with time zone))) | @ 36524 days
 
 DROP TABLE extreme_ancient;
 -- Test hypertable with data in far future
@@ -1375,7 +1538,7 @@ CREATE TABLE extreme_future(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('extreme_future', 'time', chunk_time_interval => interval '100 years');
       create_hypertable       
 ------------------------------
- (28,public,extreme_future,t)
+ (30,public,extreme_future,t)
 
 INSERT INTO extreme_future VALUES
     ('100000-06-15 00:00:00', 1),
@@ -1387,16 +1550,16 @@ WHERE hypertable_name = 'extreme_future'
 ORDER BY range_start;
      chunk_name     |          range_start           |           range_end            
 --------------------+--------------------------------+--------------------------------
- _hyper_28_71_chunk | Tue Jan 01 00:00:00 99901 UTC  | Mon Jan 01 00:00:00 100001 UTC
- _hyper_28_72_chunk | Mon Jan 01 00:00:00 100001 UTC | Sat Jan 01 00:00:00 100101 UTC
+ _hyper_30_79_chunk | Tue Jan 01 00:00:00 99901 UTC  | Mon Jan 01 00:00:00 100001 UTC
+ _hyper_30_80_chunk | Mon Jan 01 00:00:00 100001 UTC | Sat Jan 01 00:00:00 100101 UTC
 
 -- Show CHECK constraints on chunks with chunk size
 -- Chunk size should be close to 100 years when not clamped
 SELECT * FROM show_chunk_constraints('extreme_future');
        chunk        |                                                                       constraint_def                                                                       |  chunk_size  
 --------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------
- _hyper_28_71_chunk | CHECK ((("time" >= 'Tue Jan 01 00:00:00 99901 UTC'::timestamp with time zone) AND ("time" < 'Mon Jan 01 00:00:00 100001 UTC'::timestamp with time zone)))  | @ 36525 days
- _hyper_28_72_chunk | CHECK ((("time" >= 'Mon Jan 01 00:00:00 100001 UTC'::timestamp with time zone) AND ("time" < 'Sat Jan 01 00:00:00 100101 UTC'::timestamp with time zone))) | @ 36524 days
+ _hyper_30_79_chunk | CHECK ((("time" >= 'Tue Jan 01 00:00:00 99901 UTC'::timestamp with time zone) AND ("time" < 'Mon Jan 01 00:00:00 100001 UTC'::timestamp with time zone)))  | @ 36525 days
+ _hyper_30_80_chunk | CHECK ((("time" >= 'Mon Jan 01 00:00:00 100001 UTC'::timestamp with time zone) AND ("time" < 'Sat Jan 01 00:00:00 100101 UTC'::timestamp with time zone))) | @ 36524 days
 
 DROP TABLE extreme_future;
 -- Test chunks with open-ended constraints (clamped to MIN/MAX)
@@ -1405,7 +1568,7 @@ CREATE TABLE open_ended_chunks(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('open_ended_chunks', 'time', chunk_time_interval => interval '10000 years');
         create_hypertable        
 ---------------------------------
- (29,public,open_ended_chunks,t)
+ (31,public,open_ended_chunks,t)
 
 -- Insert at boundaries - should create open-ended constraints
 INSERT INTO open_ended_chunks VALUES
@@ -1416,8 +1579,8 @@ INSERT INTO open_ended_chunks VALUES
 SELECT * FROM show_chunk_constraints('open_ended_chunks');
        chunk        |                                 constraint_def                                 | chunk_size 
 --------------------+--------------------------------------------------------------------------------+------------
- _hyper_29_73_chunk | CHECK (("time" < 'Mon Jan 01 00:00:00 2001 UTC'::timestamp with time zone))    | 
- _hyper_29_74_chunk | CHECK (("time" >= 'Mon Jan 01 00:00:00 292001 UTC'::timestamp with time zone)) | 
+ _hyper_31_81_chunk | CHECK (("time" < 'Mon Jan 01 00:00:00 2001 UTC'::timestamp with time zone))    | 
+ _hyper_31_82_chunk | CHECK (("time" >= 'Mon Jan 01 00:00:00 292001 UTC'::timestamp with time zone)) | 
 
 DROP TABLE open_ended_chunks;
 -- Test with origin far in the past - chunks before and after
@@ -1426,7 +1589,7 @@ SELECT create_hypertable('origin_ancient',
     by_range('time', interval '1000 years', partition_origin => '2000-01-01 00:00:00 BC'::timestamptz));
  create_hypertable 
 -------------------
- (30,t)
+ (32,t)
 
 INSERT INTO origin_ancient VALUES
     ('4000-06-15 00:00:00 BC', 1),  -- Before origin
@@ -1439,10 +1602,10 @@ WHERE hypertable_name = 'origin_ancient'
 ORDER BY range_start;
      chunk_name     |           range_start           |            range_end            
 --------------------+---------------------------------+---------------------------------
- _hyper_30_75_chunk | Mon Jan 01 00:00:00 4000 UTC BC | Thu Jan 01 00:00:00 3000 UTC BC
- _hyper_30_76_chunk | Mon Jan 01 00:00:00 2000 UTC BC | Thu Jan 01 00:00:00 1000 UTC BC
- _hyper_30_77_chunk | Mon Jan 01 00:00:00 0001 UTC    | Thu Jan 01 00:00:00 1001 UTC
- _hyper_30_78_chunk | Mon Jan 01 00:00:00 2001 UTC    | Thu Jan 01 00:00:00 3001 UTC
+ _hyper_32_83_chunk | Mon Jan 01 00:00:00 4000 UTC BC | Thu Jan 01 00:00:00 3000 UTC BC
+ _hyper_32_84_chunk | Mon Jan 01 00:00:00 2000 UTC BC | Thu Jan 01 00:00:00 1000 UTC BC
+ _hyper_32_85_chunk | Mon Jan 01 00:00:00 0001 UTC    | Thu Jan 01 00:00:00 1001 UTC
+ _hyper_32_86_chunk | Mon Jan 01 00:00:00 2001 UTC    | Thu Jan 01 00:00:00 3001 UTC
 
 DROP TABLE origin_ancient;
 -- Test with origin far in the future - all data before origin
@@ -1451,7 +1614,7 @@ SELECT create_hypertable('origin_future',
     by_range('time', interval '100 years', partition_origin => '50000-01-01 00:00:00'::timestamptz));
  create_hypertable 
 -------------------
- (31,t)
+ (33,t)
 
 INSERT INTO origin_future VALUES
     ('2020-06-15 00:00:00', 1),
@@ -1463,9 +1626,9 @@ WHERE hypertable_name = 'origin_future'
 ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_31_79_chunk | Sat Jan 01 00:00:00 2000 UTC | Fri Jan 01 00:00:00 2100 UTC
- _hyper_31_80_chunk | Fri Jan 01 00:00:00 2100 UTC | Wed Jan 01 00:00:00 2200 UTC
- _hyper_31_81_chunk | Wed Jan 01 00:00:00 2200 UTC | Mon Jan 01 00:00:00 2300 UTC
+ _hyper_33_87_chunk | Sat Jan 01 00:00:00 2000 UTC | Fri Jan 01 00:00:00 2100 UTC
+ _hyper_33_88_chunk | Fri Jan 01 00:00:00 2100 UTC | Wed Jan 01 00:00:00 2200 UTC
+ _hyper_33_89_chunk | Wed Jan 01 00:00:00 2200 UTC | Mon Jan 01 00:00:00 2300 UTC
 
 DROP TABLE origin_future;
 ---------------------------------------------------------------
@@ -1508,7 +1671,7 @@ SELECT create_hypertable('mixed_interval',
     by_range('time', interval '1 month 15 days', partition_origin => '2020-01-01 00:00:00 UTC'::timestamptz));
  create_hypertable 
 -------------------
- (32,t)
+ (34,t)
 
 INSERT INTO mixed_interval VALUES
     ('2019-12-01 00:00:00 UTC', 1),  -- Before origin
@@ -1522,10 +1685,10 @@ WHERE hypertable_name = 'mixed_interval'
 ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_32_82_chunk | Sat Nov 16 00:00:00 2019 UTC | Wed Jan 01 00:00:00 2020 UTC
- _hyper_32_83_chunk | Wed Jan 01 00:00:00 2020 UTC | Sun Feb 16 00:00:00 2020 UTC
- _hyper_32_84_chunk | Sun Feb 16 00:00:00 2020 UTC | Tue Mar 31 00:00:00 2020 UTC
- _hyper_32_85_chunk | Tue Mar 31 00:00:00 2020 UTC | Fri May 15 00:00:00 2020 UTC
+ _hyper_34_90_chunk | Sat Nov 16 00:00:00 2019 UTC | Wed Jan 01 00:00:00 2020 UTC
+ _hyper_34_91_chunk | Wed Jan 01 00:00:00 2020 UTC | Sun Feb 16 00:00:00 2020 UTC
+ _hyper_34_92_chunk | Sun Feb 16 00:00:00 2020 UTC | Tue Mar 31 00:00:00 2020 UTC
+ _hyper_34_93_chunk | Tue Mar 31 00:00:00 2020 UTC | Fri May 15 00:00:00 2020 UTC
 
 DROP TABLE mixed_interval;
 ---------------------------------------------------------------
@@ -1537,7 +1700,7 @@ CREATE TABLE int_extreme_max(time bigint NOT NULL, value int);
 SELECT create_hypertable('int_extreme_max', by_range('time', 1000000000000, partition_origin => 0));
  create_hypertable 
 -------------------
- (33,t)
+ (35,t)
 
 INSERT INTO int_extreme_max VALUES
     (9223372036854775000, 1),  -- Near INT64_MAX
@@ -1545,13 +1708,13 @@ INSERT INTO int_extreme_max VALUES
 SELECT * FROM show_int_chunk_slices('int_extreme_max');
      chunk_name     |     range_start     |      range_end      | chunk_size  
 --------------------+---------------------+---------------------+-------------
- _hyper_33_86_chunk | 9223372000000000000 | 9223372036854775807 | 36854775807
+ _hyper_35_94_chunk | 9223372000000000000 | 9223372036854775807 | 36854775807
 
 -- Show CHECK constraints - should see open-ended constraint (no upper bound)
 SELECT * FROM show_check_constraints('int_extreme_max');
        chunk        |                  constraint_def                   
 --------------------+---------------------------------------------------
- _hyper_33_86_chunk | CHECK (("time" >= '9223372000000000000'::bigint))
+ _hyper_35_94_chunk | CHECK (("time" >= '9223372000000000000'::bigint))
 
 DROP TABLE int_extreme_max;
 -- Test bigint with large negative values
@@ -1559,7 +1722,7 @@ CREATE TABLE int_extreme_min(time bigint NOT NULL, value int);
 SELECT create_hypertable('int_extreme_min', by_range('time', 1000000000000, partition_origin => 0));
  create_hypertable 
 -------------------
- (34,t)
+ (36,t)
 
 INSERT INTO int_extreme_min VALUES
     (-9223372036854775000, 1),  -- Near INT64_MIN
@@ -1567,13 +1730,13 @@ INSERT INTO int_extreme_min VALUES
 SELECT * FROM show_int_chunk_slices('int_extreme_min');
      chunk_name     |     range_start      |      range_end       | chunk_size  
 --------------------+----------------------+----------------------+-------------
- _hyper_34_87_chunk | -9223372036854775808 | -9223372000000000000 | 36854775808
+ _hyper_36_95_chunk | -9223372036854775808 | -9223372000000000000 | 36854775808
 
 -- Show CHECK constraints - should see open-ended constraint (no lower bound)
 SELECT * FROM show_check_constraints('int_extreme_min');
        chunk        |                  constraint_def                   
 --------------------+---------------------------------------------------
- _hyper_34_87_chunk | CHECK (("time" < '-9223372000000000000'::bigint))
+ _hyper_36_95_chunk | CHECK (("time" < '-9223372000000000000'::bigint))
 
 DROP TABLE int_extreme_min;
 -- Test integer origin with values on both sides
@@ -1581,7 +1744,7 @@ CREATE TABLE int_origin_sides(time bigint NOT NULL, value int);
 SELECT create_hypertable('int_origin_sides', by_range('time', 100, partition_origin => 1000));
  create_hypertable 
 -------------------
- (35,t)
+ (37,t)
 
 INSERT INTO int_origin_sides VALUES
     (850, 1),   -- Chunk [800, 900)
@@ -1593,22 +1756,22 @@ INSERT INTO int_origin_sides VALUES
 SELECT * FROM show_int_chunk_slices('int_origin_sides');
      chunk_name     | range_start | range_end | chunk_size 
 --------------------+-------------+-----------+------------
- _hyper_35_88_chunk |         800 |       900 |        100
- _hyper_35_89_chunk |         900 |      1000 |        100
- _hyper_35_90_chunk |        1000 |      1100 |        100
- _hyper_35_91_chunk |        1100 |      1200 |        100
+ _hyper_37_96_chunk |         800 |       900 |        100
+ _hyper_37_97_chunk |         900 |      1000 |        100
+ _hyper_37_98_chunk |        1000 |      1100 |        100
+ _hyper_37_99_chunk |        1100 |      1200 |        100
 
 -- Verify data placement
 SELECT tableoid::regclass as chunk, time, value
 FROM int_origin_sides ORDER BY time;
                   chunk                   | time | value 
 ------------------------------------------+------+-------
- _timescaledb_internal._hyper_35_88_chunk |  850 |     1
- _timescaledb_internal._hyper_35_89_chunk |  950 |     2
- _timescaledb_internal._hyper_35_90_chunk | 1000 |     3
- _timescaledb_internal._hyper_35_90_chunk | 1050 |     4
- _timescaledb_internal._hyper_35_91_chunk | 1100 |     5
- _timescaledb_internal._hyper_35_91_chunk | 1150 |     6
+ _timescaledb_internal._hyper_37_96_chunk |  850 |     1
+ _timescaledb_internal._hyper_37_97_chunk |  950 |     2
+ _timescaledb_internal._hyper_37_98_chunk | 1000 |     3
+ _timescaledb_internal._hyper_37_98_chunk | 1050 |     4
+ _timescaledb_internal._hyper_37_99_chunk | 1100 |     5
+ _timescaledb_internal._hyper_37_99_chunk | 1150 |     6
 
 DROP TABLE int_origin_sides;
 RESET timezone;

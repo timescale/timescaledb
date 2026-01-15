@@ -353,7 +353,7 @@ extern void ts_dimensions_rename_schema_name(const char *old_name, const char *n
 extern TSDLLEXPORT void ts_dimension_update(const Hypertable *ht, const NameData *dimname,
 											DimensionType dimtype,
 											const ChunkInterval *chunk_interval, int16 *num_slices,
-											Oid *integer_now_func);
+											Oid *integer_now_func, bool *use_calendar_chunking);
 extern TSDLLEXPORT Point *ts_point_create(int16 num_dimensions);
 extern TSDLLEXPORT bool ts_is_equality_operator(Oid opno, Oid left, Oid right);
 extern TSDLLEXPORT Datum ts_dimension_info_in(PG_FUNCTION_ARGS);
