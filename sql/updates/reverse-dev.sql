@@ -112,3 +112,5 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.cagg_get_grouping_columns;
 DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_to_array(_timescaledb_internal.compressed_data, ANYELEMENT);
 DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_column_size(_timescaledb_internal.compressed_data, ANYELEMENT);
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_uncompressed_size;
+
