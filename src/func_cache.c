@@ -85,11 +85,16 @@ time_bucket_gapfill_sort_transform(FuncExpr *func)
 	 *
 	 * proof: time_bucket(const1, time1) >= time_bucket(const1,time2) iff time1
 	 * > time2
+	 *
+	 * Arg counts:
+	 *   5 args: integer variants (bucket_width, ts, start, finish, offset)
+	 *   6 args: timestamp variants (bucket_width, ts, start, finish, origin, offset)
+	 *   7 args: timezone variant (bucket_width, ts, timezone, start, finish, origin, offset)
 	 */
-	Assert(list_length(func->args) == 4 || list_length(func->args) == 5);
+	Assert(list_length(func->args) >= 5 && list_length(func->args) <= 7);
 
 	if (!time_bucket_has_const_period(func) ||
-		(list_length(func->args) == 5 && !time_bucket_has_const_timezone(func)))
+		(list_length(func->args) == 7 && !time_bucket_has_const_timezone(func)))
 		return (Expr *) func;
 
 	return do_sort_transform(func);
