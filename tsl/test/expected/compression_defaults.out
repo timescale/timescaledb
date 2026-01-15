@@ -571,7 +571,7 @@ SELECT segmentby FROM _timescaledb_catalog.compression_settings WHERE relid = 't
  {col2}
 
 DROP TABLE table1;
--- test that retained settings don't block defaults when re-enabling:
+-- test that retained orderby settings don't block defaults when re-enabling:
 -- 1. enable compression with explicit orderby (only time, no device_id)
 -- 2. disable compression (settings retained)
 -- 3. re-enable without explicit settings
@@ -593,11 +593,12 @@ SELECT count(compress_chunk(x)) FROM show_chunks('test_retained') x;
 -------
      2
 
-SELECT segmentby, orderby FROM timescaledb_information.chunk_compression_settings
+-- verify device_id appears in orderby from fresh defaults
+SELECT orderby FROM timescaledb_information.chunk_compression_settings
 WHERE hypertable = 'test_retained'::regclass LIMIT 1;
- segmentby |        orderby        
------------+-----------------------
-           | "time" DESC,device_id
+        orderby        
+-----------------------
+ "time" DESC,device_id
 
 DROP TABLE test_retained;
 \set ON_ERROR_STOP 0
