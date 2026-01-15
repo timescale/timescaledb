@@ -486,6 +486,7 @@ static FuncInfo funcinfo[] = {
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
 	},
+	/* Gapfill variants - PostgreSQL fills in defaults so we always see max args */
 	{
 		/* time_bucket_gapfill(INTERVAL, TIMESTAMP, TIMESTAMP, TIMESTAMP, TIMESTAMP, INTERVAL) */
 		.origin = ORIGIN_TIMESCALE,
