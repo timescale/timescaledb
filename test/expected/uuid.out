@@ -207,7 +207,7 @@ FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start');
          Index Cond: (_hyper_1_6_chunk.id < '0194244f-d800-7000-8000-000000000000'::uuid)
 
 SELECT uuid_timestamp(id), device, temp
-FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start');
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start') ORDER BY id;
         uuid_timestamp        | device | temp 
 ------------------------------+--------+------
  Wed Jan 01 01:00:00 2025 PST |      1 |    1

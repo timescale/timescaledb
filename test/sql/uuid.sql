@@ -129,7 +129,7 @@ SELECT uuid_timestamp(id), device, temp
 FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start');
 
 SELECT uuid_timestamp(id), device, temp
-FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start');
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start') ORDER BY id;
 
 -- Exclude only one chunk. Add ordering (DESC)
 EXPLAIN (verbose, buffers off, costs off, timing off)
