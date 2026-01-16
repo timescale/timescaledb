@@ -159,7 +159,7 @@ SELECT COUNT(*) FROM app_events;
 
 #### Option B: Standard COPY (Fallback)
 
-This approach loads data into the rowstore first. Data will be compressed by a background policy (takes longer).
+This approach loads data into the rowstore first. Data will be converted to the columnstore by a background policy (12-24 hours) for faster querying.
 
 **From command line:**
 
@@ -174,6 +174,20 @@ psql -h localhost -p 6543 -U postgres \
 
 ```sql
 SELECT COUNT(*) FROM app_events;
+```
+
+**Manually convert to columnstore (Optional):**
+
+While a background process will convert your rowstore data to the columnstore in 12-24 hours, you can manually convert it immediately to get the best query performance:
+
+```sql
+DO $$
+DECLARE ch TEXT;
+BEGIN
+    FOR ch IN SELECT show_chunks('app_events') LOOP
+        CALL convert_to_columnstore(ch);
+    END LOOP;
+END $$;
 ```
 
 ### Step 5: Run Sample Queries

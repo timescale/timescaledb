@@ -127,24 +127,23 @@ This creates a `trips` table with:
 
 ### Step 4: Load Sample Data
 
+First, download and decompress the sample data:
+
+```bash
+# Download the sample data
+wget https://assets.timescale.com/timescaledb-datasets/nyc_taxi_sample_nov_dec_2015.csv.gz
+
+# Decompress the CSV file
+gunzip nyc_taxi_sample_nov_dec_2015.csv.gz
+
+# This will create nyc_taxi_sample_nov_dec_2015.csv ready for loading
+```
+
 We provide two approaches for loading data. Choose based on your needs:
 
 #### Option A: Direct to Columnstore (Recommended - Instant Performance)
 
 This approach writes data directly to the columnstore, bypassing the rowstore entirely. You get instant analytical performance.
-
-**From psql:**
-
-```sql
--- Enable direct to columnstore for this session
-SET timescaledb.enable_direct_compress_copy = on;
-
--- Load data directly into columnstore
-\COPY trips FROM 'nyc-taxi-sample.csv' WITH (FORMAT csv, HEADER true);
-
--- Verify data loaded
-SELECT COUNT(*) FROM trips;
-```
 
 **From command line:**
 
@@ -153,22 +152,48 @@ psql -h localhost -p 6543 -U postgres \
   -v ON_ERROR_STOP=1 \
   -c "SET timescaledb.enable_direct_compress_copy = on;
       COPY trips FROM STDIN WITH (FORMAT csv, HEADER true);" \
-  < nyc-taxi-sample.csv
+  < nyc_taxi_sample_nov_dec_2015.csv
+```
+
+This command reads the CSV file from your local filesystem and pipes it to PostgreSQL, which loads it directly into the columnstore.
+
+**Verify data loaded:**
+
+```sql
+SELECT COUNT(*) FROM trips;
 ```
 
 #### Option B: Standard COPY (Fallback)
 
-This approach loads data into the rowstore first. Data will be compressed by a background policy (takes longer).
+This approach loads data into the rowstore first. Data will be converted to the columnstore by a background policy (12-24 hours) for faster querying.
+
+**From command line:**
+
+```bash
+psql -h localhost -p 6543 -U postgres \
+  -v ON_ERROR_STOP=1 \
+  -c "COPY trips FROM STDIN WITH (FORMAT csv, HEADER true);" \
+  < nyc_taxi_sample_nov_dec_2015.csv
+```
+
+**Verify data loaded:**
 
 ```sql
--- Standard COPY without direct to columnstore
-\COPY trips FROM 'nyc-taxi-sample.csv' WITH (FORMAT csv, HEADER true);
-
--- Verify data loaded
 SELECT COUNT(*) FROM trips;
+```
 
--- Optional: Manually compress data to columnstore instead of waiting for policy
-SELECT compress_chunk(chunk) FROM show_chunks('trips');
+**Manually convert to columnstore (Optional):**
+
+While a background process will convert your rowstore data to the columnstore in 12-24 hours, you can manually convert it immediately to get the best query performance:
+
+```sql
+DO $$
+DECLARE ch TEXT;
+BEGIN
+    FOR ch IN SELECT show_chunks('trips') LOOP
+        CALL convert_to_columnstore(ch);
+    END LOOP;
+END $$;
 ```
 
 ### Step 5: Run Sample Queries
@@ -386,12 +411,40 @@ This NYC Taxi example demonstrates patterns applicable to:
 - **Urban planning** - Traffic patterns, popular routes, demand forecasting
 - **Logistics** - Shipment tracking, route efficiency, cost analysis
 
-## Files in This Example
+## Clean Up
 
-- [`README.md`](README.md) - This file
-- [`nyc-taxi-schema.sql`](nyc-taxi-schema.sql) - Table schema and indexes
-- [`nyc-taxi-sample.csv`](nyc-taxi-sample.csv) - Sample taxi trip data (~1000 rows)
-- [`nyc-taxi-queries.sql`](nyc-taxi-queries.sql) - Sample analytical queries
+When you're done experimenting:
+
+#### If you used the one-line install:
+
+```bash
+# Stop the container
+docker stop timescaledb-ha-pg18-quickstart
+
+# Remove the container
+docker rm timescaledb-ha-pg18-quickstart
+
+# Remove the persistent data volume
+docker volume rm timescaledb_data
+
+# (Optional) Remove the Docker image
+docker rmi timescale/timescaledb-ha:pg18
+```
+
+#### If you used the manual Docker command:
+
+```bash
+# Stop the container
+docker stop timescaledb
+
+# Remove the container
+docker rm timescaledb
+
+# (Optional) Remove the Docker image
+docker rmi timescale/timescaledb-ha:pg18
+```
+
+**Note:** If you created a named volume with the manual Docker command, you can remove it with `docker volume rm <volume_name>`.
 
 ## Contributing
 
