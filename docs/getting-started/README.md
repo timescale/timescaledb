@@ -48,7 +48,7 @@ Track and analyze application events using modern UUIDv7 identifiers. Perfect fo
 
 **What you'll learn:**
 - Using UUIDv7 for time-ordered unique identifiers
-- Flexible event schema with JSONB metadata
+- Efficient time-range queries with `to_uuidv7_boundary()`
 - Session tracking and user analytics
 - Event funnel and conversion analysis
 
@@ -56,16 +56,31 @@ Track and analyze application events using modern UUIDv7 identifiers. Perfect fo
 
 ---
 
-### [Cryptocurrency Market Data](crypto/)
-Analyze cryptocurrency market data including prices, volumes, and trading patterns. Great for exploring volatile time-series data and market analytics.
+## Workshops
+
+### [AI Workshop: EV Charging Station Analysis](https://github.com/timescale/TigerData-Workshops/tree/main/AI-Workshop)
+Integrate PostgreSQL with AI capabilities for managing and analyzing EV charging station data. This workshop demonstrates how to combine time-series data with vector search and AI features.
 
 **What you'll learn:**
-- Multi-asset market data modeling
-- Price volatility and trend analysis
-- Exchange comparison and arbitrage detection
-- Time-weighted aggregations
+- Integrating TimescaleDB with AI and vector extensions
+- Managing EV charging station time-series data
+- Vector search and similarity queries
+- AI-powered analytics on time-series data
 
-**Use cases:** Crypto trading platforms, market analysis tools, portfolio tracking, arbitrage detection
+**Use cases:** EV infrastructure management, smart grid analytics, energy optimization, predictive maintenance
+
+---
+
+### [Time-Series Workshop: Financial Data Analysis](https://github.com/timescale/TigerData-Workshops/tree/main/TimeSeries-Workshop-Finance/)
+Work with cryptocurrency tick data and create candlestick charts. Learn advanced time-series analysis techniques for financial markets.
+
+**What you'll learn:**
+- Working with high-frequency cryptocurrency tick data
+- Creating candlestick aggregations and visualizations
+- Advanced time-series analysis patterns
+- Multi-timeframe financial analytics
+
+**Use cases:** Cryptocurrency trading, market analysis, financial data visualization, algorithmic trading
 
 ---
 
@@ -89,7 +104,7 @@ Each example is completely standalone and self-contained. You can use any exampl
 
 **New to TimescaleDB?** We recommend this path:
 
-1. Start with the [Quick Start Guide](../quickstart.md) (10 minutes)
+1. Start with the [Quick Start Guide](../../README.md#quick-start-with-timescaledb) (10 minutes)
 2. Try the [IoT Sensors](iot-sensors/) example (20 minutes)
 3. Explore other examples based on your use case
 4. Ready for your data? See [Your Own Data Guide](../your-own-data/)
@@ -131,7 +146,8 @@ docker run -d --name timescaledb \
 | Location-based services, GPS tracking | [NYC Taxi](nyc-taxi/) |
 | Financial trading, market data | [Financial Ticks](financial-ticks/) |
 | Application logs, user events | [Events with UUIDv7](events-uuidv7/) |
-| Cryptocurrency, volatile markets | [Crypto](crypto/) |
+| Cryptocurrency, volatile markets | [Time-Series Workshop: Financial Data Analysis](https://github.com/timescale/TigerData-Workshops/tree/main/TimeSeries-Workshop-Finance/) |
+| AI/ML with time-series data | [AI Workshop: EV Charging Station Analysis](https://github.com/timescale/TigerData-Workshops/tree/main/AI-Workshop) |
 | General time-series analytics | Start with [IoT Sensors](iot-sensors/) |
 
 ## What Makes These Examples Different?
