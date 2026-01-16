@@ -139,19 +139,6 @@ We provide two approaches for loading data. Choose based on your needs:
 
 This approach writes data directly to the columnstore, bypassing the rowstore entirely. You get instant analytical performance.
 
-**From psql:**
-
-```sql
--- Enable direct to columnstore for this session
-SET timescaledb.enable_direct_compress_copy = on;
-
--- Load data directly into columnstore
-\COPY app_events FROM 'events_uuid.csv' WITH (FORMAT csv, HEADER true);
-
--- Verify data loaded
-SELECT COUNT(*) FROM app_events;
-```
-
 **From command line:**
 
 ```bash
@@ -162,15 +149,30 @@ psql -h localhost -p 6543 -U postgres \
   < events_uuid.csv
 ```
 
+This command reads the CSV file from your local filesystem and pipes it to PostgreSQL, which loads it directly into the columnstore.
+
+**Verify data loaded:**
+
+```sql
+SELECT COUNT(*) FROM app_events;
+```
+
 #### Option B: Standard COPY (Fallback)
 
 This approach loads data into the rowstore first. Data will be compressed by a background policy (takes longer).
 
-```sql
--- Standard COPY without direct to columnstore
-\COPY app_events FROM 'events_uuid.csv' WITH (FORMAT csv, HEADER true);
+**From command line:**
 
--- Verify data loaded
+```bash
+psql -h localhost -p 6543 -U postgres \
+  -v ON_ERROR_STOP=1 \
+  -c "COPY app_events FROM STDIN WITH (FORMAT csv, HEADER true);" \
+  < events_uuid.csv
+```
+
+**Verify data loaded:**
+
+```sql
 SELECT COUNT(*) FROM app_events;
 ```
 
