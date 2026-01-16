@@ -121,6 +121,18 @@ This creates an `app_events` table with:
 
 ### Step 4: Load Sample Data
 
+First, download and extract the sample data:
+
+```bash
+# Download the sample data
+wget https://assets.timescale.com/timescaledb-datasets/events_uuid.tar.gz
+
+# Extract the archive
+tar -xzf events_uuid.tar.gz
+
+# This will create a directory with the sample data files
+```
+
 We provide two approaches for loading data. Choose based on your needs:
 
 #### Option A: Direct to Columnstore (Recommended - Instant Performance)
@@ -278,16 +290,9 @@ The `tsdb.segmentby='user_id'` setting:
 
 ### UUIDv7 Functions
 
-TimescaleDB provides several UUIDv7 functions:
+TimescaleDB provides comprehensive UUIDv7 functionality across **all supported PostgreSQL versions** (including PostgreSQL 15, 16, and 17), while PostgreSQL only provides UUIDv7 support in PostgreSQL 18. 
 
-| Function | Description |
-|----------|-------------|
-| `gen_random_uuidv7()` | Generate a new UUIDv7 with current timestamp |
-| `uuidv7(timestamptz)` | Generate UUIDv7 from specific timestamp |
-| `uuid_timestamp(uuid)` | Extract timestamp from UUIDv7 |
-| `to_uuidv7_boundary(timestamptz)` | Create boundary UUID for range queries |
-| `to_uuidv7_boundary(timestamptz, bool)` | `true` = lower bound (zeros), `false` = upper bound (ones) |
-
+For complete documentation on all available UUIDv7 functions, see the [UUIDv7 Functions API Reference](https://www.tigerdata.com/docs/api/latest/uuid-functions). 
 
 ## Continuous Aggregates (Advanced)
 
