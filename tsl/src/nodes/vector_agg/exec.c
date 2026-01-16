@@ -274,7 +274,6 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
 
 	const int nargs = list_length(args);
-	Ensure(nargs <= 5, "only <= 5 args supported");
 
 	FmgrInfo flinfo;
 	fmgr_info(funcoid, &flinfo);
