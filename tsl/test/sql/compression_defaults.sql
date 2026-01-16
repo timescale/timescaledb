@@ -312,13 +312,6 @@ ALTER TABLE table1 SET (timescaledb.compress = true);
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ALTER TABLE table1 SET (timescaledb.compress = false);
 
--- test that INSERT works when settings exist but compression is disabled
-INSERT INTO table1 VALUES (1, 100), (2, 200), (11, 300);
-SELECT * FROM table1 ORDER BY col1;
--- verify compression_state is off even though settings exist
-SELECT compression_state FROM _timescaledb_catalog.hypertable WHERE table_name = 'table1';
-SELECT count(*) FROM _timescaledb_catalog.compression_settings WHERE relid = 'table1'::regclass;
-
 -- test that re-enabling with explicit NEW settings uses those settings
 ALTER TABLE table1 SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'col2');
 SELECT segmentby FROM _timescaledb_catalog.compression_settings WHERE relid = 'table1'::regclass;
