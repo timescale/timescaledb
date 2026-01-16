@@ -26,6 +26,7 @@
 #include "nodes/columnar_scan/exec.h"
 #include "nodes/columnar_scan/vector_quals.h"
 #include "nodes/vector_agg.h"
+#include "nodes/vector_agg/filter_word_iterator.h"
 #include "nodes/vector_agg/plan.h"
 #include "nodes/vector_agg/vector_slot.h"
 
@@ -353,14 +354,18 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	}
 
 	/*
-	 * Call the Postgres function on every row.
+	 * Call the Postgres function on every row. Here as well, we have to deal
+	 * with very selective filters and avoid evaluating the functions on long
+	 * consecutive ranges of filtered out rows, to improve the performance.
 	 */
 	ColumnarResult columnar_result = { 0 };
 	columnar_result_init_for_type(&columnar_result, batch_state, get_func_rettype(funcoid));
 	MemoryContext function_call_context =
 		AllocSetContextCreate(CurrentMemoryContext, "bulk function call", ALLOCSET_DEFAULT_SIZES);
 	MemoryContext old = MemoryContextSwitchTo(function_call_context);
-	for (int row = 0; row < nrows; row++)
+	FilterWordIterator iter = filter_word_iterator_init(nrows, input_validity);
+	int last_processed_row = 0;
+	for (;;)
 	{
 		/*
 		 * The Arrow format requires the offsets to monotonically increase even
@@ -368,29 +373,50 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 		 */
 		if (columnar_result.offset_buffer != NULL)
 		{
-			columnar_result.offset_buffer[row] = columnar_result.current_offset;
+			for (int row = last_processed_row; row < iter.start_row; row++)
+			{
+				columnar_result.offset_buffer[row] = columnar_result.current_offset;
+			}
 		}
-
-		/*
-		 * Do not evaluate the function on null inputs because it is strict.
-		 */
-		if (!arrow_row_is_valid(input_validity, row))
+		if (!filter_word_iterator_is_valid(&iter))
 		{
-			continue;
+			break;
+		}
+		for (int row = iter.start_row; row < iter.end_row; row++)
+		{
+			/*
+			 * The Arrow format requires the offsets to monotonically increase even
+			 * for the invalid rows.
+			 */
+			if (columnar_result.offset_buffer != NULL)
+			{
+				columnar_result.offset_buffer[row] = columnar_result.current_offset;
+			}
+
+			/*
+			 * Do not evaluate the function on null inputs because it is strict.
+			 */
+			if (!arrow_row_is_valid(input_validity, row))
+			{
+				continue;
+			}
+
+			compressed_columns_to_postgres_data(arg_values, nargs, row);
+
+			const Datum datum = FunctionCallInvoke(fcinfo);
+
+			/*
+			 * A strict function can still return a null for a non-null argument.
+			 */
+			const bool isnull = fcinfo->isnull;
+
+			columnar_result_set_row(&columnar_result, batch_state, row, datum, isnull);
+
+			MemoryContextReset(function_call_context);
 		}
 
-		compressed_columns_to_postgres_data(arg_values, nargs, row);
-
-		const Datum datum = FunctionCallInvoke(fcinfo);
-
-		/*
-		 * A strict function can still return a null for a non-null argument.
-		 */
-		const bool isnull = fcinfo->isnull;
-
-		columnar_result_set_row(&columnar_result, batch_state, row, datum, isnull);
-
-		MemoryContextReset(function_call_context);
+		last_processed_row = iter.end_row;
+		filter_word_iterator_advance(&iter);
 	}
 	MemoryContextSwitchTo(old);
 	MemoryContextDelete(function_call_context);
