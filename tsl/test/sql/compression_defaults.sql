@@ -307,7 +307,7 @@ ALTER TABLE table1 SET (timescaledb.compress = false);
 
 -- test that compression settings are retained when disabling columnstore (issue #8841)
 SELECT * FROM _timescaledb_catalog.compression_settings;
--- re-enable without specifying settings - settings cleared if default functions available
+-- re-enable without specifying settings - segmentby cleared because default function available
 ALTER TABLE table1 SET (timescaledb.compress = true);
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ALTER TABLE table1 SET (timescaledb.compress = false);
