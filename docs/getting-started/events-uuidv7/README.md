@@ -121,19 +121,17 @@ This creates an `app_events` table with:
 
 ### Step 4: Load Sample Data
 
-First, download and extract the sample data:
+First, download and decompress the sample data:
 
 ```bash
 # Download the sample data
-wget https://assets.timescale.com/timescaledb-datasets/events_uuid.tar.gz
+wget https://assets.timescale.com/timescaledb-datasets/events_uuid.csv.gz
 
-# Extract the archive (warnings about mtree specifications are harmless and can be ignored)
-tar -xzf events_uuid.tar.gz 2>/dev/null || tar -xzf events_uuid.tar.gz
+# Decompress the CSV file
+gunzip events_uuid.csv.gz
 
-# This will create a directory with the sample data files
+# This will create events_uuid.csv ready for loading
 ```
-
-**Note:** If you see warnings like "Missing type keyword in mtree specification" during extraction, these are harmless and can be safely ignored. The data files will extract correctly.
 
 We provide two approaches for loading data. Choose based on your needs:
 
@@ -147,11 +145,8 @@ This approach writes data directly to the columnstore, bypassing the rowstore en
 -- Enable direct to columnstore for this session
 SET timescaledb.enable_direct_compress_copy = on;
 
--- Load data directly into columnstore (if you have a CSV file)
-\COPY app_events FROM 'app_events_sample.csv' WITH (FORMAT csv, HEADER true);
-
--- Or for compressed CSV:
--- \COPY app_events FROM PROGRAM 'gzip -dc app_events_sample.csv.gz' WITH (FORMAT csv, HEADER true);
+-- Load data directly into columnstore
+\COPY app_events FROM 'events_uuid.csv' WITH (FORMAT csv, HEADER true);
 
 -- Verify data loaded
 SELECT COUNT(*) FROM app_events;
@@ -164,7 +159,7 @@ psql -h localhost -p 6543 -U postgres \
   -v ON_ERROR_STOP=1 \
   -c "SET timescaledb.enable_direct_compress_copy = on;
       COPY app_events FROM STDIN WITH (FORMAT csv, HEADER true);" \
-  < app_events_sample.csv
+  < events_uuid.csv
 ```
 
 #### Option B: Standard COPY (Fallback)
@@ -173,7 +168,7 @@ This approach loads data into the rowstore first. Data will be compressed by a b
 
 ```sql
 -- Standard COPY without direct to columnstore
-\COPY app_events FROM 'app_events_sample.csv' WITH (FORMAT csv, HEADER true);
+\COPY app_events FROM 'events_uuid.csv' WITH (FORMAT csv, HEADER true);
 
 -- Verify data loaded
 SELECT COUNT(*) FROM app_events;
