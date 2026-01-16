@@ -1,6 +1,6 @@
 # TimescaleDB Examples
 
-This directory contains complete, standalone examples to help you get started with TimescaleDB using real-world use cases. Each example includes sample data, optimized schemas, and analytical queries to showcase TimescaleDB's capabilities.
+This directory contains complete, standalone examples to help you get started with TimescaleDB using real-world use cases. Each example includes sample data and analytical queries to showcase TimescaleDB's capabilities.
 
 ## Available Examples
 

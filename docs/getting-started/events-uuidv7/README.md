@@ -203,19 +203,23 @@ GROUP BY event_type;
 
 **Why this is slow:** The `uuid_timestamp()` function must be evaluated for every row, preventing chunk exclusion.
 
-**Query 3: Multi-Column SkipScan (Latest Event per User/Session)**
+**Query 3: SkipScan on Single Column (Distinct Users)**
 ```sql
--- Demonstrates 90x faster DISTINCT with SkipScan
-SELECT DISTINCT ON (user_id, session_id)
+-- Demonstrates SkipScan optimization: uses compression index to skip repeated values
+\timing on
+SELECT DISTINCT ON (user_id)
     user_id,
-    session_id,
     event_type,
     uuid_timestamp(event_id) as event_time
 FROM app_events
 WHERE event_id >= to_uuidv7_boundary(now() - interval '30 days')
-ORDER BY user_id, session_id, event_id DESC
-LIMIT 100;
+ORDER BY user_id, event_id DESC
+LIMIT 50;
 ```
+
+**Why this uses SkipScan:** Since `user_id` is the segmentby column, TimescaleDB automatically creates a compression index on it. SkipScan can jump directly to the next unique `user_id` value instead of scanning all rows. The WHERE clause ensures chunk exclusion (only scans chunks with recent data), making it even faster.
+
+**Verify SkipScan is used:** Check the query plan with `EXPLAIN` - you should see `Custom Scan (SkipScan)` on the compressed chunks instead of a sequential scan.
 
 **Query 4: Funnel Analysis**
 ```sql
