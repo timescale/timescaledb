@@ -39,7 +39,7 @@ INSERT INTO clients(name) VALUES ('test-client');
 INSERT INTO records
 SELECT generate_series('2000-03-01'::timestamptz,'2000-04-01','1 day'),1,3.14;
 
-SELECT * FROM records_monthly;
+SELECT * FROM records_monthly ORDER BY bucket, clientId;
 
 SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
