@@ -192,7 +192,7 @@ DECLARE
 BEGIN
   RAISE INFO 'Creating % jobs', njobs;
   FOR stmt IN
-    SELECT format('CREATE PROCEDURE custom_job%s(job_id int, config jsonb) LANGUAGE PLPGSQL AS $$ BEGIN PERFORM pg_sleep(0.1); END; $$', i) FROM generate_series(1, njobs) AS i
+    SELECT format('CREATE PROCEDURE custom_job%s(job_id int, config jsonb) LANGUAGE PLPGSQL AS $$ BEGIN PERFORM pg_sleep(1); END; $$', i) FROM generate_series(1, njobs) AS i
   LOOP
     EXECUTE stmt;
   END LOOP;
