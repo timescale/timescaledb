@@ -127,14 +127,30 @@ All examples require:
 - A PostgreSQL client (`psql` recommended)
 - 10-30 minutes of your time
 
-Each example works with the same Docker setup:
+Each example works with the same Docker setup. You have two options:
+
+**Option 1: One-line install (Recommended)**
+
+```sh
+curl -sL https://tsdb.co/start-local | sh
+```
+
+This command:
+- Downloads and starts TimescaleDB (if not already downloaded)
+- Exposes PostgreSQL on port **6543** (a non-standard port to avoid conflicts with other PostgreSQL instances on port 5432)
+- Automatically tunes settings for your environment using timescaledb-tune
+- Sets up a persistent data volume
+
+**Option 2: Manual Docker command**
 
 ```bash
 docker run -d --name timescaledb \
-    -p 5432:5432 \
+    -p 6543:5432 \
     -e POSTGRES_PASSWORD=password \
-    timescale/timescaledb-ha:pg17
+    timescale/timescaledb-ha:pg18
 ```
+
+**Note:** We use port **6543** (mapped to container port 5432) to avoid conflicts if you have other PostgreSQL instances running on the standard port 5432.
 
 ## Example Selection Guide
 
