@@ -149,7 +149,7 @@ FROM generate_series(
 ) AS time;
 
 -- Once data is inserted into the columnstore we optimize the order and structure 
--- of each chunk to ensure optimal performance during querying
+-- this compacts and orders the data in the chunks for optimal query performance and compression
 DO $$
 DECLARE ch TEXT;
 BEGIN
