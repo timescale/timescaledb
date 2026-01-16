@@ -232,17 +232,21 @@ SELECT ht.schema_name AS hypertable_schema,
   rank() OVER (PARTITION BY hypertable_id ORDER BY dim.id) AS dimension_number,
   dim.column_name,
   dim.column_type,
-  CASE WHEN dim.interval_length IS NULL THEN
+  CASE WHEN dim.interval_length IS NULL AND dim.interval IS NULL THEN
     'Space'
   ELSE
     'Time'
   END AS dimension_type,
-  CASE WHEN dim.interval_length IS NOT NULL THEN
-    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
+  CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
+    CASE WHEN dim.interval IS NOT NULL THEN
+      dim.interval
+    WHEN dim.interval_length IS NOT NULL THEN
       _timescaledb_functions.to_interval(dim.interval_length)
     ELSE
       NULL
     END
+  ELSE
+    NULL
   END AS time_interval,
   CASE WHEN dim.interval_length IS NOT NULL THEN
     CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
@@ -251,6 +255,26 @@ SELECT ht.schema_name AS hypertable_schema,
       dim.interval_length
     END
   END AS integer_interval,
+  CASE WHEN dim.interval_origin IS NOT NULL THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','uuid']::regtype[]) THEN
+      _timescaledb_functions.to_timestamp(dim.interval_origin)
+    WHEN dim.column_type = 'date'::regtype THEN
+      _timescaledb_functions.to_timestamp(dim.interval_origin)::date::timestamptz
+    ELSE
+      NULL
+    END
+  ELSE
+    NULL
+  END AS time_origin,
+  CASE WHEN dim.interval_origin IS NOT NULL THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date','uuid']::regtype[]) THEN
+      NULL
+    ELSE
+      dim.interval_origin
+    END
+  ELSE
+    NULL
+  END AS integer_origin,
   dim.integer_now_func,
   dim.num_slices AS num_partitions
 FROM _timescaledb_catalog.hypertable ht,

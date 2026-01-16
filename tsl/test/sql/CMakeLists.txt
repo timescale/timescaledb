@@ -102,6 +102,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_FILES
     attach_chunk.sql
     bgw_custom.sql
+    calendar_chunking_integration.sql
     bgw_db_scheduler.sql
     bgw_job_stat_history.sql
     bgw_job_stat_history_errors.sql

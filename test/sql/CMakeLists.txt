@@ -7,6 +7,7 @@ set(TEST_FILES
     catalog_corruption.sql
     chunks.sql
     chunk_adaptive.sql
+    chunk_origin.sql
     chunk_utils.sql
     cluster.sql
     create_chunks.sql
@@ -109,6 +110,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_launcher.sql
     c_unit_tests.sql
     copy_memory_usage.sql
+    calendar_chunking.sql
     metadata.sql
     multi_transaction_index.sql
     net.sql

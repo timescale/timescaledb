@@ -80,6 +80,7 @@ extern TSDLLEXPORT bool ts_guc_debug_skip_scan_info;
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;
 extern TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings;
+extern bool ts_guc_enable_calendar_chunking;
 
 typedef enum CompressTruncateBehaviour
 {

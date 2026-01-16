@@ -23,6 +23,7 @@ static const WithClauseDefinition create_table_with_clauses_def[] = {
 	[CreateTableFlagSegmentBy] = { .arg_names = {"segmentby", "segment_by", "compress_segmentby", NULL}, .type_id = TEXTOID,},
 	[CreateTableFlagOrderBy] = { .arg_names = {"orderby", "order_by", "compress_orderby", NULL}, .type_id = TEXTOID,},
 	[CreateTableFlagIndex] = { .arg_names = {"compress_index", "compress_sparse_index", "index", "sparse_index", NULL}, .type_id = TEXTOID,},
+	[CreateTableFlagOrigin] = { .arg_names = { "chunk_origin", "partition_origin", "partitioning_origin", "origin", NULL}, .type_id = TEXTOID,},
 };
 
 WithClauseResult *
@@ -71,5 +72,56 @@ ts_create_table_parse_chunk_time_interval(WithClauseResult option, Oid column_ty
 		}
 	}
 	*interval_type = InvalidOid;
+	return UnassignedDatum;
+}
+
+Datum
+ts_create_table_parse_origin(WithClauseResult option, Oid column_type, Oid *origin_type)
+{
+	if (option.is_default == false)
+	{
+		Datum textarg = option.parsed;
+		switch (column_type)
+		{
+			case INT2OID:
+			{
+				*origin_type = INT2OID;
+				return DirectFunctionCall1(int2in, CStringGetDatum(TextDatumGetCString(textarg)));
+			}
+			case INT4OID:
+			{
+				*origin_type = INT4OID;
+				return DirectFunctionCall1(int4in, CStringGetDatum(TextDatumGetCString(textarg)));
+			}
+			case INT8OID:
+			{
+				*origin_type = INT8OID;
+				return DirectFunctionCall1(int8in, CStringGetDatum(TextDatumGetCString(textarg)));
+			}
+			case TIMESTAMPOID:
+			{
+				*origin_type = TIMESTAMPOID;
+				return DirectFunctionCall3(timestamp_in,
+										   CStringGetDatum(TextDatumGetCString(textarg)),
+										   InvalidOid,
+										   -1);
+			}
+			case TIMESTAMPTZOID:
+			case UUIDOID:
+			{
+				*origin_type = TIMESTAMPTZOID;
+				return DirectFunctionCall3(timestamptz_in,
+										   CStringGetDatum(TextDatumGetCString(textarg)),
+										   InvalidOid,
+										   -1);
+			}
+			case DATEOID:
+			{
+				*origin_type = DATEOID;
+				return DirectFunctionCall1(date_in, CStringGetDatum(TextDatumGetCString(textarg)));
+			}
+		}
+	}
+	*origin_type = InvalidOid;
 	return UnassignedDatum;
 }

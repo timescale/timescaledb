@@ -3884,17 +3884,27 @@ process_create_table_end(Node *parsetree)
 
 		Oid interval_type = InvalidOid;
 		Datum interval = UnassignedDatum;
+		Oid origin_type = InvalidOid;
+		Datum origin = UnassignedDatum;
+
+		AttrNumber time_attno = get_attnum(table_relid, time_column);
+		Oid time_type = get_atttype(table_relid, time_attno);
 
 		if (!create_table_info.with_clauses[CreateTableFlagChunkTimeInterval].is_default)
 		{
-			AttrNumber time_attno = get_attnum(table_relid, time_column);
-			Oid time_type = get_atttype(table_relid, time_attno);
-
 			interval =
 				ts_create_table_parse_chunk_time_interval(create_table_info.with_clauses
 															  [CreateTableFlagChunkTimeInterval],
 														  time_type,
 														  &interval_type);
+		}
+
+		if (!create_table_info.with_clauses[CreateTableFlagOrigin].is_default)
+		{
+			origin =
+				ts_create_table_parse_origin(create_table_info.with_clauses[CreateTableFlagOrigin],
+											 time_type,
+											 &origin_type);
 		}
 
 		if (!create_table_info.with_clauses[CreateTableFlagCreateDefaultIndexes].is_default)
@@ -3921,13 +3931,16 @@ process_create_table_end(Node *parsetree)
 							   .parsed));
 		}
 
+		bool has_origin = !create_table_info.with_clauses[CreateTableFlagOrigin].is_default;
 		DimensionInfo *open_dim_info =
 			ts_dimension_info_create_open(table_relid,
 										  &time_column_name, /* column name */
 										  interval,			 /* interval */
 										  interval_type,	 /* interval type */
-										  InvalidOid		 /* partitioning func */
-			);
+										  InvalidOid,		 /* partitioning func */
+										  origin,			 /* origin */
+										  origin_type,		 /* origin_type */
+										  has_origin);
 
 		ChunkSizingInfo *csi = ts_chunk_sizing_info_get_default_disabled(table_relid);
 		csi->colname = time_column;
