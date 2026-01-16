@@ -127,11 +127,13 @@ First, download and extract the sample data:
 # Download the sample data
 wget https://assets.timescale.com/timescaledb-datasets/events_uuid.tar.gz
 
-# Extract the archive
-tar -xzf events_uuid.tar.gz
+# Extract the archive (warnings about mtree specifications are harmless and can be ignored)
+tar -xzf events_uuid.tar.gz 2>/dev/null || tar -xzf events_uuid.tar.gz
 
 # This will create a directory with the sample data files
 ```
+
+**Note:** If you see warnings like "Missing type keyword in mtree specification" during extraction, these are harmless and can be safely ignored. The data files will extract correctly.
 
 We provide two approaches for loading data. Choose based on your needs:
 
@@ -356,6 +358,41 @@ This Application Events example demonstrates patterns applicable to:
 
 - [`README.md`](README.md) - This file
 - Sample data files (to be added)
+
+## Clean Up
+
+When you're done experimenting:
+
+#### If you used the one-line install:
+
+```bash
+# Stop the container
+docker stop timescaledb-ha-pg18-quickstart
+
+# Remove the container
+docker rm timescaledb-ha-pg18-quickstart
+
+# Remove the persistent data volume
+docker volume rm timescaledb_data
+
+# (Optional) Remove the Docker image
+docker rmi timescale/timescaledb-ha:pg18
+```
+
+#### If you used the manual Docker command:
+
+```bash
+# Stop the container
+docker stop timescaledb
+
+# Remove the container
+docker rm timescaledb
+
+# (Optional) Remove the Docker image
+docker rmi timescale/timescaledb-ha:pg18
+```
+
+**Note:** If you created a named volume with the manual Docker command, you can remove it with `docker volume rm <volume_name>`.
 
 ---
 
