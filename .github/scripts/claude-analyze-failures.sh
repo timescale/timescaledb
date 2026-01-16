@@ -26,6 +26,8 @@
 #   SKIP_PR            - If set to "true", run Claude to make local changes but skip PR creation
 #   KEEP_WORK_DIR      - If set to "true", keep the work directory in /tmp for inspection
 #   ANALYSIS_OUTPUT_DIR - If set, copy Claude analysis output files to this directory before cleanup
+#   SLACK_BOT_TOKEN    - Slack bot token for sending notifications (requires chat:write scope)
+#   SLACK_CHANNEL      - Slack channel ID to post notifications to (e.g., C01234567)
 #
 
 set -euo pipefail
@@ -107,6 +109,81 @@ cleanup() {
 }
 
 trap cleanup EXIT
+
+send_slack_notification() {
+    local pr_url="$1"
+    local test_count="$2"
+
+    if [[ -z "${SLACK_BOT_TOKEN:-}" ]]; then
+        log_info "SLACK_BOT_TOKEN not set, skipping Slack notification"
+        return 0
+    fi
+
+    if [[ -z "${SLACK_CHANNEL:-}" ]]; then
+        log_info "SLACK_CHANNEL not set, skipping Slack notification"
+        return 0
+    fi
+
+    log_info "Sending Slack notification to channel ${SLACK_CHANNEL}..."
+
+    local message
+    message=$(cat <<EOF
+{
+    "channel": "${SLACK_CHANNEL}",
+    "text": "Claude created a PR to fix nightly test failures",
+    "blocks": [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": ":robot_face: *Claude created a PR to fix nightly test failures*"
+            }
+        },
+        {
+            "type": "section",
+            "fields": [
+                {
+                    "type": "mrkdwn",
+                    "text": "*Tests Fixed:*\n${test_count}"
+                },
+                {
+                    "type": "mrkdwn",
+                    "text": "*Repository:*\n${TARGET_REPOSITORY:-${GITHUB_REPOSITORY}}"
+                }
+            ]
+        },
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "View Pull Request"
+                    },
+                    "url": "${pr_url}",
+                    "style": "primary"
+                }
+            ]
+        }
+    ]
+}
+EOF
+)
+
+    local response
+    response=$(curl -s -X POST \
+        -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+        -H 'Content-type: application/json; charset=utf-8' \
+        --data "${message}" \
+        "https://slack.com/api/chat.postMessage")
+
+    if echo "${response}" | jq -e '.ok == true' > /dev/null 2>&1; then
+        log_info "Slack notification sent successfully"
+    else
+        log_warn "Failed to send Slack notification: $(echo "${response}" | jq -r '.error // "unknown error"')"
+    fi
+}
 
 check_prerequisites() {
     log_info "Checking prerequisites..."
@@ -1030,6 +1107,13 @@ main() {
     # Step 6: Create PR
     local pr_url
     pr_url=$(create_pull_request "${branch_name}")
+
+    # Count fixed tests (number of commits on the branch)
+    local fixed_count
+    fixed_count=$(git rev-list --count "${BASE_BRANCH}..${branch_name}" 2>/dev/null || echo "unknown")
+
+    # Step 7: Send Slack notification
+    send_slack_notification "${pr_url}" "${fixed_count}"
 
     log_info "Done! PR created: ${pr_url}"
 }
