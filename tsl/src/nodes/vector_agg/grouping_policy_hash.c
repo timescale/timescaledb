@@ -19,6 +19,7 @@
 #include "grouping_policy.h"
 
 #include "nodes/vector_agg/exec.h"
+#include "nodes/vector_agg/filter_word_iterator.h"
 #include "nodes/vector_agg/vector_slot.h"
 
 #include "grouping_policy_hash.h"
@@ -122,8 +123,7 @@ gp_hash_reset(GroupingPolicy *obj)
 
 static void
 compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext,
-						 TupleTableSlot *vector_slot, int start_row, int end_row,
-						 const VectorAggDef *agg_def, void *agg_states)
+						 TupleTableSlot *vector_slot, const VectorAggDef *agg_def, void *agg_states)
 {
 	const uint32 *offsets = policy->key_index_for_row;
 	MemoryContext agg_extra_mctx = policy->agg_extra_mctx;
@@ -172,125 +172,56 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 															 NULL);
 
 	/*
-	 * Now call the function.
+	 * Now call the function, skipping the sequences of rows that didn't pass
+	 * the filters.
 	 */
-	if (arg_arrow != NULL)
+	for (FilterWordIterator iter =
+			 filter_word_iterator_init(batch_state->total_batch_rows, combined_validity);
+		 filter_word_iterator_is_valid(&iter);
+		 filter_word_iterator_advance(&iter))
 	{
-		/* Arrow argument. */
-		agg_def->func.agg_many_vector(agg_states,
-									  offsets,
-									  combined_validity,
-									  start_row,
-									  end_row,
-									  arg_arrow,
-									  agg_extra_mctx);
-	}
-	else
-	{
-		/*
-		 * Scalar argument, or count(*). The latter has an optimized
-		 * implementation.
-		 */
-		if (agg_def->func.agg_many_scalar != NULL)
+		if (arg_arrow != NULL)
 		{
-			agg_def->func.agg_many_scalar(agg_states,
+			/* Arrow argument. */
+			agg_def->func.agg_many_vector(agg_states,
 										  offsets,
 										  combined_validity,
-										  start_row,
-										  end_row,
-										  arg_datum,
-										  arg_isnull,
+										  iter.start_row,
+										  iter.end_row,
+										  arg_arrow,
 										  agg_extra_mctx);
 		}
 		else
 		{
-			for (int i = start_row; i < end_row; i++)
-			{
-				if (!arrow_row_is_valid(combined_validity, i))
-				{
-					continue;
-				}
-
-				void *state = (offsets[i] * agg_def->func.state_bytes + (char *) agg_states);
-				agg_def->func.agg_scalar(state, arg_datum, arg_isnull, 1, agg_extra_mctx);
-			}
-		}
-	}
-}
-
-static void
-add_one_range(GroupingPolicyHash *policy, DecompressContext *dcontext, TupleTableSlot *vector_slot,
-			  const int start_row, const int end_row)
-{
-	const int num_fns = policy->num_agg_defs;
-	Assert(start_row < end_row);
-
-	/*
-	 * Remember which aggregation states have already existed, and which we
-	 * have to initialize. State index zero is invalid.
-	 */
-	const uint32 last_initialized_key_index = policy->hashing.last_used_key_index;
-	Assert(last_initialized_key_index <= policy->num_allocated_per_key_agg_states);
-
-	/*
-	 * Match rows to aggregation states using a hash table.
-	 */
-	Assert((size_t) end_row <= policy->num_key_index_for_row);
-	policy->hashing.fill_offsets(policy, vector_slot, start_row, end_row);
-
-	/*
-	 * Process the aggregate function states. We are processing single aggregate
-	 * function for the entire batch to improve the memory locality.
-	 */
-	const uint64 new_aggstate_rows = policy->num_allocated_per_key_agg_states * 2 + 1;
-	for (int agg_index = 0; agg_index < num_fns; agg_index++)
-	{
-		const VectorAggDef *agg_def = &policy->agg_defs[agg_index];
-		/*
-		 * If we added new keys, initialize the aggregate function states for
-		 * them.
-		 */
-		if (policy->hashing.last_used_key_index > last_initialized_key_index)
-		{
 			/*
-			 * If the aggregate function states don't fit into the existing
-			 * storage, reallocate it.
+			 * Scalar argument, or count(*). The latter has an optimized
+			 * implementation.
 			 */
-			if (policy->hashing.last_used_key_index >= policy->num_allocated_per_key_agg_states)
+			if (agg_def->func.agg_many_scalar != NULL)
 			{
-				policy->per_agg_per_key_states[agg_index] =
-					repalloc(policy->per_agg_per_key_states[agg_index],
-							 new_aggstate_rows * agg_def->func.state_bytes);
+				agg_def->func.agg_many_scalar(agg_states,
+											  offsets,
+											  combined_validity,
+											  iter.start_row,
+											  iter.end_row,
+											  arg_datum,
+											  arg_isnull,
+											  agg_extra_mctx);
 			}
+			else
+			{
+				for (int i = iter.start_row; i < iter.end_row; i++)
+				{
+					if (!arrow_row_is_valid(combined_validity, i))
+					{
+						continue;
+					}
 
-			void *first_uninitialized_state =
-				agg_def->func.state_bytes * (last_initialized_key_index + 1) +
-				(char *) policy->per_agg_per_key_states[agg_index];
-			agg_def->func.agg_init(first_uninitialized_state,
-								   policy->hashing.last_used_key_index -
-									   last_initialized_key_index);
+					void *state = (offsets[i] * agg_def->func.state_bytes + (char *) agg_states);
+					agg_def->func.agg_scalar(state, arg_datum, arg_isnull, 1, agg_extra_mctx);
+				}
+			}
 		}
-
-		/*
-		 * Add this batch to the states of this aggregate function.
-		 */
-		compute_single_aggregate(policy,
-								 dcontext,
-								 vector_slot,
-								 start_row,
-								 end_row,
-								 agg_def,
-								 policy->per_agg_per_key_states[agg_index]);
-	}
-
-	/*
-	 * Record the newly allocated number of aggregate function states in case we
-	 * had to reallocate.
-	 */
-	if (policy->hashing.last_used_key_index >= policy->num_allocated_per_key_agg_states)
-	{
-		Assert(new_aggstate_rows > policy->num_allocated_per_key_agg_states);
-		policy->num_allocated_per_key_agg_states = new_aggstate_rows;
 	}
 }
 
@@ -298,8 +229,8 @@ static void
 gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlot *vector_slot)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
-	uint16 n;
-	const uint64 *restrict filter = vector_slot_get_qual_result(vector_slot, &n);
+	uint16 nrows;
+	const uint64 *restrict filter = vector_slot_get_qual_result(vector_slot, &nrows);
 
 	Assert(!policy->returning_results);
 
@@ -308,23 +239,23 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlo
 	 * to a given batch row. We don't need the offsets for the previous batch
 	 * that are currently stored there, so we don't need to use repalloc.
 	 */
-	if ((size_t) n > policy->num_key_index_for_row)
+	if ((size_t) nrows > policy->num_key_index_for_row)
 	{
 		if (policy->key_index_for_row != NULL)
 		{
 			pfree(policy->key_index_for_row);
 		}
-		policy->num_key_index_for_row = n;
+		policy->num_key_index_for_row = nrows;
 		policy->key_index_for_row =
 			palloc(sizeof(policy->key_index_for_row[0]) * policy->num_key_index_for_row);
 	}
-	memset(policy->key_index_for_row, 0, n * sizeof(policy->key_index_for_row[0]));
+	memset(policy->key_index_for_row, 0, nrows * sizeof(policy->key_index_for_row[0]));
 
 	/*
 	 * Allocate the temporary filter array for computing the combined results of
 	 * batch filter, aggregate filter and column validity.
 	 */
-	const size_t num_words = (n + 63) / 64;
+	const size_t num_words = (nrows + 63) / 64;
 	if (num_words > policy->num_tmp_filter_words)
 	{
 		policy->tmp_filter = palloc(sizeof(*policy->tmp_filter) * (num_words * 2 + 1));
@@ -348,77 +279,87 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlo
 	policy->hashing.prepare_for_batch(policy, vector_slot);
 
 	/*
-	 * Add the batch rows to aggregate function states.
+	 * Remember which grouping keys have already existed, and which we
+	 * have to initialize. State index zero is invalid.
 	 */
-	if (filter == NULL)
+	const uint32 last_initialized_key_index = policy->hashing.last_used_key_index;
+	Assert(last_initialized_key_index <= policy->num_allocated_per_key_agg_states);
+
+	/*
+	 * Add the grouping keys to the hash table, skipping the sequences
+	 * of rows that are filtered out by the batch filter.
+	 */
+	int stats_matched_rows = 0;
+	for (FilterWordIterator iter = filter_word_iterator_init(nrows, filter);
+		 filter_word_iterator_is_valid(&iter);
+		 filter_word_iterator_advance(&iter))
 	{
-		/*
-		 * We don't have a filter on this batch, so aggregate it entirely in one
-		 * go.
-		 */
-		add_one_range(policy, dcontext, vector_slot, 0, n);
+		stats_matched_rows += iter.end_row - iter.start_row;
+		Assert((size_t) iter.end_row <= policy->num_key_index_for_row);
+		policy->hashing.fill_offsets(policy, vector_slot, iter.start_row, iter.end_row);
 	}
-	else
+
+	policy->stat_input_total_rows += nrows;
+	policy->stat_input_valid_rows += arrow_num_valid(filter, nrows);
+	policy->stat_bulk_filtered_rows += nrows - stats_matched_rows;
+
+	/*
+	 * Process the aggregate function states. We are processing single aggregate
+	 * function for the entire batch to improve the memory locality.
+	 */
+	const uint64 new_aggstate_rows = policy->num_allocated_per_key_agg_states * 2 + 1;
+	const int num_fns = policy->num_agg_defs;
+	for (int agg_index = 0; agg_index < num_fns; agg_index++)
 	{
+		const VectorAggDef *agg_def = &policy->agg_defs[agg_index];
+
 		/*
-		 * If we have a filter, skip the rows for which the entire words of the
-		 * filter bitmap are zero. This improves performance for highly
-		 * selective filters.
+		 * If we added new keys for this batch, initialize the states for these
+		 * keys for this aggregate function.
 		 */
-		int statistics_range_row = 0;
-		int start_word = 0;
-		int end_word = 0;
-		int past_the_end_word = (n - 1) / 64 + 1;
-		for (;;)
+		if (policy->hashing.last_used_key_index > last_initialized_key_index)
 		{
 			/*
-			 * Skip the bitmap words which are zero.
+			 * If the aggregate function states don't fit into the existing
+			 * storage, reallocate it. We will record the allocated size later,
+			 * and before that, the allocation needs to be done for every
+			 * aggregate function.
 			 */
-			for (start_word = end_word; start_word < past_the_end_word && filter[start_word] == 0;
-				 start_word++)
-				;
-
-			if (start_word >= past_the_end_word)
+			if (policy->hashing.last_used_key_index >= policy->num_allocated_per_key_agg_states)
 			{
-				break;
+				policy->per_agg_per_key_states[agg_index] =
+					repalloc(policy->per_agg_per_key_states[agg_index],
+							 new_aggstate_rows * agg_def->func.state_bytes);
 			}
 
-			/*
-			 * Collect the consecutive bitmap words which are nonzero.
-			 */
-			for (end_word = start_word + 1; end_word < past_the_end_word && filter[end_word] != 0;
-				 end_word++)
-				;
-
-			/*
-			 * Now we have the [start, end] range of bitmap words that are
-			 * nonzero.
-			 *
-			 * Determine starting and ending rows, also skipping the starting
-			 * and trailing zero bits at the ends of the range.
-			 */
-			const int start_row = start_word * 64 + pg_rightmost_one_pos64(filter[start_word]);
-			Assert(start_row <= n);
-
-			/*
-			 * The bits for past-the-end rows must be set to zero, so this
-			 * calculation should yield no more than n.
-			 */
-			Assert(end_word > start_word);
-			const int end_row =
-				(end_word - 1) * 64 + pg_leftmost_one_pos64(filter[end_word - 1]) + 1;
-			Assert(end_row <= n);
-
-			statistics_range_row += end_row - start_row;
-
-			add_one_range(policy, dcontext, vector_slot, start_row, end_row);
+			void *first_uninitialized_state =
+				agg_def->func.state_bytes * (last_initialized_key_index + 1) +
+				(char *) policy->per_agg_per_key_states[agg_index];
+			agg_def->func.agg_init(first_uninitialized_state,
+								   policy->hashing.last_used_key_index -
+									   last_initialized_key_index);
 		}
 
-		policy->stat_bulk_filtered_rows += n - statistics_range_row;
+		/*
+		 * Add this batch to the states of this aggregate function.
+		 */
+		compute_single_aggregate(policy,
+								 dcontext,
+								 vector_slot,
+								 agg_def,
+								 policy->per_agg_per_key_states[agg_index]);
 	}
 
-	policy->stat_input_total_rows += n;
-	policy->stat_input_valid_rows += arrow_num_valid(filter, n);
+	/*
+	 * If we got new grouping keys in this batch, this means we had to
+	 * reallocate the aggregate function states for them, and now have to record
+	 * the new allocated size.
+	 */
+	if (policy->hashing.last_used_key_index >= policy->num_allocated_per_key_agg_states)
+	{
+		Assert(new_aggstate_rows > policy->num_allocated_per_key_agg_states);
+		policy->num_allocated_per_key_agg_states = new_aggstate_rows;
+	}
 }
 
 static bool
