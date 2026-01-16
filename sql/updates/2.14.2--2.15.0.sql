@@ -429,21 +429,23 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.policy_job_error_retention_check(
 --
 
 -- Migrate existing CAggs using time_bucket_ng to time_bucket
-CREATE PROCEDURE _timescaledb_functions.cagg_migrate_to_time_bucket(cagg REGCLASS)
-   AS '@MODULE_PATHNAME@', 'ts_continuous_agg_migrate_to_time_bucket' LANGUAGE C;
-
 DO $$
 DECLARE
   cagg_name regclass;
+  caggs text;
 BEGIN
-  FOR cagg_name IN
-    SELECT pg_catalog.format('%I.%I', user_view_schema, user_view_name)::regclass
+    SELECT string_agg(pg_catalog.format('%I.%I', user_view_schema, user_view_name), ', ')
+      INTO caggs
       FROM _timescaledb_catalog.continuous_agg cagg
       JOIN _timescaledb_catalog.continuous_aggs_bucket_function AS bf ON (cagg.mat_hypertable_id = bf.mat_hypertable_id)
       WHERE
-         bf.bucket_func::text LIKE '%time_bucket_ng%'
-  LOOP
-    CALL _timescaledb_functions.cagg_migrate_to_time_bucket(cagg_name);
-  END LOOP;
+         bf.bucket_func::text LIKE '%time_bucket_ng%';
+
+    IF caggs IS NOT NULL THEN
+      RAISE
+        WARNING 'continuous aggregates with time_bucket_ng found, please use _timescaledb_functions.cagg_migrate_to_time_bucket to migrate caggs manually after extension update'
+        USING
+          DETAIL = format('Continuous Aggregates: %s', caggs);
+    END IF;
 END
 $$;

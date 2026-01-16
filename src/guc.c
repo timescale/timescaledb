@@ -156,8 +156,6 @@ char *ts_telemetry_cloud = NULL;
 
 TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
 
-bool ts_guc_debug_allow_cagg_with_deprecated_funcs = false;
-
 /*
  * Exit code for the scheduler.
  *
@@ -1404,16 +1402,6 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 
-	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_allow_cagg_with_deprecated_funcs"),
-							 /* short_desc= */ "allow new caggs using time_bucket_ng",
-							 /* long_desc= */ "this is for debugging/testing purposes",
-							 /* valueAddr= */ &ts_guc_debug_allow_cagg_with_deprecated_funcs,
-							 /* bootValue= */ false,
-							 /* context= */ PGC_USERSET,
-							 /* flags= */ 0,
-							 /* check_hook= */ NULL,
-							 /* assign_hook= */ NULL,
-							 /* show_hook= */ NULL);
 #endif
 
 	/* register feature flags */
