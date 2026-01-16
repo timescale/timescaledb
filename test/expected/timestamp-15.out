@@ -150,7 +150,7 @@ SELECT _timescaledb_functions.to_unix_microseconds('2017-02-07 15:09:36.236538+0
 SELECT _timescaledb_functions.to_unix_microseconds('+infinity');
 ERROR:  invalid input syntax for type timestamp with time zone: "+infinity" at character 52
 SELECT _timescaledb_functions.to_timestamp(9223372036854775807);
- to_timestamp
+ to_timestamp 
 --------------
  infinity
 
