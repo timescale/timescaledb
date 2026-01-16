@@ -108,7 +108,10 @@ columnar_result_init_for_type(ColumnarResult *columnar_result,
 	{
 		columnar_result->offset_buffer =
 			MemoryContextAllocZero(batch_state->per_batch_context,
-								   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1) + 1));
+								   pad_to_multiple(64,
+												   sizeof(*columnar_result->offset_buffer) *
+														   (nrows + 1) +
+													   1));
 		columnar_result->allocated_body_bytes = pad_to_multiple(64, 10);
 	}
 	else
