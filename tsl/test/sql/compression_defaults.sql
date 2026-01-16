@@ -305,6 +305,79 @@ ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = '
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ALTER TABLE table1 SET (timescaledb.compress = false);
 
+-- test that compression settings are retained when disabling columnstore (issue #8841)
+SELECT * FROM _timescaledb_catalog.compression_settings;
+-- re-enable without specifying settings - segmentby cleared because default function available
+ALTER TABLE table1 SET (timescaledb.compress = true);
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ALTER TABLE table1 SET (timescaledb.compress = false);
+
+-- test that re-enabling with explicit NEW settings uses those settings
+ALTER TABLE table1 SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'col2');
+SELECT segmentby FROM _timescaledb_catalog.compression_settings WHERE relid = 'table1'::regclass;
+ALTER TABLE table1 SET (timescaledb.compress = false);
+
+-- verify settings are retained on disable
+SELECT segmentby FROM _timescaledb_catalog.compression_settings WHERE relid = 'table1'::regclass;
+DROP TABLE table1;
+
+-- test that retained orderby settings don't block defaults when re-enabling:
+-- 1. enable compression with explicit orderby (only time, no device_id)
+-- 2. disable compression (settings retained)
+-- 3. re-enable without explicit settings
+-- 4. compress and verify device_id appears in orderby (from fresh defaults)
+CREATE TABLE test_retained_orderby (time timestamptz NOT NULL, device_id text, val float);
+SELECT create_hypertable('test_retained_orderby', 'time');
+CREATE INDEX ON test_retained_orderby(device_id, time);
+INSERT INTO test_retained_orderby SELECT t, 'dev1', 1.0 FROM generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 hour') t;
+ANALYZE test_retained_orderby;
+ALTER TABLE test_retained_orderby SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+ALTER TABLE test_retained_orderby SET (timescaledb.compress = false);
+ALTER TABLE test_retained_orderby SET (timescaledb.compress = true);
+SELECT count(compress_chunk(x)) FROM show_chunks('test_retained_orderby') x;
+-- verify device_id appears in orderby from fresh defaults
+SELECT orderby FROM timescaledb_information.chunk_compression_settings
+WHERE hypertable = 'test_retained_orderby'::regclass LIMIT 1;
+DROP TABLE test_retained_orderby;
+
+-- test that retained segmentby settings don't block defaults when re-enabling:
+-- use a table where default segmentby function returns device_id
+CREATE TABLE test_retained_segmentby (time timestamptz NOT NULL, device_id text, val float);
+SELECT create_hypertable('test_retained_segmentby', 'time');
+CREATE UNIQUE INDEX ON test_retained_segmentby(device_id, time);
+-- insert data with multiple device_ids to get good cardinality for segmentby
+INSERT INTO test_retained_segmentby SELECT t + (i || ' seconds')::interval, 'dev' || (i % 10), i FROM generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 hour') t, generate_series(1, 100) i;
+ANALYZE test_retained_segmentby;
+-- verify default segmentby would return device_id
+SELECT _timescaledb_functions.get_segmentby_defaults('test_retained_segmentby'::regclass);
+-- enable with explicit different segmentby (val instead of device_id)
+ALTER TABLE test_retained_segmentby SET (timescaledb.compress, timescaledb.compress_segmentby = 'val');
+ALTER TABLE test_retained_segmentby SET (timescaledb.compress = false);
+ALTER TABLE test_retained_segmentby SET (timescaledb.compress = true);
+SELECT count(compress_chunk(x)) FROM show_chunks('test_retained_segmentby') x;
+-- verify segmentby is device_id from fresh defaults, not val from retained
+SELECT segmentby FROM timescaledb_information.chunk_compression_settings
+WHERE hypertable = 'test_retained_segmentby'::regclass LIMIT 1;
+DROP TABLE test_retained_segmentby;
+
+-- test that retained index settings don't block defaults when re-enabling
+CREATE TABLE test_retained_index (time timestamptz NOT NULL, device_id text, val float);
+SELECT create_hypertable('test_retained_index', 'time');
+CREATE INDEX ON test_retained_index(device_id, time);
+INSERT INTO test_retained_index SELECT t, 'dev' || (i % 10), i FROM generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 hour') t, generate_series(1, 10) i;
+ANALYZE test_retained_index;
+-- enable with explicit empty index (no sparse indexes)
+ALTER TABLE test_retained_index SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC', timescaledb.compress_index = '');
+-- verify no index settings
+SELECT index FROM _timescaledb_catalog.compression_settings WHERE relid = 'test_retained_index'::regclass;
+ALTER TABLE test_retained_index SET (timescaledb.compress = false);
+ALTER TABLE test_retained_index SET (timescaledb.compress = true);
+SELECT count(compress_chunk(x)) FROM show_chunks('test_retained_index') x;
+-- verify index is populated from fresh defaults (auto sparse indexes)
+SELECT index IS NOT NULL as has_index FROM timescaledb_information.chunk_compression_settings
+WHERE hypertable = 'test_retained_index'::regclass LIMIT 1;
+DROP TABLE test_retained_index;
+
 \set ON_ERROR_STOP 0
 SET timescaledb.compression_segmentby_default_function = 'function_does_not_exist';
 SET timescaledb.compression_orderby_default_function = 'function_does_not_exist';
@@ -485,3 +558,27 @@ SELECT count(compress_chunk(x)) FROM show_chunks('test_exclude_datetype') x;
 SELECT * FROM timescaledb_information.chunk_compression_settings WHERE hypertable = 'test_exclude_datetype'::regclass ORDER BY chunk LIMIT 1;
 
 DROP TABLE test_exclude_datetype;
+
+-- test that continuous aggregate materialized hypertables DELETE settings on disable
+-- (unlike regular hypertables which retain them)
+CREATE TABLE cagg_test (time TIMESTAMPTZ NOT NULL, device_id TEXT, val FLOAT);
+SELECT create_hypertable('cagg_test', 'time');
+INSERT INTO cagg_test SELECT t, 'dev1', random() FROM generate_series('2020-01-01'::timestamptz, '2020-01-10'::timestamptz, '1 hour') t;
+CREATE MATERIALIZED VIEW cagg_test_agg WITH (timescaledb.continuous) AS
+  SELECT time_bucket('1 day', time) AS bucket, device_id, avg(val) FROM cagg_test GROUP BY 1, 2 WITH NO DATA;
+CALL refresh_continuous_aggregate('cagg_test_agg', NULL, NULL);
+-- enable compression on the cagg with specific settings
+ALTER MATERIALIZED VIEW cagg_test_agg SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'device_id');
+-- verify settings exist (join through hypertable to get the mat_hypertable's relid)
+SELECT count(*) FROM _timescaledb_catalog.compression_settings cs
+  JOIN _timescaledb_catalog.hypertable h ON cs.relid = format('%I.%I', h.schema_name, h.table_name)::regclass
+  JOIN _timescaledb_catalog.continuous_agg ca ON h.id = ca.mat_hypertable_id
+  WHERE ca.user_view_name = 'cagg_test_agg';
+-- disable compression on the cagg
+ALTER MATERIALIZED VIEW cagg_test_agg SET (timescaledb.compress = false);
+-- verify settings are deleted for caggs (unlike regular hypertables)
+SELECT count(*) FROM _timescaledb_catalog.compression_settings cs
+  JOIN _timescaledb_catalog.hypertable h ON cs.relid = format('%I.%I', h.schema_name, h.table_name)::regclass
+  JOIN _timescaledb_catalog.continuous_agg ca ON h.id = ca.mat_hypertable_id
+  WHERE ca.user_view_name = 'cagg_test_agg';
+DROP TABLE cagg_test CASCADE;

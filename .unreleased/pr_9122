@@ -1,0 +1,1 @@
+Fixes: #8841 Retain compression settings when disabling columnstore

@@ -95,7 +95,8 @@ static void compression_settings_set_manually_for_create(Hypertable *ht,
 														 WithClauseResult *with_clause_options);
 static void compression_settings_set_manually_for_alter(Hypertable *ht,
 														CompressionSettings *settings,
-														WithClauseResult *with_clause_options);
+														WithClauseResult *with_clause_options,
+														bool is_new_enable);
 
 static char *
 compression_column_segment_metadata_name(const char *type, int16 column_index)
@@ -847,7 +848,16 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 		ts_hypertable_unset_compressed(ht);
 	}
 
-	ts_compression_settings_delete(ht->main_table_relid);
+	/*
+	 * For regular user hypertables, retain compression settings so they can
+	 * be restored when compression is re-enabled. For internal hypertables
+	 * (continuous aggregate materialized hypertables), delete the settings
+	 * since they are managed by the system.
+	 */
+	if (ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id, true) != NULL)
+	{
+		ts_compression_settings_delete(ht->main_table_relid);
+	}
 
 	return true;
 }
@@ -961,7 +971,13 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 												  NULL);
 	}
 
-	compression_settings_set_manually_for_alter(ht, settings, with_clause_options);
+	/*
+	 * Pass is_new_enable=true when compression table doesn't exist yet.
+	 * This indicates we're enabling compression (possibly re-enabling after
+	 * disable), not modifying existing compression settings.
+	 */
+	bool is_new_enable = !TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht);
+	compression_settings_set_manually_for_alter(ht, settings, with_clause_options, is_new_enable);
 
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
@@ -1460,12 +1476,51 @@ compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 
 static void
 compression_settings_set_manually_for_alter(Hypertable *ht, CompressionSettings *settings,
-											WithClauseResult *with_clause_options)
+											WithClauseResult *with_clause_options,
+											bool is_new_enable)
 {
 	/* orderby arrays should always be in sync either all NULL or none */
 	Assert(
 		(settings->fd.orderby && settings->fd.orderby_desc && settings->fd.orderby_nullsfirst) ||
 		(!settings->fd.orderby && !settings->fd.orderby_desc && !settings->fd.orderby_nullsfirst));
+
+	/*
+	 * When enabling compression (not modifying existing), clear retained
+	 * settings that would block default computation. Only clear settings
+	 * if the corresponding default function is available, so that:
+	 * - If defaults are available, fresh defaults will be computed
+	 * - If defaults are disabled, retained settings are preserved
+	 */
+	if (is_new_enable)
+	{
+		bool updated = false;
+
+		/* Clear orderby if orderby default function is available */
+		if (OidIsValid(ts_guc_default_orderby_fn_oid()) && settings->fd.orderby)
+		{
+			settings->fd.orderby = NULL;
+			settings->fd.orderby_desc = NULL;
+			settings->fd.orderby_nullsfirst = NULL;
+			updated = true;
+		}
+
+		/* Clear segmentby if segmentby default function is available */
+		if (OidIsValid(ts_guc_default_segmentby_fn_oid()) && settings->fd.segmentby)
+		{
+			settings->fd.segmentby = NULL;
+			updated = true;
+		}
+
+		/* Clear index if auto sparse indexes is enabled */
+		if (ts_guc_auto_sparse_indexes && settings->fd.index)
+		{
+			settings->fd.index = NULL;
+			updated = true;
+		}
+
+		if (updated)
+			ts_compression_settings_update(settings);
+	}
 
 	if (with_clause_options[AlterTableFlagSegmentBy].is_default &&
 		with_clause_options[AlterTableFlagOrderBy].is_default &&
@@ -1610,7 +1665,7 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 void
 tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 {
-	Assert(TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) || TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
+	Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
