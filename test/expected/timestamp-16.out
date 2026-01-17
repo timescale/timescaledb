@@ -532,6 +532,82 @@ FROM unnest(ARRAY[
  Sun Nov 05 01:05:00 2017 EST | Sun Nov 05 00:00:00 2017
  Sun Nov 05 03:05:00 2017 EST | Sun Nov 05 02:00:00 2017
 
+-- GitHub issue #7059: time_bucket with timezone + offset across DST boundary
+-- Asia/Amman: clocks skip from 00:00 to 01:00 on 2021-03-26
+-- Input: 01:00+03 = 22:00 UTC → Result: 22:15 UTC = 01:15 local (00:00 + 15min offset)
+SELECT time_bucket('1 day', '2021-03-26 01:00:00+03'::timestamptz,
+    timezone := 'Asia/Amman', "offset" := '15 minutes'::interval);
+         time_bucket          
+------------------------------
+ Wed Mar 24 18:15:00 2021 EDT
+
+-- GitHub issue #8851: time_bucket with negative offset during DST fall-back
+-- Europe/Berlin: clocks repeat 02:00-02:59 on 2025-10-26
+-- Input: 02:00+02 = 00:00 UTC → Result: 23:59:45 UTC = 01:59:45 local (02:00 - 15s offset)
+SELECT time_bucket('30 seconds', '2025-10-26 02:00:00+02'::timestamptz,
+    timezone := 'Europe/Berlin', "offset" := '-15 seconds'::interval);
+         time_bucket          
+------------------------------
+ Sat Oct 25 19:59:45 2025 EDT
+
+-- Additional DST edge cases for coverage of DST direction × offset sign combinations
+-- Spring-forward + negative offset
+-- Input: 01:30+03 = 22:30 UTC → Result: 22:45 UTC = 01:45 local (01:00 + 45min = 02:00 - 15min)
+SELECT time_bucket('1 hour', '2021-03-26 01:30:00+03'::timestamptz,
+    timezone := 'Asia/Amman', "offset" := '-15 minutes'::interval);
+         time_bucket          
+------------------------------
+ Thu Mar 25 17:45:00 2021 EDT
+
+-- Fall-back + positive offset
+-- Input: 02:30+01 = 01:30 UTC → Result: 01:15 UTC = 02:15 local (02:00 + 15min offset)
+SELECT time_bucket('1 hour', '2025-10-26 02:30:00+01'::timestamptz,
+    timezone := 'Europe/Berlin', "offset" := '15 minutes'::interval);
+         time_bucket          
+------------------------------
+ Sat Oct 25 21:15:00 2025 EDT
+
+-- Input exactly at DST spring-forward transition
+-- Input: 22:00 UTC = 00:00 local (the moment clocks jump to 01:00)
+-- Result: 22:15 UTC = 01:15 local (01:00 + 15min offset)
+SELECT time_bucket('1 hour', '2021-03-25 22:00:00+00'::timestamptz,
+    timezone := 'Asia/Amman', "offset" := '15 minutes'::interval);
+         time_bucket          
+------------------------------
+ Thu Mar 25 17:15:00 2021 EDT
+
+-- Input exactly at DST fall-back transition
+-- Input: 01:00 UTC = 03:00 CEST (the moment clocks go back to 02:00 CET)
+-- Result: 23:15 UTC = 01:15 local (01:00 + 15min offset, but in CET now)
+SELECT time_bucket('1 hour', '2025-10-26 01:00:00+00'::timestamptz,
+    timezone := 'Europe/Berlin', "offset" := '15 minutes'::interval);
+         time_bucket          
+------------------------------
+ Sat Oct 25 20:15:00 2025 EDT
+
+-- Offset larger than bucket size (1h offset with 30min bucket)
+-- Input: 01:30+03 = 22:30 UTC → Result: 22:30 UTC = 01:30 local (01:00 + 30min = 00:30 + 1h)
+SELECT time_bucket('30 minutes', '2021-03-26 01:30:00+03'::timestamptz,
+    timezone := 'Asia/Amman', "offset" := '1 hour'::interval);
+         time_bucket          
+------------------------------
+ Thu Mar 25 18:30:00 2021 EDT
+
+-- GitHub issue #9136: time_bucket with origin during DST fall-back
+-- When origin is in standard time but timestamp is in daylight time,
+-- the bucket could incorrectly start AFTER the timestamp.
+-- America/New_York: clocks go back at 02:00 EDT on 2024-11-03
+-- Input: 01:30-04 (EDT) = 05:30 UTC; origin in EST
+-- Result should have bucket start <= timestamp (bucket in EDT, not EST)
+SELECT time_bucket('1 hour', '2024-11-03 01:30:00-04'::timestamptz,
+    'America/New_York', '2000-01-01 00:00:00 America/New_York'::timestamptz) as bucket,
+    '2024-11-03 01:30:00-04'::timestamptz < time_bucket('1 hour',
+        '2024-11-03 01:30:00-04'::timestamptz, 'America/New_York',
+        '2000-01-01 00:00:00 America/New_York'::timestamptz) as ts_before_bucket;
+            bucket            | ts_before_bucket 
+------------------------------+------------------
+ Sun Nov 03 01:00:00 2024 EDT | f
+
 SELECT time,
     time_bucket(10::smallint, time) AS time_bucket_smallint,
     time_bucket(10::int, time) AS time_bucket_int,
