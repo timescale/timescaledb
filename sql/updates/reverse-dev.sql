@@ -114,3 +114,29 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_column_size(_time
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_uncompressed_size;
 
+
+-- Revert time_bucket_gapfill functions to old signatures
+-- Integer variants stay at 4 args (unchanged between versions)
+-- Only timestamp and timezone variants need to be reverted
+
+-- Drop the new timestamp functions with origin/offset parameters (6 params)
+DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INTERVAL, DATE, DATE, DATE, DATE, INTERVAL);
+DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INTERVAL, TIMESTAMP, TIMESTAMP, TIMESTAMP, TIMESTAMP, INTERVAL);
+DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INTERVAL, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, INTERVAL);
+
+-- Drop the new timezone function with origin/offset parameters (7 params)
+DROP FUNCTION IF EXISTS @extschema@.time_bucket_gapfill(INTERVAL, TIMESTAMPTZ, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, INTERVAL);
+
+-- Recreate old timestamp variants (4 params)
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width INTERVAL, ts DATE, start DATE=NULL, finish DATE=NULL) RETURNS DATE
+	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width INTERVAL, ts TIMESTAMP, start TIMESTAMP=NULL, finish TIMESTAMP=NULL) RETURNS TIMESTAMP
+	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width INTERVAL, ts TIMESTAMPTZ, start TIMESTAMPTZ=NULL, finish TIMESTAMPTZ=NULL) RETURNS TIMESTAMPTZ
+	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;
+
+-- Recreate old timezone variant (5 params)
+CREATE OR REPLACE FUNCTION @extschema@.time_bucket_gapfill(bucket_width INTERVAL, ts TIMESTAMPTZ, timezone TEXT, start TIMESTAMPTZ=NULL, finish TIMESTAMPTZ=NULL) RETURNS TIMESTAMPTZ
+	AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE PARALLEL SAFE;

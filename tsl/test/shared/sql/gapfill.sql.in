@@ -1589,3 +1589,95 @@ FROM (SELECT NULL::timestamptz AS time LIMIT 0) s GROUP BY 1;
 
 RESET timezone;
 
+-- Test offset and origin parameters (#1304)
+
+-- Test offset with timestamptz
+-- This should produce buckets starting at 6:00 each day instead of midnight
+SELECT time_bucket_gapfill('1 day'::interval, time,
+    '2024-01-01 06:00:00'::timestamptz,
+    '2024-01-05 06:00:00'::timestamptz,
+    "offset" => '6 hours'::interval), count(*)
+FROM (VALUES ('2024-01-02 10:00:00'::timestamptz), ('2024-01-04 14:00:00'::timestamptz)) v(time)
+GROUP BY 1 ORDER BY 1;
+
+-- Test offset with timestamp
+SELECT time_bucket_gapfill('1 day'::interval, time,
+    '2024-01-01 06:00:00'::timestamp,
+    '2024-01-05 06:00:00'::timestamp,
+    "offset" => '6 hours'::interval), count(*)
+FROM (VALUES ('2024-01-02 10:00:00'::timestamp), ('2024-01-04 14:00:00'::timestamp)) v(time)
+GROUP BY 1 ORDER BY 1;
+
+-- Test offset with date
+SELECT time_bucket_gapfill('7 days'::interval, time,
+    '2024-01-01'::date,
+    '2024-01-29'::date,
+    "offset" => '3 days'::interval), count(*)
+FROM (VALUES ('2024-01-05'::date), ('2024-01-20'::date)) v(time)
+GROUP BY 1 ORDER BY 1;
+
+-- Test origin with timestamptz (fiscal month starting April 1st)
+SELECT time_bucket_gapfill('1 month'::interval, time,
+    '2024-01-01'::timestamptz,
+    '2024-07-01'::timestamptz,
+    origin => '2024-04-01'::timestamptz), count(*)
+FROM (VALUES ('2024-02-15'::timestamptz), ('2024-05-20'::timestamptz)) v(time)
+GROUP BY 1 ORDER BY 1;
+
+-- Test origin with timestamp
+SELECT time_bucket_gapfill('1 week'::interval, time,
+    '2024-01-01'::timestamp,
+    '2024-02-01'::timestamp,
+    origin => '2024-01-03'::timestamp), count(*)
+FROM (VALUES ('2024-01-10'::timestamp), ('2024-01-25'::timestamp)) v(time)
+GROUP BY 1 ORDER BY 1;
+
+-- Test origin with date
+SELECT time_bucket_gapfill('1 week'::interval, time,
+    '2024-01-01'::date,
+    '2024-02-01'::date,
+    origin => '2024-01-03'::date), count(*)
+FROM (VALUES ('2024-01-10'::date), ('2024-01-25'::date)) v(time)
+GROUP BY 1 ORDER BY 1;
+
+-- Test offset with timezone variant
+SELECT time_bucket_gapfill('1 day'::interval, time, 'Europe/Berlin',
+    '2024-01-01'::timestamptz,
+    '2024-01-05'::timestamptz,
+    "offset" => '6 hours'::interval), count(*)
+FROM (VALUES ('2024-01-02 10:00:00+01'::timestamptz), ('2024-01-04 14:00:00+01'::timestamptz)) v(time)
+GROUP BY 1 ORDER BY 1;
+
+-- Test origin with timezone variant
+SELECT time_bucket_gapfill('1 month'::interval, time, 'Europe/Berlin',
+    '2024-01-01'::timestamptz,
+    '2024-07-01'::timestamptz,
+    origin => '2024-04-01'::timestamptz), count(*)
+FROM (VALUES ('2024-02-15 12:00:00+01'::timestamptz), ('2024-05-20 12:00:00+02'::timestamptz)) v(time)
+GROUP BY 1 ORDER BY 1;
+
+-- Test offset with locf
+SELECT time_bucket_gapfill('1 day'::interval, time,
+    '2024-01-01 06:00:00'::timestamptz,
+    '2024-01-05 06:00:00'::timestamptz,
+    "offset" => '6 hours'::interval), locf(max(value))
+FROM (VALUES ('2024-01-02 10:00:00'::timestamptz, 100), ('2024-01-04 14:00:00'::timestamptz, 200)) v(time, value)
+GROUP BY 1 ORDER BY 1;
+
+-- Test origin with interpolate
+SELECT time_bucket_gapfill('1 day'::interval, time,
+    '2024-01-01'::timestamptz,
+    '2024-01-05'::timestamptz,
+    origin => '2024-01-01'::timestamptz), interpolate(avg(value))
+FROM (VALUES ('2024-01-01 12:00:00'::timestamptz, 100.0), ('2024-01-04 12:00:00'::timestamptz, 400.0)) v(time, value)
+GROUP BY 1 ORDER BY 1;
+
+-- Test error when both origin and offset are specified
+SELECT time_bucket_gapfill('1 day'::interval, time,
+    '2024-01-01'::timestamptz,
+    '2024-01-05'::timestamptz,
+    origin => '2024-01-01'::timestamptz,
+    "offset" => '6 hours'::interval), count(*)
+FROM (VALUES ('2024-01-02'::timestamptz)) v(time)
+GROUP BY 1 ORDER BY 1;
+

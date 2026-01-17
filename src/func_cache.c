@@ -10,6 +10,7 @@
 #include <catalog/pg_proc.h>
 #include <catalog/pg_type.h>
 #include <miscadmin.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/pathnodes.h>
 #include <optimizer/optimizer.h>
 #include <parser/parse_oper.h>
@@ -66,6 +67,20 @@ date_trunc_sort_transform(FuncExpr *func)
 #define time_bucket_has_const_period(func) IsA(linitial((func)->args), Const)
 #define time_bucket_has_const_timezone(func) IsA(lthird((func)->args), Const)
 
+/*
+ * Check if a time_bucket_gapfill function has a timezone argument.
+ * The 7-arg timezone variant is the only one with a timezone argument.
+ * Arg counts:
+ *   - 4 args: integer variants (bucket_width, ts, start, finish)
+ *   - 6 args: timestamp variants (bucket_width, ts, start, finish, origin, offset)
+ *   - 7 args: timezone variant (bucket_width, ts, timezone, start, finish, origin, offset)
+ */
+static bool
+gapfill_has_timezone_arg(FuncExpr *func)
+{
+	return list_length(func->args) == 7;
+}
+
 static Expr *
 do_sort_transform(FuncExpr *func)
 {
@@ -85,11 +100,17 @@ time_bucket_gapfill_sort_transform(FuncExpr *func)
 	 *
 	 * proof: time_bucket(const1, time1) >= time_bucket(const1,time2) iff time1
 	 * > time2
+	 *
+	 * Arg counts:
+	 *   4 args: integer variants (bucket_width, ts, start, finish)
+	 *   6 args: timestamp variants (bucket_width, ts, start, finish, origin, offset)
+	 *   7 args: timezone variant (bucket_width, ts, timezone, start, finish, origin, offset)
 	 */
-	Assert(list_length(func->args) == 4 || list_length(func->args) == 5);
+	Assert(list_length(func->args) == 4 || list_length(func->args) == 6 ||
+		   list_length(func->args) == 7);
 
 	if (!time_bucket_has_const_period(func) ||
-		(list_length(func->args) == 5 && !time_bucket_has_const_timezone(func)))
+		(gapfill_has_timezone_arg(func) && !time_bucket_has_const_timezone(func)))
 		return (Expr *) func;
 
 	return do_sort_transform(func);
@@ -455,47 +476,71 @@ static FuncInfo funcinfo[] = {
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
 	},
+	/* Gapfill variants - PostgreSQL fills in defaults so we always see max args */
 	{
+		/* time_bucket_gapfill(INTERVAL, TIMESTAMP, TIMESTAMP, TIMESTAMP, TIMESTAMP, INTERVAL) */
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
-		.nargs = 4,
-		.arg_types = { INTERVALOID, TIMESTAMPOID, TIMESTAMPOID, TIMESTAMPOID },
+		.nargs = 6,
+		.arg_types = { INTERVALOID,
+					   TIMESTAMPOID,
+					   TIMESTAMPOID,
+					   TIMESTAMPOID,
+					   TIMESTAMPOID,
+					   INTERVALOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
+		/* time_bucket_gapfill(INTERVAL, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ,
+		   INTERVAL) */
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
-		.nargs = 4,
-		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TIMESTAMPTZOID, TIMESTAMPTZOID },
+		.nargs = 6,
+		.arg_types = { INTERVALOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID,
+					   INTERVALOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
+		/* time_bucket_gapfill(INTERVAL, TIMESTAMPTZ, TEXT, TIMESTAMPTZ, TIMESTAMPTZ, TIMESTAMPTZ,
+		   INTERVAL) */
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
-		.nargs = 5,
-		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TEXTOID, TIMESTAMPTZOID, TIMESTAMPTZOID },
+		.nargs = 7,
+		.arg_types = { INTERVALOID,
+					   TIMESTAMPTZOID,
+					   TEXTOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID,
+					   TIMESTAMPTZOID,
+					   INTERVALOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
+		/* time_bucket_gapfill(INTERVAL, DATE, DATE, DATE, DATE, INTERVAL) */
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
 		.funcname = "time_bucket_gapfill",
-		.nargs = 4,
-		.arg_types = { INTERVALOID, DATEOID, DATEOID, DATEOID },
+		.nargs = 6,
+		.arg_types = { INTERVALOID, DATEOID, DATEOID, DATEOID, DATEOID, INTERVALOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
+		/* time_bucket_gapfill(SMALLINT, SMALLINT, SMALLINT, SMALLINT) */
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
@@ -506,6 +551,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
+		/* time_bucket_gapfill(INT, INT, INT, INT) */
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
@@ -516,6 +562,7 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_gapfill_sort_transform,
 	},
 	{
+		/* time_bucket_gapfill(BIGINT, BIGINT, BIGINT, BIGINT) */
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,

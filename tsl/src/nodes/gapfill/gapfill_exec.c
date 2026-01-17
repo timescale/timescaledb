@@ -214,6 +214,51 @@ gapfill_period_get_internal(Oid timetype, Oid argtype, Datum arg, Interval **int
 	}
 }
 
+static bool
+is_const_null(Expr *expr)
+{
+	return IsA(expr, Const) && castNode(Const, expr)->constisnull;
+}
+
+/*
+ * Get the origin argument expression, or NULL if not provided.
+ * For old 4-arg variants: no origin (returns NULL)
+ * For integer variants (5 args): no origin (returns NULL)
+ * For timestamp variants (6 args): origin is arg[4]
+ * For timezone variant (7 args): origin is arg[5]
+ */
+static Expr *
+get_origin_arg(GapFillState *state)
+{
+	int nargs = list_length(state->args);
+
+	if (nargs <= 4)
+		return NULL; /* integer variant (4 args) has no origin */
+	else if (nargs == 6)
+		return list_nth(state->args, 4); /* timestamp variant */
+	else
+		return list_nth(state->args, 5); /* timezone variant */
+}
+
+/*
+ * Get the offset argument expression, or NULL if not provided.
+ * For integer variants (4 args): no offset support (returns NULL)
+ * For timestamp variants (6 args): offset is arg[5]
+ * For timezone variant (7 args): offset is arg[6]
+ */
+static Expr *
+get_offset_arg(GapFillState *state)
+{
+	int nargs = list_length(state->args);
+
+	if (nargs <= 4)
+		return NULL; /* integer variant (4 args) has no offset */
+	else if (nargs == 6)
+		return list_nth(state->args, 5); /* timestamp variant */
+	else
+		return list_nth(state->args, 6); /* timezone variant */
+}
+
 /*
  * Create a GapFill node from this plan. This is the full execution
  * state that replaces the plan node as the plan moves from planning to
@@ -223,19 +268,37 @@ Node *
 gapfill_state_create(CustomScan *cscan)
 {
 	GapFillState *state = (GapFillState *) newNode(sizeof(GapFillState), T_CustomScanState);
+	int nargs;
 
 	state->csstate.methods = &gapfill_state_methods;
 	state->subplan = linitial(cscan->custom_plans);
 	state->args = lfourth(cscan->custom_private);
-	state->have_timezone = list_length(state->args) == 5;
+	nargs = list_length(state->args);
+
+	/*
+	 * Determine if this is a timezone variant by checking argument count.
+	 * Argument counts:
+	 *   4 args: integer variant (bucket_width, ts, start, finish)
+	 *   6 args: timestamp variant (bucket_width, ts, start, finish, origin, offset)
+	 *   7 args: timezone variant (bucket_width, ts, timezone, start, finish, origin, offset)
+	 */
+	state->have_timezone = (nargs == 7);
+
+	/* Check if origin is provided (non-NULL) */
+	Expr *origin_expr = get_origin_arg(state);
+	state->have_origin = (origin_expr != NULL && !is_const_null(origin_expr));
+
+	/* Check if offset is provided (non-NULL) */
+	Expr *offset_expr = get_offset_arg(state);
+	state->have_offset = (offset_expr != NULL && !is_const_null(offset_expr));
+
+	/* Validate that origin and offset are mutually exclusive */
+	if (state->have_origin && state->have_offset)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot specify both origin and offset in time_bucket_gapfill")));
 
 	return (Node *) state;
-}
-
-static bool
-is_const_null(Expr *expr)
-{
-	return IsA(expr, Const) && castNode(Const, expr)->constisnull;
 }
 
 /*
@@ -361,12 +424,50 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 					 errmsg("invalid time_bucket_gapfill argument: timezone cannot be NULL")));
 		}
 
-		time_bucket->args =
-			list_make3(linitial(time_bucket->args), expr, lthird(time_bucket->args));
+		/*
+		 * For timezone variant (7 args): bucket_width, ts, timezone, start, finish, origin, offset
+		 * Pass through origin and offset from original args.
+		 */
+		Expr *origin_arg = get_origin_arg(state);
+		Expr *offset_arg = get_offset_arg(state);
+		Node *null_const = (Node *) makeBoolConst(true, true);
+		List *args = list_make3(linitial(time_bucket->args), expr, lthird(time_bucket->args));
+		args = lappend(args, null_const); /* start placeholder */
+		args = lappend(args, null_const); /* finish placeholder */
+		args = lappend(args, origin_arg ? (Node *) origin_arg : null_const); /* origin */
+		args = lappend(args, offset_arg ? (Node *) offset_arg : null_const); /* offset */
+		time_bucket->args = args;
 	}
 	else
 	{
-		time_bucket->args = list_make2(linitial(time_bucket->args), expr);
+		int nargs = list_length(state->args);
+		if (nargs == 4)
+		{
+			/*
+			 * For integer variant (4 args): bucket_width, ts, start, finish
+			 * No origin/offset support.
+			 */
+			Node *null_const = (Node *) makeBoolConst(true, true);
+			List *args = list_make2(linitial(time_bucket->args), expr);
+			args = lappend(args, null_const); /* start placeholder */
+			args = lappend(args, null_const); /* finish placeholder */
+			time_bucket->args = args;
+		}
+		else
+		{
+			/*
+			 * For timestamp variant (6 args): bucket_width, ts, start, finish, origin, offset
+			 */
+			Expr *origin_arg = get_origin_arg(state);
+			Expr *offset_arg = get_offset_arg(state);
+			Node *null_const = (Node *) makeBoolConst(true, true);
+			List *args = list_make2(linitial(time_bucket->args), expr);
+			args = lappend(args, null_const); /* start placeholder */
+			args = lappend(args, null_const); /* finish placeholder */
+			args = lappend(args, origin_arg ? (Node *) origin_arg : null_const); /* origin */
+			args = lappend(args, offset_arg ? (Node *) offset_arg : null_const); /* offset */
+			time_bucket->args = args;
+		}
 	}
 	value = gapfill_exec_expr(state, state->scanslot, (Expr *) time_bucket, &isnull);
 
