@@ -7,6 +7,14 @@
 #ifdef GENERATE_DISPATCH_TABLE
 extern VectorAggFunctions FUNCTION_NAME(argdef);
 case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
+	/*
+	 * Text min/max uses memcmp for comparison, which only produces correct
+	 * ordering for C collation. For non-C collations, return NULL to fall
+	 * back to the Postgres aggregation.
+	 */
+	if (!OidIsValid(collation) ||
+		!pg_newlocale_from_collation(collation)->collate_is_c)
+		return NULL;
 	return &FUNCTION_NAME(argdef);
 #else
 

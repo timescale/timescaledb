@@ -57,4 +57,4 @@ typedef struct
 	void (*agg_emit)(void *restrict agg_state, Datum *out_result, bool *out_isnull);
 } VectorAggFunctions;
 
-VectorAggFunctions *get_vector_aggregate(Oid aggfnoid);
+VectorAggFunctions *get_vector_aggregate(Oid aggfnoid, Oid collation);
