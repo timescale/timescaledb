@@ -911,7 +911,7 @@ DECLARE
 BEGIN
   FOR chunk IN
   SELECT format('%I.%I', schema_name, table_name)::regclass
-    FROM _timescaledb_catalog.chunk WHERE status = 9 and compressed_chunk_id IS NOT NULL AND NOT dropped
+    FROM _timescaledb_catalog.chunk WHERE status = 9 and compressed_chunk_id IS NOT NULL
     ORDER BY id
   LOOP
     EXECUTE format('select decompress_chunk(''%s'');', chunk::text);

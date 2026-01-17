@@ -1447,12 +1447,12 @@ SELECT drop_chunks('metrics', older_than=>'1 day'::interval);
 
 SELECT
    c.table_name as chunk_name,
-   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+   c.status as chunk_status, c.compressed_chunk_id as comp_id
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
- chunk_name | chunk_status | dropped | comp_id 
-------------+--------------+---------+---------
+ chunk_name | chunk_status | comp_id 
+------------+--------------+---------
 
 SELECT "time", cnt  FROM cagg_expr ORDER BY time LIMIT 5;
              time             | cnt  
@@ -1473,14 +1473,14 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
 
 SELECT
    c.table_name as chunk_name,
-   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+   c.status as chunk_status, c.compressed_chunk_id as comp_id
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
-     chunk_name     | chunk_status | dropped | comp_id 
---------------------+--------------+---------+---------
- _hyper_13_64_chunk |            1 | f       |      66
- _hyper_13_65_chunk |            1 | f       |      67
+     chunk_name     | chunk_status | comp_id 
+--------------------+--------------+---------
+ _hyper_13_64_chunk |            1 |      66
+ _hyper_13_65_chunk |            1 |      67
 
 SELECT count(*) FROM metrics;
  count 
