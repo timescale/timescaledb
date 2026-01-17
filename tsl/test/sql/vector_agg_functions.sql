@@ -146,7 +146,8 @@ from
         'cts',
         'ctstz',
         'cdate',
-        '*']) variable,
+        '*',
+        'x']) variable,
     unnest(array[
         'min',
         'max',
@@ -168,6 +169,7 @@ from
 where
     true
     and (explain is null /* or condition is null and grouping = 's' */)
+    and (variable != 'x' or function in ('min'))
     and (variable != '*' or function = 'count')
     and (variable not in ('t', 'cts', 'ctstz', 'cdate') or function in ('min', 'max'))
     -- This is not vectorized yet
