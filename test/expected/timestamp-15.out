@@ -545,7 +545,7 @@ SELECT time_bucket('30 seconds', '2025-10-26 02:00:00+02'::timestamptz,
     timezone := 'Europe/Berlin', "offset" := '-15 seconds'::interval);
          time_bucket          
 ------------------------------
- Sat Oct 25 20:59:45 2025 EDT
+ Sat Oct 25 19:59:45 2025 EDT
 
 -- Additional DST edge cases for coverage of DST direction × offset sign combinations
 -- Spring-forward + negative offset
@@ -580,7 +580,7 @@ SELECT time_bucket('1 hour', '2025-10-26 01:00:00+00'::timestamptz,
     timezone := 'Europe/Berlin', "offset" := '15 minutes'::interval);
          time_bucket          
 ------------------------------
- Sat Oct 25 21:15:00 2025 EDT
+ Sat Oct 25 20:15:00 2025 EDT
 
 -- Offset larger than bucket size (1h offset with 30min bucket)
 -- Input: 01:30+03 = 22:30 UTC → Result: 22:30 UTC = 01:30 local (01:00 + 30min = 00:30 + 1h)
@@ -589,6 +589,21 @@ SELECT time_bucket('30 minutes', '2021-03-26 01:30:00+03'::timestamptz,
          time_bucket          
 ------------------------------
  Thu Mar 25 18:30:00 2021 EDT
+
+-- GitHub issue #9136: time_bucket with origin during DST fall-back
+-- When origin is in standard time but timestamp is in daylight time,
+-- the bucket could incorrectly start AFTER the timestamp.
+-- America/New_York: clocks go back at 02:00 EDT on 2024-11-03
+-- Input: 01:30-04 (EDT) = 05:30 UTC; origin in EST
+-- Result should have bucket start <= timestamp (bucket in EDT, not EST)
+SELECT time_bucket('1 hour', '2024-11-03 01:30:00-04'::timestamptz,
+    'America/New_York', '2000-01-01 00:00:00 America/New_York'::timestamptz) as bucket,
+    '2024-11-03 01:30:00-04'::timestamptz < time_bucket('1 hour',
+        '2024-11-03 01:30:00-04'::timestamptz, 'America/New_York',
+        '2000-01-01 00:00:00 America/New_York'::timestamptz) as ts_before_bucket;
+            bucket            | ts_before_bucket 
+------------------------------+------------------
+ Sun Nov 03 01:00:00 2024 EDT | f
 
 SELECT time,
     time_bucket(10::smallint, time) AS time_bucket_smallint,

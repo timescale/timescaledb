@@ -1,1 +1,1 @@
-Fixes: #7059 #8851 Fix time_bucket with timezone and offset during DST
+Fixes: #7059 #8851 #9136 Fix time_bucket with timezone during DST

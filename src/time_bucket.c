@@ -374,6 +374,18 @@ ts_timestamptz_timezone_bucket(PG_FUNCTION_ARGS)
 	/* Convert back to timestamptz */
 	Datum result = DirectFunctionCall2(timestamp_zone, tzname, local_ts);
 
+	/*
+	 * During DST fall-back, the same local time maps to two different UTC
+	 * times. PostgreSQL's timestamp_zone picks the later (standard time)
+	 * interpretation. If the original timestamp was in daylight time, the
+	 * bucket could start AFTER the timestamp. Fix by subtracting periods
+	 * until the bucket is at or before the timestamp (issue #9136).
+	 */
+	while (DatumGetTimestampTz(result) > DatumGetTimestampTz(timestamp))
+	{
+		result = DirectFunctionCall2(timestamptz_mi_interval, result, period);
+	}
+
 	if (have_offset)
 	{
 		/* Remove offset in UTC space. */
