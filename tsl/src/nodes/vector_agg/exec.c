@@ -183,12 +183,6 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 				 */
 				const int new_body_bytes =
 					required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) row + 1))) + 1;
-				//				fprintf(stderr,
-				//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
-				//						new_body_bytes,
-				//						new_body_bytes / (float) required_body_bytes,
-				//						i,
-				//						nrows);
 				Assert(new_body_bytes >= required_body_bytes);
 				columnar_result->body_buffer =
 					repalloc(columnar_result->body_buffer, new_body_bytes);

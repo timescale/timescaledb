@@ -210,6 +210,9 @@ is_vector_type(Oid typeoid)
 
 static bool is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr);
 
+/*
+ * Whether we can evaluate this function as part of the columnar pipeline.
+ */
 static bool
 is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid resulttype,
 				   Oid inputcollid)
@@ -248,6 +251,9 @@ is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid re
 static bool
 is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 {
+	/*
+	 * Skip NULLs for uniform handling of the optional nodes.
+	 */
 	if (expr == NULL)
 	{
 		return true;
