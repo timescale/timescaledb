@@ -21,6 +21,7 @@
 
 #include "gapfill.h"
 #include "gapfill_internal.h"
+#include "utils.h"
 
 static CustomScanMethods gapfill_plan_methods = {
 	.CustomName = "GapFill",
@@ -50,7 +51,7 @@ gapfill_aggref_mutator(Node *node, void *context)
 
 	if (IsA(node, Aggref))
 		return (Node *)
-			makeConst(((Aggref *) node)->aggtype, -1, InvalidOid, -2, (Datum) 0, true, false);
+			makeConst(((Aggref *) node)->aggtype, -1, InvalidOid, -2, UnassignedDatum, true, false);
 
 	return expression_tree_mutator(node, gapfill_aggref_mutator, context);
 }

@@ -1904,7 +1904,7 @@ relation_set_reloption_impl(Relation rel, List *options, LOCKMODE lockmode)
 
 	/* Generate new proposed reloptions (text array) */
 	Datum newOptions =
-		transformRelOptions(isnull ? (Datum) 0 : datum, options, NULL, NULL, false, false);
+		transformRelOptions(isnull ? UnassignedDatum : datum, options, NULL, NULL, false, false);
 	(void) heap_reloptions(rel->rd_rel->relkind, newOptions, true);
 
 	if (newOptions)
