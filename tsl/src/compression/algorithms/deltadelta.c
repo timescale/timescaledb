@@ -767,7 +767,7 @@ deltadelta_compressed_recv(StringInfo buffer)
 	int nulls_size = 0;
 	size_t compressed_size = 0;
 
-	size_t allocated_size = (2 * sizeof(Simple8bRleSerialized)) + sizeof(DeltaDeltaCompressed) +
+	size_t allocated_size = 2 * sizeof(Simple8bRleSerialized) + sizeof(DeltaDeltaCompressed) +
 							(buffer->len - buffer->cursor);
 	compressed = palloc(allocated_size);
 

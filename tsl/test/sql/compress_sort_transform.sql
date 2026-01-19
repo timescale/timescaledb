@@ -75,9 +75,7 @@ order by device, time_bucket('1 minute', time) limit 1;
 -- Test incorrect transformation into a Pathkey on different relation through
 -- a join EquivalenceClass.
 set max_parallel_workers_per_gather = 0;
-set enable_hashjoin to off;
--- :PREFIX
-explain
+:PREFIX
 select time_bucket('1 minute', a.time) from ht_metrics_partially_compressed a
 join ht_metrics_partially_compressed b
 on a.time = b.time

@@ -635,7 +635,7 @@ tsl_uuid_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 				/* Copy the 16 bytes of the UUID with simple assignment, because we know it is
 				 * aligned */
 				values[i * 2] = compressed_non_null_values[position * 2];
-				values[(i * 2) + 1] = compressed_non_null_values[(position * 2) + 1];
+				values[i * 2 + 1] = compressed_non_null_values[position * 2 + 1];
 				position++;
 			}
 		}
