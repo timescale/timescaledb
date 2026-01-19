@@ -689,7 +689,7 @@ create_toast_table(CreateStmt *stmt, Oid chunk_oid)
 	const char *const validnsps[] = HEAP_RELOPT_NAMESPACES;
 #endif
 	Datum toast_options =
-		transformRelOptions((Datum) 0, stmt->options, "toast", validnsps, true, false);
+		transformRelOptions(UnassignedDatum, stmt->options, "toast", validnsps, true, false);
 
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 
