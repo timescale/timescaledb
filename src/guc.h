@@ -147,8 +147,6 @@ extern TSDLLEXPORT bool ts_guc_enable_rowlevel_compression_locking;
 
 extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_batch_sorted_merge;
 
-extern TSDLLEXPORT bool ts_guc_debug_allow_cagg_with_deprecated_funcs;
-
 extern bool ts_guc_enable_partitioned_hypertables;
 
 void _guc_init(void);
