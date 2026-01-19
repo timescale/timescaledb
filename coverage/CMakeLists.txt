@@ -58,7 +58,7 @@ else()
         "Failed to get LCOV version. Error code: ${LCOV_VERSION_RESULT}")
   endif()
 
-  if(${LCOV_VERSION} GREATER_EQUAL "2.0")
+  if(${LCOV_VERSION} VERSION_GREATER_EQUAL "2.0")
     set(LCOV_EXTRA_OPTIONS "--ignore-errors;mismatch,mismatch")
   else()
     set(LCOV_EXTRA_OPTIONS "")
