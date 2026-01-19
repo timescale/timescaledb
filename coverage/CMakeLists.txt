@@ -59,7 +59,7 @@ else()
   endif()
 
   if(${LCOV_VERSION} GREATER_EQUAL "2.0")
-    set(LCOV_EXTRA_OPTIONS "--ignore-errors mismatch,mismatch")
+    set(LCOV_EXTRA_OPTIONS "--ignore-errors;mismatch,mismatch")
   else()
     set(LCOV_EXTRA_OPTIONS "")
   endif()
