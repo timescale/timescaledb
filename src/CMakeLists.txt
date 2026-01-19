@@ -122,7 +122,19 @@ add_subdirectory(loader)
 add_subdirectory(bgw_policy)
 add_subdirectory(compat)
 add_subdirectory(ts_catalog)
-add_subdirectory(import)
 add_subdirectory(nodes)
 add_subdirectory(planner)
 add_subdirectory(with_clause)
+
+# Don't run clang-tidy on the files we copied from Postgres. We don't want
+# to introduce changes there unless absolutely necessary. CMake can only access
+# the file properties if the target was added in the same directory,
+# so just move it all here.
+set(IMPORTED_SOURCES
+    import/allpaths.c
+    import/heapswap.c
+    import/list.c
+    import/planner.c
+    import/ts_explain.c)
+set_source_files_properties(${IMPORTED_SOURCES} PROPERTIES SKIP_LINTING ON)
+target_sources(${PROJECT_NAME} PRIVATE ${IMPORTED_SOURCES})
