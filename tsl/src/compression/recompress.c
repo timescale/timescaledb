@@ -919,7 +919,7 @@ match_tuple_batch(TupleTableSlot *compressed_slot, int num_orderby, ScanKey orde
 		if (!slot_key_test(compressed_slot, key))
 			return handle_null_scan(key->sk_flags, nulls_first[i], Tuple_before);
 
-		key = &orderby_scankeys[i * 2 + 1];
+		key = &orderby_scankeys[(i * 2) + 1];
 		if (!slot_key_test(compressed_slot, key))
 			return handle_null_scan(key->sk_flags, nulls_first[i], Tuple_after);
 	}

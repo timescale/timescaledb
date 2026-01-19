@@ -183,14 +183,14 @@ bloom1_get_hash_function(Oid type, FmgrInfo **finfo)
 		case F_HASHDATEEXTENDED:
 #endif
 			return bloom1_hash_4;
+		default:
+			/*
+			 * Use the Postgres hash function. We might require the finfo, for
+			 * example for functions defined in procedural languages.
+			 */
+			*finfo = &entry->hash_extended_proc_finfo;
+			return entry->hash_extended_proc_finfo.fn_addr;
 	}
-
-	/*
-	 * For the Postgres hash function, finfo might be required, for example for
-	 * functions defined in procedural languages.
-	 */
-	*finfo = &entry->hash_extended_proc_finfo;
-	return entry->hash_extended_proc_finfo.fn_addr;
 }
 
 static void
@@ -273,7 +273,7 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	const double k = BLOOM1_HASHES;
 	const double p = BLOOM1_FALSE_POSITIVES;
 	const double t = orig_bits_set;
-	const double m1 = -log(1 - t / m0) / (log(1 - 1 / m0) * log(1 - pow(p, 1 / k)));
+	const double m1 = -log(1 - (t / m0)) / (log(1 - (1 / m0)) * log(1 - pow(p, 1 / k)));
 
 	/*
 	 * Compute powers of two corresponding to the current and desired filter
@@ -367,7 +367,7 @@ bloom1_get_one_offset(uint64 value_hash, uint32 index)
 	 * Add a quadratic component to lessen degradation in the unlikely case when
 	 * 'high' is a multiple of block bits.
 	 */
-	return low + (index * high + index * index) % BLOOM1_BLOCK_BITS;
+	return low + ((index * high + index * index) % BLOOM1_BLOCK_BITS);
 }
 
 static void
@@ -692,7 +692,7 @@ bloom1_varlena_alloc_size(int num_bits)
 	 * We are not supposed to go below 64 bits because we work in 64-bit words.
 	 */
 	Assert(num_bits % 64 == 0);
-	return VARHDRSZ + num_bits / 8;
+	return VARHDRSZ + (num_bits / 8);
 }
 
 BatchMetadataBuilder *
@@ -748,7 +748,7 @@ bloom1_estimate_ndistinct(struct varlena *bloom)
 	const double m = bloom1_num_bits(bloom);
 	const double t = pg_popcount(bloom1_words_buf(bloom), m / 8);
 	const double k = BLOOM1_HASHES;
-	return log(1 - t / m) / (k * log(1 - 1 / m));
+	return log(1 - (t / m)) / (k * log(1 - (1 / m)));
 }
 
 /*

@@ -558,7 +558,9 @@ if(LINTER)
       ",-readability-identifier-length"
       ",-readability-isolate-declaration"
       ",-readability-magic-numbers"
+      ",-readability-math-missing-parentheses"
       ",-readability-non-const-parameter"
+      ",-readability-redundant-casting"
       "${CLANG_TIDY_EXTRA_OPTS}")
   if(WARNINGS_AS_ERRORS)
     set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--warnings-as-errors=*")

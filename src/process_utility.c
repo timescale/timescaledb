@@ -2674,7 +2674,7 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 				appendStringInfo(&command,
 								 "%s IS NOT NULL",
 								 elem->name ? quote_identifier(elem->name) :
-											  deparse_expression((Node *) elem->expr,
+											  deparse_expression(elem->expr,
 																 dpcontext,
 																 false,
 																 false));
@@ -2694,7 +2694,7 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 							 "%s",
 							 elem->name ?
 								 quote_identifier(elem->name) :
-								 deparse_expression((Node *) elem->expr, dpcontext, false, false));
+								 deparse_expression(elem->expr, dpcontext, false, false));
 			if (j < list_length(stmt->indexParams))
 				appendStringInfo(&command, ",");
 		}

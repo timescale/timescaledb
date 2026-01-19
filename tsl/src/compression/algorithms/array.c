@@ -149,7 +149,7 @@ array_compressor_is_full(Compressor *compressor, Datum val)
 		extended->internal = array_compressor_alloc(extended->element_type);
 
 	Size datum_size_and_align;
-	ArrayCompressor *array_comp = (ArrayCompressor *) extended->internal;
+	ArrayCompressor *array_comp = extended->internal;
 	if (datum_serializer_value_may_be_toasted(array_comp->serializer))
 		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
 
@@ -635,7 +635,7 @@ tsl_uuid_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 				/* Copy the 16 bytes of the UUID with simple assignment, because we know it is
 				 * aligned */
 				values[i * 2] = compressed_non_null_values[position * 2];
-				values[i * 2 + 1] = compressed_non_null_values[position * 2 + 1];
+				values[(i * 2) + 1] = compressed_non_null_values[(position * 2) + 1];
 				position++;
 			}
 		}
