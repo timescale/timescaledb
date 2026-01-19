@@ -96,10 +96,57 @@ ORDER BY range_start;
 DROP TABLE origin_update;
 
 ---------------------------------------------------------------
--- INTEGER COLUMNS WITH INTEGER ORIGIN
+-- INTEGER COLUMNS WITH INTEGER ORIGIN (OLD API)
 ---------------------------------------------------------------
--- Test integer columns with integer origin
+-- Test integer columns with integer origin using create_hypertable old API
 
+-- Test smallint with origin (old API)
+CREATE TABLE smallint_origin_old(id smallint NOT NULL, value int);
+SELECT create_hypertable('smallint_origin_old', 'id',
+    chunk_time_interval => 100,
+    chunk_time_origin => 50);
+
+SELECT hypertable_name, integer_interval, integer_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'smallint_origin_old';
+
+INSERT INTO smallint_origin_old VALUES (40, 1);   -- chunk [-50, 50)
+INSERT INTO smallint_origin_old VALUES (50, 2);   -- chunk [50, 150)
+INSERT INTO smallint_origin_old VALUES (150, 3);  -- chunk [150, 250)
+
+SELECT c.table_name AS chunk_name, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
+JOIN _timescaledb_catalog.dimension_slice ds ON cc.dimension_slice_id = ds.id
+WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'smallint_origin_old')
+ORDER BY ds.range_start;
+
+DROP TABLE smallint_origin_old;
+
+-- Test int (int4) with origin (old API)
+CREATE TABLE int4_origin_old(id int NOT NULL, value int);
+SELECT create_hypertable('int4_origin_old', 'id',
+    chunk_time_interval => 1000,
+    chunk_time_origin => 500);
+
+SELECT hypertable_name, integer_interval, integer_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'int4_origin_old';
+
+INSERT INTO int4_origin_old VALUES (400, 1);   -- chunk [-500, 500)
+INSERT INTO int4_origin_old VALUES (500, 2);   -- chunk [500, 1500)
+INSERT INTO int4_origin_old VALUES (1500, 3);  -- chunk [1500, 2500)
+
+SELECT c.table_name AS chunk_name, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
+JOIN _timescaledb_catalog.dimension_slice ds ON cc.dimension_slice_id = ds.id
+WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'int4_origin_old')
+ORDER BY ds.range_start;
+
+DROP TABLE int4_origin_old;
+
+-- Test bigint with origin (old API)
 CREATE TABLE int_origin(time bigint NOT NULL, value int);
 SELECT create_hypertable('int_origin', 'time',
     chunk_time_interval => 1000,
@@ -125,6 +172,84 @@ WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE ta
 ORDER BY ds.range_start;
 
 DROP TABLE int_origin;
+
+-- Test smallint columns with integer origin using by_range syntax
+CREATE TABLE smallint_origin(id smallint NOT NULL, value int);
+SELECT create_hypertable('smallint_origin',
+    by_range('id', 100, partition_origin => 50));
+
+-- Verify dimensions view shows integer_origin
+SELECT hypertable_name, integer_interval, integer_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'smallint_origin';
+
+-- Insert data to verify chunk alignment relative to origin=50
+-- Chunks should be: [..., -50 to 50, 50 to 150, 150 to 250, ...]
+INSERT INTO smallint_origin VALUES (40, 1);   -- chunk [-50, 50)
+INSERT INTO smallint_origin VALUES (50, 2);   -- chunk [50, 150)
+INSERT INTO smallint_origin VALUES (120, 3);  -- chunk [50, 150)
+INSERT INTO smallint_origin VALUES (150, 4);  -- chunk [150, 250)
+
+SELECT c.table_name AS chunk_name, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
+JOIN _timescaledb_catalog.dimension_slice ds ON cc.dimension_slice_id = ds.id
+WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'smallint_origin')
+ORDER BY ds.range_start;
+
+DROP TABLE smallint_origin;
+
+-- Test int (int4) columns with integer origin using by_range syntax
+CREATE TABLE int4_origin(id int NOT NULL, value int);
+SELECT create_hypertable('int4_origin',
+    by_range('id', 1000, partition_origin => 500));
+
+-- Verify dimensions view shows integer_origin
+SELECT hypertable_name, integer_interval, integer_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'int4_origin';
+
+-- Insert data to verify chunk alignment relative to origin=500
+-- Chunks should be: [..., -500 to 500, 500 to 1500, 1500 to 2500, ...]
+INSERT INTO int4_origin VALUES (400, 1);   -- chunk [-500, 500)
+INSERT INTO int4_origin VALUES (500, 2);   -- chunk [500, 1500)
+INSERT INTO int4_origin VALUES (1200, 3);  -- chunk [500, 1500)
+INSERT INTO int4_origin VALUES (1500, 4);  -- chunk [1500, 2500)
+
+SELECT c.table_name AS chunk_name, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
+JOIN _timescaledb_catalog.dimension_slice ds ON cc.dimension_slice_id = ds.id
+WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'int4_origin')
+ORDER BY ds.range_start;
+
+DROP TABLE int4_origin;
+
+-- Test bigint columns with integer origin using by_range syntax
+CREATE TABLE bigint_origin(id bigint NOT NULL, value int);
+SELECT create_hypertable('bigint_origin',
+    by_range('id', 10000, partition_origin => 5000));
+
+-- Verify dimensions view shows integer_origin
+SELECT hypertable_name, integer_interval, integer_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'bigint_origin';
+
+-- Insert data to verify chunk alignment relative to origin=5000
+-- Chunks should be: [..., -5000 to 5000, 5000 to 15000, 15000 to 25000, ...]
+INSERT INTO bigint_origin VALUES (4000, 1);   -- chunk [-5000, 5000)
+INSERT INTO bigint_origin VALUES (5000, 2);   -- chunk [5000, 15000)
+INSERT INTO bigint_origin VALUES (12000, 3);  -- chunk [5000, 15000)
+INSERT INTO bigint_origin VALUES (15000, 4);  -- chunk [15000, 25000)
+
+SELECT c.table_name AS chunk_name, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
+JOIN _timescaledb_catalog.dimension_slice ds ON cc.dimension_slice_id = ds.id
+WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'bigint_origin')
+ORDER BY ds.range_start;
+
+DROP TABLE bigint_origin;
 
 ---------------------------------------------------------------
 -- ADD_DIMENSION WITH ORIGIN

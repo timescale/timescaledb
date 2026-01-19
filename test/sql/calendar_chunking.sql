@@ -415,6 +415,29 @@ SET timezone = 'Pacific/Chatham';
 -- HYPERTABLE TESTS: TIMESTAMP (without timezone)
 ---------------------------------------------------------------
 
+-- Daily chunks
+CREATE TABLE ts_daily(time timestamp NOT NULL, value int);
+SELECT create_hypertable('ts_daily', 'time', chunk_time_interval => interval '1 day');
+INSERT INTO ts_daily VALUES
+    ('2025-01-01 00:00:00', 1),
+    ('2025-01-01 23:59:59.999999', 2),
+    ('2025-01-02 00:00:00', 3);
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'ts_daily' ORDER BY range_start;
+DROP TABLE ts_daily;
+
+-- Weekly chunks
+CREATE TABLE ts_weekly(time timestamp NOT NULL, value int);
+SELECT create_hypertable('ts_weekly', 'time', chunk_time_interval => interval '1 week');
+INSERT INTO ts_weekly VALUES
+    ('2025-01-06 00:00:00', 1),  -- Monday
+    ('2025-01-12 23:59:59', 2),  -- Sunday
+    ('2025-01-13 00:00:00', 3);  -- Monday (next week)
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'ts_weekly' ORDER BY range_start;
+DROP TABLE ts_weekly;
+
+-- Monthly chunks
 CREATE TABLE ts_monthly(time timestamp NOT NULL, value int);
 SELECT create_hypertable('ts_monthly', 'time', chunk_time_interval => interval '1 month');
 INSERT INTO ts_monthly VALUES
@@ -425,10 +448,73 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'ts_monthly' ORDER BY range_start;
 DROP TABLE ts_monthly;
 
+-- Yearly chunks
+CREATE TABLE ts_yearly(time timestamp NOT NULL, value int);
+SELECT create_hypertable('ts_yearly', 'time', chunk_time_interval => interval '1 year');
+INSERT INTO ts_yearly VALUES
+    ('2024-06-15 12:00:00', 1),
+    ('2025-06-15 12:00:00', 2);
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'ts_yearly' ORDER BY range_start;
+DROP TABLE ts_yearly;
+
+-- Custom origin: days starting at noon (timestamp without timezone)
+CREATE TABLE ts_noon_days(time timestamp NOT NULL, value int);
+SELECT create_hypertable('ts_noon_days', 'time',
+    chunk_time_interval => interval '1 day',
+    chunk_time_origin => '2024-06-01 12:00:00'::timestamp);
+
+INSERT INTO ts_noon_days VALUES
+    ('2024-06-01 00:00:00', 1),
+    ('2024-06-01 11:59:59', 2),
+    ('2024-06-01 12:00:00', 3),
+    ('2024-06-02 11:59:59', 4);
+
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'ts_noon_days' ORDER BY range_start;
+DROP TABLE ts_noon_days;
+
+-- Custom origin: fiscal year starting July 1 (timestamp without timezone)
+CREATE TABLE ts_fiscal_year(time timestamp NOT NULL, value int);
+SELECT create_hypertable('ts_fiscal_year',
+    by_range('time', interval '1 year', partition_origin => '2020-07-01 00:00:00'::timestamp));
+
+INSERT INTO ts_fiscal_year VALUES
+    ('2024-06-30 23:59:59', 1),  -- FY2024
+    ('2024-07-01 00:00:00', 2),  -- FY2025
+    ('2025-06-30 23:59:59', 3);  -- FY2025
+
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'ts_fiscal_year' ORDER BY range_start;
+DROP TABLE ts_fiscal_year;
+
 ---------------------------------------------------------------
 -- HYPERTABLE TESTS: DATE
 ---------------------------------------------------------------
 
+-- Daily chunks
+CREATE TABLE date_daily(day date NOT NULL, value int);
+SELECT create_hypertable('date_daily', 'day', chunk_time_interval => interval '1 day');
+INSERT INTO date_daily VALUES
+    ('2025-01-01', 1),
+    ('2025-01-02', 2),
+    ('2025-01-03', 3);
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'date_daily' ORDER BY range_start;
+DROP TABLE date_daily;
+
+-- Weekly chunks
+CREATE TABLE date_weekly(day date NOT NULL, value int);
+SELECT create_hypertable('date_weekly', 'day', chunk_time_interval => interval '1 week');
+INSERT INTO date_weekly VALUES
+    ('2025-01-06', 1),  -- Monday
+    ('2025-01-12', 2),  -- Sunday
+    ('2025-01-13', 3);  -- Monday (next week)
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'date_weekly' ORDER BY range_start;
+DROP TABLE date_weekly;
+
+-- Monthly chunks
 CREATE TABLE date_monthly(day date NOT NULL, value int);
 SELECT create_hypertable('date_monthly', 'day', chunk_time_interval => interval '1 month');
 INSERT INTO date_monthly VALUES
@@ -438,6 +524,58 @@ INSERT INTO date_monthly VALUES
 SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'date_monthly' ORDER BY range_start;
 DROP TABLE date_monthly;
+
+-- Yearly chunks
+CREATE TABLE date_yearly(day date NOT NULL, value int);
+SELECT create_hypertable('date_yearly', 'day', chunk_time_interval => interval '1 year');
+INSERT INTO date_yearly VALUES
+    ('2024-06-15', 1),
+    ('2025-06-15', 2);
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'date_yearly' ORDER BY range_start;
+DROP TABLE date_yearly;
+
+-- Custom origin: weeks starting on Wednesday
+CREATE TABLE date_wed_weeks(day date NOT NULL, value int);
+SELECT create_hypertable('date_wed_weeks', 'day',
+    chunk_time_interval => interval '1 week',
+    chunk_time_origin => '2025-01-01'::date);  -- Wednesday
+
+INSERT INTO date_wed_weeks VALUES
+    ('2024-12-31', 1),  -- Tuesday (before origin week boundary)
+    ('2025-01-01', 2),  -- Wednesday (at origin)
+    ('2025-01-07', 3),  -- Tuesday
+    ('2025-01-08', 4);  -- Wednesday (next week)
+
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'date_wed_weeks' ORDER BY range_start;
+DROP TABLE date_wed_weeks;
+
+-- Custom origin: fiscal year starting April 1 (date)
+CREATE TABLE date_fiscal_year(day date NOT NULL, value int);
+SELECT create_hypertable('date_fiscal_year',
+    by_range('day', interval '1 year', partition_origin => '2020-04-01'::date));
+
+INSERT INTO date_fiscal_year VALUES
+    ('2024-03-31', 1),  -- FY2024
+    ('2024-04-01', 2),  -- FY2025
+    ('2025-03-31', 3);  -- FY2025
+
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'date_fiscal_year' ORDER BY range_start;
+DROP TABLE date_fiscal_year;
+
+-- Quarterly chunks (date)
+CREATE TABLE date_quarterly(day date NOT NULL, value int);
+SELECT create_hypertable('date_quarterly', 'day', chunk_time_interval => interval '3 months');
+INSERT INTO date_quarterly VALUES
+    ('2025-01-15', 1),  -- Q1
+    ('2025-04-15', 2),  -- Q2
+    ('2025-07-15', 3),  -- Q3
+    ('2025-10-15', 4);  -- Q4
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'date_quarterly' ORDER BY range_start;
+DROP TABLE date_quarterly;
 
 ---------------------------------------------------------------
 -- CUSTOM ORIGIN TESTS

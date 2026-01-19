@@ -616,12 +616,53 @@ SET timezone = 'Pacific/Chatham';
 ---------------------------------------------------------------
 -- HYPERTABLE TESTS: TIMESTAMP (without timezone)
 ---------------------------------------------------------------
+-- Daily chunks
+CREATE TABLE ts_daily(time timestamp NOT NULL, value int);
+SELECT create_hypertable('ts_daily', 'time', chunk_time_interval => interval '1 day');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+   create_hypertable    
+------------------------
+ (10,public,ts_daily,t)
+
+INSERT INTO ts_daily VALUES
+    ('2025-01-01 00:00:00', 1),
+    ('2025-01-01 23:59:59.999999', 2),
+    ('2025-01-02 00:00:00', 3);
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'ts_daily' ORDER BY range_start;
+     chunk_name     |          range_start           |           range_end            
+--------------------+--------------------------------+--------------------------------
+ _hyper_10_28_chunk | Wed Jan 01 13:45:00 2025 +1345 | Thu Jan 02 13:45:00 2025 +1345
+ _hyper_10_29_chunk | Thu Jan 02 13:45:00 2025 +1345 | Fri Jan 03 13:45:00 2025 +1345
+
+DROP TABLE ts_daily;
+-- Weekly chunks
+CREATE TABLE ts_weekly(time timestamp NOT NULL, value int);
+SELECT create_hypertable('ts_weekly', 'time', chunk_time_interval => interval '1 week');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+    create_hypertable    
+-------------------------
+ (11,public,ts_weekly,t)
+
+INSERT INTO ts_weekly VALUES
+    ('2025-01-06 00:00:00', 1),  -- Monday
+    ('2025-01-12 23:59:59', 2),  -- Sunday
+    ('2025-01-13 00:00:00', 3);  -- Monday (next week)
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'ts_weekly' ORDER BY range_start;
+     chunk_name     |          range_start           |           range_end            
+--------------------+--------------------------------+--------------------------------
+ _hyper_11_30_chunk | Mon Jan 06 13:45:00 2025 +1345 | Mon Jan 13 13:45:00 2025 +1345
+ _hyper_11_31_chunk | Mon Jan 13 13:45:00 2025 +1345 | Mon Jan 20 13:45:00 2025 +1345
+
+DROP TABLE ts_weekly;
+-- Monthly chunks
 CREATE TABLE ts_monthly(time timestamp NOT NULL, value int);
 SELECT create_hypertable('ts_monthly', 'time', chunk_time_interval => interval '1 month');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
     create_hypertable     
 --------------------------
- (10,public,ts_monthly,t)
+ (12,public,ts_monthly,t)
 
 INSERT INTO ts_monthly VALUES
     ('2025-01-15 12:00:00', 1),
@@ -631,19 +672,122 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'ts_monthly' ORDER BY range_start;
      chunk_name     |          range_start           |           range_end            
 --------------------+--------------------------------+--------------------------------
- _hyper_10_28_chunk | Wed Jan 01 13:45:00 2025 +1345 | Sat Feb 01 13:45:00 2025 +1345
- _hyper_10_29_chunk | Sat Feb 01 13:45:00 2025 +1345 | Sat Mar 01 13:45:00 2025 +1345
- _hyper_10_30_chunk | Sat Mar 01 13:45:00 2025 +1345 | Tue Apr 01 13:45:00 2025 +1345
+ _hyper_12_32_chunk | Wed Jan 01 13:45:00 2025 +1345 | Sat Feb 01 13:45:00 2025 +1345
+ _hyper_12_33_chunk | Sat Feb 01 13:45:00 2025 +1345 | Sat Mar 01 13:45:00 2025 +1345
+ _hyper_12_34_chunk | Sat Mar 01 13:45:00 2025 +1345 | Tue Apr 01 13:45:00 2025 +1345
 
 DROP TABLE ts_monthly;
+-- Yearly chunks
+CREATE TABLE ts_yearly(time timestamp NOT NULL, value int);
+SELECT create_hypertable('ts_yearly', 'time', chunk_time_interval => interval '1 year');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+    create_hypertable    
+-------------------------
+ (13,public,ts_yearly,t)
+
+INSERT INTO ts_yearly VALUES
+    ('2024-06-15 12:00:00', 1),
+    ('2025-06-15 12:00:00', 2);
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'ts_yearly' ORDER BY range_start;
+     chunk_name     |          range_start           |           range_end            
+--------------------+--------------------------------+--------------------------------
+ _hyper_13_35_chunk | Mon Jan 01 13:45:00 2024 +1345 | Wed Jan 01 13:45:00 2025 +1345
+ _hyper_13_36_chunk | Wed Jan 01 13:45:00 2025 +1345 | Thu Jan 01 13:45:00 2026 +1345
+
+DROP TABLE ts_yearly;
+-- Custom origin: days starting at noon (timestamp without timezone)
+CREATE TABLE ts_noon_days(time timestamp NOT NULL, value int);
+SELECT create_hypertable('ts_noon_days', 'time',
+    chunk_time_interval => interval '1 day',
+    chunk_time_origin => '2024-06-01 12:00:00'::timestamp);
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+     create_hypertable      
+----------------------------
+ (14,public,ts_noon_days,t)
+
+INSERT INTO ts_noon_days VALUES
+    ('2024-06-01 00:00:00', 1),
+    ('2024-06-01 11:59:59', 2),
+    ('2024-06-01 12:00:00', 3),
+    ('2024-06-02 11:59:59', 4);
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'ts_noon_days' ORDER BY range_start;
+     chunk_name     |          range_start           |           range_end            
+--------------------+--------------------------------+--------------------------------
+ _hyper_14_37_chunk | Sat Jun 01 00:45:00 2024 +1245 | Sun Jun 02 00:45:00 2024 +1245
+ _hyper_14_38_chunk | Sun Jun 02 00:45:00 2024 +1245 | Mon Jun 03 00:45:00 2024 +1245
+
+DROP TABLE ts_noon_days;
+-- Custom origin: fiscal year starting July 1 (timestamp without timezone)
+CREATE TABLE ts_fiscal_year(time timestamp NOT NULL, value int);
+SELECT create_hypertable('ts_fiscal_year',
+    by_range('time', interval '1 year', partition_origin => '2020-07-01 00:00:00'::timestamp));
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+ create_hypertable 
+-------------------
+ (15,t)
+
+INSERT INTO ts_fiscal_year VALUES
+    ('2024-06-30 23:59:59', 1),  -- FY2024
+    ('2024-07-01 00:00:00', 2),  -- FY2025
+    ('2025-06-30 23:59:59', 3);  -- FY2025
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'ts_fiscal_year' ORDER BY range_start;
+     chunk_name     |          range_start           |           range_end            
+--------------------+--------------------------------+--------------------------------
+ _hyper_15_39_chunk | Sat Jul 01 12:45:00 2023 +1245 | Mon Jul 01 12:45:00 2024 +1245
+ _hyper_15_40_chunk | Mon Jul 01 12:45:00 2024 +1245 | Tue Jul 01 12:45:00 2025 +1245
+
+DROP TABLE ts_fiscal_year;
 ---------------------------------------------------------------
 -- HYPERTABLE TESTS: DATE
 ---------------------------------------------------------------
+-- Daily chunks
+CREATE TABLE date_daily(day date NOT NULL, value int);
+SELECT create_hypertable('date_daily', 'day', chunk_time_interval => interval '1 day');
+    create_hypertable     
+--------------------------
+ (16,public,date_daily,t)
+
+INSERT INTO date_daily VALUES
+    ('2025-01-01', 1),
+    ('2025-01-02', 2),
+    ('2025-01-03', 3);
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'date_daily' ORDER BY range_start;
+     chunk_name     |          range_start           |           range_end            
+--------------------+--------------------------------+--------------------------------
+ _hyper_16_41_chunk | Wed Jan 01 13:45:00 2025 +1345 | Thu Jan 02 13:45:00 2025 +1345
+ _hyper_16_42_chunk | Thu Jan 02 13:45:00 2025 +1345 | Fri Jan 03 13:45:00 2025 +1345
+ _hyper_16_43_chunk | Fri Jan 03 13:45:00 2025 +1345 | Sat Jan 04 13:45:00 2025 +1345
+
+DROP TABLE date_daily;
+-- Weekly chunks
+CREATE TABLE date_weekly(day date NOT NULL, value int);
+SELECT create_hypertable('date_weekly', 'day', chunk_time_interval => interval '1 week');
+     create_hypertable     
+---------------------------
+ (17,public,date_weekly,t)
+
+INSERT INTO date_weekly VALUES
+    ('2025-01-06', 1),  -- Monday
+    ('2025-01-12', 2),  -- Sunday
+    ('2025-01-13', 3);  -- Monday (next week)
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'date_weekly' ORDER BY range_start;
+     chunk_name     |          range_start           |           range_end            
+--------------------+--------------------------------+--------------------------------
+ _hyper_17_44_chunk | Mon Jan 06 13:45:00 2025 +1345 | Mon Jan 13 13:45:00 2025 +1345
+ _hyper_17_45_chunk | Mon Jan 13 13:45:00 2025 +1345 | Mon Jan 20 13:45:00 2025 +1345
+
+DROP TABLE date_weekly;
+-- Monthly chunks
 CREATE TABLE date_monthly(day date NOT NULL, value int);
 SELECT create_hypertable('date_monthly', 'day', chunk_time_interval => interval '1 month');
      create_hypertable      
 ----------------------------
- (11,public,date_monthly,t)
+ (18,public,date_monthly,t)
 
 INSERT INTO date_monthly VALUES
     ('2025-01-15', 1),
@@ -653,11 +797,94 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'date_monthly' ORDER BY range_start;
      chunk_name     |          range_start           |           range_end            
 --------------------+--------------------------------+--------------------------------
- _hyper_11_31_chunk | Wed Jan 01 13:45:00 2025 +1345 | Sat Feb 01 13:45:00 2025 +1345
- _hyper_11_32_chunk | Sat Feb 01 13:45:00 2025 +1345 | Sat Mar 01 13:45:00 2025 +1345
- _hyper_11_33_chunk | Sat Mar 01 13:45:00 2025 +1345 | Tue Apr 01 13:45:00 2025 +1345
+ _hyper_18_46_chunk | Wed Jan 01 13:45:00 2025 +1345 | Sat Feb 01 13:45:00 2025 +1345
+ _hyper_18_47_chunk | Sat Feb 01 13:45:00 2025 +1345 | Sat Mar 01 13:45:00 2025 +1345
+ _hyper_18_48_chunk | Sat Mar 01 13:45:00 2025 +1345 | Tue Apr 01 13:45:00 2025 +1345
 
 DROP TABLE date_monthly;
+-- Yearly chunks
+CREATE TABLE date_yearly(day date NOT NULL, value int);
+SELECT create_hypertable('date_yearly', 'day', chunk_time_interval => interval '1 year');
+     create_hypertable     
+---------------------------
+ (19,public,date_yearly,t)
+
+INSERT INTO date_yearly VALUES
+    ('2024-06-15', 1),
+    ('2025-06-15', 2);
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'date_yearly' ORDER BY range_start;
+     chunk_name     |          range_start           |           range_end            
+--------------------+--------------------------------+--------------------------------
+ _hyper_19_49_chunk | Mon Jan 01 13:45:00 2024 +1345 | Wed Jan 01 13:45:00 2025 +1345
+ _hyper_19_50_chunk | Wed Jan 01 13:45:00 2025 +1345 | Thu Jan 01 13:45:00 2026 +1345
+
+DROP TABLE date_yearly;
+-- Custom origin: weeks starting on Wednesday
+CREATE TABLE date_wed_weeks(day date NOT NULL, value int);
+SELECT create_hypertable('date_wed_weeks', 'day',
+    chunk_time_interval => interval '1 week',
+    chunk_time_origin => '2025-01-01'::date);  -- Wednesday
+      create_hypertable       
+------------------------------
+ (20,public,date_wed_weeks,t)
+
+INSERT INTO date_wed_weeks VALUES
+    ('2024-12-31', 1),  -- Tuesday (before origin week boundary)
+    ('2025-01-01', 2),  -- Wednesday (at origin)
+    ('2025-01-07', 3),  -- Tuesday
+    ('2025-01-08', 4);  -- Wednesday (next week)
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'date_wed_weeks' ORDER BY range_start;
+     chunk_name     |          range_start           |           range_end            
+--------------------+--------------------------------+--------------------------------
+ _hyper_20_51_chunk | Wed Dec 25 13:45:00 2024 +1345 | Wed Jan 01 13:45:00 2025 +1345
+ _hyper_20_52_chunk | Wed Jan 01 13:45:00 2025 +1345 | Wed Jan 08 13:45:00 2025 +1345
+ _hyper_20_53_chunk | Wed Jan 08 13:45:00 2025 +1345 | Wed Jan 15 13:45:00 2025 +1345
+
+DROP TABLE date_wed_weeks;
+-- Custom origin: fiscal year starting April 1 (date)
+CREATE TABLE date_fiscal_year(day date NOT NULL, value int);
+SELECT create_hypertable('date_fiscal_year',
+    by_range('day', interval '1 year', partition_origin => '2020-04-01'::date));
+ create_hypertable 
+-------------------
+ (21,t)
+
+INSERT INTO date_fiscal_year VALUES
+    ('2024-03-31', 1),  -- FY2024
+    ('2024-04-01', 2),  -- FY2025
+    ('2025-03-31', 3);  -- FY2025
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'date_fiscal_year' ORDER BY range_start;
+     chunk_name     |          range_start           |           range_end            
+--------------------+--------------------------------+--------------------------------
+ _hyper_21_54_chunk | Sat Apr 01 13:45:00 2023 +1345 | Mon Apr 01 13:45:00 2024 +1345
+ _hyper_21_55_chunk | Mon Apr 01 13:45:00 2024 +1345 | Tue Apr 01 13:45:00 2025 +1345
+
+DROP TABLE date_fiscal_year;
+-- Quarterly chunks (date)
+CREATE TABLE date_quarterly(day date NOT NULL, value int);
+SELECT create_hypertable('date_quarterly', 'day', chunk_time_interval => interval '3 months');
+      create_hypertable       
+------------------------------
+ (22,public,date_quarterly,t)
+
+INSERT INTO date_quarterly VALUES
+    ('2025-01-15', 1),  -- Q1
+    ('2025-04-15', 2),  -- Q2
+    ('2025-07-15', 3),  -- Q3
+    ('2025-10-15', 4);  -- Q4
+SELECT chunk_name, range_start, range_end
+FROM timescaledb_information.chunks WHERE hypertable_name = 'date_quarterly' ORDER BY range_start;
+     chunk_name     |          range_start           |           range_end            
+--------------------+--------------------------------+--------------------------------
+ _hyper_22_56_chunk | Wed Jan 01 13:45:00 2025 +1345 | Tue Apr 01 13:45:00 2025 +1345
+ _hyper_22_57_chunk | Tue Apr 01 13:45:00 2025 +1345 | Tue Jul 01 12:45:00 2025 +1245
+ _hyper_22_58_chunk | Tue Jul 01 12:45:00 2025 +1245 | Wed Oct 01 13:45:00 2025 +1345
+ _hyper_22_59_chunk | Wed Oct 01 13:45:00 2025 +1345 | Thu Jan 01 13:45:00 2026 +1345
+
+DROP TABLE date_quarterly;
 ---------------------------------------------------------------
 -- CUSTOM ORIGIN TESTS
 ---------------------------------------------------------------
@@ -667,7 +894,7 @@ SELECT create_hypertable('fiscal_year',
     by_range('time', interval '1 year', partition_origin => '2020-07-01 00:00:00 UTC'::timestamptz));
  create_hypertable 
 -------------------
- (12,t)
+ (23,t)
 
 INSERT INTO fiscal_year VALUES
     ('2024-06-30 23:59:59 UTC', 1),  -- FY2024
@@ -677,8 +904,8 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'fiscal_year' ORDER BY range_start;
      chunk_name     |          range_start           |           range_end            
 --------------------+--------------------------------+--------------------------------
- _hyper_12_34_chunk | Sat Jul 01 12:45:00 2023 +1245 | Mon Jul 01 12:45:00 2024 +1245
- _hyper_12_35_chunk | Mon Jul 01 12:45:00 2024 +1245 | Tue Jul 01 12:45:00 2025 +1245
+ _hyper_23_60_chunk | Sat Jul 01 12:45:00 2023 +1245 | Mon Jul 01 12:45:00 2024 +1245
+ _hyper_23_61_chunk | Mon Jul 01 12:45:00 2024 +1245 | Tue Jul 01 12:45:00 2025 +1245
 
 DROP TABLE fiscal_year;
 -- Quarters starting April 1
@@ -687,7 +914,7 @@ SELECT create_hypertable('fiscal_quarter',
     by_range('time', interval '3 months', partition_origin => '2024-04-01 00:00:00 UTC'::timestamptz));
  create_hypertable 
 -------------------
- (13,t)
+ (24,t)
 
 INSERT INTO fiscal_quarter VALUES
     ('2024-03-31 23:59:59 UTC', 1),  -- Q4 FY2024
@@ -698,9 +925,9 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'fiscal_quarter' ORDER BY range_start;
      chunk_name     |          range_start           |           range_end            
 --------------------+--------------------------------+--------------------------------
- _hyper_13_36_chunk | Mon Jan 01 13:45:00 2024 +1345 | Mon Apr 01 13:45:00 2024 +1345
- _hyper_13_37_chunk | Mon Apr 01 13:45:00 2024 +1345 | Mon Jul 01 13:45:00 2024 +1245
- _hyper_13_38_chunk | Tue Oct 01 13:45:00 2024 +1345 | Wed Jan 01 13:45:00 2025 +1345
+ _hyper_24_62_chunk | Mon Jan 01 13:45:00 2024 +1345 | Mon Apr 01 13:45:00 2024 +1345
+ _hyper_24_63_chunk | Mon Apr 01 13:45:00 2024 +1345 | Mon Jul 01 13:45:00 2024 +1245
+ _hyper_24_64_chunk | Tue Oct 01 13:45:00 2024 +1345 | Wed Jan 01 13:45:00 2025 +1345
 
 DROP TABLE fiscal_quarter;
 -- Days starting at noon
@@ -710,7 +937,7 @@ SELECT create_hypertable('noon_days', 'time',
     chunk_time_origin => '2024-06-01 12:00:00 UTC'::timestamptz);
     create_hypertable    
 -------------------------
- (14,public,noon_days,t)
+ (25,public,noon_days,t)
 
 INSERT INTO noon_days VALUES
     ('2024-06-01 00:00:00 UTC', 1),
@@ -721,8 +948,8 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'noon_days' ORDER BY range_start;
      chunk_name     |          range_start           |           range_end            
 --------------------+--------------------------------+--------------------------------
- _hyper_14_39_chunk | Sat Jun 01 00:45:00 2024 +1245 | Sun Jun 02 00:45:00 2024 +1245
- _hyper_14_40_chunk | Sun Jun 02 00:45:00 2024 +1245 | Mon Jun 03 00:45:00 2024 +1245
+ _hyper_25_65_chunk | Sat Jun 01 00:45:00 2024 +1245 | Sun Jun 02 00:45:00 2024 +1245
+ _hyper_25_66_chunk | Sun Jun 02 00:45:00 2024 +1245 | Mon Jun 03 00:45:00 2024 +1245
 
 DROP TABLE noon_days;
 -- Partitioning function with interval and origin (int epoch seconds to timestamptz)
@@ -737,7 +964,7 @@ SELECT create_hypertable('events_epoch',
              partition_origin => '2024-07-01 00:00:00 UTC'::timestamptz));
  create_hypertable 
 -------------------
- (15,t)
+ (26,t)
 
 -- Epoch values in seconds:
 -- 2024-06-30 23:59:59 UTC = 1719791999
@@ -753,9 +980,9 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'events_epoch' ORDER BY range_start;
      chunk_name     | range_start | range_end 
 --------------------+-------------+-----------
- _hyper_15_41_chunk |             | 
- _hyper_15_42_chunk |             | 
- _hyper_15_43_chunk |             | 
+ _hyper_26_67_chunk |             | 
+ _hyper_26_68_chunk |             | 
+ _hyper_26_69_chunk |             | 
 
 DROP TABLE events_epoch;
 DROP FUNCTION epoch_sec_to_timestamptz(int);
@@ -768,14 +995,14 @@ CREATE TABLE add_dim_old_api(id int NOT NULL, time timestamptz NOT NULL, value i
 SELECT create_hypertable('add_dim_old_api', 'id', chunk_time_interval => 100);
        create_hypertable       
 -------------------------------
- (16,public,add_dim_old_api,t)
+ (27,public,add_dim_old_api,t)
 
 SELECT add_dimension('add_dim_old_api', 'time',
     chunk_time_interval => interval '1 month',
     chunk_time_origin => '2024-04-01 00:00:00 UTC'::timestamptz);
            add_dimension            
 ------------------------------------
- (17,public,add_dim_old_api,time,t)
+ (28,public,add_dim_old_api,time,t)
 
 INSERT INTO add_dim_old_api VALUES
     (1, '2024-03-31 23:59:59 UTC', 1),  -- March (before origin month)
@@ -797,13 +1024,13 @@ CREATE TABLE add_dim_new_api(id int NOT NULL, time timestamptz NOT NULL, value i
 SELECT create_hypertable('add_dim_new_api', 'id', chunk_time_interval => 100);
        create_hypertable       
 -------------------------------
- (17,public,add_dim_new_api,t)
+ (28,public,add_dim_new_api,t)
 
 SELECT add_dimension('add_dim_new_api',
     by_range('time', interval '3 months', partition_origin => '2024-07-01 00:00:00 UTC'::timestamptz));
  add_dimension 
 ---------------
- (19,t)
+ (30,t)
 
 INSERT INTO add_dim_new_api VALUES
     (1, '2024-06-30 23:59:59 UTC', 1),  -- Q2 (before origin)
@@ -829,7 +1056,7 @@ CREATE TABLE set_interval_test(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('set_interval_test', 'time', chunk_time_interval => interval '1 day');
         create_hypertable        
 ---------------------------------
- (18,public,set_interval_test,t)
+ (29,public,set_interval_test,t)
 
 -- Insert to create initial chunk aligned to default origin (midnight)
 INSERT INTO set_interval_test VALUES ('2024-06-15 12:00:00 UTC', 1);
@@ -837,7 +1064,7 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'set_interval_test' ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_18_50_chunk | Sat Jun 15 00:00:00 2024 UTC | Sun Jun 16 00:00:00 2024 UTC
+ _hyper_29_76_chunk | Sat Jun 15 00:00:00 2024 UTC | Sun Jun 16 00:00:00 2024 UTC
 
 -- Verify current origin (default: 2001-01-01 midnight)
 SELECT d.column_name,
@@ -882,9 +1109,9 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'set_interval_test' ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_18_50_chunk | Sat Jun 15 00:00:00 2024 UTC | Sun Jun 16 00:00:00 2024 UTC
- _hyper_18_51_chunk | Sun Jun 16 00:00:00 2024 UTC | Sun Jun 16 12:00:00 2024 UTC
- _hyper_18_52_chunk | Mon Jul 15 12:00:00 2024 UTC | Tue Jul 16 12:00:00 2024 UTC
+ _hyper_29_76_chunk | Sat Jun 15 00:00:00 2024 UTC | Sun Jun 16 00:00:00 2024 UTC
+ _hyper_29_77_chunk | Sun Jun 16 00:00:00 2024 UTC | Sun Jun 16 12:00:00 2024 UTC
+ _hyper_29_78_chunk | Mon Jul 15 12:00:00 2024 UTC | Tue Jul 16 12:00:00 2024 UTC
 
 DROP TABLE set_interval_test;
 -- Test set_chunk_time_interval() changing from days to months with fiscal origin
@@ -892,7 +1119,7 @@ CREATE TABLE set_interval_fiscal(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('set_interval_fiscal', 'time', chunk_time_interval => interval '1 day');
          create_hypertable         
 -----------------------------------
- (19,public,set_interval_fiscal,t)
+ (30,public,set_interval_fiscal,t)
 
 -- Insert initial data
 INSERT INTO set_interval_fiscal VALUES ('2024-06-15 12:00:00 UTC', 1);
@@ -920,9 +1147,9 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'set_interval_fiscal' ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_19_53_chunk | Sat Jun 15 00:00:00 2024 UTC | Sun Jun 16 00:00:00 2024 UTC
- _hyper_19_54_chunk | Mon Jul 01 00:00:00 2024 UTC | Thu Aug 01 00:00:00 2024 UTC
- _hyper_19_55_chunk | Thu Aug 01 00:00:00 2024 UTC | Sun Sep 01 00:00:00 2024 UTC
+ _hyper_30_79_chunk | Sat Jun 15 00:00:00 2024 UTC | Sun Jun 16 00:00:00 2024 UTC
+ _hyper_30_80_chunk | Mon Jul 01 00:00:00 2024 UTC | Thu Aug 01 00:00:00 2024 UTC
+ _hyper_30_81_chunk | Thu Aug 01 00:00:00 2024 UTC | Sun Sep 01 00:00:00 2024 UTC
 
 DROP TABLE set_interval_fiscal;
 -- Reset timezone
@@ -944,7 +1171,7 @@ CREATE TABLE non_calendar(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('non_calendar', 'time', chunk_time_interval => interval '1 day');
      create_hypertable      
 ----------------------------
- (20,public,non_calendar,t)
+ (31,public,non_calendar,t)
 
 INSERT INTO non_calendar VALUES
     ('2025-01-01 12:00:00 UTC', 1),
@@ -953,8 +1180,8 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'non_calendar' ORDER BY range_start;
      chunk_name     |          range_start           |           range_end            
 --------------------+--------------------------------+--------------------------------
- _hyper_20_56_chunk | Wed Jan 01 13:45:00 2025 +1345 | Thu Jan 02 13:45:00 2025 +1345
- _hyper_20_57_chunk | Thu Jan 02 13:45:00 2025 +1345 | Fri Jan 03 13:45:00 2025 +1345
+ _hyper_31_82_chunk | Wed Jan 01 13:45:00 2025 +1345 | Thu Jan 02 13:45:00 2025 +1345
+ _hyper_31_83_chunk | Thu Jan 02 13:45:00 2025 +1345 | Fri Jan 03 13:45:00 2025 +1345
 
 DROP TABLE non_calendar;
 -- Calendar chunking
@@ -963,7 +1190,7 @@ CREATE TABLE calendar(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('calendar', 'time', chunk_time_interval => interval '1 day');
    create_hypertable    
 ------------------------
- (21,public,calendar,t)
+ (32,public,calendar,t)
 
 INSERT INTO calendar VALUES
     ('2025-01-01 12:00:00 UTC', 1),
@@ -972,8 +1199,8 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'calendar' ORDER BY range_start;
      chunk_name     |          range_start           |           range_end            
 --------------------+--------------------------------+--------------------------------
- _hyper_21_58_chunk | Thu Jan 02 00:00:00 2025 +1345 | Fri Jan 03 00:00:00 2025 +1345
- _hyper_21_59_chunk | Fri Jan 03 00:00:00 2025 +1345 | Sat Jan 04 00:00:00 2025 +1345
+ _hyper_32_84_chunk | Thu Jan 02 00:00:00 2025 +1345 | Fri Jan 03 00:00:00 2025 +1345
+ _hyper_32_85_chunk | Fri Jan 03 00:00:00 2025 +1345 | Sat Jan 04 00:00:00 2025 +1345
 
 DROP TABLE calendar;
 ---------------------------------------------------------------
@@ -987,7 +1214,7 @@ CREATE TABLE calendar_no_integer(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('calendar_no_integer', 'time', chunk_time_interval => interval '1 day');
          create_hypertable         
 -----------------------------------
- (22,public,calendar_no_integer,t)
+ (33,public,calendar_no_integer,t)
 
 -- Verify calendar chunking is active
 SELECT d.column_name,
@@ -1051,7 +1278,7 @@ CREATE TABLE non_calendar_ht(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('non_calendar_ht', 'time', chunk_time_interval => interval '1 day');
        create_hypertable       
 -------------------------------
- (23,public,non_calendar_ht,t)
+ (34,public,non_calendar_ht,t)
 
 -- Verify initial state: non-calendar mode (has_integer_interval=t, has_time_interval=f)
 SELECT d.column_name,
@@ -1145,7 +1372,7 @@ CREATE TABLE calendar_ht(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('calendar_ht', 'time', chunk_time_interval => interval '1 day');
      create_hypertable     
 ---------------------------
- (24,public,calendar_ht,t)
+ (35,public,calendar_ht,t)
 
 -- Verify initial state: calendar mode (interval_length IS NULL, interval IS NOT NULL)
 SELECT d.column_name,
@@ -1241,7 +1468,7 @@ CREATE TABLE mode_switch(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('mode_switch', 'time', chunk_time_interval => interval '1 day');
      create_hypertable     
 ---------------------------
- (25,public,mode_switch,t)
+ (36,public,mode_switch,t)
 
 -- 1. Initial state: non-calendar mode
 SELECT d.column_name,
@@ -1262,8 +1489,8 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'mode_switch' ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_25_60_chunk | Tue Dec 31 19:00:00 2024 EST | Wed Jan 01 19:00:00 2025 EST
- _hyper_25_61_chunk | Wed Jan 01 19:00:00 2025 EST | Thu Jan 02 19:00:00 2025 EST
+ _hyper_36_86_chunk | Tue Dec 31 19:00:00 2024 EST | Wed Jan 01 19:00:00 2025 EST
+ _hyper_36_87_chunk | Wed Jan 01 19:00:00 2025 EST | Thu Jan 02 19:00:00 2025 EST
 
 -- 2. Switch to calendar mode using set_chunk_time_interval
 SELECT set_chunk_time_interval('mode_switch', '1 week'::interval, calendar_chunking => true);
@@ -1290,10 +1517,10 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'mode_switch' ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_25_60_chunk | Tue Dec 31 19:00:00 2024 EST | Wed Jan 01 19:00:00 2025 EST
- _hyper_25_61_chunk | Wed Jan 01 19:00:00 2025 EST | Thu Jan 02 19:00:00 2025 EST
- _hyper_25_62_chunk | Mon Feb 10 00:00:00 2025 EST | Mon Feb 17 00:00:00 2025 EST
- _hyper_25_63_chunk | Mon Feb 17 00:00:00 2025 EST | Mon Feb 24 00:00:00 2025 EST
+ _hyper_36_86_chunk | Tue Dec 31 19:00:00 2024 EST | Wed Jan 01 19:00:00 2025 EST
+ _hyper_36_87_chunk | Wed Jan 01 19:00:00 2025 EST | Thu Jan 02 19:00:00 2025 EST
+ _hyper_36_88_chunk | Mon Feb 10 00:00:00 2025 EST | Mon Feb 17 00:00:00 2025 EST
+ _hyper_36_89_chunk | Mon Feb 17 00:00:00 2025 EST | Mon Feb 24 00:00:00 2025 EST
 
 -- 3. Switch back to non-calendar using set_partitioning_interval
 SELECT set_partitioning_interval('mode_switch', '2 days'::interval, calendar_chunking => false);
@@ -1320,12 +1547,12 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'mode_switch' ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_25_60_chunk | Tue Dec 31 19:00:00 2024 EST | Wed Jan 01 19:00:00 2025 EST
- _hyper_25_61_chunk | Wed Jan 01 19:00:00 2025 EST | Thu Jan 02 19:00:00 2025 EST
- _hyper_25_62_chunk | Mon Feb 10 00:00:00 2025 EST | Mon Feb 17 00:00:00 2025 EST
- _hyper_25_63_chunk | Mon Feb 17 00:00:00 2025 EST | Mon Feb 24 00:00:00 2025 EST
- _hyper_25_64_chunk | Sat Jun 14 01:00:00 2025 EDT | Mon Jun 16 01:00:00 2025 EDT
- _hyper_25_65_chunk | Wed Jun 18 01:00:00 2025 EDT | Fri Jun 20 01:00:00 2025 EDT
+ _hyper_36_86_chunk | Tue Dec 31 19:00:00 2024 EST | Wed Jan 01 19:00:00 2025 EST
+ _hyper_36_87_chunk | Wed Jan 01 19:00:00 2025 EST | Thu Jan 02 19:00:00 2025 EST
+ _hyper_36_88_chunk | Mon Feb 10 00:00:00 2025 EST | Mon Feb 17 00:00:00 2025 EST
+ _hyper_36_89_chunk | Mon Feb 17 00:00:00 2025 EST | Mon Feb 24 00:00:00 2025 EST
+ _hyper_36_90_chunk | Sat Jun 14 01:00:00 2025 EDT | Mon Jun 16 01:00:00 2025 EDT
+ _hyper_36_91_chunk | Wed Jun 18 01:00:00 2025 EDT | Fri Jun 20 01:00:00 2025 EDT
 
 -- 4. Switch back to calendar using set_chunk_time_interval
 SELECT set_chunk_time_interval('mode_switch', '1 month'::interval, calendar_chunking => true);
@@ -1352,14 +1579,14 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks WHERE hypertable_name = 'mode_switch' ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_25_60_chunk | Tue Dec 31 19:00:00 2024 EST | Wed Jan 01 19:00:00 2025 EST
- _hyper_25_61_chunk | Wed Jan 01 19:00:00 2025 EST | Thu Jan 02 19:00:00 2025 EST
- _hyper_25_62_chunk | Mon Feb 10 00:00:00 2025 EST | Mon Feb 17 00:00:00 2025 EST
- _hyper_25_63_chunk | Mon Feb 17 00:00:00 2025 EST | Mon Feb 24 00:00:00 2025 EST
- _hyper_25_64_chunk | Sat Jun 14 01:00:00 2025 EDT | Mon Jun 16 01:00:00 2025 EDT
- _hyper_25_65_chunk | Wed Jun 18 01:00:00 2025 EDT | Fri Jun 20 01:00:00 2025 EDT
- _hyper_25_66_chunk | Mon Sep 01 00:00:00 2025 EDT | Wed Oct 01 00:00:00 2025 EDT
- _hyper_25_67_chunk | Wed Oct 01 00:00:00 2025 EDT | Sat Nov 01 00:00:00 2025 EDT
+ _hyper_36_86_chunk | Tue Dec 31 19:00:00 2024 EST | Wed Jan 01 19:00:00 2025 EST
+ _hyper_36_87_chunk | Wed Jan 01 19:00:00 2025 EST | Thu Jan 02 19:00:00 2025 EST
+ _hyper_36_88_chunk | Mon Feb 10 00:00:00 2025 EST | Mon Feb 17 00:00:00 2025 EST
+ _hyper_36_89_chunk | Mon Feb 17 00:00:00 2025 EST | Mon Feb 24 00:00:00 2025 EST
+ _hyper_36_90_chunk | Sat Jun 14 01:00:00 2025 EDT | Mon Jun 16 01:00:00 2025 EDT
+ _hyper_36_91_chunk | Wed Jun 18 01:00:00 2025 EDT | Fri Jun 20 01:00:00 2025 EDT
+ _hyper_36_92_chunk | Mon Sep 01 00:00:00 2025 EDT | Wed Oct 01 00:00:00 2025 EDT
+ _hyper_36_93_chunk | Wed Oct 01 00:00:00 2025 EDT | Sat Nov 01 00:00:00 2025 EDT
 
 DROP TABLE mode_switch;
 -- Test error: calendar_chunking => true with integer interval
@@ -1367,7 +1594,7 @@ CREATE TABLE calendar_switch_error(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('calendar_switch_error', 'time', chunk_time_interval => interval '1 day');
           create_hypertable          
 -------------------------------------
- (26,public,calendar_switch_error,t)
+ (37,public,calendar_switch_error,t)
 
 \set ON_ERROR_STOP 0
 SELECT set_chunk_time_interval('calendar_switch_error', 86400000000::bigint, calendar_chunking => true);
@@ -1398,7 +1625,7 @@ SELECT create_hypertable('origin_position',
     by_range('time', interval '1 month', partition_origin => '2020-01-15 00:00:00 UTC'::timestamptz));
  create_hypertable 
 -------------------
- (27,t)
+ (38,t)
 
 -- Insert data: before origin, enclosing origin, after origin
 INSERT INTO origin_position VALUES
@@ -1417,23 +1644,23 @@ WHERE hypertable_name = 'origin_position'
 ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_27_68_chunk | Fri Nov 15 00:00:00 2019 UTC | Sun Dec 15 00:00:00 2019 UTC
- _hyper_27_69_chunk | Sun Dec 15 00:00:00 2019 UTC | Wed Jan 15 00:00:00 2020 UTC
- _hyper_27_70_chunk | Wed Jan 15 00:00:00 2020 UTC | Sat Feb 15 00:00:00 2020 UTC
- _hyper_27_71_chunk | Sat Feb 15 00:00:00 2020 UTC | Sun Mar 15 00:00:00 2020 UTC
- _hyper_27_72_chunk | Sun Mar 15 00:00:00 2020 UTC | Wed Apr 15 00:00:00 2020 UTC
+ _hyper_38_94_chunk | Fri Nov 15 00:00:00 2019 UTC | Sun Dec 15 00:00:00 2019 UTC
+ _hyper_38_95_chunk | Sun Dec 15 00:00:00 2019 UTC | Wed Jan 15 00:00:00 2020 UTC
+ _hyper_38_96_chunk | Wed Jan 15 00:00:00 2020 UTC | Sat Feb 15 00:00:00 2020 UTC
+ _hyper_38_97_chunk | Sat Feb 15 00:00:00 2020 UTC | Sun Mar 15 00:00:00 2020 UTC
+ _hyper_38_98_chunk | Sun Mar 15 00:00:00 2020 UTC | Wed Apr 15 00:00:00 2020 UTC
 
 -- Verify data is in correct chunks
 SELECT tableoid::regclass as chunk, time, value
 FROM origin_position ORDER BY time;
                   chunk                   |             time             | value 
 ------------------------------------------+------------------------------+-------
- _timescaledb_internal._hyper_27_68_chunk | Wed Nov 20 12:00:00 2019 UTC |     1
- _timescaledb_internal._hyper_27_69_chunk | Fri Dec 20 12:00:00 2019 UTC |     2
- _timescaledb_internal._hyper_27_70_chunk | Wed Jan 15 00:00:00 2020 UTC |     3
- _timescaledb_internal._hyper_27_70_chunk | Mon Jan 20 12:00:00 2020 UTC |     4
- _timescaledb_internal._hyper_27_71_chunk | Thu Feb 20 12:00:00 2020 UTC |     5
- _timescaledb_internal._hyper_27_72_chunk | Fri Mar 20 12:00:00 2020 UTC |     6
+ _timescaledb_internal._hyper_38_94_chunk | Wed Nov 20 12:00:00 2019 UTC |     1
+ _timescaledb_internal._hyper_38_95_chunk | Fri Dec 20 12:00:00 2019 UTC |     2
+ _timescaledb_internal._hyper_38_96_chunk | Wed Jan 15 00:00:00 2020 UTC |     3
+ _timescaledb_internal._hyper_38_96_chunk | Mon Jan 20 12:00:00 2020 UTC |     4
+ _timescaledb_internal._hyper_38_97_chunk | Thu Feb 20 12:00:00 2020 UTC |     5
+ _timescaledb_internal._hyper_38_98_chunk | Fri Mar 20 12:00:00 2020 UTC |     6
 
 DROP TABLE origin_position;
 -- Test with daily chunks and origin at noon
@@ -1443,7 +1670,7 @@ SELECT create_hypertable('origin_daily',
     by_range('time', interval '1 day', partition_origin => '2020-06-15 12:00:00 UTC'::timestamptz));
  create_hypertable 
 -------------------
- (28,t)
+ (39,t)
 
 INSERT INTO origin_daily VALUES
     -- Before origin date (chunks before origin)
@@ -1458,12 +1685,12 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'origin_daily'
 ORDER BY range_start;
-     chunk_name     |         range_start          |          range_end           
---------------------+------------------------------+------------------------------
- _hyper_28_73_chunk | Sat Jun 13 12:00:00 2020 UTC | Sun Jun 14 12:00:00 2020 UTC
- _hyper_28_74_chunk | Sun Jun 14 12:00:00 2020 UTC | Mon Jun 15 12:00:00 2020 UTC
- _hyper_28_75_chunk | Mon Jun 15 12:00:00 2020 UTC | Tue Jun 16 12:00:00 2020 UTC
- _hyper_28_76_chunk | Tue Jun 16 12:00:00 2020 UTC | Wed Jun 17 12:00:00 2020 UTC
+     chunk_name      |         range_start          |          range_end           
+---------------------+------------------------------+------------------------------
+ _hyper_39_99_chunk  | Sat Jun 13 12:00:00 2020 UTC | Sun Jun 14 12:00:00 2020 UTC
+ _hyper_39_100_chunk | Sun Jun 14 12:00:00 2020 UTC | Mon Jun 15 12:00:00 2020 UTC
+ _hyper_39_101_chunk | Mon Jun 15 12:00:00 2020 UTC | Tue Jun 16 12:00:00 2020 UTC
+ _hyper_39_102_chunk | Tue Jun 16 12:00:00 2020 UTC | Wed Jun 17 12:00:00 2020 UTC
 
 DROP TABLE origin_daily;
 ---------------------------------------------------------------
@@ -1509,7 +1736,7 @@ CREATE TABLE extreme_ancient(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('extreme_ancient', 'time', chunk_time_interval => interval '100 years');
        create_hypertable       
 -------------------------------
- (29,public,extreme_ancient,t)
+ (40,public,extreme_ancient,t)
 
 INSERT INTO extreme_ancient VALUES
     ('4700-06-15 00:00:00 BC', 1),
@@ -1519,18 +1746,18 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'extreme_ancient'
 ORDER BY range_start;
-     chunk_name     |           range_start           |            range_end            
---------------------+---------------------------------+---------------------------------
- _hyper_29_77_chunk | Sat Jan 01 00:00:00 4700 UTC BC | Thu Jan 01 00:00:00 4600 UTC BC
- _hyper_29_78_chunk | Thu Jan 01 00:00:00 4600 UTC BC | Tue Jan 01 00:00:00 4500 UTC BC
+     chunk_name      |           range_start           |            range_end            
+---------------------+---------------------------------+---------------------------------
+ _hyper_40_103_chunk | Sat Jan 01 00:00:00 4700 UTC BC | Thu Jan 01 00:00:00 4600 UTC BC
+ _hyper_40_104_chunk | Thu Jan 01 00:00:00 4600 UTC BC | Tue Jan 01 00:00:00 4500 UTC BC
 
 -- Show CHECK constraints on chunks with chunk size
 -- Chunk size should be close to 100 years when not clamped
 SELECT * FROM show_chunk_constraints('extreme_ancient');
-       chunk        |                                                                        constraint_def                                                                        |  chunk_size  
---------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------
- _hyper_29_77_chunk | CHECK ((("time" >= 'Sat Jan 01 00:00:00 4700 UTC BC'::timestamp with time zone) AND ("time" < 'Thu Jan 01 00:00:00 4600 UTC BC'::timestamp with time zone))) | @ 36524 days
- _hyper_29_78_chunk | CHECK ((("time" >= 'Thu Jan 01 00:00:00 4600 UTC BC'::timestamp with time zone) AND ("time" < 'Tue Jan 01 00:00:00 4500 UTC BC'::timestamp with time zone))) | @ 36524 days
+        chunk        |                                                                        constraint_def                                                                        |  chunk_size  
+---------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------
+ _hyper_40_103_chunk | CHECK ((("time" >= 'Sat Jan 01 00:00:00 4700 UTC BC'::timestamp with time zone) AND ("time" < 'Thu Jan 01 00:00:00 4600 UTC BC'::timestamp with time zone))) | @ 36524 days
+ _hyper_40_104_chunk | CHECK ((("time" >= 'Thu Jan 01 00:00:00 4600 UTC BC'::timestamp with time zone) AND ("time" < 'Tue Jan 01 00:00:00 4500 UTC BC'::timestamp with time zone))) | @ 36524 days
 
 DROP TABLE extreme_ancient;
 -- Test hypertable with data in far future
@@ -1538,7 +1765,7 @@ CREATE TABLE extreme_future(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('extreme_future', 'time', chunk_time_interval => interval '100 years');
       create_hypertable       
 ------------------------------
- (30,public,extreme_future,t)
+ (41,public,extreme_future,t)
 
 INSERT INTO extreme_future VALUES
     ('100000-06-15 00:00:00', 1),
@@ -1548,18 +1775,18 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'extreme_future'
 ORDER BY range_start;
-     chunk_name     |          range_start           |           range_end            
---------------------+--------------------------------+--------------------------------
- _hyper_30_79_chunk | Tue Jan 01 00:00:00 99901 UTC  | Mon Jan 01 00:00:00 100001 UTC
- _hyper_30_80_chunk | Mon Jan 01 00:00:00 100001 UTC | Sat Jan 01 00:00:00 100101 UTC
+     chunk_name      |          range_start           |           range_end            
+---------------------+--------------------------------+--------------------------------
+ _hyper_41_105_chunk | Tue Jan 01 00:00:00 99901 UTC  | Mon Jan 01 00:00:00 100001 UTC
+ _hyper_41_106_chunk | Mon Jan 01 00:00:00 100001 UTC | Sat Jan 01 00:00:00 100101 UTC
 
 -- Show CHECK constraints on chunks with chunk size
 -- Chunk size should be close to 100 years when not clamped
 SELECT * FROM show_chunk_constraints('extreme_future');
-       chunk        |                                                                       constraint_def                                                                       |  chunk_size  
---------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------
- _hyper_30_79_chunk | CHECK ((("time" >= 'Tue Jan 01 00:00:00 99901 UTC'::timestamp with time zone) AND ("time" < 'Mon Jan 01 00:00:00 100001 UTC'::timestamp with time zone)))  | @ 36525 days
- _hyper_30_80_chunk | CHECK ((("time" >= 'Mon Jan 01 00:00:00 100001 UTC'::timestamp with time zone) AND ("time" < 'Sat Jan 01 00:00:00 100101 UTC'::timestamp with time zone))) | @ 36524 days
+        chunk        |                                                                       constraint_def                                                                       |  chunk_size  
+---------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------
+ _hyper_41_105_chunk | CHECK ((("time" >= 'Tue Jan 01 00:00:00 99901 UTC'::timestamp with time zone) AND ("time" < 'Mon Jan 01 00:00:00 100001 UTC'::timestamp with time zone)))  | @ 36525 days
+ _hyper_41_106_chunk | CHECK ((("time" >= 'Mon Jan 01 00:00:00 100001 UTC'::timestamp with time zone) AND ("time" < 'Sat Jan 01 00:00:00 100101 UTC'::timestamp with time zone))) | @ 36524 days
 
 DROP TABLE extreme_future;
 -- Test chunks with open-ended constraints (clamped to MIN/MAX)
@@ -1568,7 +1795,7 @@ CREATE TABLE open_ended_chunks(time timestamptz NOT NULL, value int);
 SELECT create_hypertable('open_ended_chunks', 'time', chunk_time_interval => interval '10000 years');
         create_hypertable        
 ---------------------------------
- (31,public,open_ended_chunks,t)
+ (42,public,open_ended_chunks,t)
 
 -- Insert at boundaries - should create open-ended constraints
 INSERT INTO open_ended_chunks VALUES
@@ -1577,10 +1804,10 @@ INSERT INTO open_ended_chunks VALUES
 -- Show CHECK constraints - should see open-ended constraints
 -- Chunk size should be smaller than 10000 years when clamped
 SELECT * FROM show_chunk_constraints('open_ended_chunks');
-       chunk        |                                 constraint_def                                 | chunk_size 
---------------------+--------------------------------------------------------------------------------+------------
- _hyper_31_81_chunk | CHECK (("time" < 'Mon Jan 01 00:00:00 2001 UTC'::timestamp with time zone))    | 
- _hyper_31_82_chunk | CHECK (("time" >= 'Mon Jan 01 00:00:00 292001 UTC'::timestamp with time zone)) | 
+        chunk        |                                 constraint_def                                 | chunk_size 
+---------------------+--------------------------------------------------------------------------------+------------
+ _hyper_42_107_chunk | CHECK (("time" < 'Mon Jan 01 00:00:00 2001 UTC'::timestamp with time zone))    | 
+ _hyper_42_108_chunk | CHECK (("time" >= 'Mon Jan 01 00:00:00 292001 UTC'::timestamp with time zone)) | 
 
 DROP TABLE open_ended_chunks;
 -- Test with origin far in the past - chunks before and after
@@ -1589,7 +1816,7 @@ SELECT create_hypertable('origin_ancient',
     by_range('time', interval '1000 years', partition_origin => '2000-01-01 00:00:00 BC'::timestamptz));
  create_hypertable 
 -------------------
- (32,t)
+ (43,t)
 
 INSERT INTO origin_ancient VALUES
     ('4000-06-15 00:00:00 BC', 1),  -- Before origin
@@ -1600,12 +1827,12 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'origin_ancient'
 ORDER BY range_start;
-     chunk_name     |           range_start           |            range_end            
---------------------+---------------------------------+---------------------------------
- _hyper_32_83_chunk | Mon Jan 01 00:00:00 4000 UTC BC | Thu Jan 01 00:00:00 3000 UTC BC
- _hyper_32_84_chunk | Mon Jan 01 00:00:00 2000 UTC BC | Thu Jan 01 00:00:00 1000 UTC BC
- _hyper_32_85_chunk | Mon Jan 01 00:00:00 0001 UTC    | Thu Jan 01 00:00:00 1001 UTC
- _hyper_32_86_chunk | Mon Jan 01 00:00:00 2001 UTC    | Thu Jan 01 00:00:00 3001 UTC
+     chunk_name      |           range_start           |            range_end            
+---------------------+---------------------------------+---------------------------------
+ _hyper_43_109_chunk | Mon Jan 01 00:00:00 4000 UTC BC | Thu Jan 01 00:00:00 3000 UTC BC
+ _hyper_43_110_chunk | Mon Jan 01 00:00:00 2000 UTC BC | Thu Jan 01 00:00:00 1000 UTC BC
+ _hyper_43_111_chunk | Mon Jan 01 00:00:00 0001 UTC    | Thu Jan 01 00:00:00 1001 UTC
+ _hyper_43_112_chunk | Mon Jan 01 00:00:00 2001 UTC    | Thu Jan 01 00:00:00 3001 UTC
 
 DROP TABLE origin_ancient;
 -- Test with origin far in the future - all data before origin
@@ -1614,7 +1841,7 @@ SELECT create_hypertable('origin_future',
     by_range('time', interval '100 years', partition_origin => '50000-01-01 00:00:00'::timestamptz));
  create_hypertable 
 -------------------
- (33,t)
+ (44,t)
 
 INSERT INTO origin_future VALUES
     ('2020-06-15 00:00:00', 1),
@@ -1624,11 +1851,11 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'origin_future'
 ORDER BY range_start;
-     chunk_name     |         range_start          |          range_end           
---------------------+------------------------------+------------------------------
- _hyper_33_87_chunk | Sat Jan 01 00:00:00 2000 UTC | Fri Jan 01 00:00:00 2100 UTC
- _hyper_33_88_chunk | Fri Jan 01 00:00:00 2100 UTC | Wed Jan 01 00:00:00 2200 UTC
- _hyper_33_89_chunk | Wed Jan 01 00:00:00 2200 UTC | Mon Jan 01 00:00:00 2300 UTC
+     chunk_name      |         range_start          |          range_end           
+---------------------+------------------------------+------------------------------
+ _hyper_44_113_chunk | Sat Jan 01 00:00:00 2000 UTC | Fri Jan 01 00:00:00 2100 UTC
+ _hyper_44_114_chunk | Fri Jan 01 00:00:00 2100 UTC | Wed Jan 01 00:00:00 2200 UTC
+ _hyper_44_115_chunk | Wed Jan 01 00:00:00 2200 UTC | Mon Jan 01 00:00:00 2300 UTC
 
 DROP TABLE origin_future;
 ---------------------------------------------------------------
@@ -1671,7 +1898,7 @@ SELECT create_hypertable('mixed_interval',
     by_range('time', interval '1 month 15 days', partition_origin => '2020-01-01 00:00:00 UTC'::timestamptz));
  create_hypertable 
 -------------------
- (34,t)
+ (45,t)
 
 INSERT INTO mixed_interval VALUES
     ('2019-12-01 00:00:00 UTC', 1),  -- Before origin
@@ -1683,12 +1910,12 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'mixed_interval'
 ORDER BY range_start;
-     chunk_name     |         range_start          |          range_end           
---------------------+------------------------------+------------------------------
- _hyper_34_90_chunk | Sat Nov 16 00:00:00 2019 UTC | Wed Jan 01 00:00:00 2020 UTC
- _hyper_34_91_chunk | Wed Jan 01 00:00:00 2020 UTC | Sun Feb 16 00:00:00 2020 UTC
- _hyper_34_92_chunk | Sun Feb 16 00:00:00 2020 UTC | Tue Mar 31 00:00:00 2020 UTC
- _hyper_34_93_chunk | Tue Mar 31 00:00:00 2020 UTC | Fri May 15 00:00:00 2020 UTC
+     chunk_name      |         range_start          |          range_end           
+---------------------+------------------------------+------------------------------
+ _hyper_45_116_chunk | Sat Nov 16 00:00:00 2019 UTC | Wed Jan 01 00:00:00 2020 UTC
+ _hyper_45_117_chunk | Wed Jan 01 00:00:00 2020 UTC | Sun Feb 16 00:00:00 2020 UTC
+ _hyper_45_118_chunk | Sun Feb 16 00:00:00 2020 UTC | Tue Mar 31 00:00:00 2020 UTC
+ _hyper_45_119_chunk | Tue Mar 31 00:00:00 2020 UTC | Fri May 15 00:00:00 2020 UTC
 
 DROP TABLE mixed_interval;
 ---------------------------------------------------------------
@@ -1700,21 +1927,21 @@ CREATE TABLE int_extreme_max(time bigint NOT NULL, value int);
 SELECT create_hypertable('int_extreme_max', by_range('time', 1000000000000, partition_origin => 0));
  create_hypertable 
 -------------------
- (35,t)
+ (46,t)
 
 INSERT INTO int_extreme_max VALUES
     (9223372036854775000, 1),  -- Near INT64_MAX
     (9223372036854774000, 2);
 SELECT * FROM show_int_chunk_slices('int_extreme_max');
-     chunk_name     |     range_start     |      range_end      | chunk_size  
---------------------+---------------------+---------------------+-------------
- _hyper_35_94_chunk | 9223372000000000000 | 9223372036854775807 | 36854775807
+     chunk_name      |     range_start     |      range_end      | chunk_size  
+---------------------+---------------------+---------------------+-------------
+ _hyper_46_120_chunk | 9223372000000000000 | 9223372036854775807 | 36854775807
 
 -- Show CHECK constraints - should see open-ended constraint (no upper bound)
 SELECT * FROM show_check_constraints('int_extreme_max');
-       chunk        |                  constraint_def                   
---------------------+---------------------------------------------------
- _hyper_35_94_chunk | CHECK (("time" >= '9223372000000000000'::bigint))
+        chunk        |                  constraint_def                   
+---------------------+---------------------------------------------------
+ _hyper_46_120_chunk | CHECK (("time" >= '9223372000000000000'::bigint))
 
 DROP TABLE int_extreme_max;
 -- Test bigint with large negative values
@@ -1722,21 +1949,21 @@ CREATE TABLE int_extreme_min(time bigint NOT NULL, value int);
 SELECT create_hypertable('int_extreme_min', by_range('time', 1000000000000, partition_origin => 0));
  create_hypertable 
 -------------------
- (36,t)
+ (47,t)
 
 INSERT INTO int_extreme_min VALUES
     (-9223372036854775000, 1),  -- Near INT64_MIN
     (-9223372036854774000, 2);
 SELECT * FROM show_int_chunk_slices('int_extreme_min');
-     chunk_name     |     range_start      |      range_end       | chunk_size  
---------------------+----------------------+----------------------+-------------
- _hyper_36_95_chunk | -9223372036854775808 | -9223372000000000000 | 36854775808
+     chunk_name      |     range_start      |      range_end       | chunk_size  
+---------------------+----------------------+----------------------+-------------
+ _hyper_47_121_chunk | -9223372036854775808 | -9223372000000000000 | 36854775808
 
 -- Show CHECK constraints - should see open-ended constraint (no lower bound)
 SELECT * FROM show_check_constraints('int_extreme_min');
-       chunk        |                  constraint_def                   
---------------------+---------------------------------------------------
- _hyper_36_95_chunk | CHECK (("time" < '-9223372000000000000'::bigint))
+        chunk        |                  constraint_def                   
+---------------------+---------------------------------------------------
+ _hyper_47_121_chunk | CHECK (("time" < '-9223372000000000000'::bigint))
 
 DROP TABLE int_extreme_min;
 -- Test integer origin with values on both sides
@@ -1744,7 +1971,7 @@ CREATE TABLE int_origin_sides(time bigint NOT NULL, value int);
 SELECT create_hypertable('int_origin_sides', by_range('time', 100, partition_origin => 1000));
  create_hypertable 
 -------------------
- (37,t)
+ (48,t)
 
 INSERT INTO int_origin_sides VALUES
     (850, 1),   -- Chunk [800, 900)
@@ -1754,24 +1981,24 @@ INSERT INTO int_origin_sides VALUES
     (1100, 5),  -- Chunk [1100, 1200)
     (1150, 6);  -- Same chunk
 SELECT * FROM show_int_chunk_slices('int_origin_sides');
-     chunk_name     | range_start | range_end | chunk_size 
---------------------+-------------+-----------+------------
- _hyper_37_96_chunk |         800 |       900 |        100
- _hyper_37_97_chunk |         900 |      1000 |        100
- _hyper_37_98_chunk |        1000 |      1100 |        100
- _hyper_37_99_chunk |        1100 |      1200 |        100
+     chunk_name      | range_start | range_end | chunk_size 
+---------------------+-------------+-----------+------------
+ _hyper_48_122_chunk |         800 |       900 |        100
+ _hyper_48_123_chunk |         900 |      1000 |        100
+ _hyper_48_124_chunk |        1000 |      1100 |        100
+ _hyper_48_125_chunk |        1100 |      1200 |        100
 
 -- Verify data placement
 SELECT tableoid::regclass as chunk, time, value
 FROM int_origin_sides ORDER BY time;
-                  chunk                   | time | value 
-------------------------------------------+------+-------
- _timescaledb_internal._hyper_37_96_chunk |  850 |     1
- _timescaledb_internal._hyper_37_97_chunk |  950 |     2
- _timescaledb_internal._hyper_37_98_chunk | 1000 |     3
- _timescaledb_internal._hyper_37_98_chunk | 1050 |     4
- _timescaledb_internal._hyper_37_99_chunk | 1100 |     5
- _timescaledb_internal._hyper_37_99_chunk | 1150 |     6
+                   chunk                   | time | value 
+-------------------------------------------+------+-------
+ _timescaledb_internal._hyper_48_122_chunk |  850 |     1
+ _timescaledb_internal._hyper_48_123_chunk |  950 |     2
+ _timescaledb_internal._hyper_48_124_chunk | 1000 |     3
+ _timescaledb_internal._hyper_48_124_chunk | 1050 |     4
+ _timescaledb_internal._hyper_48_125_chunk | 1100 |     5
+ _timescaledb_internal._hyper_48_125_chunk | 1150 |     6
 
 DROP TABLE int_origin_sides;
 RESET timezone;

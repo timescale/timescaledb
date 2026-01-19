@@ -124,16 +124,81 @@ ORDER BY range_start;
 
 DROP TABLE origin_update;
 ---------------------------------------------------------------
--- INTEGER COLUMNS WITH INTEGER ORIGIN
+-- INTEGER COLUMNS WITH INTEGER ORIGIN (OLD API)
 ---------------------------------------------------------------
--- Test integer columns with integer origin
+-- Test integer columns with integer origin using create_hypertable old API
+-- Test smallint with origin (old API)
+CREATE TABLE smallint_origin_old(id smallint NOT NULL, value int);
+SELECT create_hypertable('smallint_origin_old', 'id',
+    chunk_time_interval => 100,
+    chunk_time_origin => 50);
+        create_hypertable         
+----------------------------------
+ (3,public,smallint_origin_old,t)
+
+SELECT hypertable_name, integer_interval, integer_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'smallint_origin_old';
+   hypertable_name   | integer_interval | integer_origin 
+---------------------+------------------+----------------
+ smallint_origin_old |              100 |             50
+
+INSERT INTO smallint_origin_old VALUES (40, 1);   -- chunk [-50, 50)
+INSERT INTO smallint_origin_old VALUES (50, 2);   -- chunk [50, 150)
+INSERT INTO smallint_origin_old VALUES (150, 3);  -- chunk [150, 250)
+SELECT c.table_name AS chunk_name, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
+JOIN _timescaledb_catalog.dimension_slice ds ON cc.dimension_slice_id = ds.id
+WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'smallint_origin_old')
+ORDER BY ds.range_start;
+    chunk_name    | range_start | range_end 
+------------------+-------------+-----------
+ _hyper_3_7_chunk |         -50 |        50
+ _hyper_3_8_chunk |          50 |       150
+ _hyper_3_9_chunk |         150 |       250
+
+DROP TABLE smallint_origin_old;
+-- Test int (int4) with origin (old API)
+CREATE TABLE int4_origin_old(id int NOT NULL, value int);
+SELECT create_hypertable('int4_origin_old', 'id',
+    chunk_time_interval => 1000,
+    chunk_time_origin => 500);
+      create_hypertable       
+------------------------------
+ (4,public,int4_origin_old,t)
+
+SELECT hypertable_name, integer_interval, integer_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'int4_origin_old';
+ hypertable_name | integer_interval | integer_origin 
+-----------------+------------------+----------------
+ int4_origin_old |             1000 |            500
+
+INSERT INTO int4_origin_old VALUES (400, 1);   -- chunk [-500, 500)
+INSERT INTO int4_origin_old VALUES (500, 2);   -- chunk [500, 1500)
+INSERT INTO int4_origin_old VALUES (1500, 3);  -- chunk [1500, 2500)
+SELECT c.table_name AS chunk_name, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
+JOIN _timescaledb_catalog.dimension_slice ds ON cc.dimension_slice_id = ds.id
+WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'int4_origin_old')
+ORDER BY ds.range_start;
+    chunk_name     | range_start | range_end 
+-------------------+-------------+-----------
+ _hyper_4_10_chunk |        -500 |       500
+ _hyper_4_11_chunk |         500 |      1500
+ _hyper_4_12_chunk |        1500 |      2500
+
+DROP TABLE int4_origin_old;
+-- Test bigint with origin (old API)
 CREATE TABLE int_origin(time bigint NOT NULL, value int);
 SELECT create_hypertable('int_origin', 'time',
     chunk_time_interval => 1000,
     chunk_time_origin => 500);
     create_hypertable    
 -------------------------
- (3,public,int_origin,t)
+ (5,public,int_origin,t)
 
 -- Verify dimensions view shows integer_origin (not time_origin)
 SELECT hypertable_name, integer_interval, integer_origin, time_interval, time_origin
@@ -155,13 +220,118 @@ JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
 JOIN _timescaledb_catalog.dimension_slice ds ON cc.dimension_slice_id = ds.id
 WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'int_origin')
 ORDER BY ds.range_start;
-    chunk_name    | range_start | range_end 
-------------------+-------------+-----------
- _hyper_3_7_chunk |        -500 |       500
- _hyper_3_8_chunk |         500 |      1500
- _hyper_3_9_chunk |        1500 |      2500
+    chunk_name     | range_start | range_end 
+-------------------+-------------+-----------
+ _hyper_5_13_chunk |        -500 |       500
+ _hyper_5_14_chunk |         500 |      1500
+ _hyper_5_15_chunk |        1500 |      2500
 
 DROP TABLE int_origin;
+-- Test smallint columns with integer origin using by_range syntax
+CREATE TABLE smallint_origin(id smallint NOT NULL, value int);
+SELECT create_hypertable('smallint_origin',
+    by_range('id', 100, partition_origin => 50));
+ create_hypertable 
+-------------------
+ (6,t)
+
+-- Verify dimensions view shows integer_origin
+SELECT hypertable_name, integer_interval, integer_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'smallint_origin';
+ hypertable_name | integer_interval | integer_origin 
+-----------------+------------------+----------------
+ smallint_origin |              100 |             50
+
+-- Insert data to verify chunk alignment relative to origin=50
+-- Chunks should be: [..., -50 to 50, 50 to 150, 150 to 250, ...]
+INSERT INTO smallint_origin VALUES (40, 1);   -- chunk [-50, 50)
+INSERT INTO smallint_origin VALUES (50, 2);   -- chunk [50, 150)
+INSERT INTO smallint_origin VALUES (120, 3);  -- chunk [50, 150)
+INSERT INTO smallint_origin VALUES (150, 4);  -- chunk [150, 250)
+SELECT c.table_name AS chunk_name, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
+JOIN _timescaledb_catalog.dimension_slice ds ON cc.dimension_slice_id = ds.id
+WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'smallint_origin')
+ORDER BY ds.range_start;
+    chunk_name     | range_start | range_end 
+-------------------+-------------+-----------
+ _hyper_6_16_chunk |         -50 |        50
+ _hyper_6_17_chunk |          50 |       150
+ _hyper_6_18_chunk |         150 |       250
+
+DROP TABLE smallint_origin;
+-- Test int (int4) columns with integer origin using by_range syntax
+CREATE TABLE int4_origin(id int NOT NULL, value int);
+SELECT create_hypertable('int4_origin',
+    by_range('id', 1000, partition_origin => 500));
+ create_hypertable 
+-------------------
+ (7,t)
+
+-- Verify dimensions view shows integer_origin
+SELECT hypertable_name, integer_interval, integer_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'int4_origin';
+ hypertable_name | integer_interval | integer_origin 
+-----------------+------------------+----------------
+ int4_origin     |             1000 |            500
+
+-- Insert data to verify chunk alignment relative to origin=500
+-- Chunks should be: [..., -500 to 500, 500 to 1500, 1500 to 2500, ...]
+INSERT INTO int4_origin VALUES (400, 1);   -- chunk [-500, 500)
+INSERT INTO int4_origin VALUES (500, 2);   -- chunk [500, 1500)
+INSERT INTO int4_origin VALUES (1200, 3);  -- chunk [500, 1500)
+INSERT INTO int4_origin VALUES (1500, 4);  -- chunk [1500, 2500)
+SELECT c.table_name AS chunk_name, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
+JOIN _timescaledb_catalog.dimension_slice ds ON cc.dimension_slice_id = ds.id
+WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'int4_origin')
+ORDER BY ds.range_start;
+    chunk_name     | range_start | range_end 
+-------------------+-------------+-----------
+ _hyper_7_19_chunk |        -500 |       500
+ _hyper_7_20_chunk |         500 |      1500
+ _hyper_7_21_chunk |        1500 |      2500
+
+DROP TABLE int4_origin;
+-- Test bigint columns with integer origin using by_range syntax
+CREATE TABLE bigint_origin(id bigint NOT NULL, value int);
+SELECT create_hypertable('bigint_origin',
+    by_range('id', 10000, partition_origin => 5000));
+ create_hypertable 
+-------------------
+ (8,t)
+
+-- Verify dimensions view shows integer_origin
+SELECT hypertable_name, integer_interval, integer_origin
+FROM timescaledb_information.dimensions
+WHERE hypertable_name = 'bigint_origin';
+ hypertable_name | integer_interval | integer_origin 
+-----------------+------------------+----------------
+ bigint_origin   |            10000 |           5000
+
+-- Insert data to verify chunk alignment relative to origin=5000
+-- Chunks should be: [..., -5000 to 5000, 5000 to 15000, 15000 to 25000, ...]
+INSERT INTO bigint_origin VALUES (4000, 1);   -- chunk [-5000, 5000)
+INSERT INTO bigint_origin VALUES (5000, 2);   -- chunk [5000, 15000)
+INSERT INTO bigint_origin VALUES (12000, 3);  -- chunk [5000, 15000)
+INSERT INTO bigint_origin VALUES (15000, 4);  -- chunk [15000, 25000)
+SELECT c.table_name AS chunk_name, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
+JOIN _timescaledb_catalog.dimension_slice ds ON cc.dimension_slice_id = ds.id
+WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'bigint_origin')
+ORDER BY ds.range_start;
+    chunk_name     | range_start | range_end 
+-------------------+-------------+-----------
+ _hyper_8_22_chunk |       -5000 |      5000
+ _hyper_8_23_chunk |        5000 |     15000
+ _hyper_8_24_chunk |       15000 |     25000
+
+DROP TABLE bigint_origin;
 ---------------------------------------------------------------
 -- ADD_DIMENSION WITH ORIGIN
 ---------------------------------------------------------------
@@ -170,14 +340,14 @@ CREATE TABLE add_dim_origin(id int NOT NULL, time timestamptz NOT NULL, value in
 SELECT create_hypertable('add_dim_origin', 'id', chunk_time_interval => 100);
       create_hypertable      
 -----------------------------
- (4,public,add_dim_origin,t)
+ (9,public,add_dim_origin,t)
 
 SELECT add_dimension('add_dim_origin', 'time',
     chunk_time_interval => 86400000000,  -- 1 day in microseconds
     chunk_time_origin => '2024-04-01 00:00:00 UTC'::timestamptz);
-          add_dimension           
-----------------------------------
- (5,public,add_dim_origin,time,t)
+           add_dimension           
+-----------------------------------
+ (10,public,add_dim_origin,time,t)
 
 -- Verify the origin was stored correctly in the dimension
 SELECT d.column_name,
@@ -218,7 +388,7 @@ SELECT create_hypertable('by_range_origin',
     by_range('time', '1 day'::interval, partition_origin => '2020-01-01 06:00:00 UTC'::timestamptz));
  create_hypertable 
 -------------------
- (5,t)
+ (10,t)
 
 -- Verify origin is stored correctly
 SELECT hypertable_name, time_interval, time_origin
@@ -238,11 +408,11 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'by_range_origin'
 ORDER BY range_start;
-    chunk_name     |         range_start          |          range_end           
--------------------+------------------------------+------------------------------
- _hyper_5_10_chunk | Tue Dec 31 06:00:00 2019 UTC | Wed Jan 01 06:00:00 2020 UTC
- _hyper_5_11_chunk | Wed Jan 01 06:00:00 2020 UTC | Thu Jan 02 06:00:00 2020 UTC
- _hyper_5_12_chunk | Thu Jan 02 06:00:00 2020 UTC | Fri Jan 03 06:00:00 2020 UTC
+     chunk_name     |         range_start          |          range_end           
+--------------------+------------------------------+------------------------------
+ _hyper_10_25_chunk | Tue Dec 31 06:00:00 2019 UTC | Wed Jan 01 06:00:00 2020 UTC
+ _hyper_10_26_chunk | Wed Jan 01 06:00:00 2020 UTC | Thu Jan 02 06:00:00 2020 UTC
+ _hyper_10_27_chunk | Thu Jan 02 06:00:00 2020 UTC | Fri Jan 03 06:00:00 2020 UTC
 
 DROP TABLE by_range_origin;
 ---------------------------------------------------------------
@@ -272,11 +442,11 @@ SELECT chunk_name, range_start, range_end
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'with_origin_ts'
 ORDER BY range_start;
-    chunk_name     |         range_start          |          range_end           
--------------------+------------------------------+------------------------------
- _hyper_6_13_chunk | Tue Dec 31 12:00:00 2019 UTC | Wed Jan 01 12:00:00 2020 UTC
- _hyper_6_14_chunk | Wed Jan 01 12:00:00 2020 UTC | Thu Jan 02 12:00:00 2020 UTC
- _hyper_6_15_chunk | Thu Jan 02 12:00:00 2020 UTC | Fri Jan 03 12:00:00 2020 UTC
+     chunk_name     |         range_start          |          range_end           
+--------------------+------------------------------+------------------------------
+ _hyper_11_28_chunk | Tue Dec 31 12:00:00 2019 UTC | Wed Jan 01 12:00:00 2020 UTC
+ _hyper_11_29_chunk | Wed Jan 01 12:00:00 2020 UTC | Thu Jan 02 12:00:00 2020 UTC
+ _hyper_11_30_chunk | Thu Jan 02 12:00:00 2020 UTC | Fri Jan 03 12:00:00 2020 UTC
 
 DROP TABLE with_origin_ts;
 -- Test with partition_origin alias
@@ -314,11 +484,11 @@ JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
 JOIN _timescaledb_catalog.dimension_slice ds ON cc.dimension_slice_id = ds.id
 WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'with_origin_int')
 ORDER BY ds.range_start;
-    chunk_name     | range_start | range_end 
--------------------+-------------+-----------
- _hyper_8_16_chunk |        -500 |       500
- _hyper_8_17_chunk |         500 |      1500
- _hyper_8_18_chunk |        1500 |      2500
+     chunk_name     | range_start | range_end 
+--------------------+-------------+-----------
+ _hyper_13_31_chunk |        -500 |       500
+ _hyper_13_32_chunk |         500 |      1500
+ _hyper_13_33_chunk |        1500 |      2500
 
 DROP TABLE with_origin_int;
 -- Test with smallint column and origin
@@ -341,10 +511,10 @@ JOIN _timescaledb_catalog.chunk_constraint cc ON c.id = cc.chunk_id
 JOIN _timescaledb_catalog.dimension_slice ds ON cc.dimension_slice_id = ds.id
 WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'with_origin_smallint')
 ORDER BY ds.range_start;
-    chunk_name     | range_start | range_end 
--------------------+-------------+-----------
- _hyper_9_19_chunk |         -50 |        50
- _hyper_9_20_chunk |          50 |       150
+     chunk_name     | range_start | range_end 
+--------------------+-------------+-----------
+ _hyper_14_34_chunk |         -50 |        50
+ _hyper_14_35_chunk |          50 |       150
 
 DROP TABLE with_origin_smallint;
 -- Test with int column and origin
@@ -369,8 +539,8 @@ WHERE c.hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE ta
 ORDER BY ds.range_start;
      chunk_name     | range_start | range_end 
 --------------------+-------------+-----------
- _hyper_10_21_chunk |        -500 |       500
- _hyper_10_22_chunk |         500 |      1500
+ _hyper_15_36_chunk |        -500 |       500
+ _hyper_15_37_chunk |         500 |      1500
 
 DROP TABLE with_origin_int4;
 -- Test with timestamp (without timezone) column and origin
@@ -395,8 +565,8 @@ WHERE hypertable_name = 'with_origin_timestamp'
 ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_11_23_chunk | Tue Dec 31 12:00:00 2019 UTC | Wed Jan 01 12:00:00 2020 UTC
- _hyper_11_24_chunk | Wed Jan 01 12:00:00 2020 UTC | Thu Jan 02 12:00:00 2020 UTC
+ _hyper_16_38_chunk | Tue Dec 31 12:00:00 2019 UTC | Wed Jan 01 12:00:00 2020 UTC
+ _hyper_16_39_chunk | Wed Jan 01 12:00:00 2020 UTC | Thu Jan 02 12:00:00 2020 UTC
 
 DROP TABLE with_origin_timestamp;
 -- Test with date column and origin
@@ -421,8 +591,8 @@ WHERE hypertable_name = 'with_origin_date'
 ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_12_25_chunk | Wed Dec 25 00:00:00 2019 UTC | Wed Jan 01 00:00:00 2020 UTC
- _hyper_12_26_chunk | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 08 00:00:00 2020 UTC
+ _hyper_17_40_chunk | Wed Dec 25 00:00:00 2019 UTC | Wed Jan 01 00:00:00 2020 UTC
+ _hyper_17_41_chunk | Wed Jan 01 00:00:00 2020 UTC | Wed Jan 08 00:00:00 2020 UTC
 
 DROP TABLE with_origin_date;
 -- Test with chunk_origin alias (alternative name)
@@ -450,7 +620,7 @@ SELECT create_hypertable('preserve_origin', 'time',
     chunk_time_origin => '2020-01-01 06:00:00 UTC'::timestamptz);
        create_hypertable       
 -------------------------------
- (14,public,preserve_origin,t)
+ (19,public,preserve_origin,t)
 
 -- Verify custom origin is set to 6:00
 SELECT hypertable_name, time_interval, time_origin
@@ -469,7 +639,7 @@ WHERE hypertable_name = 'preserve_origin'
 ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_14_27_chunk | Wed Jan 01 06:00:00 2020 UTC | Thu Jan 02 06:00:00 2020 UTC
+ _hyper_19_42_chunk | Wed Jan 01 06:00:00 2020 UTC | Thu Jan 02 06:00:00 2020 UTC
 
 -- Now change only the interval, NOT specifying origin (should preserve 6:00 origin)
 SELECT set_chunk_time_interval('preserve_origin', 43200000000);  -- 12 hours, no origin
@@ -494,8 +664,8 @@ WHERE hypertable_name = 'preserve_origin'
 ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_14_27_chunk | Wed Jan 01 06:00:00 2020 UTC | Thu Jan 02 06:00:00 2020 UTC
- _hyper_14_28_chunk | Thu Jan 02 06:00:00 2020 UTC | Thu Jan 02 18:00:00 2020 UTC
+ _hyper_19_42_chunk | Wed Jan 01 06:00:00 2020 UTC | Thu Jan 02 06:00:00 2020 UTC
+ _hyper_19_43_chunk | Thu Jan 02 06:00:00 2020 UTC | Thu Jan 02 18:00:00 2020 UTC
 
 DROP TABLE preserve_origin;
 ---------------------------------------------------------------
@@ -509,7 +679,7 @@ SELECT create_hypertable('preserve_origin_calendar', 'time',
     chunk_time_origin => '2020-01-01 06:00:00 UTC'::timestamptz);
            create_hypertable            
 ----------------------------------------
- (15,public,preserve_origin_calendar,t)
+ (20,public,preserve_origin_calendar,t)
 
 -- Verify custom origin is set to 6:00
 SELECT hypertable_name, time_interval, time_origin
@@ -528,7 +698,7 @@ WHERE hypertable_name = 'preserve_origin_calendar'
 ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_15_29_chunk | Wed Jan 01 06:00:00 2020 UTC | Thu Jan 02 06:00:00 2020 UTC
+ _hyper_20_44_chunk | Wed Jan 01 06:00:00 2020 UTC | Thu Jan 02 06:00:00 2020 UTC
 
 -- Now change only the interval, NOT specifying origin (should preserve 6:00 origin)
 SELECT set_chunk_time_interval('preserve_origin_calendar', interval '12 hours');
@@ -553,8 +723,8 @@ WHERE hypertable_name = 'preserve_origin_calendar'
 ORDER BY range_start;
      chunk_name     |         range_start          |          range_end           
 --------------------+------------------------------+------------------------------
- _hyper_15_29_chunk | Wed Jan 01 06:00:00 2020 UTC | Thu Jan 02 06:00:00 2020 UTC
- _hyper_15_30_chunk | Thu Jan 02 06:00:00 2020 UTC | Thu Jan 02 18:00:00 2020 UTC
+ _hyper_20_44_chunk | Wed Jan 01 06:00:00 2020 UTC | Thu Jan 02 06:00:00 2020 UTC
+ _hyper_20_45_chunk | Thu Jan 02 06:00:00 2020 UTC | Thu Jan 02 18:00:00 2020 UTC
 
 DROP TABLE preserve_origin_calendar;
 RESET timescaledb.enable_calendar_chunking;
@@ -568,7 +738,7 @@ SELECT create_hypertable('change_origin_only', 'time',
     chunk_time_interval => 86400000000);  -- 1 day in microseconds
         create_hypertable         
 ----------------------------------
- (16,public,change_origin_only,t)
+ (21,public,change_origin_only,t)
 
 -- Verify initial state (default origin)
 SELECT hypertable_name, time_interval, time_origin
