@@ -15,5 +15,5 @@ SELECT compress_chunk(chunk) FROM show_chunks('t1') AS chunk;
 SELECT compress_chunk(chunk) FROM show_chunks('t2') AS chunk;
 
 
-SELECT ccs.compressed_chunk_id,round(ccs.uncompressed_heap_size, -5) uncompressed_heap_size,ccs.uncompressed_toast_size,round(ccs.uncompressed_index_size,-5) uncompressed_index_size, ccs.uncompressed_heap_size + ccs.uncompressed_toast_size + ccs.uncompressed_index_size AS uncompressed_total_size, l.relation_size, l.index_size, l.total_size FROM _timescaledb_catalog.compression_chunk_size ccs JOIN _timescaledb_catalog.chunk ch ON ch.id=ccs.compressed_chunk_id JOIN LATERAL (SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(format('%I.%I',ch.schema_name,ch.table_name))) l ON true;
+SELECT ccs.compressed_chunk_id,round(ccs.uncompressed_heap_size, -6) uncompressed_heap_size,ccs.uncompressed_toast_size,round(ccs.uncompressed_index_size,-6) uncompressed_index_size, ccs.uncompressed_heap_size + ccs.uncompressed_toast_size + ccs.uncompressed_index_size AS uncompressed_total_size, l.relation_size, l.index_size, l.total_size FROM _timescaledb_catalog.compression_chunk_size ccs JOIN _timescaledb_catalog.chunk ch ON ch.id=ccs.compressed_chunk_id JOIN LATERAL (SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(format('%I.%I',ch.schema_name,ch.table_name))) l ON true;
 
