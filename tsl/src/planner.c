@@ -312,21 +312,21 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 #ifdef TS_DEBUG
 	if (ts_guc_debug_require_vector_agg != DRO_Allow)
 	{
-		bool has_postgres_partial_agg = false;
+		bool has_some_agg = false;
 		const bool has_vector_partial_agg =
-			has_vector_agg_node(stmt->planTree, &has_postgres_partial_agg);
+			has_vector_agg_node(stmt->planTree, &has_some_agg);
 
 		/*
-		 * For convenience, we don't complain about queries that don't have
-		 * aggregation at all.
+		 * For convenience of using this in the tests, we don't complain about
+		 * queries that don't have aggregation at all.
 		 */
-		if (has_postgres_partial_agg || has_vector_partial_agg)
+		if (has_some_agg)
 		{
-			if (has_postgres_partial_agg && ts_guc_debug_require_vector_agg == DRO_Require)
+			if (!has_vector_partial_agg && ts_guc_debug_require_vector_agg == DRO_Require)
 			{
 				ereport(ERROR,
 						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-						 errmsg("postgres partial aggregation nodes inconsistent with "
+						 errmsg("vectorized aggregation node not found when required by the "
 								"debug_require_vector_agg GUC")));
 			}
 
@@ -334,7 +334,7 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 			{
 				ereport(ERROR,
 						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-						 errmsg("vectorized partial aggregation nodes inconsistent with "
+						 errmsg("vectorized aggregation node found when forbidden by the "
 								"debug_require_vector_agg GUC")));
 			}
 		}
