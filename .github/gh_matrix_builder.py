@@ -95,7 +95,7 @@ def build_debug_config(overrides):
             "clang": "clang",
             "coverage": True,
             "cxx": "g++",
-            "extra_packages": "clang llvm llvm-dev llvm-tools",
+            "extra_packages": "clang llvm llvm-dev",
             "ignored_tests": default_ignored_tests,
             "name": "Debug",
             "os": "ubuntu-24.04",
