@@ -569,6 +569,27 @@ EOF
     return 0
 }
 
+check_existing_pr_for_test() {
+    local test_name="$1"
+
+    # Search for open PRs with the claude-code label that mention this test
+    local matching_pr
+    matching_pr=$(gh pr list \
+        --repo "${TARGET_REPOSITORY}" \
+        --state open \
+        --label "claude-code" \
+        --json number,title,url,body \
+        --jq ".[] | select(.title + .body | test(\"${test_name}\"; \"i\")) | .url" \
+        2>/dev/null | head -1)
+
+    if [[ -n "${matching_pr}" ]]; then
+        echo "${matching_pr}"
+        return 0
+    fi
+
+    return 1
+}
+
 fix_single_test() {
     local test_name="$1"
     local test_context="$2"
@@ -578,6 +599,15 @@ fix_single_test() {
     log_info "----------------------------------------------"
     log_info "FIXING TEST ${test_number}/${total_tests}: ${test_name}"
     log_info "----------------------------------------------"
+
+    # Check if an unmerged PR already exists for this test
+    local existing_pr
+    if existing_pr=$(check_existing_pr_for_test "${test_name}"); then
+        log_warn "SKIPPING: An unmerged PR already exists for test '${test_name}'"
+        log_warn "Existing PR: ${existing_pr}"
+        log_info "Not creating a duplicate fix. Please review and merge the existing PR."
+        return 2  # Return code 2 indicates "skipped due to existing PR"
+    fi
 
     # Create a prompt file for this specific test
     local prompt_file="${WORK_DIR}/prompt_${test_number}.txt"
@@ -728,6 +758,7 @@ invoke_claude_code() {
     local total_tests=0
     local fixed_tests=0
     local failed_fixes=0
+    local skipped_tests=0
 
     if [[ -f "${unique_tests_file}" && -s "${unique_tests_file}" ]]; then
         total_tests=$(wc -l < "${unique_tests_file}")
@@ -743,8 +774,14 @@ invoke_claude_code() {
             test_context=$(extract_test_context "${test_name}" "${context_file}")
 
             # Fix this specific test
-            if fix_single_test "${test_name}" "${test_context}" "${test_number}" "${total_tests}"; then
+            local fix_result
+            fix_single_test "${test_name}" "${test_context}" "${test_number}" "${total_tests}"
+            fix_result=$?
+
+            if [[ ${fix_result} -eq 0 ]]; then
                 ((fixed_tests++))
+            elif [[ ${fix_result} -eq 2 ]]; then
+                ((skipped_tests++))
             else
                 ((failed_fixes++))
             fi
@@ -804,6 +841,7 @@ EOF
     log_info "=============================================="
     log_info "Total tests attempted: ${total_tests}"
     log_info "Successfully fixed: ${fixed_tests}"
+    log_info "Skipped (existing PR): ${skipped_tests}"
     log_info "Failed to fix: ${failed_fixes}"
 
     # Show all commits made
@@ -815,7 +853,12 @@ EOF
     log_info "=============================================="
 
     if [[ ${fixed_tests} -eq 0 ]]; then
-        log_error "No tests were fixed"
+        if [[ ${skipped_tests} -gt 0 ]]; then
+            log_info "No new fixes needed - all failing tests have existing unmerged PRs"
+            log_info "Please review and merge the existing PRs to resolve the failures"
+        else
+            log_error "No tests were fixed"
+        fi
         return 1
     fi
 
