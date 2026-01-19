@@ -533,8 +533,8 @@ if(LINTER)
           /opt/bin
     DOC "The path to the clang-tidy linter" REQUIRED)
 
-  message(STATUS "Using clang-tidy ${CLANG_TIDY}")
-  execute_process(COMMAND ${CLANG_TIDY} --version)
+  execute_process(COMMAND ${CLANG_TIDY} --version OUTPUT_VARIABLE CLANG_TIDY_VERSION)
+  message(STATUS "Using clang-tidy ${CLANG_TIDY}, ${CLANG_TIDY_VERSION}")
   string(
     CONCAT
       CMAKE_C_CLANG_TIDY
