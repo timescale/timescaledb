@@ -95,7 +95,7 @@ node_old.safe_psql(dbname=pg_database_test, query="CHECKPOINT")
 node_old.safe_psql(dbname=pg_database_test, filename="test/sql/updates/setup.check.sql")
 
 # Run over the old node to check the output
-(code, old_out, old_err) = node_old.psql(
+code, old_out, old_err = node_old.psql(
     dbname=pg_database_test, filename="test/sql/updates/post.pg_upgrade.sql"
 )
 
@@ -107,7 +107,7 @@ print(f"Upgrading node {pg_node_old} to {pg_node_new}")
 res = node_new.upgrade_from(old_node=node_old, options=["--retain"])
 node_new.start()
 
-(code, new_out, new_err) = node_new.psql(
+code, new_out, new_err = node_new.psql(
     dbname=pg_database_test,
     filename="test/sql/updates/post.pg_upgrade.sql",
 )
