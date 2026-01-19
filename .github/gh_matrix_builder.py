@@ -358,7 +358,7 @@ elif len(sys.argv) > 2:
         stdout=subprocess.PIPE,
         shell=True,
     )
-    (output, err) = p.communicate()
+    output, err = p.communicate()
     p_status = p.wait()
     if p_status != 0:
         print(
