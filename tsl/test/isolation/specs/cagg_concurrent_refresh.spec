@@ -119,13 +119,20 @@ setup
     CREATE TABLE cancelpid (
         pid INTEGER NOT NULL PRIMARY KEY
     );
-    CREATE OR REPLACE PROCEDURE cancelpids() AS 
+    CREATE OR REPLACE PROCEDURE cancelpids() AS
     $$
+    DECLARE
+        max_wait_time CONSTANT NUMERIC := 30.0;  -- Maximum wait time in seconds
+        elapsed_time NUMERIC := 0.0;
+        sleep_interval CONSTANT NUMERIC := 0.1;  -- Check every 100ms instead of 10ms
     BEGIN
         PERFORM pg_cancel_backend(pid) FROM cancelpid;
+        -- Wait for backends to transition from 'active' state or timeout
         WHILE EXISTS (SELECT FROM pg_stat_activity WHERE pid IN (SELECT pid FROM cancelpid) AND state = 'active')
+              AND elapsed_time < max_wait_time
         LOOP
-            PERFORM pg_sleep(0.01);
+            PERFORM pg_sleep(sleep_interval);
+            elapsed_time := elapsed_time + sleep_interval;
         END LOOP;
         DELETE FROM cancelpid;
     END;
