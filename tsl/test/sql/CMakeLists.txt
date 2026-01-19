@@ -7,7 +7,6 @@ set(TEST_FILES
     bgw_job_ddl.sql
     bgw_policy.sql
     bgw_security.sql
-    cagg_deprecated_bucket_ng.sql
     cagg_direct_compress.sql
     cagg_errors.sql
     cagg_invalidation.sql
@@ -146,10 +145,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     decompress_memory.sql
     decompress_vector_qual.sql
     detach_chunk.sql
-    cagg_exp_monthly.sql
-    cagg_exp_next_gen.sql
-    cagg_exp_origin.sql
-    cagg_exp_timezone.sql
     hypertable_generalization.sql
     insert_memory_usage.sql
     information_view_chunk_count.sql
@@ -177,7 +172,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_TEMPLATES
     cagg_bgw.sql.in
     cagg_ddl.sql.in
-    cagg_migrate_function.sql.in
     cagg_usage.sql.in
     cagg.sql.in
     compression_update_delete.sql.in

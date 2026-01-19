@@ -23,6 +23,7 @@ extern bool ts_guc_enable_ordered_append;
 extern bool ts_guc_enable_chunk_append;
 extern bool ts_guc_enable_parallel_chunk_append;
 extern bool ts_guc_enable_qual_propagation;
+extern bool ts_guc_enable_qual_filtering;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
 extern bool ts_guc_enable_cagg_reorder_groupby;
@@ -145,8 +146,6 @@ extern TSDLLEXPORT bool ts_guc_debug_compression_path_info;
 extern TSDLLEXPORT bool ts_guc_enable_rowlevel_compression_locking;
 
 extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_batch_sorted_merge;
-
-extern TSDLLEXPORT bool ts_guc_debug_allow_cagg_with_deprecated_funcs;
 
 extern bool ts_guc_enable_partitioned_hypertables;
 

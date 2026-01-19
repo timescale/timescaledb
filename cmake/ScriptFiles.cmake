@@ -35,7 +35,6 @@ set(SOURCE_FILES
     ddl_triggers.sql
     bookend.sql
     time_bucket.sql
-    time_bucket_ng.sql
     version.sql
     size_utils.sql
     histogram.sql
@@ -52,7 +51,6 @@ set(SOURCE_FILES
     policy_api.sql
     policy_internal.sql
     cagg_utils.sql
-    cagg_migrate.sql
     job_stat_history_log_retention.sql
     osm_api.sql
     compression_defaults.sql

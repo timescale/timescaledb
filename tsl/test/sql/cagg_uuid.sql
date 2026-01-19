@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- this test has implicit dependencies on the plans generated with quals
+-- (plans favoring index scans over seq scans), so disable the optimization
+SET timescaledb.enable_qual_filtering = off;
+
 --
 --
 -- Test caggs with "time" partitioning on UUIDv7
@@ -44,12 +48,12 @@ LIMIT 1 OFFSET 1 \gset
 CREATE MATERIALIZED VIEW daily_uuid_events WITH (timescaledb.continuous) AS
 SELECT time_bucket('1 day', id) AS day, round(avg(temp)::numeric, 3) AS temp
 FROM uuid_events WHERE device < 6
-GROUP BY 1;
+GROUP BY 1 ORDER BY 1;
 
 CREATE MATERIALIZED VIEW daily_ts_events WITH (timescaledb.continuous) AS
 SELECT time_bucket('1 day', ts) AS day, round(avg(temp)::numeric, 3) AS temp
 FROM ts_events WHERE device < 6
-GROUP BY 1;
+GROUP BY 1 ORDER BY 1;
 
 -- The uuid and timestmap caggs should look the same
 SELECT * FROM daily_uuid_events ORDER BY day;

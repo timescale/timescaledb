@@ -271,15 +271,6 @@ dimension_restrict_info_add(DimensionRestrictInfo *dri, int strategy, Oid collat
 	}
 }
 
-typedef struct HypertableRestrictInfo
-{
-	int num_base_restrictions; /* number of base restrictions
-								* successfully added */
-	int num_dimensions;
-	DimensionRestrictInfo *dimension_restriction[FLEXIBLE_ARRAY_MEMBER]; /* array of dimension
-																		  * restrictions */
-} HypertableRestrictInfo;
-
 HypertableRestrictInfo *
 ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
 {

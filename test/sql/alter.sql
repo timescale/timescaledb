@@ -510,6 +510,13 @@ ORDER BY index_name;
 
 -- Alter replica identity directly on a chunk is not supported
 SELECT ch AS chunk_name FROM show_chunks('replid') ch ORDER BY chunk_name LIMIT 1 \gset
+\set ON_ERROR_STOP 0
 ALTER TABLE :chunk_name REPLICA IDENTITY FULL;
+\set ON_ERROR_STOP 1
 SELECT relname, relreplident FROM show_chunks('replid') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
+
+-- test implicit constraints gh issue #9132
+CREATE TABLE i9132(time timestamptz) WITH (tsdb.hypertable);
+INSERT INTO i9132 VALUES ('2024-01-01'), ('2024-02-02');
+ALTER TABLE i9132 ADD COLUMN id serial, ADD CONSTRAINT implicit_pk PRIMARY KEY (id, time);
 

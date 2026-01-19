@@ -18,6 +18,7 @@
 #include "plan.h"
 
 #include "exec.h"
+#include "expression_utils.h"
 #include "import/list.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/vector_quals.h"
@@ -31,38 +32,6 @@ void
 _vector_agg_init(void)
 {
 	TryRegisterCustomScanMethods(&scan_methods);
-}
-
-/*
- * Build an output targetlist for a custom node that just references all the
- * custom scan targetlist entries.
- */
-static inline List *
-build_trivial_custom_output_targetlist(List *scan_targetlist)
-{
-	List *result = NIL;
-
-	ListCell *lc;
-	foreach (lc, scan_targetlist)
-	{
-		TargetEntry *scan_entry = (TargetEntry *) lfirst(lc);
-
-		Var *var = makeVar(INDEX_VAR,
-						   scan_entry->resno,
-						   exprType((Node *) scan_entry->expr),
-						   exprTypmod((Node *) scan_entry->expr),
-						   exprCollation((Node *) scan_entry->expr),
-						   /* varlevelsup = */ 0);
-
-		TargetEntry *output_entry = makeTargetEntry((Expr *) var,
-													scan_entry->resno,
-													scan_entry->resname,
-													scan_entry->resjunk);
-
-		result = lappend(result, output_entry);
-	}
-
-	return result;
 }
 
 static Node *
@@ -150,7 +119,7 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 	 * the scan targetlists.
 	 */
 	vector_agg->scan.plan.targetlist =
-		build_trivial_custom_output_targetlist(vector_agg->custom_scan_tlist);
+		ts_build_trivial_custom_output_targetlist(vector_agg->custom_scan_tlist);
 
 	/*
 	 * Copy the costs from the normal aggregation node, so that they show up in
