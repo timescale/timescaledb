@@ -4677,7 +4677,14 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			if (conname == NULL)
 				conname = get_rel_name(obj->objectId);
 
-			process_altertable_add_constraint(ht, cmd, conname);
+			/*
+			 * Implicit constraints (e.g., those created by PRIMARY KEY or UNIQUE
+			 * constraints) have already been processed when the index was created.
+			 * These will have no objectId in the ObjectAddress passed to this
+			 * function and no conname.
+			 */
+			if (conname)
+				process_altertable_add_constraint(ht, cmd, conname);
 		}
 		break;
 		case AT_AlterColumnType:
