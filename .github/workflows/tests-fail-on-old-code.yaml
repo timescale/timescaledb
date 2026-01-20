@@ -48,6 +48,10 @@ jobs:
         # Test changes: changed .out files under test/expected directories.
         # For versioned test outputs, we should only check the version that
         # matches the Postgers version we build.
+        git diff --name-only base HEAD -- test/expected tsl/test/expected
+
+        echo "sed -n 's!^.*expected/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out$!\1!gp'"
+
         readarray -t CHANGED_TESTS < <( \
             git diff --name-only base HEAD -- test/expected tsl/test/expected \
             | sed -n 's!^.*expected/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out$!\1!gp')
@@ -112,7 +116,8 @@ jobs:
       if: steps.check.outputs.should_run == 'true'
       run: |
         readarray -t CODE_FILES -d '' < <(git diff -z --name-only base HEAD -- 'src/' 'tsl/src/')
-        if ! ((${#CODE_FILES[@]})) then
+        if ! ((${#CODE_FILES[@]}))
+        then
             echo "Bug: this job shouldn't run when there are no code files modified"
             exit 1
         fi
