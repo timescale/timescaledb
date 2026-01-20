@@ -41,7 +41,8 @@ jobs:
         # Code changes: anything under src/ directories
         readarray -t CODE_CHANGES < <(git diff --name-only base HEAD -- 'src/' 'tsl/src/')
 
-        if [[ ${#CODE_CHANGES[@]} -eq 0 ]]; then
+        if ! ((${#CODE_CHANGES[@]}))
+        then
           echo "No code changes found, skipping"
           echo "should_run=false" >> $GITHUB_OUTPUT
           exit 0
@@ -60,7 +61,8 @@ jobs:
 
         echo ${CHANGED_TESTS[@]}
 
-        if [[ ${#CHANGED_TESTS[@]} -eq 0 ]]; then
+        if ! ((${#CHANGED_TESTS[@]}))
+        then
           echo "No test output changes found, skipping"
           echo "should_run=false" >> $GITHUB_OUTPUT
           exit 0
