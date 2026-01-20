@@ -111,7 +111,7 @@ jobs:
     - name: Revert code changes
       if: steps.check.outputs.should_run == 'true'
       run: |
-        readarray -t CODE_FILES -d '' < <(git diff -z --name-only base HEAD -- 'src/' 'tsl/src/'))
+        readarray -t CODE_FILES -d '' < <(git diff -z --name-only base HEAD -- 'src/' 'tsl/src/')
         if ! ((${#CODE_FILES[@]})) then
             echo "Bug: this job shouldn't run when there are no code files modified"
             exit 1
