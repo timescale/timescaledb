@@ -11,7 +11,7 @@ name: Tests should fail on old code
 jobs:
   verify-tests-fail:
     name: Verify tests fail on old code
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
 
     env:
       PG_SRC_DIR: pgbuild
