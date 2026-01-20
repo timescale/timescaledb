@@ -1,7 +1,7 @@
 name: Check for loader changes
 "on":
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited]
 
 jobs:
   check_loader_change:

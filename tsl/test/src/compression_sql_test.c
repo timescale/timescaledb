@@ -56,7 +56,7 @@ get_compression_algorithm(char *name)
 #define CTYPE float8
 #define PG_TYPE_PREFIX FLOAT8
 #define DATUM_TO_CTYPE DatumGetFloat8
-#define IS_FINITE(X) isfinite((double) X)
+#define IS_FINITE(X) isfinite((double) (X))
 #include "decompress_arithmetic_test_impl.c"
 
 #define ALGO DELTADELTA
@@ -76,14 +76,14 @@ get_compression_algorithm(char *name)
 #define CTYPE pg_uuid_t
 #define PG_TYPE_PREFIX UUID
 #define DATUM_TO_CTYPE *DatumGetUUIDP
-#define IS_NOT_EQUAL(X, Y) (memcmp(&X, &Y, sizeof(pg_uuid_t)) != 0)
+#define IS_NOT_EQUAL(X, Y) (memcmp(&(X), &(Y), sizeof(pg_uuid_t)) != 0)
 #include "decompress_arithmetic_test_impl.c"
 
 #define ALGO UUID
 #define CTYPE pg_uuid_t
 #define PG_TYPE_PREFIX UUID
 #define DATUM_TO_CTYPE *DatumGetUUIDP
-#define IS_NOT_EQUAL(X, Y) (memcmp(&X, &Y, sizeof(pg_uuid_t)) != 0)
+#define IS_NOT_EQUAL(X, Y) (memcmp(&(X), &(Y), sizeof(pg_uuid_t)) != 0)
 #include "decompress_arithmetic_test_impl.c"
 
 /*

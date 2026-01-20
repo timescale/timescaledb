@@ -2673,11 +2673,9 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 				IndexElem *elem = lfirst_node(IndexElem, lc);
 				appendStringInfo(&command,
 								 "%s IS NOT NULL",
-								 elem->name ? quote_identifier(elem->name) :
-											  deparse_expression((Node *) elem->expr,
-																 dpcontext,
-																 false,
-																 false));
+								 elem->name ?
+									 quote_identifier(elem->name) :
+									 deparse_expression(elem->expr, dpcontext, false, false));
 				if (i < list_length(stmt->indexParams))
 					appendStringInfo(&command, " AND ");
 			}
@@ -2692,9 +2690,8 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 			IndexElem *elem = lfirst_node(IndexElem, lc);
 			appendStringInfo(&command,
 							 "%s",
-							 elem->name ?
-								 quote_identifier(elem->name) :
-								 deparse_expression((Node *) elem->expr, dpcontext, false, false));
+							 elem->name ? quote_identifier(elem->name) :
+										  deparse_expression(elem->expr, dpcontext, false, false));
 			if (j < list_length(stmt->indexParams))
 				appendStringInfo(&command, ",");
 		}

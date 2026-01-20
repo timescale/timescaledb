@@ -38,7 +38,6 @@ jobs:
       with:
         ref: ${{ github.event.pull_request.head.ref }}
         fetch-depth: 0
-        token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
     - name: Configure Git
       if: steps.check-key.outputs.skip != 'true'
@@ -59,7 +58,6 @@ jobs:
     - name: Handle review feedback
       if: steps.check-key.outputs.skip != 'true'
       env:
-        GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         PR_BRANCH: ${{ github.event.pull_request.head.ref }}

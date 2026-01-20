@@ -403,7 +403,6 @@ jobs:
     - name: Analyze failures and create fix PR
       if: steps.check-key.outputs.skip != 'true'
       env:
-        GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
         SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL_CLAUDE }}

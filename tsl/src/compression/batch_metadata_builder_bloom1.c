@@ -183,14 +183,14 @@ bloom1_get_hash_function(Oid type, FmgrInfo **finfo)
 		case F_HASHDATEEXTENDED:
 #endif
 			return bloom1_hash_4;
+		default:
+			/*
+			 * Use the Postgres hash function. We might require the finfo, for
+			 * example for functions defined in procedural languages.
+			 */
+			*finfo = &entry->hash_extended_proc_finfo;
+			return entry->hash_extended_proc_finfo.fn_addr;
 	}
-
-	/*
-	 * For the Postgres hash function, finfo might be required, for example for
-	 * functions defined in procedural languages.
-	 */
-	*finfo = &entry->hash_extended_proc_finfo;
-	return entry->hash_extended_proc_finfo.fn_addr;
 }
 
 static void
