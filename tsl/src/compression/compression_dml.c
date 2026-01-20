@@ -221,7 +221,7 @@ get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, in
 		if (isnull)
 		{
 			updated_scankeys[i].sk_flags = null_flags;
-			updated_scankeys[i].sk_argument = (Datum) 0;
+			updated_scankeys[i].sk_argument = UnassignedDatum;
 		}
 		else
 		{

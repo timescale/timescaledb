@@ -8,6 +8,8 @@
 #include <executor/executor.h>
 #include <nodes/extensible.h>
 
+#include "utils.h"
+
 typedef struct ColumnarIndexScanState
 {
 	CustomScanState csstate;
@@ -81,7 +83,7 @@ columnar_index_scan_exec(CustomScanState *node)
 		bool isnull;
 		AttrNumber attno = lfirst_int(lc);
 		Datum value = slot_getattr(compressed_slot, attno, &isnull);
-		result_slot->tts_values[i] = isnull ? (Datum) 0 : value;
+		result_slot->tts_values[i] = isnull ? UnassignedDatum : value;
 		result_slot->tts_isnull[i] = isnull;
 		i++;
 	}

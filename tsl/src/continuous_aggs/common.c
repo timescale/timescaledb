@@ -603,7 +603,7 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail)
 static Datum
 get_bucket_width_datum(ContinuousAggTimeBucketInfo bucket_info)
 {
-	Datum width = (Datum) 0;
+	Datum width = UnassignedDatum;
 
 	switch (bucket_info.bf->bucket_width_type)
 	{

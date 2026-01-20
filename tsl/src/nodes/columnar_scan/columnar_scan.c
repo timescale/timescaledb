@@ -2752,7 +2752,7 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 }
 
 /*
- * Check if we can push down the sort below the ColumnarSacn node and fill
+ * Check if we can push down the sort below the ColumnarScan node and fill
  * SortInfo accordingly
  *
  * The following conditions need to be true for pushdown:
@@ -2819,12 +2819,13 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	cost_qual_eval(&sort_info.decompressed_sort_pathkeys_cost, sort_pathkey_exprs, root);
 
 	/*
-	 * Next, check if we can push the sort down to the uncompressed part.
+	 * Next, check if we can push the sort down to the compressed part.
 	 *
-	 * Not possible if the chunk is unordered.
+	 * Batch sorted merge optimization is enabled for unordered chunks
+	 * because we do merge the batches at execution time which
+	 * only relies that the batches themselves are sorted which is
+	 * always the case.
 	 */
-	if (ts_chunk_is_unordered(chunk))
-		return sort_info;
 
 	/* all segmentby columns need to be prefix of pathkeys */
 	int i = 0;
@@ -2886,6 +2887,10 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 			return sort_info;
 		}
 	}
+
+	/* Cannot use compressed sort for unordered chunks */
+	if (ts_chunk_is_unordered(chunk))
+		return sort_info;
 
 	if (i == list_length(pathkeys))
 	{
