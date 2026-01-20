@@ -459,8 +459,8 @@ has_vector_agg_node(Plan *plan, bool *has_some_agg)
 	else if (IsA(plan, CustomScan))
 	{
 		custom = castNode(CustomScan, plan);
-		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0
-			|| strcmp("ModifyHypertable", custom->methods->CustomName) == 0)
+		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0 ||
+			strcmp("ModifyHypertable", custom->methods->CustomName) == 0)
 		{
 			append_plans = custom->custom_plans;
 		}
@@ -555,8 +555,8 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 	else if (IsA(plan, CustomScan))
 	{
 		CustomScan *custom = castNode(CustomScan, plan);
-		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0
-			|| strcmp("ModifyHypertable", custom->methods->CustomName) == 0)
+		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0 ||
+			strcmp("ModifyHypertable", custom->methods->CustomName) == 0)
 		{
 			append_plans = custom->custom_plans;
 		}
