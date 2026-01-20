@@ -40,5 +40,6 @@ ChunkTupleRouting *ts_chunk_tuple_routing_create(EState *estate, Hypertable *ht,
 void ts_chunk_tuple_routing_destroy(ChunkTupleRouting *ctr);
 ChunkInsertState *ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point);
 extern void ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis,
+														 ResultRelInfo *root_rri,
 														 TupleTableSlot *slot, EState *estate,
 														 bool update_counter);
