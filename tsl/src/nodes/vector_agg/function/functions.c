@@ -13,11 +13,31 @@
 #include <utils/float.h>
 #include <utils/fmgroids.h>
 #include <utils/fmgrprotos.h>
-#include <utils/pg_locale.h>
 
 #include "functions.h"
 
 #include "compat/compat.h"
+
+/*
+ * For PG18+: provide the old lc_collate_is_c() API using pg_locale_t flags.
+ */
+
+#if PG18_GE
+
+#include "postgres.h"
+#include "utils/pg_locale.h"
+
+static inline bool
+lc_collate_is_c(Oid collation)
+{
+	return pg_newlocale_from_collation(collation)->collate_is_c;
+}
+
+#else
+
+#include <utils/pg_locale.h>
+
+#endif
 
 /*
  * Aggregate function count(*).
