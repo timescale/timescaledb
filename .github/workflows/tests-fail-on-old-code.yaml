@@ -64,9 +64,9 @@ jobs:
           exit 0
         fi
 
-        echo "Changed tests: $CHANGED_TESTS"
+        echo "Changed tests: ${CHANGED_TESTS[@]}"
         echo "should_run=true" >> $GITHUB_OUTPUT
-        echo "changed_tests=$CHANGED_TESTS" >> $GITHUB_OUTPUT
+        echo "changed_tests=${CHANGED_TESTS[@]}" >> $GITHUB_OUTPUT
 
     - name: Install Linux Dependencies
       if: steps.check.outputs.should_run == 'true'
@@ -166,7 +166,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        name: PostgreSQL log ${{ steps.pg.outputs.version }}
         path: postmaster.*
 
     - name: Verify tests failed on old code
@@ -175,7 +175,7 @@ jobs:
         TESTS="${{ steps.check.outputs.changed_tests }}"
 
         readarray -t FAILED_TESTS < <( \
-          sed -n 's!^\+\+\+.*expected/\([^/ -]\+\(-{{ steps.pg.outputs.major }}\)\?\)\.out .*$!\1!gp' regression.log)
+          sed -n 's!^\+\+\+.*expected/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out .*$!\1!gp' regression.log)
         echo "Tests failing with the old code: ${FAILED_TESTS[@]}"
 
         # Check which changed tests did NOT fail
