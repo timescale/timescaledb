@@ -6,7 +6,16 @@ name: Tests should fail on old code
   push:
     branches:
       - main
+      - prerelease_test
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE*'
+      - NOTICE
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE*'
+      - NOTICE
 
 jobs:
   verify-tests-fail:
@@ -16,34 +25,42 @@ jobs:
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql
-      PG_VERSION: "17.2"
 
     steps:
     - name: Install Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install flex bison cmake
+        sudo apt-get install flex bison cmake libssl-dev libkrb5-dev libipc-run-perl
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
+    - name: Read PG version from ci_settings.py
+      id: pgversion
+      run: |
+        PG_VERSION=$(grep -E "^PG17_LATEST" .github/ci_settings.py | cut -d'"' -f2)
+        echo "pg_version=$PG_VERSION" >> $GITHUB_OUTPUT
+        echo "Using PostgreSQL $PG_VERSION"
+
     - name: Check for code and test changes
       id: check
       run: |
+        if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+          echo "Not a pull request, skipping"
+          echo "should_run=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
         git fetch origin ${{ github.base_ref }}:base
 
-        # Check for source code changes (excluding tests)
-        CODE_CHANGES=$(git diff --name-only base HEAD -- \
-          'src/**/*.c' 'src/**/*.h' \
-          'tsl/src/**/*.c' 'tsl/src/**/*.h' \
-          | grep -v '_test\.' | head -1 || true)
+        # Code changes: anything under src/ directories
+        CODE_CHANGES=$(git diff --name-only base HEAD -- 'src/' 'tsl/src/' | head -1 || true)
 
-        # Get list of changed test files (sql only)
-        CHANGED_TESTS=$(git diff --name-only base HEAD -- \
-          'tsl/test/sql/*.sql' 'test/sql/*.sql' \
-          | xargs -I{} basename {} .sql 2>/dev/null | sort -u | tr '\n' ' ' || true)
+        # Test changes: changed .out files under test/expected directories
+        CHANGED_OUT_FILES=$(git diff --name-only base HEAD -- \
+          'test/expected/*.out' 'tsl/test/expected/*.out' || true)
 
         if [[ -z "$CODE_CHANGES" ]]; then
           echo "No code changes found, skipping"
@@ -51,14 +68,18 @@ jobs:
           exit 0
         fi
 
-        if [[ -z "$CHANGED_TESTS" ]]; then
-          echo "No test changes found, skipping"
+        if [[ -z "$CHANGED_OUT_FILES" ]]; then
+          echo "No test output changes found, skipping"
           echo "should_run=false" >> $GITHUB_OUTPUT
           exit 0
         fi
 
+        # Extract test names from changed .out files (handle versioned tests like cagg-17.out)
+        CHANGED_TESTS=$(echo "$CHANGED_OUT_FILES" | xargs -I{} basename {} .out | sed 's/-[0-9]*$//' | sort -u | tr '\n' ' ')
+
         echo "Code changes detected"
-        echo "Changed tests: $CHANGED_TESTS"
+        echo "Changed test outputs: $CHANGED_OUT_FILES"
+        echo "Test names: $CHANGED_TESTS"
         echo "should_run=true" >> $GITHUB_OUTPUT
         echo "changed_tests=$CHANGED_TESTS" >> $GITHUB_OUTPUT
 
@@ -73,11 +94,12 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: "ubuntu-latest-postgresql-${{ env.PG_VERSION }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
+        key: "ubuntu-latest-postgresql-${{ steps.pgversion.outputs.pg_version }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Build PostgreSQL
       if: steps.check.outputs.should_run == 'true' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
+        PG_VERSION="${{ steps.pgversion.outputs.pg_version }}"
         wget -q -O postgresql.tar.bz2 \
           https://ftp.postgresql.org/pub/source/v$PG_VERSION/postgresql-$PG_VERSION.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
@@ -96,10 +118,7 @@ jobs:
     - name: Revert code changes, keep test changes
       if: steps.check.outputs.should_run == 'true'
       run: |
-        CODE_FILES=$(git diff --name-only base HEAD -- \
-          'src/**/*.c' 'src/**/*.h' \
-          'tsl/src/**/*.c' 'tsl/src/**/*.h' \
-          | grep -v '_test\.' || true)
+        CODE_FILES=$(git diff --name-only base HEAD -- 'src/' 'tsl/src/' || true)
 
         if [[ -n "$CODE_FILES" ]]; then
           echo "Reverting code changes:"
@@ -117,39 +136,60 @@ jobs:
         make -j $(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
 
-    - name: Verify each changed test fails
+    - name: Run tests and check for expected failures
       if: steps.check.outputs.should_run == 'true'
       run: |
         TESTS="${{ steps.check.outputs.changed_tests }}"
-        FAILED_TESTS=""
-        PASSED_TESTS=""
+        echo "Running tests: $TESTS"
 
+        # Run all changed tests together, allow failure
+        make -C build installcheck TESTS="$TESTS" > installcheck.log 2>&1 || true
+
+        # Find regression.diffs and extract failed test names
+        REGRESSION_DIFFS=$(find build -name regression.diffs 2>/dev/null | head -1)
+
+        if [[ -z "$REGRESSION_DIFFS" || ! -s "$REGRESSION_DIFFS" ]]; then
+          echo ""
+          echo "ERROR: No test failures detected (regression.diffs is empty or missing)"
+          echo "All tests passed when they should have failed."
+          echo ""
+          echo "This suggests these tests may not be testing the new code changes."
+          echo "Please verify that your tests actually exercise the new functionality."
+          echo ""
+          cat installcheck.log
+          exit 1
+        fi
+
+        # Extract test names from regression.diffs (lines like "diff -u .../expected/testname.out")
+        FAILED_TESTS=$(grep -oE "expected/[a-zA-Z0-9_-]+\.out" "$REGRESSION_DIFFS" | \
+          sed 's|expected/||; s|\.out||; s|-[0-9]*$||' | sort -u | tr '\n' ' ')
+
+        echo ""
+        echo "=== Results ==="
+        echo "Tests that failed (from regression.diffs): $FAILED_TESTS"
+        echo ""
+
+        # Check which changed tests did NOT fail
+        PASSED_TESTS=""
         for TEST in $TESTS; do
-          echo "Running test: $TEST"
-          if make -C build installcheck TESTS="$TEST" > /dev/null 2>&1; then
+          if ! echo "$FAILED_TESTS" | grep -qw "$TEST"; then
             PASSED_TESTS="$PASSED_TESTS $TEST"
-            echo "  PASSED (unexpected)"
-          else
-            FAILED_TESTS="$FAILED_TESTS $TEST"
-            echo "  FAILED (expected)"
           fi
         done
 
-        echo ""
-        echo "=== Summary ==="
-        if [[ -n "$FAILED_TESTS" ]]; then
-          echo "Tests that failed as expected:$FAILED_TESTS"
-        fi
-
         if [[ -n "$PASSED_TESTS" ]]; then
-          echo ""
-          echo "ERROR: The following tests PASSED when they should have FAILED:"
+          echo "WARNING: The following changed tests PASSED when they should have FAILED:"
           echo " $PASSED_TESTS"
           echo ""
           echo "This suggests these tests may not be testing the new code changes."
           echo "Please verify that your tests actually exercise the new functionality."
+          echo ""
+          echo "=== regression.diffs ==="
+          cat "$REGRESSION_DIFFS"
           exit 1
         fi
 
-        echo ""
         echo "All changed tests failed as expected."
+        echo ""
+        echo "=== regression.diffs ==="
+        cat "$REGRESSION_DIFFS"
