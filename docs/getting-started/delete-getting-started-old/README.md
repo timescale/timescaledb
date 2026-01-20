@@ -28,11 +28,10 @@ Get TimescaleDB running locally and create your first hypertable:
 
 Explore complete, standalone examples with real-world datasets:
 
-- **[IoT Sensors](examples/iot-sensors/)** - Device monitoring patterns
-- **[NYC Taxi Data](examples/nyc-taxi/)** - Transportation analytics (full example)
-- **[Financial Market Data](examples/financial-ticks/)** - Trading analytics
-- **[Application Events](examples/events-uuidv7/)** - Event logging with UUIDv7
-- **[Cryptocurrency](examples/crypto/)** - Crypto market analysis
+- **[IoT Sensors](../iot-sensors/)** - Device monitoring patterns
+- **[NYC Taxi Data](../nyc-taxi/)** - Transportation analytics (full example)
+- **[Financial Market Data](../financial-ticks/)** - Trading analytics
+- **[Application Events](../events-uuidv7/)** - Event logging with UUIDv7
 
 Each example includes:
 - Complete schema definition
@@ -40,7 +39,7 @@ Each example includes:
 - Analytical queries
 - Step-by-step walkthrough
 
-[Browse all examples →](examples/)
+[Browse all examples →](../README.md)
 
 ## Bring Your Own Data
 
@@ -138,7 +137,7 @@ Ready to deploy to production?
 ## What's Next?
 
 1. Complete the [Quick Start Guide](quickstart.md)
-2. Try an [example](examples/) that matches your use case
+2. Try an [example](../README.md) that matches your use case
 3. Experiment with [your own data](your-own-data/)
 4. Deploy to [Timescale Cloud](https://www.timescale.com/cloud) or [self-host](https://docs.timescale.com/self-hosted/latest/)
 

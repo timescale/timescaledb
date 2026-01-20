@@ -184,7 +184,7 @@ SELECT COUNT(*) FROM trips;
 
 **Manually convert to columnstore (Optional):**
 
-While a background process will convert your rowstore data to the columnstore in 12-24 hours, you can manually convert it immediately to get the best query performance:
+If you loaded data using standard copy a background process will convert your rowstore data to the columnstore in 12-24 hours, you can manually convert it immediately to get the best query performance:
 
 ```sql
 DO $$

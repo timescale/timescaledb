@@ -353,12 +353,12 @@ See more:
 
 ## Examples
 
-Learn TimescaleDB with complete, standalone examples using real-world datasets. Each example includes sample data, optimized schemas, and analytical queries.
+Learn TimescaleDB with complete, standalone examples using real-world datasets. Each example includes sample data and analytical queries.
 
-- **[IoT Sensors](getting-started/examples/iot-sensors/)** - Device monitoring and analytics patterns
-- **[NYC Taxi Data](getting-started/examples/nyc-taxi/)** - Transportation and location-based analytics
-- **[Financial Market Data](getting-started/examples/financial-ticks/)** - Trading and market data analysis
-- **[Application Events](getting-started/examples/events-uuidv7/)** - Event logging with UUIDv7
+- **[IoT Sensors](docs/getting-started/iot-sensors/)** - Device monitoring and analytics patterns
+- **[NYC Taxi Data](docs/getting-started/nyc-taxi/)** - Transportation and location-based analytics
+- **[Financial Market Data](docs/getting-started/financial-ticks/)** - Trading and market data analysis
+- **[Application Events](docs/getting-started/events-uuidv7/)** - Event logging with UUIDv7
 
 Or try some of our workshops
 - **[AI Workshop: EV Charging Station Analysis](https://github.com/timescale/TigerData-Workshops/tree/main/AI-Workshop)** - Integrate PostgreSQL with AI capabilities for managing and analyzing EV charging station data
