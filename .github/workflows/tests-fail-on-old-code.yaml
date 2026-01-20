@@ -25,7 +25,6 @@ jobs:
 
     - name: Set PostgreSQL version
       id: pg
-      if: steps.check.outputs.should_run == 'true'
       run: |
         MAJOR=17
         echo "major=$MAJOR" >> $GITHUB_OUTPUT
