@@ -32,6 +32,10 @@ jobs:
       id: config
       run: python -B .github/gh_config_reader.py
 
+    - name: Set PostgreSQL version
+      id: pg
+      run: echo "version=${{ steps.config.outputs.PG17_LATEST }}" >> $GITHUB_OUTPUT
+
     - name: Check for code and test changes
       id: check
       run: |
@@ -76,19 +80,19 @@ jobs:
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
     # leading to a tainted cache
-    - name: Cache PostgreSQL ${{ steps.config.outputs.PG_DEFAULT }}
+    - name: Cache PostgreSQL ${{ steps.pg.outputs.version }}
       if: steps.check.outputs.should_run == 'true'
       id: cache-postgresql
       uses: actions/cache@v4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: "ubuntu-latest-postgresql-${{ steps.config.outputs.PG_DEFAULT }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
+        key: "ubuntu-latest-postgresql-${{ steps.pg.outputs.version }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
-    - name: Build PostgreSQL ${{ steps.config.outputs.PG_DEFAULT }}
+    - name: Build PostgreSQL ${{ steps.pg.outputs.version }}
       if: steps.check.outputs.should_run == 'true' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
         wget -q -O postgresql.tar.bz2 \
-          https://ftp.postgresql.org/pub/source/v${{ steps.config.outputs.PG_DEFAULT }}/postgresql-${{ steps.config.outputs.PG_DEFAULT }}.tar.bz2
+          https://ftp.postgresql.org/pub/source/v${{ steps.pg.outputs.version }}/postgresql-${{ steps.pg.outputs.version }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
         cd ~/$PG_SRC_DIR
@@ -96,7 +100,7 @@ jobs:
           --without-readline --without-zlib --without-libxml
         make -j $(getconf _NPROCESSORS_ONLN)
 
-    - name: Install PostgreSQL ${{ steps.config.outputs.PG_DEFAULT }}
+    - name: Install PostgreSQL ${{ steps.pg.outputs.version }}
       if: steps.check.outputs.should_run == 'true'
       run: |
         cd ~/$PG_SRC_DIR
@@ -146,7 +150,7 @@ jobs:
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: Regression diff PG${{ steps.config.outputs.PG_DEFAULT }}
+        name: Regression diff PG${{ steps.pg.outputs.version }}
         path: |
           regression.log
           installcheck.log
