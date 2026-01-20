@@ -185,7 +185,7 @@ jobs:
         # Check which changed tests did NOT fail
         PASSED_TESTS=""
         for TEST in $TESTS; do
-          if ! echo "$FAILED_TESTS" | grep -qw "$TEST"; then
+          if ! echo "${FAILED_TESTS[@]}" | grep -qw "$TEST"; then
             PASSED_TESTS="$PASSED_TESTS $TEST"
           fi
         done
