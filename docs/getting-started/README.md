@@ -4,19 +4,6 @@ This directory contains complete, standalone examples to help you get started wi
 
 ## Available Examples
 
-### [IoT Sensors](iot-sensors/)
-Monitor and analyze device metrics with time-series data from IoT sensors. Perfect for learning about device monitoring, real-time dashboards, and downsampling patterns.
-
-**What you'll learn:**
-- Multi-metric sensor data modeling
-- Time-based aggregations for monitoring
-- Continuous aggregates for real-time dashboards
-- Downsampling and data retention patterns
-
-**Use cases:** Manufacturing monitoring, smart home systems, industrial IoT, environmental monitoring
-
----
-
 ### [NYC Taxi Data](nyc-taxi/)
 Analyze New York City taxi trip data to understand transportation patterns. Great for learning about location-based analytics and high-volume time-series data.
 
@@ -105,7 +92,7 @@ Each example is completely standalone and self-contained. You can use any exampl
 **New to TimescaleDB?** We recommend this path:
 
 1. Start with the [Quick Start Guide](../../README.md#quick-start-with-timescaledb) (10 minutes)
-2. Try the [IoT Sensors](iot-sensors/) example (20 minutes)
+2. Try the [NYC Taxi](nyc-taxi/) example (20 minutes)
 3. Explore other examples based on your use case
 4. Ready for your data? See [Your Own Data Guide](../your-own-data/)
 
@@ -158,13 +145,12 @@ docker run -d --name timescaledb \
 
 | Your Use Case | Recommended Example |
 |--------------|---------------------|
-| IoT devices, sensors, machines | [IoT Sensors](iot-sensors/) |
 | Location-based services, GPS tracking | [NYC Taxi](nyc-taxi/) |
 | Financial trading, market data | [Financial Ticks](financial-ticks/) |
 | Application logs, user events | [Events with UUIDv7](events-uuidv7/) |
 | Cryptocurrency, volatile markets | [Time-Series Workshop: Financial Data Analysis](https://github.com/timescale/TigerData-Workshops/tree/main/TimeSeries-Workshop-Finance/) |
 | AI/ML with time-series data | [AI Workshop: EV Charging Station Analysis](https://github.com/timescale/TigerData-Workshops/tree/main/AI-Workshop) |
-| General time-series analytics | Start with [IoT Sensors](iot-sensors/) |
+| General time-series analytics | Start with [NYC Taxi](nyc-taxi/) |
 
 ## What Makes These Examples Different?
 

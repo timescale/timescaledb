@@ -28,7 +28,6 @@ Get TimescaleDB running locally and create your first hypertable:
 
 Explore complete, standalone examples with real-world datasets:
 
-- **[IoT Sensors](../iot-sensors/)** - Device monitoring patterns
 - **[NYC Taxi Data](../nyc-taxi/)** - Transportation analytics (full example)
 - **[Financial Market Data](../financial-ticks/)** - Trading analytics
 - **[Application Events](../events-uuidv7/)** - Event logging with UUIDv7

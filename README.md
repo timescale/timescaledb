@@ -355,7 +355,6 @@ See more:
 
 Learn TimescaleDB with complete, standalone examples using real-world datasets. Each example includes sample data and analytical queries.
 
-- **[IoT Sensors](docs/getting-started/iot-sensors/)** - Device monitoring and analytics patterns
 - **[NYC Taxi Data](docs/getting-started/nyc-taxi/)** - Transportation and location-based analytics
 - **[Financial Market Data](docs/getting-started/financial-ticks/)** - Trading and market data analysis
 - **[Application Events](docs/getting-started/events-uuidv7/)** - Event logging with UUIDv7

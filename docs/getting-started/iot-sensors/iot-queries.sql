@@ -1,2 +1,0 @@
--- TimescaleDB IoT Sensors Example Queries
--- Placeholder: Sample analytical queries will be added here
