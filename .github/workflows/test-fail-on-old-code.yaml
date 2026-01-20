@@ -130,10 +130,21 @@ jobs:
         make -C build installcheck TESTS="$TESTS" 2>&1 | tee installcheck.log || true
 
     - name: Show regression diffs
-      if: steps.check.outputs.should_run == 'true'
+      if: always() && steps.check.outputs.should_run == 'true'
+      id: collectlogs
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
+        if [[ -s regression.log ]]; then echo "regression_diff=true" >> $GITHUB_OUTPUT; fi
         cat regression.log
+
+    - name: Save regression diffs
+      if: always() && steps.collectlogs.outputs.regression_diff == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Regression diff PG${{ steps.config.outputs.PG17_LATEST }}
+        path: |
+          regression.log
+          installcheck.log
 
     - name: Verify tests failed on old code
       if: steps.check.outputs.should_run == 'true'
