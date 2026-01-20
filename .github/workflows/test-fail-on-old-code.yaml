@@ -32,7 +32,7 @@ jobs:
     - name: Read PG version from ci_settings.py
       id: pgversion
       run: |
-        PG_VERSION=$(grep -E "^PG17_LATEST" .github/ci_settings.py | cut -d'"' -f2)
+        PG_VERSION=$(cd .github && python -c "from ci_settings import PG17_LATEST; print(PG17_LATEST)")
         echo "pg_version=$PG_VERSION" >> $GITHUB_OUTPUT
         echo "Using PostgreSQL $PG_VERSION"
 
