@@ -221,8 +221,9 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 }
 
 extern void
-ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis, TupleTableSlot *slot,
-											 EState *estate, bool update_counter)
+ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis, ResultRelInfo *root_rri,
+											 TupleTableSlot *slot, EState *estate,
+											 bool update_counter)
 {
 	if (!cis->chunk_compressed || (cis->cached_decompression_state &&
 								   !cis->cached_decompression_state->has_primary_or_unique_index))
@@ -240,12 +241,12 @@ ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis, TupleTableSl
 	/* If we are dealing with generated stored columns, generate the values
 	 * so can use it for uniqueness checks.
 	 */
-	Relation resultRelationDesc = cis->result_relation_info->ri_RelationDesc;
+	Relation resultRelationDesc = cis->rel;
 	if (resultRelationDesc->rd_att->constr &&
 		resultRelationDesc->rd_att->constr->has_generated_stored)
 	{
 		slot->tts_tableOid = RelationGetRelid(resultRelationDesc);
-		ExecComputeStoredGenerated(cis->result_relation_info, estate, slot, CMD_INSERT);
+		ExecComputeStoredGenerated(root_rri, estate, slot, CMD_INSERT);
 		cis->skip_generated_column_computations = true;
 	}
 	ts_cm_functions->decompress_batches_for_insert(cis, slot);
