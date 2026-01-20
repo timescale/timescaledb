@@ -38,6 +38,8 @@ jobs:
       run: |
         git fetch origin ${{ github.base_ref }}:base
 
+        echo "Looking at PR event ref $(git rev-parse @) vs base $(git rev-parse base)"
+
         # Code changes: anything under src/ directories
         readarray -t CODE_CHANGES < <(git diff --name-only base HEAD -- 'src/' 'tsl/src/')
 
@@ -53,13 +55,9 @@ jobs:
         # matches the Postgers version we build.
         git diff --name-only base HEAD -- test/expected tsl/test/expected
 
-        echo "sed -n 's!^.*expected/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out$!\1!gp'"
-
         readarray -t CHANGED_TESTS < <( \
             git diff --name-only base HEAD -- test/expected tsl/test/expected \
             | sed -n 's!^.*expected/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out$!\1!gp')
-
-        echo ${CHANGED_TESTS[@]}
 
         if ! ((${#CHANGED_TESTS[@]}))
         then
@@ -95,7 +93,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: "ubuntu-latest-postgresql-${{ steps.pg.outputs.version }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
+        key: "pg-${{ steps.pg.outputs.version }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Build PostgreSQL ${{ steps.pg.outputs.version }}
       if: steps.check.outputs.should_run == 'true' && steps.cache-postgresql.outputs.cache-hit != 'true'
