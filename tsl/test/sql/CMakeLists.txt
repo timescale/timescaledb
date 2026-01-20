@@ -27,6 +27,7 @@ set(TEST_FILES
     compress_dml_copy.sql
     compress_explain.sql
     compress_float8_corrupt.sql
+    compress_unordered_sort.sql
     compress_qualpushdown_saop.sql
     compress_sort_transform.sql
     compressed_collation.sql
