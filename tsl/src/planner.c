@@ -313,8 +313,7 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 	if (ts_guc_debug_require_vector_agg != DRO_Allow)
 	{
 		bool has_some_agg = false;
-		const bool has_vector_partial_agg =
-			has_vector_agg_node(stmt->planTree, &has_some_agg);
+		const bool has_vector_partial_agg = has_vector_agg_node(stmt->planTree, &has_some_agg);
 
 		/*
 		 * For convenience of using this in the tests, we don't complain about
