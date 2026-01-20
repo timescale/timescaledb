@@ -3,9 +3,6 @@
 name: Tests should fail on old code
 
 "on":
-  push:
-    branches:
-      - main
   pull_request:
 
 jobs:
@@ -28,6 +25,10 @@ jobs:
       run: |
         MAJOR=17
         echo "major=$MAJOR" >> $GITHUB_OUTPUT
+
+        # Choose the latest version from config that matches our major version.
+        # This weird quote handling in sed is to remove the quotes around the
+        # value that the config reader produces, i.e. version="17.7".
         GITHUB_OUTPUT=/dev/stdout .github/gh_config_reader.py \
           | sed -n "s/PG${MAJOR}_LATEST=\"\([^\"]*\)\"/version=\1/p" \
           >> $GITHUB_OUTPUT
@@ -175,8 +176,10 @@ jobs:
       run: |
         TESTS="${{ steps.check.outputs.changed_tests }}"
 
+        # Here we switch on results because there can be variant expected files
+        # using a _NNN suffix (pg_regress feature).
         readarray -t FAILED_TESTS < <( \
-          sed -n 's!^\+\+\+.*expected/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out .*$!\1!gp' regression.log)
+          sed -n 's!^\+\+\+.*results/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out[[:space:]].*$!\1!gp' regression.log)
         echo "Tests failing with the old code: ${FAILED_TESTS[@]}"
 
         # Check which changed tests did NOT fail
