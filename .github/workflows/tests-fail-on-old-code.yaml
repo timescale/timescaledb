@@ -6,7 +6,6 @@ name: Tests should fail on old code
   push:
     branches:
       - main
-      - '?.*.x'
   pull_request:
 
 jobs:
@@ -66,12 +65,17 @@ jobs:
         echo "should_run=true" >> $GITHUB_OUTPUT
         echo "changed_tests=$CHANGED_TESTS" >> $GITHUB_OUTPUT
 
+    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # ages after the original problem.
     - name: Get date for build caching
       if: steps.check.outputs.should_run == 'true'
       id: get-date
       run: |
         echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
 
+    # we cache the build directory instead of the install directory here
+    # because extension installation will write files to install directory
+    # leading to a tainted cache
     - name: Cache PostgreSQL ${{ steps.config.outputs.PG17_LATEST }}
       if: steps.check.outputs.should_run == 'true'
       id: cache-postgresql
@@ -135,6 +139,7 @@ jobs:
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
         if [[ -s regression.log ]]; then echo "regression_diff=true" >> $GITHUB_OUTPUT; fi
+        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
 
     - name: Save regression diffs
@@ -145,6 +150,13 @@ jobs:
         path: |
           regression.log
           installcheck.log
+
+    - name: Save PostgreSQL log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        path: postmaster.*
 
     - name: Verify tests failed on old code
       if: steps.check.outputs.should_run == 'true'
