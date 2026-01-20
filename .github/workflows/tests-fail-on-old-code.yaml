@@ -29,7 +29,8 @@ jobs:
         MAJOR=17
         echo "major=$MAJOR" >> $GITHUB_OUTPUT
         GITHUB_OUTPUT=/dev/stdout .github/gh_config_reader.py \
-            | sed -n 's/PG17_LATEST/version/p' >> $GITHUB_OUTPUT
+          | sed -n "s/PG${MAJOR}_LATEST=\"\([^\"]*\)\"/version=\1/p" \
+          >> $GITHUB_OUTPUT
 
     - name: Check for code and test changes
       id: check
