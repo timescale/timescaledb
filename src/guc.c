@@ -82,6 +82,7 @@ bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
+bool ts_guc_enable_qual_filtering = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
 bool ts_guc_enable_now_constify = true;
@@ -155,8 +156,6 @@ char *ts_telemetry_cloud = NULL;
 #endif
 
 TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
-
-bool ts_guc_debug_allow_cagg_with_deprecated_funcs = false;
 
 /*
  * Exit code for the scheduler.
@@ -625,6 +624,18 @@ _guc_init(void)
 							 "Enable foreign key propagation",
 							 "Adjust foreign key lookup queries to target whole hypertable",
 							 &ts_guc_enable_foreign_key_propagation,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_qual_filtering"),
+							 "Enable qualifier filtering for chunks",
+							 "Filter qualifiers on chunks when complete chunk would be included by "
+							 "filter",
+							 &ts_guc_enable_qual_filtering,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -1404,16 +1415,6 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 
-	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_allow_cagg_with_deprecated_funcs"),
-							 /* short_desc= */ "allow new caggs using time_bucket_ng",
-							 /* long_desc= */ "this is for debugging/testing purposes",
-							 /* valueAddr= */ &ts_guc_debug_allow_cagg_with_deprecated_funcs,
-							 /* bootValue= */ false,
-							 /* context= */ PGC_USERSET,
-							 /* flags= */ 0,
-							 /* check_hook= */ NULL,
-							 /* assign_hook= */ NULL,
-							 /* show_hook= */ NULL);
 #endif
 
 	/* register feature flags */

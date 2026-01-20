@@ -533,8 +533,9 @@ if(LINTER)
           /opt/bin
     DOC "The path to the clang-tidy linter" REQUIRED)
 
-  message(STATUS "Using clang-tidy ${CLANG_TIDY}")
-  execute_process(COMMAND ${CLANG_TIDY} --version)
+  execute_process(COMMAND ${CLANG_TIDY} --version
+                  OUTPUT_VARIABLE CLANG_TIDY_VERSION)
+  message(STATUS "Using clang-tidy ${CLANG_TIDY}, ${CLANG_TIDY_VERSION}")
   string(
     CONCAT
       CMAKE_C_CLANG_TIDY
@@ -558,7 +559,9 @@ if(LINTER)
       ",-readability-identifier-length"
       ",-readability-isolate-declaration"
       ",-readability-magic-numbers"
+      ",-readability-math-missing-parentheses"
       ",-readability-non-const-parameter"
+      ",-readability-redundant-casting"
       "${CLANG_TIDY_EXTRA_OPTS}")
   if(WARNINGS_AS_ERRORS)
     set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--warnings-as-errors=*")

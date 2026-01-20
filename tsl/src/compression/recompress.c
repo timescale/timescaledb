@@ -1035,7 +1035,7 @@ init_scankey(ScanKey sk, AttrNumber attnum, Oid atttypid, Oid attcollid, Strateg
 						   InvalidOid, /* No strategy subtype. */
 						   attcollid,
 						   opr,
-						   (Datum) 0);
+						   UnassignedDatum);
 }
 
 static void

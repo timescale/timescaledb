@@ -54,6 +54,7 @@
 #include "chunk.h"
 #include "cross_module_fn.h"
 #include "guc.h"
+#include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
 #include "import/planner.h"
@@ -1000,7 +1001,7 @@ get_simplified_restrictions(PlannerInfo *root, List *restrictions)
  */
 static Chunk **
 get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
-		   unsigned int *num_chunks)
+		   unsigned int *num_chunks, HypertableRestrictInfo **hri_out)
 {
 	bool reverse;
 	int order_attno;
@@ -1016,6 +1017,13 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 
 	List *simplified_restrictions = get_simplified_restrictions(root, rel->baserestrictinfo);
 	ts_hypertable_restrict_info_add(hri, root, simplified_restrictions);
+
+	/* Limit to hypertables without multiple dimensions for now */
+	if (hri->num_base_restrictions >= 1 && hri->num_dimensions == 1 &&
+		ht->space->num_dimensions == 1)
+	{
+		*hri_out = hri;
+	}
 
 	/*
 	 * If fdw_private has not been setup by caller there is no point checking
@@ -1088,6 +1096,99 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 		propagate_join_quals(root, rel, &ctx);
 }
 
+/*
+ * Build a list of baserestrictinfo with any Var OP Const constraints on the primary
+ * dimension removed.
+ */
+static List *
+filter_baserestrictions(Hypertable *ht, List *base_restrictions)
+{
+	AttrNumber dim_attno = ht->space->dimensions[0].column_attno;
+	List *filtered_restrictions = NIL;
+	ListCell *lc;
+	foreach (lc, base_restrictions)
+	{
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc));
+		Expr *qual = ri->clause;
+		if (IsA(qual, OpExpr))
+		{
+			OpExpr *op = castNode(OpExpr, qual);
+			Node *left = strip_implicit_coercions(linitial(op->args));
+			Node *right = strip_implicit_coercions(lsecond(op->args));
+			if ((IsA(left, Var) && IsA(right, Const) &&
+				 castNode(Var, left)->varattno == dim_attno) ||
+				(IsA(right, Var) && IsA(left, Const) &&
+				 castNode(Var, right)->varattno == dim_attno))
+			{
+				/* only consider simple column to constant comparisons */
+				continue;
+			}
+		}
+
+		filtered_restrictions = lappend(filtered_restrictions, ri);
+	}
+	return filtered_restrictions;
+}
+
+/*
+ * Returns true if the given chunk is fully included by the restrictions
+ * on the primary dimension.
+ */
+static bool
+chunk_fully_covered(HypertableRestrictInfo *hri, Chunk *chunk)
+{
+	DimensionRestrictInfoOpen *dri = (DimensionRestrictInfoOpen *) hri->dimension_restriction[0];
+	Ensure(dri->base.dimension->type == DIMENSION_TYPE_OPEN, "primary dimension must be open");
+	Ensure(hri->num_base_restrictions > 0, "must have base restrictions");
+
+	if (dri->lower_strategy == InvalidStrategy && dri->upper_strategy == InvalidStrategy)
+		return false;
+
+	/*
+	 * DimensionRetrictInfo strategy should only be one BTGreaterStrategyNumber
+	 * or BTGreaterEqualStrategyNumber on the lower boundary and
+	 * BTLessStrategyNumber or BTLessEqualStrategyNumber on the upper boundary.
+	 *
+	 * BTEqualStrategyNumber gets changed to BTGreaterEqualStrategyNumber
+	 * on lower boundary and BTLessEqualStrategyNumber on upper boundary.
+	 */
+	if (dri->lower_strategy != InvalidStrategy)
+	{
+		switch (dri->lower_strategy)
+		{
+			case BTGreaterStrategyNumber:
+				if (chunk->cube->slices[0]->fd.range_start <= dri->lower_bound)
+					return false;
+				break;
+			case BTGreaterEqualStrategyNumber:
+				if (chunk->cube->slices[0]->fd.range_start < dri->lower_bound)
+					return false;
+				break;
+			default:
+				/* Should never happen */
+				elog(ERROR, "unexpected dimension restrictinfo strategy: %d", dri->upper_strategy);
+		}
+	}
+	if (dri->upper_strategy != InvalidStrategy)
+	{
+		switch (dri->upper_strategy)
+		{
+			case BTLessStrategyNumber:
+				if (chunk->cube->slices[0]->fd.range_end > dri->upper_bound)
+					return false;
+				break;
+			case BTLessEqualStrategyNumber:
+				if (chunk->cube->slices[0]->fd.range_end - 1 > dri->upper_bound)
+					return false;
+				break;
+			default:
+				/* Should never happen */
+				elog(ERROR, "unexpected dimension restrictinfo strategy: %d", dri->upper_strategy);
+		}
+	}
+	return true;
+}
+
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relation. */
 void
@@ -1124,7 +1225,8 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	Chunk **chunks = NULL;
 	unsigned int num_chunks = 0;
 
-	chunks = get_chunks(root, rel, ht, include_osm, &num_chunks);
+	HypertableRestrictInfo *hri = NULL;
+	chunks = get_chunks(root, rel, ht, include_osm, &num_chunks, &hri);
 	/* Can have zero chunks. */
 	Assert(num_chunks == 0 || chunks != NULL);
 
@@ -1235,17 +1337,47 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * build_simple_rel will look things up in the append_rel_array, so we can
 	 * only use it after that array has been set up.
 	 */
+	List *base_restrictions = rel->baserestrictinfo;
+	List *filtered_restrictions = NIL;
+	bool try_restriction_filtering =
+		ts_guc_enable_qual_filtering && hri && ht->space->num_dimensions == 1;
+
+	if (try_restriction_filtering)
+	{
+		filtered_restrictions = filter_baserestrictions(ht, base_restrictions);
+		/* Dont try filtering if all restrictions remain after filtering */
+		if (list_length(base_restrictions) == list_length(filtered_restrictions))
+			try_restriction_filtering = false;
+	}
+
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{
+		bool can_clear_restrictinfo = false;
 		Index child_rtindex = first_chunk_index + i;
+		Chunk *chunk = chunks[i];
+		if (try_restriction_filtering)
+		{
+			can_clear_restrictinfo = chunk_fully_covered(hri, chunk);
+		}
+
+		/* build_simple_rel will copy baserestrictinfo to the child rel and
+		 * do the necessary attribute mapping. If we can determine that the chunk
+		 * is fully covered by the primary dimension restriction we can remove
+		 * primary dimension restrictions from baserestrictinfo.
+		 */
+		if (can_clear_restrictinfo)
+			rel->baserestrictinfo = filtered_restrictions;
+
 		/* build_simple_rel will add the child to the relarray */
 		RelOptInfo *child_rel = build_simple_rel(root, child_rtindex, rel);
+
+		if (can_clear_restrictinfo)
+			rel->baserestrictinfo = base_restrictions;
 
 		/*
 		 * Can't touch fdw_private for OSM chunks, it might be managed by the
 		 * OSM extension, or, in the tests, by postgres_fdw.
 		 */
-		Chunk *chunk = chunks[i];
 		if (!IS_OSM_CHUNK(chunk))
 		{
 			Assert(chunk->table_id == root->simple_rte_array[child_rtindex]->relid);

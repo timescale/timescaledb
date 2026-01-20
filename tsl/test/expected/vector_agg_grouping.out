@@ -8,6 +8,24 @@ CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
 $$ LANGUAGE SQL;
 -- To not confuse null with empty strings in the test reference
 \pset null $
+-- First, check the test GUC we're using. It must complain even in case when
+-- there's no partial aggregation at all. Test this on a table with one chunk.
+create table onechunk(t int) with (tsdb.hypertable, tsdb.partition_column = 't',
+    tsdb.compress, tsdb.chunk_interval = 1000);
+insert into onechunk select 1;
+select count(compress_chunk(x)) from show_chunks('onechunk') x;
+ count 
+-------
+     1
+
+set timescaledb.debug_require_vector_agg = 'require';
+\set ON_ERROR_STOP 0
+select t, count(*) from onechunk group by t order by t limit 1;
+ERROR:  vectorized aggregation node not found when required by the debug_require_vector_agg GUC
+\set ON_ERROR_STOP 1
+reset timescaledb.debug_require_vector_agg;
+drop table onechunk;
+-- Prepare the table for main tests.
 \set CHUNKS 2::int
 \set CHUNK_ROWS 100000::int
 \set GROUPING_CARDINALITY 10::int
@@ -16,7 +34,7 @@ create table agggroup(t int, s int,
 select create_hypertable('agggroup', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
    create_hypertable   
 -----------------------
- (1,public,agggroup,t)
+ (3,public,agggroup,t)
 
 create view source as
 select s * 10000 + t as t,
@@ -1773,7 +1791,7 @@ create table long(t int, a text, b text, c text, d text);
 select create_hypertable('long', 't');
  create_hypertable 
 -------------------
- (3,public,long,t)
+ (5,public,long,t)
 
 insert into long select n, a, x, x, x from (
     select n, 'short' || m a, repeat('1', 100 * 4 + n) x
@@ -1892,7 +1910,7 @@ create table keylength(t int, a text, b text);
 select create_hypertable('keylength', 't');
    create_hypertable    
 ------------------------
- (5,public,keylength,t)
+ (7,public,keylength,t)
 
 insert into keylength select t, 'a', repeat('b', t) from generate_series(1, 1000) t;
 insert into keylength values (-1, '', ''); -- second chunk
@@ -1941,7 +1959,7 @@ create table groupnull(t int, a text, b text);
 select create_hypertable('groupnull', 't');
    create_hypertable    
 ------------------------
- (7,public,groupnull,t)
+ (9,public,groupnull,t)
 
 insert into groupnull values (1, '1', null), (2, null, '2'), (3000000, '3', '3');
 alter table groupnull set (timescaledb.compress, timescaledb.compress_segmentby = '',

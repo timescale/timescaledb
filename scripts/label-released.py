@@ -3,6 +3,7 @@
 Look at commits between the given release and the previous one, and label all
 PRs that made these commits with the "released-..." label.
 """
+
 import os
 import sys
 import argparse

@@ -12,3 +12,5 @@
 
 bool TSDLLEXPORT ts_extract_expr_args(Expr *expr, Var **var, Expr **arg_value, Oid *opno,
 									  Oid *opcode);
+
+TSDLLEXPORT List *ts_build_trivial_custom_output_targetlist(List *scan_targetlist);

@@ -18,6 +18,7 @@
 #include "plan.h"
 
 #include "exec.h"
+#include "expression_utils.h"
 #include "import/list.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/vector_quals.h"
@@ -31,38 +32,6 @@ void
 _vector_agg_init(void)
 {
 	TryRegisterCustomScanMethods(&scan_methods);
-}
-
-/*
- * Build an output targetlist for a custom node that just references all the
- * custom scan targetlist entries.
- */
-static inline List *
-build_trivial_custom_output_targetlist(List *scan_targetlist)
-{
-	List *result = NIL;
-
-	ListCell *lc;
-	foreach (lc, scan_targetlist)
-	{
-		TargetEntry *scan_entry = (TargetEntry *) lfirst(lc);
-
-		Var *var = makeVar(INDEX_VAR,
-						   scan_entry->resno,
-						   exprType((Node *) scan_entry->expr),
-						   exprTypmod((Node *) scan_entry->expr),
-						   exprCollation((Node *) scan_entry->expr),
-						   /* varlevelsup = */ 0);
-
-		TargetEntry *output_entry = makeTargetEntry((Expr *) var,
-													scan_entry->resno,
-													scan_entry->resname,
-													scan_entry->resjunk);
-
-		result = lappend(result, output_entry);
-	}
-
-	return result;
 }
 
 static Node *
@@ -150,7 +119,7 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 	 * the scan targetlists.
 	 */
 	vector_agg->scan.plan.targetlist =
-		build_trivial_custom_output_targetlist(vector_agg->custom_scan_tlist);
+		ts_build_trivial_custom_output_targetlist(vector_agg->custom_scan_tlist);
 
 	/*
 	 * Copy the costs from the normal aggregation node, so that they show up in
@@ -448,24 +417,31 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 }
 
 /*
- * Check if we have a vectorized aggregation node and the usual Postgres
- * aggregation node in the plan tree. This is used for testing.
+ * Whether we have a vectorized aggregation node and any aggregate node at all
+ * in the plan tree. This is used for testing.
  */
 bool
-has_vector_agg_node(Plan *plan, bool *has_postgres_partial_agg)
+has_vector_agg_node(Plan *plan, bool *has_some_agg)
 {
+	if (IsA(plan, Agg))
+	{
+		*has_some_agg = true;
+	}
+
 	if (IsA(plan, Agg) && castNode(Agg, plan)->aggsplit == AGGSPLIT_INITIAL_SERIAL)
 	{
-		*has_postgres_partial_agg = true;
+		/*
+		 * Postgres partial aggregation.
+		 */
 		return false;
 	}
 
-	if (plan->lefttree && has_vector_agg_node(plan->lefttree, has_postgres_partial_agg))
+	if (plan->lefttree && has_vector_agg_node(plan->lefttree, has_some_agg))
 	{
 		return true;
 	}
 
-	if (plan->righttree && has_vector_agg_node(plan->righttree, has_postgres_partial_agg))
+	if (plan->righttree && has_vector_agg_node(plan->righttree, has_some_agg))
 	{
 		return true;
 	}
@@ -483,7 +459,8 @@ has_vector_agg_node(Plan *plan, bool *has_postgres_partial_agg)
 	else if (IsA(plan, CustomScan))
 	{
 		custom = castNode(CustomScan, plan);
-		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0)
+		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0
+			|| strcmp("ModifyHypertable", custom->methods->CustomName) == 0)
 		{
 			append_plans = custom->custom_plans;
 		}
@@ -499,7 +476,7 @@ has_vector_agg_node(Plan *plan, bool *has_postgres_partial_agg)
 		ListCell *lc;
 		foreach (lc, append_plans)
 		{
-			if (has_vector_agg_node(lfirst(lc), has_postgres_partial_agg))
+			if (has_vector_agg_node(lfirst(lc), has_some_agg))
 			{
 				return true;
 			}
@@ -579,7 +556,7 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 	{
 		CustomScan *custom = castNode(CustomScan, plan);
 		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0
-		 || strcmp("ModifyHypertable", custom->methods->CustomName) == 0)
+			|| strcmp("ModifyHypertable", custom->methods->CustomName) == 0)
 		{
 			append_plans = custom->custom_plans;
 		}

@@ -62,7 +62,7 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 	policy->agg_defs = agg_defs;
 
 	policy->per_agg_per_key_states =
-		palloc(sizeof(*policy->per_agg_per_key_states) * policy->num_agg_defs);
+		(void **) palloc(sizeof(*policy->per_agg_per_key_states) * policy->num_agg_defs);
 	for (int i = 0; i < policy->num_agg_defs; i++)
 	{
 		const VectorAggDef *agg_def = &policy->agg_defs[i];

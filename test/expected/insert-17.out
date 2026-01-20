@@ -393,9 +393,7 @@ EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timesta
          ->  Limit
                ->  Append
                      ->  Index Only Scan using _hyper_7_16_chunk_timestamp_inf_time_idx on _hyper_7_16_chunk
-                           Index Cond: ("time" < 'infinity'::timestamp without time zone)
                      ->  Index Only Scan using _hyper_7_17_chunk_timestamp_inf_time_idx on _hyper_7_17_chunk
-                           Index Cond: ("time" < 'infinity'::timestamp without time zone)
 
 EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time >= 'infinity' LIMIT 1;
@@ -423,9 +421,7 @@ EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timesta
          ->  Limit
                ->  Append
                      ->  Index Only Scan using _hyper_7_16_chunk_timestamp_inf_time_idx on _hyper_7_16_chunk
-                           Index Cond: ("time" > '-infinity'::timestamp without time zone)
                      ->  Index Only Scan using _hyper_7_17_chunk_timestamp_inf_time_idx on _hyper_7_17_chunk
-                           Index Cond: ("time" > '-infinity'::timestamp without time zone)
 
 CREATE TABLE date_inf(time DATE);
 SELECT create_hypertable('date_inf', 'time');
@@ -442,9 +438,7 @@ EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
          ->  Limit
                ->  Append
                      ->  Index Only Scan using _hyper_8_18_chunk_date_inf_time_idx on _hyper_8_18_chunk
-                           Index Cond: ("time" < 'infinity'::date)
                      ->  Index Only Scan using _hyper_8_19_chunk_date_inf_time_idx on _hyper_8_19_chunk
-                           Index Cond: ("time" < 'infinity'::date)
 
 EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time >= 'infinity' LIMIT 1;
@@ -472,9 +466,7 @@ EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
          ->  Limit
                ->  Append
                      ->  Index Only Scan using _hyper_8_18_chunk_date_inf_time_idx on _hyper_8_18_chunk
-                           Index Cond: ("time" > '-infinity'::date)
                      ->  Index Only Scan using _hyper_8_19_chunk_date_inf_time_idx on _hyper_8_19_chunk
-                           Index Cond: ("time" > '-infinity'::date)
 
 -- test INSERT with cached plans / plpgsql functions
 -- https://github.com/timescale/timescaledb/issues/1809

@@ -6,6 +6,8 @@
 
 #include <postgres.h>
 #include <catalog/pg_type.h>
+#include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/primnodes.h>
 #include <utils/lsyscache.h>
 
@@ -104,4 +106,36 @@ ts_extract_expr_args(Expr *expr, Var **var, Expr **arg_value, Oid *opno, Oid *op
 	}
 
 	return false;
+}
+
+/*
+ * Build an output targetlist for a custom node that just references all the
+ * custom scan targetlist entries.
+ */
+List *
+ts_build_trivial_custom_output_targetlist(List *scan_targetlist)
+{
+	List *result = NIL;
+
+	ListCell *lc;
+	foreach (lc, scan_targetlist)
+	{
+		TargetEntry *scan_entry = (TargetEntry *) lfirst(lc);
+
+		Var *var = makeVar(INDEX_VAR,
+						   scan_entry->resno,
+						   exprType((Node *) scan_entry->expr),
+						   exprTypmod((Node *) scan_entry->expr),
+						   exprCollation((Node *) scan_entry->expr),
+						   /* varlevelsup = */ 0);
+
+		TargetEntry *output_entry = makeTargetEntry((Expr *) var,
+													scan_entry->resno,
+													scan_entry->resname,
+													scan_entry->resjunk);
+
+		result = lappend(result, output_entry);
+	}
+
+	return result;
 }
