@@ -293,9 +293,13 @@ can_use_columnar_index_scan(PlannerInfo *root, const Chunk *chunk, RelOptInfo *c
 				if (var->varattno != TableOidAttributeNumber)
 					return false;
 			}
-			else if (!bms_is_member(var->varattno, info->chunk_segmentby_attnos))
+			else
 			{
-				return false;
+				/* Targetlist references hypertable attnums so we have to translate to chunk */
+				AttrNumber chunk_attno =
+					ts_map_attno(info->ht_rte->relid, info->chunk_rte->relid, var->varattno);
+				if (!bms_is_member(chunk_attno, info->chunk_segmentby_attnos))
+					return false;
 			}
 		}
 	}
@@ -327,7 +331,7 @@ ColumnarIndexScanPath *
 ts_columnar_index_scan_path_create(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 								   const CompressionInfo *info, Path *compressed_path)
 {
-	if (!ts_guc_enable_columnarindexscan)
+	if (!ts_guc_enable_columnarindexscan || compressed_path->parallel_aware)
 		return NULL;
 
 	List *aggregate_attnos = NIL;
@@ -350,8 +354,8 @@ ts_columnar_index_scan_path_create(PlannerInfo *root, const Chunk *chunk, RelOpt
 	path->custom_path.path.pathtarget = chunk_rel->reltarget;
 	path->custom_path.path.param_info = NULL;
 	path->custom_path.path.parallel_aware = false;
-	path->custom_path.path.parallel_safe = compressed_path->parallel_safe;
-	path->custom_path.path.parallel_workers = compressed_path->parallel_workers;
+	path->custom_path.path.parallel_safe = false;
+	path->custom_path.path.parallel_workers = 0;
 	path->custom_path.path.pathkeys = NIL;
 	path->custom_path.flags = 0;
 	path->custom_path.custom_paths = list_make1(compressed_path);
@@ -446,6 +450,8 @@ build_output_map(ColumnarIndexScanPath *cispath, RelOptInfo *rel, List *output_t
 		bool found_agg = false;
 		while (agg_lc != NULL && var->varattno == lfirst_int(agg_lc))
 		{
+			Assert(meta_lc != NULL && fnoid_lc != NULL);
+
 			AttrNumber metadata_attno = lfirst_int(meta_lc);
 			Oid aggfnoid = lfirst_oid(fnoid_lc);
 
@@ -604,6 +610,8 @@ fix_aggref_walker(Node *node, List *remap_info)
 
 			while (pos_lc != NULL)
 			{
+				Assert(fnoid_lc != NULL && target_lc != NULL);
+
 				AttrNumber original_pos = lfirst_int(pos_lc);
 				Oid entry_aggfnoid = lfirst_oid(fnoid_lc);
 				AttrNumber target_pos = lfirst_int(target_lc);
@@ -638,6 +646,8 @@ fix_aggref_walker(Node *node, List *remap_info)
 
 		while (pos_lc != NULL)
 		{
+			Assert(fnoid_lc != NULL && target_lc != NULL);
+
 			AttrNumber original_pos = lfirst_int(pos_lc);
 			Oid entry_aggfnoid = lfirst_oid(fnoid_lc);
 			AttrNumber target_pos = lfirst_int(target_lc);
@@ -689,6 +699,8 @@ fix_aggregate_aggrefs(Agg *agg, List *remap_info)
 
 		while (pos_lc != NULL)
 		{
+			Assert(fnoid_lc != NULL && target_lc != NULL);
+
 			AttrNumber original_pos = lfirst_int(pos_lc);
 			Oid entry_aggfnoid = lfirst_oid(fnoid_lc);
 			AttrNumber target_pos = lfirst_int(target_lc);
@@ -726,20 +738,34 @@ ts_columnar_index_scan_fix_aggrefs(Plan *plan)
 		Agg *agg = (Agg *) plan;
 		Plan *subplan = agg->plan.lefttree;
 
-		if (subplan != NULL && ts_is_columnar_index_scan_plan(subplan))
+		/* ColumnarIndexScan might be below Sort/IncrementalSort nodes */
+		if (!ts_is_columnar_index_scan_plan(subplan))
+		{
+			switch (nodeTag(subplan))
+			{
+				case T_Sort:
+				case T_IncrementalSort:
+					subplan = subplan->lefttree;
+					break;
+				default:
+					return;
+					break;
+			}
+		}
+
+		if (subplan && ts_is_columnar_index_scan_plan(subplan))
 		{
 			CustomScan *cscan = (CustomScan *) subplan;
 
 			/* Get remap_info from custom_private */
-			Ensure(list_length(cscan->custom_private) == 2,
-				   "ColumnarIndexScan invalid custom_private");
+			Assert(list_length(cscan->custom_private) == 2);
 			List *remap_info = lsecond(cscan->custom_private);
 			if (remap_info != NIL)
 			{
 				fix_aggregate_aggrefs(agg, remap_info);
 
 				/*
-				 * Also rebuild CustomScan's scan.plan.targetlist to have
+				 * Rebuild CustomScan's scan.plan.targetlist to have
 				 * entries for all positions in custom_scan_tlist. This is
 				 * necessary because setrefs set it up based on the original
 				 * plan, but after fix_aggregate_aggrefs, the Aggregate
@@ -747,6 +773,36 @@ ts_columnar_index_scan_fix_aggrefs(Plan *plan)
 				 */
 				cscan->scan.plan.targetlist =
 					ts_build_trivial_custom_output_targetlist(cscan->custom_scan_tlist);
+
+				/*
+				 * Also fix targetlists of intermediate nodes (Sort, etc.)
+				 * between ColumnarIndexScan and Aggregate. These need to
+				 * pass through all columns from the expanded targetlist.
+				 * Use OUTER_VAR since these nodes reference their lefttree.
+				 */
+				Plan *intermediate = agg->plan.lefttree;
+				while (intermediate != (Plan *) cscan)
+				{
+					List *new_tlist = NIL;
+					ListCell *lc;
+					foreach (lc, cscan->custom_scan_tlist)
+					{
+						TargetEntry *scan_entry = (TargetEntry *) lfirst(lc);
+						Var *var = makeVar(OUTER_VAR,
+										   scan_entry->resno,
+										   exprType((Node *) scan_entry->expr),
+										   exprTypmod((Node *) scan_entry->expr),
+										   exprCollation((Node *) scan_entry->expr),
+										   0);
+						TargetEntry *new_entry = makeTargetEntry((Expr *) var,
+																 scan_entry->resno,
+																 scan_entry->resname,
+																 scan_entry->resjunk);
+						new_tlist = lappend(new_tlist, new_entry);
+					}
+					intermediate->targetlist = new_tlist;
+					intermediate = intermediate->lefttree;
+				}
 			}
 		}
 	}
@@ -780,6 +836,24 @@ ts_columnar_index_scan_fix_aggrefs(Plan *plan)
 		CustomScan *cs = (CustomScan *) plan;
 		ListCell *lc;
 		foreach (lc, cs->custom_plans)
+		{
+			ts_columnar_index_scan_fix_aggrefs(lfirst(lc));
+		}
+	}
+	else if (IsA(plan, BitmapAnd))
+	{
+		BitmapAnd *ba = (BitmapAnd *) plan;
+		ListCell *lc;
+		foreach (lc, ba->bitmapplans)
+		{
+			ts_columnar_index_scan_fix_aggrefs(lfirst(lc));
+		}
+	}
+	else if (IsA(plan, BitmapOr))
+	{
+		BitmapOr *bo = (BitmapOr *) plan;
+		ListCell *lc;
+		foreach (lc, bo->bitmapplans)
 		{
 			ts_columnar_index_scan_fix_aggrefs(lfirst(lc));
 		}
