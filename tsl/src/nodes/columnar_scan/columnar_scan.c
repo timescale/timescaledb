@@ -2865,6 +2865,16 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		}
 
 		/*
+		 * Pathkeys satisfied by sorting the compressed data on segmentby columns.
+		 * Can use compressed sort on segmentby cols for unordered chunks as well.
+		 */
+		if (i == list_length(pathkeys))
+		{
+			sort_info.use_compressed_sort = true;
+			return sort_info;
+		}
+
+		/*
 		 * If pathkeys still has items, but we didn't find all segmentby columns,
 		 * we cannot satisfy these pathkeys by sorting the compressed chunk table.
 		 */
@@ -2888,18 +2898,12 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		}
 	}
 
-	/* Cannot use compressed sort for unordered chunks */
+	/*
+	 * Cannot push down sort on non-segmentby columns
+	 * if the chunk has batches overlapping on orderby columns
+	 */
 	if (ts_chunk_is_unordered(chunk))
 		return sort_info;
-
-	if (i == list_length(pathkeys))
-	{
-		/*
-		 * Pathkeys satisfied by sorting the compressed data on segmentby columns.
-		 */
-		sort_info.use_compressed_sort = true;
-		return sort_info;
-	}
 
 	/*
 	 * Pathkeys includes columns past segmentby columns, so we need sequence_num
