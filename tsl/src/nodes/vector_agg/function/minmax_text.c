@@ -12,44 +12,12 @@ case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 	 * ordering for C collation. For non-C collations, return NULL to fall
 	 * back to the Postgres aggregation.
 	 */
-	if (!OidIsValid(collation) ||
-		!pg_newlocale_from_collation(collation)->collate_is_c)
-		return NULL;
-	return &FUNCTION_NAME(argdef);
+	if (lc_collate_is_c(collation))
+		return &FUNCTION_NAME(argdef);
+	return NULL;
 #else
 
-typedef struct
-{
-	uint32 capacity;
-	struct varlena *data;
-} MinMaxBytesState;
-
-typedef struct BytesView
-{
-	const uint8 *data;
-	uint32 len;
-} BytesView;
-
 typedef MinMaxBytesState FUNCTION_NAME(state);
-
-static void
-minmax_bytes_init(void *restrict agg_states, int n)
-{
-	MinMaxBytesState *restrict states = (MinMaxBytesState *) agg_states;
-	for (int i = 0; i < n; i++)
-	{
-		states[i].capacity = 0;
-		states[i].data = NULL;
-	}
-}
-
-static void
-minmax_bytes_emit(void *agg_state, Datum *out_result, bool *out_isnull)
-{
-	MinMaxBytesState *state = (MinMaxBytesState *) agg_state;
-	*out_isnull = state->capacity == 0;
-	*out_result = PointerGetDatum(state->data);
-}
 
 static pg_attribute_always_inline void
 FUNCTION_NAME(one)(void *restrict agg_state, const BytesView value)
@@ -192,3 +160,6 @@ VectorAggFunctions FUNCTION_NAME(argdef) = {
 #undef CTYPE
 #undef DATUM_TO_CTYPE
 #undef CTYPE_TO_DATUM
+
+#undef PREDICATE
+#undef AGG_NAME

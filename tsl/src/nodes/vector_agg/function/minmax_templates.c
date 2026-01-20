@@ -67,9 +67,55 @@ minmax_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 	(unlikely(!isnan((double) (CURRENT))) && (isnan((double) (NEW)) || (CURRENT) < (NEW)))
 #include "minmax_arithmetic_types.c"
 
+#ifndef GENERATE_DISPATCH_TABLE
+
+/*
+ * Common parts for vectorized min(text), max(text).
+ */
+
+typedef struct
+{
+	uint32 capacity;
+	struct varlena *data;
+} MinMaxBytesState;
+
+typedef struct BytesView
+{
+	const uint8 *data;
+	uint32 len;
+} BytesView;
+
+static void
+minmax_bytes_init(void *restrict agg_states, int n)
+{
+	MinMaxBytesState *restrict states = (MinMaxBytesState *) agg_states;
+	for (int i = 0; i < n; i++)
+	{
+		states[i].capacity = 0;
+		states[i].data = NULL;
+	}
+}
+
+static void
+minmax_bytes_emit(void *agg_state, Datum *out_result, bool *out_isnull)
+{
+	MinMaxBytesState *state = (MinMaxBytesState *) agg_state;
+	*out_isnull = state->capacity == 0;
+	*out_result = PointerGetDatum(state->data);
+}
+#endif
+
+/*
+ * Templated parts for vectorized min(text), max(text).
+ */
 #define PG_TYPE TEXT
 #define AGG_NAME MIN
 #define PREDICATE(CURRENT, NEW) ((CURRENT) > (NEW))
+#include "minmax_text.c"
+
+#define PG_TYPE TEXT
+#define AGG_NAME MAX
+#define PREDICATE(CURRENT, NEW) ((CURRENT) < (NEW))
 #include "minmax_text.c"
 
 #undef AGG_NAME

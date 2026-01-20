@@ -59,6 +59,7 @@ select * from compressed_collation_ht order by name;
 
 reset enable_seqscan;
 
+
 -- Test vectorized aggregation with collations. Need multiple chunks for partial
 -- aggregation, which is where VectorAgg is used.
 create table collation_agg(time int, name text collate :"COLLATION");
@@ -70,28 +71,32 @@ from generate_series(1, 30) x;
 select count(compress_chunk(ch)) from show_chunks('collation_agg') ch;
 vacuum analyze collation_agg;
 
-set enable_sort = false;
-
 -- Vectorized aggregation is not used for non-C collations.
 set timescaledb.debug_require_vector_agg = 'forbid';
+set enable_sort = false;
+
 select min(name), max(name) from collation_agg;
 
 reset enable_sort;
 reset timescaledb.debug_require_vector_agg;
 
--- But is used when the column has C collation directly.
+
+-- Vectorized aggregation is used when the column has C collation.
+-- At the moment we don't support the 'min(name collate "C")' form that is
+-- represented by CollateExpr node.
 create table collation_agg_c(time int, name text collate "C");
 select create_hypertable('collation_agg_c', 'time', chunk_time_interval => 10);
 alter table collation_agg_c set (timescaledb.compress, timescaledb.compress_orderby = 'time');
 
-insert into collation_agg_c select x, case x % 3 when 0 then 'a' when 1 then 'b' else 'c' end
+insert into collation_agg_c select x, case x % 3 when 0 then 'á' when 1 then 'b' else 'ç' end
 from generate_series(1, 30) x;
 select count(compress_chunk(ch)) from show_chunks('collation_agg_c') ch;
 vacuum analyze collation_agg_c;
 
 set enable_sort = false;
 set timescaledb.debug_require_vector_agg = 'require';
-select min(name) from collation_agg_c;
+
+select min(name), max(name) from collation_agg_c;
 
 reset enable_sort;
 reset timescaledb.debug_require_vector_agg;

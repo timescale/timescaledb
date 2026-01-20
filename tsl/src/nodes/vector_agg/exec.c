@@ -172,8 +172,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 			Aggref *aggref = castNode(Aggref, tlentry->expr);
 
-			VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid,
-														  aggref->inputcollid);
+			VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid, aggref->inputcollid);
 			Assert(func != NULL);
 			def->func = *func;
 
