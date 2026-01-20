@@ -50,7 +50,7 @@ jobs:
         # matches the Postgers version we build.
         readarray -t CHANGED_TESTS < <( \
             git diff --name-only base HEAD -- test/expected tsl/test/expected \
-            | sed -n 's!^.*expected/\([^/ -]\+\(-{{ steps.outputs.pg.major }}\)\?\)\.out .*$!\1!gp')
+            | sed -n 's!^.*expected/\([^/ -]\+\(-${{ steps.outputs.pg.major }}\)\?\)\.out$!\1!gp')
 
         echo ${CHANGED_TESTS[@]}
 
