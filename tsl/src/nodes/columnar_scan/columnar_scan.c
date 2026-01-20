@@ -2820,6 +2820,11 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 
 	/*
 	 * Next, check if we can push the sort down to the compressed part.
+	 *
+	 * Batch sorted merge optimization is enabled for unordered chunks
+	 * because we do merge the batches at execution time which
+	 * only relies that the batches themselves are sorted which is
+	 * always the case.
 	 */
 
 	/* all segmentby columns need to be prefix of pathkeys */
