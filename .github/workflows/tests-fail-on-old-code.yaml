@@ -50,7 +50,7 @@ jobs:
         # matches the Postgers version we build.
         readarray -t CHANGED_TESTS < <( \
             git diff --name-only base HEAD -- test/expected tsl/test/expected \
-            | sed -n 's!^.*expected/\([^/ -]\+\(-${{ steps.outputs.pg.major }}\)\?\)\.out$!\1!gp')
+            | sed -n 's!^.*expected/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out$!\1!gp')
 
         echo ${CHANGED_TESTS[@]}
 
@@ -169,7 +169,8 @@ jobs:
       run: |
         TESTS="${{ steps.check.outputs.changed_tests }}"
 
-        readarray -t FAILED_TESTS < <(sed -n 's!^\+\+\+.*expected/\([^/ -]\+\(-{{ steps.outputs.pg.major }}\)\?\)\.out .*$!\1!gp' regression.log)
+        readarray -t FAILED_TESTS < <( \
+          sed -n 's!^\+\+\+.*expected/\([^/ -]\+\(-{{ steps.pg.outputs.major }}\)\?\)\.out .*$!\1!gp' regression.log)
         echo "Tests failing with the old code: ${FAILED_TESTS[@]}"
 
         # Check which changed tests did NOT fail
