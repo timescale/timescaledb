@@ -417,9 +417,8 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 }
 
 /*
- * Whether we have a vectorized aggregation node, a Postgres partial aggregation
- * node, and any aggregate node at all in the plan tree. This is used for
- * testing.
+ * Whether we have a vectorized aggregation node and any aggregate node at all
+ * in the plan tree. This is used for testing.
  */
 bool
 has_vector_agg_node(Plan *plan, bool *has_some_agg)
