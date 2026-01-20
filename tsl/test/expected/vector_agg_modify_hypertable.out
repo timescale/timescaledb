@@ -31,67 +31,20 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('source_ht') ch;
 
 VACUUM ANALYZE source_ht;
 -- Create a target hypertable for aggregated data
--- Use device_id as the time column so GROUP BY device_id works
 CREATE TABLE target_ht(device_id int NOT NULL, total bigint, cnt bigint);
 SELECT create_hypertable('target_ht', 'device_id', chunk_time_interval => 10);
    create_hypertable    
 ------------------------
  (3,public,target_ht,t)
 
--- First verify a simple SELECT uses VectorAgg (baseline test)
-EXPLAIN (costs off)
-SELECT sum(value) FROM source_ht;
---- QUERY PLAN ---
- Finalize Aggregate
-   ->  Append
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Seq Scan on compress_hyper_2_4_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
-                     ->  Seq Scan on compress_hyper_2_5_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
-                     ->  Seq Scan on compress_hyper_2_6_chunk
-
--- Now verify INSERT INTO hypertable SELECT ... GROUP BY also uses VectorAgg
--- The plan should show:
---   Custom Scan (ModifyHypertable)
---     -> Insert
---          -> Finalize GroupAggregate
---               -> Merge Append
---                    -> Custom Scan (VectorAgg)  <-- THIS is what PR #9137 enables
---
--- Without PR #9137, we would see Partial GroupAggregate instead of VectorAgg
-EXPLAIN (costs off)
+-- Require vectorized aggregation. The INSERT will fail if vectorization
+-- is not used, which would happen without the PR #9137 code change.
+SET timescaledb.debug_require_vector_agg = 'require';
 INSERT INTO target_ht
 SELECT device_id, sum(value), count(*)
 FROM source_ht
 GROUP BY device_id;
---- QUERY PLAN ---
- Custom Scan (ModifyHypertable)
-   ->  Insert on target_ht
-         ->  Finalize GroupAggregate
-               Group Key: source_ht.device_id
-               ->  Merge Append
-                     Sort Key: source_ht.device_id
-                     ->  Custom Scan (VectorAgg)
-                           ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                                 ->  Index Scan using compress_hyper_2_4_chunk_device_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_4_chunk
-                     ->  Custom Scan (VectorAgg)
-                           ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk
-                                 ->  Index Scan using compress_hyper_2_5_chunk_device_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_5_chunk
-                     ->  Custom Scan (VectorAgg)
-                           ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
-                                 ->  Sort
-                                       Sort Key: compress_hyper_2_6_chunk.device_id
-                                       ->  Seq Scan on compress_hyper_2_6_chunk
-
--- Execute the INSERT to verify correctness
-INSERT INTO target_ht
-SELECT device_id, sum(value), count(*)
-FROM source_ht
-GROUP BY device_id;
+RESET timescaledb.debug_require_vector_agg;
 -- Verify data was inserted correctly
 SELECT count(*) FROM target_ht;
  count 

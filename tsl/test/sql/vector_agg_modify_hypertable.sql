@@ -30,35 +30,19 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('source_ht') ch;
 VACUUM ANALYZE source_ht;
 
 -- Create a target hypertable for aggregated data
--- Use device_id as the time column so GROUP BY device_id works
 CREATE TABLE target_ht(device_id int NOT NULL, total bigint, cnt bigint);
 SELECT create_hypertable('target_ht', 'device_id', chunk_time_interval => 10);
 
--- First verify a simple SELECT uses VectorAgg (baseline test)
-EXPLAIN (costs off)
-SELECT sum(value) FROM source_ht;
+-- Require vectorized aggregation. The INSERT will fail if vectorization
+-- is not used, which would happen without the PR #9137 code change.
+SET timescaledb.debug_require_vector_agg = 'require';
 
--- Now verify INSERT INTO hypertable SELECT ... GROUP BY also uses VectorAgg
--- The plan should show:
---   Custom Scan (ModifyHypertable)
---     -> Insert
---          -> Finalize GroupAggregate
---               -> Merge Append
---                    -> Custom Scan (VectorAgg)  <-- THIS is what PR #9137 enables
---
--- Without PR #9137, we would see Partial GroupAggregate instead of VectorAgg
-
-EXPLAIN (costs off)
 INSERT INTO target_ht
 SELECT device_id, sum(value), count(*)
 FROM source_ht
 GROUP BY device_id;
 
--- Execute the INSERT to verify correctness
-INSERT INTO target_ht
-SELECT device_id, sum(value), count(*)
-FROM source_ht
-GROUP BY device_id;
+RESET timescaledb.debug_require_vector_agg;
 
 -- Verify data was inserted correctly
 SELECT count(*) FROM target_ht;
