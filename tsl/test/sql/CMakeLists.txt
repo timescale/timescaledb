@@ -162,6 +162,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_agg_grouping.sql
     vector_agg_text.sql
     vector_agg_memory.sql
+    vector_agg_modify_hypertable.sql
     vector_agg_segmentby.sql
     vector_agg_uuid.sql
     vector_qual_default.sql
