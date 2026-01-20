@@ -6,6 +6,7 @@ name: Tests should fail on old code
   push:
     branches:
       - main
+      - '?.*.x'
   pull_request:
 
 jobs:
@@ -18,7 +19,7 @@ jobs:
       PG_INSTALL_DIR: postgresql
 
     steps:
-    - name: Install Dependencies
+    - name: Install Linux Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install flex bison cmake
@@ -71,9 +72,10 @@ jobs:
     - name: Get date for build caching
       if: steps.check.outputs.should_run == 'true'
       id: get-date
-      run: echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+      run: |
+        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
 
-    - name: Cache PostgreSQL
+    - name: Cache PostgreSQL ${{ steps.pgversion.outputs.pg_version }}
       if: steps.check.outputs.should_run == 'true'
       id: cache-postgresql
       uses: actions/cache@v4
@@ -81,12 +83,11 @@ jobs:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "ubuntu-latest-postgresql-${{ steps.pgversion.outputs.pg_version }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
-    - name: Build PostgreSQL
+    - name: Build PostgreSQL ${{ steps.pgversion.outputs.pg_version }}
       if: steps.check.outputs.should_run == 'true' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        PG_VERSION="${{ steps.pgversion.outputs.pg_version }}"
         wget -q -O postgresql.tar.bz2 \
-          https://ftp.postgresql.org/pub/source/v$PG_VERSION/postgresql-$PG_VERSION.tar.bz2
+          https://ftp.postgresql.org/pub/source/v${{ steps.pgversion.outputs.pg_version }}/postgresql-${{ steps.pgversion.outputs.pg_version }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
         cd ~/$PG_SRC_DIR
@@ -94,10 +95,11 @@ jobs:
           --without-readline --without-zlib --without-libxml
         make -j $(getconf _NPROCESSORS_ONLN)
 
-    - name: Install PostgreSQL
+    - name: Install PostgreSQL ${{ steps.pgversion.outputs.pg_version }}
       if: steps.check.outputs.should_run == 'true'
       run: |
-        make -C ~/$PG_SRC_DIR install
+        cd ~/$PG_SRC_DIR
+        make install
         echo "$HOME/$PG_INSTALL_DIR/bin" >> $GITHUB_PATH
 
     - name: Revert code changes, keep test changes
@@ -111,7 +113,7 @@ jobs:
           echo "$CODE_FILES" | xargs git checkout base --
         fi
 
-    - name: Build TimescaleDB with old code
+    - name: Build TimescaleDB
       if: steps.check.outputs.should_run == 'true'
       run: |
         cmake -B build -S . \
@@ -121,19 +123,27 @@ jobs:
         make -j $(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
 
-    - name: Run tests and check for expected failures
+    - name: make installcheck
       if: steps.check.outputs.should_run == 'true'
       run: |
         TESTS="${{ steps.check.outputs.changed_tests }}"
         echo "Running tests: $TESTS"
 
         # Run all changed tests together, allow failure
-        make -C build installcheck TESTS="$TESTS" > installcheck.log 2>&1 || true
+        make -C build installcheck TESTS="$TESTS" 2>&1 | tee installcheck.log || true
 
-        # Find regression.diffs and extract failed test names
-        REGRESSION_DIFFS=$(find build -name regression.diffs 2>/dev/null | head -1)
+    - name: Show regression diffs
+      if: steps.check.outputs.should_run == 'true'
+      run: |
+        find . -name regression.diffs -exec cat {} + > regression.log
+        cat regression.log
 
-        if [[ -z "$REGRESSION_DIFFS" || ! -s "$REGRESSION_DIFFS" ]]; then
+    - name: Verify tests failed on old code
+      if: steps.check.outputs.should_run == 'true'
+      run: |
+        TESTS="${{ steps.check.outputs.changed_tests }}"
+
+        if [[ ! -s regression.log ]]; then
           echo ""
           echo "ERROR: No test failures detected (regression.diffs is empty or missing)"
           echo "All tests passed when they should have failed."
@@ -145,13 +155,13 @@ jobs:
           exit 1
         fi
 
-        # Extract test names from regression.diffs (lines like "diff -u .../expected/testname.out")
-        FAILED_TESTS=$(grep -oE "expected/[a-zA-Z0-9_-]+\.out" "$REGRESSION_DIFFS" | \
+        # Extract test names from regression.log (lines like "diff -u .../expected/testname.out")
+        FAILED_TESTS=$(grep -oE "expected/[a-zA-Z0-9_-]+\.out" regression.log | \
           sed 's|expected/||; s|\.out||; s|-[0-9]*$||' | sort -u | tr '\n' ' ')
 
         echo ""
         echo "=== Results ==="
-        echo "Tests that failed (from regression.diffs): $FAILED_TESTS"
+        echo "Tests that failed: $FAILED_TESTS"
         echo ""
 
         # Check which changed tests did NOT fail
@@ -168,13 +178,7 @@ jobs:
           echo ""
           echo "This suggests these tests may not be testing the new code changes."
           echo "Please verify that your tests actually exercise the new functionality."
-          echo ""
-          echo "=== regression.diffs ==="
-          cat "$REGRESSION_DIFFS"
           exit 1
         fi
 
         echo "All changed tests failed as expected."
-        echo ""
-        echo "=== regression.diffs ==="
-        cat "$REGRESSION_DIFFS"
