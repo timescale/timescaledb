@@ -5,13 +5,7 @@
 -- Test for vectorized aggregation under ModifyHypertable plan node.
 -- This validates that INSERT INTO hypertable SELECT ... GROUP BY ...
 -- can use vectorized aggregation for the SELECT portion.
---
--- PR #9137 adds ModifyHypertable to the list of custom scan nodes
--- that try_insert_vector_agg_node() recurses into.
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
-
--- Create a source hypertable with compressed data
 CREATE TABLE source_ht(time int NOT NULL, device_id int, value int);
 SELECT create_hypertable('source_ht', 'time', chunk_time_interval => 10000);
 
@@ -29,12 +23,9 @@ ALTER TABLE source_ht SET (
 SELECT count(compress_chunk(ch)) FROM show_chunks('source_ht') ch;
 VACUUM ANALYZE source_ht;
 
--- Create a target hypertable for aggregated data
 CREATE TABLE target_ht(device_id int NOT NULL, total bigint, cnt bigint);
 SELECT create_hypertable('target_ht', 'device_id', chunk_time_interval => 10);
 
--- Require vectorized aggregation. The INSERT will fail if vectorization
--- is not used, which would happen without the PR #9137 code change.
 SET timescaledb.debug_require_vector_agg = 'require';
 
 INSERT INTO target_ht
