@@ -18,23 +18,10 @@ jobs:
       PG_INSTALL_DIR: postgresql
 
     steps:
-    - name: Install Linux Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install flex bison cmake
-
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
-
-    - name: Read configuration
-      id: config
-      run: python -B .github/gh_config_reader.py
-
-    - name: Set PostgreSQL version
-      id: pg
-      run: echo "version=${{ steps.config.outputs.PG17_LATEST }}" >> $GITHUB_OUTPUT
 
     - name: Check for code and test changes
       id: check
@@ -68,6 +55,22 @@ jobs:
         echo "Test names: $CHANGED_TESTS"
         echo "should_run=true" >> $GITHUB_OUTPUT
         echo "changed_tests=$CHANGED_TESTS" >> $GITHUB_OUTPUT
+
+    - name: Read configuration
+      id: config
+      if: steps.check.outputs.should_run == 'true'
+      run: python -B .github/gh_config_reader.py
+
+    - name: Set PostgreSQL version
+      id: pg
+      if: steps.check.outputs.should_run == 'true'
+      run: echo "version=${{ steps.config.outputs.PG17_LATEST }}" >> $GITHUB_OUTPUT
+
+    - name: Install Linux Dependencies
+      if: steps.check.outputs.should_run == 'true'
+      run: |
+        sudo apt-get update
+        sudo apt-get install flex bison cmake
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
