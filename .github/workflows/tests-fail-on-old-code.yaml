@@ -23,6 +23,15 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Set PostgreSQL version
+      id: pg
+      if: steps.check.outputs.should_run == 'true'
+      run: |
+        MAJOR=17
+        echo "major=$MAJOR" >> $GITHUB_OUTPUT
+        GITHUB_OUTPUT=/dev/stdout .github/gh_config_reader.py \
+            | sed -n 's/PG17_LATEST/version/p' >> $GITHUB_OUTPUT
+
     - name: Check for code and test changes
       id: check
       run: |
@@ -32,8 +41,9 @@ jobs:
         CODE_CHANGES=$(git diff --name-only base HEAD -- 'src/' 'tsl/src/' | head -1 || true)
 
         # Test changes: changed .out files under test/expected directories
-        CHANGED_OUT_FILES=$(git diff --name-only base HEAD -- \
-          'test/expected/*.out' 'tsl/test/expected/*.out' || true)
+        readarray -t CHANGED_OUT_FILES < <( \
+            git diff --name-only base HEAD -- test/expected tsl/test/expected \
+            | sed -n 's!^.*expected/\([^/ -]\+\(-{{ steps.outputs.pg.major }}\)\?\)\.out .*$!\1!gp')
 
         if [[ -z "$CODE_CHANGES" ]]; then
           echo "No code changes found, skipping"
@@ -55,16 +65,6 @@ jobs:
         echo "Test names: $CHANGED_TESTS"
         echo "should_run=true" >> $GITHUB_OUTPUT
         echo "changed_tests=$CHANGED_TESTS" >> $GITHUB_OUTPUT
-
-    - name: Read configuration
-      id: config
-      if: steps.check.outputs.should_run == 'true'
-      run: python -B .github/gh_config_reader.py
-
-    - name: Set PostgreSQL version
-      id: pg
-      if: steps.check.outputs.should_run == 'true'
-      run: echo "version=${{ steps.config.outputs.PG17_LATEST }}" >> $GITHUB_OUTPUT
 
     - name: Install Linux Dependencies
       if: steps.check.outputs.should_run == 'true'
@@ -110,16 +110,17 @@ jobs:
         make install
         echo "$HOME/$PG_INSTALL_DIR/bin" >> $GITHUB_PATH
 
-    - name: Revert code changes, keep test changes
+    - name: Revert code changes
       if: steps.check.outputs.should_run == 'true'
       run: |
-        CODE_FILES=$(git diff --name-only base HEAD -- 'src/' 'tsl/src/' || true)
-
-        if [[ -n "$CODE_FILES" ]]; then
-          echo "Reverting code changes:"
-          echo "$CODE_FILES"
-          echo "$CODE_FILES" | xargs git checkout base --
+        readarray -t CODE_FILES -d '' < <(git diff -z --name-only base HEAD -- 'src/' 'tsl/src/'))
+        if ! ((${#CODE_FILES[@]})) then
+            echo "Bug: this job shouldn't run when there are no code files modified"
+            exit 1
         fi
+        git checkout base "${CODE_FILES[@]}"
+        echo "Reverted ${CODE_FILES[@]}:"
+        git status
 
     - name: Build TimescaleDB
       if: steps.check.outputs.should_run == 'true'
@@ -170,26 +171,8 @@ jobs:
       run: |
         TESTS="${{ steps.check.outputs.changed_tests }}"
 
-        if [[ ! -s regression.log ]]; then
-          echo ""
-          echo "ERROR: No test failures detected (regression.diffs is empty or missing)"
-          echo "All tests passed when they should have failed."
-          echo ""
-          echo "This suggests these tests may not be testing the new code changes."
-          echo "Please verify that your tests actually exercise the new functionality."
-          echo ""
-          cat installcheck.log
-          exit 1
-        fi
-
-        # Extract test names from regression.log (lines like "diff -u .../expected/testname.out")
-        FAILED_TESTS=$(grep -oE "expected/[a-zA-Z0-9_-]+\.out" regression.log | \
-          sed 's|expected/||; s|\.out||; s|-[0-9]*$||' | sort -u | tr '\n' ' ')
-
-        echo ""
-        echo "=== Results ==="
-        echo "Tests that failed: $FAILED_TESTS"
-        echo ""
+        readarray -t FAILED_TESTS < <(sed -n 's!^\+\+\+.*expected/\([^/ -]\+\(-{{ steps.outputs.pg.major }}\)\?\)\.out .*$!\1!gp' regression.log)
+        echo "Tests failing with the old code: ${FAILED_TESTS[@]}"
 
         # Check which changed tests did NOT fail
         PASSED_TESTS=""
