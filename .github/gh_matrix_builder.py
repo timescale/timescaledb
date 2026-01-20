@@ -98,7 +98,7 @@ def build_debug_config(overrides):
             "extra_packages": "clang llvm llvm-dev",
             "ignored_tests": default_ignored_tests,
             "name": "Debug",
-            "os": "ubuntu-24.04",
+            "os": "ubuntu-22.04",
             "pg_extra_args": "--enable-debug --enable-cassert --with-llvm LLVM_CONFIG=llvm-config",
             "pg_extensions": "postgres_fdw test_decoding",
             "installcheck": True,
