@@ -1649,7 +1649,7 @@ row_decompressor_close(RowDecompressor *decompressor)
 	pfree(decompressor->compressed_is_nulls);
 	pfree(decompressor->decompressed_datums);
 	pfree(decompressor->decompressed_is_nulls);
-	pfree(decompressor->decompressed_slots);
+	pfree((void *) decompressor->decompressed_slots);
 	pfree(decompressor->per_compressed_cols);
 }
 
