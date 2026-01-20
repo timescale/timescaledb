@@ -6,16 +6,7 @@ name: Tests should fail on old code
   push:
     branches:
       - main
-      - prerelease_test
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE*'
-      - NOTICE
   pull_request:
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE*'
-      - NOTICE
 
 jobs:
   verify-tests-fail:
@@ -30,7 +21,7 @@ jobs:
     - name: Install Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install flex bison cmake libssl-dev libkrb5-dev libipc-run-perl
+        sudo apt-get install flex bison cmake
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
@@ -47,12 +38,6 @@ jobs:
     - name: Check for code and test changes
       id: check
       run: |
-        if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-          echo "Not a pull request, skipping"
-          echo "should_run=false" >> $GITHUB_OUTPUT
-          exit 0
-        fi
-
         git fetch origin ${{ github.base_ref }}:base
 
         # Code changes: anything under src/ directories
