@@ -1446,6 +1446,41 @@ ORDER BY 1;
  device_id_3         |     1
 
 DROP TABLE gen_column;
+-- regression test for SDC 3721
+create table generated_with_dropped (
+    timestamp timestamp with time zone not null,
+    a numeric(15,10),
+    b numeric(15,10),
+    c numeric(15,10) generated always as (a+b) stored,
+    to_be_dropped bigint not null,
+    d jsonb,
+    e bigint,
+    f text not null);
+select create_hypertable('generated_with_dropped', by_range('timestamp', '1 week'::interval));
+ create_hypertable 
+-------------------
+ (42,t)
+
+-- Dropping a column to verify we are using the correct
+-- tuple desc when generating generated column.
+alter table generated_with_dropped drop column to_be_dropped;
+-- populate the table with some data
+insert into generated_with_dropped (timestamp, a, b, d, e, f) values
+('2026-01-18 22:55:39+00', -104.8180690000, 39.7653270000, '{"test": 5}', 397000, 'test');
+-- compress everything
+ALTER TABLE generated_with_dropped SET(
+    timescaledb.enable_columnstore,
+    timescaledb.orderby = 'timestamp'
+);
+select compress_chunk(chunk) from show_chunks('generated_with_dropped') as chunk;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_42_94_chunk
+
+-- This should not segfault
+insert into generated_with_dropped (f, timestamp, a, b, d, e) values
+('test1', '2026-01-18 22:56:08+00', -118.1709590000, 33.9069520000, '{"test": 5}', 327000);
+DROP TABLE generated_with_dropped;
 -- test insert into compressed chunk directly works
 -- to ensure maintenance operations work unhindered we dont
 -- want to block direct inserts into compressed chunks
@@ -1469,7 +1504,7 @@ SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 D
 -- should have not ModifyHypertable node
 EXPLAIN (costs off,timing off, summary off) INSERT INTO :CHUNK SELECT * FROM compressed_batches;
 --- QUERY PLAN ---
- Insert on compress_hyper_43_95_chunk
+ Insert on compress_hyper_45_97_chunk
    ->  Seq Scan on compressed_batches
 
 INSERT INTO :CHUNK SELECT * FROM compressed_batches;
