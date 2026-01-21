@@ -115,6 +115,7 @@ typedef struct CrossModuleFunctions
 	PGFunction continuous_agg_get_bucket_function;
 	PGFunction continuous_agg_get_bucket_function_info;
 	PGFunction continuous_agg_get_grouping_columns;
+	PGFunction continuous_agg_add_column;
 
 	PGFunction compressed_data_send;
 	PGFunction compressed_data_recv;

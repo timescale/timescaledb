@@ -16,6 +16,7 @@ list(
   TEST_FILES
   compression_ddl_iso.spec
   compression_conflicts_iso.spec
+  cagg_alter.spec
   cagg_insert.spec
   cagg_multi_iso.spec
   deadlock_drop_chunks_compress.spec
