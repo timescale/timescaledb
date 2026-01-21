@@ -217,3 +217,12 @@ CREATE OR REPLACE PROCEDURE @extschema@.refresh_continuous_aggregate(
     options                  JSONB = NULL
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh';
 
+-- Add a column from the source hypertable to a continuous aggregate.
+-- The column will be added to the GROUP BY clause and all internal views.
+CREATE OR REPLACE FUNCTION @extschema@.add_continuous_aggregate_column(
+    continuous_aggregate     REGCLASS,
+    column_name              NAME,
+    if_not_exists            BOOLEAN = FALSE
+) RETURNS VOID
+LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_add_column';
+
