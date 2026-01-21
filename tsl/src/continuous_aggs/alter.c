@@ -465,6 +465,9 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 										  atttypmod,
 										  attcollation,
 										  column_name);
+			/* Also update the RTE's column names to match the subquery's targetList */
+			mat_rte->eref->colnames =
+				lappend(mat_rte->eref->colnames, makeString(pstrdup(column_name)));
 		}
 
 		/* Update raw subquery (queries raw_ht) - needs GROUP BY for aggregation */
@@ -479,6 +482,9 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 								atttypmod,
 								attcollation,
 								column_name);
+			/* Also update the RTE's column names to match the subquery's targetList */
+			raw_rte->eref->colnames =
+				lappend(raw_rte->eref->colnames, makeString(pstrdup(column_name)));
 		}
 
 		/* Update SetOperationStmt column type lists */
