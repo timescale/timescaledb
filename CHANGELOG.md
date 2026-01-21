@@ -62,6 +62,7 @@ This release contains performance improvements and bug fixes since the 2.24.0 re
 * [#9121](https://github.com/timescale/timescaledb/pull/9121) Allow any immutable constant expressions as default values for compressed columns
 * [#9121](https://github.com/timescale/timescaledb/pull/9121) Fix a potential "unexpected column type 'bool'" error for compressed bool columns with missing value
 * [#9144](https://github.com/timescale/timescaledb/pull/9144) Fix handling implicit constraints in `ALTER TABLE`
+* [#9155](https://github.com/timescale/timescaledb/pull/9155) Fix column generation during compressed chunk insert
 
 **GUCs**
 * `enable_columnarindexscan`: Enable returning results directly from compression metadata without decompression. Default: `true` 
