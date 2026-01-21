@@ -1,0 +1,1 @@
+Fixes: #9155 Fix column generation during compressed chunk insert
