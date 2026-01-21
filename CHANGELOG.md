@@ -16,7 +16,7 @@ This release contains performance improvements and bug fixes since the 2.24.0 re
 
 **Sunsetting Announcements**
 * This release removes the WAL-based invalidation of continuous aggregates. This feature was introduced in [2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.22.0) as tech preview to use logical decoding for building the invalidation logs. The feature was designed for high ingest workloads, reducing the write amplification. With the upcoming stream of improvements to continuous aggregates, this feature was deprioritized and removed.
-* Old the continuous aggregate format is fully removed from timescaledb, read the [migration path](https://www.tigerdata.com/docs/use-timescale/latest/continuous-aggregates/migrate) to migrate to the new format. Tiger Cloud users have been migrated automatically ahead of time. The old format was announced deprecate in the version [2.10.0](https://github.com/timescale/timescaledb/releases/tag/2.10.0).
+* The old continuous aggregate format, deprecated in version [2.10.0](https://github.com/timescale/timescaledb/releases/tag/2.10.0), has been fully removed from TimescaleDB in this release. Users still on the old format should read the [migration documentation](https://www.tigerdata.com/docs/use-timescale/latest/continuous-aggregates/migrate) to migrate to the new format. Users of Tiger Cloud have already been automatically migrated.
 
 **Features**
 * [#8777](https://github.com/timescale/timescaledb/pull/8777) Enable direct compress on continuous aggregate refresh using new GUC `timescaledb.enable_direct_compress_on_cagg_refresh`
