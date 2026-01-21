@@ -290,10 +290,8 @@ select device, sensor||'1', min(time), max(time) from metrics group by device, s
 --- QUERY PLAN ---
  GroupAggregate
    Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
-   ->  Sort
-         Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
-         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
 
 select device, sensor, min(time) from metrics group by device, sensor order by 1,2;
  device | sensor |             min              
@@ -307,10 +305,8 @@ select device, sensor, min(time) from metrics group by device, sensor order by 1
 --- QUERY PLAN ---
  GroupAggregate
    Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
-   ->  Sort
-         Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
-         ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
-               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
 
 select device, sensor, first(time,time) from metrics group by device, sensor order by 1,2;
  device | sensor |            first             

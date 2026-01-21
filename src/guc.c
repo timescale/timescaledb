@@ -130,7 +130,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
-TSDLLEXPORT bool ts_guc_enable_columnarindexscan = true;
+TSDLLEXPORT bool ts_guc_enable_columnarindexscan = false;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 #if PG16_GE
@@ -1196,7 +1196,7 @@ _guc_init(void)
 							 "Enable returning results directly from compression "
 							 "metadata without decompression",
 							 &ts_guc_enable_columnarindexscan,
-							 true,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
