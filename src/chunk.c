@@ -4619,7 +4619,7 @@ ts_chunk_get_compression_status(int32 chunk_id)
 bool
 ts_chunk_is_unordered(const Chunk *chunk)
 {
-	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED_UNORDERED);
+	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED);
 }
 
 bool
