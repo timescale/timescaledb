@@ -41,7 +41,7 @@
 #define UnassignedDatum (Datum) 0
 
 static inline int64
-interval_to_usec(Interval *interval)
+interval_to_usec(const Interval *interval)
 {
 	return (interval->month * DAYS_PER_MONTH * USECS_PER_DAY) + (interval->day * USECS_PER_DAY) +
 		   interval->time;
