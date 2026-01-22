@@ -302,11 +302,167 @@ SELECT * FROM test_cagg_level3 ORDER BY bucket, device_id;
  Sun Dec 22 16:00:00 2019 PST |         1 |               20 | 
  Sun Dec 22 16:00:00 2019 PST |         2 | 33.3333333333333 | 
 
--- Cleanup
+-- Cleanup materialized-only hierarchical CAggs
 DROP MATERIALIZED VIEW test_cagg_level3;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_5_6_chunk
 DROP MATERIALIZED VIEW test_cagg_level2;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_5_chunk
+-- Hierarchical continuous aggregate with real-time mode
+-- Create a second-level real-time CAgg on top of test_cagg_realtime
+CREATE MATERIALIZED VIEW test_cagg_realtime_level2
+    WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS SELECT
+    time_bucket('7 days', bucket) AS bucket,
+    device_id,
+    avg(avg_value) AS avg_value
+FROM test_cagg_realtime
+GROUP BY 1, 2
+WITH NO DATA;
+-- Create a third-level real-time CAgg on top of test_cagg_realtime_level2
+CREATE MATERIALIZED VIEW test_cagg_realtime_level3
+    WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS SELECT
+    time_bucket('14 days', bucket) AS bucket,
+    device_id,
+    avg(avg_value) AS avg_value
+FROM test_cagg_realtime_level2
+GROUP BY 1, 2
+WITH NO DATA;
+-- Refresh all levels
+CALL refresh_continuous_aggregate('test_cagg_realtime_level2', NULL, NULL);
+CALL refresh_continuous_aggregate('test_cagg_realtime_level3', NULL, NULL);
+-- Show initial state
+SELECT * FROM test_cagg_realtime_level2 ORDER BY bucket, device_id;
+            bucket            | device_id |    avg_value     
+------------------------------+-----------+------------------
+ Sun Dec 29 16:00:00 2019 PST |         1 | 21.6666666666667
+ Sun Dec 29 16:00:00 2019 PST |         2 | 33.3333333333333
+
+SELECT * FROM test_cagg_realtime_level3 ORDER BY bucket, device_id;
+            bucket            | device_id |    avg_value     
+------------------------------+-----------+------------------
+ Sun Dec 22 16:00:00 2019 PST |         1 | 21.6666666666667
+ Sun Dec 22 16:00:00 2019 PST |         2 | 33.3333333333333
+
+-- Error - column doesn't exist
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_realtime_level2', 'nonexistent_column');
+ERROR:  column "nonexistent_column" does not exist in parent continuous aggregate "public"."test_cagg_realtime"
+\set ON_ERROR_STOP 1
+-- Add column to second-level real-time CAgg (column exists in parent CAgg)
+SELECT add_continuous_aggregate_column('test_cagg_realtime_level2', 'location');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Error - column already exists
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_realtime_level2', 'location');
+ERROR:  column "location" already exists in continuous aggregate
+\set ON_ERROR_STOP 1
+-- if_not_exists=true should not error
+SELECT add_continuous_aggregate_column('test_cagg_realtime_level2', 'location', true);
+NOTICE:  column "location" already exists in continuous aggregate, skipping
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify the column was added
+\d+ test_cagg_realtime_level2
+                            View "public.test_cagg_realtime_level2"
+  Column   |           Type           | Collation | Nullable | Default | Storage  | Description 
+-----------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain    | 
+ device_id | integer                  |           |          |         | plain    | 
+ avg_value | double precision         |           |          |         | plain    | 
+ location  | text                     |           |          |         | extended | 
+View definition:
+ SELECT _materialized_hypertable_6.bucket,
+    _materialized_hypertable_6.device_id,
+    _materialized_hypertable_6.avg_value,
+    _materialized_hypertable_6.location
+   FROM _timescaledb_internal._materialized_hypertable_6
+  WHERE _materialized_hypertable_6.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(6)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 7 days'::interval, test_cagg_realtime.bucket) AS bucket,
+    test_cagg_realtime.device_id,
+    avg(test_cagg_realtime.avg_value) AS avg_value,
+    test_cagg_realtime.location
+   FROM test_cagg_realtime
+  WHERE test_cagg_realtime.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(6)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 7 days'::interval, test_cagg_realtime.bucket)), test_cagg_realtime.device_id, test_cagg_realtime.location;
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_realtime_level2', NULL, NULL);
+NOTICE:  continuous aggregate "test_cagg_realtime_level2" is already up-to-date
+SELECT * FROM test_cagg_realtime_level2 ORDER BY bucket, device_id;
+            bucket            | device_id |    avg_value     | location 
+------------------------------+-----------+------------------+----------
+ Sun Dec 29 16:00:00 2019 PST |         1 | 21.6666666666667 | 
+ Sun Dec 29 16:00:00 2019 PST |         2 | 33.3333333333333 | 
+
+-- Add same column to third-level real-time CAgg (now exists in second-level)
+SELECT add_continuous_aggregate_column('test_cagg_realtime_level3', 'location');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify the column was added
+\d+ test_cagg_realtime_level3
+                            View "public.test_cagg_realtime_level3"
+  Column   |           Type           | Collation | Nullable | Default | Storage  | Description 
+-----------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain    | 
+ device_id | integer                  |           |          |         | plain    | 
+ avg_value | double precision         |           |          |         | plain    | 
+ location  | text                     |           |          |         | extended | 
+View definition:
+ SELECT _materialized_hypertable_7.bucket,
+    _materialized_hypertable_7.device_id,
+    _materialized_hypertable_7.avg_value,
+    _materialized_hypertable_7.location
+   FROM _timescaledb_internal._materialized_hypertable_7
+  WHERE _materialized_hypertable_7.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(7)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 14 days'::interval, test_cagg_realtime_level2.bucket) AS bucket,
+    test_cagg_realtime_level2.device_id,
+    avg(test_cagg_realtime_level2.avg_value) AS avg_value,
+    test_cagg_realtime_level2.location
+   FROM test_cagg_realtime_level2
+  WHERE test_cagg_realtime_level2.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(7)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 14 days'::interval, test_cagg_realtime_level2.bucket)), test_cagg_realtime_level2.device_id, test_cagg_realtime_level2.location;
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_realtime_level3', NULL, NULL);
+NOTICE:  continuous aggregate "test_cagg_realtime_level3" is already up-to-date
+SELECT * FROM test_cagg_realtime_level3 ORDER BY bucket, device_id;
+            bucket            | device_id |    avg_value     | location 
+------------------------------+-----------+------------------+----------
+ Sun Dec 22 16:00:00 2019 PST |         1 | 21.6666666666667 | 
+ Sun Dec 22 16:00:00 2019 PST |         2 | 33.3333333333333 | 
+
+-- Insert more data to test real-time aggregation
+INSERT INTO test_ht VALUES
+    ('2020-01-04 00:00:00', 1, 40.0, 'extra8', 'loc4'),
+    ('2020-01-04 01:00:00', 2, 50.0, 'extra9', 'loc4');
+-- Query real-time hierarchical CAggs (should include new data without refresh)
+SELECT * FROM test_cagg_realtime_level2 ORDER BY bucket, device_id;
+            bucket            | device_id |    avg_value     | location 
+------------------------------+-----------+------------------+----------
+ Sun Dec 29 16:00:00 2019 PST |         1 | 21.6666666666667 | 
+ Sun Dec 29 16:00:00 2019 PST |         2 | 33.3333333333333 | 
+
+SELECT * FROM test_cagg_realtime_level3 ORDER BY bucket, device_id;
+            bucket            | device_id |    avg_value     | location 
+------------------------------+-----------+------------------+----------
+ Sun Dec 22 16:00:00 2019 PST |         1 | 21.6666666666667 | 
+ Sun Dec 22 16:00:00 2019 PST |         2 | 33.3333333333333 | 
+
+-- Cleanup
+DROP MATERIALIZED VIEW test_cagg_realtime_level3;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_8_chunk
+DROP MATERIALIZED VIEW test_cagg_realtime_level2;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_7_chunk
 DROP MATERIALIZED VIEW test_cagg_mat_only;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
 DROP MATERIALIZED VIEW test_cagg_realtime;
