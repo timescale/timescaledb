@@ -497,7 +497,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 
 		/* Update raw subquery (queries raw_ht) - needs GROUP BY for aggregation */
 		Query *raw_subquery = raw_rte->subquery;
-		int raw_varno = find_rte_index_for_relid(raw_subquery, raw_ht->main_table_relid);
+		int raw_varno = find_rte_index_for_relid(raw_subquery, source_relid);
 		if (raw_varno > 0)
 		{
 			add_column_to_query(raw_subquery,
