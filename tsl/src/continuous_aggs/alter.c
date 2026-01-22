@@ -100,31 +100,6 @@ find_rte_index_for_relid(Query *query, Oid relid)
 }
 
 /*
- * Add a column to a query's targetList only (no GROUP BY)
- *
- * This function:
- * 1. Creates a Var node for the column
- * 2. Creates a TargetEntry and appends it to the targetList
- */
-static void
-add_column_to_targetlist_only(Query *query, int varno, AttrNumber attnum, Oid atttype,
-							  int32 atttypmod, Oid attcollation, const char *column_name)
-{
-	/* Create Var node for the column */
-	Var *var = makeVar(varno, attnum, atttype, atttypmod, attcollation, 0);
-
-	/* Create TargetEntry */
-	TargetEntry *tle = makeTargetEntry((Expr *) var,
-									   list_length(query->targetList) + 1,
-									   pstrdup(column_name),
-									   false); /* not resjunk */
-	tle->ressortgroupref = 0;
-
-	/* Add to targetList */
-	query->targetList = lappend(query->targetList, tle);
-}
-
-/*
  * Add a column to a query's targetList and groupClause
  *
  * This function:
@@ -139,31 +114,34 @@ add_column_to_query(Query *query, int varno, AttrNumber attnum, Oid atttype, int
 	/* Create Var node for the column */
 	Var *var = makeVar(varno, attnum, atttype, atttypmod, attcollation, 0);
 
-	/* Get next sortgroupref value */
-	Index next_ref = get_max_sortgroupref(query) + 1;
-
 	/* Create TargetEntry */
 	TargetEntry *tle = makeTargetEntry((Expr *) var,
 									   list_length(query->targetList) + 1,
 									   pstrdup(column_name),
 									   false); /* not resjunk */
-	tle->ressortgroupref = next_ref;
+	tle->ressortgroupref = 0;
 
 	/* Add to targetList */
 	query->targetList = lappend(query->targetList, tle);
 
-	/* Create SortGroupClause for GROUP BY */
-	TypeCacheEntry *tce = lookup_type_cache(atttype, TYPECACHE_EQ_OPR | TYPECACHE_LT_OPR);
+	if (query->groupClause != NIL)
+	{
+		/* Get next sortgroupref value */
+		tle->ressortgroupref = get_max_sortgroupref(query) + 1;
 
-	SortGroupClause *sgc = makeNode(SortGroupClause);
-	sgc->tleSortGroupRef = next_ref;
-	sgc->eqop = tce->eq_opr;
-	sgc->sortop = tce->lt_opr;
-	sgc->nulls_first = false;
-	sgc->hashable = op_hashjoinable(tce->eq_opr, atttype);
+		/* Create SortGroupClause for GROUP BY */
+		TypeCacheEntry *tce = lookup_type_cache(atttype, TYPECACHE_EQ_OPR | TYPECACHE_LT_OPR);
 
-	/* Add to groupClause */
-	query->groupClause = lappend(query->groupClause, sgc);
+		SortGroupClause *sgc = makeNode(SortGroupClause);
+		sgc->tleSortGroupRef = tle->ressortgroupref;
+		sgc->eqop = tce->eq_opr;
+		sgc->sortop = tce->lt_opr;
+		sgc->nulls_first = false;
+		sgc->hashable = op_hashjoinable(tce->eq_opr, atttype);
+
+		/* Add to groupClause */
+		query->groupClause = lappend(query->groupClause, sgc);
+	}
 }
 
 /*
@@ -240,7 +218,12 @@ update_view_add_column(Oid view_oid, const char *view_schema, const char *view_n
 	add_column_to_query(query, varno, attnum, atttype, atttypmod, attcollation, column_name);
 
 	/* Step 2: Add the column to the view relation */
-	add_column_to_view_relation(view_oid, view_schema, view_name, column_name, atttype, atttypmod,
+	add_column_to_view_relation(view_oid,
+								view_schema,
+								view_name,
+								column_name,
+								atttype,
+								atttypmod,
 								attcollation);
 
 	/* Step 3: Store the updated query */
@@ -312,31 +295,72 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	{
 		ts_cache_release(&hcache);
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("could not find raw hypertable for continuous aggregate")));
 	}
 
-	/* Check if column exists in raw hypertable */
-	AttrNumber attnum = get_attnum(raw_ht->main_table_relid, column_name);
-	if (attnum == InvalidAttrNumber)
+	/*
+	 * Determine the source relation for the partial/direct views:
+	 * - For regular CAggs: the raw hypertable
+	 * - For hierarchical CAggs: the parent CAgg's user view
+	 */
+	Oid source_relid = raw_ht->main_table_relid;
+	AttrNumber attnum = InvalidAttrNumber;
+	Oid atttype;
+	int32 atttypmod;
+	Oid attcollation;
+	ContinuousAgg *parent_cagg;
+
+	if (ContinuousAggIsHierarchical(cagg))
 	{
-		ts_cache_release(&hcache);
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_COLUMN),
-				 errmsg("column \"%s\" does not exist in hypertable \"%s\".\"%s\"",
-						column_name,
-						NameStr(raw_ht->fd.schema_name),
-						NameStr(raw_ht->fd.table_name))));
+		/* Get the parent continuous aggregate */
+		parent_cagg =
+			ts_continuous_agg_find_by_mat_hypertable_id(cagg->data.parent_mat_hypertable_id, false);
+
+		if (parent_cagg == NULL)
+		{
+			ts_cache_release(&hcache);
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("could not find parent continuous aggregate")));
+		}
+
+		/* Get the parent CAgg's user view OID */
+		source_relid = ts_get_relation_relid(NameStr(parent_cagg->data.user_view_schema),
+											 NameStr(parent_cagg->data.user_view_name),
+											 false);
 	}
 
-	/* Get column type information by opening the relation and getting the attribute */
-	Relation raw_rel = table_open(raw_ht->main_table_relid, AccessShareLock);
-	TupleDesc raw_tupdesc = RelationGetDescr(raw_rel);
-	Form_pg_attribute attr = TupleDescAttr(raw_tupdesc, attnum - 1); /* attnum is 1-based */
-	Oid atttype = attr->atttypid;
-	int32 atttypmod = attr->atttypmod;
-	Oid attcollation = attr->attcollation;
-	table_close(raw_rel, AccessShareLock);
+	/* Check if column exists in source relation */
+	attnum = get_attnum(source_relid, column_name);
+	if (!AttributeNumberIsValid(attnum))
+	{
+		ts_cache_release(&hcache);
+		if (ContinuousAggIsHierarchical(cagg))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("column \"%s\" does not exist in parent continuous aggregate "
+							"\"%s\".\"%s\"",
+							column_name,
+							NameStr(parent_cagg->data.user_view_schema),
+							NameStr(parent_cagg->data.user_view_name))));
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("column \"%s\" does not exist in hypertable \"%s\".\"%s\"",
+							column_name,
+							NameStr(raw_ht->fd.schema_name),
+							NameStr(raw_ht->fd.table_name))));
+	}
+
+	/* Get column type information from the source relation */
+	Relation source_rel = table_open(source_relid, AccessShareLock);
+	TupleDesc source_tupdesc = RelationGetDescr(source_rel);
+	Form_pg_attribute attr = TupleDescAttr(source_tupdesc, AttrNumberGetAttrOffset(attnum));
+	atttype = attr->atttypid;
+	atttypmod = attr->atttypmod;
+	attcollation = attr->attcollation;
+	table_close(source_rel, AccessShareLock);
 
 	/* Get the materialization hypertable */
 	Hypertable *mat_ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
@@ -373,7 +397,8 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	}
 
 	/* Check if the materialization hypertable has compressed chunks */
-	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(mat_ht) || TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
+	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(mat_ht) ||
+		TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
 	{
 		ts_cache_release(&hcache);
 		ereport(ERROR,
@@ -389,12 +414,12 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 
 	/*
 	 * Step 2: Update partial view
-	 * The partial view queries the raw hypertable
+	 * The partial view queries the source relation (raw hypertable or parent CAgg's user view)
 	 */
 	update_view_add_column(partial_view_oid,
 						   NameStr(cagg->data.partial_view_schema),
 						   NameStr(cagg->data.partial_view_name),
-						   raw_ht->main_table_relid,
+						   source_relid,
 						   attnum,
 						   atttype,
 						   atttypmod,
@@ -403,7 +428,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 
 	/*
 	 * Step 3: Update direct view
-	 * The direct view also queries the raw hypertable
+	 * The direct view also queries the source relation
 	 */
 	Oid direct_view_oid = ts_get_relation_relid(NameStr(cagg->data.direct_view_schema),
 												NameStr(cagg->data.direct_view_name),
@@ -411,7 +436,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	update_view_add_column(direct_view_oid,
 						   NameStr(cagg->data.direct_view_schema),
 						   NameStr(cagg->data.direct_view_name),
-						   raw_ht->main_table_relid,
+						   source_relid,
 						   attnum,
 						   atttype,
 						   atttypmod,
@@ -458,13 +483,13 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		int mat_varno = find_rte_index_for_relid(mat_subquery, mat_ht->main_table_relid);
 		if (mat_varno > 0)
 		{
-			add_column_to_targetlist_only(mat_subquery,
-										  mat_varno,
-										  mat_attnum,
-										  atttype,
-										  atttypmod,
-										  attcollation,
-										  column_name);
+			add_column_to_query(mat_subquery,
+								mat_varno,
+								mat_attnum,
+								atttype,
+								atttypmod,
+								attcollation,
+								column_name);
 			/* Also update the RTE's column names to match the subquery's targetList */
 			mat_rte->eref->colnames =
 				lappend(mat_rte->eref->colnames, makeString(pstrdup(column_name)));
@@ -517,17 +542,17 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		int varno = find_rte_index_for_relid(user_query, mat_ht->main_table_relid);
 		if (varno > 0)
 		{
-			add_column_to_targetlist_only(user_query,
-										  varno,
-										  mat_attnum,
-										  atttype,
-										  atttypmod,
-										  attcollation,
-										  column_name);
+			add_column_to_query(user_query,
+								varno,
+								mat_attnum,
+								atttype,
+								atttypmod,
+								attcollation,
+								column_name);
 		}
 	}
 
-	/* First add the column to the user view relation */
+	/* Add the column to the user view relation */
 	add_column_to_view_relation(user_view_oid,
 								NameStr(cagg->data.user_view_schema),
 								NameStr(cagg->data.user_view_name),

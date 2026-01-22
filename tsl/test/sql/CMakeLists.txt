@@ -7,7 +7,6 @@ set(TEST_FILES
     bgw_job_ddl.sql
     bgw_policy.sql
     bgw_security.sql
-    cagg_alter.sql
     cagg_direct_compress.sql
     cagg_errors.sql
     cagg_invalidation.sql
@@ -77,6 +76,7 @@ set(TEST_FILES
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES
+    cagg_alter.sql.in
     cagg_query.sql.in
     cagg_query_using_merge.sql.in
     cagg_union_view.sql.in
