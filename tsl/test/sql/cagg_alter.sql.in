@@ -178,9 +178,86 @@ SELECT add_continuous_aggregate_column('test_cagg_level3', 'extra');
 CALL refresh_continuous_aggregate('test_cagg_level3', NULL, NULL);
 SELECT * FROM test_cagg_level3 ORDER BY bucket, device_id;
 
--- Cleanup
+-- Cleanup materialized-only hierarchical CAggs
 DROP MATERIALIZED VIEW test_cagg_level3;
 DROP MATERIALIZED VIEW test_cagg_level2;
+
+-- Hierarchical continuous aggregate with real-time mode
+-- Create a second-level real-time CAgg on top of test_cagg_realtime
+CREATE MATERIALIZED VIEW test_cagg_realtime_level2
+    WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS SELECT
+    time_bucket('7 days', bucket) AS bucket,
+    device_id,
+    avg(avg_value) AS avg_value
+FROM test_cagg_realtime
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Create a third-level real-time CAgg on top of test_cagg_realtime_level2
+CREATE MATERIALIZED VIEW test_cagg_realtime_level3
+    WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS SELECT
+    time_bucket('14 days', bucket) AS bucket,
+    device_id,
+    avg(avg_value) AS avg_value
+FROM test_cagg_realtime_level2
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Refresh all levels
+CALL refresh_continuous_aggregate('test_cagg_realtime_level2', NULL, NULL);
+CALL refresh_continuous_aggregate('test_cagg_realtime_level3', NULL, NULL);
+
+-- Show initial state
+SELECT * FROM test_cagg_realtime_level2 ORDER BY bucket, device_id;
+SELECT * FROM test_cagg_realtime_level3 ORDER BY bucket, device_id;
+
+-- Error - column doesn't exist
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_realtime_level2', 'nonexistent_column');
+\set ON_ERROR_STOP 1
+
+-- Add column to second-level real-time CAgg (column exists in parent CAgg)
+SELECT add_continuous_aggregate_column('test_cagg_realtime_level2', 'location');
+
+-- Error - column already exists
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_realtime_level2', 'location');
+\set ON_ERROR_STOP 1
+
+-- if_not_exists=true should not error
+SELECT add_continuous_aggregate_column('test_cagg_realtime_level2', 'location', true);
+
+-- Verify the column was added
+\d+ test_cagg_realtime_level2
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_realtime_level2', NULL, NULL);
+SELECT * FROM test_cagg_realtime_level2 ORDER BY bucket, device_id;
+
+-- Add same column to third-level real-time CAgg (now exists in second-level)
+SELECT add_continuous_aggregate_column('test_cagg_realtime_level3', 'location');
+
+-- Verify the column was added
+\d+ test_cagg_realtime_level3
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_realtime_level3', NULL, NULL);
+SELECT * FROM test_cagg_realtime_level3 ORDER BY bucket, device_id;
+
+-- Insert more data to test real-time aggregation
+INSERT INTO test_ht VALUES
+    ('2020-01-04 00:00:00', 1, 40.0, 'extra8', 'loc4'),
+    ('2020-01-04 01:00:00', 2, 50.0, 'extra9', 'loc4');
+
+-- Query real-time hierarchical CAggs (should include new data without refresh)
+SELECT * FROM test_cagg_realtime_level2 ORDER BY bucket, device_id;
+SELECT * FROM test_cagg_realtime_level3 ORDER BY bucket, device_id;
+
+-- Cleanup
+DROP MATERIALIZED VIEW test_cagg_realtime_level3;
+DROP MATERIALIZED VIEW test_cagg_realtime_level2;
 DROP MATERIALIZED VIEW test_cagg_mat_only;
 DROP MATERIALIZED VIEW test_cagg_realtime;
 DROP TABLE test_ht;
