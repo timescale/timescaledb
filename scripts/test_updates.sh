@@ -74,7 +74,7 @@ for version in ${VERSIONS}; do
   if [ ! -f "${PG_EXTENSION_DIR}/timescaledb--${version}.sql" ]; then
     echo "Building ${version}"
     git checkout ${version}
-    make -C "${BUILD_DIR}" -j4 > /dev/null
+    make -C "${BUILD_DIR}" -j $(getconf _NPROCESSORS_ONLN) > /dev/null
     sudo make -C "${BUILD_DIR}" install > /dev/null
     git checkout ${GIT_REF}
   fi
@@ -82,7 +82,7 @@ done
 
 # We want to use the latest loader for all the tests so we build it last
 git checkout ${GIT_REF}
-make -C "${BUILD_DIR}" -j4
+make -C "${BUILD_DIR}" -j $(getconf _NPROCESSORS_ONLN)
 sudo make -C "${BUILD_DIR}" install
 
 set +e
