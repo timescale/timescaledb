@@ -1,0 +1,314 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Tests for add_continuous_aggregate_column function
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+-- Create test hypertable
+CREATE TABLE test_ht (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INTEGER NOT NULL,
+    value DOUBLE PRECISION,
+    extra TEXT,
+    location TEXT
+);
+SELECT create_hypertable('test_ht', 'time');
+  create_hypertable   
+----------------------
+ (1,public,test_ht,t)
+
+-- Insert some test data
+INSERT INTO test_ht VALUES
+    ('2020-01-01 00:00:00', 1, 10.0, 'extra1', 'loc1'),
+    ('2020-01-01 01:00:00', 1, 20.0, 'extra2', 'loc1'),
+    ('2020-01-01 02:00:00', 2, 30.0, 'extra3', 'loc2'),
+    ('2020-01-02 00:00:00', 1, 15.0, 'extra4', 'loc1'),
+    ('2020-01-02 01:00:00', 2, 25.0, 'extra5', 'loc2');
+-- Create a simple continuous aggregate (materialized-only mode)
+CREATE MATERIALIZED VIEW test_cagg_mat_only
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS SELECT
+    time_bucket('1 day', time) AS bucket,
+    device_id,
+    avg(value) AS avg_value
+FROM test_ht
+GROUP BY 1, 2
+WITH NO DATA;
+-- Create a real-time continuous aggregate
+CREATE MATERIALIZED VIEW test_cagg_realtime
+    WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS SELECT
+    time_bucket('1 day', time) AS bucket,
+    device_id,
+    avg(value) AS avg_value
+FROM test_ht
+GROUP BY 1, 2
+WITH NO DATA;
+-- Show initial state
+SELECT user_view_name, partial_view_name, direct_view_name
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name IN ('test_cagg_mat_only', 'test_cagg_realtime')
+ORDER BY user_view_name;
+   user_view_name   | partial_view_name | direct_view_name 
+--------------------+-------------------+------------------
+ test_cagg_mat_only | _partial_view_2   | _direct_view_2
+ test_cagg_realtime | _partial_view_3   | _direct_view_3
+
+-- Add column to materialized-only CAgg
+SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'extra');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify the column was added
+\d+ test_cagg_mat_only
+                                View "public.test_cagg_mat_only"
+  Column   |           Type           | Collation | Nullable | Default | Storage  | Description 
+-----------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain    | 
+ device_id | integer                  |           |          |         | plain    | 
+ avg_value | double precision         |           |          |         | plain    | 
+ extra     | text                     |           |          |         | extended | 
+View definition:
+ SELECT _materialized_hypertable_2.bucket,
+    _materialized_hypertable_2.device_id,
+    _materialized_hypertable_2.avg_value,
+    _materialized_hypertable_2.extra
+   FROM _timescaledb_internal._materialized_hypertable_2;
+
+-- Add column to real-time CAgg
+SELECT add_continuous_aggregate_column('test_cagg_realtime', 'location');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify the column was added
+\d+ test_cagg_realtime
+                                View "public.test_cagg_realtime"
+  Column   |           Type           | Collation | Nullable | Default | Storage  | Description 
+-----------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain    | 
+ device_id | integer                  |           |          |         | plain    | 
+ avg_value | double precision         |           |          |         | plain    | 
+ location  | text                     |           |          |         | extended | 
+View definition:
+ SELECT _materialized_hypertable_3.bucket,
+    _materialized_hypertable_3.device_id,
+    _materialized_hypertable_3.avg_value,
+    _materialized_hypertable_3.location
+   FROM _timescaledb_internal._materialized_hypertable_3
+  WHERE _materialized_hypertable_3.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, test_ht."time") AS bucket,
+    test_ht.device_id,
+    avg(test_ht.value) AS avg_value,
+    test_ht.location
+   FROM test_ht
+  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 day'::interval, test_ht."time")), test_ht.device_id, test_ht.location;
+
+-- Error - column doesn't exist
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'nonexistent_column');
+ERROR:  column "nonexistent_column" does not exist in hypertable "public"."test_ht"
+\set ON_ERROR_STOP 1
+-- Error - column already exists in CA
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'device_id');
+ERROR:  column "device_id" already exists in continuous aggregate
+\set ON_ERROR_STOP 1
+-- Error - column already added
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'extra');
+ERROR:  column "extra" already exists in continuous aggregate
+\set ON_ERROR_STOP 1
+-- if_not_exists=true should not error
+SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'extra', true);
+NOTICE:  column "extra" already exists in continuous aggregate, skipping
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'device_id', true);
+NOTICE:  column "device_id" already exists in continuous aggregate, skipping
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Refresh and verify data
+CALL refresh_continuous_aggregate('test_cagg_mat_only', NULL, NULL);
+CALL refresh_continuous_aggregate('test_cagg_realtime', NULL, NULL);
+-- Check data in materialized-only CA
+SELECT * FROM test_cagg_mat_only ORDER BY bucket, device_id;
+            bucket            | device_id | avg_value | extra  
+------------------------------+-----------+-----------+--------
+ Tue Dec 31 16:00:00 2019 PST |         1 |        20 | extra2
+ Tue Dec 31 16:00:00 2019 PST |         1 |        10 | extra1
+ Tue Dec 31 16:00:00 2019 PST |         2 |        30 | extra3
+ Wed Jan 01 16:00:00 2020 PST |         1 |        15 | extra4
+ Wed Jan 01 16:00:00 2020 PST |         2 |        25 | extra5
+
+-- Check data in real-time CA
+SELECT * FROM test_cagg_realtime ORDER BY bucket, device_id;
+            bucket            | device_id | avg_value | location 
+------------------------------+-----------+-----------+----------
+ Tue Dec 31 16:00:00 2019 PST |         1 |        15 | loc1
+ Tue Dec 31 16:00:00 2019 PST |         2 |        30 | loc2
+ Wed Jan 01 16:00:00 2020 PST |         1 |        15 | loc1
+ Wed Jan 01 16:00:00 2020 PST |         2 |        25 | loc2
+
+-- Add another column and refresh again
+SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'location');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Insert new data
+INSERT INTO test_ht VALUES
+    ('2020-01-03 00:00:00', 1, 35.0, 'extra6', 'loc3'),
+    ('2020-01-03 01:00:00', 2, 45.0, 'extra7', 'loc3');
+CALL refresh_continuous_aggregate('test_cagg_mat_only', NULL, NULL);
+-- New data should have the location column populated
+SELECT * FROM test_cagg_mat_only ORDER BY bucket, device_id;
+            bucket            | device_id | avg_value | extra  | location 
+------------------------------+-----------+-----------+--------+----------
+ Tue Dec 31 16:00:00 2019 PST |         1 |        20 | extra2 | 
+ Tue Dec 31 16:00:00 2019 PST |         1 |        10 | extra1 | 
+ Tue Dec 31 16:00:00 2019 PST |         2 |        30 | extra3 | 
+ Wed Jan 01 16:00:00 2020 PST |         1 |        15 | extra4 | 
+ Wed Jan 01 16:00:00 2020 PST |         2 |        25 | extra5 | 
+ Thu Jan 02 16:00:00 2020 PST |         1 |        35 | extra6 | loc3
+ Thu Jan 02 16:00:00 2020 PST |         2 |        45 | extra7 | loc3
+
+-- Error - not a continuous aggregate
+CREATE TABLE regular_table (id INT, data TEXT);
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('regular_table', 'data');
+ERROR:  relation "regular_table" is not a continuous aggregate
+\set ON_ERROR_STOP 1
+DROP TABLE regular_table;
+-- Hierarchical continuous aggregate (CAgg on CAgg)
+-- Create a second-level CAgg on top of test_cagg_mat_only
+CREATE MATERIALIZED VIEW test_cagg_level2
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS SELECT
+    time_bucket('7 days', bucket) AS bucket,
+    device_id,
+    avg(avg_value) AS avg_value
+FROM test_cagg_mat_only
+GROUP BY 1, 2
+WITH NO DATA;
+-- Create a third-level CAgg on top of test_cagg_level2
+CREATE MATERIALIZED VIEW test_cagg_level3
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS SELECT
+    time_bucket('14 days', bucket) AS bucket,
+    device_id,
+    avg(avg_value) AS avg_value
+FROM test_cagg_level2
+GROUP BY 1, 2
+WITH NO DATA;
+-- Refresh all levels
+CALL refresh_continuous_aggregate('test_cagg_level2', NULL, NULL);
+CALL refresh_continuous_aggregate('test_cagg_level3', NULL, NULL);
+-- Show initial state
+SELECT * FROM test_cagg_level2 ORDER BY bucket, device_id;
+            bucket            | device_id |    avg_value     
+------------------------------+-----------+------------------
+ Sun Dec 29 16:00:00 2019 PST |         1 |               20
+ Sun Dec 29 16:00:00 2019 PST |         2 | 33.3333333333333
+
+SELECT * FROM test_cagg_level3 ORDER BY bucket, device_id;
+            bucket            | device_id |    avg_value     
+------------------------------+-----------+------------------
+ Sun Dec 22 16:00:00 2019 PST |         1 |               20
+ Sun Dec 22 16:00:00 2019 PST |         2 | 33.3333333333333
+
+-- Error - column doesn't exist
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'nonexistent_column');
+ERROR:  column "nonexistent_column" does not exist in parent continuous aggregate "public"."test_cagg_mat_only"
+\set ON_ERROR_STOP 1
+-- Add column to second-level CAgg (column exists in parent CAgg)
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'extra');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Error - column already exists
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'extra');
+ERROR:  column "extra" already exists in continuous aggregate
+\set ON_ERROR_STOP 1
+-- if_not_exists=true should not error
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'extra', true);
+NOTICE:  column "extra" already exists in continuous aggregate, skipping
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify the column was added
+\d+ test_cagg_level2
+                                 View "public.test_cagg_level2"
+  Column   |           Type           | Collation | Nullable | Default | Storage  | Description 
+-----------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain    | 
+ device_id | integer                  |           |          |         | plain    | 
+ avg_value | double precision         |           |          |         | plain    | 
+ extra     | text                     |           |          |         | extended | 
+View definition:
+ SELECT _materialized_hypertable_4.bucket,
+    _materialized_hypertable_4.device_id,
+    _materialized_hypertable_4.avg_value,
+    _materialized_hypertable_4.extra
+   FROM _timescaledb_internal._materialized_hypertable_4;
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_level2', NULL, NULL);
+NOTICE:  continuous aggregate "test_cagg_level2" is already up-to-date
+SELECT * FROM test_cagg_level2 ORDER BY bucket, device_id;
+            bucket            | device_id |    avg_value     | extra 
+------------------------------+-----------+------------------+-------
+ Sun Dec 29 16:00:00 2019 PST |         1 |               20 | 
+ Sun Dec 29 16:00:00 2019 PST |         2 | 33.3333333333333 | 
+
+-- Add same column to third-level CAgg (now exists in second-level)
+SELECT add_continuous_aggregate_column('test_cagg_level3', 'extra');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify the column was added
+\d+ test_cagg_level3
+                                 View "public.test_cagg_level3"
+  Column   |           Type           | Collation | Nullable | Default | Storage  | Description 
+-----------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain    | 
+ device_id | integer                  |           |          |         | plain    | 
+ avg_value | double precision         |           |          |         | plain    | 
+ extra     | text                     |           |          |         | extended | 
+View definition:
+ SELECT _materialized_hypertable_5.bucket,
+    _materialized_hypertable_5.device_id,
+    _materialized_hypertable_5.avg_value,
+    _materialized_hypertable_5.extra
+   FROM _timescaledb_internal._materialized_hypertable_5;
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_level3', NULL, NULL);
+NOTICE:  continuous aggregate "test_cagg_level3" is already up-to-date
+SELECT * FROM test_cagg_level3 ORDER BY bucket, device_id;
+            bucket            | device_id |    avg_value     | extra 
+------------------------------+-----------+------------------+-------
+ Sun Dec 22 16:00:00 2019 PST |         1 |               20 | 
+ Sun Dec 22 16:00:00 2019 PST |         2 | 33.3333333333333 | 
+
+-- Cleanup
+DROP MATERIALIZED VIEW test_cagg_level3;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_5_6_chunk
+DROP MATERIALIZED VIEW test_cagg_level2;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_5_chunk
+DROP MATERIALIZED VIEW test_cagg_mat_only;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
+DROP MATERIALIZED VIEW test_cagg_realtime;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_4_chunk
+DROP TABLE test_ht;
