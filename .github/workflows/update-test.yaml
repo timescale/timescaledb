@@ -56,7 +56,7 @@ jobs:
         find update_test -name postgres.log -exec grep ERROR {} \;
 
     - name: Check for coredumps
-      if: always()
+      if: failure()
       id: collectlogs
       run: |
         # wait for in progress coredumps
