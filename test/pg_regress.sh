@@ -142,6 +142,8 @@ else
       if ! matches "${SKIPS}" "${test_name}"; then
         if [[ $test_name == $test_pattern ]]; then
           current_tests="${current_tests} ${test_name}"
+        elif [[ $test_name =~ ^${test_pattern}-[1-9][0-9]$ ]]; then
+          current_tests="${current_tests} ${test_name}"
         fi
       fi
     done
