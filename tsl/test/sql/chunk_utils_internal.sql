@@ -19,6 +19,8 @@ CREATE OR REPLACE VIEW chunk_view AS
     srcch.table_name AS chunk_name,
     _timescaledb_functions.to_timestamp(dimsl.range_start)
      AS range_start,
+    dimsl.range_start AS range_start_int,
+    dimsl.range_end AS range_end_int,
     _timescaledb_functions.to_timestamp(dimsl.range_end)
      AS range_end
   FROM _timescaledb_catalog.chunk srcch
@@ -609,6 +611,8 @@ INSERT INTO hyper_constr VALUES( 10, 200, 22, 1, 111, 44);
 \c postgres_fdw_db :ROLE_4
 CREATE TABLE fdw_hyper_constr(id integer, time bigint, temp float, mid integer, dev integer, devref integer);
 INSERT INTO fdw_hyper_constr VALUES( 10, 100, 33, 2, 222, 55);
+INSERT INTO fdw_hyper_constr VALUES( 10, 300, 44, 2, 333, 30);
+INSERT INTO fdw_hyper_constr VALUES( 10, 400, 55, 2, 444, 40);
 
 \c :TEST_DBNAME :ROLE_4
 -- this is a stand-in for the OSM table
@@ -618,8 +622,10 @@ CREATE FOREIGN TABLE child_hyper_constr
 
 --check constraints are automatically added for the foreign table
 SELECT _timescaledb_functions.attach_osm_table_chunk('hyper_constr', 'child_hyper_constr');
--- was attached with data, so must update the range
-SELECT _timescaledb_functions.hypertable_osm_range_update('hyper_constr', 100, 110);
+SELECT chunk_name, range_start_int, range_end_int
+FROM chunk_view
+WHERE hypertable_name = 'hyper_constr'
+ORDER BY chunk_name;
 
 SELECT table_name, status, osm_chunk
 FROM _timescaledb_catalog.chunk
@@ -628,8 +634,11 @@ WHERE hypertable_id IN (SELECT id from _timescaledb_catalog.hypertable
 ORDER BY table_name;
 
 SELECT * FROM hyper_constr order by time;
+-- TEST verify data from fdw is selected correctly
+SELECT * FROM hyper_constr WHERE time > 200 order by time;
+SELECT * FROM hyper_constr WHERE time > 200 and time < 400 order by time;
 
---verify the check constraint exists on the OSM chunk
+--TEST verify the check constraint exists on the OSM chunk
 SELECT * FROM test.show_constraints('child_hyper_constr');
 
 -- TEST foreign key trigger: deleting data from foreign table measure
@@ -677,7 +686,7 @@ SELECT show_chunks('hyper_constr');
 ROLLBACK;
 CALL run_job(:deljob_id);
 CALL run_job(:deljob_id);
-SELECT chunk_name, range_start, range_end
+SELECT chunk_name
 FROM chunk_view
 WHERE hypertable_name = 'hyper_constr'
 ORDER BY chunk_name;
