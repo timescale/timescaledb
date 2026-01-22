@@ -44,6 +44,7 @@ This release contains performance improvements and bug fixes since the 2.24.0 re
 * [#8859](https://github.com/timescale/timescaledb/pull/8859) Remove support for partial continuous aggregate format
 * [#9022](https://github.com/timescale/timescaledb/pull/9022) Remove WAL based invalidation
 * [#9016](https://github.com/timescale/timescaledb/pull/9016) Remove `_timescaledb_debug` schema
+* [#9030](https://github.com/timescale/timescaledb/pull/9030) Add new chunks to hypertable publication
 
 **Bugfixes**
 * [#8706](https://github.com/timescale/timescaledb/pull/8706) Fix planning performance regression on Postgres 16 and later on some join queries.
@@ -63,6 +64,7 @@ This release contains performance improvements and bug fixes since the 2.24.0 re
 * [#9121](https://github.com/timescale/timescaledb/pull/9121) Fix a potential "unexpected column type 'bool'" error for compressed bool columns with missing value
 * [#9144](https://github.com/timescale/timescaledb/pull/9144) Fix handling implicit constraints in `ALTER TABLE`
 * [#9155](https://github.com/timescale/timescaledb/pull/9155) Fix column generation during compressed chunk insert
+* [#9129](https://github.com/timescale/timescaledb/pull/9129) Fix `time_bucket` with timezone during DST
 
 **GUCs**
 * `enable_columnarindexscan`: Enable returning results directly from compression metadata without decompression. Default: `true` 
@@ -72,6 +74,7 @@ This release contains performance improvements and bug fixes since the 2.24.0 re
 **Thanks**
 * @t-aistleitner for reporting the planning performance regression on PG16 and later on some join queries.
 * @vahnrr for reporting a crash when adding columns and constraints to a hypertable at the same time
+* @cracksalad and @eyadmba for reporting a bug with timezone handling in time_bucket
 
 ## 2.24.0 (2025-12-03)
 
