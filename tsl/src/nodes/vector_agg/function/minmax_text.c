@@ -20,17 +20,23 @@ case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 typedef MinMaxBytesState FUNCTION_NAME(state);
 
 static pg_attribute_always_inline void
-FUNCTION_NAME(one)(void *restrict agg_state, const BytesView value)
+FUNCTION_NAME(one)(void *restrict agg_state, const BytesView new_value)
 {
 	FUNCTION_NAME(state) *restrict state = (FUNCTION_NAME(state) *) agg_state;
+
+	/*
+	 * If current value is null, we replace it with the new value, otherwise we
+	 * have to check the predicate.
+	 */
 	bool replace = state->capacity == 0;
 	if (likely(!replace))
 	{
 		const uint32 current_len = VARSIZE(state->data) - VARHDRSZ;
-		const int result = memcmp(VARDATA(state->data), value.data, Min(current_len, value.len));
+		const int result =
+			memcmp(VARDATA(state->data), new_value.data, Min(current_len, new_value.len));
 		if (result == 0)
 		{
-			replace = PREDICATE(current_len, value.len);
+			replace = PREDICATE(current_len, new_value.len);
 		}
 		else
 		{
@@ -40,16 +46,21 @@ FUNCTION_NAME(one)(void *restrict agg_state, const BytesView value)
 
 	if (replace)
 	{
-		const uint32 new_vardata_bytes = value.len + VARHDRSZ;
+		const uint32 new_vardata_bytes = new_value.len + VARHDRSZ;
 		if (new_vardata_bytes > state->capacity)
 		{
+			/*
+			 * Reallocate to closest power of two to amortize the costs. Varlena
+			 * is limited to 2^30 - 1 bytes.
+			 */
+			Assert(new_vardata_bytes < INT32_MAX / 2);
 			const int lowest_power = pg_leftmost_one_pos32(new_vardata_bytes * 2 - 1);
 			const int new_capacity = 1ULL << lowest_power;
 			state->data = palloc(new_capacity);
 			state->capacity = new_capacity;
 		}
 		SET_VARSIZE(state->data, new_vardata_bytes);
-		memcpy(VARDATA(state->data), value.data, value.len);
+		memcpy(VARDATA(state->data), new_value.data, new_value.len);
 
 		Assert(state->capacity > 0);
 		Assert(VARSIZE(state->data) <= state->capacity);
@@ -93,17 +104,6 @@ FUNCTION_NAME(many_vector)(void *restrict agg_states, const uint32 *state_indice
 	const uint32 *body_offsets =
 		arrow->dictionary ? arrow->dictionary->buffers[1] : arrow->buffers[1];
 
-	//	fprintf(stderr, "range [%d, %d), dictionary %p\n", start_row, end_row, arrow->dictionary);
-
-	//	for (int row = start_row; row < end_row; row++)
-	//	{
-	//		if (body_offsets[row + 1] < body_offsets[row])
-	//		{
-	//			fprintf(stderr, "[%d] oops!!! %d -> %d\n",
-	//				row, body_offsets[row], body_offsets[row + 1]);
-	//		}
-	//	}
-
 	MemoryContext old = MemoryContextSwitchTo(agg_extra_mctx);
 	for (int row = start_row; row < end_row; row++)
 	{
@@ -112,13 +112,6 @@ FUNCTION_NAME(many_vector)(void *restrict agg_states, const uint32 *state_indice
 		const int body_offset_index = body_offset_indexes == NULL ? row : body_offset_indexes[row];
 		const int body_offset = body_offsets[body_offset_index];
 		const int body_bytes = body_offsets[body_offset_index + 1] - body_offset;
-
-		//		fprintf(stderr, "[%d/%ld] -> [%d]: filter %d, null %d, offset index %d, offset %d,
-		// bytes %d\n", 			row, arrow->length, state_indices[row],
-		// arrow_row_is_valid(filter, row), 			arrow_row_is_valid(arrow->buffers[0], row),
-		// body_offset_index, body_offset,
-		// body_bytes);
-
 		const BytesView value = { .data = &bodies[body_offset], .len = body_bytes };
 
 		if (arrow_row_is_valid(filter, row))
