@@ -49,7 +49,7 @@ select count(compress_chunk(x)) from show_chunks('aggfns') x;
 
 alter table aggfns add column ss int default 11;
 alter table aggfns add column cfloat8 float8 default '13';
-alter table aggfns add column x text default '11';
+alter table aggfns add column x text collate "C" default '11';
 insert into aggfns
 select *, ss::text as x from (
     select *
