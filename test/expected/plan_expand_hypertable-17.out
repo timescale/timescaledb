@@ -1308,7 +1308,7 @@ test overflow behaviour of time_bucket exclusion
          ->  Seq Scan on _hyper_1_101_chunk
                Filter: (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint)
          ->  Seq Scan on _hyper_1_102_chunk
-               Filter: (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint)
+               Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
 
 \qecho test timestamp upper boundary
 test timestamp upper boundary
