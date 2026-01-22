@@ -53,38 +53,38 @@ FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name IN ('test_cagg_mat_only', 'test_cagg_realtime')
 ORDER BY user_view_name;
 
--- Test 1: Add column to materialized-only CA
+-- Add column to materialized-only CAgg
 SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'extra');
 
 -- Verify the column was added
 \d+ test_cagg_mat_only
 
--- Test 2: Add column to real-time CA
+-- Add column to real-time CAgg
 SELECT add_continuous_aggregate_column('test_cagg_realtime', 'location');
 
 -- Verify the column was added
 \d+ test_cagg_realtime
 
--- Test 3: Error - column doesn't exist
+-- Error - column doesn't exist
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'nonexistent_column');
 \set ON_ERROR_STOP 1
 
--- Test 4: Error - column already exists in CA
+-- Error - column already exists in CA
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'device_id');
 \set ON_ERROR_STOP 1
 
--- Test 5: Error - column already added
+-- Error - column already added
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'extra');
 \set ON_ERROR_STOP 1
 
--- Test 6: if_not_exists=true should not error
+-- if_not_exists=true should not error
 SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'extra', true);
 SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'device_id', true);
 
--- Test 7: Refresh and verify data
+-- Refresh and verify data
 CALL refresh_continuous_aggregate('test_cagg_mat_only', NULL, NULL);
 CALL refresh_continuous_aggregate('test_cagg_realtime', NULL, NULL);
 
@@ -94,7 +94,7 @@ SELECT * FROM test_cagg_mat_only ORDER BY bucket, device_id;
 -- Check data in real-time CA
 SELECT * FROM test_cagg_realtime ORDER BY bucket, device_id;
 
--- Test 8: Add another column and refresh again
+-- Add another column and refresh again
 SELECT add_continuous_aggregate_column('test_cagg_mat_only', 'location');
 
 -- Insert new data
@@ -102,20 +102,85 @@ INSERT INTO test_ht VALUES
     ('2020-01-03 00:00:00', 1, 35.0, 'extra6', 'loc3'),
     ('2020-01-03 01:00:00', 2, 45.0, 'extra7', 'loc3');
 
--- Refresh
 CALL refresh_continuous_aggregate('test_cagg_mat_only', NULL, NULL);
 
 -- New data should have the location column populated
 SELECT * FROM test_cagg_mat_only ORDER BY bucket, device_id;
 
--- Test 9: Error - not a continuous aggregate
+-- Error - not a continuous aggregate
 CREATE TABLE regular_table (id INT, data TEXT);
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_column('regular_table', 'data');
 \set ON_ERROR_STOP 1
 DROP TABLE regular_table;
 
+-- Hierarchical continuous aggregate (CAgg on CAgg)
+-- Create a second-level CAgg on top of test_cagg_mat_only
+CREATE MATERIALIZED VIEW test_cagg_level2
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS SELECT
+    time_bucket('7 days', bucket) AS bucket,
+    device_id,
+    avg(avg_value) AS avg_value
+FROM test_cagg_mat_only
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Create a third-level CAgg on top of test_cagg_level2
+CREATE MATERIALIZED VIEW test_cagg_level3
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS SELECT
+    time_bucket('14 days', bucket) AS bucket,
+    device_id,
+    avg(avg_value) AS avg_value
+FROM test_cagg_level2
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Refresh all levels
+CALL refresh_continuous_aggregate('test_cagg_level2', NULL, NULL);
+CALL refresh_continuous_aggregate('test_cagg_level3', NULL, NULL);
+
+-- Show initial state
+SELECT * FROM test_cagg_level2 ORDER BY bucket, device_id;
+SELECT * FROM test_cagg_level3 ORDER BY bucket, device_id;
+
+-- Error - column doesn't exist
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'nonexistent_column');
+\set ON_ERROR_STOP 1
+
+-- Add column to second-level CAgg (column exists in parent CAgg)
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'extra');
+
+-- Error - column already exists
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'extra');
+\set ON_ERROR_STOP 1
+
+-- if_not_exists=true should not error
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'extra', true);
+
+-- Verify the column was added
+\d+ test_cagg_level2
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_level2', NULL, NULL);
+SELECT * FROM test_cagg_level2 ORDER BY bucket, device_id;
+
+-- Add same column to third-level CAgg (now exists in second-level)
+SELECT add_continuous_aggregate_column('test_cagg_level3', 'extra');
+
+-- Verify the column was added
+\d+ test_cagg_level3
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_level3', NULL, NULL);
+SELECT * FROM test_cagg_level3 ORDER BY bucket, device_id;
+
 -- Cleanup
+DROP MATERIALIZED VIEW test_cagg_level3;
+DROP MATERIALIZED VIEW test_cagg_level2;
 DROP MATERIALIZED VIEW test_cagg_mat_only;
 DROP MATERIALIZED VIEW test_cagg_realtime;
 DROP TABLE test_ht;
