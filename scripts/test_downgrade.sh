@@ -26,13 +26,13 @@ fi
 if [ ! -f "${PG_EXTENSION_DIR}/timescaledb--${PREV_VERSION}.sql" ]; then
   echo "Building ${PREV_VERSION}"
   git checkout ${PREV_VERSION}
-  make -C "${BUILD_DIR}" -j  $(getconf _NPROCESSORS_ONLN) > /dev/null
+  make -C "${BUILD_DIR}" -j "$(getconf _NPROCESSORS_ONLN)" > /dev/null
   sudo make -C "${BUILD_DIR}" install > /dev/null
   git checkout ${GIT_REF}
 fi
 
 # We want to use the latest loader for all the tests so we build it last
-make -C "${BUILD_DIR}" -j $(getconf _NPROCESSORS_ONLN)
+make -C "${BUILD_DIR}" -j "$(getconf _NPROCESSORS_ONLN)"
 sudo make -C "${BUILD_DIR}" install > /dev/null
 
 set +e
