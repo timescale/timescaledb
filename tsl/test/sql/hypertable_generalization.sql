@@ -20,6 +20,11 @@ SELECT create_hypertable('n',NULL::_timescaledb_internal.dimension_info);
 SELECT add_dimension('n',NULL::_timescaledb_internal.dimension_info);
 \set ON_ERROR_STOP 1
 
+-- test int types
+SELECT by_range('id',2::int2);
+SELECT by_range('id',4::int4);
+SELECT by_range('id',8::int8);
+
 SELECT by_range('id');
 SELECT by_range('id', partition_func => 'part_func');
 SELECT by_range('id', '1 week'::interval);
@@ -36,6 +41,7 @@ SELECT * FROM by_hash('id', 3, partition_func => 'part_func') WHERE by_hash IS N
 \set ON_ERROR_STOP 0
 SELECT 'hash//id//3//-'::_timescaledb_internal.dimension_info;
 SELECT by_range(NULL::name);
+SELECT by_range('foo',0::regproc);
 SELECT by_hash(NULL::name, 3);
 \set ON_ERROR_STOP 1
 
