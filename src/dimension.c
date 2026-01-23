@@ -1730,6 +1730,33 @@ ts_dimension_info_in(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID(); /* keep compiler quiet */
 }
 
+/*
+ * Get the interval value as a Datum from a ChunkInterval.
+ * On 32-bit platforms, int64 is pass-by-reference so we need Int64GetDatumFast.
+ */
+static Datum
+chunk_interval_get_datum(const ChunkInterval *ci)
+{
+	switch (ci->type)
+	{
+		case INT2OID:
+			return Int16GetDatum((int16) ci->integer_interval);
+		case INT4OID:
+			return Int32GetDatum((int32) ci->integer_interval);
+		case INT8OID:
+			/* int64 is pass-by-ref on 32-bit, pass-by-val on 64-bit */
+			return Int64GetDatumFast(ci->integer_interval);
+		case INTERVALOID:
+			/* Interval is always pass-by-ref */
+			return IntervalPGetDatum(&((ChunkInterval *) ci)->interval);
+		default:
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("unsupported chunk interval type %d", ci->type)));
+			return UnassignedDatum; /* keep compiler quiet */
+	}
+}
+
 TSDLLEXPORT Datum
 ts_dimension_info_out(PG_FUNCTION_ARGS)
 {

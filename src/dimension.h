@@ -36,31 +36,6 @@ typedef struct ChunkInterval
 	};
 } ChunkInterval;
 
-/*
- * Get the interval value as a Datum from a ChunkInterval.
- * On 32-bit platforms, int64 is pass-by-reference so we need Int64GetDatumFast.
- */
-static inline Datum
-chunk_interval_get_datum(const ChunkInterval *ci)
-{
-	switch (ci->type)
-	{
-		case INT2OID:
-			return Int16GetDatum((int16) ci->integer_interval);
-		case INT4OID:
-			return Int32GetDatum((int32) ci->integer_interval);
-		case INT8OID:
-			/* int64 is pass-by-ref on 32-bit, pass-by-val on 64-bit */
-			return Int64GetDatumFast(ci->integer_interval);
-		case INTERVALOID:
-			/* Interval is always pass-by-ref */
-			return IntervalPGetDatum(&((ChunkInterval *) ci)->interval);
-		default:
-			Ensure(false, "unsupported chunk interval type %d", ci->type);
-			return UnassignedDatum;
-	}
-}
-
 static inline void
 chunk_interval_set(ChunkInterval *chunk_interval, Datum interval, Oid type)
 {
