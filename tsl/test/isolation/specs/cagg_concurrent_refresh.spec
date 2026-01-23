@@ -124,6 +124,7 @@ setup
     DECLARE
         max_attempts INT := 200; -- 2 seconds total (200 * 10ms), enough for 500ms lock_timeout + buffer
         attempts INT := 0;
+        remaining_pids INT;
     BEGIN
         PERFORM pg_cancel_backend(pid) FROM cancelpid;
         WHILE EXISTS (SELECT FROM pg_stat_activity WHERE pid IN (SELECT pid FROM cancelpid) AND state = 'active') AND attempts < max_attempts
@@ -131,6 +132,13 @@ setup
             PERFORM pg_sleep(0.01);
             attempts := attempts + 1;
         END LOOP;
+        -- Check if any processes are still active after timeout
+        SELECT COUNT(*) INTO remaining_pids
+        FROM pg_stat_activity
+        WHERE pid IN (SELECT pid FROM cancelpid) AND state = 'active';
+        IF remaining_pids > 0 THEN
+            RAISE EXCEPTION 'Timeout waiting for % process(es) to become inactive after cancellation', remaining_pids;
+        END IF;
         DELETE FROM cancelpid;
     END;
     $$ LANGUAGE plpgsql;
