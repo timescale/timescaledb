@@ -119,13 +119,17 @@ setup
     CREATE TABLE cancelpid (
         pid INTEGER NOT NULL PRIMARY KEY
     );
-    CREATE OR REPLACE PROCEDURE cancelpids() AS 
+    CREATE OR REPLACE PROCEDURE cancelpids() AS
     $$
+    DECLARE
+        max_attempts INT := 200; -- 2 seconds total (200 * 10ms), enough for 500ms lock_timeout + buffer
+        attempts INT := 0;
     BEGIN
         PERFORM pg_cancel_backend(pid) FROM cancelpid;
-        WHILE EXISTS (SELECT FROM pg_stat_activity WHERE pid IN (SELECT pid FROM cancelpid) AND state = 'active')
+        WHILE EXISTS (SELECT FROM pg_stat_activity WHERE pid IN (SELECT pid FROM cancelpid) AND state = 'active') AND attempts < max_attempts
         LOOP
             PERFORM pg_sleep(0.01);
+            attempts := attempts + 1;
         END LOOP;
         DELETE FROM cancelpid;
     END;
