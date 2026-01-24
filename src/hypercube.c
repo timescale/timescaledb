@@ -211,7 +211,10 @@ ts_hypercube_from_constraints(const ChunkConstraints *constraints, ScanIterator 
 			 * in recovery mode.
 			 */
 			slice = ts_dimension_slice_scan_iterator_get_by_id(slice_it, cc->fd.dimension_slice_id);
-			Assert(slice != NULL);
+			if (!slice)
+			{
+				elog(ERROR, "could not find dimension slice with id %d", cc->fd.dimension_slice_id);
+			}
 			hc->slices[hc->num_slices++] = slice;
 		}
 	}
