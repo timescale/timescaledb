@@ -901,7 +901,12 @@ update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_claus
 	}
 	int64 compress_interval_usec =
 		ts_interval_value_to_internal(IntervalPGetDatum(compress_interval), INTERVALOID);
-	if (compress_interval_usec % time_dim->fd.interval_length > 0)
+	/*
+	 * For non-calendar chunking, warn if compress interval is not a multiple of chunk interval.
+	 * Skip this check for calendar chunking since interval_length is 0 and chunk sizes vary.
+	 */
+	if (!IS_CALENDAR_CHUNKING(time_dim) && time_dim->fd.interval_length > 0 &&
+		compress_interval_usec % time_dim->fd.interval_length > 0)
 		elog(WARNING,
 			 "compress chunk interval is not a multiple of chunk interval, you should use a "
 			 "factor of chunk interval to merge as much as possible");

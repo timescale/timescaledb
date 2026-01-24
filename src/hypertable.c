@@ -1538,6 +1538,11 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	text *target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11);
 	Oid sizing_func = PG_ARGISNULL(12) ? InvalidOid : PG_GETARG_OID(12);
 	regproc open_partitioning_func = PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13);
+	const int origin_paramnum = 14;
+	bool origin_isnull = PG_ARGISNULL(origin_paramnum);
+	Datum origin = origin_isnull ? 0 : PG_GETARG_DATUM(origin_paramnum);
+	Oid origin_type =
+		origin_isnull ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, origin_paramnum);
 
 	if (!OidIsValid(table_relid))
 		ereport(ERROR,
@@ -1550,11 +1555,13 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 
 	DimensionInfo *open_dim_info =
 		ts_dimension_info_create_open(table_relid,
-									  open_dim_name,		 /* column name */
-									  default_interval,		 /* interval */
-									  interval_type,		 /* interval type */
-									  open_partitioning_func /* partitioning func */
-		);
+									  open_dim_name,		  /* column name */
+									  default_interval,		  /* interval */
+									  interval_type,		  /* interval type */
+									  open_partitioning_func, /* partitioning func */
+									  origin,				  /* origin */
+									  origin_type,			  /* origin_type */
+									  !origin_isnull /* has_origin */);
 
 	DimensionInfo *closed_dim_info = NULL;
 	if (closed_dim_name)
@@ -1634,7 +1641,10 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 	/*
 	 * Fill in the rest of the info.
 	 */
+	AttrNumber colattr = get_attnum(table_relid, NameStr(dim_info->colname));
 	dim_info->table_relid = table_relid;
+	dim_info->coltype = get_atttype(table_relid, colattr);
+	ts_dimension_info_set_defaults(dim_info);
 
 	return ts_hypertable_create_internal(fcinfo,
 										 table_relid,
@@ -2148,8 +2158,8 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 						DIMENSION_TYPE_OPEN,
 						NULL,
 						NULL,
-						NULL,
-						&now_func_oid);
+						&now_func_oid,
+						NULL);
 	ts_cache_release(&hcache);
 	PG_RETURN_NULL();
 }

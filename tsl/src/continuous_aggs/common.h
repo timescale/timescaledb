@@ -29,6 +29,7 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
+#include "dimension.h"
 #include "errors.h"
 #include "func_cache.h"
 #include "hypertable_cache.h"
@@ -62,14 +63,14 @@ typedef struct MaterializationHypertableColumnInfo
 
 typedef struct ContinuousAggTimeBucketInfo
 {
-	int32 htid;						/* hypertable id */
-	int32 parent_mat_hypertable_id; /* parent materialization hypertable id */
-	Oid htoid;						/* hypertable oid */
-	Oid htoidparent;				/* parent hypertable oid in case of hierarchical */
-	AttrNumber htpartcolno;			/* primary partitioning column of raw hypertable */
-									/* This should also be the column used by time_bucket */
-	Oid htpartcoltype;				/* The collation type */
-	int64 htpartcol_interval_len;	/* interval length setting for primary partitioning column */
+	int32 htid;						  /* hypertable id */
+	int32 parent_mat_hypertable_id;	  /* parent materialization hypertable id */
+	Oid htoid;						  /* hypertable oid */
+	Oid htoidparent;				  /* parent hypertable oid in case of hierarchical */
+	AttrNumber htpartcolno;			  /* primary partitioning column of raw hypertable */
+									  /* This should also be the column used by time_bucket */
+	Oid htpartcoltype;				  /* The collation type */
+	ChunkInterval htpartcol_interval; /* chunk interval for primary partitioning column */
 
 	/* General bucket information */
 	ContinuousAggBucketFunction *bf;

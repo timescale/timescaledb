@@ -7,26 +7,38 @@
 #include <access/relscan.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
+#include <catalog/pg_type_d.h>
 #include <commands/tablecmds.h>
+#include <datatype/timestamp.h>
+#include <fmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
+#include <openssl/rsa.h>
+#include <pgtime.h>
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
+#include <utils/date.h>
+#include <utils/datetime.h>
+#include <utils/datum.h>
+#include <utils/elog.h>
+#include <utils/fmgrprotos.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
 
 #include "compat/compat.h"
-#include "cross_module_fn.h"
+#include "annotations.h"
+#include "chunk.h"
+#include "chunk_range.h"
 #include "debug_point.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
 #include "error_utils.h"
 #include "errors.h"
+#include "guc.h"
 #include "hypertable.h"
-#include "hypertable_cache.h"
 #include "indexing.h"
 #include "partitioning.h"
 #include "scanner.h"
@@ -58,6 +70,11 @@ enum Anum_generic_add_dimension
 };
 
 #define Natts_generic_add_dimension (_Anum_generic_add_dimension_max - 1)
+
+static int64 dimension_interval_to_internal(const char *colname, Oid dimtype,
+											const ChunkInterval *chunk_interval,
+											bool adaptive_chunking, bool suppress_warnings);
+static void validate_origin_type_compatibility(Oid dimtype, Oid origin_type, const char *colname);
 
 static int
 cmp_dimension_id(const void *left, const void *right)
@@ -151,6 +168,60 @@ hyperspace_get_num_dimensions_by_type(Hyperspace *hs, DimensionType type)
 	return n;
 }
 
+/*
+ * Get the default origin as a Datum of the appropriate type.
+ * Uses DEFAULT_ORIGIN_YEAR/MONTH/DAY (2001-01-01) as the default.
+ *
+ * For UUID columns, returns a TIMESTAMPTZOID origin.
+ * For DATE columns, returns a TIMESTAMPOID origin.
+ * For integer types, returns Int64GetDatum(0).
+ *
+ * If out_origin_type is not NULL, it will be set to the origin type.
+ */
+static Datum
+get_default_origin_datum(Oid dimtype, Oid *out_origin_type)
+{
+	struct pg_tm tm_o;
+	int tz_origin = 0;
+	Oid origin_type = dimtype;
+	Timestamp origin;
+
+	switch (dimtype)
+	{
+		case UUIDOID:
+			origin_type = TIMESTAMPTZOID;
+			break;
+		case DATEOID:
+			origin_type = TIMESTAMPOID;
+			break;
+		case TIMESTAMPTZOID:
+		case TIMESTAMPOID:
+			break;
+		default:
+			if (out_origin_type)
+				*out_origin_type = dimtype;
+			return Int64GetDatum(0);
+	}
+
+	if (out_origin_type)
+		*out_origin_type = origin_type;
+
+	memset(&tm_o, 0, sizeof(struct pg_tm));
+	tm_o.tm_year = DEFAULT_ORIGIN_YEAR;
+	tm_o.tm_mday = DEFAULT_ORIGIN_DAY;
+	tm_o.tm_mon = DEFAULT_ORIGIN_MONTH;
+
+	if (origin_type == TIMESTAMPTZOID)
+		tz_origin = DetermineTimeZoneOffset(&tm_o, session_timezone);
+
+	tm2timestamp(&tm_o, 0, &tz_origin, &origin);
+
+	if (origin_type == TIMESTAMPTZOID)
+		return TimestampTzGetDatum(origin);
+	else
+		return TimestampGetDatum(origin);
+}
+
 static inline DimensionType
 dimension_type(TupleInfo *ti)
 {
@@ -159,6 +230,12 @@ dimension_type(TupleInfo *ti)
 		return DIMENSION_TYPE_CLOSED;
 
 	if (!slot_attisnull(ti->slot, Anum_dimension_interval_length) &&
+		slot_attisnull(ti->slot, Anum_dimension_interval) &&
+		slot_attisnull(ti->slot, Anum_dimension_num_slices))
+		return DIMENSION_TYPE_OPEN;
+
+	if (slot_attisnull(ti->slot, Anum_dimension_interval_length) &&
+		!slot_attisnull(ti->slot, Anum_dimension_interval) &&
 		slot_attisnull(ti->slot, Anum_dimension_num_slices))
 		return DIMENSION_TYPE_OPEN;
 
@@ -232,11 +309,85 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 			DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)]);
 	else
 	{
-		d->fd.interval_length =
-			DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
+		Assert(isnull[AttrNumberGetAttrOffset(Anum_dimension_interval)] ||
+			   isnull[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
+
+		if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_interval)])
+		{
+			d->fd.interval =
+				*DatumGetIntervalP(values[AttrNumberGetAttrOffset(Anum_dimension_interval)]);
+			d->chunk_interval.type = INTERVALOID;
+			d->chunk_interval.interval = d->fd.interval;
+		}
+		else
+		{
+			Assert(!isnull[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
+
+			d->fd.interval_length =
+				DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
+			d->chunk_interval.type = INT8OID;
+			d->chunk_interval.integer_interval = d->fd.interval_length;
+		}
+
 		if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)])
 			d->fd.compress_interval_length = DatumGetInt64(
 				values[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)]);
+
+		/*
+		 * Get the effective dimension type. For dimensions with a partitioning
+		 * function, this is the return type of the function (e.g., timestamptz),
+		 * not the column type (e.g., text).
+		 */
+		Oid dimtype = ts_dimension_get_partition_type(d);
+
+		if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)])
+		{
+			d->fd.interval_origin =
+				DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)]);
+			d->chunk_interval.has_origin = true;
+		}
+		else if (IS_TIMESTAMP_TYPE(dimtype) || dimtype == UUIDOID)
+		{
+			/*
+			 * Origin not stored in metadata - compute the default origin.
+			 * The default origin is 2001-01-01 in local time for the dimension type.
+			 * We store it in internal format (Unix epoch microseconds).
+			 */
+			Oid origin_type;
+			Datum default_origin = get_default_origin_datum(dimtype, &origin_type);
+			d->fd.interval_origin = ts_time_value_to_internal(default_origin, origin_type);
+			d->chunk_interval.has_origin = false;
+		}
+		else
+		{
+			/* For integer types and other types, origin is 0 */
+			d->fd.interval_origin = 0;
+			d->chunk_interval.has_origin = false;
+		}
+
+		/*
+		 * Verify consistency between chunk_interval.type and fd.interval_length.
+		 * In-memory representation:
+		 * - Calendar mode: type == INTERVALOID, fd.interval_length == 0
+		 * - Non-calendar mode: type == INT8OID, fd.interval_length > 0
+		 * Note: In the catalog, calendar mode stores interval_length as NULL,
+		 * but in-memory we use 0 to indicate calendar mode.
+		 */
+		Assert(!IS_CALENDAR_CHUNKING(d) || d->fd.interval_length == 0);
+		Assert(d->chunk_interval.type != INT8OID || d->fd.interval_length > 0);
+
+		/*
+		 * Populate chunk_interval origin from fd.interval_origin.
+		 * fd.interval_origin is in internal format (Unix epoch for timestamps).
+		 * chunk_interval stores timestamps in PostgreSQL epoch format.
+		 * For UUID columns, origin is stored as TIMESTAMPTZOID since it represents
+		 * the timestamp portion of the UUIDv7.
+		 */
+		Oid origin_type = (dimtype == UUIDOID) ? TIMESTAMPTZOID : dimtype;
+		chunk_interval_set_origin_internal(&d->chunk_interval, d->fd.interval_origin, origin_type);
+
+		/* Verify origin round-trips correctly */
+		Assert(d->fd.interval_origin == chunk_interval_get_origin_internal(&d->chunk_interval));
 	}
 
 	d->column_attno = get_attnum(main_table_relid, NameStr(d->fd.column_name));
@@ -247,7 +398,7 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 }
 
 static Datum
-create_range_datum(FunctionCallInfo fcinfo, DimensionSlice *slice)
+create_range_datum(FunctionCallInfo fcinfo, const DimensionSlice *slice)
 {
 	TupleDesc tupdesc;
 	Datum values[2];
@@ -266,35 +417,144 @@ create_range_datum(FunctionCallInfo fcinfo, DimensionSlice *slice)
 	return HeapTupleGetDatum(tuple);
 }
 
+static int64
+clamp_dimension_range_value(int64 unixts, Oid clamp_type)
+{
+	const int64 mints = ts_time_get_min(clamp_type);
+
+	if (unixts <= mints)
+		return DIMENSION_SLICE_MINVALUE;
+
+	const int64 maxts = ts_time_get_max(clamp_type);
+
+	if (unixts >= maxts)
+		return DIMENSION_SLICE_MAXVALUE;
+
+	return unixts;
+}
+
+/*
+ * Convert a ChunkRange to a DimensionSlice.
+ *
+ * Converts range boundaries from native time format to internal (Unix epoch) format,
+ * then clamps to DIMENSION_SLICE_MINVALUE/MAXVALUE if at type boundaries.
+ */
+static DimensionSlice *
+chunk_range_to_dimension_slice(int32 dimension_id, const ChunkRange *range)
+{
+	int64 range_start = ts_chunk_range_get_start_internal(range);
+	int64 range_end = ts_chunk_range_get_end_internal(range);
+
+	range_start = clamp_dimension_range_value(range_start, range->type);
+	range_end = clamp_dimension_range_value(range_end, range->type);
+
+	return ts_dimension_slice_create(dimension_id, range_start, range_end);
+}
+
+/*
+ * Convert an internal origin value (Unix epoch microseconds) to a Datum
+ * of the appropriate timestamp type.
+ *
+ * If has_origin is false, returns the default origin (2001-01-01) for the
+ * given type. The internal_origin value is ignored in this case.
+ */
+static Datum
+internal_origin_to_datum(int64 internal_origin, bool has_origin, Oid type)
+{
+	if (!has_origin)
+		return get_default_origin_datum(type, NULL);
+
+	/* Convert from Unix epoch to PostgreSQL epoch */
+	TimestampTz ts = internal_origin - TS_EPOCH_DIFF_MICROSECONDS;
+
+	if (type == TIMESTAMPTZOID)
+		return TimestampTzGetDatum(ts);
+	else
+		return TimestampGetDatum(ts);
+}
+
 static DimensionSlice *
 calculate_open_range_default(const Dimension *dim, int64 value)
 {
-	int64 range_start, range_end;
+	int64 range_start = 0, range_end = 0;
 	Oid dimtype = ts_dimension_get_partition_type(dim);
+	int64 interval_length = 0;
 
-	if (value < 0)
+	/* Use calendar-based chunking for Interval type chunk intervals */
+	if (dim->chunk_interval.type == INTERVALOID)
+	{
+		Oid tstype = dimtype;
+
+		if (dimtype == UUIDOID)
+			tstype = TIMESTAMPTZOID;
+		else if (dimtype == DATEOID)
+			tstype = TIMESTAMPOID;
+
+		Datum ts = ts_internal_to_time_value(value, tstype);
+		/*
+		 * For dimensions loaded from metadata, fd.interval_origin always has a
+		 * valid value (either explicitly stored or computed default). Pass
+		 * has_origin=true to use the stored value directly.
+		 */
+		Datum origin = internal_origin_to_datum(dim->fd.interval_origin, true, tstype);
+		Interval *interval = &((Dimension *) dim)->chunk_interval.interval;
+		ChunkRange crange = ts_chunk_range_calculate(ts, tstype, interval, origin);
+
+		if (OidIsValid(crange.type))
+		{
+			DimensionSlice *slice = chunk_range_to_dimension_slice(dim->fd.id, &crange);
+			Assert(value >= slice->fd.range_start && value < slice->fd.range_end);
+			return slice;
+		}
+
+		/* Zero interval - fall back to legacy calculation */
+		interval_length = interval_to_usec(interval);
+	}
+	else
+	{
+		/* Non-interval type - use legacy microsecond-based calculation */
+		interval_length = dim->fd.interval_length;
+	}
+
+	/*
+	 * For legacy chunking, if an origin was explicitly set, align chunks to
+	 * the origin. Otherwise, use the default behavior (origin = 0).
+	 */
+	int64 origin = dim->chunk_interval.has_origin ? dim->fd.interval_origin : 0;
+
+	/*
+	 * Calculate chunk range relative to origin by shifting the value,
+	 * computing the aligned range, then shifting back.
+	 */
+	int64 value_from_origin = value - origin;
+
+	if (value_from_origin < 0)
 	{
 		const int64 dim_min = ts_time_get_min(dimtype);
 
-		range_end = ((value + 1) / dim->fd.interval_length) * dim->fd.interval_length;
+		range_end = ((value_from_origin + 1) / interval_length) * interval_length + origin;
 
-		/* prevent integer underflow */
-		if (dim_min - range_end > -dim->fd.interval_length)
+		/*
+		 * Prevent integer underflow when computing range_start.
+		 * Check if range_end - interval_length would be less than dim_min.
+		 * Use dim_min + interval_length to avoid underflow in the comparison.
+		 */
+		if (range_end < dim_min + interval_length)
 			range_start = DIMENSION_SLICE_MINVALUE;
 		else
-			range_start = range_end - dim->fd.interval_length;
+			range_start = range_end - interval_length;
 	}
 	else
 	{
 		const int64 dim_end = ts_time_get_max(dimtype);
 
-		range_start = (value / dim->fd.interval_length) * dim->fd.interval_length;
+		range_start = (value_from_origin / interval_length) * interval_length + origin;
 
 		/* prevent integer overflow */
-		if (dim_end - range_start < dim->fd.interval_length)
+		if (dim_end - range_start < interval_length)
 			range_end = DIMENSION_SLICE_MAXVALUE;
 		else
-			range_end = range_start + dim->fd.interval_length;
+			range_end = range_start + interval_length;
 	}
 
 	return ts_dimension_slice_create(dim->fd.id, range_start, range_end);
@@ -313,11 +573,125 @@ ts_dimension_calculate_open_range_default(PG_FUNCTION_ARGS)
 		.type = DIMENSION_TYPE_OPEN,
 		.fd.id = 0,
 		.fd.interval_length = PG_GETARG_INT64(1),
+		.chunk_interval = {
+			.type = INT8OID,
+			.integer_interval = PG_GETARG_INT64(1),
+		},
 		.fd.column_type = TypenameGetTypid(PG_GETARG_CSTRING(2)),
 	};
 	DimensionSlice *slice = calculate_open_range_default(&dim, value);
 
 	PG_RETURN_DATUM(create_range_datum(fcinfo, slice));
+}
+
+static Datum
+create_timestamp_range_datum(FunctionCallInfo fcinfo, const ChunkRange *range)
+{
+	TupleDesc tupdesc;
+	Datum values[2];
+	bool nulls[2] = { false };
+	HeapTuple tuple;
+
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		elog(ERROR, "function returning record called in context that cannot accept type record");
+
+	tupdesc = BlessTupleDesc(tupdesc);
+
+	values[0] = range->range_start;
+	values[1] = range->range_end;
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	return HeapTupleGetDatum(tuple);
+}
+
+TS_FUNCTION_INFO_V1(ts_dimension_calculate_open_range_calendar);
+
+/*
+ * Expose open dimension range calculation for testing purposes.
+ * Arguments: timestamp, interval, [origin], [force_general]
+ *
+ * If force_general is true, uses the general iterative algorithm even for
+ * calendar-compatible intervals, allowing comparison between approaches.
+ */
+Datum
+ts_dimension_calculate_open_range_calendar(PG_FUNCTION_ARGS)
+{
+	Oid type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+	Datum timestamp = PG_GETARG_DATUM(0);
+	Interval *interval = DatumGetIntervalP(PG_GETARG_DATUM(1));
+	Datum origin_datum;
+	int64 origin_internal = 0;
+	bool force_general = false;
+	const int dim_id = 0;
+
+	/* Check for infinity timestamps - chunk range calculation is not defined for infinity */
+	if (IS_TIMESTAMP_TYPE(type) && TIMESTAMP_NOT_FINITE(DatumGetTimestampTz(timestamp)))
+		ereport(ERROR,
+				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+				 errmsg("timestamp out of range"),
+				 errhint("Cannot calculate chunk range for infinity timestamps.")));
+
+	/* Check if origin is provided (third argument) */
+	if (!PG_ARGISNULL(2))
+	{
+		origin_datum = PG_GETARG_DATUM(2);
+		Oid origin_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
+
+		/* Check for infinity origin */
+		if (IS_TIMESTAMP_TYPE(origin_type) &&
+			TIMESTAMP_NOT_FINITE(DatumGetTimestampTz(origin_datum)))
+			ereport(ERROR,
+					(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+					 errmsg("origin timestamp out of range"),
+					 errhint("Cannot use infinity as chunk origin.")));
+
+		origin_internal = ts_time_value_to_internal(origin_datum, origin_type);
+	}
+	else
+	{
+		/* Use the default origin (2001-01-01) in current session timezone */
+		Oid origin_type;
+		origin_datum = get_default_origin_datum(type, &origin_type);
+		origin_internal = ts_time_value_to_internal(origin_datum, origin_type);
+	}
+
+	/* Check if force_general is provided (fourth argument) */
+	if (!PG_ARGISNULL(3))
+		force_general = PG_GETARG_BOOL(3);
+
+	if (force_general)
+	{
+		/* Force using the general iterative algorithm */
+		ChunkRange crange =
+			ts_chunk_range_calculate_general(timestamp, type, interval, origin_datum, NULL);
+		PG_RETURN_DATUM(create_timestamp_range_datum(fcinfo, &crange));
+	}
+
+	/* Use the standard path through calculate_open_range_default */
+	Dimension dim = {
+		.type = DIMENSION_TYPE_OPEN,
+		.fd.id = dim_id,
+		.fd.interval_length = 0,
+		.fd.interval_origin = origin_internal,
+		.fd.column_type = type,
+	};
+
+	chunk_interval_set_with_origin(&dim.chunk_interval,
+								   IntervalPGetDatum(interval),
+								   INTERVALOID,
+								   origin_datum,
+								   type,
+								   !PG_ARGISNULL(2));
+
+	int64 value = ts_time_value_to_internal(timestamp, type);
+	DimensionSlice *slice = calculate_open_range_default(&dim, value);
+	ChunkRange crange = {
+		.type = TIMESTAMPTZOID,
+		.range_start = ts_internal_to_time_value(slice->fd.range_start, TIMESTAMPTZOID),
+		.range_end = ts_internal_to_time_value(slice->fd.range_end, TIMESTAMPTZOID),
+	};
+
+	PG_RETURN_DATUM(create_timestamp_range_datum(fcinfo, &crange));
 }
 
 static int64
@@ -441,8 +815,9 @@ ts_dimension_get_open_slice_ordinal(const Dimension *dim, const DimensionSlice *
  * intervals where repartitioning happens, there might be an unexpected number
  * of slices due to a mix of slices from both the old and the new partitioning
  * configuration. As a result, the ordinal value of a given slice might not
- * actually match the partitioning settings at a given point in time. In this case, we will return
- * the ordinal of current slice most overlapping the given slice (or first fully overlapped slice).
+ * actually match the partitioning settings at a given point in time. In this case, we will
+ * return the ordinal of current slice most overlapping the given slice (or first fully
+ * overlapped slice).
  */
 static int
 ts_dimension_get_closed_slice_ordinal(const Dimension *dim, const DimensionSlice *target_slice)
@@ -456,8 +831,9 @@ ts_dimension_get_closed_slice_ordinal(const Dimension *dim, const DimensionSlice
 	Assert(NULL != target_slice);
 	Assert(dim->fd.num_slices > 0);
 
-	/* Slicing assumes partitioning functions use the range [0, INT32_MAX], though the first slice
-	 * uses INT64_MIN as its lower bound, and the last slice uses INT64_MAX as its upper bound. */
+	/* Slicing assumes partitioning functions use the range [0, INT32_MAX], though the first
+	 * slice uses INT64_MIN as its lower bound, and the last slice uses INT64_MAX as its upper
+	 * bound. */
 	if (target_slice->fd.range_start == DIMENSION_SLICE_MINVALUE)
 		return 0;
 
@@ -467,9 +843,10 @@ ts_dimension_get_closed_slice_ordinal(const Dimension *dim, const DimensionSlice
 	Assert(target_slice->fd.range_start > 0);
 	Assert(target_slice->fd.range_end < DIMENSION_SLICE_CLOSED_MAX);
 
-	/* Given a target slice starting from some point p, determine a candidate slice in the current
-	 * partitioning configuration that contains p. If that slice contains over half of our target
-	 * slice, return it's ordinal. Otherwise return the ordinal for the next slice. */
+	/* Given a target slice starting from some point p, determine a candidate slice in the
+	 * current partitioning configuration that contains p. If that slice contains over half of
+	 * our target slice, return it's ordinal. Otherwise return the ordinal for the next slice.
+	 */
 	current_slice_size = calculate_closed_range_interval(dim);
 	target_slice_size = target_slice->fd.range_end - target_slice->fd.range_start;
 	candidate_slice_ordinal = target_slice->fd.range_start / current_slice_size;
@@ -477,7 +854,7 @@ ts_dimension_get_closed_slice_ordinal(const Dimension *dim, const DimensionSlice
 		current_slice_size - (target_slice->fd.range_start % current_slice_size);
 
 	/* Note that if the candidate slice wholly contains the target slice,
-	 * target_overlap_with_candidate_slice will actually be greater than target_slice_size.  This
+	 * target_overlap_with_candidate_slice will actually be greater than target_slice_size. This
 	 * doesn't affect the correctness of the following check. */
 	if (target_overlap_with_candidate_slice >= target_slice_size / 2)
 		return candidate_slice_ordinal;
@@ -720,7 +1097,14 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 
 	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
-	Assert((dim->fd.num_slices <= 0 && dim->fd.interval_length > 0) ||
+	/*
+	 * Validate dimension type consistency:
+	 * - Open dimension: num_slices <= 0 with either interval_length > 0 (legacy)
+	 *   or calendar chunking (chunk_interval.type == INTERVALOID)
+	 * - Closed dimension: num_slices > 0 with interval_length <= 0
+	 */
+	Assert((dim->fd.num_slices <= 0 &&
+			(dim->fd.interval_length > 0 || dim->chunk_interval.type == INTERVALOID)) ||
 		   (dim->fd.num_slices > 0 && dim->fd.interval_length <= 0));
 
 	values[AttrNumberGetAttrOffset(Anum_dimension_column_name)] =
@@ -749,9 +1133,54 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 		nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)] = false;
 	}
 
-	if (!nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_length)])
+	/*
+	 * Update interval-related fields. For calendar chunking, we store the
+	 * Interval value and origin. For legacy chunking, we store interval_length.
+	 *
+	 * Catalog storage (mutually exclusive):
+	 * - Calendar: interval IS NOT NULL, interval_length IS NULL
+	 * - Non-calendar: interval IS NULL, interval_length IS NOT NULL (and > 0)
+	 *
+	 * In-memory representation (fd.interval_length):
+	 * - Calendar: fd.interval_length == 0 (catalog stores NULL)
+	 * - Non-calendar: fd.interval_length > 0 (catalog stores same value)
+	 */
+	Assert(!IS_CALENDAR_CHUNKING(dim) || dim->fd.interval_length == 0);
+	Assert(dim->chunk_interval.type != INT8OID || dim->fd.interval_length > 0);
+
+	if (IS_CALENDAR_CHUNKING(dim))
+	{
+		/* Calendar chunking: store Interval value and origin */
+		values[AttrNumberGetAttrOffset(Anum_dimension_interval)] =
+			IntervalPGetDatum(&dim->chunk_interval.interval);
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval)] = false;
+		values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] =
+			Int64GetDatum(dim->fd.interval_origin);
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] = false;
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] = true;
+	}
+	else if (!IS_CALENDAR_CHUNKING(dim) && dim->fd.interval_length > 0)
+	{
+		/*
+		 * Non-calendar (legacy) chunking: store interval_length and clear calendar
+		 * interval field. If origin was explicitly set, store it for chunk alignment.
+		 */
 		values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] =
 			Int64GetDatum(dim->fd.interval_length);
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] = false;
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval)] = true;
+
+		if (dim->chunk_interval.has_origin)
+		{
+			values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] =
+				Int64GetDatum(dim->fd.interval_origin);
+			nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] = false;
+		}
+		else
+		{
+			nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] = true;
+		}
+	}
 
 	if (dim->fd.compress_interval_length > 0)
 	{
@@ -776,9 +1205,30 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 	return SCAN_DONE;
 }
 
+/*
+ * Convert a user-provided origin value to internal time format.
+ *
+ * The internal format is Unix epoch microseconds (microseconds since
+ * 1970-01-01 00:00:00 UTC), NOT PostgreSQL epoch (2000-01-01). This is
+ * important because the catalog stores interval_origin as a bigint in
+ * Unix epoch format.
+ *
+ * Supports TIMESTAMPOID, TIMESTAMPTZOID, DATEOID, and integer types.
+ * Returns 0 if origin_type is invalid (meaning use default origin).
+ */
+int64
+ts_dimension_origin_to_internal(Datum origin, Oid origin_type)
+{
+	if (!OidIsValid(origin_type))
+		return 0;
+
+	return ts_time_value_to_internal(origin, origin_type);
+}
+
 static int32
-dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid coltype,
-						  int16 num_slices, regproc partitioning_func, int64 interval_length)
+dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid coltype, Oid dimtype,
+						  int16 num_slices, regproc partitioning_func,
+						  const ChunkInterval *chunk_interval)
 {
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_dimension];
@@ -808,17 +1258,93 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 	if (num_slices > 0)
 	{
 		/* Closed (hash) dimension */
-		Assert(num_slices > 0 && interval_length <= 0);
+		Assert(num_slices > 0 && !OidIsValid(chunk_interval->type));
 		values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)] = Int16GetDatum(num_slices);
 		values[AttrNumberGetAttrOffset(Anum_dimension_aligned)] = BoolGetDatum(false);
 		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval)] = true;
+		nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] = true;
 	}
 	else
 	{
 		/* Open (time) dimension */
-		Assert(num_slices <= 0 && interval_length > 0);
-		values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] =
-			Int64GetDatum(interval_length);
+		Assert(num_slices <= 0);
+		Assert(OidIsValid(chunk_interval->type));
+
+		if (chunk_interval->type == INTERVALOID && ts_guc_enable_calendar_chunking)
+		{
+			/*
+			 * Calendar chunking enabled: store the Interval value and origin.
+			 * If origin not explicitly provided, compute the default origin
+			 * (2001-01-01 00:00:00) in the current session timezone.
+			 */
+			values[AttrNumberGetAttrOffset(Anum_dimension_interval)] =
+				IntervalPGetDatum(&chunk_interval->interval);
+			nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] = true;
+
+			if (chunk_interval->has_origin)
+			{
+				values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] =
+					Int64GetDatum(chunk_interval_get_origin_internal(chunk_interval));
+			}
+			else
+			{
+				/* Compute default origin in current session timezone */
+				Oid origin_type;
+				Datum default_origin = get_default_origin_datum(dimtype, &origin_type);
+				int64 default_origin_internal =
+					ts_time_value_to_internal(default_origin, origin_type);
+				values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] =
+					Int64GetDatum(default_origin_internal);
+			}
+		}
+		else if (chunk_interval->type == INTERVALOID)
+		{
+			/*
+			 * Calendar chunking disabled: convert Interval to integer microseconds.
+			 * If origin is explicitly provided, store it for chunk alignment.
+			 */
+			int64 interval = interval_to_usec((Interval *) &chunk_interval->interval);
+			values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] =
+				Int64GetDatum(interval);
+			nulls[AttrNumberGetAttrOffset(Anum_dimension_interval)] = true;
+
+			if (chunk_interval->has_origin)
+			{
+				values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] =
+					Int64GetDatum(chunk_interval_get_origin_internal(chunk_interval));
+			}
+			else
+			{
+				nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] = true;
+			}
+		}
+		else
+		{
+			/*
+			 * Integer interval: store as interval_length.
+			 * If origin is explicitly provided, store it for chunk alignment.
+			 */
+			int64 interval = dimension_interval_to_internal(NameStr(*colname),
+															dimtype,
+															chunk_interval,
+															false,
+															false);
+			values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] =
+				Int64GetDatum(interval);
+			nulls[AttrNumberGetAttrOffset(Anum_dimension_interval)] = true;
+
+			if (chunk_interval->has_origin)
+			{
+				values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] =
+					Int64GetDatum(chunk_interval_get_origin_internal(chunk_interval));
+			}
+			else
+			{
+				nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] = true;
+			}
+		}
+
 		values[AttrNumberGetAttrOffset(Anum_dimension_aligned)] = BoolGetDatum(true);
 		nulls[AttrNumberGetAttrOffset(Anum_dimension_num_slices)] = true;
 	}
@@ -827,7 +1353,7 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 	nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)] = true;
 	nulls[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func)] = true;
 
-	/* no compress interval length by default */
+	/* no compress interval by default */
 	nulls[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)] = true;
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -840,8 +1366,8 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 }
 
 static int32
-dimension_insert(int32 hypertable_id, Name colname, Oid coltype, int16 num_slices,
-				 regproc partitioning_func, int64 interval_length)
+dimension_insert(int32 hypertable_id, Name colname, Oid coltype, Oid dimtype, int16 num_slices,
+				 regproc partitioning_func, const ChunkInterval *chunk_interval)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -852,9 +1378,10 @@ dimension_insert(int32 hypertable_id, Name colname, Oid coltype, int16 num_slice
 											 hypertable_id,
 											 colname,
 											 coltype,
+											 dimtype,
 											 num_slices,
 											 partitioning_func,
-											 interval_length);
+											 chunk_interval);
 	table_close(rel, RowExclusiveLock);
 	return dimension_id;
 }
@@ -1002,7 +1529,7 @@ ts_hyperspace_calculate_point(const Hyperspace *hs, TupleTableSlot *slot)
 #define IS_VALID_NUM_SLICES(num_slices) ((num_slices) >= 1 && (num_slices) <= PG_INT16_MAX)
 
 static int64
-get_validated_integer_interval(Oid dimtype, int64 value)
+get_validated_integer_interval(Oid dimtype, int64 value, bool suppress_warnings)
 {
 	if (value < 1 || value > INT_TYPE_MAX(dimtype))
 		ereport(ERROR,
@@ -1010,7 +1537,7 @@ get_validated_integer_interval(Oid dimtype, int64 value)
 				 errmsg("invalid interval: must be between 1 and " INT64_FORMAT,
 						INT_TYPE_MAX(dimtype))));
 
-	if (IS_TIMESTAMP_TYPE(dimtype) && value < USECS_PER_SEC)
+	if (!suppress_warnings && IS_TIMESTAMP_TYPE(dimtype) && value < USECS_PER_SEC)
 		ereport(WARNING,
 				(errcode(ERRCODE_AMBIGUOUS_PARAMETER),
 				 errmsg("unexpected interval: smaller than one second"),
@@ -1053,16 +1580,32 @@ get_default_interval(Oid dimtype, bool adaptive_chunking)
 		case TIMESTAMPTZOID:
 		case DATEOID:
 		case UUIDOID:
-			if (default_chunk_time_interval != NULL)
+			if (ts_guc_enable_calendar_chunking)
 			{
-				chunk_interval.type = INTERVALOID;
-				chunk_interval.interval = *default_chunk_time_interval;
+				if (default_chunk_time_interval != NULL)
+				{
+					chunk_interval.type = INTERVALOID;
+					chunk_interval.interval = *default_chunk_time_interval;
+				}
+				else
+				{
+					/*
+					 * Calendar chunking enabled: use INTERVALOID type with a '7 days' Interval.
+					 * This allows the dimension to use calendar-based chunk alignment.
+					 */
+					chunk_interval.type = INTERVALOID;
+					chunk_interval.interval.time = 0;
+					chunk_interval.interval.day = 7;
+					chunk_interval.interval.month = 0;
+				}
 			}
 			else
 			{
 				chunk_interval.type = INT8OID;
 
-				if (adaptive_chunking)
+				if (default_chunk_time_interval != NULL)
+					chunk_interval.integer_interval = interval_to_usec(default_chunk_time_interval);
+				else if (adaptive_chunking)
 					chunk_interval.integer_interval = DEFAULT_CHUNK_TIME_INTERVAL_ADAPTIVE;
 				else
 					chunk_interval.integer_interval = DEFAULT_CHUNK_TIME_INTERVAL;
@@ -1081,9 +1624,11 @@ get_default_interval(Oid dimtype, bool adaptive_chunking)
 
 static int64
 dimension_interval_to_internal(const char *colname, Oid dimtype,
-							   const ChunkInterval *chunk_interval, bool adaptive_chunking)
+							   const ChunkInterval *chunk_interval, bool adaptive_chunking,
+							   bool suppress_warnings)
 {
 	int64 interval;
+	ChunkInterval default_interval = { 0 };
 
 	Assert(chunk_interval != NULL);
 
@@ -1093,16 +1638,28 @@ dimension_interval_to_internal(const char *colname, Oid dimtype,
 				 errmsg("invalid type for dimension \"%s\"", colname),
 				 errhint("Use an integer, timestamp, or date type.")));
 
+	if (!OidIsValid(chunk_interval->type))
+	{
+		default_interval = get_default_interval(dimtype, adaptive_chunking);
+		chunk_interval = &default_interval;
+	}
+
 	switch (chunk_interval->type)
 	{
 		case INT2OID:
-			interval = get_validated_integer_interval(dimtype, chunk_interval->integer_interval);
+			interval = get_validated_integer_interval(dimtype,
+													  (int16) chunk_interval->integer_interval,
+													  suppress_warnings);
 			break;
 		case INT4OID:
-			interval = get_validated_integer_interval(dimtype, chunk_interval->integer_interval);
+			interval = get_validated_integer_interval(dimtype,
+													  (int32) chunk_interval->integer_interval,
+													  suppress_warnings);
 			break;
 		case INT8OID:
-			interval = get_validated_integer_interval(dimtype, chunk_interval->integer_interval);
+			interval = get_validated_integer_interval(dimtype,
+													  chunk_interval->integer_interval,
+													  suppress_warnings);
 			break;
 		case INTERVALOID:
 			if (!IS_TIMESTAMP_TYPE(dimtype) && !IS_UUID_TYPE(dimtype))
@@ -1148,7 +1705,8 @@ ts_dimension_interval_to_internal_test(PG_FUNCTION_ARGS)
 	else
 		chunk_interval_set(&chunk_interval, PG_GETARG_DATUM(1), argtype);
 
-	PG_RETURN_INT64(dimension_interval_to_internal("testcol", dimtype, &chunk_interval, false));
+	PG_RETURN_INT64(
+		dimension_interval_to_internal("testcol", dimtype, &chunk_interval, false, false));
 }
 
 static void
@@ -1170,7 +1728,8 @@ dimension_add_not_null_on_column(Oid table_relid, char *colname)
 
 void
 ts_dimension_update(const Hypertable *ht, const NameData *dimname, DimensionType dimtype,
-					Datum *interval, Oid *intervaltype, int16 *num_slices, Oid *integer_now_func)
+					const ChunkInterval *chunk_interval, int16 *num_slices, Oid *integer_now_func,
+					bool *use_calendar_chunking)
 {
 	Dimension *dim;
 
@@ -1204,17 +1763,83 @@ ts_dimension_update(const Hypertable *ht, const NameData *dimname, DimensionType
 
 	Assert(dim->type == dimtype);
 
-	if (interval)
+	if (chunk_interval)
 	{
-		Oid dimtype = ts_dimension_get_partition_type(dim);
-		ChunkInterval chunk_interval;
+		Oid partition_type = ts_dimension_get_partition_type(dim);
+		bool should_use_calendar;
 
-		chunk_interval_set(&chunk_interval, *interval, *intervaltype);
-		dim->fd.interval_length =
-			dimension_interval_to_internal(NameStr(dim->fd.column_name),
-										   dimtype,
-										   &chunk_interval,
-										   hypertable_adaptive_chunking_enabled(ht));
+		Assert(IS_OPEN_DIMENSION(dim));
+
+		/*
+		 * Determine whether to use calendar chunking:
+		 * - If use_calendar_chunking is explicitly set, use that value (overrides everything)
+		 * - Otherwise, use existing mode (sticky behavior)
+		 */
+		if (use_calendar_chunking != NULL)
+			should_use_calendar = *use_calendar_chunking;
+		else
+			should_use_calendar = IS_CALENDAR_CHUNKING(dim);
+
+		if (chunk_interval->type == INTERVALOID && should_use_calendar)
+		{
+			/*
+			 * Calendar chunking: store the Interval value and origin.
+			 *
+			 * If hypertable is already using calendar mode, keep it in calendar
+			 * mode regardless of the GUC setting. This makes the chunking mode
+			 * "sticky" - once created in a mode, it stays in that mode.
+			 *
+			 * Simple struct assignment works because ChunkInterval stores
+			 * values directly in unions, not as Datum pointers.
+			 */
+			dim->chunk_interval = *chunk_interval;
+
+			/* Compute and store the origin in internal format (Unix epoch) */
+			if (chunk_interval->has_origin)
+			{
+				dim->fd.interval_origin = chunk_interval_get_origin_internal(chunk_interval);
+			}
+			else if (dim->fd.interval_origin == 0)
+			{
+				/*
+				 * Use default origin only if no origin was previously set.
+				 * This preserves an existing custom origin when the user
+				 * changes only the interval without specifying an origin.
+				 */
+				Oid origin_type;
+				Datum default_origin = get_default_origin_datum(partition_type, &origin_type);
+				dim->fd.interval_origin = ts_time_value_to_internal(default_origin, origin_type);
+			}
+			/* Otherwise, preserve existing origin */
+
+			/* Clear interval_length since we're using calendar chunking */
+			dim->fd.interval_length = 0;
+		}
+		else
+		{
+			/*
+			 * Non-calendar chunking: convert interval to integer microseconds.
+			 * If origin is explicitly provided, store it for chunk alignment.
+			 */
+			dim->fd.interval_length =
+				dimension_interval_to_internal(NameStr(dim->fd.column_name),
+											   partition_type,
+											   chunk_interval,
+											   hypertable_adaptive_chunking_enabled(ht),
+											   false);
+			/* Set chunk_interval type to INT8OID to indicate non-calendar chunking */
+			dim->chunk_interval.type = INT8OID;
+			dim->chunk_interval.integer_interval = dim->fd.interval_length;
+
+			if (chunk_interval->has_origin)
+			{
+				dim->fd.interval_origin = chunk_interval_get_origin_internal(chunk_interval);
+				dim->chunk_interval.has_origin = true;
+				chunk_interval_set_origin_internal(&dim->chunk_interval,
+												   dim->fd.interval_origin,
+												   chunk_interval->origin_type);
+			}
+		}
 	}
 
 	if (num_slices)
@@ -1267,7 +1892,7 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 	 * num_slices cannot be > INT16_MAX.
 	 */
 	num_slices = num_slices_arg & 0xffff;
-	ts_dimension_update(ht, colname, DIMENSION_TYPE_CLOSED, NULL, NULL, &num_slices, NULL);
+	ts_dimension_update(ht, colname, DIMENSION_TYPE_CLOSED, NULL, &num_slices, NULL, NULL);
 	ts_cache_release(&hcache);
 
 	PG_RETURN_VOID();
@@ -1285,16 +1910,23 @@ TS_FUNCTION_INFO_V1(ts_dimension_set_interval);
  *     TIMESTAMP/TIMESTAMPTZ/DATE type, it can be integral which is treated as
  *     microseconds, or an INTERVAL type.
  * dimension_name - The name of the dimension
+ * origin - The new origin for chunk alignment (optional)
  */
 Datum
 ts_dimension_set_interval(PG_FUNCTION_ARGS)
 {
 	Oid table_relid = PG_GETARG_OID(0);
-	Datum interval = PG_GETARG_DATUM(1);
-	Oid intervaltype = InvalidOid;
+	Datum interval_datum = PG_GETARG_DATUM(1);
 	Name colname = PG_ARGISNULL(2) ? NULL : PG_GETARG_NAME(2);
+	bool origin_isnull = PG_ARGISNULL(3);
+	Datum origin_datum = origin_isnull ? UnassignedDatum : PG_GETARG_DATUM(3);
+	Oid origin_type = origin_isnull ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3);
+	bool calendar_chunking_isnull = PG_ARGISNULL(4);
+	bool calendar_chunking_value = calendar_chunking_isnull ? false : PG_GETARG_BOOL(4);
+	bool *use_calendar_chunking = calendar_chunking_isnull ? NULL : &calendar_chunking_value;
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht;
+	ChunkInterval chunk_interval;
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
@@ -1310,8 +1942,66 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid interval: an explicit interval must be specified")));
 
-	intervaltype = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	ts_dimension_update(ht, colname, DIMENSION_TYPE_OPEN, &interval, &intervaltype, NULL, NULL);
+	/*
+	 * Check if the hypertable uses calendar chunking and validate interval type.
+	 * Calendar-based hypertables require an INTERVAL type for the chunk interval,
+	 * unless the user is explicitly switching to non-calendar mode.
+	 */
+	{
+		Oid interval_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+		Dimension *dim =
+			ts_hyperspace_get_mutable_dimension_by_name(ht->space,
+														DIMENSION_TYPE_OPEN,
+														colname ? NameStr(*colname) : NULL);
+		if (dim == NULL)
+			dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+
+		/*
+		 * Error if using integer interval on calendar hypertable, unless explicitly
+		 * switching to non-calendar mode via calendar_chunking => false.
+		 */
+		if (dim != NULL && IS_CALENDAR_CHUNKING(dim) && interval_type != INTERVALOID &&
+			(use_calendar_chunking == NULL || *use_calendar_chunking == true))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("cannot use integer interval on calendar-based hypertable"),
+					 errhint("Use an INTERVAL type value (e.g., INTERVAL '1 day') "
+							 "or set calendar_chunking => false to switch to non-calendar mode.")));
+
+		/*
+		 * Error if trying to enable calendar chunking with an integer interval.
+		 */
+		if (use_calendar_chunking != NULL && *use_calendar_chunking == true &&
+			interval_type != INTERVALOID)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("cannot enable calendar chunking with an integer interval"),
+					 errhint("Use an INTERVAL type value (e.g., INTERVAL '1 day').")));
+
+		/* Validate origin type compatibility with dimension type */
+		if (!origin_isnull && dim != NULL)
+			validate_origin_type_compatibility(dim->fd.column_type,
+											   origin_type,
+											   NameStr(dim->fd.column_name));
+	}
+
+	{
+		Oid interval_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+		chunk_interval_set_with_origin(&chunk_interval,
+									   interval_datum,
+									   interval_type,
+									   origin_datum,
+									   origin_type,
+									   !origin_isnull);
+	}
+
+	ts_dimension_update(ht,
+						colname,
+						DIMENSION_TYPE_OPEN,
+						&chunk_interval,
+						NULL,
+						NULL,
+						use_calendar_chunking);
 	ts_cache_release(&hcache);
 
 	PG_RETURN_VOID();
@@ -1319,18 +2009,25 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 
 DimensionInfo *
 ts_dimension_info_create_open(Oid table_relid, Name column_name, Datum interval, Oid interval_type,
-							  regproc partitioning_func)
+							  regproc partitioning_func, Datum origin, Oid origin_type,
+							  bool has_origin)
 {
-	DimensionInfo *info = palloc(sizeof(*info));
-	*info = (DimensionInfo){
-		.type = DIMENSION_TYPE_OPEN,
-		.table_relid = table_relid,
-		.partitioning_func = partitioning_func,
-	};
+	DimensionInfo *info = palloc0(sizeof(*info));
+	AttrNumber colnum = get_attnum(table_relid, NameStr(*column_name));
+	Oid coltype = get_atttype(table_relid, colnum);
 
-	chunk_interval_set(&info->chunk_interval, interval, interval_type);
-
+	info->type = DIMENSION_TYPE_OPEN;
+	info->table_relid = table_relid;
+	info->coltype = coltype;
+	info->partitioning_func = partitioning_func;
 	namestrcpy(&info->colname, NameStr(*column_name));
+
+	chunk_interval_set_with_origin(&info->chunk_interval,
+								   interval,
+								   interval_type,
+								   origin,
+								   origin_type,
+								   has_origin);
 	return info;
 }
 
@@ -1339,15 +2036,71 @@ ts_dimension_info_create_closed(Oid table_relid, Name column_name, int32 num_sli
 								regproc partitioning_func)
 {
 	DimensionInfo *info = palloc(sizeof(*info));
+	AttrNumber colnum = get_attnum(table_relid, NameStr(*column_name));
+
 	*info = (DimensionInfo){
 		.type = DIMENSION_TYPE_CLOSED,
 		.table_relid = table_relid,
+		.coltype = get_atttype(table_relid, colnum),
 		.num_slices = num_slices,
 		.num_slices_is_set = (num_slices > 0),
 		.partitioning_func = partitioning_func,
 	};
 	namestrcpy(&info->colname, NameStr(*column_name));
 	return info;
+}
+
+/*
+ * Validate that the origin type is compatible with the dimension type.
+ *
+ * The origin must be of a type that can be meaningfully converted to the
+ * dimension's internal representation:
+ * - Integer dimensions require integer origins
+ * - Timestamp/date dimensions accept timestamp, timestamptz, or date origins
+ */
+static void
+validate_origin_type_compatibility(Oid dimtype, Oid origin_type, const char *colname)
+{
+	bool dim_is_integer = IS_INTEGER_TYPE(dimtype);
+	bool dim_is_timestamp = IS_TIMESTAMP_TYPE(dimtype);
+	bool origin_is_integer = IS_INTEGER_TYPE(origin_type);
+	bool origin_is_timestamp = IS_TIMESTAMP_TYPE(origin_type);
+
+	if (dim_is_integer)
+	{
+		/* Integer dimensions require integer origins */
+		if (!origin_is_integer)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("origin type %s is not compatible with integer time column \"%s\"",
+							format_type_be(origin_type),
+							colname),
+					 errhint("Use an integer origin value for integer time columns.")));
+	}
+	else if (dim_is_timestamp)
+	{
+		/* Timestamp/date dimensions accept timestamp, timestamptz, or date origins */
+		if (!origin_is_timestamp)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("origin type %s is not compatible with %s column \"%s\"",
+							format_type_be(origin_type),
+							format_type_be(dimtype),
+							colname),
+					 errhint("Use a timestamp, timestamptz, or date origin value.")));
+	}
+	else if (dimtype == UUIDOID)
+	{
+		/* UUID dimensions (UUID v7) accept timestamp, timestamptz, or date origins */
+		if (!origin_is_timestamp)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("origin type %s is not compatible with uuid column \"%s\"",
+							format_type_be(origin_type),
+							colname),
+					 errhint(
+						 "Use a timestamp, timestamptz, or date origin value for UUID columns.")));
+	}
 }
 
 /* Validate the configuration of an open ("time") dimension */
@@ -1372,24 +2125,49 @@ dimension_info_validate_open(DimensionInfo *info)
 		dimtype = get_func_rettype(info->partitioning_func);
 	}
 
-	/*
-	 * Validate the dimension type before trying to get the default interval.
-	 * This ensures we give a clear "invalid type" error rather than a confusing
-	 * "cannot get default interval" error for unsupported types.
-	 */
+	/* Validate that the dimension type is valid for an open (time) dimension */
 	if (!IS_VALID_OPEN_DIM_TYPE(dimtype))
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("invalid type for dimension \"%s\"", NameStr(info->colname)),
 				 errhint("Use an integer, timestamp, or date type.")));
 
+	/*
+	 * Validate origin type compatibility with dimension type.
+	 * The origin must be convertible to the dimension's internal representation.
+	 */
+	if (info->chunk_interval.has_origin)
+		validate_origin_type_compatibility(dimtype,
+										   info->chunk_interval.origin_type,
+										   NameStr(info->colname));
+
 	if (!OidIsValid(info->chunk_interval.type))
+	{
+		/*
+		 * No interval specified - use the default. Preserve origin fields since
+		 * get_default_interval only sets interval type and value.
+		 */
+		int64 origin_internal = 0;
+		Oid origin_type = info->chunk_interval.origin_type;
+		bool has_origin = info->chunk_interval.has_origin;
+
+		if (has_origin)
+			origin_internal = chunk_interval_get_origin_internal(&info->chunk_interval);
+
 		info->chunk_interval = get_default_interval(dimtype, info->adaptive_chunking);
 
-	info->interval = dimension_interval_to_internal(NameStr(info->colname),
-													dimtype,
-													&info->chunk_interval,
-													info->adaptive_chunking);
+		/* Restore origin fields */
+		info->chunk_interval.has_origin = has_origin;
+		if (has_origin)
+			chunk_interval_set_origin_internal(&info->chunk_interval, origin_internal, origin_type);
+	}
+
+	/* Validate the interval (suppress warnings as they will be issued during insert) */
+	(void) dimension_interval_to_internal(NameStr(info->colname),
+										  dimtype,
+										  &info->chunk_interval,
+										  info->adaptive_chunking,
+										  true);
 }
 
 /* Validate the configuration of a closed ("space") dimension */
@@ -1445,7 +2223,6 @@ ts_dimension_info_validate(DimensionInfo *info)
 
 	datum = SysCacheGetAttr(ATTNAME, tuple, Anum_pg_attribute_atttypid, &isnull);
 	Assert(!isnull);
-
 	info->coltype = DatumGetObjectId(datum);
 
 	datum = SysCacheGetAttr(ATTNAME, tuple, Anum_pg_attribute_attnotnull, &isnull);
@@ -1508,17 +2285,24 @@ ts_dimension_info_validate(DimensionInfo *info)
 int32
 ts_dimension_add_from_info(DimensionInfo *info)
 {
+	Oid dimtype;
+
 	if (info->set_not_null && info->type == DIMENSION_TYPE_OPEN)
 		dimension_add_not_null_on_column(info->table_relid, NameStr(info->colname));
 
 	Assert(info->ht != NULL);
 
+	/* Dimension type is return type of partitioning function if present */
+	dimtype = OidIsValid(info->partitioning_func) ? get_func_rettype(info->partitioning_func) :
+													info->coltype;
+
 	info->dimension_id = dimension_insert(info->ht->fd.id,
 										  &info->colname,
 										  info->coltype,
+										  dimtype,
 										  info->num_slices,
 										  info->partitioning_func,
-										  info->interval);
+										  &info->chunk_interval);
 
 	return info->dimension_id;
 }
@@ -1569,6 +2353,13 @@ dimension_create_datum(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_gen
 	}
 
 	return HeapTupleGetDatum(tuple);
+}
+
+void
+ts_dimension_info_set_defaults(DimensionInfo *info)
+{
+	/* No defaults needed for origin - if has_origin is false, it means use default */
+	(void) info;
 }
 
 /*
@@ -1624,6 +2415,7 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 				 errmsg("cannot omit both the number of partitions and the interval")));
 
 	ts_dimension_info_validate(info);
+	ts_dimension_info_set_defaults(info);
 
 	if (!info->skip)
 	{
@@ -1692,21 +2484,34 @@ TS_FUNCTION_INFO_V1(ts_dimension_add_general);
 Datum
 ts_dimension_add(PG_FUNCTION_ARGS)
 {
+	bool origin_isnull = PG_ARGISNULL(6);
+	Datum origin_datum = origin_isnull ? UnassignedDatum : PG_GETARG_DATUM(6);
+	Oid origin_type = origin_isnull ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 6);
+	Name colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
 	Oid interval_type = PG_ARGISNULL(3) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3);
 	DimensionInfo info = {
 		.type = PG_ARGISNULL(2) ? DIMENSION_TYPE_OPEN : DIMENSION_TYPE_CLOSED,
 		.table_relid = PG_GETARG_OID(0),
 		.num_slices = PG_ARGISNULL(2) ? DatumGetInt32(-1) : PG_GETARG_INT32(2),
 		.num_slices_is_set = !PG_ARGISNULL(2),
-		.chunk_interval.type = interval_type,
 		.partitioning_func = PG_ARGISNULL(4) ? InvalidOid : PG_GETARG_OID(4),
 		.if_not_exists = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5),
 	};
 
+	chunk_interval_set_with_origin(&info.chunk_interval,
+								   PG_ARGISNULL(3) ? UnassignedDatum : PG_GETARG_DATUM(3),
+								   interval_type,
+								   origin_datum,
+								   origin_type,
+								   !origin_isnull);
+
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	if (!PG_ARGISNULL(1))
-		namestrcpy(&info.colname, NameStr(*PG_GETARG_NAME(1)));
+	if (NULL == colname)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("column_name cannot be NULL")));
+
+	namestrcpy(&info.colname, NameStr(*colname));
 
 	if (!PG_ARGISNULL(3))
 		chunk_interval_set(&info.chunk_interval, PG_GETARG_DATUM(3), interval_type);
@@ -1798,7 +2603,7 @@ make_dimension_info(Name colname, DimensionType dimtype)
 Datum
 ts_hash_dimension(PG_FUNCTION_ARGS)
 {
-	Ensure(PG_NARGS() > 2, "expected at most 3 arguments, invoked with %d arguments", PG_NARGS());
+	Ensure(PG_NARGS() > 2, "expected at least 3 arguments, invoked with %d arguments", PG_NARGS());
 	Name column_name;
 	GETARG_NOTNULL_NULLABLE(column_name, 0, "column_name", NAME);
 	DimensionInfo *info = make_dimension_info(column_name, DIMENSION_TYPE_CLOSED);
@@ -1817,15 +2622,24 @@ ts_hash_dimension(PG_FUNCTION_ARGS)
 Datum
 ts_range_dimension(PG_FUNCTION_ARGS)
 {
-	Ensure(PG_NARGS() > 2, "expected at most 3 arguments, invoked with %d arguments", PG_NARGS());
+	Ensure(PG_NARGS() > 2, "expected at least 3 arguments, invoked with %d arguments", PG_NARGS());
 	Name column_name;
 	GETARG_NOTNULL_NULLABLE(column_name, 0, "column_name", NAME);
 	DimensionInfo *info = make_dimension_info(column_name, DIMENSION_TYPE_OPEN);
 	Datum interval_datum = PG_ARGISNULL(1) ? Int32GetDatum(-1) : PG_GETARG_DATUM(1);
 	Oid interval_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
+	bool origin_isnull = PG_ARGISNULL(3);
+	Oid origin_type = origin_isnull ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3);
+
 	info->partitioning_func = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2);
 
-	chunk_interval_set(&info->chunk_interval, interval_datum, interval_type);
+	chunk_interval_set_with_origin(&info->chunk_interval,
+								   interval_datum,
+								   interval_type,
+								   origin_isnull ? UnassignedDatum : PG_GETARG_DATUM(3),
+								   origin_type,
+								   !origin_isnull);
+
 	PG_RETURN_POINTER(info);
 }
 
@@ -1833,8 +2647,11 @@ Datum
 ts_dimension_add_general(PG_FUNCTION_ARGS)
 {
 	DimensionInfo *info = NULL;
+	Oid relid = PG_GETARG_OID(0);
 	GETARG_NOTNULL_POINTER(info, 1, "dimension", DimensionInfo);
-	info->table_relid = PG_GETARG_OID(0);
+	AttrNumber colattr = get_attnum(relid, NameStr(info->colname));
+	info->coltype = get_atttype(relid, colattr);
+	info->table_relid = relid;
 	if (PG_GETARG_BOOL(2))
 		info->if_not_exists = true;
 	return ts_dimension_add_internal(fcinfo, info, true);
