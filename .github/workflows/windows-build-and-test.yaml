@@ -10,17 +10,7 @@ name: Regression Windows
       - ?.*.x
       - trigger/windows_tests
       - trigger/regression
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE*'
-      - NOTICE
-      - 'bootstrap*'
   pull_request:
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE*'
-      - NOTICE
-      - 'bootstrap*'
   workflow_dispatch:
 jobs:
   config:
@@ -47,11 +37,31 @@ jobs:
           echo "build_type=['Debug','Release']" >>$GITHUB_OUTPUT
         fi
 
+  check_paths:
+    runs-on: ubuntu-latest
+    outputs:
+      run_ci: ${{ steps.filter.outputs.src }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            src:
+              - 'cmake/**'
+              - 'scripts/**'
+              - 'sql/**'
+              - 'src/**'
+              - 'test/**'
+              - 'tsl/**'
+              - 'CMakeLists.txt'
+
   build:
     # Change the JOB_NAME variable below when changing the name.
     name: PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
     runs-on: windows-2025
-    needs: config
+    needs: [config, check_paths]
+    if: needs.check_paths.outputs.run_ci == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -339,3 +349,17 @@ jobs:
         fi
         export GITHUB_PR_NUMBER
         scripts/upload_ci_stats.sh
+
+  report_status:
+    name: Regression Windows summary
+    needs: [check_paths, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          # If the detector failed, or the matrix failed, exit with error
+          if [[ "${{ needs.build.result }}" == "failure" ]]; then
+            exit 1
+          fi
+          echo "All checks passed or were safely skipped."
+

@@ -12,15 +12,7 @@ name: Regression
       - main
       - ?.*.x
       - trigger/regression
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE*'
-      - NOTICE
   pull_request:
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE*'
-      - NOTICE
 jobs:
   matrixbuilder:
     runs-on: ubuntu-latest
@@ -41,10 +33,30 @@ jobs:
           .github/gh_matrix_builder.py ${{ github.event_name }}
         fi
 
+  check_paths:
+    runs-on: ubuntu-latest
+    outputs:
+      run_ci: ${{ steps.filter.outputs.src }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            src:
+              - 'cmake/**'
+              - 'scripts/**'
+              - 'sql/**'
+              - 'src/**'
+              - 'test/**'
+              - 'tsl/**'
+              - 'CMakeLists.txt'
+
   regress:
+    if: needs.check_paths.outputs.run_ci == 'true'
     # Change the JOB_NAME variable below when changing the name.
     name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}
-    needs: matrixbuilder
+    needs: [matrixbuilder, check_paths]
     runs-on: ${{ matrix.os }}
 
     env:
@@ -372,3 +384,17 @@ jobs:
       CLAUDE_APP_PRIVATE_KEY: ${{ secrets.CLAUDE_APP_PRIVATE_KEY }}
       CLAUDE_SLACK_BOT_TOKEN: ${{ secrets.CLAUDE_SLACK_BOT_TOKEN }}
       CLAUDE_SLACK_CHANNEL: ${{ secrets.CLAUDE_SLACK_CHANNEL }}
+
+  report_status:
+    name: Regression summary
+    needs: [check_paths, regress]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          # If the detector failed, or the matrix failed, exit with error
+          if [[ "${{ needs.regress.result }}" == "failure" ]]; then
+            exit 1
+          fi
+          echo "All checks passed or were safely skipped."
+
