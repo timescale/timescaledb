@@ -94,7 +94,7 @@ vector_const_textne(const ArrowArray *arrow, const Datum constdatum, uint64 *res
 	{                                                                                              \
 		(p)++;                                                                                     \
 		(plen)--;                                                                                  \
-	} while ((plen) > 0 && (*(p) &0xC0) == 0x80)
+	} while ((plen) > 0 && (*(p) & 0xC0) == 0x80)
 #define MatchText UTF8_MatchText
 
 #include "import/ts_like_match.c"

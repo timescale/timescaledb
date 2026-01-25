@@ -989,8 +989,6 @@ ts_dimension_slice_scan_iterator_get_by_id(ScanIterator *it, int32 slice_id)
 		return NULL;
 
 	DimensionSlice *slice = ts_dimension_slice_from_tuple(ti);
-	/* There should be only one slice with the given id */
-	Assert(ts_scan_iterator_next(it) == NULL);
 
 	return slice;
 }

@@ -130,7 +130,7 @@ typedef struct GroupingPolicyHash
 	uint64 stat_consecutive_keys;
 } GroupingPolicyHash;
 
-//#define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
+// #define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
 #ifndef DEBUG_PRINT
 #define DEBUG_PRINT(...)
 #endif

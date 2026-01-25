@@ -12,7 +12,9 @@
 #define VECTOR_CTYPE int64
 #define CONST_CTYPE int64
 #define CONST_CONVERSION(X) DatumGetInt64(X)
-#define PG_PREDICATE(X) F_INT8##X: case F_TIMESTAMPTZ_##X: case F_TIMESTAMP_##X
+#define PG_PREDICATE(X)                                                                            \
+	F_INT8##X: case F_TIMESTAMPTZ_##X:                                                             \
+	case F_TIMESTAMP_##X
 
 #include "pred_vector_const_arithmetic_type_pair.c"
 
