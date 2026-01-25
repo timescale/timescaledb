@@ -35,6 +35,10 @@
 
 #include <math.h>
 
+/* Track last logged query to avoid duplicate INFO messages during replanning */
+static int last_logged_stmt_location = -1;
+static int last_logged_stmt_len = -1;
+
 typedef struct SkipKeyInfo
 {
 	/* Index clause which we'll use to skip past elements we've already seen */
@@ -163,7 +167,29 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 	StringInfoData debuginfo;
 	RangeTblEntry *indexed_rte = NULL;
 	char *sep = "";
-	if (ts_guc_debug_skip_scan_info)
+	/*
+	 * Only emit debug info if enabled and this is not a replan of the same statement.
+	 * In Debug builds with CACHEFLUSH, prepared statements may be replanned on
+	 * subsequent executions. We track the statement location/length to avoid
+	 * duplicate INFO messages for the same SQL statement.
+	 */
+	bool should_log = ts_guc_debug_skip_scan_info;
+	if (should_log && root->parse->stmt_location >= 0)
+	{
+		/* Check if this is the same statement we just logged */
+		if (root->parse->stmt_location == last_logged_stmt_location &&
+			root->parse->stmt_len == last_logged_stmt_len)
+		{
+			should_log = false;
+		}
+		else
+		{
+			/* Update last logged statement */
+			last_logged_stmt_location = root->parse->stmt_location;
+			last_logged_stmt_len = root->parse->stmt_len;
+		}
+	}
+	if (should_log)
 	{
 		initStringInfo(&debuginfo);
 		RelOptInfo *indexed_rel = index_path->path.parent;
@@ -237,7 +263,7 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 										 sknulls,
 										 skinfo->scankey_attno));
 		/* Debug info about skip key */
-		if (ts_guc_debug_skip_scan_info)
+		if (should_log)
 		{
 			char *attname = get_attname(indexed_rte->relid, skinfo->indexed_column_attno, false);
 			char *sknullstext;
@@ -260,7 +286,7 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 		}
 	}
 
-	if (ts_guc_debug_skip_scan_info)
+	if (should_log)
 	{
 		appendStringInfoString(&debuginfo, ")");
 		elog(INFO, "%s", debuginfo.data);

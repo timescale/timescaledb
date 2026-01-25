@@ -1757,30 +1757,28 @@ ts_makeaclitem(PG_FUNCTION_ARGS)
 	bool goption = PG_GETARG_BOOL(3);
 	AclItem *result;
 	AclMode priv;
-	static const priv_map any_priv_map[] = {
-		{ "SELECT", ACL_SELECT },
-		{ "INSERT", ACL_INSERT },
-		{ "UPDATE", ACL_UPDATE },
-		{ "DELETE", ACL_DELETE },
-		{ "TRUNCATE", ACL_TRUNCATE },
-		{ "REFERENCES", ACL_REFERENCES },
-		{ "TRIGGER", ACL_TRIGGER },
-		{ "EXECUTE", ACL_EXECUTE },
-		{ "USAGE", ACL_USAGE },
-		{ "CREATE", ACL_CREATE },
-		{ "TEMP", ACL_CREATE_TEMP },
-		{ "TEMPORARY", ACL_CREATE_TEMP },
-		{ "CONNECT", ACL_CONNECT },
+	static const priv_map any_priv_map[] = { { "SELECT", ACL_SELECT },
+											 { "INSERT", ACL_INSERT },
+											 { "UPDATE", ACL_UPDATE },
+											 { "DELETE", ACL_DELETE },
+											 { "TRUNCATE", ACL_TRUNCATE },
+											 { "REFERENCES", ACL_REFERENCES },
+											 { "TRIGGER", ACL_TRIGGER },
+											 { "EXECUTE", ACL_EXECUTE },
+											 { "USAGE", ACL_USAGE },
+											 { "CREATE", ACL_CREATE },
+											 { "TEMP", ACL_CREATE_TEMP },
+											 { "TEMPORARY", ACL_CREATE_TEMP },
+											 { "CONNECT", ACL_CONNECT },
 #if PG16_GE
-		{ "SET", ACL_SET },
-		{ "ALTER SYSTEM", ACL_ALTER_SYSTEM },
+											 { "SET", ACL_SET },
+											 { "ALTER SYSTEM", ACL_ALTER_SYSTEM },
 #endif
 #if PG17_GE
-		{ "MAINTAIN", ACL_MAINTAIN },
+											 { "MAINTAIN", ACL_MAINTAIN },
 #endif
-		{ "RULE", 0 }, /* ignore old RULE privileges */
-		{ NULL, 0 }
-	};
+											 { "RULE", 0 }, /* ignore old RULE privileges */
+											 { NULL, 0 } };
 
 	priv = ts_convert_any_priv_string(privtext, any_priv_map);
 
