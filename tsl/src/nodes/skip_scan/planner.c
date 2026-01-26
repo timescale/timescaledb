@@ -170,17 +170,20 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 	/*
 	 * Only emit debug info if enabled and this is not a replan of the same statement.
 	 *
-	 * CACHEFLUSH is a PostgreSQL debug option (enabled via CFLAGS="-DCACHEFLUSH_START_CACHESIZE=1")
-	 * that aggressively invalidates the plan cache to stress-test the planner. When enabled,
-	 * prepared statements are replanned on subsequent executions rather than being cached.
+	 * PostgreSQL may replan prepared statements when the plan cache is invalidated due to
+	 * various reasons: statistics updates, schema changes, cache pressure, or internal cache
+	 * management policies. This is normal PostgreSQL behavior, not specific to any debug flag.
 	 *
-	 * This aggressive cache invalidation was encountered during testing with a PostgreSQL 16
-	 * snapshot build (pre-release version). While this behavior is most prominent in snapshot
-	 * builds with CACHEFLUSH enabled, similar replanning can occur in stable releases when the
-	 * plan cache is invalidated (e.g., due to schema changes, statistics updates, or cache pressure).
+	 * During testing with PostgreSQL 16 snapshot builds, we observed that prepared statements
+	 * could be replanned on subsequent executions, causing our skip scan planner to be invoked
+	 * multiple times for the same SQL statement within a single test run. This resulted in
+	 * duplicate INFO messages when ts_guc_debug_skip_scan_info is enabled, causing test failures.
 	 *
-	 * Without deduplication, this replanning triggers duplicate INFO messages for the same SQL
-	 * statement, causing test failures. We track statement location/length to suppress duplicates.
+	 * While more frequent in development/snapshot builds due to their aggressive testing
+	 * configurations, similar replanning can occur in stable PostgreSQL releases.
+	 *
+	 * To prevent duplicate INFO messages, we track the statement location and length to detect
+	 * and suppress output for replans of the same statement.
 	 */
 	bool should_log = ts_guc_debug_skip_scan_info;
 	if (should_log && root->parse->stmt_location >= 0)
