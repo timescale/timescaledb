@@ -7,7 +7,20 @@ name: pg_upgrade test
   pull_request:
 
 jobs:
+  check_paths:
+    runs-on: ubuntu-latest
+    outputs:
+      run_ci: ${{ steps.filter.outputs.sql == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: .github/filters.yaml
+
   pg_upgrade_test:
+    needs: check_paths
+    if: needs.check_paths.outputs.run_ci == 'true'
     name: pg_upgrade test from PG${{ matrix.pg_version_old }} to PG${{ matrix.pg_version_new }}
     runs-on: 'ubuntu-latest'
     strategy:
@@ -111,3 +124,17 @@ jobs:
         with:
           name: pg_upgrade logs from ${{ matrix.pg_version_old }} to ${{ matrix.pg_version_new }}
           path: /tmp/pg_upgrade_artifacts.tgz
+
+  report_status:
+    name: pg_upgrade summary
+    needs: [check_paths, pg_upgrade_test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          # If the detector failed, or the matrix failed, exit with error
+          if [[ "${{ needs.pg_upgrade_test.result }}" == "failure" ]]; then
+            exit 1
+          fi
+          echo "All checks passed or were safely skipped."
+
