@@ -205,7 +205,7 @@ $TEST$;
 INFO:  Creating 30 jobs
 INFO:  Scheduling 30 jobs
 SELECT _timescaledb_functions.restart_background_workers();
- restart_background_workers
+ restart_background_workers 
 ----------------------------
  t
 
