@@ -25,6 +25,7 @@
 #include <compression/compression.h>
 #include <compression/compression_dml.h>
 #include <compression/create.h>
+#include <compression/sparse_index_bloom1.h>
 #include <compression/wal_utils.h>
 #include <continuous_aggs/insert.h>
 #include <expression_utils.h>
@@ -53,12 +54,11 @@ typedef BatchQualSummary(BatchMatcher)(RowDecompressor *decompressor, ScanKeyDat
 									   int num_scankeys, tuple_filtering_constraints *constraints,
 									   bool check_full_match, bool *skip_current_tuple);
 
-static struct decompress_batches_stats decompress_batches_scan(
-	Relation in_rel, Relation out_rel, Relation index_rel, Snapshot snapshot,
-	ScanKeyData *index_scankeys, int num_index_scankeys, ScanKeyData *heap_scankeys,
-	int num_heap_scankeys, ScanKeyData *mem_scankeys, int num_mem_scankeys,
-	tuple_filtering_constraints *constraints, bool *skip_current_tuple, bool delete_only,
-	Bitmapset *null_columns, List *is_nulls, InvalidationContext *invalidation_ctx);
+static struct decompress_batches_stats
+decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, Snapshot snapshot,
+						bool *skip_current_tuple, bool delete_only, List *is_nulls,
+						InvalidationContext *invalidation_ctx, CachedDecompressionState *cdst,
+						TupleTableSlot *insert_slot);
 
 static BatchQualSummary batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys,
 									  int num_scankeys, tuple_filtering_constraints *constraints,
@@ -86,8 +86,9 @@ static bool can_delete_without_decompression(ModifyHypertableState *ht_state,
 static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 											CompressionSettings *settings, Relation chunk_rel,
 											Oid ht_relid, ScanKeyWithAttnos *mem_scankeys);
-static ScanKeyData *get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot,
-										 int null_flags);
+static void update_scankeys(ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags);
+static void init_upsert_bloom_state(ChunkInsertState *cis);
+static Bitmapset *get_arbiter_index_attnums(ChunkInsertState *cis);
 
 static AttrNumber
 TupleDescGetAttrNumber(TupleDesc desc, const char *name)
@@ -99,6 +100,151 @@ TupleDescGetAttrNumber(TupleDesc desc, const char *name)
 	}
 
 	return InvalidAttrNumber;
+}
+
+typedef struct MatchedBloom
+{
+	char *column_name;
+	Bitmapset *attnums;
+	AttrNumber compressed_attnum;
+	int num_cols;
+} MatchedBloom;
+
+/*
+ * Get arbiter index column attnums from the arbiter index list.
+ */
+static Bitmapset *
+get_arbiter_index_attnums(ChunkInsertState *cis)
+{
+	Assert(cis != NULL);
+	Assert(cis->result_relation_info != NULL);
+	List *arbiterIndexes = cis->result_relation_info->ri_onConflictArbiterIndexes;
+	if (arbiterIndexes == NIL)
+		return NULL;
+
+	Oid arbiter_oid = linitial_oid(arbiterIndexes);
+	Relation index_rel = index_open(arbiter_oid, AccessShareLock);
+
+	Bitmapset *attnums = NULL;
+	for (int i = 0; i < index_rel->rd_index->indnkeyatts; i++)
+	{
+		AttrNumber attno = index_rel->rd_index->indkey.values[i];
+		if (!AttributeNumberIsValid(attno))
+		{
+			/* Expression index - can't use bloom optimization */
+			index_close(index_rel, AccessShareLock);
+			return NULL;
+		}
+		attnums = bms_add_member(attnums, attno);
+	}
+
+	index_close(index_rel, AccessShareLock);
+	return attnums;
+}
+
+/*
+ * Per-chunk initialization of UPSERT bloom state. Called once per chunk in
+ * init_decompress_state_for_insert(), inside the has_primary_or_unique_index block. The result is
+ * cached in CachedDecompressionState via ChunkInsertState in subspace_store.
+ *
+ * It assumes cdst->compression_settings is already looked up for the chunk.
+ *
+ * Discovers which bloom columns match arbiter index columns, that is, being a subset of the
+ * conflict columns. Builds the mapping from bloom columns to INSERT tuple attnums, and resolves
+ * bloom column names to compressed chunk attnums. The chosen bloom filter is stored in the
+ * CachedDecompressionState struct.
+ */
+static void
+init_upsert_bloom_state(ChunkInsertState *cis)
+{
+	Bitmapset *conflict_attnums = get_arbiter_index_attnums(cis);
+	CachedDecompressionState *cdst = cis->cached_decompression_state;
+	Assert(cdst != NULL);
+	if (cdst == NULL || conflict_attnums == NULL)
+		return;
+
+	CompressionSettings *settings = cdst->compression_settings;
+	Assert(settings != NULL);
+	if (settings == NULL || settings->fd.index == NULL)
+		return;
+
+	Oid compressed_relid = settings->fd.compress_relid;
+
+	ParsedCompressionSettings *parsed =
+		ts_convert_to_parsed_compression_settings(settings->fd.index);
+	Assert(parsed != NULL);
+	if (parsed == NULL)
+		return;
+
+	/* Map the bloom column names to hypertable attnums, because the bloom columns
+	 * will be built based on the insert tuple attnums which are the hypertable attnums. */
+	TsBmsList per_column_attnos =
+		ts_resolve_columns_to_attnos_from_parsed_settings(parsed, cis->hypertable_relid);
+
+	Assert(list_length(per_column_attnos) == list_length(parsed->objects));
+	Assert(list_length(per_column_attnos) > 0);
+	MatchedBloom best_match = { .num_cols = 0 };
+
+	/** Parallel iteration over objects and their resolved attnums. */
+	ListCell *obj_cell;
+	ListCell *attno_cell;
+	forboth (obj_cell, parsed->objects, attno_cell, per_column_attnos)
+	{
+		ParsedCompressionSettingsObject *obj = lfirst(obj_cell);
+		Bitmapset *bloom_attnos = lfirst(attno_cell);
+
+		/* Check if bloom type */
+		List *type_values = ts_get_values_by_key_from_parsed_object(obj, "type");
+		if (type_values == NIL || strcmp((char *) linitial(type_values), "bloom") != 0)
+			continue;
+
+		/* Check if bloom columns are a subset of the conflict columns */
+		if (!bms_is_subset(bloom_attnos, conflict_attnums))
+			continue;
+
+		int num_cols = bms_num_members(bloom_attnos);
+
+		/* Only keep the best match (most columns) */
+		if (num_cols <= best_match.num_cols)
+			continue;
+
+		/* Get column name for this bloom */
+		List *column_names = ts_get_column_names_from_parsed_object(obj);
+		char *col_name =
+			compressed_column_metadata_name_list_v2(bloom1_column_prefix, column_names);
+
+		/* Verify bloom column exists in the compressed chunk */
+		AttrNumber compressed_attnum = get_attnum(compressed_relid, col_name);
+		Assert(AttributeNumberIsValid(compressed_attnum));
+		if (!AttributeNumberIsValid(compressed_attnum))
+			continue;
+
+		/* New best match */
+		best_match.column_name = col_name;
+		best_match.attnums = bms_copy(bloom_attnos);
+		best_match.compressed_attnum = compressed_attnum;
+		best_match.num_cols = num_cols;
+	}
+
+	/* Create builder for the best match, having the largest number of columns */
+	if (best_match.num_cols > 0)
+	{
+		Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+		cdst->bloom_column_name = best_match.column_name;
+		cdst->bloom_insert_attnums = best_match.attnums;
+		cdst->upsert_bloom_attnum = best_match.compressed_attnum;
+
+		int col_idx = 0;
+		int attnum = -1;
+		while ((attnum = bms_next_member(best_match.attnums, attnum)) >= 0)
+			type_oids[col_idx++] = get_atttype(cis->hypertable_relid, attnum);
+
+		if (ts_guc_enable_sparse_index_bloom)
+			cdst->bloom_hasher = bloom1_hasher_create(type_oids, best_match.num_cols);
+	}
+
+	ts_bmslist_free(per_column_attnos);
+	ts_free_parsed_compression_settings(parsed);
 }
 
 void
@@ -117,7 +263,7 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 
 	MemoryContext old_context = MemoryContextSwitchTo(cis->mctx);
 	cdst = palloc0(sizeof(CachedDecompressionState));
-
+	cis->cached_decompression_state = cdst;
 	cdst->has_primary_or_unique_index = ts_indexing_relation_has_primary_or_unique_index(cis->rel);
 
 	if (cdst->has_primary_or_unique_index)
@@ -168,6 +314,11 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 												&index_columns,
 												&cdst->index_scankeys.num_scankeys,
 												&cdst->index_scankeys.attnos);
+
+			if (cis->onConflictAction != ONCONFLICT_NONE)
+			{
+				init_upsert_bloom_state(cis);
+			}
 		}
 
 		if (index_rel)
@@ -199,37 +350,33 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 		cdst->columns_with_null_check = columns_with_null_check;
 		table_close(in_rel, NoLock);
 	}
-	cis->cached_decompression_state = cdst;
 
 	MemoryContextSwitchTo(old_context);
 }
 
-static ScanKeyData *
-get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags)
+static void
+update_scankeys(ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags)
 {
 	if (scankeys->num_scankeys == 0)
 	{
-		return NULL;
+		return;
 	}
 
-	ScanKeyData *updated_scankeys = palloc0(sizeof(ScanKeyData) * scankeys->num_scankeys);
 	for (int i = 0; i < scankeys->num_scankeys; i++)
 	{
-		updated_scankeys[i] = scankeys->scankeys[i];
 		bool isnull = false;
 		Datum value = slot_getattr(slot, scankeys->attnos[i], &isnull);
 		if (isnull)
 		{
-			updated_scankeys[i].sk_flags = null_flags;
-			updated_scankeys[i].sk_argument = UnassignedDatum;
+			scankeys->scankeys[i].sk_flags = null_flags;
+			scankeys->scankeys[i].sk_argument = UnassignedDatum;
 		}
 		else
 		{
-			updated_scankeys[i].sk_flags = 0;
-			updated_scankeys[i].sk_argument = value;
+			scankeys->scankeys[i].sk_flags = 0;
+			scankeys->scankeys[i].sk_argument = value;
 		}
 	}
-	return updated_scankeys;
 }
 
 void
@@ -274,7 +421,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 
 	/* the scan keys used for in memory tests of the decompressed tuples */
 	bool skip_current_tuple = false;
-	struct decompress_batches_stats stats;
+	struct decompress_batches_stats stats = { 0 };
 
 	Relation index_rel = NULL;
 	if (OidIsValid(cdst->index_relid))
@@ -282,11 +429,9 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 		index_rel = index_open(cdst->index_relid, AccessShareLock);
 	}
 
-	ScanKeyData *index_scankeys =
-		get_updated_scankeys(&cdst->index_scankeys, slot, SK_ISNULL | SK_SEARCHNULL);
-	ScanKeyData *heap_scankeys =
-		get_updated_scankeys(&cdst->heap_scankeys, slot, SK_ISNULL | SK_SEARCHNULL);
-	ScanKeyData *mem_scankeys = get_updated_scankeys(&cdst->mem_scankeys, slot, SK_ISNULL);
+	update_scankeys(&cdst->index_scankeys, slot, SK_ISNULL | SK_SEARCHNULL);
+	update_scankeys(&cdst->heap_scankeys, slot, SK_ISNULL | SK_SEARCHNULL);
+	update_scankeys(&cdst->mem_scankeys, slot, SK_ISNULL);
 
 	if (ts_guc_debug_compression_path_info)
 	{
@@ -308,19 +453,12 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 									out_rel,
 									index_rel,
 									GetActiveSnapshot(),
-									index_scankeys,
-									cdst->index_scankeys.num_scankeys,
-									heap_scankeys,
-									cdst->heap_scankeys.num_scankeys,
-									mem_scankeys,
-									cdst->mem_scankeys.num_scankeys,
-									cdst->constraints,
 									&skip_current_tuple,
 									false,
-									cdst->columns_with_null_check, /* no null column check for
-														   non-segmentby columns */
 									NIL,
-									NULL /* no CAgg invalidation for inserts */);
+									NULL /* no CAgg invalidation for inserts */,
+									cdst,
+									slot);
 	if (index_rel)
 		index_close(index_rel, AccessShareLock);
 	PopActiveSnapshot();
@@ -334,13 +472,10 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 	cis->counters->batches_filtered += stats.batches_filtered;
 	cis->counters->batches_decompressed += stats.batches_decompressed;
 	cis->counters->tuples_decompressed += stats.tuples_decompressed;
-
-	if (index_scankeys)
-		pfree(index_scankeys);
-	if (heap_scankeys)
-		pfree(heap_scankeys);
-	if (mem_scankeys)
-		pfree(mem_scankeys);
+	cis->counters->batches_checked_by_bloom += stats.batches_checked_by_bloom;
+	cis->counters->batches_pruned_by_bloom += stats.batches_pruned_by_bloom;
+	cis->counters->batches_without_bloom += stats.batches_without_bloom;
+	cis->counters->batches_bloom_false_positives += stats.batches_bloom_false_positives;
 
 	CommandCounterIncrement();
 	table_close(in_rel, NoLock);
@@ -376,7 +511,7 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	int num_scankeys = 0;
 	ScanKeyData *index_scankeys = NULL;
 	int num_index_scankeys = 0;
-	struct decompress_batches_stats stats;
+	struct decompress_batches_stats stats = { 0 };
 	int num_mem_scankeys = 0;
 	ScanKeyData *mem_scankeys = NULL;
 
@@ -443,23 +578,28 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 		index_scankeys =
 			build_index_scankeys(matching_index_rel, index_filters, &num_index_scankeys);
 	}
+
+	CachedDecompressionState temp_cdst = { 0 };
+	temp_cdst.index_scankeys.scankeys = index_scankeys;
+	temp_cdst.index_scankeys.num_scankeys = num_index_scankeys;
+	temp_cdst.heap_scankeys.scankeys = scankeys;
+	temp_cdst.heap_scankeys.num_scankeys = num_scankeys;
+	temp_cdst.mem_scankeys.scankeys = mem_scankeys;
+	temp_cdst.mem_scankeys.num_scankeys = num_mem_scankeys;
+	temp_cdst.constraints = NULL;
+	temp_cdst.columns_with_null_check = null_columns;
+
 	PushActiveSnapshot(GetTransactionSnapshot());
 	stats = decompress_batches_scan(comp_chunk_rel,
 									chunk_rel,
 									matching_index_rel,
 									GetActiveSnapshot(),
-									index_scankeys,
-									num_index_scankeys,
-									scankeys,
-									num_scankeys,
-									mem_scankeys,
-									num_mem_scankeys,
-									NULL,
 									NULL,
 									delete_only,
-									null_columns,
 									is_null,
-									ht_state->has_continuous_aggregate ? &invalidation_ctx : NULL);
+									ht_state->has_continuous_aggregate ? &invalidation_ctx : NULL,
+									&temp_cdst,
+									NULL);
 
 	/* close the selected index */
 	if (matching_index_rel)
@@ -531,24 +671,36 @@ static bool
 decompress_batch_scan_getnext_slot(DecompressBatchScanDesc scan, ScanDirection direction,
 								   struct TupleTableSlot *slot)
 {
-	if (scan->index_scan)
+	if (scan == NULL)
+	{
+		return false;
+	}
+	else if (scan->index_scan)
 	{
 		return index_getnext_slot(scan->index_scan, direction, slot);
 	}
-	else
+	else if (scan->scan)
 	{
 		return table_scan_getnextslot(scan->scan, direction, slot);
+	}
+	else
+	{
+		return false;
 	}
 }
 
 static void
 decompress_batch_endscan(DecompressBatchScanDesc scan)
 {
-	if (scan->index_scan)
+	if (scan == NULL)
+	{
+		return;
+	}
+	else if (scan->index_scan)
 	{
 		index_endscan(scan->index_scan);
 	}
-	else
+	else if (scan->scan)
 	{
 		table_endscan(scan->scan);
 	}
@@ -568,12 +720,9 @@ decompress_batch_endscan(DecompressBatchScanDesc scan)
  */
 static struct decompress_batches_stats
 decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, Snapshot snapshot,
-						ScanKeyData *index_scankeys, int num_index_scankeys,
-						ScanKeyData *heap_scankeys, int num_heap_scankeys,
-						ScanKeyData *mem_scankeys, int num_mem_scankeys,
-						tuple_filtering_constraints *constraints, bool *skip_current_tuple,
-						bool delete_only, Bitmapset *null_columns, List *is_nulls,
-						InvalidationContext *invalidation_ctx)
+						bool *skip_current_tuple, bool delete_only, List *is_nulls,
+						InvalidationContext *invalidation_ctx, CachedDecompressionState *cdst,
+						TupleTableSlot *insert_slot)
 {
 	HeapTuple compressed_tuple;
 	BulkWriter writer;
@@ -584,6 +733,15 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	int num_filtered_rows = 0;
 	TM_Result result;
 	DecompressBatchScanDesc scan = NULL;
+	ScanKeyData *index_scankeys = cdst->index_scankeys.scankeys;
+	int num_index_scankeys = cdst->index_scankeys.num_scankeys;
+	ScanKeyData *heap_scankeys = cdst->heap_scankeys.scankeys;
+	int num_heap_scankeys = cdst->heap_scankeys.num_scankeys;
+	ScanKeyData *mem_scankeys = cdst->mem_scankeys.scankeys;
+	int num_mem_scankeys = cdst->mem_scankeys.num_scankeys;
+	tuple_filtering_constraints *constraints = cdst->constraints;
+	Bitmapset *null_columns = cdst->columns_with_null_check;
+
 	BatchMatcher *batch_matcher =
 		constraints && constraints->vectorized_filtering ? batch_matches_vectorized : batch_matches;
 	AttrNumber meta_count_attno = InvalidAttrNumber;
@@ -684,6 +842,46 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
 
+		/* To track false positives */
+		bool bloom_passed = false;
+
+		/* Bloom pre-filtering for UPSERT conflict detection */
+		if (insert_slot != NULL && cdst->bloom_hasher != NULL)
+		{
+			Datum bloom_datum =
+				decompressor.compressed_datums[AttrNumberGetAttrOffset(cdst->upsert_bloom_attnum)];
+			bool bloom_isnull =
+				decompressor
+					.compressed_is_nulls[AttrNumberGetAttrOffset(cdst->upsert_bloom_attnum)];
+
+			if (!bloom_isnull)
+			{
+				NullableDatum values[MAX_BLOOM_FILTER_COLUMNS];
+				int col_idx = 0;
+				int attnum = -1;
+				while ((attnum = bms_next_member(cdst->bloom_insert_attnums, attnum)) >= 0)
+				{
+					values[col_idx].value =
+						slot_getattr(insert_slot, attnum, &values[col_idx].isnull);
+					col_idx++;
+				}
+				uint64 hash = cdst->bloom_hasher->hash_values(cdst->bloom_hasher, values);
+
+				stats.batches_checked_by_bloom++;
+				if (!batch_metadata_builder_bloom1_hash_maybe_present(bloom_datum, hash))
+				{
+					row_decompressor_reset(&decompressor);
+					stats.batches_pruned_by_bloom++;
+					continue;
+				}
+				bloom_passed = true;
+			}
+			else
+			{
+				stats.batches_without_bloom++;
+			}
+		}
+
 		/* If there are no in-memory quals, all rows pass */
 		BatchQualSummary summary = AllRowsPass;
 		if (num_mem_scankeys)
@@ -698,6 +896,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			/* If no rows pass, complete batch gets filtered */
 			if (summary == NoRowsPass)
 			{
+				if (bloom_passed)
+					stats.batches_bloom_false_positives++;
 				row_decompressor_reset(&decompressor);
 				stats.batches_filtered++;
 				continue;

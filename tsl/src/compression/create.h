@@ -26,7 +26,9 @@ Chunk *create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid tabl
 
 char *column_segment_min_name(int16 column_index);
 char *column_segment_max_name(int16 column_index);
-char *compressed_column_metadata_name_v2(const char *metadata_type, const char *column_name);
+char *compressed_column_metadata_name_v2(const char *metadata_type, const char **column_names,
+										 int num_columns);
+char *compressed_column_metadata_name_list_v2(const char *metadata_type, List *column_names_list);
 
 typedef struct CompressionSettings CompressionSettings;
 int compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_reloid,

@@ -7,7 +7,9 @@ CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings 
 
 -- Test configurable sparse indexes settings
 
-create table test_settings(x int, value text, u uuid, ts timestamp);
+create table test_settings(
+  x int, value text, u uuid, ts timestamp, d real, b bigint, age int, gender text, city text,
+  long1_01234567890123456789 text, long2_01234567890123456789 text, long3_01234567890123456789 text);
 select create_hypertable('test_settings', 'x');
 
 -- defaults
@@ -81,19 +83,6 @@ alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = 'bloom("u"), minmax("u")');
 
--- multiple columns
-alter table test_settings set (timescaledb.compress,
-    timescaledb.compress_orderby = 'x',
-    timescaledb.compress_index = 'bloom("u,ts")');
-
-alter table test_settings set (timescaledb.compress,
-    timescaledb.compress_orderby = 'x',
-    timescaledb.compress_index = 'bloom(u,ts)');
-
-alter table test_settings set (timescaledb.compress,
-    timescaledb.compress_orderby = 'x',
-    timescaledb.compress_index = 'bloom(u,abc)');
-
 -- duplicate column
 alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
@@ -117,6 +106,93 @@ alter table test_settings set (timescaledb.compress,
     timescaledb.compress_index = 'bloom("u")');
 
 reset timescaledb.enable_sparse_index_bloom;
+\set ON_ERROR_STOP 1
+
+-- valid composite bloom filter cases:
+-- two columns
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u,ts)');
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u","ts")');
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u",ts)');
+
+-- three columns
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u,ts,value)');
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u","ts","value")');
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u",ts,"value")');
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(long1_01234567890123456789,long2_01234567890123456789,long3_01234567890123456789)');
+
+-- more than 3 columns
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u,ts,value,d)');
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u,ts,value,d,b)');
+
+-- partial overlaps
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u,value),bloom(u,ts)');
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u),bloom(u,ts)');
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u,value),bloom(u,ts,value)');
+
+-- invalid composite bloom filter cases:
+\set ON_ERROR_STOP 0
+
+-- nine column composite bloom is not supported
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u,ts,"value",d,b,x,age,gender,city)');
+
+-- duplicate column
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u,ts,u)');
+
+-- duplicate blooms in different orders
+-- 2 cols
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u,ts),bloom(ts,u)');
+
+-- 3 cols
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u,ts,x),bloom(u,x,ts)');
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(ts,x,u),bloom(ts,u,x)');
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(x,ts,u),bloom(x,u,ts)');
+
 \set ON_ERROR_STOP 1
 
 -- empty sparse index

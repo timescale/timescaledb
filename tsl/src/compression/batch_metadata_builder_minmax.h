@@ -17,6 +17,7 @@ typedef struct BatchMetadataBuilderMinMax
 	BatchMetadataBuilder functions;
 
 	Oid type_oid;
+	AttrNumber attnum;
 	bool empty;
 	bool has_null;
 
