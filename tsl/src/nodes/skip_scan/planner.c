@@ -169,9 +169,18 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 	char *sep = "";
 	/*
 	 * Only emit debug info if enabled and this is not a replan of the same statement.
-	 * In Debug builds with CACHEFLUSH, prepared statements may be replanned on
-	 * subsequent executions. We track the statement location/length to avoid
-	 * duplicate INFO messages for the same SQL statement.
+	 *
+	 * CACHEFLUSH is a PostgreSQL debug option (enabled via CFLAGS="-DCACHEFLUSH_START_CACHESIZE=1")
+	 * that aggressively invalidates the plan cache to stress-test the planner. When enabled,
+	 * prepared statements are replanned on subsequent executions rather than being cached.
+	 *
+	 * This aggressive cache invalidation was encountered during testing with a PostgreSQL 16
+	 * snapshot build (pre-release version). While this behavior is most prominent in snapshot
+	 * builds with CACHEFLUSH enabled, similar replanning can occur in stable releases when the
+	 * plan cache is invalidated (e.g., due to schema changes, statistics updates, or cache pressure).
+	 *
+	 * Without deduplication, this replanning triggers duplicate INFO messages for the same SQL
+	 * statement, causing test failures. We track statement location/length to suppress duplicates.
 	 */
 	bool should_log = ts_guc_debug_skip_scan_info;
 	if (should_log && root->parse->stmt_location >= 0)

@@ -38,7 +38,7 @@
 
 #define DEFAULT_MATPARTCOLUMN_NAME "time_partition_col"
 #define CAGG_INVALIDATION_THRESHOLD_NAME "invalidation threshold watermark"
-#define CAGG_INVALIDATION_WRONG_GREATEST_VALUE ((int64) - 210866803200000001)
+#define CAGG_INVALIDATION_WRONG_GREATEST_VALUE ((int64) -210866803200000001)
 
 typedef struct FinalizeQueryInfo
 {
