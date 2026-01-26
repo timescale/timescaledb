@@ -1193,8 +1193,8 @@ _guc_init(void)
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarindexscan"),
 							 "Enable metadata-only optimization for ColumnarScans",
-							 "Enable returning results directly from compression "
-							 "metadata without decompression",
+							 "Enable experimental support for returning results directly from "
+							 "compression metadata without decompression",
 							 &ts_guc_enable_columnarindexscan,
 							 false,
 							 PGC_USERSET,
