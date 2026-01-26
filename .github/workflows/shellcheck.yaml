@@ -16,16 +16,13 @@ jobs:
   check_paths:
     runs-on: ubuntu-latest
     outputs:
-      run_ci: ${{ steps.filter.outputs.shell }}
+      run_ci: ${{ steps.filter.outputs.shell == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
         with:
-          filters: |
-            shell:
-              - '**.sh'
-              - .github/workflows/shellcheck.yaml
+          filters: .github/filters.yaml
 
   shellcheck:
     name: Shellcheck
