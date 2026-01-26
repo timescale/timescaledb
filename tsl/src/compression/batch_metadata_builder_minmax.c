@@ -39,6 +39,7 @@ batch_metadata_builder_minmax_create(Oid type_oid, Oid collation, int min_attr_o
 				.update_null = minmax_update_null,
 				.insert_to_compressed_row = minmax_insert_to_compressed_row,
 				.reset = minmax_reset,
+				.builder_type = METADATA_BUILDER_MINMAX,
 			},
 		.type_oid = type_oid,
 		.empty = true,

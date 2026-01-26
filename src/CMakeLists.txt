@@ -1,6 +1,7 @@
 set(SOURCES
     uuid.c
     agg_bookend.c
+    bmslist_utils.c
     func_cache.c
     cache.c
     cache_invalidate.c

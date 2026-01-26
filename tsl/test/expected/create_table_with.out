@@ -482,7 +482,7 @@ ROLLBACK;
 -- invalid syntax
 BEGIN;
 CREATE TABLE t31(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value),bloom(count(device))');
-ERROR:  sparse index bloom's first option must reference a valid column.
+ERROR:  sparse index column reference must reference a valid column name
 ROLLBACK;
 BEGIN;
 CREATE TABLE t32(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='value,bloom(count(device))');
@@ -495,7 +495,7 @@ ERROR:  duplicate column name "value"
 ROLLBACK;
 BEGIN;
 CREATE TABLE t34(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value),bloom(value)');
-ERROR:  duplicate column name "value"
+ERROR:  duplicate sparse index configuration ('value')
 ROLLBACK;
 -- invalid column
 BEGIN;

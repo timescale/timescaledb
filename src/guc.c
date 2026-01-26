@@ -107,7 +107,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom = true;
-
+TSDLLEXPORT bool ts_guc_enable_composite_bloom_indexes = true;
 TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1 = false;
 
 bool ts_guc_enable_chunk_skipping = false;
@@ -1158,6 +1158,18 @@ _guc_init(void)
 							 "This sparse index speeds up the equality queries on compressed "
 							 "columns, and can be disabled when not desired.",
 							 &ts_guc_enable_sparse_index_bloom,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_composite_bloom_indexes"),
+							 "Enable creation of the bloom1 composite index on compressed chunks",
+							 "This composite index speeds up the equality queries on compressed "
+							 "columns, and can be disabled when not desired.",
+							 &ts_guc_enable_composite_bloom_indexes,
 							 true,
 							 PGC_USERSET,
 							 0,
