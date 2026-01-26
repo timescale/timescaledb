@@ -12,6 +12,10 @@ RETURNS bool
 AS '@MODULE_PATHNAME@', 'ts_bloom1_contains_any'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
+-- This function matches a column name string and checks if the corresponding sparse
+-- index entry has the given type. It does not handle composite bloom filters, where the
+-- column field is an array.
+-- TODO (dbeck) : check if this function is still needed
 CREATE OR REPLACE FUNCTION _timescaledb_functions.jsonb_get_matching_index_entry(
     config jsonb,
     attr_name text,

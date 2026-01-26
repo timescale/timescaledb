@@ -29,6 +29,7 @@ strip_path(const char *filename)
 #define TestFailure(fmt, ...)                                                                      \
 	do                                                                                             \
 	{                                                                                              \
+		elog(WARNING, "TestFailure in %s() at %s:%d", __func__, __FILE__, __LINE__);               \
 		elog(ERROR, "TestFailure | " fmt "", ##__VA_ARGS__);                                       \
 		pg_unreachable();                                                                          \
 	} while (0)
@@ -51,6 +52,15 @@ strip_path(const char *filename)
 			TestFailure("(%s == %s)", #a, #b);                                                     \
 	} while (0)
 
+#define TestAssertCStringEq(a, b)                                                                  \
+	do                                                                                             \
+	{                                                                                              \
+		const char *a_i = (a) == NULL ? "<null>" : (a);                                            \
+		const char *b_i = (b) == NULL ? "<null>" : (b);                                            \
+		if (strcmp(a_i, b_i) != 0)                                                                 \
+			TestFailure("(%s == %s) [%s == %s]", #a, #b, a_i, b_i);                                \
+	} while (0)
+
 #define TestAssertDoubleEq(a, b)                                                                   \
 	do                                                                                             \
 	{                                                                                              \
@@ -58,6 +68,17 @@ strip_path(const char *filename)
 		double b_i = (b);                                                                          \
 		if (a_i != b_i)                                                                            \
 			TestFailure("(%s == %s) [%f == %f]", #a, #b, a_i, b_i);                                \
+	} while (0)
+
+#define TestAssertBoolEq(a, b)                                                                     \
+	do                                                                                             \
+	{                                                                                              \
+		const char *a_i = (a) ? "true" : "false";                                                  \
+		const char *b_i = (b) ? "true" : "false";                                                  \
+		bool a_bool = (a);                                                                         \
+		bool b_bool = (b);                                                                         \
+		if (a_bool != b_bool)                                                                      \
+			TestFailure("(%s == %s) [%s == %s]", #a, #b, a_i, b_i);                                \
 	} while (0)
 
 #define TestEnsureError(a)                                                                         \
@@ -94,3 +115,18 @@ strip_path(const char *filename)
 #define TS_TEST_FN(name)                                                                           \
 	TS_FUNCTION_INFO_V1(name);                                                                     \
 	Datum name(PG_FUNCTION_ARGS)
+
+#ifdef __JSONB_H__
+extern TSDLLEXPORT const char *jsonb_to_cstring(Jsonb *jsonb);
+extern TSDLLEXPORT Jsonb *cstring_to_jsonb(const char *cstring);
+
+#define TestAssertJsonbEqCstring(a, b)                                                             \
+	do                                                                                             \
+	{                                                                                              \
+		Jsonb *a_j = (a);                                                                          \
+		const char *a_i = (a) == NULL ? "<null>" : jsonb_to_cstring(a_j);                          \
+		const char *b_i = (b) == NULL ? "<null>" : (b);                                            \
+		if (strcmp(a_i, b_i) != 0)                                                                 \
+			TestFailure("(%s == %s)", a_i, b_i);                                                   \
+	} while (0)
+#endif

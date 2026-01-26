@@ -227,11 +227,12 @@ bloom1_num_bits(const struct varlena *bloom)
 	return 8 * VARSIZE_ANY_EXHDR(bloom);
 }
 
-static void
-bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
+void
+batch_metadata_builder_bloom1_insert_bloom_filter_to_compressed_row(void *bloom_varlena,
+																	int16 bloom_attr_offset,
+																	RowCompressor *compressor)
 {
-	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
-	struct varlena *bloom = builder->bloom_varlena;
+	struct varlena *bloom = (struct varlena *) bloom_varlena;
 	char *restrict words_buf = bloom1_words_buf(bloom);
 
 	const int orig_num_bits = bloom1_num_bits(bloom);
@@ -251,8 +252,8 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 		 * but technically possible, and the following calculations will
 		 * segfault in this case.
 		 */
-		compressor->compressed_is_null[builder->bloom_attr_offset] = true;
-		compressor->compressed_values[builder->bloom_attr_offset] = PointerGetDatum(NULL);
+		compressor->compressed_is_null[bloom_attr_offset] = true;
+		compressor->compressed_values[bloom_attr_offset] = PointerGetDatum(NULL);
 		return;
 	}
 
@@ -314,15 +315,25 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	Assert(bloom1_num_bits(bloom) % (sizeof(*words_buf) * 8) == 0);
 	Assert(bloom1_num_bits(bloom) % 64 == 0);
 
-	compressor->compressed_is_null[builder->bloom_attr_offset] = false;
-	compressor->compressed_values[builder->bloom_attr_offset] = PointerGetDatum(bloom);
+	compressor->compressed_is_null[bloom_attr_offset] = false;
+	compressor->compressed_values[bloom_attr_offset] = PointerGetDatum(bloom);
+}
+
+static void
+bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
+{
+	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
+	batch_metadata_builder_bloom1_insert_bloom_filter_to_compressed_row(builder->bloom_varlena,
+																		builder->bloom_attr_offset,
+																		compressor);
 }
 
 /*
  * Call a hash function that uses a postgres "extended hash" signature.
  */
-static inline uint64
-calculate_hash(PGFunction hash_function, FmgrInfo *finfo, Datum needle)
+uint64
+batch_metadata_builder_bloom1_calculate_hash(PGFunction hash_function, FmgrInfo *finfo,
+											 Datum needle)
 {
 	LOCAL_FCINFO(hashfcinfo, 2);
 	*hashfcinfo = (FunctionCallInfoBaseData){ 0 };
@@ -370,13 +381,14 @@ bloom1_get_one_offset(uint64 value_hash, uint32 index)
 	return low + (index * high + index * index) % BLOOM1_BLOCK_BITS;
 }
 
-static void
-bloom1_update_val(void *builder_, Datum needle)
+void
+batch_metadata_builder_bloom1_update_bloom_filter_with_hash(void *varlena_ptr, uint64 hash)
 {
-	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
+	Assert(varlena_ptr != NULL);
+	struct varlena *bloom_varlena = (struct varlena *) varlena_ptr;
 
-	char *restrict words_buf = bloom1_words_buf(builder->bloom_varlena);
-	const uint32 num_bits = bloom1_num_bits(builder->bloom_varlena);
+	char *restrict words_buf = bloom1_words_buf(bloom_varlena);
+	const uint32 num_bits = bloom1_num_bits(bloom_varlena);
 
 	/*
 	 * These calculations are a little inconvenient, but I had to switch to
@@ -391,16 +403,27 @@ bloom1_update_val(void *builder_, Datum needle)
 	const uint32 word_mask = num_word_bits - 1;
 	Assert((word_mask >> num_word_bits) == 0);
 
-	const uint64 datum_hash_1 =
-		calculate_hash(builder->hash_function, builder->hash_function_finfo, needle);
 	const uint32 absolute_mask = num_bits - 1;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
-		const uint32 absolute_bit_index = bloom1_get_one_offset(datum_hash_1, i) & absolute_mask;
+		const uint32 absolute_bit_index = bloom1_get_one_offset(hash, i) & absolute_mask;
 		const uint32 word_index = absolute_bit_index >> log2_word_bits;
 		const uint32 word_bit_index = absolute_bit_index & word_mask;
 		words_buf[word_index] |= 1ULL << word_bit_index;
 	}
+}
+
+static void
+bloom1_update_val(void *builder_, Datum needle)
+{
+	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
+
+	const uint64 datum_hash_1 =
+		batch_metadata_builder_bloom1_calculate_hash(builder->hash_function,
+													 builder->hash_function_finfo,
+													 needle);
+	batch_metadata_builder_bloom1_update_bloom_filter_with_hash(builder->bloom_varlena,
+																datum_hash_1);
 }
 
 /*
@@ -418,6 +441,8 @@ typedef struct Bloom1ContainsContext
 
 	/* This is per-row, here for convenience. */
 	struct varlena *current_row_bloom;
+
+	bool is_composite;
 } Bloom1ContainsContext;
 
 static Bloom1ContainsContext *
@@ -438,20 +463,30 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 				   "cannot determine array element type for bloom1_contains_any");
 		}
 
-		context->hash_function_pointer =
-			bloom1_get_hash_function(context->element_type, &context->hash_function_finfo);
-
-		/*
-		 * Technically this function is callable by user with arbitrary argument
-		 * that might not have an extended hash function, so report this error
-		 * gracefully.
-		 */
-		if (context->hash_function_pointer == NULL)
+		if (type_is_rowtype(context->element_type))
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_DATA_EXCEPTION),
-					 errmsg("the argument type %s lacks an extended hash function",
-							format_type_be(context->element_type))));
+			context->is_composite = true;
+			context->hash_function_pointer = NULL;
+		}
+		else
+		{
+			context->is_composite = false;
+
+			context->hash_function_pointer =
+				bloom1_get_hash_function(context->element_type, &context->hash_function_finfo);
+
+			/*
+			 * Technically this function is callable by user with arbitrary argument
+			 * that might not have an extended hash function, so report this error
+			 * gracefully.
+			 */
+			if (context->hash_function_pointer == NULL)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_DATA_EXCEPTION),
+						 errmsg("the argument type %s lacks an extended hash function",
+								format_type_be(context->element_type))));
+			}
 		}
 
 		get_typlenbyvalalign(context->element_type,
@@ -472,6 +507,39 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 	}
 
 	return context;
+}
+
+static inline bool
+check_bloom_bits(const char *words_buf, uint32 num_bits, uint64 hash)
+{
+	Assert(words_buf != NULL);
+
+	/* Must be a power of two. */
+	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
+
+	/* Must be >= 64 bits. */
+	CheckCompressedData(num_bits >= 64);
+
+	const uint32 num_word_bits = sizeof(*words_buf) * 8;
+	Assert(num_bits % num_word_bits == 0);
+	const uint32 log2_word_bits = pg_leftmost_one_pos32(num_word_bits);
+	Assert(num_word_bits == (1ULL << log2_word_bits));
+
+	const uint32 word_mask = num_word_bits - 1;
+	Assert((word_mask >> num_word_bits) == 0);
+
+	const uint32 absolute_mask = num_bits - 1;
+	for (int i = 0; i < BLOOM1_HASHES; i++)
+	{
+		const uint32 absolute_bit_index = bloom1_get_one_offset(hash, i) & absolute_mask;
+		const uint32 word_index = absolute_bit_index >> log2_word_bits;
+		const uint32 word_bit_index = absolute_bit_index & word_mask;
+		if ((words_buf[word_index] & (1ULL << word_bit_index)) == 0)
+		{
+			return false;
+		}
+	}
+	return true;
 }
 
 /*
@@ -504,41 +572,79 @@ bloom1_contains(PG_FUNCTION_ARGS)
 		PG_RETURN_BOOL(false);
 	}
 
-	/*
-	 * Compute the bloom filter parameters.
-	 */
+	if (context->is_composite)
+	{
+		HeapTupleHeader tuple = DatumGetHeapTupleHeader(PG_GETARG_DATUM(1));
+
+		/* Get tuple descriptor */
+		Oid tupType = HeapTupleHeaderGetTypeId(tuple);
+		int32 tupTypmod = HeapTupleHeaderGetTypMod(tuple);
+		TupleDesc tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
+
+		int natts = tupdesc->natts;
+
+		if (natts > MAX_BLOOM_FILTER_COLUMNS)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_EXCEPTION),
+					 errmsg("composite bloom filter supports at most %d columns, got %d",
+							MAX_BLOOM_FILTER_COLUMNS,
+							natts)));
+		}
+
+		/* Extract fields and types */
+		Datum field_values[MAX_BLOOM_FILTER_COLUMNS];
+		bool field_nulls[MAX_BLOOM_FILTER_COLUMNS];
+		Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+
+		for (int i = 0; i < natts; i++)
+		{
+			Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
+			field_values[i] = GetAttributeByNum(tuple, i + 1, &field_nulls[i]);
+			type_oids[i] = attr->atttypid;
+		}
+
+		ReleaseTupleDesc(tupdesc);
+
+		/* Create temporary builder to calculate hash. */
+		BatchMetadataBuilder *temp_builder =
+			batch_metadata_builder_bloom1_composite_create(type_oids, natts, 0);
+
+		/* Call existing update functions. */
+		for (int i = 0; i < natts; i++)
+		{
+			if (field_nulls[i])
+				temp_builder->update_null(temp_builder);
+			else
+				temp_builder->update_val(temp_builder, field_values[i]);
+		}
+
+		/* Get the calculated hash using getter */
+		uint64 composite_hash = batch_metadata_builder_bloom1_composite_get_last_hash(temp_builder);
+
+		pfree(temp_builder);
+
+		/* Check bloom filter bits */
+		const char *words_buf = bloom1_words_buf(bloom);
+		const uint32 num_bits = bloom1_num_bits(bloom);
+
+		CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
+		CheckCompressedData(num_bits >= 64);
+
+		bool result = check_bloom_bits(words_buf, num_bits, composite_hash);
+		PG_RETURN_BOOL(result);
+	}
+
 	const char *words_buf = bloom1_words_buf(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
 
-	/* Must be a power of two. */
-	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
-
-	/* Must be >= 64 bits. */
-	CheckCompressedData(num_bits >= 64);
-
-	const uint32 num_word_bits = sizeof(*words_buf) * 8;
-	Assert(num_bits % num_word_bits == 0);
-	const uint32 log2_word_bits = pg_leftmost_one_pos32(num_word_bits);
-	Assert(num_word_bits == (1ULL << log2_word_bits));
-
-	const uint32 word_mask = num_word_bits - 1;
-	Assert((word_mask >> num_word_bits) == 0);
-
 	Datum needle = PG_GETARG_DATUM(1);
 	const uint64 datum_hash_1 =
-		calculate_hash(context->hash_function_pointer, context->hash_function_finfo, needle);
-	const uint32 absolute_mask = num_bits - 1;
-	for (int i = 0; i < BLOOM1_HASHES; i++)
-	{
-		const uint32 absolute_bit_index = bloom1_get_one_offset(datum_hash_1, i) & absolute_mask;
-		const uint32 word_index = absolute_bit_index >> log2_word_bits;
-		const uint32 word_bit_index = absolute_bit_index & word_mask;
-		if ((words_buf[word_index] & (1ULL << word_bit_index)) == 0)
-		{
-			PG_RETURN_BOOL(false);
-		}
-	}
-	PG_RETURN_BOOL(true);
+		batch_metadata_builder_bloom1_calculate_hash(context->hash_function_pointer,
+													 context->hash_function_finfo,
+													 needle);
+	bool result = check_bloom_bits(words_buf, num_bits, datum_hash_1);
+	PG_RETURN_BOOL(result);
 }
 
 #define ST_SORT sort_hashes
@@ -622,7 +728,8 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 			continue;
 		}
 
-		item_base_hashes[valid++] = calculate_hash(hash_fn, finfo, items[i]);
+		item_base_hashes[valid++] =
+			batch_metadata_builder_bloom1_calculate_hash(hash_fn, finfo, items[i]);
 	}
 
 	if (valid == 0)
@@ -695,8 +802,8 @@ bloom1_varlena_alloc_size(int num_bits)
 	return VARHDRSZ + num_bits / 8;
 }
 
-BatchMetadataBuilder *
-batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
+int
+batch_metadata_builder_bloom1_varlena_size(void)
 {
 	/*
 	 * Better make the bloom filter size a power of two, because we compress the
@@ -707,7 +814,13 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 	const int lowest_power = pg_leftmost_one_pos32(expected_elements * 2 - 1);
 	Assert(lowest_power <= 16);
 	const int desired_bits = 1ULL << lowest_power;
-	const int varlena_bytes = bloom1_varlena_alloc_size(desired_bits);
+	return bloom1_varlena_alloc_size(desired_bits);
+}
+
+BatchMetadataBuilder *
+batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
+{
+	const int varlena_bytes = batch_metadata_builder_bloom1_varlena_size();
 
 	Bloom1MetadataBuilder *builder = palloc(sizeof(*builder));
 	*builder = (Bloom1MetadataBuilder){
@@ -717,6 +830,7 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 				.update_null = bloom1_update_null,
 				.insert_to_compressed_row = bloom1_insert_to_compressed_row,
 				.reset = bloom1_reset,
+				.builder_type = METADATA_BUILDER_BLOOM1,
 			},
 		.bloom_attr_offset = bloom_attr_offset,
 		.allocated_varlena_bytes = varlena_bytes,
@@ -850,7 +964,7 @@ ts_bloom1_debug_hash(PG_FUNCTION_ARGS)
 
 	Assert(!PG_ARGISNULL(0));
 	Datum needle = PG_GETARG_DATUM(0);
-	PG_RETURN_UINT64(calculate_hash(fn, finfo, needle));
+	PG_RETURN_UINT64(batch_metadata_builder_bloom1_calculate_hash(fn, finfo, needle));
 }
 
 #endif // #ifndef NDEBUG

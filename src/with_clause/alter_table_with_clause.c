@@ -13,6 +13,7 @@
 #include <commands/trigger.h>
 #include <fmgr.h>
 #include <parser/parser.h>
+#include <port.h>
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
@@ -20,6 +21,7 @@
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
+#include "bmslist_utils.h"
 #include "cross_module_fn.h"
 #include "debug_assert.h"
 #include "guc.h"
@@ -405,39 +407,24 @@ sparse_index_type_with_clause_parse(const char *parse, const WithClauseDefinitio
 	return _SparseIndexTypeEnumMax;
 }
 
-static void
-parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_details,
-						  Hypertable *hypertable, ArrayType **collist)
+static SparseIndexColumn
+parse_sparse_index_column(Hypertable *hypertable, FuncCall *sparse_index_details, int index,
+						  SparseIndexTypeEnum type)
 {
-	Oid coltypid;
-	char *colname;
-	AttrNumber col_attno;
-	TypeCacheEntry *type_cache;
-	/* extract type */
-	SparseIndexConfig config;
-	config.base.type =
-		sparse_index_type_with_clause_parse(NameListToString(sparse_index_details->funcname),
-											sparse_index_with_clause_def,
-											TS_ARRAY_LEN(sparse_index_with_clause_def));
-	config.base.source = _SparseIndexSourceEnumConfig;
+	SparseIndexColumn column;
+	Assert(index >= 0);
+	Assert(list_length(sparse_index_details->args) > index);
 
-	if (list_length(sparse_index_details->args) != 1)
-	{
+	if (index >= list_length(sparse_index_details->args) || index >= MAX_BLOOM_FILTER_COLUMNS)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				 errmsg("sparse index \"%s\" can only have one column",
-						ts_sparse_index_type_names[config.base.type])));
-	}
+				 errmsg("sparse index %s has too many columns", ts_sparse_index_type_names[type])));
 
-	/* validate and extract column */
-	Node *arg = list_nth(sparse_index_details->args, 0);
-
+	Node *arg = list_nth(sparse_index_details->args, index);
 	if (!IsA(arg, ColumnRef))
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				 errmsg("sparse index %s's first option must reference a valid "
-						"column.",
-						ts_sparse_index_type_names[config.base.type])));
+				 errmsg("sparse index column reference must reference a valid column name")));
 
 	ColumnRef *cf = (ColumnRef *) arg;
 	if (list_length(cf->fields) != 1 || !IsA(linitial(cf->fields), String))
@@ -447,35 +434,86 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 				 errdetail(
 					 "Wildcard or qualified references like '*' or 'table.col' are not allowed.")));
 
-	colname = strVal(linitial(cf->fields));
-	col_attno = get_attnum(hypertable->main_table_relid, colname);
-	if (col_attno == InvalidAttrNumber)
+	column.name = strVal(linitial(cf->fields));
+	column.attnum = get_attnum(hypertable->main_table_relid, column.name);
+	if (column.attnum == InvalidAttrNumber)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
-				 errmsg("column \"%s\" does not exist", colname),
+				 errmsg("column \"%s\" does not exist", column.name),
 				 errhint("The sparse index %s option must reference a valid "
 						 "column.",
-						 ts_sparse_index_type_names[config.base.type])));
+						 ts_sparse_index_type_names[type])));
 	}
 
 	/* get normalized column name */
-	colname = get_attname(hypertable->main_table_relid, col_attno, false);
-	coltypid = get_atttype(hypertable->main_table_relid, col_attno);
+	column.name = get_attname(hypertable->main_table_relid, column.attnum, false);
+	column.type = get_atttype(hypertable->main_table_relid, column.attnum);
 
-	/*
-	 * Note: currently only one sparse index per column is supported.
-	 */
-	if (ts_array_is_member(*collist, colname))
-		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
-				 errmsg("duplicate column name \"%s\"", colname),
-				 errhint("The sparse index option must reference distinct "
-						 "column.")));
-	*collist = ts_array_add_element_text(*collist, pstrdup(colname));
+	return column;
+}
+
+static const char *
+column_name_list_as_string(BloomFilterConfig *config)
+{
+	StringInfoData buf;
+	initStringInfo(&buf);
+	appendStringInfo(&buf, "(");
+	for (int i = 0; i < config->num_columns; i++)
+	{
+		appendStringInfo(&buf, "'%s'", config->columns[i].name);
+		if (i < config->num_columns - 1)
+			appendStringInfo(&buf, ",");
+	}
+	appendStringInfo(&buf, ")");
+	return buf.data;
+}
+
+/* parses the individual sparse index config entities. being called oncee for each sparse index
+ * config entity in the list. */
+static void
+parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_details,
+						  Hypertable *hypertable, TsBmsList *sparse_index_columns)
+{
+	TypeCacheEntry *type_cache;
+	MinmaxIndexColumnConfig minmax_config;
+	BloomFilterConfig bloom_config;
+	SparseIndexConfigBase config;
+	SparseIndexConfigBase *config_ptr = &config;
+	SparseIndexColumn first_column;
+
+	config.type =
+		sparse_index_type_with_clause_parse(NameListToString(sparse_index_details->funcname),
+											sparse_index_with_clause_def,
+											TS_ARRAY_LEN(sparse_index_with_clause_def));
+	config.source = _SparseIndexSourceEnumConfig;
+	int num_columns = list_length(sparse_index_details->args);
+
+	if (num_columns != 1)
+	{
+		if (num_columns > 1 && config.type == _SparseIndexTypeEnumBloom)
+		{
+			if (num_columns > MAX_BLOOM_FILTER_COLUMNS)
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("bloom index has too many columns: %d > max %d",
+								num_columns,
+								MAX_BLOOM_FILTER_COLUMNS)));
+		}
+		else
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("minmax index can only have one column")));
+		}
+	}
+
+	/* parse the first column separately because we only need one for minmax */
+	first_column = parse_sparse_index_column(hypertable, sparse_index_details, 0, config.type);
+	Bitmapset *attnums_bitmap = bms_make_singleton(first_column.attnum);
 
 	/* extract custom sparse index type config */
-	switch (config.base.type)
+	switch (config.type)
 	{
 		case _SparseIndexTypeEnumBloom:
 			if (!ts_guc_enable_sparse_index_bloom)
@@ -487,21 +525,73 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 								 "bloom filter indexes from \"sparse_index\" configuration of the "
 								 "hypertable.")));
 			}
-			/*
-			 * The column type must be hashable. For some types we use our own hash functions
-			 * which have better characteristics.
-			 */
-			FmgrInfo *finfo = NULL;
-			if (ts_cm_functions->bloom1_get_hash_function(coltypid, &finfo) == NULL)
-				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_FUNCTION),
-						 errmsg("invalid bloom filter column type %s", format_type_be(coltypid)),
-						 errdetail("Could not identify a hashing function for the type.")));
 
-			config.base.col = colname;
+			bloom_config.base = config;
+			config_ptr = (SparseIndexConfigBase *) &bloom_config;
+			bloom_config.num_columns = num_columns;
+
+			bloom_config.columns = palloc(num_columns * sizeof(SparseIndexColumn));
+			bloom_config.columns[0] = first_column;
+			for (int i = 1; i < num_columns; i++)
+			{
+				bloom_config.columns[i] =
+					parse_sparse_index_column(hypertable, sparse_index_details, i, config.type);
+				attnums_bitmap = bms_add_member(attnums_bitmap, bloom_config.columns[i].attnum);
+				if (bms_num_members(attnums_bitmap) <= i)
+					ereport(ERROR,
+							(errcode(ERRCODE_SYNTAX_ERROR),
+							 errmsg("duplicate column name ('%s') in compsite bloom index "
+									"configuration: %s",
+									bloom_config.columns[i].name,
+									column_name_list_as_string(&bloom_config)),
+							 errhint(
+								 "The sparse index option must reference distinct column set.")));
+			}
+
+			if (ts_bmslist_contains_set(*sparse_index_columns, attnums_bitmap))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("duplicate sparse index configuration %s",
+								column_name_list_as_string(&bloom_config)),
+						 errhint("The sparse index option must reference distinct column set.")));
+			}
+			*sparse_index_columns = ts_bmslist_add_set(*sparse_index_columns, attnums_bitmap);
+
+			for (int i = 0; i < num_columns; i++)
+			{
+				/*
+				 * The column type must be hashable. For some types we use our own hash functions
+				 * which have better characteristics.
+				 */
+				FmgrInfo *finfo = NULL;
+				if (ts_cm_functions->bloom1_get_hash_function(bloom_config.columns[i].type,
+															  &finfo) == NULL)
+					ereport(ERROR,
+							(errcode(ERRCODE_UNDEFINED_FUNCTION),
+							 errmsg("invalid bloom filter column type %s",
+									format_type_be(bloom_config.columns[i].type)),
+							 errdetail("Could not identify a hashing function for the type.")));
+			}
+
+			/* the convention is that the column names are sorted by attribute number */
+			qsort(bloom_config.columns,
+				  num_columns,
+				  sizeof(SparseIndexColumn),
+				  ts_qsort_attrnumber_cmp);
 			break;
+
 		case _SparseIndexTypeEnumMinmax:
-			type_cache = lookup_type_cache(coltypid, TYPECACHE_LT_OPR);
+			if (ts_bmslist_contains_set(*sparse_index_columns, attnums_bitmap))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("duplicate column name \"%s\"", first_column.name),
+						 errhint("The sparse index option must reference distinct "
+								 "column.")));
+			}
+			*sparse_index_columns = ts_bmslist_add_set(*sparse_index_columns, attnums_bitmap);
+			type_cache = lookup_type_cache(first_column.type, TYPECACHE_LT_OPR);
 
 			/*
 			 * a comparison operator is required for min max operations
@@ -509,18 +599,21 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 			if (!OidIsValid(type_cache->lt_opr))
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_FUNCTION),
-						 errmsg("invalid minmax column type %s", format_type_be(coltypid)),
+						 errmsg("invalid minmax column type %s", format_type_be(first_column.type)),
 						 errdetail("Could not identify a less-than operator for the type.")));
 
-			config.base.col = colname;
+			minmax_config.base = config;
+			config_ptr = (SparseIndexConfigBase *) &minmax_config;
+			minmax_config.col = first_column.name;
 			break;
+
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("Invalid sparse index type")));
 	}
 
-	ts_convert_sparse_index_config_to_jsonb(parse_state, &config);
+	ts_convert_sparse_index_config_to_jsonb(parse_state, config_ptr);
 }
 
 static Jsonb *
@@ -590,11 +683,12 @@ parse_sparse_index_config_list(char *inpstr, Hypertable *hypertable)
 
 	/* json format will be
 	 * [{"type": "bloom", "source":"config", "column": "u"},
-	 * {"type": "minmax","source":"config", "column": "ts"}]
+	 * {"type": "minmax","source":"config", "column": "ts"},
+	 * {"type": "bloom", "source":"config", "column": ["age", "gender"]}]
 	 */
 	pushJsonbValue(&parse_state, WJB_BEGIN_ARRAY, NULL);
 
-	ArrayType *collist = NULL;
+	TsBmsList sparse_index_columns = ts_bmslist_create();
 	foreach (lc, select->targetList)
 	{
 		ResTarget *target = lfirst_node(ResTarget, lc);
@@ -604,10 +698,10 @@ parse_sparse_index_config_list(char *inpstr, Hypertable *hypertable)
 
 		FuncCall *fc = (FuncCall *) target->val;
 
-		parse_sparse_index_config(parse_state, fc, hypertable, &collist);
+		parse_sparse_index_config(parse_state, fc, hypertable, &sparse_index_columns);
 	}
 
-	pfree(collist);
+	ts_bmslist_free(sparse_index_columns);
 	return JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL));
 }
 

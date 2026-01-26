@@ -769,6 +769,73 @@ get_compressed_chunk_index(ResultRelInfo *resultRelInfo, const CompressionSettin
 	return InvalidOid;
 }
 
+static BatchMetadataBuilder *
+create_composite_bloom_builder(Form_pg_attribute *all_column_attrs, int num_all_columns,
+							   Oid compress_relid, ParsedCompressionSettings *parsed_settings,
+							   int composite_bloom_index_obj_id)
+{
+	Assert(parsed_settings != NULL);
+	Assert(composite_bloom_index_obj_id >= 0);
+	Assert(list_length(parsed_settings->objects) > composite_bloom_index_obj_id);
+
+	ParsedCompressionSettingsObject *obj =
+		(ParsedCompressionSettingsObject *) list_nth(parsed_settings->objects,
+													 composite_bloom_index_obj_id);
+	Assert(obj != NULL);
+	Assert(list_length(obj->pairs) > 1);
+
+	/* get the list of column names participating in the composite bloom index */
+	List *column_names = ts_get_column_names_from_parsed_object(obj);
+	Assert(column_names != NULL);
+	int num_column_names = list_length(column_names);
+	Assert(num_column_names > 1);
+	Assert(num_column_names <= MAX_BLOOM_FILTER_COLUMNS);
+
+	/* get the attribute number of the composite bloom column */
+	const char *composite_bloom_column_name =
+		compressed_column_metadata_name_list_v2(bloom1_column_prefix, column_names);
+	AttrNumber composite_bloom_attr_number =
+		get_attnum(compress_relid, composite_bloom_column_name);
+	Assert(AttributeNumberIsValid(composite_bloom_attr_number));
+
+	if (!AttributeNumberIsValid(composite_bloom_attr_number))
+		return NULL;
+
+	/* get the attribute offset of the composite bloom column */
+	int16 composite_bloom_attr_offset = AttrNumberGetAttrOffset(composite_bloom_attr_number);
+
+	/* collect the column attr OIDs*/
+	Oid column_attr_oids[MAX_BLOOM_FILTER_COLUMNS];
+	ListCell *column_name_cell = NULL;
+	int i = 0;
+	foreach (column_name_cell, column_names)
+	{
+		const char *column_name = (const char *) lfirst(column_name_cell);
+		for (int j = 0; j < num_all_columns; j++)
+		{
+			Form_pg_attribute attr = all_column_attrs[j];
+			if (attr == NULL || attr->attisdropped)
+				continue;
+
+			if (strcmp(NameStr(attr->attname), column_name) == 0)
+			{
+				column_attr_oids[i] = attr->atttypid;
+				i++;
+				break;
+			}
+		}
+	}
+	Assert(i == num_column_names);
+
+	/* create the composite bloom builder */
+	BatchMetadataBuilder *composite_bloom_builder =
+		batch_metadata_builder_bloom1_composite_create(column_attr_oids,
+													   num_column_names,
+													   composite_bloom_attr_offset);
+	Ensure(composite_bloom_builder != NULL, "failed to create composite bloom builder");
+	return composite_bloom_builder;
+}
+
 static void
 build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 				 const TupleDesc out_desc, PerColumn **pcolumns, int16 **pmap)
@@ -778,9 +845,30 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 	PerColumn *columns = palloc0(sizeof(PerColumn) * in_desc->natts);
 	int16 *map = palloc0(sizeof(int16) * in_desc->natts);
 
+	ParsedCompressionSettings *parsed_settings = NULL;
+	if (settings && settings->fd.index)
+		parsed_settings = ts_convert_to_parsed_compression_settings(settings->fd.index);
+
+	List *column_settings = ts_get_per_column_compression_settings(parsed_settings);
+	BatchMetadataBuilder **composite_bloom_builders = NULL;
+	int num_sparse_indexes = parsed_settings != NULL ? list_length(parsed_settings->objects) : 0;
+
+	/* allocate a batch metadata builder for each sparse index, but only the composite ones will be
+	 * created */
+	if (num_sparse_indexes > 0)
+		composite_bloom_builders = palloc0(sizeof(BatchMetadataBuilder *) * num_sparse_indexes);
+
+	Form_pg_attribute *column_attrs = palloc0(sizeof(Form_pg_attribute) * in_desc->natts);
+	/* collect the column attributes first, because they will be needed for the composite bloom
+	 * builders */
 	for (int i = 0; i < in_desc->natts; i++)
 	{
-		Form_pg_attribute attr = TupleDescAttr(in_desc, i);
+		column_attrs[i] = TupleDescAttr(in_desc, i);
+	}
+
+	for (int i = 0; i < in_desc->natts; i++)
+	{
+		Form_pg_attribute attr = column_attrs[i];
 
 		if (attr->attisdropped)
 			continue;
@@ -817,7 +905,7 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 			int16 segment_min_attr_offset = segment_min_attr_number - 1;
 			int16 segment_max_attr_offset = segment_max_attr_number - 1;
 
-			BatchMetadataBuilder *batch_minmax_builder = NULL;
+			BatchMetadataBuilder *batch_metadata_builder = NULL;
 			if (segment_min_attr_number != InvalidAttrNumber ||
 				segment_max_attr_number != InvalidAttrNumber)
 			{
@@ -825,14 +913,14 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 					   "could not find the min metadata column");
 				Ensure(segment_max_attr_number != InvalidAttrNumber,
 					   "could not find the min metadata column");
-				batch_minmax_builder =
+				batch_metadata_builder =
 					batch_metadata_builder_minmax_create(attr->atttypid,
 														 attr->attcollation,
 														 segment_min_attr_offset,
 														 segment_max_attr_offset);
 			}
 
-			Ensure(!is_orderby || batch_minmax_builder != NULL,
+			Ensure(!is_orderby || batch_metadata_builder != NULL,
 				   "orderby columns must have minmax metadata");
 
 			const AttrNumber bloom_attr_number =
@@ -844,13 +932,53 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 			if (AttributeNumberIsValid(bloom_attr_number))
 			{
 				const int bloom_attr_offset = AttrNumberGetAttrOffset(bloom_attr_number);
-				batch_minmax_builder =
+				batch_metadata_builder =
 					batch_metadata_builder_bloom1_create(attr->atttypid, bloom_attr_offset);
+			}
+
+			List *metadata_builders = NIL;
+			if (batch_metadata_builder != NULL)
+				metadata_builders = list_make1(batch_metadata_builder);
+
+			PerColumnCompressionSettings *per_column_settings =
+				ts_get_per_column_compression_settings_by_column_name(column_settings,
+																	  NameStr(attr->attname));
+			if (per_column_settings != NULL)
+			{
+				/* iterate over the composite bloom index object ids assiciated with the current
+				 * column */
+				int i = -1;
+				while ((i = bms_next_member(per_column_settings->composite_bloom_index_obj_ids,
+											i)) >= 0)
+				{
+					/* only create the composite bloom builder if it hasn't been created yet */
+					if (composite_bloom_builders[i] == NULL)
+					{
+						Ensure(i < num_sparse_indexes,
+							   "composite bloom index object id out of bounds");
+						BatchMetadataBuilder *composite_bloom_builder =
+							create_composite_bloom_builder(column_attrs,
+														   in_desc->natts,
+														   settings->fd.compress_relid,
+														   parsed_settings,
+														   i);
+						if (composite_bloom_builder == NULL)
+							continue;
+
+						composite_bloom_builders[i] = composite_bloom_builder;
+					}
+
+					Assert(composite_bloom_builders[i] != NULL);
+
+					/* append the composite bloom builder to the metadata builders of the current
+					 * column */
+					metadata_builders = lappend(metadata_builders, composite_bloom_builders[i]);
+				}
 			}
 
 			*column = (PerColumn){
 				.compressor = compressor_for_type(attr->atttypid),
-				.metadata_builder = batch_minmax_builder,
+				.metadata_builders = metadata_builders,
 				.segmentby_column_index = -1,
 			};
 		}
@@ -867,6 +995,9 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 			};
 		}
 	}
+
+	ts_free_parsed_compression_settings(parsed_settings);
+	pfree(column_attrs);
 	*pcolumns = columns;
 	*pmap = map;
 }
@@ -1224,21 +1355,25 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 		/* Performance Improvement: Since we call getallatts at the beginning, slot_getattr is
 		 * useless overhead here, and we should just access the array directly.
 		 */
-		BatchMetadataBuilder *builder = row_compressor->per_column[col].metadata_builder;
 		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
 		if (is_null)
 		{
 			compressor->append_null(compressor);
-			if (builder != NULL)
+
+			ListCell *lc;
+			foreach (lc, row_compressor->per_column[col].metadata_builders)
 			{
+				BatchMetadataBuilder *builder = (BatchMetadataBuilder *) lfirst(lc);
 				builder->update_null(builder);
 			}
 		}
 		else
 		{
 			compressor->append_val(compressor, val);
-			if (builder != NULL)
+			ListCell *lc;
+			foreach (lc, row_compressor->per_column[col].metadata_builders)
 			{
+				BatchMetadataBuilder *builder = (BatchMetadataBuilder *) lfirst(lc);
 				builder->update_val(builder, val);
 			}
 		}
@@ -1283,10 +1418,11 @@ row_compressor_build_tuple(RowCompressor *row_compressor)
 				row_compressor->compressed_values[compressed_col] =
 					PointerGetDatum(compressed_data);
 
-			if (column->metadata_builder != NULL)
+			ListCell *lc;
+			foreach (lc, column->metadata_builders)
 			{
-				column->metadata_builder->insert_to_compressed_row(column->metadata_builder,
-																   row_compressor);
+				BatchMetadataBuilder *builder = (BatchMetadataBuilder *) lfirst(lc);
+				builder->insert_to_compressed_row(builder, row_compressor);
 			}
 		}
 		else if (column->segment_info != NULL)
@@ -1334,9 +1470,11 @@ row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups)
 		if (column->compressor != NULL || !column->segment_info->typ_by_val)
 			pfree(DatumGetPointer(row_compressor->compressed_values[compressed_col]));
 
-		if (column->metadata_builder != NULL)
+		ListCell *lc;
+		foreach (lc, column->metadata_builders)
 		{
-			column->metadata_builder->reset(column->metadata_builder, row_compressor);
+			BatchMetadataBuilder *builder = (BatchMetadataBuilder *) lfirst(lc);
+			builder->reset(builder, row_compressor);
 		}
 
 		row_compressor->compressed_values[compressed_col] = 0;
@@ -1362,12 +1500,23 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 	{
 		InvalidationSettings *settings = row_compressor->invalidation;
 		PerColumn *dim_col = &row_compressor->per_column[settings->invalidation_column_offset];
-		BatchMetadataBuilderMinMax *builder =
-			(BatchMetadataBuilderMinMax *) dim_col->metadata_builder;
-		Datum min = row_compressor->compressed_values[builder->min_metadata_attr_offset];
-		Datum max = row_compressor->compressed_values[builder->max_metadata_attr_offset];
-		int64 start = ts_time_value_to_internal(min, builder->type_oid);
-		int64 end = ts_time_value_to_internal(max, builder->type_oid);
+
+		BatchMetadataBuilderMinMax *minmax_builder = NULL;
+		ListCell *lc;
+		foreach (lc, dim_col->metadata_builders)
+		{
+			BatchMetadataBuilder *builder = (BatchMetadataBuilder *) lfirst(lc);
+			if (builder->builder_type == METADATA_BUILDER_MINMAX)
+			{
+				minmax_builder = (BatchMetadataBuilderMinMax *) builder;
+				break;
+			}
+		}
+		Assert(minmax_builder != NULL);
+		Datum min = row_compressor->compressed_values[minmax_builder->min_metadata_attr_offset];
+		Datum max = row_compressor->compressed_values[minmax_builder->max_metadata_attr_offset];
+		int64 start = ts_time_value_to_internal(min, minmax_builder->type_oid);
+		int64 end = ts_time_value_to_internal(max, minmax_builder->type_oid);
 		continuous_agg_invalidate_range(settings->hypertable_id, settings->chunk_relid, start, end);
 	}
 

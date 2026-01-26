@@ -23,6 +23,7 @@ set(TEST_FILES
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
     compress_bloom_hash.sql
+    compress_composite_bloom.sql
     compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
@@ -30,6 +31,7 @@ set(TEST_FILES
     compress_float8_corrupt.sql
     compress_unordered_sort.sql
     compress_qualpushdown_saop.sql
+    compress_qualpushdown_complex.sql
     compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
@@ -122,6 +124,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_utils_compression.sql
     chunk_utils_internal.sql
     compress_bloom_sparse_debug.sql
+    compress_composite_bloom_debug.sql
     compression_algos.sql
     compression_bgw.sql
     compression_bools.sql

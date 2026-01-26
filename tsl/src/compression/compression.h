@@ -215,10 +215,12 @@ typedef struct PerColumn
 	/* the compressor to use for regular columns, NULL for segmenters */
 	Compressor *compressor;
 	/*
-	 * Information on the metadata we'll store for this column (currently only min/max).
-	 * Only used for order-by columns right now, will be {-1, NULL} for others.
+	 * List of sparse index builders for this column, currently these types are supported:
+	 *  - min/max : BatchMetadataBuilderMinMax
+	 *  - single bloom : BatchMetadataBuilderBloom1
+	 *  - composite bloom : BatchMetadataBuilderBloom1Composite
 	 */
-	BatchMetadataBuilder *metadata_builder;
+	List *metadata_builders;
 
 	/* segment info; only used if compressor is NULL */
 	SegmentInfo *segment_info;

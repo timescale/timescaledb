@@ -646,9 +646,9 @@ SELECT count(compress_chunk(x)) FROM show_chunks('test_table') x;
      1
 
 select * from chunk_settings;
- hypertable | chunks | segmentby |   orderby    |                                                        index                                                         
-------------+--------+-----------+--------------+----------------------------------------------------------------------------------------------------------------------
- test_table |      1 |           | uuid,ts DESC | [{"type": "minmax", "column": "uuid", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+ hypertable | chunks | segmentby |   orderby    |                                                                                         index                                                                                          
+------------+--------+-----------+--------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ test_table |      1 |           | uuid,ts DESC | [{"type": "bloom", "column": ["ts", "uuid"], "source": "default"}, {"type": "minmax", "column": "uuid", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
 
 DROP TABLE test_table;
 -- test that date/time columns (category 'D') are not selected as segmentby
