@@ -4,10 +4,11 @@ shell:
 sql:
   - 'sql/**'
 src:
+  - 'CMakeLists.txt'
   - 'cmake/**'
+  - 'coverage/**'
   - 'scripts/**'
   - 'sql/**'
   - 'src/**'
   - 'test/**'
   - 'tsl/**'
-  - 'CMakeLists.txt'
