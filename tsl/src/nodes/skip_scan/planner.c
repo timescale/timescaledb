@@ -35,10 +35,6 @@
 
 #include <math.h>
 
-/* Track last logged query to avoid duplicate INFO messages during replanning */
-static int last_logged_stmt_location = -1;
-static int last_logged_stmt_len = -1;
-
 typedef struct SkipKeyInfo
 {
 	/* Index clause which we'll use to skip past elements we've already seen */
@@ -167,41 +163,7 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 	StringInfoData debuginfo;
 	RangeTblEntry *indexed_rte = NULL;
 	char *sep = "";
-	/*
-	 * Only emit debug info if enabled and this is not a replan of the same statement.
-	 *
-	 * PostgreSQL may replan prepared statements when the plan cache is invalidated due to
-	 * various reasons: statistics updates, schema changes, cache pressure, or internal cache
-	 * management policies. This is normal PostgreSQL behavior, not specific to any debug flag.
-	 *
-	 * During testing with PostgreSQL 16 snapshot builds, we observed that prepared statements
-	 * could be replanned on subsequent executions, causing our skip scan planner to be invoked
-	 * multiple times for the same SQL statement within a single test run. This resulted in
-	 * duplicate INFO messages when ts_guc_debug_skip_scan_info is enabled, causing test failures.
-	 *
-	 * While more frequent in development/snapshot builds due to their aggressive testing
-	 * configurations, similar replanning can occur in stable PostgreSQL releases.
-	 *
-	 * To prevent duplicate INFO messages, we track the statement location and length to detect
-	 * and suppress output for replans of the same statement.
-	 */
-	bool should_log = ts_guc_debug_skip_scan_info;
-	if (should_log && root->parse->stmt_location >= 0)
-	{
-		/* Check if this is the same statement we just logged */
-		if (root->parse->stmt_location == last_logged_stmt_location &&
-			root->parse->stmt_len == last_logged_stmt_len)
-		{
-			should_log = false;
-		}
-		else
-		{
-			/* Update last logged statement */
-			last_logged_stmt_location = root->parse->stmt_location;
-			last_logged_stmt_len = root->parse->stmt_len;
-		}
-	}
-	if (should_log)
+	if (ts_guc_debug_skip_scan_info)
 	{
 		initStringInfo(&debuginfo);
 		RelOptInfo *indexed_rel = index_path->path.parent;
@@ -275,7 +237,7 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 										 sknulls,
 										 skinfo->scankey_attno));
 		/* Debug info about skip key */
-		if (should_log)
+		if (ts_guc_debug_skip_scan_info)
 		{
 			char *attname = get_attname(indexed_rte->relid, skinfo->indexed_column_attno, false);
 			char *sknullstext;
@@ -298,7 +260,7 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 		}
 	}
 
-	if (should_log)
+	if (ts_guc_debug_skip_scan_info)
 	{
 		appendStringInfoString(&debuginfo, ")");
 		elog(INFO, "%s", debuginfo.data);
