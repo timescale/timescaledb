@@ -1,0 +1,1 @@
+Fixes: #9176 Handle NULL values in continuous aggregate invalidation more gracefully

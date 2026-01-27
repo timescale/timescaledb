@@ -124,10 +124,81 @@ SELECT device, min(value), max(value) FROM metrics GROUP BY device;
 :PREFIX SELECT device, min(time), max(time), min(value), max(value) FROM metrics GROUP BY device;
 SELECT device, min(time), max(time), min(value), max(value) FROM metrics GROUP BY device;
 
--- aggregate on segmentby can use optimization
+-- expression on aggregates (currently not optimized)
+:PREFIX SELECT device, max(time), min(time), max(time) - min(time)  FROM metrics GROUP BY device;
+SELECT device, max(time), min(time), max(time) - min(time)  FROM metrics GROUP BY device;
+
+-- aggregate on segmentby column does not use optimization
 :PREFIX SELECT device, min(sensor) FROM metrics GROUP BY device;
+SELECT device, min(sensor) FROM metrics GROUP BY device;
 
 -- aggregate on column without metadata does not use optimization
 :PREFIX SELECT device, min(value2) FROM metrics GROUP BY device;
 SELECT device, min(value2) FROM metrics GROUP BY device;
+
+-- test with sort
+:PREFIX SELECT device, sensor, first(time,time), last(time,time) from metrics group by device, sensor order by 1,2;
+SELECT device, sensor, first(time,time), last(time,time) from metrics group by device, sensor order by 1,2;
+
+-- test with subquery (SubqueryScan)
+:PREFIX SELECT * FROM (SELECT device, min(time), max(time) FROM metrics GROUP BY device) sub ORDER BY device;
+SELECT * FROM (SELECT device, min(time), max(time) FROM metrics GROUP BY device) sub ORDER BY device;
+
+:PREFIX SELECT mx, mn, device FROM (SELECT device, min(time) mn, max(time) mx FROM metrics GROUP BY device) sub ORDER BY device;
+SELECT mx, mn, device FROM (SELECT device, min(time) mn, max(time) mx FROM metrics GROUP BY device) sub ORDER BY device;
+
+-- test with CTE (also uses SubqueryScan)
+:PREFIX WITH agg_data AS (
+    SELECT device, min(time) as min_time, max(time) as max_time FROM metrics GROUP BY device
+)
+SELECT * FROM agg_data ORDER BY device;
+
+WITH agg_data AS (
+    SELECT device, min(time) as min_time, max(time) as max_time FROM metrics GROUP BY device
+)
+SELECT * FROM agg_data ORDER BY device;
+
+-- test parallel queries (not supported with ColumnarIndexScan)
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+:PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device;
+SELECT device, min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+
+-- test with UNION ALL (Append node)
+:PREFIX SELECT device, min(time) FROM metrics WHERE device = 'd1' GROUP BY device
+UNION ALL
+SELECT device, min(time) FROM metrics WHERE device = 'd2' GROUP BY device;
+
+SELECT device, min(time) FROM metrics WHERE device = 'd1' GROUP BY device
+UNION ALL
+SELECT device, min(time) FROM metrics WHERE device = 'd2' GROUP BY device
+ORDER BY device;
+
+:PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device
+UNION ALL
+SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
+
+SELECT device, min(time), max(time) FROM metrics GROUP BY device
+UNION ALL
+SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
+
+-- test with multiple chunks to verify Append/MergeAppend handling
+INSERT INTO metrics VALUES
+('2025-02-01 00:00:00 PST', 'd1', 'A', 100.0, 100.1),
+('2025-02-01 01:00:00 PST', 'd1', 'B', 200.0, 200.1),
+('2025-02-01 00:00:00 PST', 'd2', 'A', 150.0, 150.1),
+('2025-02-01 01:00:00 PST', 'd2', 'C', 250.0, 250.1);
+
+SELECT compress_chunk(c) FROM show_chunks('metrics') c WHERE NOT EXISTS (
+    SELECT 1 FROM timescaledb_information.chunks ch
+    WHERE ch.chunk_name = split_part(c::text, '.', 2) AND ch.is_compressed = true
+);
+
+-- query across multiple chunks with ColumnarIndexScan
+:PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device;
+SELECT device, min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
+
+-- multiple aggregates across multiple chunks
+:PREFIX SELECT device, min(time), max(time), min(value), max(value) FROM metrics GROUP BY device;
+SELECT device, min(time), max(time), min(value), max(value) FROM metrics GROUP BY device ORDER BY device;
 
