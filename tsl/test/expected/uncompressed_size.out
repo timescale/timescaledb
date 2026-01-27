@@ -9,13 +9,27 @@ INSERT INTO t1 SELECT '2025-01-01'::timestamptz + format('%s ms', i)::interval, 
 INSERT INTO t2 SELECT '2025-01-01'::timestamptz + format('%s ms', i)::interval, i%1000, 1 + 1/i FROM generate_series(1, 100000) i;
 VACUUM FULL t1;
 VACUUM FULL t2;
+-- VACUUM FULL each chunk before compression to eliminate bloat and stabilize uncompressed sizes
+DO $$
+DECLARE
+    chunk_name text;
+BEGIN
+    FOR chunk_name IN SELECT show_chunks('t1')
+    LOOP
+        EXECUTE format('VACUUM FULL %s', chunk_name);
+    END LOOP;
+    FOR chunk_name IN SELECT show_chunks('t2')
+    LOOP
+        EXECUTE format('VACUUM FULL %s', chunk_name);
+    END LOOP;
+END $$;
 SELECT compress_chunk(chunk) FROM show_chunks('t1') AS chunk;
-             compress_chunk             
+             compress_chunk
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
 
 SELECT compress_chunk(chunk) FROM show_chunks('t2') AS chunk;
-             compress_chunk             
+             compress_chunk
 ----------------------------------------
  _timescaledb_internal._hyper_3_2_chunk
 
@@ -23,5 +37,5 @@ SELECT ccs.compressed_chunk_id,round(ccs.uncompressed_heap_size, -5) uncompresse
  compressed_chunk_id | uncompressed_heap_size | uncompressed_toast_size | uncompressed_index_size | uncompressed_total_size | relation_size | index_size | total_size
 ---------------------+------------------------+-------------------------+-------------------------+-------------------------+---------------+------------+------------
                    3 |                6000000 |                    8192 |                 2300000 |                 8298496 |       5980000 |    2000000 |    7980000
-                   4 |                5300000 |                       0 |                 2300000 |                 7512064 |       5520000 |    2000000 |    7520000
+                   4 |                5200000 |                       0 |                 2300000 |                 7479296 |       5520000 |    2000000 |    7520000
 
