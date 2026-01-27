@@ -122,14 +122,14 @@ setup
     CREATE OR REPLACE PROCEDURE cancelpids() AS
     $$
     DECLARE
-        max_attempts INT := 200; -- 2 seconds total (200 * 10ms), enough for 500ms lock_timeout + buffer
+        max_attempts INT := 100; -- 2 seconds total (100 * 20ms), enough for 500ms lock_timeout + buffer
         attempts INT := 0;
         remaining_pids INT;
     BEGIN
         PERFORM pg_cancel_backend(pid) FROM cancelpid;
         WHILE EXISTS (SELECT FROM pg_stat_activity WHERE pid IN (SELECT pid FROM cancelpid) AND state = 'active') AND attempts < max_attempts
         LOOP
-            PERFORM pg_sleep(0.01);
+            PERFORM pg_sleep(0.02);
             attempts := attempts + 1;
         END LOOP;
         -- Check if any processes are still active after timeout
