@@ -36,14 +36,15 @@
 #include <math.h>
 
 /* Track last logged query to avoid duplicate INFO messages during replanning.
- * We store the query string pointer, statement location, and index OID to
- * uniquely identify each distinct SkipScan operation. This allows us to suppress
- * duplicate messages from replanning the same query while still showing
- * messages for different queries (even if they have the same stmt_location).
+ * We store the planner root pointer, statement location, and index OID to
+ * uniquely identify each SkipScan plan creation within a planning session.
+ * The root pointer changes between different query executions but stays the same
+ * during replanning within a single planning session, allowing us to suppress
+ * duplicate messages from replanning while showing messages for new executions.
  */
 typedef struct LastLoggedQuery
 {
-	const char *query_string;
+	const void *planner_root;
 	int stmt_location;
 	Oid index_oid;
 } LastLoggedQuery;
@@ -180,11 +181,12 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 	char *sep = "";
 	bool should_log = ts_guc_debug_skip_scan_info;
 
-	/* Check for duplicate INFO messages from replanning.
-	 * We track the query string pointer, statement location, and index OID
-	 * to uniquely identify this SkipScan operation. This prevents duplicate
-	 * messages from plan cache invalidation while preserving messages for
-	 * distinct queries (even if they have the same stmt_location in test files).
+	/* Check for duplicate INFO messages during replanning within a planning session.
+	 * We track the planner root pointer, statement location, and index OID.
+	 * The root pointer is unique to each planning session - it changes between
+	 * separate query executions but remains the same during replanning within
+	 * a single execution. This allows us to suppress duplicate messages from
+	 * replanning while still showing messages when the same query runs again.
 	 */
 	if (should_log)
 	{
@@ -195,22 +197,19 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 		else if (IsA(plan, IndexOnlyScan))
 			index_oid = castNode(IndexOnlyScan, plan)->indexid;
 
-		/* Check if this is a duplicate of the last logged query.
-		 * We compare the query string pointer (stable within a session),
-		 * statement location, and index OID.
+		/* Check if this is a duplicate within the same planning session.
+		 * We compare the root pointer, statement location, and index OID.
 		 */
-		if (debug_query_string != NULL &&
-			debug_query_string == last_logged_query.query_string &&
+		if (root == last_logged_query.planner_root &&
 			root->parse->stmt_location == last_logged_query.stmt_location &&
-			index_oid == last_logged_query.index_oid &&
-			OidIsValid(index_oid))
+			index_oid == last_logged_query.index_oid && OidIsValid(index_oid))
 		{
 			should_log = false;
 		}
 		else
 		{
-			/* Update last logged query */
-			last_logged_query.query_string = debug_query_string;
+			/* Update last logged query for this planning session */
+			last_logged_query.planner_root = root;
 			last_logged_query.stmt_location = root->parse->stmt_location;
 			last_logged_query.index_oid = index_oid;
 		}
