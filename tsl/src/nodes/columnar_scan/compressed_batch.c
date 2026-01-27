@@ -75,10 +75,15 @@ make_single_value_arrow_arithmetic(Oid arithmetic_type, Datum datum, bool isnull
 		FOR_TYPE(TIMESTAMPOID, Timestamp, DatumGetTimestamp);
 		FOR_TYPE(DATEOID, DateADT, DatumGetDateADT);
 		FOR_TYPE(UUIDOID, pg_uuid_t, *DatumGetUUIDP);
+		case BOOLOID:
+			arrow_set_row_validity((uint64 *) arrow->buffers[1], 0, DatumGetBool(datum));
+			break;
 		default:
 			elog(ERROR, "unexpected column type '%s'", format_type_be(arithmetic_type));
 			pg_unreachable();
 	}
+
+#undef FOR_TYPE
 
 	return arrow;
 }

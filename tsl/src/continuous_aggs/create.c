@@ -421,7 +421,7 @@ mattablecolumninfo_create_materialization_table(
 
 	/* NewRelationCreateToastTable calls CommandCounterIncrement. */
 	toast_options =
-		transformRelOptions((Datum) 0, create->options, "toast", validnsps, true, false);
+		transformRelOptions(UnassignedDatum, create->options, "toast", validnsps, true, false);
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 	NewRelationCreateToastTable(mat_relid, toast_options);
 	RESTORE_USER(uid, saved_uid, sec_ctx);

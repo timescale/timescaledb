@@ -68,6 +68,10 @@ ts_create_table_parse_chunk_time_interval(WithClauseResult option, Oid column_ty
 										   InvalidOid,
 										   -1);
 			}
+			default:
+				Ensure(false,
+					   "unexpected column type %s when setting chunk interval",
+					   format_type_be(column_type));
 		}
 	}
 	*interval_type = InvalidOid;

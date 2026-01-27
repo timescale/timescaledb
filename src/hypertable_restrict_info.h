@@ -30,7 +30,14 @@ typedef struct DimensionRestrictInfoClosed
 
 /* HypertableRestrictInfo represents restrictions on a hypertable. It uses
  * range exclusion logic to figure out which chunks can match the description */
-typedef struct HypertableRestrictInfo HypertableRestrictInfo;
+typedef struct HypertableRestrictInfo
+{
+	int num_base_restrictions; /* number of base restrictions
+								* successfully added */
+	int num_dimensions;
+	DimensionRestrictInfo *dimension_restriction[FLEXIBLE_ARRAY_MEMBER]; /* array of dimension
+																		  * restrictions */
+} HypertableRestrictInfo;
 
 extern HypertableRestrictInfo *ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht);
 

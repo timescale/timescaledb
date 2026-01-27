@@ -10,7 +10,6 @@ import sys
 from github import Github  # This is PyGithub.
 import requests
 
-
 # Limit our history search and fetch depth to this value, not to get stuck in
 # case of a bug.
 HISTORY_DEPTH = 1000
@@ -47,9 +46,7 @@ def get_referenced_issue(pr_number):
     # We only need the first issue here. We also request only the first 30 labels,
     # because GitHub requires some small restriction there that is counted
     # towards the GraphQL API usage quota.
-    ref_result = run_query(
-        string.Template(
-            """
+    ref_result = run_query(string.Template("""
         query {
             repository(owner: "timescale", name: "timescaledb") {
               pullRequest(number: $pr_number) {
@@ -62,9 +59,7 @@ def get_referenced_issue(pr_number):
               }
             }
           }
-          """
-        ).substitute({"pr_number": pr_number})
-    )
+          """).substitute({"pr_number": pr_number}))
 
     # The above returns:
     # {'data': {'repository': {'pullRequest': {'closingIssuesReferences': {'nodes': [{'number': 6819,
@@ -93,22 +88,19 @@ def set_auto_merge(pr_number):
 
     # We first have to find out the PR id, which is some base64 string, different
     # from its number.
-    query = string.Template(
-        """query {
+    query = string.Template("""query {
           repository(owner: "$owner", name: "$name") {
             pullRequest(number: $pr_number) {
               id
             }
           }
-        }"""
-    ).substitute(
+        }""").substitute(
         pr_number=pr_number, owner=source_repo.owner.login, name=source_repo.name
     )
     result = run_query(query)
     pr_id = result["data"]["repository"]["pullRequest"]["id"]
 
-    query = string.Template(
-        """mutation {
+    query = string.Template("""mutation {
             enablePullRequestAutoMerge(
                 input: {
                     pullRequestId: "$pr_id",
@@ -117,8 +109,7 @@ def set_auto_merge(pr_number):
             ) {
                 clientMutationId
             }
-        }"""
-    ).substitute(pr_id=pr_id)
+        }""").substitute(pr_id=pr_id)
     run_query(query)
 
 

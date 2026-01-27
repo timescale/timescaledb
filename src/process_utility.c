@@ -7,6 +7,7 @@
 #include <postgres.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
+#include <catalog/heap.h>
 #include <catalog/index.h>
 #include <catalog/namespace.h>
 #include <catalog/objectaddress.h>
@@ -33,6 +34,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/parsenodes.h>
+#include <optimizer/optimizer.h>
 #include <parser/parse_expr.h>
 #include <parser/parse_relation.h>
 #include <parser/parse_type.h>
@@ -343,14 +345,13 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 }
 
 static void
-check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
+check_altertable_add_column_for_compressed(ParseState *parse_state, Hypertable *ht, ColumnDef *col)
 {
 	if (col->constraints)
 	{
 		bool has_default = false;
 		bool has_notnull = col->is_not_null;
 		ListCell *lc;
-		bool is_bool = false;
 		foreach (lc, col->constraints)
 		{
 			Constraint *constraint = lfirst_node(Constraint, lc);
@@ -382,33 +383,31 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 				case CONSTR_CHECK:
 					continue;
 				case CONSTR_DEFAULT:
+				{
 					/*
 					 * Since default expressions might trigger a table rewrite we
 					 * only allow Const here for now.
 					 */
-					if (!IsA(constraint->raw_expr, A_Const))
+					Oid typeoid;
+					int32 typmod;
+					typenameTypeIdAndMod(parse_state, col->typeName, &typeoid, &typmod);
+					Node *transformed = cookDefault(parse_state,
+													constraint->raw_expr,
+													typeoid,
+													typmod,
+													col->colname,
+													col->generated);
+					Node *constified = eval_const_expressions(NULL, transformed);
+					if (!IsA(constified, Const))
 					{
-						if (IsA(constraint->raw_expr, TypeCast) &&
-							IsA(castNode(TypeCast, constraint->raw_expr)->arg, A_Const))
-						{
-							/*
-							 * Ignore error only for boolean column, as values like
-							 * 'True' or 'False' are treated as TypeCast.
-							 */
-							char *name =
-								strVal(llast(((TypeCast *) constraint->raw_expr)->typeName->names));
-							is_bool = strstr(name, "bool") ? true : false;
-						}
-						if (!is_bool)
-							ereport(ERROR,
-									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-									 errmsg(
-										 "cannot add column with non-constant default expression "
-										 "to a hypertable that has columnstore enabled")));
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("cannot add column with non-constant default expression "
+										"to a hypertable that has columnstore enabled")));
 					}
 					has_default = true;
 					continue;
-
+				}
 				default:
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -2674,11 +2673,9 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 				IndexElem *elem = lfirst_node(IndexElem, lc);
 				appendStringInfo(&command,
 								 "%s IS NOT NULL",
-								 elem->name ? quote_identifier(elem->name) :
-											  deparse_expression((Node *) elem->expr,
-																 dpcontext,
-																 false,
-																 false));
+								 elem->name ?
+									 quote_identifier(elem->name) :
+									 deparse_expression(elem->expr, dpcontext, false, false));
 				if (i < list_length(stmt->indexParams))
 					appendStringInfo(&command, " AND ");
 			}
@@ -2693,9 +2690,8 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 			IndexElem *elem = lfirst_node(IndexElem, lc);
 			appendStringInfo(&command,
 							 "%s",
-							 elem->name ?
-								 quote_identifier(elem->name) :
-								 deparse_expression((Node *) elem->expr, dpcontext, false, false));
+							 elem->name ? quote_identifier(elem->name) :
+										  deparse_expression(elem->expr, dpcontext, false, false));
 			if (j < list_length(stmt->indexParams))
 				appendStringInfo(&command, ",");
 		}
@@ -4340,7 +4336,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				Assert(IsA(cmd->def, ColumnDef));
 				col = (ColumnDef *) cmd->def;
 				if (ht && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-					check_altertable_add_column_for_compressed(ht, col);
+					check_altertable_add_column_for_compressed(args->parse_state, ht, col);
 				if (ht)
 					foreach (constraint_lc, col->constraints)
 						verify_constraint_hypertable(ht, lfirst(constraint_lc));
@@ -4678,7 +4674,14 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			if (conname == NULL)
 				conname = get_rel_name(obj->objectId);
 
-			process_altertable_add_constraint(ht, cmd, conname);
+			/*
+			 * Implicit constraints (e.g., those created by PRIMARY KEY or UNIQUE
+			 * constraints) have already been processed when the index was created.
+			 * These will have no objectId in the ObjectAddress passed to this
+			 * function and no conname.
+			 */
+			if (conname)
+				process_altertable_add_constraint(ht, cmd, conname);
 		}
 		break;
 		case AT_AlterColumnType:

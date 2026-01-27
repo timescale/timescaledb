@@ -150,7 +150,7 @@ array_compressor_is_full(Compressor *compressor, Datum val)
 		extended->internal = array_compressor_alloc(extended->element_type);
 
 	Size datum_size_and_align;
-	ArrayCompressor *array_comp = (ArrayCompressor *) extended->internal;
+	ArrayCompressor *array_comp = extended->internal;
 	if (datum_serializer_value_may_be_toasted(array_comp->serializer))
 		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
 

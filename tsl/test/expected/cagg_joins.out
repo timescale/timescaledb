@@ -780,7 +780,7 @@ WHERE devices.device_id = cagg.thermo_id
 GROUP BY 1;
 NOTICE:  refreshing continuous aggregate "cagg_on_cagg"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
-SELECT * FROM cagg_on_cagg;
+SELECT * FROM cagg_on_cagg ORDER BY bucket;
             bucket            |     temperature     
 ------------------------------+---------------------
  Sun Jun 13 17:00:00 2021 PDT | 26.0000000000000000
@@ -814,7 +814,7 @@ ON devices.device_id = cagg.thermo_id
 GROUP BY 1;
 NOTICE:  refreshing continuous aggregate "cagg_on_cagg_join"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
-SELECT * FROM cagg_on_cagg_join;
+SELECT * FROM cagg_on_cagg_join ORDER BY bucket;
             bucket            |     temperature     
 ------------------------------+---------------------
  Sun Jun 13 17:00:00 2021 PDT | 26.0000000000000000

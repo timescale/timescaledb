@@ -667,13 +667,11 @@ SET timescaledb.enable_tiered_reads=false;
 
 :EXPLAIN SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
 --- QUERY PLAN ---
- Index Scan using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
-   Index Cond: (timec > 'Sat Jan 01 01:00:00 2022 PST'::timestamp with time zone)
+ Seq Scan on _hyper_5_10_chunk
 
 :EXPLAIN SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
 --- QUERY PLAN ---
- Index Scan using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
-   Index Cond: (timec < 'Sun Jan 01 01:00:00 2023 PST'::timestamp with time zone)
+ Seq Scan on _hyper_5_10_chunk
 
 SET timescaledb.enable_tiered_reads=true;
 :EXPLAIN SELECT * from ht_try;
@@ -685,15 +683,13 @@ SET timescaledb.enable_tiered_reads=true;
 -- foreign chunk contains data from Jan 2020, so it is skipped during planning
 :EXPLAIN SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
 --- QUERY PLAN ---
- Index Scan using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
-   Index Cond: (timec > 'Sat Jan 01 01:00:00 2022 PST'::timestamp with time zone)
+ Seq Scan on _hyper_5_10_chunk
 
 :EXPLAIN SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
 --- QUERY PLAN ---
  Append
    ->  Foreign Scan on child_fdw_table
-   ->  Index Scan using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
-         Index Cond: (timec < 'Sun Jan 01 01:00:00 2023 PST'::timestamp with time zone)
+   ->  Seq Scan on _hyper_5_10_chunk
 
 -- Test forceful refreshment. Here we simulate the situation that we've seen
 -- with tiered data when `timescaledb.enable_tiered_reads` were disabled on the
@@ -1432,9 +1428,7 @@ WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_sl
  Merge Append
    Sort Key: test_chunkapp."time"
    ->  Index Scan Backward using _hyper_20_32_chunk_test_chunkapp_time_idx on _hyper_20_32_chunk
-         Index Cond: ("time" < 'Sun Jan 01 00:00:00 2023 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_20_33_chunk_test_chunkapp_time_idx on _hyper_20_33_chunk
-         Index Cond: ("time" < 'Sun Jan 01 00:00:00 2023 PST'::timestamp with time zone)
    ->  Foreign Scan on test_chunkapp_fdw_child
 
 SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
@@ -1473,9 +1467,7 @@ SELECT * FROM test_chunkapp ORDER BY 1;
  Custom Scan (ChunkAppend) on test_chunkapp
    Order: test_chunkapp."time"
    ->  Index Scan Backward using _hyper_20_32_chunk_test_chunkapp_time_idx on _hyper_20_32_chunk
-         Index Cond: ("time" < 'Sun Jan 01 00:00:00 2023 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_20_33_chunk_test_chunkapp_time_idx on _hyper_20_33_chunk
-         Index Cond: ("time" < 'Sun Jan 01 00:00:00 2023 PST'::timestamp with time zone)
 
 SELECT * FROM test_chunkapp WHERE time < '2023-01-01' ORDER BY 1;
              time             | a 
