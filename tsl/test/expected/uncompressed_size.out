@@ -10,19 +10,8 @@ INSERT INTO t2 SELECT '2025-01-01'::timestamptz + format('%s ms', i)::interval, 
 VACUUM FULL t1;
 VACUUM FULL t2;
 -- VACUUM FULL each chunk before compression to eliminate bloat and stabilize uncompressed sizes
-DO $$
-DECLARE
-    chunk_name text;
-BEGIN
-    FOR chunk_name IN SELECT show_chunks('t1')
-    LOOP
-        EXECUTE format('VACUUM FULL %s', chunk_name);
-    END LOOP;
-    FOR chunk_name IN SELECT show_chunks('t2')
-    LOOP
-        EXECUTE format('VACUUM FULL %s', chunk_name);
-    END LOOP;
-END $$;
+SELECT format('VACUUM FULL %s;', show_chunks) AS command FROM show_chunks('t1') \gexec
+SELECT format('VACUUM FULL %s;', show_chunks) AS command FROM show_chunks('t2') \gexec
 SELECT compress_chunk(chunk) FROM show_chunks('t1') AS chunk;
              compress_chunk
 ----------------------------------------
