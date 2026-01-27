@@ -1583,8 +1583,19 @@ try_create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSet
 	 */
 	int valid_columns = 0;
 
+	/*
+	 * The index must be enabled by the GUC.
+	 */
+	if (!ts_guc_enable_sparse_index_bloom)
+	{
+		return false;
+	}
+
 	/* Bitmapset of column attnums */
 	Bitmapset *attnums_bitmap = NULL;
+
+	/* Check the total width of the hashable columns */
+	int total_width = 0;
 
 	for (int i = 0; i < num_cols; i++)
 	{
@@ -1606,8 +1617,25 @@ try_create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSet
 		Oid atttypid = get_atttype(ht->main_table_relid, attno);
 
 		/* Check if hashable */
+		FmgrInfo *finfo = NULL;
+		if (bloom1_get_hash_function(atttypid, &finfo) == NULL)
+			continue;
+
 		TypeCacheEntry *type = lookup_type_cache(atttypid, TYPECACHE_HASH_EXTENDED_PROC);
-		if (!should_create_bloom_sparse_index(atttypid, type, ht->main_table_relid))
+		total_width += (type->typlen > 0 ? type->typlen : 4);
+
+		/* Numeric columns can be added to a composite index, but the user may disable it. */
+		if (atttypid == NUMERICOID && !ts_guc_enable_numeric_in_auto_composite_bloom)
+			continue;
+
+		/* Time types can be added to a composite index, but the user may disable it. */
+		if ((atttypid == TIMESTAMPTZOID || atttypid == TIMESTAMPOID ||
+			 atttypid == TIMEOID || atttypid == TIMETZOID ||
+			 atttypid == DATEOID) && !ts_guc_enable_time_types_in_auto_composite_bloom)
+			continue;
+
+		/* Equality queries are unlikely for floating-point types, so we skip them. */
+		if (atttypid == FLOAT4OID || atttypid == FLOAT8OID)
 			continue;
 
 		/* Add to bloom config */
@@ -1619,8 +1647,8 @@ try_create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSet
 		attnums_bitmap = bms_add_member(attnums_bitmap, attno);
 	}
 
-	/* Need at least 2 valid columns for composite bloom */
-	if (valid_columns < 2)
+	/* Need at least 2 valid columns for composite bloom and the total width must be at least 4 bytes. */
+	if (valid_columns < 2 || total_width < 4)
 	{
 		pfree(bloom_config.columns);
 		bms_free(attnums_bitmap);
