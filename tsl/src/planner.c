@@ -175,7 +175,7 @@ check_limit_bulk_decompression(PlannerInfo *root, Node *node)
 				limit = DatumGetInt64(count->constvalue);
 			}
 
-			if (path->limitOffset != NULL && IsA(path->limitCount, Const))
+			if (path->limitOffset != NULL && IsA(path->limitOffset, Const))
 			{
 				Const *offset = castNode(Const, path->limitOffset);
 				Assert(offset->consttype == INT8OID);
