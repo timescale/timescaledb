@@ -1,0 +1,1 @@
+Implements: #9192 Push down scalar array operations into the columar metadata scan by transforming them into an OR/AND clause.
