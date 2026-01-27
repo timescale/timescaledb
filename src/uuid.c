@@ -189,9 +189,8 @@ ts_uuid_v7_extract_timestamptz(const pg_uuid_t *uuid, TimestampTz *timestamp, bo
 		return false;
 
 	/* Milliseconds timestamp from PG Epoch (2000-01-01) */
-	uint64 timestamp_millis =
-		(unixtime_millis -
-		 ((uint64) (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY) * 1000ULL);
+	const uint64 epoch_diff = POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE;
+	uint64 timestamp_millis = (unixtime_millis - (epoch_diff * SECS_PER_DAY) * 1000ULL);
 
 	/* Convert to microseconds */
 	*timestamp = timestamp_millis * 1000;

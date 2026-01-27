@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-SET timescaledb.enable_transparent_decompression to OFF;
+SET timescaledb.enable_columnarscan to OFF;
 SET timezone TO 'America/Los_Angeles';
 \set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 \ir include/rand_generator.sql
@@ -52,10 +52,10 @@ SELECT count(*) from foo;
 
 alter table foo set (timescaledb.compress, timescaledb.compress_segmentby = 'a,b', timescaledb.compress_orderby = 'c desc, d asc nulls last');
 --test self-refencing updates
-SET timescaledb.enable_transparent_decompression to ON;
+SET timescaledb.enable_columnarscan to ON;
 update foo set c = 40
 where  a = (SELECT max(a) FROM foo);
-SET timescaledb.enable_transparent_decompression to OFF;
+SET timescaledb.enable_columnarscan to OFF;
 SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id FROM _timescaledb_catalog.hypertable ORDER BY id;
  id |      schema_name      |        table_name        | compressed | compressed_hypertable_id 
 ----+-----------------------+--------------------------+------------+--------------------------
@@ -488,7 +488,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
  t
 
 -- test plans get invalidated when chunks get compressed
-SET timescaledb.enable_transparent_decompression TO ON;
+SET timescaledb.enable_columnarscan TO ON;
 CREATE TABLE plan_inval(time timestamptz, device_id int);
 SELECT create_hypertable('plan_inval','time');
     create_hypertable    
@@ -1655,6 +1655,7 @@ SELECT sum(cpu) FROM f_sensor_data;
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_37_73_chunk
                            Output: _hyper_37_73_chunk.cpu
+                           Chunk Status: PARTIAL
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_74_chunk
                                  Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
                ->  Partial Aggregate
@@ -1672,6 +1673,7 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 1000;
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_37_73_chunk
                Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
                Filter: (_hyper_37_73_chunk.sensor_id > 1000)
+               Chunk Status: PARTIAL
                ->  Parallel Index Scan using compress_hyper_38_74_chunk_sensor_id__ts_meta_min_1__ts_met_idx on _timescaledb_internal.compress_hyper_38_74_chunk
                      Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
                      Index Cond: (compress_hyper_38_74_chunk.sensor_id > 1000)
@@ -1770,6 +1772,7 @@ SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1
                      Sort Key: _hyper_41_77_chunk."time" DESC, _hyper_41_77_chunk.device
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_41_77_chunk
                            Output: _hyper_41_77_chunk."time", _hyper_41_77_chunk.device, _hyper_41_77_chunk.value
+                           Chunk Status: PARTIAL
                            ->  Seq Scan on _timescaledb_internal.compress_hyper_42_79_chunk
                                  Output: compress_hyper_42_79_chunk._ts_meta_count, compress_hyper_42_79_chunk.device, compress_hyper_42_79_chunk._ts_meta_min_1, compress_hyper_42_79_chunk._ts_meta_max_1, compress_hyper_42_79_chunk."time", compress_hyper_42_79_chunk.value
                ->  Sort
@@ -1869,22 +1872,19 @@ ORDER BY timestamp desc  LIMIT 1 ) a ON true;
                Runtime Exclusion: true
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_43_83_chunk
                      Output: _hyper_43_83_chunk."timestamp", _hyper_43_83_chunk.attr_id, _hyper_43_83_chunk.number_val
-                     Vectorized Filter: ((_hyper_43_83_chunk."timestamp" > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (_hyper_43_83_chunk."timestamp" < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
                      ->  Index Scan using compress_hyper_44_86_chunk_attr_id__ts_meta_min_1__ts_meta__idx on _timescaledb_internal.compress_hyper_44_86_chunk
                            Output: compress_hyper_44_86_chunk._ts_meta_count, compress_hyper_44_86_chunk.attr_id, compress_hyper_44_86_chunk._ts_meta_min_1, compress_hyper_44_86_chunk._ts_meta_max_1, compress_hyper_44_86_chunk."timestamp", compress_hyper_44_86_chunk.number_val
-                           Index Cond: ((compress_hyper_44_86_chunk.attr_id = "*VALUES*".column1) AND (compress_hyper_44_86_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_86_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone))
+                           Index Cond: (compress_hyper_44_86_chunk.attr_id = "*VALUES*".column1)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_43_82_chunk
                      Output: _hyper_43_82_chunk."timestamp", _hyper_43_82_chunk.attr_id, _hyper_43_82_chunk.number_val
-                     Vectorized Filter: ((_hyper_43_82_chunk."timestamp" > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (_hyper_43_82_chunk."timestamp" < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
                      ->  Index Scan using compress_hyper_44_85_chunk_attr_id__ts_meta_min_1__ts_meta__idx on _timescaledb_internal.compress_hyper_44_85_chunk
                            Output: compress_hyper_44_85_chunk._ts_meta_count, compress_hyper_44_85_chunk.attr_id, compress_hyper_44_85_chunk._ts_meta_min_1, compress_hyper_44_85_chunk._ts_meta_max_1, compress_hyper_44_85_chunk."timestamp", compress_hyper_44_85_chunk.number_val
-                           Index Cond: ((compress_hyper_44_85_chunk.attr_id = "*VALUES*".column1) AND (compress_hyper_44_85_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_85_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone))
+                           Index Cond: (compress_hyper_44_85_chunk.attr_id = "*VALUES*".column1)
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_43_81_chunk
                      Output: _hyper_43_81_chunk."timestamp", _hyper_43_81_chunk.attr_id, _hyper_43_81_chunk.number_val
-                     Vectorized Filter: ((_hyper_43_81_chunk."timestamp" > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (_hyper_43_81_chunk."timestamp" < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
                      ->  Index Scan using compress_hyper_44_84_chunk_attr_id__ts_meta_min_1__ts_meta__idx on _timescaledb_internal.compress_hyper_44_84_chunk
                            Output: compress_hyper_44_84_chunk._ts_meta_count, compress_hyper_44_84_chunk.attr_id, compress_hyper_44_84_chunk._ts_meta_min_1, compress_hyper_44_84_chunk._ts_meta_max_1, compress_hyper_44_84_chunk."timestamp", compress_hyper_44_84_chunk.number_val
-                           Index Cond: ((compress_hyper_44_84_chunk.attr_id = "*VALUES*".column1) AND (compress_hyper_44_84_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_84_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone))
+                           Index Cond: (compress_hyper_44_84_chunk.attr_id = "*VALUES*".column1)
 
 SELECT * FROM ( VALUES(1),(2),(3),(4),(5),(6),(7),(8),(9),(10) ) AS attr_ids(attr_id)
 INNER JOIN LATERAL (
@@ -2297,6 +2297,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                Sort Key: sensor_data_compressed."time" DESC
                ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_45_87_chunk (never executed)
                      Output: _hyper_45_87_chunk."time", _hyper_45_87_chunk.sensor_id, _hyper_45_87_chunk.cpu, _hyper_45_87_chunk.temperature
+                     Chunk Status: PARTIAL
                      Batch Sorted Merge: true
                      Bulk Decompression: false
                      ->  Sort (never executed)
@@ -2377,6 +2378,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Sort Key: _hyper_45_87_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_45_87_chunk (never executed)
                            Output: _hyper_45_87_chunk."time", _hyper_45_87_chunk.sensor_id, _hyper_45_87_chunk.cpu, _hyper_45_87_chunk.temperature
+                           Chunk Status: PARTIAL
                            Bulk Decompression: true
                            ->  Seq Scan on _timescaledb_internal.compress_hyper_46_94_chunk (never executed)
                                  Output: compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1, compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature
@@ -2703,3 +2705,35 @@ HINT:  Changing compression settings for "badly_compressed_ht" can improve compr
 
 \set VERBOSITY terse
 RESET timescaledb.enable_compression_ratio_warnings;
+CREATE TABLE test_xid_compressed(time timestamptz not null, device int, value int);
+SELECT create_hypertable('test_xid_compressed', 'time');
+         create_hypertable         
+-----------------------------------
+ (59,public,test_xid_compressed,t)
+
+INSERT INTO test_xid_compressed VALUES ('2020-01-01', 1, 1);
+ALTER TABLE test_xid_compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT compress_chunk(show_chunks('test_xid_compressed'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_59_118_chunk
+
+SELECT show_chunks('test_xid_compressed') AS chunk LIMIT 1 \gset
+BEGIN;
+SELECT txid_current_if_assigned() IS NULL;
+ ?column? 
+----------
+ t
+
+SELECT COUNT(*) FROM :chunk;
+ count 
+-------
+     1
+
+SELECT txid_current_if_assigned() IS NULL;
+ ?column? 
+----------
+ t
+
+COMMIT;
+DROP TABLE test_xid_compressed;

@@ -985,8 +985,8 @@ test_null()
 		.len = 0,
 		.maxlen = 0,
 	};
-	TestEnsureError(null_decompression_iterator_from_datum_forward((Datum) 0, INT2OID));
-	TestEnsureError(null_decompression_iterator_from_datum_reverse((Datum) 0, BOOLOID));
+	TestEnsureError(null_decompression_iterator_from_datum_forward(UnassignedDatum, INT2OID));
+	TestEnsureError(null_decompression_iterator_from_datum_reverse(UnassignedDatum, BOOLOID));
 	TestEnsureError(null_compressed_send(NULL, &buffer));
 	TestEnsureError(null_compressed_recv(&buffer));
 	TestEnsureError(null_compressor_for_type(BOOLOID));
@@ -1146,9 +1146,9 @@ test_delta_size_and_placement(const int32 *values, int n, int expected_size)
 	size_t var_size;
 	size_t calc_size;
 
-	Datum pass1 = (Datum) 0;
-	Datum pass2 = (Datum) 0;
-	Datum pass3 = (Datum) 0;
+	Datum pass1 = UnassignedDatum;
+	Datum pass2 = UnassignedDatum;
+	Datum pass3 = UnassignedDatum;
 
 	/* First pass, obtain a reference and verify expected size is legit */
 	{
@@ -1629,8 +1629,9 @@ test_uuid()
 static void
 pointless_tests_to_satisfy_codecov()
 {
-	TestEnsureError(tsl_array_decompress_all((Datum) 0, InvalidOid, CurrentMemoryContext));
-	TestEnsureError(tsl_dictionary_decompress_all((Datum) 0, InvalidOid, CurrentMemoryContext));
+	TestEnsureError(tsl_array_decompress_all(UnassignedDatum, InvalidOid, CurrentMemoryContext));
+	TestEnsureError(
+		tsl_dictionary_decompress_all(UnassignedDatum, InvalidOid, CurrentMemoryContext));
 }
 
 Datum

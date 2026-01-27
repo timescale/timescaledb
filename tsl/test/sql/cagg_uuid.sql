@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- this test has implicit dependencies on the plans generated with quals
+-- (plans favoring index scans over seq scans), so disable the optimization
+SET timescaledb.enable_qual_filtering = off;
+
 --
 --
 -- Test caggs with "time" partitioning on UUIDv7
@@ -44,12 +48,12 @@ LIMIT 1 OFFSET 1 \gset
 CREATE MATERIALIZED VIEW daily_uuid_events WITH (timescaledb.continuous) AS
 SELECT time_bucket('1 day', id) AS day, round(avg(temp)::numeric, 3) AS temp
 FROM uuid_events WHERE device < 6
-GROUP BY 1;
+GROUP BY 1 ORDER BY 1;
 
 CREATE MATERIALIZED VIEW daily_ts_events WITH (timescaledb.continuous) AS
 SELECT time_bucket('1 day', ts) AS day, round(avg(temp)::numeric, 3) AS temp
 FROM ts_events WHERE device < 6
-GROUP BY 1;
+GROUP BY 1 ORDER BY 1;
 
 -- The uuid and timestmap caggs should look the same
 SELECT * FROM daily_uuid_events ORDER BY day;
@@ -167,3 +171,73 @@ SELECT * FROM weekly_uuid_events ORDER BY week;
 
 SELECT * FROM daily_ts_events ORDER BY day;
 SELECT * FROM weekly_ts_events ORDER BY week;
+
+
+-- Test compression policies on both raw table and cagg
+
+-- Record row counts before compression for comparison
+SELECT count(*) AS uuid_events_count_before FROM uuid_events;
+SELECT * FROM daily_uuid_events ORDER BY day;
+
+-- Show current chunk status for uuid_events before compression policy
+SELECT chunk_name, compression_status
+FROM chunk_compression_stats('uuid_events')
+ORDER BY chunk_name;
+
+-- Add columnstore policy on raw hypertable (columnstore already enabled above)
+CALL add_columnstore_policy('uuid_events', after => '1 day'::interval);
+
+-- Get the job ID for the compression policy on uuid_events
+SELECT job_id AS uuid_compress_job
+FROM timescaledb_information.jobs
+WHERE hypertable_name = 'uuid_events' AND proc_name = 'policy_compression' \gset
+
+-- Run the compression job for uuid_events
+CALL run_job(:uuid_compress_job);
+
+-- Verify chunks are compressed on the raw hypertable
+SELECT chunk_name, compression_status
+FROM chunk_compression_stats('uuid_events')
+WHERE compression_status = 'Compressed'
+ORDER BY chunk_name;
+
+-- Count compressed vs uncompressed chunks for uuid_events
+SELECT count(*) AS total_chunks,
+       count(*) FILTER (WHERE compression_status = 'Compressed') AS compressed_chunks
+FROM chunk_compression_stats('uuid_events');
+
+-- Show current chunk status for daily_uuid_events cagg before compression policy
+SELECT chunk_name, is_compressed
+FROM timescaledb_information.chunks
+WHERE hypertable_name = (SELECT materialization_hypertable_name FROM timescaledb_information.continuous_aggregates WHERE view_name = 'daily_uuid_events')
+ORDER BY chunk_name;
+
+-- Add columnstore policy on the continuous aggregate
+CALL add_columnstore_policy('daily_uuid_events', after => '1 day'::interval);
+
+-- Get the job ID for the compression policy on daily_uuid_events cagg
+SELECT job_id AS cagg_compress_job
+FROM timescaledb_information.jobs
+WHERE hypertable_name = 'daily_uuid_events' AND proc_name = 'policy_compression' \gset
+
+-- Refresh the cagg to ensure all data is materialized
+CALL refresh_continuous_aggregate('daily_uuid_events', NULL, NULL);
+
+-- Run the compression job for daily_uuid_events cagg
+CALL run_job(:cagg_compress_job);
+
+-- Verify chunks are compressed on the cagg
+SELECT chunk_name, is_compressed
+FROM timescaledb_information.chunks
+WHERE hypertable_name = (SELECT materialization_hypertable_name FROM timescaledb_information.continuous_aggregates WHERE view_name = 'daily_uuid_events')
+ORDER BY chunk_name;
+
+-- Count compressed vs uncompressed chunks for the cagg
+SELECT count(*) AS total_chunks,
+       count(*) FILTER (WHERE is_compressed = true) AS compressed_chunks
+FROM timescaledb_information.chunks
+WHERE hypertable_name = (SELECT materialization_hypertable_name FROM timescaledb_information.continuous_aggregates WHERE view_name = 'daily_uuid_events');
+
+-- Verify data is still accessible after compression (compare with counts before)
+SELECT count(*) AS uuid_events_count_after FROM uuid_events;
+SELECT * FROM daily_uuid_events ORDER BY day;

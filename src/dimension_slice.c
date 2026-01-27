@@ -980,18 +980,17 @@ DimensionSlice *
 ts_dimension_slice_scan_iterator_get_by_id(ScanIterator *it, int32 slice_id)
 {
 	TupleInfo *ti;
-	DimensionSlice *slice = NULL;
 
 	ts_dimension_slice_scan_iterator_set_slice_id(it, slice_id);
 	ts_scan_iterator_start_or_restart_scan(it);
 	ti = ts_scan_iterator_next(it);
-	Assert(ti);
 
-	if (ti)
-	{
-		slice = ts_dimension_slice_from_tuple(ti);
-		Assert(ts_scan_iterator_next(it) == NULL);
-	}
+	if (!ti)
+		return NULL;
+
+	DimensionSlice *slice = ts_dimension_slice_from_tuple(ti);
+	/* There should be only one slice with the given id */
+	Assert(ts_scan_iterator_next(it) == NULL);
 
 	return slice;
 }

@@ -233,3 +233,41 @@ CREATE TABLE new_col_chunk(time timestamptz not null, temp float, device int);
 INSERT INTO new_col_chunk VALUES ('2018-01-15 05:00:00-8', 23.4, 1);
 ALTER TABLE chunkapi ADD COLUMN temp float;
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1515628800000000, 1516233600000000], "device": [-9223372036854775808, 1073741823]}', NULL, NULL, 'new_col_chunk');
+
+SELECT show_chunks('chunkapi') AS chunk LIMIT 1 \gset
+BEGIN;
+SELECT txid_current_if_assigned() IS NULL;
+SELECT COUNT(*) FROM :chunk;
+SELECT txid_current_if_assigned() IS NULL;
+COMMIT;
+
+-- Test that newly created chunks are automatically added to publications
+SET ROLE :ROLE_SUPERUSER;
+SET timescaledb.enable_chunk_auto_publication = true;
+CREATE PUBLICATION test_chunk_pub FOR TABLE chunkapi;
+
+-- Verify existing chunks are in the publication
+SELECT COUNT(*) as initial_chunk_count
+FROM pg_publication_tables
+WHERE pubname = 'test_chunk_pub'
+  AND tablename LIKE '%chunk%';
+
+-- Create a new chunk via create_chunk API
+CREATE TABLE pub_test_chunk(time timestamptz not null, device int, temp float);
+INSERT INTO pub_test_chunk VALUES ('2018-01-22 05:00:00-8', 1, 26.7);
+SELECT table_name as new_chunk_name FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1516233600000000, 1516838400000000], "device": [-9223372036854775808, 1073741823]}', NULL, NULL, 'pub_test_chunk') \gset
+
+-- Verify the new chunk was automatically added to the publication
+SELECT COUNT(*) as final_chunk_count
+FROM pg_publication_tables
+WHERE pubname = 'test_chunk_pub'
+  AND tablename LIKE '%chunk%';
+
+-- Show the new chunk in the publication (it should have the internal chunk name)
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_chunk_pub'
+  AND tablename = :'new_chunk_name';
+
+-- Cleanup
+DROP PUBLICATION test_chunk_pub CASCADE;

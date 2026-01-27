@@ -4,6 +4,8 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+SET timescaledb.enable_qual_filtering = off;
+
 create function stable_abs(x int4) returns int4 as 'int4abs' language internal stable;
 
 create table vectorqual(metric1 int8, ts timestamp, metric2 int8, device int8);
@@ -835,7 +837,7 @@ select * from int_table where b is null or b is not null order by 1;
 select * from int_table where b is null and b is not null order by 1;
 
 -- check the compression algorithm for the compressed chunks
-set timescaledb.enable_transparent_decompression='off';
+set timescaledb.enable_columnarscan='off';
 DO $$
 DECLARE
 	comp_regclass REGCLASS;
@@ -869,7 +871,7 @@ BEGIN
 END;
 $$;
 
-reset timescaledb.enable_transparent_decompression;
+reset timescaledb.enable_columnarscan;
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bool_compression;
 

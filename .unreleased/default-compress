@@ -1,0 +1,2 @@
+Fixes: #9121 Fix a potential "unexpected column type 'bool'" error for compressed bool columns with missing value.
+Fixes: #9121 Allow any immutable constant expressions as default values for compressed columns.

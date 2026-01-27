@@ -19,6 +19,8 @@ CREATE OR REPLACE VIEW chunk_view AS
     srcch.table_name AS chunk_name,
     _timescaledb_functions.to_timestamp(dimsl.range_start)
      AS range_start,
+    dimsl.range_start AS range_start_int,
+    dimsl.range_end AS range_end_int,
     _timescaledb_functions.to_timestamp(dimsl.range_end)
      AS range_end
   FROM _timescaledb_catalog.chunk srcch
@@ -609,6 +611,8 @@ INSERT INTO hyper_constr VALUES( 10, 200, 22, 1, 111, 44);
 \c postgres_fdw_db :ROLE_4
 CREATE TABLE fdw_hyper_constr(id integer, time bigint, temp float, mid integer, dev integer, devref integer);
 INSERT INTO fdw_hyper_constr VALUES( 10, 100, 33, 2, 222, 55);
+INSERT INTO fdw_hyper_constr VALUES( 10, 300, 44, 2, 333, 30);
+INSERT INTO fdw_hyper_constr VALUES( 10, 400, 55, 2, 444, 40);
 
 \c :TEST_DBNAME :ROLE_4
 -- this is a stand-in for the OSM table
@@ -618,8 +622,10 @@ CREATE FOREIGN TABLE child_hyper_constr
 
 --check constraints are automatically added for the foreign table
 SELECT _timescaledb_functions.attach_osm_table_chunk('hyper_constr', 'child_hyper_constr');
--- was attached with data, so must update the range
-SELECT _timescaledb_functions.hypertable_osm_range_update('hyper_constr', 100, 110);
+SELECT chunk_name, range_start_int, range_end_int
+FROM chunk_view
+WHERE hypertable_name = 'hyper_constr'
+ORDER BY chunk_name;
 
 SELECT table_name, status, osm_chunk
 FROM _timescaledb_catalog.chunk
@@ -628,8 +634,11 @@ WHERE hypertable_id IN (SELECT id from _timescaledb_catalog.hypertable
 ORDER BY table_name;
 
 SELECT * FROM hyper_constr order by time;
+-- TEST verify data from fdw is selected correctly
+SELECT * FROM hyper_constr WHERE time > 200 order by time;
+SELECT * FROM hyper_constr WHERE time > 200 and time < 400 order by time;
 
---verify the check constraint exists on the OSM chunk
+--TEST verify the check constraint exists on the OSM chunk
 SELECT * FROM test.show_constraints('child_hyper_constr');
 
 -- TEST foreign key trigger: deleting data from foreign table measure
@@ -677,7 +686,7 @@ SELECT show_chunks('hyper_constr');
 ROLLBACK;
 CALL run_job(:deljob_id);
 CALL run_job(:deljob_id);
-SELECT chunk_name, range_start, range_end
+SELECT chunk_name
 FROM chunk_view
 WHERE hypertable_name = 'hyper_constr'
 ORDER BY chunk_name;
@@ -936,6 +945,67 @@ UPDATE :COMPRESSED_CHUNK SET device = 'dev3' WHERE device = 'dev1';
 DELETE FROM :COMPRESSED_CHUNK WHERE device = 'dev1';
 COPY :COMPRESSED_CHUNK FROM STDIN;
 \set ON_ERROR_STOP 1
+
+-- TEST: OSM chunks should NOT be added to publications
+-- Create a new hypertable for publication testing
+\c :TEST_DBNAME :ROLE_4
+CREATE TABLE ht_pub_test(timec timestamptz NOT NULL, device_id int, value float);
+SELECT create_hypertable('ht_pub_test', 'timec', chunk_time_interval => interval '1 day');
+
+-- Insert data to create first normal chunk
+INSERT INTO ht_pub_test VALUES ('2023-01-01 01:00', 1, 10.5);
+
+-- Create publication
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timescaledb.enable_chunk_auto_publication = true;
+CREATE PUBLICATION test_pub_osm FOR TABLE ht_pub_test;
+
+-- Verify: 1 normal chunk in publication
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_pub_osm'
+ORDER BY schemaname, tablename;
+
+-- Create a new foreign table for OSM testing
+\c :TEST_DBNAME :ROLE_4
+CREATE FOREIGN TABLE osm_chunk_pub_test
+(timec timestamptz NOT NULL, device_id int, value float)
+SERVER s3_server OPTIONS (schema_name 'public', table_name 'fdw_table');
+
+-- Attach OSM chunk
+SELECT _timescaledb_functions.attach_osm_table_chunk('ht_pub_test', 'osm_chunk_pub_test');
+SELECT _timescaledb_functions.hypertable_osm_range_update('ht_pub_test', '2020-01-01'::timestamptz, '2020-01-02');
+
+-- Check chunks also have OSM chunk
+SELECT schema_name, table_name, status, osm_chunk
+FROM _timescaledb_catalog.chunk
+WHERE hypertable_id IN (SELECT id from _timescaledb_catalog.hypertable
+                        WHERE table_name = 'ht_pub_test')
+ORDER BY table_name;
+
+-- Verify: still only 1 normal chunk in publication (OSM chunk NOT added)
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_pub_osm'
+ORDER BY schemaname, tablename;
+
+-- Insert data to create second normal chunk
+\c :TEST_DBNAME :ROLE_4
+SET timescaledb.enable_chunk_auto_publication = true;
+INSERT INTO ht_pub_test VALUES ('2023-01-02 01:00', 2, 20.5);
+
+-- Verify: 2 normal chunks in publication (second chunk added, OSM still not)
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_pub_osm'
+ORDER BY schemaname, tablename;
+
+-- Cleanup
+DROP PUBLICATION test_pub_osm CASCADE;
+\c :TEST_DBNAME :ROLE_4
+DROP TABLE ht_pub_test CASCADE;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- clean up databases created

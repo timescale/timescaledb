@@ -100,9 +100,7 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.extension_state();
 CREATE SCHEMA _timescaledb_debug;
 GRANT USAGE ON SCHEMA _timescaledb_debug TO PUBLIC;
 
-CREATE SCHEMA _timescaledb_config;
-GRANT USAGE ON SCHEMA _timescaledb_config TO PUBLIC;
-
+DROP VIEW IF EXISTS _timescaledb_config.bgw_job;
 ALTER TABLE _timescaledb_catalog.bgw_job SET SCHEMA _timescaledb_config;
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_compressed_batch_size(REGCLASS);
@@ -111,4 +109,6 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.cagg_get_grouping_columns;
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_to_array(_timescaledb_internal.compressed_data, ANYELEMENT);
 DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_column_size(_timescaledb_internal.compressed_data, ANYELEMENT);
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_uncompressed_size;
 

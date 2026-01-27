@@ -795,8 +795,7 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 									  check_new_settings,
 									  ts_alter_table_with_clause_parse(NIL));
 
-	/* TODO: evaluate which settings would affect this and only check inquality for those */
-	if (!ts_compression_settings_equal(check_new_settings, settings))
+	if (!ts_array_equal(settings->fd.segmentby, check_new_settings->fd.segmentby))
 	{
 		table_close(uncompressed_chunk_rel, lockmode);
 		table_close(compressed_chunk_rel, lockmode);
@@ -832,7 +831,7 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 	CompressionSettings *new_settings = ts_compression_settings_get(uncompressed_chunk->table_id);
 	Relation new_compressed_chunk_rel = table_open(new_compressed_chunk->table_id, lockmode);
 
-	Ensure(ts_compression_settings_equal(new_settings, settings),
+	Ensure(ts_compression_settings_equal(new_settings, check_new_settings),
 		   "compression settings mismatch during recompression of \"%s.%s\"",
 		   NameStr(uncompressed_chunk->fd.schema_name),
 		   NameStr(uncompressed_chunk->fd.table_name));
@@ -1036,7 +1035,7 @@ init_scankey(ScanKey sk, AttrNumber attnum, Oid atttypid, Oid attcollid, Strateg
 						   InvalidOid, /* No strategy subtype. */
 						   attcollid,
 						   opr,
-						   (Datum) 0);
+						   UnassignedDatum);
 }
 
 static void

@@ -11,6 +11,26 @@ $$ LANGUAGE SQL;
 -- To not confuse null with empty strings in the test reference
 \pset null $
 
+-- First, check the test GUC we're using. It must complain even in case when
+-- there's no partial aggregation at all. Test this on a table with one chunk.
+create table onechunk(t int) with (tsdb.hypertable, tsdb.partition_column = 't',
+    tsdb.compress, tsdb.chunk_interval = 1000);
+
+insert into onechunk select 1;
+
+select count(compress_chunk(x)) from show_chunks('onechunk') x;
+
+set timescaledb.debug_require_vector_agg = 'require';
+
+\set ON_ERROR_STOP 0
+select t, count(*) from onechunk group by t order by t limit 1;
+\set ON_ERROR_STOP 1
+
+reset timescaledb.debug_require_vector_agg;
+
+drop table onechunk;
+
+-- Prepare the table for main tests.
 \set CHUNKS 2::int
 \set CHUNK_ROWS 100000::int
 \set GROUPING_CARDINALITY 10::int
@@ -141,6 +161,11 @@ select sum(t) from long group by a order by 1;
 
 -- No scalar columns
 select sum(t) from long group by b, c, d order by 1 limit 10;
+
+-- No functions
+select a, b, c, d from long group by a, b, c, d order by a, b, c, d limit 10;
+
+select a, b, c, d from long group by a, b, c, d order by d, c, b, a limit 10;
 
 reset timescaledb.debug_require_vector_agg;
 

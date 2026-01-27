@@ -396,66 +396,6 @@ static FuncInfo funcinfo[] = {
 		.sort_transform = time_bucket_tz_sort_transform,
 	},
 	{
-		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
-		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
-		.funcname = "time_bucket_ng",
-		.nargs = 2,
-		.arg_types = { INTERVALOID, DATEOID },
-		.group_estimate = time_bucket_group_estimate,
-		.sort_transform = time_bucket_sort_transform,
-	},
-	{
-		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
-		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
-		.funcname = "time_bucket_ng",
-		.nargs = 3,
-		.arg_types = { INTERVALOID, DATEOID, DATEOID },
-		.group_estimate = time_bucket_group_estimate,
-		.sort_transform = time_bucket_sort_transform,
-	},
-	{
-		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
-		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
-		.funcname = "time_bucket_ng",
-		.nargs = 2,
-		.arg_types = { INTERVALOID, TIMESTAMPOID },
-		.group_estimate = time_bucket_group_estimate,
-		.sort_transform = time_bucket_sort_transform,
-	},
-	{
-		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
-		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
-		.funcname = "time_bucket_ng",
-		.nargs = 3,
-		.arg_types = { INTERVALOID, TIMESTAMPOID, TIMESTAMPOID },
-		.group_estimate = time_bucket_group_estimate,
-		.sort_transform = time_bucket_sort_transform,
-	},
-	{
-		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
-		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
-		.funcname = "time_bucket_ng",
-		.nargs = 3,
-		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TEXTOID },
-		.group_estimate = time_bucket_group_estimate,
-		.sort_transform = time_bucket_sort_transform,
-	},
-	{
-		.origin = ORIGIN_TIMESCALE_EXPERIMENTAL,
-		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
-		.funcname = "time_bucket_ng",
-		.nargs = 4,
-		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TIMESTAMPTZOID, TEXTOID },
-		.group_estimate = time_bucket_group_estimate,
-		.sort_transform = time_bucket_sort_transform,
-	},
-	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
 		.allowed_in_cagg_definition = false,
@@ -583,9 +523,10 @@ proc_get_oid(HeapTuple tuple)
 	return form->oid;
 }
 
-static void
-initialize_func_info()
+void
+ts_func_cache_init()
 {
+	Ensure(!func_hash, "function cache already initialized");
 	HASHCTL hashctl = {
 		.keysize = sizeof(Oid),
 		.entrysize = sizeof(FuncEntry),
@@ -660,8 +601,8 @@ ts_func_cache_get(Oid funcid)
 {
 	FuncEntry *entry;
 
-	if (NULL == func_hash)
-		initialize_func_info();
+	if (!func_hash)
+		ts_func_cache_init();
 
 	entry = hash_search(func_hash, &funcid, HASH_FIND, NULL);
 

@@ -206,14 +206,12 @@ select count(*) as num_orphaned_slices from orphaned_slices;
 select sum(temp) from mergeme;
 
 -- Test that indexes work after merge
-set timescaledb.enable_columnarscan = false;
 set enable_seqscan = false;
 analyze mergeme;
 explain (buffers off, costs off)
 select * from mergeme where device = 1;
 select * from mergeme where device = 1;
 select * from _timescaledb_internal._hyper_1_1_chunk where device = 1;
-reset timescaledb.enable_columnarscan;
 reset enable_seqscan;
 rollback;
 
@@ -468,3 +466,39 @@ call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_intern
 call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
 
 drop view chunks_being_merged;
+
+-- Test: Verify merged chunks remain in publication
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timescaledb.enable_chunk_auto_publication = true;
+
+CREATE TABLE pub_merge_test(time timestamptz not null, device int, temp float);
+SELECT create_hypertable('pub_merge_test', 'time', chunk_time_interval => interval '1 day');
+
+-- Insert data to create multiple chunks
+INSERT INTO pub_merge_test VALUES
+    ('2024-01-01 01:00', 1, 1.0),
+    ('2024-01-02 01:00', 2, 2.0);
+
+-- Create publication
+CREATE PUBLICATION test_merge_pub FOR TABLE pub_merge_test;
+
+-- Verify chunks before merge
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_merge_pub'
+ORDER BY schemaname, tablename;
+
+-- Merge chunks
+SELECT show_chunks('pub_merge_test') as chunk1 ORDER BY 1 LIMIT 1 OFFSET 0 \gset
+SELECT show_chunks('pub_merge_test') as chunk2 ORDER BY 1 LIMIT 1 OFFSET 1 \gset
+CALL merge_chunks(:'chunk1', :'chunk2');
+
+-- Verify merged chunk remains in publication
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_merge_pub'
+ORDER BY schemaname, tablename;
+
+-- Cleanup
+DROP PUBLICATION test_merge_pub CASCADE;
+DROP TABLE pub_merge_test CASCADE;

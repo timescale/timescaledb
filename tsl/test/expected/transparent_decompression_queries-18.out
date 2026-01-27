@@ -186,9 +186,7 @@ WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                Filter: check_equal_228(rtt)
                Rows Removed by Filter: 2
-               Vectorized Filter: (ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)
                ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=3.00 loops=1)
-                     Filter: (_ts_meta_min_1 < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)
 
 -- test pseudoconstant qual #3241
 CREATE TABLE pseudo(time timestamptz NOT NULL);

@@ -460,7 +460,8 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 						 * We want to distinguish between the two cases here by
 						 * marking the chunk when rte->inh is true.
 						 */
-						Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
+						Chunk *chunk =
+							ts_chunk_get_by_relid_locked(rte->relid, NoLock, NULL, false);
 						if (chunk && rte->inh)
 							rte_mark_for_expansion(rte);
 					}
@@ -1054,7 +1055,7 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					FuncInfo *info = ts_func_cache_get_bucketing_func(func->funcid);
 					Expr *transformed;
 
-					if (info != NULL)
+					if (info && info->sort_transform)
 					{
 						transformed = info->sort_transform(func);
 						if (IsA(transformed, Var) &&
@@ -1474,14 +1475,14 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * based on the Chunk struct cached by our hypertable expansion, but
 			 * in cases when these functions don't run, we have to do it here.
 			 */
-			const bool use_transparent_decompression =
-				ts_guc_enable_transparent_decompression && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht);
+			const bool use_columnar_scan =
+				ts_guc_enable_columnarscan && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht);
 			const bool is_standalone_chunk = (type == TS_REL_CHUNK_STANDALONE) &&
 											 !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht);
 			const bool is_child_chunk_in_update =
 				(type == TS_REL_CHUNK_CHILD) && IS_UPDL_CMD(query);
 
-			if (use_transparent_decompression && (is_standalone_chunk || is_child_chunk_in_update))
+			if (use_columnar_scan && (is_standalone_chunk || is_child_chunk_in_update))
 			{
 				const Chunk *chunk = ts_planner_chunk_fetch(root, rel);
 

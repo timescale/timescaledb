@@ -158,7 +158,13 @@ get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_gette
 	else
 	{
 		Interval *lag = interval_getter(config);
-		return subtract_interval_from_now(lag, partitioning_type);
+		/*
+		 * For UUID (v7) partitioned hypertables, drop_chunks expects TIMESTAMPTZ
+		 * input, so we compute the boundary as TIMESTAMPTZ instead of UUID.
+		 */
+		if (IS_UUID_TYPE(partitioning_type))
+			partitioning_type = TIMESTAMPTZOID;
+		return ts_subtract_interval_from_now(lag, partitioning_type);
 	}
 }
 
@@ -166,8 +172,16 @@ static List *
 get_chunk_to_recompress(const Dimension *dim, const Jsonb *config)
 {
 	Oid partitioning_type = ts_dimension_get_partition_type(dim);
+	Oid boundary_type = partitioning_type;
 	StrategyNumber end_strategy = BTLessStrategyNumber;
 	int32 numchunks = policy_compression_get_maxchunks_per_job(config);
+
+	/*
+	 * For UUID-partitioned hypertables, the boundary is computed as TIMESTAMPTZ
+	 * by get_window_boundary, so we need to use TIMESTAMPTZOID for conversion.
+	 */
+	if (IS_UUID_TYPE(partitioning_type))
+		boundary_type = TIMESTAMPTZOID;
 
 	Datum boundary = get_window_boundary(dim,
 										 config,
@@ -179,7 +193,7 @@ get_chunk_to_recompress(const Dimension *dim, const Jsonb *config)
 													   -1,				/*start_value*/
 													   end_strategy,
 													   ts_time_value_to_internal(boundary,
-																				 partitioning_type),
+																				 boundary_type),
 													   false,
 													   true,
 													   numchunks);
@@ -336,7 +350,16 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 		use_creation_time = true;
 	}
 	else
+	{
 		boundary_type = ts_dimension_get_partition_type(open_dim);
+		/*
+		 * For UUID (v7) partitioned hypertables, drop_chunks expects TIMESTAMPTZ
+		 * input (the timestamp is extracted from the UUID internally). We need to
+		 * pass the boundary as TIMESTAMPTZ, not as UUID.
+		 */
+		if (IS_UUID_TYPE(boundary_type))
+			boundary_type = TIMESTAMPTZOID;
+	}
 
 	boundary =
 		get_window_boundary(open_dim, config, policy_retention_get_drop_after_int, interval_getter);
@@ -665,7 +688,7 @@ policy_process_hyper_inval_execute(int32 job_id, Jsonb *config)
 	int32 hypertable_id = policy_data.hypertable->fd.id;
 
 	/* We serialized on the invalidation threshold, so we get and lock it. */
-	invalidation_threshold_get(hypertable_id, dimtype);
+	invalidation_threshold_get(hypertable_id);
 	invalidation_process_hypertable_log(hypertable_id, dimtype);
 	ts_cache_release(&policy_data.hcache);
 

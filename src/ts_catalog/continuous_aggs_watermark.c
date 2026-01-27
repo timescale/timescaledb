@@ -40,7 +40,7 @@ int64
 ts_cagg_watermark_get(int32 hypertable_id)
 {
 	PG_USED_FOR_ASSERTS_ONLY short count = 0;
-	Datum watermark = (Datum) 0;
+	Datum watermark = UnassignedDatum;
 	bool value_isnull = true;
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGGS_WATERMARK, AccessShareLock, CurrentMemoryContext);

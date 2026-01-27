@@ -6,8 +6,10 @@
 #include <postgres.h>
 #include <miscadmin.h>
 #include <parser/parse_func.h>
+#include <utils/fmgrprotos.h>
 #include <utils/guc.h>
 #include <utils/regproc.h>
+#include <utils/timestamp.h>
 #include <utils/varlena.h>
 
 #include "compat/compat.h"
@@ -67,9 +69,10 @@ bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
 int ts_guc_direct_compress_copy_tuple_sort_limit = 100000;
-bool ts_guc_enable_direct_compress_insert = false;
+TSDLLEXPORT bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
-bool ts_guc_enable_direct_compress_insert_client_sorted = false;
+TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted = false;
+TSDLLEXPORT bool ts_guc_enable_direct_compress_on_cagg_refresh = false;
 int ts_guc_direct_compress_insert_tuple_sort_limit = 10000;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
@@ -81,6 +84,7 @@ bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
+bool ts_guc_enable_qual_filtering = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
 bool ts_guc_enable_now_constify = true;
@@ -95,7 +99,6 @@ TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
-TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
@@ -117,6 +120,7 @@ TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
 TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
 bool ts_guc_enable_event_triggers = false;
+bool ts_guc_enable_chunk_auto_publication = false;
 bool ts_guc_debug_skip_scan_info = false;
 
 /* Only settable in debug mode for testing */
@@ -155,8 +159,6 @@ char *ts_telemetry_cloud = NULL;
 #endif
 
 TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
-
-bool ts_guc_debug_allow_cagg_with_deprecated_funcs = false;
 
 /*
  * Exit code for the scheduler.
@@ -203,6 +205,7 @@ static bool ts_guc_enable_hypertable_create = true;
 static bool ts_guc_enable_hypertable_compression = true;
 static bool ts_guc_enable_cagg_create = true;
 static bool ts_guc_enable_policy_create = true;
+static char *ts_guc_default_chunk_time_interval = NULL;
 
 typedef struct
 {
@@ -392,6 +395,87 @@ ts_guc_default_orderby_fn_oid()
 	return get_orderby_func(ts_guc_default_orderby_fn);
 }
 
+/*
+ * Assign hook for chunk skipping.
+ *
+ * When chunk skipping is enabled, we need to clear the hypertable cache.
+ * Otherwise there might be cached entries without a valid range_space entry,
+ * which could lead to column stats not being created.
+ */
+static void
+chunk_skipping_assign_hook(bool newval, void *extra)
+{
+	if (newval)
+		ts_hypertable_cache_invalidate_callback();
+}
+
+#if PG16_LT
+/*
+ * guc_malloc is not public in PostgreSQL < 16.
+ */
+static void *
+guc_malloc(int elevel, size_t size)
+{
+	void *data;
+
+	/* Avoid unportable behavior of malloc(0) */
+	if (size == 0)
+		size = 1;
+	data = malloc(size);
+	if (data == NULL)
+		ereport(elevel, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("out of memory")));
+	return data;
+}
+#endif
+
+static bool
+check_default_chunk_time_interval(char **newval, void **extra, GucSource source)
+{
+	/*
+	 * If GUC is unset, we treat that as a valid value for "no default chunk interval".
+	 * The chunk interval is instead computed in the legacy way using hard-coded defaults.
+	 */
+	if (*newval == NULL)
+	{
+		Assert(*extra == NULL);
+		return true;
+	}
+
+	/* Test that the text value is a valid Interval */
+	LOCAL_FCINFO(fcinfo, 3);
+	InitFunctionCallInfoData(*fcinfo, NULL, 3, InvalidOid, NULL, NULL);
+	fcinfo->args[0].value = CStringGetDatum(*newval);
+	fcinfo->args[0].isnull = false;
+	fcinfo->args[1].value = ObjectIdGetDatum(INTERVALOID);
+	fcinfo->args[1].isnull = false;
+	fcinfo->args[2].value = Int32GetDatum(-1);
+	fcinfo->args[2].isnull = false;
+
+	Datum interval = interval_in(fcinfo);
+
+	if (fcinfo->isnull)
+	{
+		GUC_check_errdetail("The default chunk interval must be a valid INTERVAL.");
+		return false;
+	}
+
+	Interval *parsed = DatumGetIntervalP(interval);
+	/* Save the new Interval in extra. The old extra is freed automatically. */
+	*extra = guc_malloc(ERROR, sizeof(Interval));
+	memcpy(*extra, parsed, sizeof(Interval));
+	pfree(parsed);
+
+	return true;
+}
+
+Interval *default_chunk_time_interval = NULL;
+
+static void
+assign_default_chunk_time_interval(const char *newval, void *extra)
+{
+	default_chunk_time_interval = extra;
+}
+
 void
 _guc_init(void)
 {
@@ -482,6 +566,18 @@ _guc_init(void)
 							 "Correct handling of data sorting by the user is required for this "
 							 "option.",
 							 &ts_guc_enable_direct_compress_insert_client_sorted,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_on_cagg_refresh"),
+							 "Enable direct compress on Continuous Aggregate refresh",
+							 "Enable experimental support for direct compression during Continuous "
+							 "Aggregate refresh",
+							 &ts_guc_enable_direct_compress_on_cagg_refresh,
 							 false,
 							 PGC_USERSET,
 							 0,
@@ -606,6 +702,18 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_qual_filtering"),
+							 "Enable qualifier filtering for chunks",
+							 "Filter qualifiers on chunks when complete chunk would be included by "
+							 "filter",
+							 &ts_guc_enable_qual_filtering,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_qual_propagation"),
 							 "Enable qualifier propagation",
 							 "Enable propagation of qualifiers in JOINs",
@@ -667,17 +775,6 @@ _guc_init(void)
 							NULL,
 							NULL,
 							NULL);
-
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_transparent_decompression"),
-							 "Enable transparent decompression",
-							 "Enable transparent decompression when querying hypertable",
-							 &ts_guc_enable_transparent_decompression,
-							 true,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_skipscan"),
 							 "Enable SkipScan",
@@ -851,7 +948,7 @@ _guc_init(void)
 							 PGC_USERSET,
 							 0,
 							 NULL,
-							 NULL,
+							 chunk_skipping_assign_hook,
 							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_segmentwise_recompression"),
@@ -944,6 +1041,18 @@ _guc_init(void)
 							 &ts_guc_enable_event_triggers,
 							 false,
 							 PGC_SUSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_chunk_auto_publication"),
+							 "Enable automatic chunk publication",
+							 "Enable automatically adding newly created chunks to the publication "
+							 "of their hypertable",
+							 &ts_guc_enable_chunk_auto_publication,
+							 false,
+							 PGC_USERSET,
 							 0,
 							 NULL,
 							 NULL,
@@ -1070,12 +1179,10 @@ _guc_init(void)
 							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan"),
-							 "Enable columnar-optimized scans for supported access methods",
-							 "A columnar scan replaces sequence scans for columnar-oriented "
-							 "storage "
-							 "and enables storage-specific optimizations like vectorized filters. "
-							 "Disabling columnar scan will make PostgreSQL fall back to regular "
-							 "sequence scans.",
+							 "Enable ColumnarScan for columnar storage",
+							 "Transparently decompress columnar data using ColumnarScan custom "
+							 "node. Disabling columnar scan will ignore data stored in columnar "
+							 "format in queries.",
 							 &ts_guc_enable_columnarscan,
 							 true,
 							 PGC_USERSET,
@@ -1086,8 +1193,8 @@ _guc_init(void)
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarindexscan"),
 							 "Enable metadata-only optimization for ColumnarScans",
-							 "Enable returning results directly from compression "
-							 "metadata without decompression",
+							 "Enable experimental support for returning results directly from "
+							 "compression metadata without decompression",
 							 &ts_guc_enable_columnarindexscan,
 							 false,
 							 PGC_USERSET,
@@ -1309,6 +1416,22 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 
+	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("default_chunk_time_interval"),
+							   /* short_desc= */ "Default chunk time interval for new hypertables",
+							   /* long_desc= */
+							   "Chunk time interval to use for a new hypertable, unless a specific "
+							   "chunk time interval is set on the hypertable. The default chunk "
+							   "interval is only used for hypertables with a compatible time "
+							   "type, e.g., timestamp, date, and UUID (v7). Hypertables using an "
+							   "integer partitioning column have hard-coded defaults.",
+							   /* valueAddr= */ &ts_guc_default_chunk_time_interval,
+							   NULL,
+							   /* context= */ PGC_USERSET,
+							   /* flags= */ 0,
+							   /* check_hook= */ check_default_chunk_time_interval,
+							   /* assign_hook= */ assign_default_chunk_time_interval,
+							   /* show_hook= */ NULL);
+
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("shutdown_bgw_scheduler"),
 							 /* short_desc= */ "immediately shutdown the bgw scheduler",
@@ -1391,16 +1514,6 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 
-	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_allow_cagg_with_deprecated_funcs"),
-							 /* short_desc= */ "allow new caggs using time_bucket_ng",
-							 /* long_desc= */ "this is for debugging/testing purposes",
-							 /* valueAddr= */ &ts_guc_debug_allow_cagg_with_deprecated_funcs,
-							 /* bootValue= */ false,
-							 /* context= */ PGC_USERSET,
-							 /* flags= */ 0,
-							 /* check_hook= */ NULL,
-							 /* assign_hook= */ NULL,
-							 /* show_hook= */ NULL);
 #endif
 
 	/* register feature flags */

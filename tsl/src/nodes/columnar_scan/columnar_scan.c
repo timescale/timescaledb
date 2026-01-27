@@ -20,6 +20,7 @@
 #include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <planner/planner.h>
+#include <storage/lockdefs.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
@@ -627,6 +628,8 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 	{
 		info->parent_relids = find_childrel_parents(root, chunk_rel);
 	}
+
+	info->chunk_status = chunk->fd.status;
 
 	return info;
 }
@@ -2249,8 +2252,14 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	/*
 	 * Add the compressed chunk to the baserel cache. Note that it belongs to
 	 * a different hypertable, the internal compression table.
+	 *
+	 * Ensure we do not grab a slice lock because that will assign a transaction ID that could
+	 * unnecessarily block other operations.
 	 */
-	const Chunk *compressed_chunk = ts_chunk_get_by_relid(info->settings->fd.compress_relid, true);
+	const Chunk *compressed_chunk = ts_chunk_get_by_relid_locked(info->settings->fd.compress_relid,
+																 AccessShareLock,
+																 NULL,
+																 true);
 	ts_add_baserel_cache_entry_for_chunk(info->settings->fd.compress_relid,
 										 ts_planner_get_hypertable(compressed_chunk
 																	   ->hypertable_relid,
@@ -2386,6 +2395,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 
 	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->reverse = false;
+	path->chunk_status = compression_info->chunk_status;
 	path->required_compressed_pathkeys = NIL;
 	cost_columnar_scan(root, compression_info, &path->custom_path.path, compressed_path);
 
@@ -2742,7 +2752,7 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 }
 
 /*
- * Check if we can push down the sort below the ColumnarSacn node and fill
+ * Check if we can push down the sort below the ColumnarScan node and fill
  * SortInfo accordingly
  *
  * The following conditions need to be true for pushdown:
@@ -2809,12 +2819,13 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	cost_qual_eval(&sort_info.decompressed_sort_pathkeys_cost, sort_pathkey_exprs, root);
 
 	/*
-	 * Next, check if we can push the sort down to the uncompressed part.
+	 * Next, check if we can push the sort down to the compressed part.
 	 *
-	 * Not possible if the chunk is unordered.
+	 * Batch sorted merge optimization is enabled for unordered chunks
+	 * because we do merge the batches at execution time which
+	 * only relies that the batches themselves are sorted which is
+	 * always the case.
 	 */
-	if (ts_chunk_is_unordered(chunk))
-		return sort_info;
 
 	/* all segmentby columns need to be prefix of pathkeys */
 	int i = 0;
@@ -2854,6 +2865,16 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		}
 
 		/*
+		 * Pathkeys satisfied by sorting the compressed data on segmentby columns.
+		 * Can use compressed sort on segmentby cols for unordered chunks as well.
+		 */
+		if (i == list_length(pathkeys))
+		{
+			sort_info.use_compressed_sort = true;
+			return sort_info;
+		}
+
+		/*
 		 * If pathkeys still has items, but we didn't find all segmentby columns,
 		 * we cannot satisfy these pathkeys by sorting the compressed chunk table.
 		 */
@@ -2877,14 +2898,12 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		}
 	}
 
-	if (i == list_length(pathkeys))
-	{
-		/*
-		 * Pathkeys satisfied by sorting the compressed data on segmentby columns.
-		 */
-		sort_info.use_compressed_sort = true;
+	/*
+	 * Cannot push down sort on non-segmentby columns
+	 * if the chunk has batches overlapping on orderby columns
+	 */
+	if (ts_chunk_is_unordered(chunk))
 		return sort_info;
-	}
 
 	/*
 	 * Pathkeys includes columns past segmentby columns, so we need sequence_num

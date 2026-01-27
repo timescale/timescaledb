@@ -22,6 +22,28 @@ BEGIN
 END
 $$;
 
+-- Block update if CAggs using time_bucket_ng are found
+DO
+$$
+DECLARE
+  caggs text;
+BEGIN
+  SELECT string_agg(pg_catalog.format('%I.%I', user_view_schema, user_view_name), ', ')
+  INTO caggs
+  FROM _timescaledb_catalog.continuous_agg cagg
+  JOIN _timescaledb_catalog.continuous_aggs_bucket_function AS bf ON (cagg.mat_hypertable_id = bf.mat_hypertable_id)
+  WHERE bf.bucket_func::text LIKE '%time_bucket_ng%';
+
+  IF caggs IS NOT NULL THEN
+    RAISE
+      EXCEPTION 'continuous aggregates using time_bucket_ng found, update blocked'
+      USING
+        DETAIL = format('Continuous Aggregates: %s', caggs),
+        HINT = 'time_bucket_ng has been removed. Please migrate the continuous aggregates using `cagg_migrate` before updating';
+  END IF;
+END
+$$;
+
 --
 -- Rebuild the catalog table `_timescaledb_catalog.continuous_agg` to remove `finalized` column
 --
@@ -151,7 +173,10 @@ DROP FUNCTION IF EXISTS _timescaledb_debug.extension_state();
 DROP SCHEMA IF EXISTS _timescaledb_debug;
 
 ALTER TABLE _timescaledb_config.bgw_job SET SCHEMA _timescaledb_catalog;
-DROP SCHEMA IF EXISTS _timescaledb_config;
+--temporary alias for bgw_job
+CREATE OR REPLACE VIEW _timescaledb_config.bgw_job AS
+SELECT * from _timescaledb_catalog.bgw_job;
+GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_config TO PUBLIC;
 
 -- Remove legacy partialize/finalize aggregate functions. It should be
 -- conditional because on 2.12.0 we moved from internal to functions schema
@@ -206,3 +231,21 @@ DROP PROCEDURE IF EXISTS _timescaledb_functions.process_hypertable_invalidations
 -- Remove orphaned entries in materialization ranges table
 DELETE FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
 WHERE NOT EXISTS (SELECT FROM _timescaledb_catalog.continuous_agg WHERE mat_hypertable_id = materialization_id);
+
+DROP PROCEDURE IF EXISTS _timescaledb_functions.cagg_migrate_to_time_bucket(regclass);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts DATE);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts DATE, origin DATE);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMP);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMP, origin TIMESTAMP);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, timezone TEXT);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, origin TIMESTAMPTZ, timezone TEXT);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, origin TIMESTAMPTZ);

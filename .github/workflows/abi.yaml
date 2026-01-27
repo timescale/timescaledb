@@ -85,7 +85,7 @@ jobs:
           git config --global --add safe.directory /mnt
           cd /mnt
           BUILD_DIR=build_abi BUILD_FORCE_REMOVE=true ./bootstrap
-          make -C build_abi install
+          make -C build_abi -j $(getconf _NPROCESSORS_ONLN) install
           mkdir -p build_abi/install_ext build_abi/install_lib
           cp `pg_config --sharedir`/extension/timescaledb*.{control,sql} build_abi/install_ext
           cp `pg_config --pkglibdir`/timescaledb*.so build_abi/install_lib
@@ -106,8 +106,9 @@ jobs:
           chown -R postgres /mnt
           set -o pipefail
           [ -f /usr/bin/gmake ] || ln -s /usr/bin/make /usr/bin/gmake
-          sudo -u postgres make -C build_abi -k regresscheck regresscheck-t \
-            regresscheck-shared IGNORES="${{ matrix.ignores }}" | tee installcheck.log
+          sudo -u postgres make -j $(getconf _NPROCESSORS_ONLN) -C build_abi \
+            -k regresscheck regresscheck-t regresscheck-shared \
+            IGNORES="${{ matrix.ignores }}" | tee installcheck.log
         EOF
 
     - name: Show regression diffs

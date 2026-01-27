@@ -52,6 +52,6 @@ $BODY$;
 SELECT timescaledb_integrity_test();
 
 -- Verify that the default jobs are the same in bgw_job
-SELECT relnamespace::regnamespace "JOB_SCHEMA" FROM pg_class WHERE relname='bgw_job' \gset
+SELECT relnamespace::regnamespace "JOB_SCHEMA" FROM pg_class WHERE relname='bgw_job' and relkind = 'r' \gset
 SELECT id, application_name FROM :JOB_SCHEMA.bgw_job ORDER BY id;
 

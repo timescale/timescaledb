@@ -246,20 +246,20 @@ ORDER BY o1.time;
    ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=13674.00 loops=1)
          Order: o1."time"
          ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=3598.00 loops=1)
-               Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+               Index Cond: (device_id = 1)
          ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (actual rows=5038.00 loops=1)
-               Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+               Index Cond: (device_id = 1)
          ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (actual rows=5038.00 loops=1)
-               Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+               Index Cond: (device_id = 1)
    ->  Materialize (actual rows=13674.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=13674.00 loops=1)
                Order: o2."time"
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=3598.00 loops=1)
-                     Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                     Index Cond: (device_id = 2)
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (actual rows=5038.00 loops=1)
-                     Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                     Index Cond: (device_id = 2)
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (actual rows=5038.00 loops=1)
-                     Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                     Index Cond: (device_id = 2)
 
 -- test JOIN
 -- last chunk of o2 should not be executed
@@ -281,7 +281,6 @@ LIMIT 10;
          ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=2.00 loops=1)
                Order: o1."time"
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk o1_1 (actual rows=2.00 loops=1)
-                     Index Cond: ("time" < 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk o1_2 (never executed)
                      Index Cond: ("time" < 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
          ->  Materialize (actual rows=10.00 loops=1)
@@ -1929,23 +1928,20 @@ ORDER BY o1.time;
                Sort Key: o2."time"
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_1 (actual rows=3598.00 loops=1)
                      Filter: (device_id = 2)
-                     Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Sort (actual rows=4.00 loops=1)
                            Sort Key: compress_hyper_X_X_chunk_1._ts_meta_min_1, compress_hyper_X_X_chunk_1._ts_meta_max_1
                            Sort Method: quicksort 
                            ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=4.00 loops=1)
-                                 Filter: ((device_id = 2) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                                 Filter: (device_id = 2)
                                  Rows Removed by Filter: 14
                ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=0.00 loops=1)
-                     Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                     Index Cond: (device_id = 2)
          ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_2 (actual rows=5038.00 loops=1)
-               Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6.00 loops=1)
-                     Index Cond: ((device_id = 2) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                     Index Cond: (device_id = 2)
          ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_3 (actual rows=5038.00 loops=1)
-               Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6.00 loops=1)
-                     Index Cond: ((device_id = 2) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                     Index Cond: (device_id = 2)
    ->  Materialize (actual rows=13674.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=13674.00 loops=1)
                Order: o1."time"
@@ -1953,24 +1949,20 @@ ORDER BY o1.time;
                      Sort Key: o1."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_1 (actual rows=2000.00 loops=1)
                            Filter: (device_id = 1)
-                           Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Sort (actual rows=2.00 loops=1)
                                  Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
                                  Sort Method: quicksort 
                                  ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=2.00 loops=1)
-                                       Filter: ((_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone) AND (device_id = 1))
+                                       Filter: (device_id = 1)
                                        Rows Removed by Filter: 16
                      ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk o1_1 (actual rows=1598.00 loops=1)
-                           Index Cond: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
                            Filter: (device_id = 1)
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_2 (actual rows=5038.00 loops=1)
-                     Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6.00 loops=1)
-                           Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_3 (actual rows=5038.00 loops=1)
-                     Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6.00 loops=1)
-                           Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                           Index Cond: (device_id = 1)
 
 -- test JOIN
 -- last chunk of o2 should not be executed
@@ -2017,11 +2009,8 @@ LIMIT 10;
                                  Sort Key: o1_1."time"
                                  Sort Method: quicksort 
                                  ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_1 (actual rows=16392.00 loops=1)
-                                       Vectorized Filter: ("time" < 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18.00 loops=1)
-                                             Filter: (_ts_meta_min_1 < 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk o1_1 (actual rows=2.00 loops=1)
-                                 Index Cond: ("time" < 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Sort (never executed)
                            Sort Key: o1_2."time"
                            ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_2 (never executed)
@@ -4126,9 +4115,7 @@ select * from dates natural join times where ts > '2021-01-01';
          ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
          ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
-               Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
          ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
-               Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
    ->  Materialize (actual rows=3.00 loops=1)
          ->  Merge Append (actual rows=3.00 loops=1)
                Sort Key: dates.ts
@@ -4146,9 +4133,7 @@ select * from dates natural join times where ts > '2021-01-01' order by ts;
          ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
          ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
-               Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
          ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
-               Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
    ->  Materialize (actual rows=3.00 loops=1)
          ->  Custom Scan (ChunkAppend) on dates (actual rows=3.00 loops=1)
                Order: dates.ts
@@ -4167,9 +4152,7 @@ select * from dates natural join times where ts > '2021-01-01' order by ts limit
                ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
                ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
-                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
                ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
          ->  Materialize (actual rows=2.00 loops=1)
                ->  Custom Scan (ChunkAppend) on dates (actual rows=2.00 loops=1)
                      Order: dates.ts
@@ -4186,9 +4169,7 @@ select * from dates natural join times where ts > '2021-01-01' order by ts desc 
          ->  Custom Scan (ChunkAppend) on times (actual rows=1.00 loops=1)
                Order: times.ts DESC
                ->  Index Scan using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
-                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
                ->  Index Scan using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
                ->  Index Scan using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
          ->  Materialize (actual rows=1.00 loops=1)
@@ -4207,9 +4188,7 @@ select * from dates join times on times.ts = dates.ts where times.ts > '2021-01-
          ->  Custom Scan (ChunkAppend) on times (actual rows=1.00 loops=1)
                Order: times.ts DESC
                ->  Index Scan using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
-                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
                ->  Index Scan using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
                ->  Index Scan using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
          ->  Materialize (actual rows=1.00 loops=1)
@@ -4230,9 +4209,7 @@ select * from dates join times on times.ts = dates.ts where times.ts > '2021-01-
                ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
                ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
-                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
                ->  Index Scan Backward using _hyper_X_X_chunk_times_ts_idx on _hyper_X_X_chunk (never executed)
-                     Index Cond: (ts > 'Fri Jan 01 00:00:00 2021'::timestamp without time zone)
          ->  Materialize (actual rows=2.00 loops=1)
                ->  Custom Scan (ChunkAppend) on dates (actual rows=2.00 loops=1)
                      Order: dates.ts

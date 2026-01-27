@@ -344,7 +344,6 @@ LIMIT 1;
          ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
                Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (never executed)
-               Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
 
 :PREFIX
 SELECT time
@@ -357,7 +356,6 @@ LIMIT 1;
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
          Order: metrics."time" DESC
          ->  Index Only Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-               Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan using _hyper_1_2_chunk_metrics_time_idx on _hyper_1_2_chunk (never executed)
                Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
 
@@ -659,11 +657,11 @@ WHERE time < '2000-02-01'::timestamptz;
  Custom Scan (ChunkAppend) on metrics (actual rows=13674.00 loops=1)
    Order: metrics."time"
    ->  Index Only Scan Backward using _hyper_1_1_chunk_metrics_device_id_time_idx on _hyper_1_1_chunk (actual rows=3598.00 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+         Index Cond: (device_id = 1)
    ->  Index Only Scan Backward using _hyper_1_2_chunk_metrics_device_id_time_idx on _hyper_1_2_chunk (actual rows=5038.00 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+         Index Cond: (device_id = 1)
    ->  Index Only Scan Backward using _hyper_1_3_chunk_metrics_device_id_time_idx on _hyper_1_3_chunk (actual rows=5038.00 loops=1)
-         Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+         Index Cond: (device_id = 1)
 
 RESET enable_seqscan;
 -- test subquery
@@ -2152,9 +2150,7 @@ LIMIT 1;
          ->  Sort (never executed)
                Sort Key: _hyper_3_15_chunk."time"
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
 
 :PREFIX
 SELECT time
@@ -2170,9 +2166,7 @@ LIMIT 1;
                Sort Key: _hyper_3_15_chunk."time" DESC
                Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=25190.00 loops=1)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=30.00 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
          ->  Sort (never executed)
                Sort Key: _hyper_3_14_chunk."time" DESC
                ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
@@ -2659,17 +2653,14 @@ WHERE time < '2000-02-01'::timestamptz;
  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=13674.00 loops=1)
    Order: metrics_compressed."time"
    ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=3598.00 loops=1)
-         Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Scan Backward using compress_hyper_4_16_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_16_chunk (actual rows=4.00 loops=1)
-               Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+               Index Cond: (device_id = 1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=5038.00 loops=1)
-         Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Scan Backward using compress_hyper_4_17_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_17_chunk (actual rows=6.00 loops=1)
-               Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+               Index Cond: (device_id = 1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=5038.00 loops=1)
-         Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Scan Backward using compress_hyper_4_18_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_18_chunk (actual rows=6.00 loops=1)
-               Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+               Index Cond: (device_id = 1)
 
 RESET enable_seqscan;
 -- test subquery

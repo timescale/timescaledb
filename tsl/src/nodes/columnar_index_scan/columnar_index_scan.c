@@ -15,6 +15,8 @@
 
 #include "compression/create.h"
 #include "debug_assert.h"
+#include "expression_utils.h"
+#include "func_cache.h"
 #include "guc.h"
 #include "nodes/columnar_index_scan/columnar_index_scan.h"
 
@@ -51,11 +53,12 @@ _columnar_index_scan_init(void)
 /*
  * Check if an aggregate function can use compressed chunk sparse index.
  *
- * Currently supported aggregates are min and max
+ * Currently supported aggregates are min, max, first, and last.
+ * If supported, adds the chunk attno, metadata attno, and aggfnoid to the lists.
  */
 static bool
-is_supported_aggregate(const CompressionInfo *info, Aggref *aggref, AttrNumber *aggregate_attno,
-					   AttrNumber *metadata_attno)
+is_supported_aggregate(const CompressionInfo *info, Aggref *aggref, List **aggregate_attnos,
+					   List **metadata_attnos, List **aggregate_fnoids)
 {
 	/* No DISTINCT, ORDER BY, or FILTER */
 	if (aggref->args == NIL || aggref->aggdistinct != NIL || aggref->aggorder != NIL ||
@@ -75,11 +78,7 @@ is_supported_aggregate(const CompressionInfo *info, Aggref *aggref, AttrNumber *
 	if (var->varattno <= 0)
 		return false;
 
-	/* var references hypertable attnums so we have to use hypertable relid for column name lookup
-	 */
-	AttrNumber chunk_attno =
-		ts_map_attno(info->ht_rte->relid, info->chunk_rte->relid, var->varattno);
-	AttrNumber meta_attno;
+	char *meta_type = NULL;
 
 	switch (aggref->aggfnoid)
 	{
@@ -112,17 +111,7 @@ is_supported_aggregate(const CompressionInfo *info, Aggref *aggref, AttrNumber *
 		case F_MIN_TIMESTAMPTZ:
 		case F_MIN_TIMETZ:
 		case F_MIN_XID8:
-			meta_attno = compressed_column_metadata_attno(info->settings,
-														  info->chunk_rte->relid,
-														  chunk_attno,
-														  info->compressed_rte->relid,
-														  "min");
-			if (meta_attno)
-			{
-				*aggregate_attno = chunk_attno;
-				*metadata_attno = meta_attno;
-				return true;
-			}
+			meta_type = "min";
 			break;
 		case F_MAX_ANYARRAY:
 		case F_MAX_ANYENUM:
@@ -152,18 +141,45 @@ is_supported_aggregate(const CompressionInfo *info, Aggref *aggref, AttrNumber *
 		case F_MAX_TIMESTAMPTZ:
 		case F_MAX_TIMETZ:
 		case F_MAX_XID8:
-			meta_attno = compressed_column_metadata_attno(info->settings,
-														  info->chunk_rte->relid,
-														  chunk_attno,
-														  info->compressed_rte->relid,
-														  "max");
-			if (meta_attno)
+			meta_type = "max";
+			break;
+		default:
+			/* Initialize function cache for access to ts_first_func_oid and ts_last_func_oid */
+			if (!OidIsValid(ts_first_func_oid) || !OidIsValid(ts_last_func_oid))
+				ts_func_cache_init();
+
+			if (aggref->aggfnoid == ts_first_func_oid || aggref->aggfnoid == ts_last_func_oid)
 			{
-				*aggregate_attno = chunk_attno;
-				*metadata_attno = meta_attno;
-				return true;
+				/*
+				 * Check for eligible first/last aggregate
+				 * For now we only support first/last with both arguments referencing same column
+				 */
+				TargetEntry *tle2 = castNode(TargetEntry, lsecond(aggref->args));
+				if (!equal(var, tle2->expr))
+					return false;
+
+				meta_type = (aggref->aggfnoid == ts_first_func_oid) ? "min" : "max";
 			}
 			break;
+	}
+	if (meta_type)
+	{
+		/* var references hypertable attnums so we have to use hypertable relid for column name
+		 * lookup */
+		AttrNumber chunk_attno =
+			ts_map_attno(info->ht_rte->relid, info->chunk_rte->relid, var->varattno);
+		AttrNumber meta_attno = compressed_column_metadata_attno(info->settings,
+																 info->chunk_rte->relid,
+																 chunk_attno,
+																 info->compressed_rte->relid,
+																 meta_type);
+		if (meta_attno)
+		{
+			*aggregate_attnos = lappend_int(*aggregate_attnos, chunk_attno);
+			*metadata_attnos = lappend_int(*metadata_attnos, meta_attno);
+			*aggregate_fnoids = lappend_oid(*aggregate_fnoids, aggref->aggfnoid);
+			return true;
+		}
 	}
 	return false;
 }
@@ -172,28 +188,33 @@ is_supported_aggregate(const CompressionInfo *info, Aggref *aggref, AttrNumber *
  * Check if we can use a ColumnarIndexScan for the given query.
  *
  * Requirements:
- * - Query has eligible aggregate on any column with metadata
+ * - Query has eligible aggregates on columns with metadata
  * - GROUP BY has only segmentby columns
  * - WHERE clause can be fully pushed down to compressed chunk
  * - No HAVING clause
  */
 static bool
 can_use_columnar_index_scan(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
-							const CompressionInfo *info, AttrNumber *aggregate_attno,
-							AttrNumber *metadata_attno)
+							const CompressionInfo *info, List **aggregate_attnos,
+							List **metadata_attnos, List **aggregate_fnoids)
 {
 	Assert(ts_guc_enable_columnarindexscan);
 
 	Query *parse = root->parse;
 	ListCell *lc;
-	bool found_aggregate = false;
 
 	/* Must have aggregates */
 	if (!parse->hasAggs)
 		return false;
 
-	/* Punt on ordered output for now until we add proper support for ordered append */
-	if (root->sort_pathkeys != NIL)
+	/*
+	 * Punt on queries without GROUP BY for now
+	 *
+	 * We can support these but this has the side effect of disabling
+	 * interaction with ordered append queries since those won't have
+	 * GROUP BY. So for now we only support GROUP BY queries.
+	 */
+	if (!parse->groupClause)
 		return false;
 
 	/*
@@ -240,7 +261,7 @@ can_use_columnar_index_scan(PlannerInfo *root, const Chunk *chunk, RelOptInfo *c
 	/*
 	 * Check target list.
 	 * The target list should contain:
-	 * - A single eligible aggregate on a column with min/max index
+	 * - One or more eligible aggregates on columns with min/max metadata
 	 * - Any segmentby columns
 	 */
 	foreach (lc, parse->targetList)
@@ -252,17 +273,12 @@ can_use_columnar_index_scan(PlannerInfo *root, const Chunk *chunk, RelOptInfo *c
 
 		if (IsA(tle->expr, Aggref))
 		{
-			/* Only one aggregate allowed */
-			if (found_aggregate)
-				return false;
-
 			if (!is_supported_aggregate(info,
 										castNode(Aggref, tle->expr),
-										aggregate_attno,
-										metadata_attno))
+										aggregate_attnos,
+										metadata_attnos,
+										aggregate_fnoids))
 				return false;
-
-			found_aggregate = true;
 		}
 		else
 		{
@@ -277,14 +293,22 @@ can_use_columnar_index_scan(PlannerInfo *root, const Chunk *chunk, RelOptInfo *c
 				if (var->varattno != TableOidAttributeNumber)
 					return false;
 			}
-			else if (!bms_is_member(var->varattno, info->chunk_segmentby_attnos))
+			else
 			{
-				return false;
+				/* Targetlist references hypertable attnums so we have to translate to chunk */
+				AttrNumber chunk_attno =
+					ts_map_attno(info->ht_rte->relid, info->chunk_rte->relid, var->varattno);
+				if (!bms_is_member(chunk_attno, info->chunk_segmentby_attnos))
+					return false;
 			}
 		}
 	}
 
-	return found_aggregate;
+	/* Must have found at least one aggregate */
+	if (*aggregate_fnoids == NIL)
+		return false;
+
+	return true;
 }
 
 /*
@@ -307,17 +331,19 @@ ColumnarIndexScanPath *
 ts_columnar_index_scan_path_create(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 								   const CompressionInfo *info, Path *compressed_path)
 {
-	if (!ts_guc_enable_columnarindexscan)
+	if (!ts_guc_enable_columnarindexscan || compressed_path->parallel_aware)
 		return NULL;
 
-	AttrNumber aggregate_attno = InvalidAttrNumber;
-	AttrNumber metadata_attno = InvalidAttrNumber;
+	List *aggregate_attnos = NIL;
+	List *metadata_attnos = NIL;
+	List *aggregate_fnoids = NIL;
 	if (!can_use_columnar_index_scan(root,
 									 chunk,
 									 chunk_rel,
 									 info,
-									 &aggregate_attno,
-									 &metadata_attno))
+									 &aggregate_attnos,
+									 &metadata_attnos,
+									 &aggregate_fnoids))
 		return NULL;
 
 	ColumnarIndexScanPath *path =
@@ -328,16 +354,17 @@ ts_columnar_index_scan_path_create(PlannerInfo *root, const Chunk *chunk, RelOpt
 	path->custom_path.path.pathtarget = chunk_rel->reltarget;
 	path->custom_path.path.param_info = NULL;
 	path->custom_path.path.parallel_aware = false;
-	path->custom_path.path.parallel_safe = compressed_path->parallel_safe;
-	path->custom_path.path.parallel_workers = compressed_path->parallel_workers;
+	path->custom_path.path.parallel_safe = false;
+	path->custom_path.path.parallel_workers = 0;
 	path->custom_path.path.pathkeys = NIL;
 	path->custom_path.flags = 0;
 	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->custom_path.methods = &columnar_index_scan_path_methods;
 
 	path->info = info;
-	path->aggregate_attno = aggregate_attno;
-	path->metadata_attno = metadata_attno;
+	path->aggregate_attnos = aggregate_attnos;
+	path->metadata_attnos = metadata_attnos;
+	path->aggregate_fnoids = aggregate_fnoids;
 
 	cost_columnar_index_scan(path, compressed_path);
 
@@ -378,6 +405,127 @@ build_tlist(PlannerInfo *root, RelOptInfo *rel)
 	return tlist;
 }
 
+/*
+ * Build the output map, custom target list, and remap info for the ColumnarIndexScan.
+ *
+ * This builds custom_scan_tlist with one entry per aggregate (even if same column).
+ * The output_map maps each entry to the right metadata/compressed column.
+ * For multiple aggregates on the same column, we create multiple entries
+ * as different aggregates may pull in values from different metadata columns.
+ *
+ * Returns the custom_scan_tlist. The output_map and remap_info are returned
+ * via output parameters.
+ */
+static List *
+build_output_map(ColumnarIndexScanPath *cispath, RelOptInfo *rel, List *output_targetlist,
+				 List **output_map_out, List **remap_info_out)
+{
+	ListCell *lc;
+	ListCell *agg_lc = list_head(cispath->aggregate_attnos);
+	ListCell *meta_lc = list_head(cispath->metadata_attnos);
+	ListCell *fnoid_lc = list_head(cispath->aggregate_fnoids);
+	List *custom_tlist = NIL;
+	List *output_map = NIL;
+
+	/* Three parallel lists for remap_info */
+	List *remap_original_positions = NIL;
+	List *remap_target_positions = NIL;
+	List *remap_aggfnoids = NIL;
+
+	int resno = 0;
+
+	foreach (lc, output_targetlist)
+	{
+		TargetEntry *tle = (TargetEntry *) lfirst(lc);
+		Ensure(IsA(tle->expr, Var), "output targetlist entries must be Vars");
+
+		Var *var = castNode(Var, tle->expr);
+		Assert((Index) var->varno == rel->relid);
+		int original_pos = foreach_current_index(lc) + 1; /* 1-based position */
+
+		/*
+		 * Check if this column is used by aggregates. If multiple aggregates
+		 * use the same column, we create multiple entries in custom_tlist.
+		 */
+		bool found_agg = false;
+		while (agg_lc != NULL && var->varattno == lfirst_int(agg_lc))
+		{
+			Assert(meta_lc != NULL && fnoid_lc != NULL);
+
+			AttrNumber metadata_attno = lfirst_int(meta_lc);
+			Oid aggfnoid = lfirst_oid(fnoid_lc);
+
+			resno++;
+
+			/* Create a new TargetEntry for this aggregate */
+			Var *new_var = copyObject(var);
+			TargetEntry *new_tle = makeTargetEntry((Expr *) new_var, resno, NULL, false);
+			custom_tlist = lappend(custom_tlist, new_tle);
+
+			/* Map this entry to the metadata column */
+			output_map = lappend_int(output_map, metadata_attno);
+
+			/*
+			 * Record remapping info when target position differs from original.
+			 * After setrefs, Aggrefs reference original_pos (position in output_targetlist).
+			 * We need to change them to reference resno (position in custom_tlist).
+			 */
+			if (resno != original_pos)
+			{
+				remap_original_positions = lappend_int(remap_original_positions, original_pos);
+				remap_target_positions = lappend_int(remap_target_positions, resno);
+				remap_aggfnoids = lappend_oid(remap_aggfnoids, aggfnoid);
+			}
+			found_agg = true;
+
+			/* Advance to next aggregate */
+			agg_lc = lnext(cispath->aggregate_attnos, agg_lc);
+			meta_lc = lnext(cispath->metadata_attnos, meta_lc);
+			fnoid_lc = lnext(cispath->aggregate_fnoids, fnoid_lc);
+		}
+
+		if (!found_agg)
+		{
+			/* Not an aggregate column - segmentby column */
+			resno++;
+
+			TargetEntry *new_tle = copyObject(tle);
+			new_tle->resno = resno;
+			custom_tlist = lappend(custom_tlist, new_tle);
+
+			AttrNumber compressed_attno = ts_map_attno(cispath->info->chunk_rte->relid,
+													   cispath->info->compressed_rte->relid,
+													   var->varattno);
+			Ensure(compressed_attno != InvalidAttrNumber,
+				   "could not map chunk attno to compressed attno");
+			output_map = lappend_int(output_map, compressed_attno);
+
+			/*
+			 * Non-aggregate columns may also need remapping if they shifted position
+			 * due to aggregate expansion. Use aggfnoid=InvalidOid to indicate this is
+			 * not an aggregate remap entry.
+			 */
+			if (resno != original_pos)
+			{
+				remap_original_positions = lappend_int(remap_original_positions, original_pos);
+				remap_aggfnoids = lappend_oid(remap_aggfnoids, InvalidOid);
+				remap_target_positions = lappend_int(remap_target_positions, resno);
+			}
+		}
+	}
+
+	*output_map_out = output_map;
+
+	/* Store remap_info as three parallel lists, or NIL if no remapping needed */
+	if (remap_original_positions != NIL)
+		*remap_info_out =
+			list_make3(remap_original_positions, remap_target_positions, remap_aggfnoids);
+	else
+		*remap_info_out = NIL;
+
+	return custom_tlist;
+}
+
 Plan *
 columnar_index_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 								List *output_targetlist, List *clauses, List *custom_plans)
@@ -393,37 +541,321 @@ columnar_index_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *
 
 	compressed_scan->plan.targetlist = build_tlist(root, cispath->info->compressed_rel);
 
-	ListCell *lc;
 	List *output_map = NIL;
+	List *remap_info = NIL;
+	List *custom_tlist =
+		build_output_map(cispath, rel, output_targetlist, &output_map, &remap_info);
 
-	foreach (lc, output_targetlist)
+	/* Store output_map and remap_info in custom_private */
+	cscan->custom_private = list_make2(output_map, remap_info);
+	cscan->custom_scan_tlist = custom_tlist;
+
+	/*
+	 * Set scan.plan.targetlist to match output_targetlist, which is what the
+	 * Aggregate node was planned with. PostgreSQL's setrefs pass will adjust
+	 * Var references based on this structure.
+	 *
+	 * After setrefs, our fix_aggrefs hook will:
+	 * 1. Update the Aggregate's references to point to expanded positions in custom_scan_tlist
+	 * 2. Rebuild scan.plan.targetlist to match custom_scan_tlist
+	 *
+	 * Note: custom_scan_tlist may have more entries than output_targetlist when
+	 * there are multiple aggregates on the same column (e.g., min(x) and max(x)).
+	 */
+	cscan->scan.plan.targetlist = copyObject(output_targetlist);
+
+	return &cscan->scan.plan;
+}
+
+/*
+ * Helper to fix Aggref args in an expression tree.
+ * After setrefs, all Aggrefs referencing the same column have the same arg position.
+ * We need to fix them based on aggfnoid to reference the correct position.
+ *
+ * remap_info is list_make3(original_positions, target_positions, aggfnoids)
+ */
+static bool
+fix_aggref_walker(Node *node, List *remap_info)
+{
+	if (node == NULL)
+		return false;
+
+	/* Extract the three parallel lists from remap_info */
+	List *original_positions = linitial(remap_info);
+	List *target_positions = lsecond(remap_info);
+	List *aggfnoids = lthird(remap_info);
+
+	if (IsA(node, Aggref))
 	{
-		TargetEntry *tle = (TargetEntry *) lfirst(lc);
-		Ensure(IsA(tle->expr, Var), "output targetlist entries must be Vars");
+		Aggref *aggref = (Aggref *) node;
 
-		Var *var = castNode(Var, tle->expr);
-		Assert((Index) var->varno == rel->relid);
-
-		if (var->varattno == cispath->aggregate_attno)
+		/*
+		 * Remap all arguments of this aggregate. This is important for aggregates
+		 * like first(val, time) which have multiple arguments that may all need
+		 * remapping.
+		 */
+		ListCell *arg_lc;
+		foreach (arg_lc, aggref->args)
 		{
-			/* Aggregate column */
-			output_map = lappend_int(output_map, cispath->metadata_attno);
+			TargetEntry *arg_te = lfirst_node(TargetEntry, arg_lc);
+			if (!IsA(arg_te->expr, Var))
+				continue;
+
+			Var *var = (Var *) arg_te->expr;
+
+			/* Look up remapping for this (position, aggfnoid) combination */
+			ListCell *pos_lc = list_head(original_positions);
+			ListCell *fnoid_lc = list_head(aggfnoids);
+			ListCell *target_lc = list_head(target_positions);
+
+			while (pos_lc != NULL)
+			{
+				Assert(fnoid_lc != NULL && target_lc != NULL);
+
+				AttrNumber original_pos = lfirst_int(pos_lc);
+				Oid entry_aggfnoid = lfirst_oid(fnoid_lc);
+				AttrNumber target_pos = lfirst_int(target_lc);
+
+				if (var->varattno == original_pos && aggref->aggfnoid == entry_aggfnoid)
+				{
+					/* Apply remapping */
+					var->varattno = target_pos;
+					break;
+				}
+
+				pos_lc = lnext(original_positions, pos_lc);
+				fnoid_lc = lnext(aggfnoids, fnoid_lc);
+				target_lc = lnext(target_positions, target_lc);
+			}
 		}
-		else
+		/* Don't recurse into Aggref args, we've handled it */
+		return false;
+	}
+
+	/*
+	 * Fix plain Vars that reference shifted positions (non-aggregate columns).
+	 * These are identified by aggfnoid=InvalidOid in remap_info.
+	 */
+	if (IsA(node, Var))
+	{
+		Var *var = (Var *) node;
+
+		ListCell *pos_lc = list_head(original_positions);
+		ListCell *fnoid_lc = list_head(aggfnoids);
+		ListCell *target_lc = list_head(target_positions);
+
+		while (pos_lc != NULL)
 		{
-			/* Segmentby column */
-			AttrNumber compressed_attno = ts_map_attno(cispath->info->chunk_rte->relid,
-													   cispath->info->compressed_rte->relid,
-													   var->varattno);
-			Ensure(compressed_attno != InvalidAttrNumber,
-				   "could not map chunk attno to compressed attno");
-			output_map = lappend_int(output_map, compressed_attno);
+			Assert(fnoid_lc != NULL && target_lc != NULL);
+
+			AttrNumber original_pos = lfirst_int(pos_lc);
+			Oid entry_aggfnoid = lfirst_oid(fnoid_lc);
+			AttrNumber target_pos = lfirst_int(target_lc);
+
+			/* Match non-aggregate remap entries (aggfnoid=InvalidOid) */
+			if (!OidIsValid(entry_aggfnoid) && var->varattno == original_pos)
+			{
+				var->varattno = target_pos;
+				break;
+			}
+
+			pos_lc = lnext(original_positions, pos_lc);
+			fnoid_lc = lnext(aggfnoids, fnoid_lc);
+			target_lc = lnext(target_positions, target_lc);
+		}
+		return false;
+	}
+
+	return expression_tree_walker(node, fix_aggref_walker, remap_info);
+}
+
+/*
+ * Fix Aggref references in an Aggregate node's targetlist, qual, and grpColIdx.
+ * remap_info is list_make3(original_positions, target_positions, aggfnoids)
+ */
+static void
+fix_aggregate_aggrefs(Agg *agg, List *remap_info)
+{
+	fix_aggref_walker((Node *) agg->plan.targetlist, remap_info);
+	fix_aggref_walker((Node *) agg->plan.qual, remap_info);
+
+	/* Extract the three parallel lists from remap_info */
+	List *original_positions = linitial(remap_info);
+	List *target_positions = lsecond(remap_info);
+	List *aggfnoids = lthird(remap_info);
+
+	/*
+	 * Fix grpColIdx - these are the input column positions for GROUP BY columns.
+	 * When non-aggregate columns shift position due to aggregate expansion,
+	 * grpColIdx needs to be updated accordingly.
+	 */
+	for (int i = 0; i < agg->numCols; i++)
+	{
+		AttrNumber old_attno = agg->grpColIdx[i];
+
+		ListCell *pos_lc = list_head(original_positions);
+		ListCell *fnoid_lc = list_head(aggfnoids);
+		ListCell *target_lc = list_head(target_positions);
+
+		while (pos_lc != NULL)
+		{
+			Assert(fnoid_lc != NULL && target_lc != NULL);
+
+			AttrNumber original_pos = lfirst_int(pos_lc);
+			Oid entry_aggfnoid = lfirst_oid(fnoid_lc);
+			AttrNumber target_pos = lfirst_int(target_lc);
+
+			/* Match non-aggregate remap entries (aggfnoid=InvalidOid) */
+			if (!OidIsValid(entry_aggfnoid) && old_attno == original_pos)
+			{
+				agg->grpColIdx[i] = target_pos;
+				break;
+			}
+
+			pos_lc = lnext(original_positions, pos_lc);
+			fnoid_lc = lnext(aggfnoids, fnoid_lc);
+			target_lc = lnext(target_positions, target_lc);
+		}
+	}
+}
+
+/*
+ * Recursively process plan tree to fix Aggref references for ColumnarIndexScan.
+ */
+void
+ts_columnar_index_scan_fix_aggrefs(Plan *plan)
+{
+	if (plan == NULL)
+		return;
+
+	/* Recurse to children first */
+	ts_columnar_index_scan_fix_aggrefs(plan->lefttree);
+	ts_columnar_index_scan_fix_aggrefs(plan->righttree);
+
+	/* Check if this is an Aggregate over ColumnarIndexScan */
+	if (IsA(plan, Agg))
+	{
+		Agg *agg = (Agg *) plan;
+		Plan *subplan = agg->plan.lefttree;
+
+		/* ColumnarIndexScan might be below Sort/IncrementalSort nodes */
+		if (!ts_is_columnar_index_scan_plan(subplan))
+		{
+			switch (nodeTag(subplan))
+			{
+				case T_Sort:
+				case T_IncrementalSort:
+					subplan = subplan->lefttree;
+					break;
+				default:
+					return;
+					break;
+			}
+		}
+
+		if (subplan && ts_is_columnar_index_scan_plan(subplan))
+		{
+			CustomScan *cscan = (CustomScan *) subplan;
+
+			/* Get remap_info from custom_private */
+			Assert(list_length(cscan->custom_private) == 2);
+			List *remap_info = lsecond(cscan->custom_private);
+			if (remap_info != NIL)
+			{
+				fix_aggregate_aggrefs(agg, remap_info);
+
+				/*
+				 * Rebuild CustomScan's scan.plan.targetlist to have
+				 * entries for all positions in custom_scan_tlist. This is
+				 * necessary because setrefs set it up based on the original
+				 * plan, but after fix_aggregate_aggrefs, the Aggregate
+				 * expects columns at expanded positions.
+				 */
+				cscan->scan.plan.targetlist =
+					ts_build_trivial_custom_output_targetlist(cscan->custom_scan_tlist);
+
+				/*
+				 * Also fix targetlists of intermediate nodes (Sort, etc.)
+				 * between ColumnarIndexScan and Aggregate. These need to
+				 * pass through all columns from the expanded targetlist.
+				 * Use OUTER_VAR since these nodes reference their lefttree.
+				 */
+				Plan *intermediate = agg->plan.lefttree;
+				while (intermediate != (Plan *) cscan)
+				{
+					List *new_tlist = NIL;
+					ListCell *lc;
+					foreach (lc, cscan->custom_scan_tlist)
+					{
+						TargetEntry *scan_entry = (TargetEntry *) lfirst(lc);
+						Var *var = makeVar(OUTER_VAR,
+										   scan_entry->resno,
+										   exprType((Node *) scan_entry->expr),
+										   exprTypmod((Node *) scan_entry->expr),
+										   exprCollation((Node *) scan_entry->expr),
+										   0);
+						TargetEntry *new_entry = makeTargetEntry((Expr *) var,
+																 scan_entry->resno,
+																 scan_entry->resname,
+																 scan_entry->resjunk);
+						new_tlist = lappend(new_tlist, new_entry);
+					}
+					intermediate->targetlist = new_tlist;
+					intermediate = intermediate->lefttree;
+				}
+			}
 		}
 	}
 
-	cscan->custom_private = list_make1(output_map);
-	cscan->custom_scan_tlist = output_targetlist;
-	cscan->scan.plan.targetlist = output_targetlist;
-
-	return &cscan->scan.plan;
+	/* Handle other plan node types that might have subplans */
+	if (IsA(plan, Append))
+	{
+		Append *append = (Append *) plan;
+		ListCell *lc;
+		foreach (lc, append->appendplans)
+		{
+			ts_columnar_index_scan_fix_aggrefs(lfirst(lc));
+		}
+	}
+	else if (IsA(plan, MergeAppend))
+	{
+		MergeAppend *merge = (MergeAppend *) plan;
+		ListCell *lc;
+		foreach (lc, merge->mergeplans)
+		{
+			ts_columnar_index_scan_fix_aggrefs(lfirst(lc));
+		}
+	}
+	else if (IsA(plan, SubqueryScan))
+	{
+		SubqueryScan *ss = (SubqueryScan *) plan;
+		ts_columnar_index_scan_fix_aggrefs(ss->subplan);
+	}
+	else if (IsA(plan, CustomScan))
+	{
+		CustomScan *cs = (CustomScan *) plan;
+		ListCell *lc;
+		foreach (lc, cs->custom_plans)
+		{
+			ts_columnar_index_scan_fix_aggrefs(lfirst(lc));
+		}
+	}
+	else if (IsA(plan, BitmapAnd))
+	{
+		BitmapAnd *ba = (BitmapAnd *) plan;
+		ListCell *lc;
+		foreach (lc, ba->bitmapplans)
+		{
+			ts_columnar_index_scan_fix_aggrefs(lfirst(lc));
+		}
+	}
+	else if (IsA(plan, BitmapOr))
+	{
+		BitmapOr *bo = (BitmapOr *) plan;
+		ListCell *lc;
+		foreach (lc, bo->bitmapplans)
+		{
+			ts_columnar_index_scan_fix_aggrefs(lfirst(lc));
+		}
+	}
 }
