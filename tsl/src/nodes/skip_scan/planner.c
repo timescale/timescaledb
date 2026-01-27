@@ -201,14 +201,20 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 			index_oid = castNode(IndexOnlyScan, plan)->indexid;
 
 		if (OidIsValid(index_oid))
-			query_hash = hash_combine(query_hash, DatumGetUInt32(hash_uint32(index_oid)));
+		{
+			uint32 oid_hash = DatumGetUInt32(hash_any((unsigned char *) &index_oid, sizeof(Oid)));
+			query_hash ^= (oid_hash << 1) | (oid_hash >> 31);
+		}
 
 		/* Combine with skip key info to distinguish different skip scan operations */
 		ListCell *lc;
 		foreach (lc, path->skipkeyinfo)
 		{
 			SkipKeyInfo *skinfo = (SkipKeyInfo *) lfirst(lc);
-			query_hash = hash_combine(query_hash, DatumGetUInt32(hash_uint32(skinfo->scankey_attno)));
+			uint32 attno_hash =
+				DatumGetUInt32(hash_any((unsigned char *) &skinfo->scankey_attno,
+										sizeof(AttrNumber)));
+			query_hash ^= (attno_hash << 1) | (attno_hash >> 31);
 		}
 
 		/* Check if this is a duplicate of the last logged query */
