@@ -38,56 +38,6 @@ typedef struct QualPushdownContext
 	bool can_pushdown;
 	bool needs_recheck;
 } QualPushdownContext;
-
-static Node *qual_pushdown_mutator(Node *node, QualPushdownContext *context);
-
-static List *
-deconstruct_array_const(Const *array_const)
-{
-	/*
-	 * No way to represent that as a list (NIL is an empty array), so has to be
-	 * handled by the caller.
-	 */
-	Assert(!array_const->constisnull);
-
-	Oid array_type = array_const->consttype;
-	Datum array_datum = array_const->constvalue;
-
-	Oid element_type = get_element_type(array_type);
-	Assert(OidIsValid(element_type));
-
-	int16 typlen;
-	bool typbyval;
-	char typalign;
-	get_typlenbyvalalign(element_type, &typlen, &typbyval, &typalign);
-
-	int nelems;
-	Datum *elem_values;
-	bool *elem_nulls;
-	deconstruct_array(DatumGetArrayTypeP(array_datum),
-					  element_type,
-					  typlen,
-					  typbyval,
-					  typalign,
-					  &elem_values,
-					  &elem_nulls,
-					  &nelems);
-
-	List *const_list = NIL;
-	for (int i = 0; i < nelems; i++)
-	{
-		Const *elem_const = makeConst(element_type,
-									  array_const->consttypmod,
-									  array_const->constcollid,
-									  typlen,
-									  elem_values[i],
-									  elem_nulls[i],
-									  typbyval);
-		const_list = lappend(const_list, elem_const);
-	}
-
-	return const_list;
-}
 static QualPushdownContext
 copy_context(const QualPushdownContext *source)
 {
@@ -669,6 +619,57 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 						/* funccollid = */ InvalidOid,
 						/* inputcollid = */ InvalidOid,
 						COERCE_EXPLICIT_CALL);
+}
+
+/*
+ * Deconstruct a Const of array type into a list of the array values.
+ */
+static List *
+deconstruct_array_const(Const *array_const)
+{
+	/*
+	 * No way to represent that as a list (NIL is an empty array), so has to be
+	 * handled by the caller.
+	 */
+	Assert(!array_const->constisnull);
+
+	Oid array_type = array_const->consttype;
+	Datum array_datum = array_const->constvalue;
+
+	Oid element_type = get_element_type(array_type);
+	Assert(OidIsValid(element_type));
+
+	int16 typlen;
+	bool typbyval;
+	char typalign;
+	get_typlenbyvalalign(element_type, &typlen, &typbyval, &typalign);
+
+	int nelems;
+	Datum *elem_values;
+	bool *elem_nulls;
+	deconstruct_array(DatumGetArrayTypeP(array_datum),
+					  element_type,
+					  typlen,
+					  typbyval,
+					  typalign,
+					  &elem_values,
+					  &elem_nulls,
+					  &nelems);
+
+	List *const_list = NIL;
+	for (int i = 0; i < nelems; i++)
+	{
+		Const *elem_const = makeConst(element_type,
+									  array_const->consttypmod,
+									  array_const->constcollid,
+									  typlen,
+									  elem_values[i],
+									  elem_nulls[i],
+									  typbyval);
+		const_list = lappend(const_list, elem_const);
+	}
+
+	return const_list;
 }
 
 /*
