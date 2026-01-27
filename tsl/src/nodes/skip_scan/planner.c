@@ -35,6 +35,14 @@
 
 #include <math.h>
 
+/* Track last logged query to avoid duplicate INFO messages during replanning.
+ * We hash the query string, index OID, and skip key attributes to uniquely
+ * identify each distinct SkipScan operation. This allows us to suppress
+ * duplicate messages from replanning the same query while still showing
+ * messages for different queries (even if they have the same stmt_location).
+ */
+static uint32 last_logged_query_hash = 0;
+
 typedef struct SkipKeyInfo
 {
 	/* Index clause which we'll use to skip past elements we've already seen */
@@ -163,7 +171,58 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 	StringInfoData debuginfo;
 	RangeTblEntry *indexed_rte = NULL;
 	char *sep = "";
-	if (ts_guc_debug_skip_scan_info)
+	bool should_log = ts_guc_debug_skip_scan_info;
+
+	/* Compute hash to detect duplicate INFO messages from replanning.
+	 * We combine query string, index OID, and skip key info to uniquely
+	 * identify this SkipScan operation. This prevents duplicate messages
+	 * from plan cache invalidation while preserving messages for distinct
+	 * queries (even if they have the same stmt_location in test files).
+	 */
+	if (should_log)
+	{
+		uint32 query_hash = 0;
+
+		/* Hash the query string if available */
+		if (root->parse->stmt_location >= 0 && debug_query_string)
+		{
+			const char *query_start = debug_query_string + root->parse->stmt_location;
+			int query_len = root->parse->stmt_len;
+			if (query_len <= 0)
+				query_len = strlen(query_start);
+			query_hash = DatumGetUInt32(hash_any((unsigned char *) query_start, query_len));
+		}
+
+		/* Combine with index OID to distinguish different indexes */
+		Oid index_oid = InvalidOid;
+		if (IsA(plan, IndexScan))
+			index_oid = castNode(IndexScan, plan)->indexid;
+		else if (IsA(plan, IndexOnlyScan))
+			index_oid = castNode(IndexOnlyScan, plan)->indexid;
+
+		if (OidIsValid(index_oid))
+			query_hash = hash_combine(query_hash, DatumGetUInt32(hash_uint32(index_oid)));
+
+		/* Combine with skip key info to distinguish different skip scan operations */
+		ListCell *lc;
+		foreach (lc, path->skipkeyinfo)
+		{
+			SkipKeyInfo *skinfo = (SkipKeyInfo *) lfirst(lc);
+			query_hash = hash_combine(query_hash, DatumGetUInt32(hash_uint32(skinfo->scankey_attno)));
+		}
+
+		/* Check if this is a duplicate of the last logged query */
+		if (query_hash == last_logged_query_hash && query_hash != 0)
+		{
+			should_log = false;
+		}
+		else
+		{
+			last_logged_query_hash = query_hash;
+		}
+	}
+
+	if (should_log)
 	{
 		initStringInfo(&debuginfo);
 		RelOptInfo *indexed_rel = index_path->path.parent;
@@ -237,7 +296,7 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 										 sknulls,
 										 skinfo->scankey_attno));
 		/* Debug info about skip key */
-		if (ts_guc_debug_skip_scan_info)
+		if (should_log)
 		{
 			char *attname = get_attname(indexed_rte->relid, skinfo->indexed_column_attno, false);
 			char *sknullstext;
@@ -260,7 +319,7 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 		}
 	}
 
-	if (ts_guc_debug_skip_scan_info)
+	if (should_log)
 	{
 		appendStringInfoString(&debuginfo, ")");
 		elog(INFO, "%s", debuginfo.data);
