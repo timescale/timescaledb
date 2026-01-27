@@ -58,17 +58,29 @@ else()
         "Failed to get LCOV version. Error code: ${LCOV_VERSION_RESULT}")
   endif()
 
-  if(${LCOV_VERSION} GREATER_EQUAL "2.0")
-    set(LCOV_EXTRA_OPTIONS "--ignore-errors mismatch,mismatch")
-  else()
-    set(LCOV_EXTRA_OPTIONS "")
-  endif()
-
   message(STATUS "Using gcov ${GCOV}:")
   execute_process(COMMAND ${GCOV} --version)
 
   # Final tracefile for code coverage
   set(OUTPUT_FILE "timescaledb-coverage.info")
+
+  # Common options for lcov capture commands
+  set(LCOV_CAPTURE_OPTS
+      --rc
+      lcov_branch_coverage=1
+      --rc
+      "lcov_excl_br_line=Assert\\(|Ensure\\("
+      --no-external
+      --base-directory
+      ${CMAKE_SOURCE_DIR}
+      --directory
+      ${CMAKE_BINARY_DIR}
+      --gcov-tool
+      ${CMAKE_CURRENT_BINARY_DIR}/gcov)
+
+  if(${LCOV_VERSION} VERSION_GREATER_EQUAL "2.0")
+    list(APPEND LCOV_CAPTURE_OPTS --ignore-errors=mismatch,mismatch)
+  endif()
 
   # Directory where to generate the HTML report
   set(REPORT_DIR "lcov-report")
@@ -84,14 +96,8 @@ else()
   add_custom_command(
     OUTPUT ${OUTPUT_FILE}.base
     COMMENT "Generating code coverage base file"
-    COMMAND
-      ${LCOV} --rc lcov_branch_coverage=1 --capture --initial # Initial run
-      --no-external # Do not include external source files
-      --rc "lcov_excl_br_line=Assert\\(|Ensure\\(" # Disable branch coverage for
-      # assertions
-      --base-directory ${CMAKE_SOURCE_DIR} --directory ${CMAKE_BINARY_DIR}
-      --output-file ${OUTPUT_FILE}.base --gcov-tool
-      ${CMAKE_CURRENT_BINARY_DIR}/gcov ${LCOV_EXTRA_OPTIONS}
+    COMMAND ${LCOV} --capture --initial ${LCOV_CAPTURE_OPTS} --output-file
+            ${OUTPUT_FILE}.base
     DEPENDS timescaledb-tsl timescaledb timescaledb-loader
             ${CMAKE_CURRENT_BINARY_DIR}/gcov
     VERBATIM)
@@ -105,12 +111,10 @@ else()
   add_custom_command(
     OUTPUT ${OUTPUT_FILE}.test
     COMMENT "Generating code coverage test file"
-    COMMAND
-      ${LCOV} --rc lcov_branch_coverage=1 --capture --no-external
-      --base-directory ${CMAKE_SOURCE_DIR} --directory ${CMAKE_BINARY_DIR}
-      --output-file ${OUTPUT_FILE}.test --gcov-tool
-      ${CMAKE_CURRENT_BINARY_DIR}/gcov ${LCOV_EXTRA_OPTIONS}
-    DEPENDS ${OUTPUT_FILE}.base coverage_base)
+    COMMAND ${LCOV} --capture ${LCOV_CAPTURE_OPTS} --output-file
+            ${OUTPUT_FILE}.test
+    DEPENDS ${OUTPUT_FILE}.base coverage_base
+    VERBATIM)
 
   # Make sure coverage_test runs after tests (installcheck) finish
   add_custom_target(coverage_test DEPENDS ${OUTPUT_FILE}.test)
@@ -121,11 +125,10 @@ else()
   add_custom_command(
     OUTPUT ${OUTPUT_FILE}
     COMMENT "Generating final code coverage file"
-    COMMAND
-      ${LCOV} --rc lcov_branch_coverage=1 --add-tracefile ${OUTPUT_FILE}.base
-      --add-tracefile ${OUTPUT_FILE}.test --output-file ${OUTPUT_FILE}
-      --gcov-tool ${CMAKE_CURRENT_BINARY_DIR}/gcov ${LCOV_EXTRA_OPTIONS}
-    DEPENDS ${OUTPUT_FILE}.test coverage_test)
+    COMMAND ${LCOV} ${LCOV_CAPTURE_OPTS} --add-tracefile ${OUTPUT_FILE}.base
+            --add-tracefile ${OUTPUT_FILE}.test --output-file ${OUTPUT_FILE}
+    DEPENDS ${OUTPUT_FILE}.test coverage_test
+    VERBATIM)
 
   add_custom_target(coverage_final DEPENDS ${OUTPUT_FILE})
   add_dependencies(coverage_final coverage_test)
