@@ -36,12 +36,19 @@
 #include <math.h>
 
 /* Track last logged query to avoid duplicate INFO messages during replanning.
- * We hash the query string, index OID, and skip key attributes to uniquely
- * identify each distinct SkipScan operation. This allows us to suppress
+ * We store the query string pointer, statement location, and index OID to
+ * uniquely identify each distinct SkipScan operation. This allows us to suppress
  * duplicate messages from replanning the same query while still showing
  * messages for different queries (even if they have the same stmt_location).
  */
-static uint32 last_logged_query_hash = 0;
+typedef struct LastLoggedQuery
+{
+	const char *query_string;
+	int stmt_location;
+	Oid index_oid;
+} LastLoggedQuery;
+
+static LastLoggedQuery last_logged_query = { NULL, 0, InvalidOid };
 
 typedef struct SkipKeyInfo
 {
@@ -173,58 +180,39 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 	char *sep = "";
 	bool should_log = ts_guc_debug_skip_scan_info;
 
-	/* Compute hash to detect duplicate INFO messages from replanning.
-	 * We combine query string, index OID, and skip key info to uniquely
-	 * identify this SkipScan operation. This prevents duplicate messages
-	 * from plan cache invalidation while preserving messages for distinct
-	 * queries (even if they have the same stmt_location in test files).
+	/* Check for duplicate INFO messages from replanning.
+	 * We track the query string pointer, statement location, and index OID
+	 * to uniquely identify this SkipScan operation. This prevents duplicate
+	 * messages from plan cache invalidation while preserving messages for
+	 * distinct queries (even if they have the same stmt_location in test files).
 	 */
 	if (should_log)
 	{
-		uint32 query_hash = 0;
-
-		/* Hash the query string if available */
-		if (root->parse->stmt_location >= 0 && debug_query_string)
-		{
-			const char *query_start = debug_query_string + root->parse->stmt_location;
-			int query_len = root->parse->stmt_len;
-			if (query_len <= 0)
-				query_len = strlen(query_start);
-			query_hash = DatumGetUInt32(hash_any((unsigned char *) query_start, query_len));
-		}
-
-		/* Combine with index OID to distinguish different indexes */
+		/* Get the index OID to distinguish different indexes */
 		Oid index_oid = InvalidOid;
 		if (IsA(plan, IndexScan))
 			index_oid = castNode(IndexScan, plan)->indexid;
 		else if (IsA(plan, IndexOnlyScan))
 			index_oid = castNode(IndexOnlyScan, plan)->indexid;
 
-		if (OidIsValid(index_oid))
-		{
-			uint32 oid_hash = DatumGetUInt32(hash_any((unsigned char *) &index_oid, sizeof(Oid)));
-			query_hash ^= (oid_hash << 1) | (oid_hash >> 31);
-		}
-
-		/* Combine with skip key info to distinguish different skip scan operations */
-		ListCell *lc;
-		foreach (lc, path->skipkeyinfo)
-		{
-			SkipKeyInfo *skinfo = (SkipKeyInfo *) lfirst(lc);
-			uint32 attno_hash =
-				DatumGetUInt32(hash_any((unsigned char *) &skinfo->scankey_attno,
-										sizeof(AttrNumber)));
-			query_hash ^= (attno_hash << 1) | (attno_hash >> 31);
-		}
-
-		/* Check if this is a duplicate of the last logged query */
-		if (query_hash == last_logged_query_hash && query_hash != 0)
+		/* Check if this is a duplicate of the last logged query.
+		 * We compare the query string pointer (stable within a session),
+		 * statement location, and index OID.
+		 */
+		if (debug_query_string != NULL &&
+			debug_query_string == last_logged_query.query_string &&
+			root->parse->stmt_location == last_logged_query.stmt_location &&
+			index_oid == last_logged_query.index_oid &&
+			OidIsValid(index_oid))
 		{
 			should_log = false;
 		}
 		else
 		{
-			last_logged_query_hash = query_hash;
+			/* Update last logged query */
+			last_logged_query.query_string = debug_query_string;
+			last_logged_query.stmt_location = root->parse->stmt_location;
+			last_logged_query.index_oid = index_oid;
 		}
 	}
 
