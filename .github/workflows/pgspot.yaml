@@ -8,7 +8,20 @@ name: pgspot
       - ?.*.x
 
 jobs:
+  check_paths:
+    runs-on: ubuntu-latest
+    outputs:
+      run_ci: ${{ steps.filter.outputs.sql == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: .github/filters.yaml
+
   pgspot:
+    needs: check_paths
+    if: needs.check_paths.outputs.run_ci == 'true'
     runs-on: ubuntu-latest
     env:
       # time_bucket with offset is intentional without explicit search_path to allow for inlining

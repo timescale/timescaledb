@@ -1,0 +1,1 @@
+Fixes: #9175 Do not remove dimension constraints for OSM chunks

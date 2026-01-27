@@ -100,9 +100,7 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.extension_state();
 CREATE SCHEMA _timescaledb_debug;
 GRANT USAGE ON SCHEMA _timescaledb_debug TO PUBLIC;
 
-CREATE SCHEMA _timescaledb_config;
-GRANT USAGE ON SCHEMA _timescaledb_config TO PUBLIC;
-
+DROP VIEW IF EXISTS _timescaledb_config.bgw_job;
 ALTER TABLE _timescaledb_catalog.bgw_job SET SCHEMA _timescaledb_config;
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_compressed_batch_size(REGCLASS);

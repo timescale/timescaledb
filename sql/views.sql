@@ -428,4 +428,9 @@ AS SELECT * FROM timescaledb_information.hypertable_compression_settings;
 CREATE OR REPLACE VIEW timescaledb_information.chunk_columnstore_settings AS
 SELECT * FROM timescaledb_information.chunk_compression_settings;
 
+--temporary alias for bgw_job
+CREATE OR REPLACE VIEW _timescaledb_config.bgw_job AS
+SELECT * from _timescaledb_catalog.bgw_job;
+
+GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_config TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;

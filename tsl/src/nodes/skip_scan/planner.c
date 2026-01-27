@@ -240,13 +240,22 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 		if (ts_guc_debug_skip_scan_info)
 		{
 			char *attname = get_attname(indexed_rte->relid, skinfo->indexed_column_attno, false);
-			appendStringInfo(&debuginfo,
-							 "%s%s %s",
-							 sep,
-							 attname,
-							 (sknulls == SK_NOT_NULL ?
-								  "NOT NULL" :
-								  (sknulls == SK_NULLS_FIRST ? "NULLS FIRST" : "NULLS LAST")));
+			char *sknullstext;
+			switch (sknulls)
+			{
+				case SK_NOT_NULL:
+					sknullstext = "NOT NULL";
+					break;
+				case SK_NULLS_FIRST:
+					sknullstext = "NULLS FIRST";
+					break;
+				case SK_NULLS_LAST:
+					sknullstext = "NULLS LAST";
+					break;
+				default:
+					Assert(false);
+			}
+			appendStringInfo(&debuginfo, "%s%s %s", sep, attname, sknullstext);
 			sep = ", ";
 		}
 	}

@@ -17,6 +17,7 @@ set(TEST_FILES
     cagg_refresh_using_merge.sql
     cagg_utils.sql
     cagg_watermark.sql
+    chunk_publication_compression.sql
     columnar_scan_cost.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
@@ -27,6 +28,7 @@ set(TEST_FILES
     compress_dml_copy.sql
     compress_explain.sql
     compress_float8_corrupt.sql
+    compress_unordered_sort.sql
     compress_qualpushdown_saop.sql
     compress_sort_transform.sql
     compressed_collation.sql
@@ -49,6 +51,7 @@ set(TEST_FILES
     compression_settings.sql
     compression_sorted_merge.sql
     compression_sorted_merge_distinct.sql
+    compression_sorted_merge_unordered.sql
     compression_uuid.sql
     compression_trigger.sql
     create_table_with.sql
