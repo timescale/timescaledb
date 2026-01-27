@@ -59,6 +59,15 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *parent)
 static Node *
 try_disable_bulk_decompression(PlannerInfo *root, Node *node, List *required_pathkeys)
 {
+	if (node == NULL)
+	{
+		/*
+		 * We can have e.g. AppendPath.subpaths == NULL in case of relations
+		 * proven empty, so handle NULLs for simplicity here.
+		 */
+		return NULL;
+	}
+
 	if (IsA(node, List))
 	{
 		ListCell *lc;
@@ -176,6 +185,8 @@ check_limit_bulk_decompression(PlannerInfo *root, Node *node)
 
 			if (limit > 0 && limit < 100)
 			{
+//				fprintf(stderr, "try disable on:\n");
+//				my_print(path->subpath);
 				path->subpath = (Path *) try_disable_bulk_decompression(root,
 																		(Node *) path->subpath,
 																		path->subpath->pathkeys);
