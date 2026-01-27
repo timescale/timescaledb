@@ -87,13 +87,14 @@ else()
     COMMAND
       ${LCOV} --rc lcov_branch_coverage=1 --capture --initial # Initial run
       --no-external # Do not include external source files
-      --rc lcov_excl_br_line=Assert\(|Ensure\( # Disable branch coverage for
-                                           # assertions
+      --rc "lcov_excl_br_line=Assert\\(|Ensure\\(" # Disable branch coverage for
+      # assertions
       --base-directory ${CMAKE_SOURCE_DIR} --directory ${CMAKE_BINARY_DIR}
       --output-file ${OUTPUT_FILE}.base --gcov-tool
       ${CMAKE_CURRENT_BINARY_DIR}/gcov ${LCOV_EXTRA_OPTIONS}
     DEPENDS timescaledb-tsl timescaledb timescaledb-loader
-            ${CMAKE_CURRENT_BINARY_DIR}/gcov)
+            ${CMAKE_CURRENT_BINARY_DIR}/gcov
+    VERBATIM)
 
   add_custom_target(coverage_base DEPENDS ${OUTPUT_FILE}.base)
 
