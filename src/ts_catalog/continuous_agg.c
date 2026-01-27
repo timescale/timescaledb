@@ -499,11 +499,18 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 {
 	Oid nspid = get_namespace_oid(NameStr(fd->user_view_schema), false);
 	Hypertable *cagg_ht = ts_hypertable_get_by_id(fd->mat_hypertable_id);
+	if (!cagg_ht)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("continuous aggregate hypertable with ID %d does not exist",
+						fd->mat_hypertable_id)));
 	const Dimension *time_dim;
-
-	Assert(NULL != cagg_ht);
 	time_dim = hyperspace_get_open_dimension(cagg_ht->space, 0);
-	Assert(NULL != time_dim);
+	if (!time_dim)
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("continuous aggregate hypertable with ID %d has no open dimension",
+						fd->mat_hypertable_id)));
 	cagg->partition_type = ts_dimension_get_partition_type(time_dim);
 	cagg->relid = get_relname_relid(NameStr(fd->user_view_name), nspid);
 	memcpy(&cagg->data, fd, sizeof(cagg->data));

@@ -829,6 +829,8 @@ SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timesc
 -- should have 1 uncompressed and 1 compressed chunk
 EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_insert;
 
+RESET timescaledb.enable_direct_compress_insert;
+
 -- test direct compress copy invalidation
 CREATE TABLE direct_compress_copy(time timestamptz) WITH (tsdb.hypertable);
 INSERT INTO direct_compress_copy SELECT '2025-01-01';
@@ -862,6 +864,8 @@ SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timesc
 -- should have 1 uncompressed and 3 compressed chunk
 EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_copy;
 
+RESET timescaledb.enable_direct_compress_copy;
+
 -- test direct compress invalidation with custom partitioning function (not supported atm)
 CREATE OR REPLACE FUNCTION f_month(timestamptz) returns int language sql AS $$ SELECT 12 * extract(year from $1) + extract(month from $1);$$ immutable;
 CREATE TABLE part_cagg (time timestamptz);
@@ -869,4 +873,19 @@ SELECT create_hypertable('part_cagg', 'time', time_partitioning_func => 'f_month
 \set ON_ERROR_STOP 0
 CREATE MATERIALIZED VIEW part_cagg1 WITH (tsdb.continuous) AS SELECT time_bucket('1day', time) FROM part_cagg GROUP BY 1;
 \set ON_ERROR_STOP 1
+
+
+-- test UPDATE invalidation
+CREATE TABLE inval_update(time timestamptz) WITH (tsdb.hypertable);
+INSERT INTO inval_update SELECT '2025-01-01';
+CREATE MATERIALIZED VIEW cagg_inval_update WITH (tsdb.continuous) AS SELECT time_bucket('1day', time) FROM inval_update GROUP BY 1;
+
+-- check setting to NULL is handled gracefully
+\set ON_ERROR_STOP 0
+UPDATE inval_update SET time = NULL WHERE time = '2025-01-01';
+\set ON_ERROR_STOP 1
+
+UPDATE inval_update SET time = '2025-01-01 00:00:23' WHERE time = '2025-01-01';
+-- should have 1 entries now
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 25 ORDER BY 1,2;
 

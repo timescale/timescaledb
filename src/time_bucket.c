@@ -348,34 +348,51 @@ ts_timestamptz_timezone_bucket(PG_FUNCTION_ARGS)
 	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
 		PG_RETURN_NULL();
 
-	/* Convert to local timestamp according to timezone */
-	timestamp = DirectFunctionCall2(timestamptz_zone, tzname, timestamp);
+	/*
+	 * Apply offset in UTC space to avoid DST issues (issue #7059).
+	 * If we applied the offset after converting to local time, we could
+	 * create non-existent times during DST transitions.
+	 */
 	if (have_offset)
 	{
-		/* Apply offset. */
-		timestamp = DirectFunctionCall2(timestamp_mi_interval, timestamp, PG_GETARG_DATUM(4));
+		timestamp = DirectFunctionCall2(timestamptz_mi_interval, timestamp, PG_GETARG_DATUM(4));
 	}
+
+	/* Convert to local timestamp according to timezone */
+	Datum local_ts = DirectFunctionCall2(timestamptz_zone, tzname, timestamp);
 
 	if (have_origin)
 	{
 		Datum origin = DirectFunctionCall2(timestamptz_zone, tzname, PG_GETARG_DATUM(3));
-		timestamp = DirectFunctionCall3(ts_timestamp_bucket, period, timestamp, origin);
+		local_ts = DirectFunctionCall3(ts_timestamp_bucket, period, local_ts, origin);
 	}
 	else
 	{
-		timestamp = DirectFunctionCall2(ts_timestamp_bucket, period, timestamp);
+		local_ts = DirectFunctionCall2(ts_timestamp_bucket, period, local_ts);
+	}
+
+	/* Convert back to timestamptz */
+	Datum result = DirectFunctionCall2(timestamp_zone, tzname, local_ts);
+
+	/*
+	 * During DST fall-back, the same local time maps to two different UTC
+	 * times. PostgreSQL's timestamp_zone picks the later (standard time)
+	 * interpretation. If the original timestamp was in daylight time, the
+	 * bucket could start AFTER the timestamp. Fix by subtracting periods
+	 * until the bucket is at or before the timestamp (issue #9136).
+	 */
+	while (DatumGetTimestampTz(result) > DatumGetTimestampTz(timestamp))
+	{
+		result = DirectFunctionCall2(timestamptz_mi_interval, result, period);
 	}
 
 	if (have_offset)
 	{
-		/* Remove offset. */
-		timestamp = DirectFunctionCall2(timestamp_pl_interval, timestamp, PG_GETARG_DATUM(4));
+		/* Remove offset in UTC space. */
+		result = DirectFunctionCall2(timestamptz_pl_interval, result, PG_GETARG_DATUM(4));
 	}
 
-	/* Convert back to timezone */
-	timestamp = DirectFunctionCall2(timestamp_zone, tzname, timestamp);
-
-	PG_RETURN_DATUM(timestamp);
+	PG_RETURN_DATUM(result);
 }
 
 static inline void

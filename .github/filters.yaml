@@ -1,0 +1,13 @@
+shell:
+  - '**.sh'
+  - .github/workflows/shellcheck.yaml
+sql:
+  - 'sql/**'
+src:
+  - 'cmake/**'
+  - 'scripts/**'
+  - 'sql/**'
+  - 'src/**'
+  - 'test/**'
+  - 'tsl/**'
+  - 'CMakeLists.txt'

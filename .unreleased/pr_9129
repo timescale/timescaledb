@@ -1,0 +1,2 @@
+Fixes: #9129 Fix time_bucket with timezone during DST
+Thanks: @cracksalad and @eyadmba for reporting a bug with timezone handling in time_bucket

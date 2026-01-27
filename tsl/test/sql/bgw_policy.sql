@@ -370,4 +370,5 @@ SELECT _timescaledb_functions.policy_reorder_check(NULL);
 SELECT _timescaledb_functions.policy_retention_check(NULL);
 \set ON_ERROR_STOP 1
 
-
+--TEST check if alias for bgw_job table works
+SELECT * from _timescaledb_config.bgw_job WHERE id = :retenion_id_missing_schedint ORDER BY id;
