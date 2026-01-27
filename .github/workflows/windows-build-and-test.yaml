@@ -40,21 +40,13 @@ jobs:
   check_paths:
     runs-on: ubuntu-latest
     outputs:
-      run_ci: ${{ steps.filter.outputs.src }}
+      run_ci: ${{ steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
         with:
-          filters: |
-            src:
-              - 'cmake/**'
-              - 'scripts/**'
-              - 'sql/**'
-              - 'src/**'
-              - 'test/**'
-              - 'tsl/**'
-              - 'CMakeLists.txt'
+          filters: .github/filters.yaml
 
   build:
     # Change the JOB_NAME variable below when changing the name.
