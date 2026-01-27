@@ -54,6 +54,7 @@ deconstruct_array_const(Const *array_const)
 	Datum array_datum = array_const->constvalue;
 
 	Oid element_type = get_element_type(array_type);
+	Assert(OidIsValid(element_type));
 
 	int16 typlen;
 	bool typbyval;
@@ -753,6 +754,9 @@ pushdown_saop_boolexpr(QualPushdownContext *context, ScalarArrayOpExpr *saop)
 		context->can_pushdown = false;
 		return (Expr *) saop;
 	}
+
+	if (list_length(pushed_down_ops) == 1)
+		return linitial(pushed_down_ops);
 
 	if (saop->useOr)
 	{

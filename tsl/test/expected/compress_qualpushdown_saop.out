@@ -317,6 +317,19 @@ select * from saop where with_bloom = any(null::text[]);
                Rows Removed by Filter: 69
 
 explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_minmax = any(null::text[]);
+--- QUERY PLAN ---
+ Append (actual rows=0.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+         Vectorized Filter: (with_minmax = ANY (NULL::text[]))
+         Rows Removed by Filter: 50001
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+         Vectorized Filter: (with_minmax = ANY (NULL::text[]))
+         Rows Removed by Filter: 50000
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[null, null]);
 --- QUERY PLAN ---
  Append (actual rows=0.00 loops=1)
@@ -765,3 +778,20 @@ execute array_param(null::text[]);
                Rows Removed by Filter: 69
 
 reset timescaledb.enable_chunk_append;
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_minmax = any(array['1'::varchar(10), '10'::varchar(10)]);
+--- QUERY PLAN ---
+ Append (actual rows=6897.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3449.00 loops=1)
+         Vectorized Filter: (with_minmax = ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 19551
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=23.00 loops=1)
+               Filter: (((_ts_meta_min_1 <= '1'::text) AND (_ts_meta_max_1 >= '1'::text)) OR ((_ts_meta_min_1 <= '10'::text) AND (_ts_meta_max_1 >= '10'::text)))
+               Rows Removed by Filter: 46
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=3448.00 loops=1)
+         Vectorized Filter: (with_minmax = ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 19552
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=23.00 loops=1)
+               Filter: (((_ts_meta_min_1 <= '1'::text) AND (_ts_meta_max_1 >= '1'::text)) OR ((_ts_meta_min_1 <= '10'::text) AND (_ts_meta_max_1 >= '10'::text)))
+               Rows Removed by Filter: 46
+
