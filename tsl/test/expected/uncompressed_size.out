@@ -20,8 +20,8 @@ SELECT compress_chunk(chunk) FROM show_chunks('t2') AS chunk;
  _timescaledb_internal._hyper_3_2_chunk
 
 SELECT ccs.compressed_chunk_id,round(ccs.uncompressed_heap_size, -5) uncompressed_heap_size,ccs.uncompressed_toast_size,round(ccs.uncompressed_index_size,-5) uncompressed_index_size, ccs.uncompressed_heap_size + ccs.uncompressed_toast_size + ccs.uncompressed_index_size AS uncompressed_total_size, l.relation_size, l.index_size, l.total_size FROM _timescaledb_catalog.compression_chunk_size ccs JOIN _timescaledb_catalog.chunk ch ON ch.id=ccs.compressed_chunk_id JOIN LATERAL (SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(format('%I.%I',ch.schema_name,ch.table_name))) l ON true;
- compressed_chunk_id | uncompressed_heap_size | uncompressed_toast_size | uncompressed_index_size | uncompressed_total_size | relation_size | index_size | total_size 
+ compressed_chunk_id | uncompressed_heap_size | uncompressed_toast_size | uncompressed_index_size | uncompressed_total_size | relation_size | index_size | total_size
 ---------------------+------------------------+-------------------------+-------------------------+-------------------------+---------------+------------+------------
                    3 |                6000000 |                    8192 |                 2300000 |                 8298496 |       5980000 |    2000000 |    7980000
-                   4 |                5200000 |                       0 |                 2300000 |                 7479296 |       5520000 |    2000000 |    7520000
+                   4 |                5300000 |                       0 |                 2300000 |                 7512064 |       5520000 |    2000000 |    7520000
 
