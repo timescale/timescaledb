@@ -165,7 +165,7 @@ jobs:
           installcheck.log
 
     - name: Save PostgreSQL log
-      if: always()
+      if: always() && steps.check.outputs.should_run == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log ${{ steps.pg.outputs.version }}
