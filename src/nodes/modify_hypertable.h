@@ -52,7 +52,7 @@ typedef struct ModifyHypertableState
 
 } ModifyHypertableState;
 
-extern bool ts_is_modify_hypertable_plan(Plan *plan);
+extern TSDLLEXPORT bool ts_is_modify_hypertable_plan(Plan *plan);
 
 extern void ts_modify_hypertable_fixup_tlist(Plan *plan);
 extern Path *ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
