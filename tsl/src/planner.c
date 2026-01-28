@@ -110,7 +110,7 @@ try_disable_bulk_decompression(PlannerInfo *root, Node *node, List *required_pat
 	}
 
 	CustomPath *custom_child = castNode(CustomPath, node);
-	if (strcmp(custom_child->methods->CustomName, "ChunkAppend") == 0)
+	if (ts_is_chunk_append_path(&custom_child->path))
 	{
 		try_disable_bulk_decompression(root,
 									   (Node *) custom_child->custom_paths,
@@ -118,7 +118,7 @@ try_disable_bulk_decompression(PlannerInfo *root, Node *node, List *required_pat
 		return node;
 	}
 
-	if (strcmp(custom_child->methods->CustomName, "DecompressChunk") != 0)
+	if (!ts_is_columnar_scan_path(&custom_child->path))
 	{
 		return node;
 	}
@@ -171,22 +171,35 @@ check_limit_bulk_decompression(PlannerInfo *root, Node *node)
 			{
 				Const *count = castNode(Const, path->limitCount);
 				Assert(count->consttype == INT8OID);
-				Assert(DatumGetInt64(count->constvalue) >= 0);
-				limit = DatumGetInt64(count->constvalue);
+				int64 count_value = DatumGetInt64(count->constvalue);
+				if (count_value < 0)
+				{
+					/*
+					 * The negative LIMIT values produce an error only at the
+					 * execution stage, so we have to handle them here. Just
+					 * skip the processing in this case, because the query will
+					 * fail anyway.
+					 */
+					break;
+				}
+				limit = count_value;
 			}
 
 			if (path->limitOffset != NULL && IsA(path->limitOffset, Const))
 			{
 				Const *offset = castNode(Const, path->limitOffset);
 				Assert(offset->consttype == INT8OID);
-				Assert(DatumGetInt64(offset->constvalue) >= 0);
-				limit += DatumGetInt64(offset->constvalue);
+				int64 offset_value = DatumGetInt64(offset->constvalue);
+				if (offset_value < 0)
+				{
+					/* See the comment for LIMIT handling above. */
+					break;
+				}
+				limit += offset_value;
 			}
 
 			if (limit > 0 && limit < 100)
 			{
-//				fprintf(stderr, "try disable on:\n");
-//				my_print(path->subpath);
 				path->subpath = (Path *) try_disable_bulk_decompression(root,
 																		(Node *) path->subpath,
 																		path->subpath->pathkeys);
