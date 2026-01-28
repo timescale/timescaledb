@@ -383,8 +383,6 @@ add_column_to_query(Query *query, int varno, AttrNumber attnum, Oid atttype, int
 typedef struct AdjustVarnoContext
 {
 	int new_varno;
-	Oid source_relid;
-	Oid target_relid;
 } AdjustVarnoContext;
 
 static Node *
@@ -471,12 +469,15 @@ add_column_to_view_relation(Oid view_oid, const char *view_schema, const char *v
 }
 
 /*
- * Update a view's query definition to add a new column
+ * Update a view's query definition to add a new column or aggregate expression.
+ *
+ * If aggref is NULL, adds a simple column (with GROUP BY).
+ * If aggref is non-NULL, adds an aggregate expression (no GROUP BY).
  */
 static void
-update_view_add_column(Oid view_oid, const char *view_schema, const char *view_name,
-					   Oid source_relid, AttrNumber attnum, Oid atttype, int32 atttypmod,
-					   Oid attcollation, const char *column_name)
+update_view_add_expr(Oid view_oid, const char *view_schema, const char *view_name,
+					 Oid source_relid, AttrNumber attnum, Aggref *aggref, Oid atttype,
+					 int32 atttypmod, Oid attcollation, const char *column_name)
 {
 	int sec_ctx;
 	Oid uid, saved_uid;
@@ -496,60 +497,16 @@ update_view_add_column(Oid view_oid, const char *view_schema, const char *view_n
 		/* Source relation not directly in rtable - this can happen with hierarchical CAggs */
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot add column to this continuous aggregate"),
+				 errmsg("cannot add %s to this continuous aggregate",
+						aggref ? "aggregate" : "column"),
 				 errhint("The source relation is not directly referenced in the view.")));
 	}
 
-	/* Add the column to the query */
-	add_column_to_query(query, varno, attnum, atttype, atttypmod, attcollation, column_name);
-
-	/* Step 2: Add the column to the view relation */
-	add_column_to_view_relation(view_oid,
-								view_schema,
-								view_name,
-								column_name,
-								atttype,
-								atttypmod,
-								attcollation);
-
-	/* Step 3: Store the updated query */
-	SWITCH_TO_TS_USER(view_schema, uid, saved_uid, sec_ctx);
-	StoreViewQuery(view_oid, query, true);
-	CommandCounterIncrement();
-	RESTORE_USER(uid, saved_uid, sec_ctx);
-}
-
-/*
- * Update a view's query definition to add a new aggregate expression
- */
-static void
-update_view_add_aggregate(Oid view_oid, const char *view_schema, const char *view_name,
-						  Oid source_relid, Aggref *aggref, Oid atttype, int32 atttypmod,
-						  Oid attcollation, const char *column_name)
-{
-	int sec_ctx;
-	Oid uid, saved_uid;
-
-	/* Step 1: Open the view and get its query BEFORE adding the column */
-	Relation view_rel = relation_open(view_oid, AccessShareLock);
-	Query *query = copyObject(get_view_query(view_rel));
-	relation_close(view_rel, NoLock);
-
-	/* Remove dummy RTEs for PG16+ */
-	RemoveRangeTableEntries(query);
-
-	/* Find the varno for the source relation */
-	int varno = find_rte_index_for_relid(query, source_relid);
-	if (varno == 0)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot add aggregate to this continuous aggregate"),
-				 errhint("The source relation is not directly referenced in the view.")));
-	}
-
-	/* Add the aggregate to the query (aggregates don't go in GROUP BY) */
-	add_aggregate_to_query(query, varno, aggref, column_name);
+	/* Add the column or aggregate to the query */
+	if (aggref)
+		add_aggregate_to_query(query, varno, aggref, column_name);
+	else
+		add_column_to_query(query, varno, attnum, atttype, atttypmod, attcollation, column_name);
 
 	/* Step 2: Add the column to the view relation */
 	add_column_to_view_relation(view_oid,
@@ -766,30 +723,17 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	 * Step 2: Update partial view
 	 * The partial view queries the source relation (raw hypertable or parent CAgg's user view)
 	 */
-	if (is_aggregate)
-	{
-		update_view_add_aggregate(partial_view_oid,
-								  NameStr(cagg->data.partial_view_schema),
-								  NameStr(cagg->data.partial_view_name),
-								  source_relid,
-								  agg_info->aggref,
-								  atttype,
-								  atttypmod,
-								  attcollation,
-								  column_name);
-	}
-	else
-	{
-		update_view_add_column(partial_view_oid,
-							   NameStr(cagg->data.partial_view_schema),
-							   NameStr(cagg->data.partial_view_name),
-							   source_relid,
-							   attnum,
-							   atttype,
-							   atttypmod,
-							   attcollation,
-							   column_name);
-	}
+	Aggref *aggref = is_aggregate ? agg_info->aggref : NULL;
+	update_view_add_expr(partial_view_oid,
+						 NameStr(cagg->data.partial_view_schema),
+						 NameStr(cagg->data.partial_view_name),
+						 source_relid,
+						 attnum,
+						 aggref,
+						 atttype,
+						 atttypmod,
+						 attcollation,
+						 column_name);
 
 	/*
 	 * Step 3: Update direct view
@@ -798,30 +742,16 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	Oid direct_view_oid = ts_get_relation_relid(NameStr(cagg->data.direct_view_schema),
 												NameStr(cagg->data.direct_view_name),
 												false);
-	if (is_aggregate)
-	{
-		update_view_add_aggregate(direct_view_oid,
-								  NameStr(cagg->data.direct_view_schema),
-								  NameStr(cagg->data.direct_view_name),
-								  source_relid,
-								  agg_info->aggref,
-								  atttype,
-								  atttypmod,
-								  attcollation,
-								  column_name);
-	}
-	else
-	{
-		update_view_add_column(direct_view_oid,
-							   NameStr(cagg->data.direct_view_schema),
-							   NameStr(cagg->data.direct_view_name),
-							   source_relid,
-							   attnum,
-							   atttype,
-							   atttypmod,
-							   attcollation,
-							   column_name);
-	}
+	update_view_add_expr(direct_view_oid,
+						 NameStr(cagg->data.direct_view_schema),
+						 NameStr(cagg->data.direct_view_name),
+						 source_relid,
+						 attnum,
+						 aggref,
+						 atttype,
+						 atttypmod,
+						 attcollation,
+						 column_name);
 
 	/*
 	 * Step 4: Update user view
