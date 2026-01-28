@@ -469,9 +469,9 @@ add_column_to_view_relation(Oid view_oid, const char *view_schema, const char *v
  * If aggref is non-NULL, adds an aggregate expression (no GROUP BY).
  */
 static void
-update_view_add_expr(Oid view_oid, const char *view_schema, const char *view_name,
-					 Oid source_relid, AttrNumber attnum, Aggref *aggref, Oid atttype,
-					 int32 atttypmod, Oid attcollation, const char *column_name)
+update_view_add_expr(Oid view_oid, const char *view_schema, const char *view_name, Oid source_relid,
+					 AttrNumber attnum, Aggref *aggref, Oid atttype, int32 atttypmod,
+					 Oid attcollation, const char *column_name)
 {
 	int sec_ctx;
 	Oid uid, saved_uid;
