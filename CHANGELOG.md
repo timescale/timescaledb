@@ -11,7 +11,7 @@ This release contains performance improvements and bug fixes since the 2.24.0 re
 
 **Highlighted features in TimescaleDB v2.25.0**
 This release features multiple improvements for continuous aggregates on the columnstore: 
-* Faster refreshes: Users can now utilize direct compress during materialized view refreshes, resulting in higher throughput and reduced I/O usage.
+* Faster refreshes: You can now utilize direct compress during materialized view refreshes, resulting in higher throughput and reduced I/O usage.
 * Efficiency: The enablement of delete optimizations significantly lowers system resource requirements.
 * Smaller transactions: Adjusted defaults for `buckets_per_batch` to 10 reduces transaction sizes, requiring less WAL holding time.
 * Faster queries: Smarter defaults for `segmentby` and `orderby` yield improved query performance and better compression ratio on the columnstore.
