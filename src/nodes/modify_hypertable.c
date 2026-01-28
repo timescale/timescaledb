@@ -197,6 +197,17 @@ modify_hypertable_rescan(CustomScanState *node)
 	ExecReScan(linitial(node->custom_ps));
 }
 
+
+static bool
+is_chunk_append_or_projection(Plan *plan)
+{
+	if (IsA(plan, Result))
+	{
+		return ts_is_chunk_append_plan(plan->lefttree);
+	}
+	return ts_is_chunk_append_plan(plan);
+}
+
 static void
 modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
@@ -210,7 +221,7 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 	 * for ModifyTable for EXPLAIN VERBOSE.
 	 */
 	if (((ModifyTable *) mtstate->ps.plan)->operation == CMD_DELETE && es->verbose &&
-		ts_is_chunk_append_plan(mtstate->ps.plan->lefttree))
+		is_chunk_append_or_projection(mtstate->ps.plan->lefttree))
 	{
 		mtstate->ps.plan->lefttree->targetlist = NULL;
 		((CustomScan *) mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
@@ -449,7 +460,7 @@ modify_hypertable_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 		cscan->scan.plan.targetlist =
 			ts_replace_rowid_vars(root, cscan->scan.plan.targetlist, mt->nominalRelation);
 
-		if (mt->operation == CMD_UPDATE && ts_is_chunk_append_plan(mt->plan.lefttree))
+		if (mt->operation == CMD_UPDATE && is_chunk_append_or_projection(mt->plan.lefttree))
 		{
 			mt->plan.lefttree->targetlist =
 				ts_replace_rowid_vars(root, mt->plan.lefttree->targetlist, mt->nominalRelation);
