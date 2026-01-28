@@ -10,9 +10,11 @@ commands from accidentally triggering the load of a previous DB version.**
 This release contains performance improvements and bug fixes since the 2.24.0 release. We recommend that you upgrade at the next available opportunity.
 
 **Highlighted features in TimescaleDB v2.25.0**
-* Multiple improvements for compressed continuous aggregate: Reduced I/O usage and higher troughput is available with the ability to use direct compress for the refresh of the materialized view, as well as the enablement of delete optimizations, require less system resources. The adjusted default buckets per batch size reduces the transaction size, resulting in less WAL holding. The smarter defaults for `segmentby` and `orderby` yield better query performance.
-* Faster query performance for aggregation queries with `MIN`, `MAX`, `FIRST`, and `LAST` functions. The newly added custom node `ColumnarIndexScan` adjusts the query plan to leverage the sparse minmax indexes to fetch the values faster, speeding up queries against the columnstore by 289 times.
-* Another performance optimization on the columnstore was added, complementary to `ColumnarIndexScan`. For queries using time as the primary dimension, for example, `SELECT COUNT(*) FROM events WHERE time > '2025-01-20';`, the `time` column is no longer required to get decompressed, showing increased query performance of 50x faster.
+This release features multiple improvements for continuous aggregates on the columnstore: 
+* Faster refreshes: Users can now utilize direct compress during materialized view refreshes, resulting in higher throughput and reduced I/O usage.
+* Efficiency: The enablement of delete optimizations significantly lowers system resource requirements.
+* Smaller transactions: Adjusted defaults for `buckets_per_batch` to 10 reduces transaction sizes, requiring less WAL holding time.
+* Faster Queries: Smarter defaults for `segmentby` and `orderby` yield improved query performance and better compression ratio on the columnstore.
 
 **Sunsetting Announcements**
 * This release removes the WAL-based invalidation of continuous aggregates. This feature was introduced in [2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.22.0) as tech preview to use logical decoding for building the invalidation logs. The feature was designed for high ingest workloads, reducing the write amplification. With the upcoming stream of improvements to continuous aggregates, this feature was deprioritized and removed.
@@ -33,10 +35,10 @@ This release contains performance improvements and bug fixes since the 2.24.0 re
 * [#9088](https://github.com/timescale/timescaledb/pull/9088) Add `ColumnarIndexScan` custom node
 * [#9090](https://github.com/timescale/timescaledb/pull/9090) Support direct batch delete on hypertables with continuous aggregates
 * [#9094](https://github.com/timescale/timescaledb/pull/9094) Enable the columnar pipeline for grouping without aggregation to speed up the queries of the form `select column from table group by column`.
-* [#9103](https://github.com/timescale/timescaledb/pull/9103) Support `FIRST` and `LAST` in `ColumnarIndexScan`c
+* [#9103](https://github.com/timescale/timescaledb/pull/9103) Support `FIRST` and `LAST` in `ColumnarIndexScan`
 * [#9108](https://github.com/timescale/timescaledb/pull/9108) Support multiple aggregates in `ColumnarIndexScan`
 * [#9111](https://github.com/timescale/timescaledb/pull/9111) Allow recompression with orderby/index changes
-* [#9113](https://github.com/timescale/timescaledb/pull/9113) Use enable_columnarscan to control columnarscan
+* [#9113](https://github.com/timescale/timescaledb/pull/9113) Use `enable_columnarscan` to control columnarscan
 * [#9127](https://github.com/timescale/timescaledb/pull/9127) Remove primary dimension constraints from fully covered chunks
 * [#8710](https://github.com/timescale/timescaledb/pull/8710) Add SQL function to fetch continuous aggregate grouping columns
 * [#9133](https://github.com/timescale/timescaledb/pull/9133) Allow pushing down sort into columnar unordered chunks when it is possible
@@ -65,6 +67,9 @@ This release contains performance improvements and bug fixes since the 2.24.0 re
 * [#9144](https://github.com/timescale/timescaledb/pull/9144) Fix handling implicit constraints in `ALTER TABLE`
 * [#9155](https://github.com/timescale/timescaledb/pull/9155) Fix column generation during compressed chunk insert
 * [#9129](https://github.com/timescale/timescaledb/pull/9129) Fix `time_bucket` with timezone during DST
+* [#9177](https://github.com/timescale/timescaledb/pull/9177) Add alias for `bgw_job`
+* [#9176](https://github.com/timescale/timescaledb/pull/9176) Handle `NULL` values in continuous aggregate invalidation more gracefully
+* [#9175](https://github.com/timescale/timescaledb/pull/9175) Do not remove dimension constraints for OSM chunks
 
 **GUCs**
 * `enable_columnarindexscan`: Enable returning results directly from compression metadata without decompression. Default: `true` 
