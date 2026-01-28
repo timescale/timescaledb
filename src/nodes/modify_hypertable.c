@@ -200,7 +200,7 @@ modify_hypertable_rescan(CustomScanState *node)
 static bool
 is_chunk_append_or_projection(Plan *plan)
 {
-	if (IsA(plan, Result))
+	if (IsA(plan, Result) && plan->lefttree != NULL)
 	{
 		return ts_is_chunk_append_plan(plan->lefttree);
 	}
