@@ -197,7 +197,6 @@ modify_hypertable_rescan(CustomScanState *node)
 	ExecReScan(linitial(node->custom_ps));
 }
 
-
 static bool
 is_chunk_append_or_projection(Plan *plan)
 {
