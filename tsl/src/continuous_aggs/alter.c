@@ -54,14 +54,11 @@
  */
 typedef struct AggregateExprInfo
 {
-	bool is_aggregate;	  /* true if aggregate expression, false if simple column */
 	char *column_alias;	  /* alias for the result column */
-	Oid aggfnoid;		  /* OID of aggregate function */
 	Oid result_type;	  /* return type of aggregate */
 	int32 result_typmod;  /* typmod of result type */
 	Oid result_collation; /* collation of result */
 	Aggref *aggref;		  /* the parsed Aggref node */
-	List *column_names;	  /* list of column names referenced in aggregate */
 } AggregateExprInfo;
 
 /*
@@ -247,13 +244,10 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 
 	/* Build the result structure */
 	info = palloc0(sizeof(AggregateExprInfo));
-	info->is_aggregate = true;
-	info->aggfnoid = aggref->aggfnoid;
 	info->result_type = aggref->aggtype;
 	info->result_typmod = -1; /* aggregates typically don't have typmod */
 	info->result_collation = aggref->aggcollid;
 	info->aggref = aggref;
-	info->column_names = col_ctx.column_names;
 
 	/* Determine the column alias */
 	if (res_target->name != NULL)
