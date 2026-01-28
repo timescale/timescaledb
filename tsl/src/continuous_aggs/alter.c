@@ -65,15 +65,6 @@ typedef struct AggregateExprInfo
 } AggregateExprInfo;
 
 /*
- * Check if a string looks like an aggregate expression (contains parentheses)
- */
-static bool
-looks_like_aggregate_expression(const char *expr_str)
-{
-	return strchr(expr_str, '(') != NULL;
-}
-
-/*
  * Walker function to collect column references from an expression
  */
 typedef struct CollectColumnContext
@@ -616,16 +607,12 @@ add_column_to_mat_hypertable(Hypertable *mat_ht, const char *column_name, Oid at
 /*
  * Main function to add a column or aggregate to a continuous aggregate
  */
-TS_FUNCTION_INFO_V1(continuous_agg_add_column);
-
 Datum
 continuous_agg_add_column(PG_FUNCTION_ARGS)
 {
 	Oid cagg_relid = PG_GETARG_OID(0);
-	text *expr_text = PG_GETARG_TEXT_PP(1);
+	char *expr_str = text_to_cstring(PG_GETARG_TEXT_PP(1));
 	bool if_not_exists = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
-
-	char *expr_str = text_to_cstring(expr_text);
 
 	/* Get the continuous aggregate */
 	ContinuousAgg *cagg = cagg_get_by_relid_or_fail(cagg_relid);
@@ -655,7 +642,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	const char *column_name;
 	ContinuousAgg *parent_cagg = NULL;
 	AggregateExprInfo *agg_info = NULL;
-	bool is_aggregate = looks_like_aggregate_expression(expr_str);
+	bool is_aggregate = false;
 
 	if (ContinuousAggIsHierarchical(cagg))
 	{
@@ -677,18 +664,11 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 											 false);
 	}
 
-	if (is_aggregate)
+	/* Parse and validate the aggregate expression */
+	agg_info = parse_aggregate_expression(expr_str, source_relid);
+	if (agg_info)
 	{
-		/* Parse and validate the aggregate expression */
-		agg_info = parse_aggregate_expression(expr_str, source_relid);
-		if (agg_info == NULL)
-		{
-			ts_cache_release(&hcache);
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("invalid aggregate expression: \"%s\"", expr_str)));
-		}
-
+		is_aggregate = true;
 		column_name = agg_info->column_alias;
 		atttype = agg_info->result_type;
 		atttypmod = agg_info->result_typmod;
