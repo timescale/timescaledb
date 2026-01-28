@@ -4,6 +4,7 @@ name: Update and Downgrade
     branches:
       - main
       - ?.*.x
+      - prerelease_test
   pull_request:
   workflow_dispatch:
 
