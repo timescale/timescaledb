@@ -255,9 +255,136 @@ INSERT INTO test_ht VALUES
 SELECT * FROM test_cagg_realtime_level2 ORDER BY bucket, device_id;
 SELECT * FROM test_cagg_realtime_level3 ORDER BY bucket, device_id;
 
--- Cleanup
+-- Cleanup hierarchical CAggs
 DROP MATERIALIZED VIEW test_cagg_realtime_level3;
 DROP MATERIALIZED VIEW test_cagg_realtime_level2;
 DROP MATERIALIZED VIEW test_cagg_mat_only;
 DROP MATERIALIZED VIEW test_cagg_realtime;
 DROP TABLE test_ht;
+
+-- =====================================================
+-- Tests for adding aggregate expressions to CAggs
+-- =====================================================
+
+-- Create new test hypertable for aggregate tests
+CREATE TABLE agg_test_ht (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INTEGER NOT NULL,
+    temperature DOUBLE PRECISION,
+    humidity DOUBLE PRECISION,
+    category TEXT
+);
+
+SELECT create_hypertable('agg_test_ht', 'time');
+
+-- Insert test data
+INSERT INTO agg_test_ht VALUES
+    ('2020-01-01 00:00:00', 1, 20.0, 50.0, 'indoor'),
+    ('2020-01-01 01:00:00', 1, 22.0, 55.0, 'indoor'),
+    ('2020-01-01 02:00:00', 1, 21.0, 52.0, 'indoor'),
+    ('2020-01-01 00:00:00', 2, 25.0, 60.0, 'outdoor'),
+    ('2020-01-01 01:00:00', 2, 28.0, 65.0, 'outdoor'),
+    ('2020-01-01 02:00:00', 2, 26.0, 62.0, 'outdoor'),
+    ('2020-01-02 00:00:00', 1, 19.0, 48.0, 'indoor'),
+    ('2020-01-02 01:00:00', 2, 30.0, 70.0, 'outdoor');
+
+-- Create a materialized-only CAgg with basic aggregation
+CREATE MATERIALIZED VIEW agg_test_cagg_mat
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS SELECT
+    time_bucket('1 day', time) AS bucket,
+    device_id,
+    avg(temperature) AS avg_temp
+FROM agg_test_ht
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Create a real-time CAgg
+CREATE MATERIALIZED VIEW agg_test_cagg_rt
+    WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS SELECT
+    time_bucket('1 day', time) AS bucket,
+    device_id,
+    avg(temperature) AS avg_temp
+FROM agg_test_ht
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Show initial state
+\d+ agg_test_cagg_mat
+\d+ agg_test_cagg_rt
+
+-- Add SUM aggregate to materialized-only CAgg
+SELECT add_continuous_aggregate_column('agg_test_cagg_mat', 'sum(temperature) AS sum_temp');
+
+-- Verify column was added
+\d+ agg_test_cagg_mat
+
+-- Add MAX aggregate to materialized-only CAgg
+SELECT add_continuous_aggregate_column('agg_test_cagg_mat', 'max(temperature) AS max_temp');
+
+-- Add MIN aggregate to real-time CAgg
+SELECT add_continuous_aggregate_column('agg_test_cagg_rt', 'min(temperature) AS min_temp');
+
+-- Verify columns were added
+\d+ agg_test_cagg_mat
+\d+ agg_test_cagg_rt
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('agg_test_cagg_mat', NULL, NULL);
+CALL refresh_continuous_aggregate('agg_test_cagg_rt', NULL, NULL);
+
+-- Verify aggregates are computed correctly
+SELECT * FROM agg_test_cagg_mat ORDER BY bucket, device_id;
+SELECT * FROM agg_test_cagg_rt ORDER BY bucket, device_id;
+
+-- Add aggregate with different column (humidity)
+SELECT add_continuous_aggregate_column('agg_test_cagg_mat', 'avg(humidity) AS avg_humidity');
+
+-- Refresh and check
+CALL refresh_continuous_aggregate('agg_test_cagg_mat', NULL, NULL);
+SELECT * FROM agg_test_cagg_mat ORDER BY bucket, device_id;
+
+-- Error - invalid aggregate function
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('agg_test_cagg_mat', 'invalid_func(temperature) AS bad');
+\set ON_ERROR_STOP 1
+
+-- Error - aggregate already exists (same alias)
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('agg_test_cagg_mat', 'sum(temperature) AS sum_temp');
+\set ON_ERROR_STOP 1
+
+-- if_not_exists=true should not error
+SELECT add_continuous_aggregate_column('agg_test_cagg_mat', 'sum(temperature) AS sum_temp', true);
+
+-- Error - column referenced in aggregate doesn't exist
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('agg_test_cagg_mat', 'sum(nonexistent) AS bad');
+\set ON_ERROR_STOP 1
+
+-- Add COUNT aggregate (no column argument)
+SELECT add_continuous_aggregate_column('agg_test_cagg_mat', 'count(*) AS row_count');
+
+-- Refresh and verify
+CALL refresh_continuous_aggregate('agg_test_cagg_mat', NULL, NULL);
+SELECT * FROM agg_test_cagg_mat ORDER BY bucket, device_id;
+
+-- Test adding aggregate without explicit alias (uses function name)
+SELECT add_continuous_aggregate_column('agg_test_cagg_rt', 'sum(humidity)');
+
+-- Verify it was added with auto-generated alias
+\d+ agg_test_cagg_rt
+
+-- Insert new data and check real-time aggregation works
+INSERT INTO agg_test_ht VALUES
+    ('2020-01-03 00:00:00', 1, 23.0, 56.0, 'indoor'),
+    ('2020-01-03 01:00:00', 2, 32.0, 72.0, 'outdoor');
+
+-- Real-time CAgg should show new data without refresh
+SELECT * FROM agg_test_cagg_rt ORDER BY bucket, device_id;
+
+-- Cleanup aggregate tests
+DROP MATERIALIZED VIEW agg_test_cagg_mat;
+DROP MATERIALIZED VIEW agg_test_cagg_rt;
+DROP TABLE agg_test_ht;
