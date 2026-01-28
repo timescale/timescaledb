@@ -14,9 +14,9 @@ This release features multiple improvements for continuous aggregates on the col
 * Faster refreshes: Users can now utilize direct compress during materialized view refreshes, resulting in higher throughput and reduced I/O usage.
 * Efficiency: The enablement of delete optimizations significantly lowers system resource requirements.
 * Smaller transactions: Adjusted defaults for `buckets_per_batch` to 10 reduces transaction sizes, requiring less WAL holding time.
-* Faster Queries: Smarter defaults for `segmentby` and `orderby` yield improved query performance and better compression ratio on the columnstore.
+* Faster queries: Smarter defaults for `segmentby` and `orderby` yield improved query performance and better compression ratio on the columnstore.
 
-**Sunsetting Announcements**
+**Sunsetting announcements**
 * This release removes the WAL-based invalidation of continuous aggregates. This feature was introduced in [2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.22.0) as tech preview to use logical decoding for building the invalidation logs. The feature was designed for high ingest workloads, reducing the write amplification. With the upcoming stream of improvements to continuous aggregates, this feature was deprioritized and removed.
 * The old continuous aggregate format, deprecated in version [2.10.0](https://github.com/timescale/timescaledb/releases/tag/2.10.0), has been fully removed from TimescaleDB in this release. Users still on the old format should read the [migration documentation](https://www.tigerdata.com/docs/use-timescale/latest/continuous-aggregates/migrate) to migrate to the new format. Users of Tiger Cloud have already been automatically migrated.
 
@@ -48,7 +48,7 @@ This release features multiple improvements for continuous aggregates on the col
 * [#9016](https://github.com/timescale/timescaledb/pull/9016) Remove `_timescaledb_debug` schema
 * [#9030](https://github.com/timescale/timescaledb/pull/9030) Add new chunks to hypertable publication
 
-**Bugfixes**
+**Bug fixes**
 * [#8706](https://github.com/timescale/timescaledb/pull/8706) Fix planning performance regression on Postgres 16 and later on some join queries.
 * [#8986](https://github.com/timescale/timescaledb/pull/8986) Add pathkey replacement for `ColumnarScanPath`
 * [#8989](https://github.com/timescale/timescaledb/pull/8989) Ensure no XID is assigned during chunk query
@@ -79,7 +79,7 @@ This release features multiple improvements for continuous aggregates on the col
 **Thanks**
 * @t-aistleitner for reporting the planning performance regression on PG16 and later on some join queries.
 * @vahnrr for reporting a crash when adding columns and constraints to a hypertable at the same time
-* @cracksalad and @eyadmba for reporting a bug with timezone handling in time_bucket
+* @cracksalad and @eyadmba for reporting a bug with timezone handling in `time_bucket`
 
 ## 2.24.0 (2025-12-03)
 
