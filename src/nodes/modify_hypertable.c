@@ -223,7 +223,7 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		is_chunk_append_or_projection(mtstate->ps.plan->lefttree))
 	{
 		mtstate->ps.plan->lefttree->targetlist = NULL;
-		((CustomScan *) mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
+		castNode(CustomScan, mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
 	}
 	if (((ModifyTable *) mtstate->ps.plan)->operation == CMD_MERGE && es->verbose)
 	{
