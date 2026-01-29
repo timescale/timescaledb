@@ -90,7 +90,7 @@ collect_column_walker(Node *node, List **column_names)
 				}
 			}
 			if (!found)
-				*column_names = lappend(*column_names, makeString(pstrdup(colname)));
+				*column_names = lappend(*column_names, makeString(colname));
 		}
 		return false;
 	}
@@ -255,16 +255,12 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	if (res_target->name != NULL)
 	{
 		/* User provided an explicit alias */
-		info->column_alias = pstrdup(res_target->name);
+		info->column_alias = res_target->name;
 	}
 	else
 	{
 		/* Generate alias from function name */
-		char *funcname_str = NameListToString(funcname);
-		/* Convert to lowercase and use as alias */
-		info->column_alias = pstrdup(funcname_str);
-		for (char *p = info->column_alias; *p; p++)
-			*p = pg_tolower((unsigned char) *p);
+		info->column_alias = strVal(linitial(func_call->funcname));
 	}
 
 	pfree(query_str);
@@ -323,7 +319,7 @@ add_column_to_query(Query *query, int varno, AttrNumber attnum, Oid atttype, int
 	/* Create TargetEntry */
 	TargetEntry *tle = makeTargetEntry((Expr *) var,
 									   list_length(query->targetList) + 1,
-									   pstrdup(column_name),
+									   (char *) column_name,
 									   false); /* not resjunk */
 	tle->ressortgroupref = 0;
 
@@ -368,7 +364,7 @@ add_aggregate_to_query(Query *query, int varno, Aggref *aggref, const char *colu
 	/* Create TargetEntry */
 	TargetEntry *tle = makeTargetEntry((Expr *) new_aggref,
 									   list_length(query->targetList) + 1,
-									   pstrdup(column_alias),
+									   (char *) column_alias,
 									   false); /* not resjunk */
 	tle->ressortgroupref = 0;				   /* Aggregates don't go in GROUP BY */
 
@@ -691,7 +687,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 								column_name);
 			/* Also update the RTE's column names to match the subquery's targetList */
 			mat_rte->eref->colnames =
-				lappend(mat_rte->eref->colnames, makeString(pstrdup(column_name)));
+				lappend(mat_rte->eref->colnames, makeString((char *) column_name));
 		}
 
 		/* Update raw subquery (queries source relation) - compute the aggregate on the fly */
@@ -702,7 +698,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 			add_aggregate_to_query(raw_subquery, raw_varno, agg_info->aggref, column_name);
 			/* Also update the RTE's column names to match the subquery's targetList */
 			raw_rte->eref->colnames =
-				lappend(raw_rte->eref->colnames, makeString(pstrdup(column_name)));
+				lappend(raw_rte->eref->colnames, makeString((char *) column_name));
 		}
 
 		/* Update SetOperationStmt column type lists */
@@ -721,7 +717,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 
 		TargetEntry *outer_tle = makeTargetEntry((Expr *) outer_var,
 												 list_length(user_query->targetList) + 1,
-												 pstrdup(column_name),
+												 (char *) column_name,
 												 false);
 		outer_tle->ressortgroupref = 0;
 		user_query->targetList = lappend(user_query->targetList, outer_tle);
