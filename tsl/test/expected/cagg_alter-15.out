@@ -492,7 +492,7 @@ NOTICE:  defaulting compress_orderby to bucket,device_id
 -- Error - cannot add column to CAgg with compression enabled
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_column('test_cagg_compress', 'sum(temperature) AS sum_temp');
-ERROR:  cannot add column to continuous aggregate with compression enabled
+ERROR:  cannot add aggregate to continuous aggregate with compression enabled
 \set ON_ERROR_STOP 1
 -- Compress the chunks
 SELECT compress_chunk(chunk) FROM show_chunks('test_cagg_compress') chunk;
@@ -503,7 +503,7 @@ SELECT compress_chunk(chunk) FROM show_chunks('test_cagg_compress') chunk;
 -- Error - still cannot add column after chunks are compressed
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_column('test_cagg_compress', 'sum(temperature) AS sum_temp');
-ERROR:  cannot add column to continuous aggregate with compression enabled
+ERROR:  cannot add aggregate to continuous aggregate with compression enabled
 \set ON_ERROR_STOP 1
 -- Decompress all chunks
 SELECT decompress_chunk(chunk) FROM show_chunks('test_cagg_compress') chunk;

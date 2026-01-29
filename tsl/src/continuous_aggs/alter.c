@@ -6,7 +6,7 @@
 
 /*
  * This file contains the implementation for altering continuous aggregates,
- * specifically adding columns to an existing continuous aggregate.
+ * specifically adding aggregate expressions to an existing continuous aggregate.
  */
 
 #include <postgres.h>
@@ -64,13 +64,8 @@ typedef struct AggregateExprInfo
 /*
  * Walker function to collect column references from an expression
  */
-typedef struct CollectColumnContext
-{
-	List *column_names;
-} CollectColumnContext;
-
 static bool
-collect_column_walker(Node *node, CollectColumnContext *context)
+collect_column_walker(Node *node, List **column_names)
 {
 	if (node == NULL)
 		return false;
@@ -86,7 +81,7 @@ collect_column_walker(Node *node, CollectColumnContext *context)
 			/* Add to list if not already present */
 			ListCell *lc;
 			bool found = false;
-			foreach (lc, context->column_names)
+			foreach (lc, *column_names)
 			{
 				if (strcmp(strVal(lfirst(lc)), colname) == 0)
 				{
@@ -95,13 +90,12 @@ collect_column_walker(Node *node, CollectColumnContext *context)
 				}
 			}
 			if (!found)
-				context->column_names =
-					lappend(context->column_names, makeString(pstrdup(colname)));
+				*column_names = lappend(*column_names, makeString(pstrdup(colname)));
 		}
 		return false;
 	}
 
-	return raw_expression_tree_walker(node, collect_column_walker, context);
+	return raw_expression_tree_walker(node, collect_column_walker, column_names);
 }
 
 /*
@@ -119,7 +113,7 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	List *raw_parsetree_list;
 	SelectStmt *select_stmt;
 	ResTarget *res_target;
-	CollectColumnContext col_ctx = { .column_names = NIL };
+	List *column_names = NIL;
 
 	/* Build a SELECT statement to parse the expression */
 	query_str = psprintf("SELECT %s", expr_str);
@@ -205,11 +199,11 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	}
 
 	/* Collect column references from the aggregate arguments */
-	collect_column_walker((Node *) func_call->args, &col_ctx);
+	collect_column_walker((Node *) func_call->args, &column_names);
 
 	/* Validate that all referenced columns exist in source relation */
 	ListCell *lc;
-	foreach (lc, col_ctx.column_names)
+	foreach (lc, column_names)
 	{
 		char *colname = strVal(lfirst(lc));
 		AttrNumber attnum = get_attnum(source_relid, colname);
@@ -340,13 +334,8 @@ add_column_to_query(Query *query, int varno, AttrNumber attnum, Oid atttype, int
 /*
  * Mutator function to adjust varno in Var nodes within an Aggref
  */
-typedef struct AdjustVarnoContext
-{
-	int new_varno;
-} AdjustVarnoContext;
-
 static Node *
-adjust_varno_mutator(Node *node, AdjustVarnoContext *context)
+adjust_varno_mutator(Node *node, int *new_varno)
 {
 	if (node == NULL)
 		return NULL;
@@ -355,11 +344,11 @@ adjust_varno_mutator(Node *node, AdjustVarnoContext *context)
 	{
 		Var *var = (Var *) node;
 		Var *newvar = copyObject(var);
-		newvar->varno = context->new_varno;
+		newvar->varno = *new_varno;
 		return (Node *) newvar;
 	}
 
-	return expression_tree_mutator(node, adjust_varno_mutator, context);
+	return expression_tree_mutator(node, adjust_varno_mutator, new_varno);
 }
 
 /*
@@ -374,8 +363,7 @@ static void
 add_aggregate_to_query(Query *query, int varno, Aggref *aggref, const char *column_alias)
 {
 	/* Copy and adjust the Aggref's Var nodes to use the correct varno */
-	AdjustVarnoContext ctx = { .new_varno = varno };
-	Aggref *new_aggref = (Aggref *) adjust_varno_mutator((Node *) aggref, &ctx);
+	Aggref *new_aggref = (Aggref *) adjust_varno_mutator((Node *) aggref, &varno);
 
 	/* Create TargetEntry */
 	TargetEntry *tle = makeTargetEntry((Expr *) new_aggref,
@@ -392,8 +380,8 @@ add_aggregate_to_query(Query *query, int varno, Aggref *aggref, const char *colu
  * Add a column to a view relation using ALTER VIEW ADD COLUMN
  */
 static void
-add_column_to_view_relation(Oid view_oid, const char *view_schema, const char *view_name,
-							const char *column_name, Oid atttype, int32 atttypmod, Oid attcollation)
+add_column_to_view_relation(const char *view_schema, const char *view_name, const char *column_name,
+							Oid atttype, int32 atttypmod, Oid attcollation)
 {
 	int sec_ctx;
 	Oid uid, saved_uid;
@@ -462,8 +450,7 @@ update_view_add_aggregate(Oid view_oid, const char *view_schema, const char *vie
 	add_aggregate_to_query(query, varno, aggref, column_name);
 
 	/* Step 2: Add the column to the view relation */
-	add_column_to_view_relation(view_oid,
-								view_schema,
+	add_column_to_view_relation(view_schema,
 								view_name,
 								column_name,
 								atttype,
@@ -515,7 +502,7 @@ add_column_to_mat_hypertable(Hypertable *mat_ht, const char *column_name, Oid at
 }
 
 /*
- * Main function to add a column or aggregate to a continuous aggregate
+ * Main function to add an aggregate expression to a continuous aggregate
  */
 Datum
 continuous_agg_add_column(PG_FUNCTION_ARGS)
@@ -556,7 +543,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		ts_cache_release(&hcache);
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot add column to continuous aggregate with compression enabled"),
+				 errmsg("cannot add aggregate to continuous aggregate with compression enabled"),
 				 errhint("Disable compression on the continuous aggregate first.")));
 	}
 
@@ -764,8 +751,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	}
 
 	/* Add the column to the user view relation */
-	add_column_to_view_relation(user_view_oid,
-								NameStr(cagg->data.user_view_schema),
+	add_column_to_view_relation(NameStr(cagg->data.user_view_schema),
 								NameStr(cagg->data.user_view_name),
 								column_name,
 								atttype,
