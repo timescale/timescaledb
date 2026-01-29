@@ -1629,9 +1629,9 @@ try_create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSet
 			continue;
 
 		/* Time types can be added to a composite index, but the user may disable it. */
-		if ((atttypid == TIMESTAMPTZOID || atttypid == TIMESTAMPOID ||
-			 atttypid == TIMEOID || atttypid == TIMETZOID ||
-			 atttypid == DATEOID) && !ts_guc_enable_time_types_in_auto_composite_bloom)
+		if ((atttypid == TIMESTAMPTZOID || atttypid == TIMESTAMPOID || atttypid == TIMEOID ||
+			 atttypid == TIMETZOID || atttypid == DATEOID) &&
+			!ts_guc_enable_time_types_in_auto_composite_bloom)
 			continue;
 
 		/* Equality queries are unlikely for floating-point types, so we skip them. */
@@ -1647,7 +1647,8 @@ try_create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSet
 		attnums_bitmap = bms_add_member(attnums_bitmap, attno);
 	}
 
-	/* Need at least 2 valid columns for composite bloom and the total width must be at least 4 bytes. */
+	/* Need at least 2 valid columns for composite bloom and the total width must be at least 4
+	 * bytes. */
 	if (valid_columns < 2 || total_width < 4)
 	{
 		pfree(bloom_config.columns);

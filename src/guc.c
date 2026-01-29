@@ -1167,8 +1167,10 @@ _guc_init(void)
 							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_numeric_in_auto_composite_bloom"),
-							 "Enable adding numeric columns to the auto-created composite bloom index",
-							 "This allows the auto-created composite bloom index to include numeric columns.",
+							 "Enable adding numeric columns to the auto-created composite bloom "
+							 "index",
+							 "This allows the auto-created composite bloom index to include "
+							 "numeric columns.",
 							 &ts_guc_enable_numeric_in_auto_composite_bloom,
 							 true,
 							 PGC_USERSET,
@@ -1177,10 +1179,10 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_time_types_in_auto_composite_bloom"),
 							 "Enable adding time types to the auto-created composite bloom index",
-							 "This allows the auto-created composite bloom index to include time types.",
+							 "This allows the auto-created composite bloom index to include time "
+							 "types.",
 							 &ts_guc_enable_time_types_in_auto_composite_bloom,
 							 true,
 							 PGC_USERSET,
@@ -1188,11 +1190,6 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-
-
-
-
-
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("read_legacy_bloom1_v1"),
 							 "Enable reading the legacy bloom1 version 1 sparse indexes for SELECT "

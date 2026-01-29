@@ -9,6 +9,7 @@
 #include <access/tupconvert.h>
 #include <funcapi.h>
 
+#include "bmslist_utils.h"
 #include "cache.h"
 #include "chunk.h"
 
@@ -46,6 +47,21 @@ typedef struct CachedDecompressionState
 	ScanKeyWithAttnos index_scankeys;
 	ScanKeyWithAttnos mem_scankeys;
 	Oid index_relid;
+
+	/*
+	 * Bloom information for UPSERT bloom optimization.
+	 * They refer to (potentially) multiple bloom filters ordered
+	 * by the number of columns in the bloom filter.
+	 *
+	 * The three lists are parallel, where the first list contains
+	 * the column names of the bloom filters, the second one contains
+	 * the insert tuple attnums to be used to generate the bloom hash,
+	 * and the third list contains the attribute number corresponding
+	 * to the compressed chunk column that is the bloom filter.
+	 */
+	List *bloom_column_names;
+	TsBmsList bloom_insert_attnums;
+	AttrNumber *upsert_bloom_attnums;
 } CachedDecompressionState;
 
 typedef struct SharedCounters
@@ -58,6 +74,8 @@ typedef struct SharedCounters
 	int64 batches_decompressed;
 	/* Number of tuples decompressed */
 	int64 tuples_decompressed;
+	/* Number of batches pruned by bloom */
+	int64 batches_pruned_by_bloom;
 } SharedCounters;
 
 typedef struct ChunkInsertState

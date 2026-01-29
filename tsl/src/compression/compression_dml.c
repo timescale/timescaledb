@@ -86,8 +86,7 @@ static bool can_delete_without_decompression(ModifyHypertableState *ht_state,
 static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 											CompressionSettings *settings, Relation chunk_rel,
 											Oid ht_relid, ScanKeyWithAttnos *mem_scankeys);
-static ScanKeyData *get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot,
-										 int null_flags);
+static void update_scankeys(ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags);
 
 static AttrNumber
 TupleDescGetAttrNumber(TupleDesc desc, const char *name)
@@ -204,32 +203,29 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 	MemoryContextSwitchTo(old_context);
 }
 
-static ScanKeyData *
-get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags)
+static void
+update_scankeys(ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags)
 {
 	if (scankeys->num_scankeys == 0)
 	{
-		return NULL;
+		return;
 	}
 
-	ScanKeyData *updated_scankeys = palloc0(sizeof(ScanKeyData) * scankeys->num_scankeys);
 	for (int i = 0; i < scankeys->num_scankeys; i++)
 	{
-		updated_scankeys[i] = scankeys->scankeys[i];
 		bool isnull = false;
 		Datum value = slot_getattr(slot, scankeys->attnos[i], &isnull);
 		if (isnull)
 		{
-			updated_scankeys[i].sk_flags = null_flags;
-			updated_scankeys[i].sk_argument = UnassignedDatum;
+			scankeys->scankeys[i].sk_flags = null_flags;
+			scankeys->scankeys[i].sk_argument = UnassignedDatum;
 		}
 		else
 		{
-			updated_scankeys[i].sk_flags = 0;
-			updated_scankeys[i].sk_argument = value;
+			scankeys->scankeys[i].sk_flags = 0;
+			scankeys->scankeys[i].sk_argument = value;
 		}
 	}
-	return updated_scankeys;
 }
 
 void
@@ -282,11 +278,9 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 		index_rel = index_open(cdst->index_relid, AccessShareLock);
 	}
 
-	ScanKeyData *index_scankeys =
-		get_updated_scankeys(&cdst->index_scankeys, slot, SK_ISNULL | SK_SEARCHNULL);
-	ScanKeyData *heap_scankeys =
-		get_updated_scankeys(&cdst->heap_scankeys, slot, SK_ISNULL | SK_SEARCHNULL);
-	ScanKeyData *mem_scankeys = get_updated_scankeys(&cdst->mem_scankeys, slot, SK_ISNULL);
+	update_scankeys(&cdst->index_scankeys, slot, SK_ISNULL | SK_SEARCHNULL);
+	update_scankeys(&cdst->heap_scankeys, slot, SK_ISNULL | SK_SEARCHNULL);
+	update_scankeys(&cdst->mem_scankeys, slot, SK_ISNULL);
 
 	if (ts_guc_debug_compression_path_info)
 	{
@@ -308,11 +302,11 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 									out_rel,
 									index_rel,
 									GetActiveSnapshot(),
-									index_scankeys,
+									cdst->index_scankeys.scankeys,
 									cdst->index_scankeys.num_scankeys,
-									heap_scankeys,
+									cdst->heap_scankeys.scankeys,
 									cdst->heap_scankeys.num_scankeys,
-									mem_scankeys,
+									cdst->mem_scankeys.scankeys,
 									cdst->mem_scankeys.num_scankeys,
 									cdst->constraints,
 									&skip_current_tuple,
@@ -334,13 +328,6 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 	cis->counters->batches_filtered += stats.batches_filtered;
 	cis->counters->batches_decompressed += stats.batches_decompressed;
 	cis->counters->tuples_decompressed += stats.tuples_decompressed;
-
-	if (index_scankeys)
-		pfree(index_scankeys);
-	if (heap_scankeys)
-		pfree(heap_scankeys);
-	if (mem_scankeys)
-		pfree(mem_scankeys);
 
 	CommandCounterIncrement();
 	table_close(in_rel, NoLock);
