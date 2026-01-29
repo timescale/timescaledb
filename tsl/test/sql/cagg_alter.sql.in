@@ -13,9 +13,7 @@ CREATE TABLE test_ht (
     temperature DOUBLE PRECISION,
     humidity DOUBLE PRECISION,
     category TEXT
-);
-
-SELECT create_hypertable('test_ht', 'time');
+) WITH (tsdb.hypertable);
 
 -- Insert test data
 INSERT INTO test_ht VALUES
@@ -30,7 +28,7 @@ INSERT INTO test_ht VALUES
 
 -- Create a materialized-only CAgg with basic aggregation
 CREATE MATERIALIZED VIEW test_cagg_mat
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+    WITH (timescaledb.continuous)
 AS SELECT
     time_bucket('1 day', time) AS bucket,
     device_id,
@@ -142,7 +140,7 @@ SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
 
 -- Create a second-level materialized-only CAgg on top of test_cagg_mat
 CREATE MATERIALIZED VIEW test_cagg_level2
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+    WITH (timescaledb.continuous)
 AS SELECT
     time_bucket('7 days', bucket) AS bucket,
     device_id,
@@ -227,7 +225,7 @@ SELECT * FROM test_cagg_rt_level2 ORDER BY bucket, device_id;
 
 -- Create a new CAgg for compression tests
 CREATE MATERIALIZED VIEW test_cagg_compress
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+    WITH (timescaledb.continuous)
 AS SELECT
     time_bucket('1 day', time) AS bucket,
     device_id,
@@ -267,6 +265,8 @@ SELECT add_continuous_aggregate_column('test_cagg_compress', 'sum(temperature) A
 -- Verify the column was added
 \d+ test_cagg_compress
 
+SET client_min_messages TO WARNING;
+
 -- Cleanup compression test CAgg
 DROP MATERIALIZED VIEW test_cagg_compress;
 
@@ -276,3 +276,5 @@ DROP MATERIALIZED VIEW test_cagg_level2;
 DROP MATERIALIZED VIEW test_cagg_mat;
 DROP MATERIALIZED VIEW test_cagg_rt;
 DROP TABLE test_ht;
+
+RESET client_min_messages;

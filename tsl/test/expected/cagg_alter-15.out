@@ -10,12 +10,8 @@ CREATE TABLE test_ht (
     temperature DOUBLE PRECISION,
     humidity DOUBLE PRECISION,
     category TEXT
-);
-SELECT create_hypertable('test_ht', 'time');
-  create_hypertable   
-----------------------
- (1,public,test_ht,t)
-
+) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
 -- Insert test data
 INSERT INTO test_ht VALUES
     ('2020-01-01 00:00:00', 1, 20.0, 50.0, 'indoor'),
@@ -28,7 +24,7 @@ INSERT INTO test_ht VALUES
     ('2020-01-02 01:00:00', 2, 30.0, 70.0, 'outdoor');
 -- Create a materialized-only CAgg with basic aggregation
 CREATE MATERIALIZED VIEW test_cagg_mat
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+    WITH (timescaledb.continuous)
 AS SELECT
     time_bucket('1 day', time) AS bucket,
     device_id,
@@ -55,10 +51,10 @@ WITH NO DATA;
  device_id | integer                  |           |          |         | plain   | 
  avg_temp  | double precision         |           |          |         | plain   | 
 View definition:
- SELECT _materialized_hypertable_2.bucket,
-    _materialized_hypertable_2.device_id,
-    _materialized_hypertable_2.avg_temp
-   FROM _timescaledb_internal._materialized_hypertable_2;
+ SELECT _materialized_hypertable_3.bucket,
+    _materialized_hypertable_3.device_id,
+    _materialized_hypertable_3.avg_temp
+   FROM _timescaledb_internal._materialized_hypertable_3;
 
 \d+ test_cagg_rt
                                   View "public.test_cagg_rt"
@@ -68,17 +64,17 @@ View definition:
  device_id | integer                  |           |          |         | plain   | 
  avg_temp  | double precision         |           |          |         | plain   | 
 View definition:
- SELECT _materialized_hypertable_3.bucket,
-    _materialized_hypertable_3.device_id,
-    _materialized_hypertable_3.avg_temp
-   FROM _timescaledb_internal._materialized_hypertable_3
-  WHERE _materialized_hypertable_3.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+ SELECT _materialized_hypertable_4.bucket,
+    _materialized_hypertable_4.device_id,
+    _materialized_hypertable_4.avg_temp
+   FROM _timescaledb_internal._materialized_hypertable_4
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, test_ht."time") AS bucket,
     test_ht.device_id,
     avg(test_ht.temperature) AS avg_temp
    FROM test_ht
-  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, test_ht."time")), test_ht.device_id;
 
 -- Add SUM aggregate to materialized-only CAgg
@@ -97,11 +93,11 @@ SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum
  avg_temp  | double precision         |           |          |         | plain   | 
  sum_temp  | double precision         |           |          |         | plain   | 
 View definition:
- SELECT _materialized_hypertable_2.bucket,
-    _materialized_hypertable_2.device_id,
-    _materialized_hypertable_2.avg_temp,
-    _materialized_hypertable_2.sum_temp
-   FROM _timescaledb_internal._materialized_hypertable_2;
+ SELECT _materialized_hypertable_3.bucket,
+    _materialized_hypertable_3.device_id,
+    _materialized_hypertable_3.avg_temp,
+    _materialized_hypertable_3.sum_temp
+   FROM _timescaledb_internal._materialized_hypertable_3;
 
 -- Add MAX aggregate to materialized-only CAgg
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'max(temperature) AS max_temp');
@@ -126,12 +122,12 @@ SELECT add_continuous_aggregate_column('test_cagg_rt', 'min(temperature) AS min_
  sum_temp  | double precision         |           |          |         | plain   | 
  max_temp  | double precision         |           |          |         | plain   | 
 View definition:
- SELECT _materialized_hypertable_2.bucket,
-    _materialized_hypertable_2.device_id,
-    _materialized_hypertable_2.avg_temp,
-    _materialized_hypertable_2.sum_temp,
-    _materialized_hypertable_2.max_temp
-   FROM _timescaledb_internal._materialized_hypertable_2;
+ SELECT _materialized_hypertable_3.bucket,
+    _materialized_hypertable_3.device_id,
+    _materialized_hypertable_3.avg_temp,
+    _materialized_hypertable_3.sum_temp,
+    _materialized_hypertable_3.max_temp
+   FROM _timescaledb_internal._materialized_hypertable_3;
 
 \d+ test_cagg_rt
                                   View "public.test_cagg_rt"
@@ -142,19 +138,19 @@ View definition:
  avg_temp  | double precision         |           |          |         | plain   | 
  min_temp  | double precision         |           |          |         | plain   | 
 View definition:
- SELECT _materialized_hypertable_3.bucket,
-    _materialized_hypertable_3.device_id,
-    _materialized_hypertable_3.avg_temp,
-    _materialized_hypertable_3.min_temp
-   FROM _timescaledb_internal._materialized_hypertable_3
-  WHERE _materialized_hypertable_3.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+ SELECT _materialized_hypertable_4.bucket,
+    _materialized_hypertable_4.device_id,
+    _materialized_hypertable_4.avg_temp,
+    _materialized_hypertable_4.min_temp
+   FROM _timescaledb_internal._materialized_hypertable_4
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, test_ht."time") AS bucket,
     test_ht.device_id,
     avg(test_ht.temperature) AS avg_temp,
     min(test_ht.temperature) AS min_temp
    FROM test_ht
-  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, test_ht."time")), test_ht.device_id;
 
 -- Refresh and check data
@@ -262,13 +258,13 @@ SELECT add_continuous_aggregate_column('test_cagg_rt', 'sum(humidity)');
  min_temp  | double precision         |           |          |         | plain   | 
  sum       | double precision         |           |          |         | plain   | 
 View definition:
- SELECT _materialized_hypertable_3.bucket,
-    _materialized_hypertable_3.device_id,
-    _materialized_hypertable_3.avg_temp,
-    _materialized_hypertable_3.min_temp,
-    _materialized_hypertable_3.sum
-   FROM _timescaledb_internal._materialized_hypertable_3
-  WHERE _materialized_hypertable_3.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+ SELECT _materialized_hypertable_4.bucket,
+    _materialized_hypertable_4.device_id,
+    _materialized_hypertable_4.avg_temp,
+    _materialized_hypertable_4.min_temp,
+    _materialized_hypertable_4.sum
+   FROM _timescaledb_internal._materialized_hypertable_4
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, test_ht."time") AS bucket,
     test_ht.device_id,
@@ -276,7 +272,7 @@ UNION ALL
     min(test_ht.temperature) AS min_temp,
     sum(test_ht.humidity) AS sum
    FROM test_ht
-  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(3)), '-infinity'::timestamp with time zone)
+  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, test_ht."time")), test_ht.device_id;
 
 -- Insert new data and check real-time aggregation works
@@ -299,7 +295,7 @@ SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
 -- =====================================================
 -- Create a second-level materialized-only CAgg on top of test_cagg_mat
 CREATE MATERIALIZED VIEW test_cagg_level2
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+    WITH (timescaledb.continuous)
 AS SELECT
     time_bucket('7 days', bucket) AS bucket,
     device_id,
@@ -324,10 +320,10 @@ SELECT * FROM test_cagg_level2 ORDER BY bucket, device_id;
  device_id | integer                  |           |          |         | plain   | 
  avg_temp  | double precision         |           |          |         | plain   | 
 View definition:
- SELECT _materialized_hypertable_4.bucket,
-    _materialized_hypertable_4.device_id,
-    _materialized_hypertable_4.avg_temp
-   FROM _timescaledb_internal._materialized_hypertable_4;
+ SELECT _materialized_hypertable_5.bucket,
+    _materialized_hypertable_5.device_id,
+    _materialized_hypertable_5.avg_temp
+   FROM _timescaledb_internal._materialized_hypertable_5;
 
 -- Error - aggregate references column that doesn't exist in parent CAgg
 \set ON_ERROR_STOP 0
@@ -350,11 +346,11 @@ SELECT add_continuous_aggregate_column('test_cagg_level2', 'sum(sum_temp) AS tot
  avg_temp       | double precision         |           |          |         | plain   | 
  total_sum_temp | double precision         |           |          |         | plain   | 
 View definition:
- SELECT _materialized_hypertable_4.bucket,
-    _materialized_hypertable_4.device_id,
-    _materialized_hypertable_4.avg_temp,
-    _materialized_hypertable_4.total_sum_temp
-   FROM _timescaledb_internal._materialized_hypertable_4;
+ SELECT _materialized_hypertable_5.bucket,
+    _materialized_hypertable_5.device_id,
+    _materialized_hypertable_5.avg_temp,
+    _materialized_hypertable_5.total_sum_temp
+   FROM _timescaledb_internal._materialized_hypertable_5;
 
 -- Refresh and check data
 CALL refresh_continuous_aggregate('test_cagg_level2', NULL, NULL);
@@ -407,17 +403,17 @@ SELECT * FROM test_cagg_rt_level2 ORDER BY bucket, device_id;
  device_id | integer                  |           |          |         | plain   | 
  avg_temp  | double precision         |           |          |         | plain   | 
 View definition:
- SELECT _materialized_hypertable_5.bucket,
-    _materialized_hypertable_5.device_id,
-    _materialized_hypertable_5.avg_temp
-   FROM _timescaledb_internal._materialized_hypertable_5
-  WHERE _materialized_hypertable_5.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(5)), '-infinity'::timestamp with time zone)
+ SELECT _materialized_hypertable_6.bucket,
+    _materialized_hypertable_6.device_id,
+    _materialized_hypertable_6.avg_temp
+   FROM _timescaledb_internal._materialized_hypertable_6
+  WHERE _materialized_hypertable_6.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(6)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 7 days'::interval, test_cagg_rt.bucket) AS bucket,
     test_cagg_rt.device_id,
     avg(test_cagg_rt.avg_temp) AS avg_temp
    FROM test_cagg_rt
-  WHERE test_cagg_rt.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(5)), '-infinity'::timestamp with time zone)
+  WHERE test_cagg_rt.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(6)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 7 days'::interval, test_cagg_rt.bucket)), test_cagg_rt.device_id;
 
 -- Add aggregate using column from parent CAgg
@@ -436,19 +432,19 @@ SELECT add_continuous_aggregate_column('test_cagg_rt_level2', 'max(min_temp) AS 
  avg_temp   | double precision         |           |          |         | plain   | 
  max_of_min | double precision         |           |          |         | plain   | 
 View definition:
- SELECT _materialized_hypertable_5.bucket,
-    _materialized_hypertable_5.device_id,
-    _materialized_hypertable_5.avg_temp,
-    _materialized_hypertable_5.max_of_min
-   FROM _timescaledb_internal._materialized_hypertable_5
-  WHERE _materialized_hypertable_5.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(5)), '-infinity'::timestamp with time zone)
+ SELECT _materialized_hypertable_6.bucket,
+    _materialized_hypertable_6.device_id,
+    _materialized_hypertable_6.avg_temp,
+    _materialized_hypertable_6.max_of_min
+   FROM _timescaledb_internal._materialized_hypertable_6
+  WHERE _materialized_hypertable_6.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(6)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 7 days'::interval, test_cagg_rt.bucket) AS bucket,
     test_cagg_rt.device_id,
     avg(test_cagg_rt.avg_temp) AS avg_temp,
     max(test_cagg_rt.min_temp) AS max_of_min
    FROM test_cagg_rt
-  WHERE test_cagg_rt.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(5)), '-infinity'::timestamp with time zone)
+  WHERE test_cagg_rt.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(6)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 7 days'::interval, test_cagg_rt.bucket)), test_cagg_rt.device_id;
 
 -- Refresh and check data
@@ -476,7 +472,7 @@ SELECT * FROM test_cagg_rt_level2 ORDER BY bucket, device_id;
 -- =====================================================
 -- Create a new CAgg for compression tests
 CREATE MATERIALIZED VIEW test_cagg_compress
-    WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+    WITH (timescaledb.continuous)
 AS SELECT
     time_bucket('1 day', time) AS bucket,
     device_id,
@@ -498,7 +494,7 @@ ERROR:  cannot add aggregate to continuous aggregate with compression enabled
 SELECT compress_chunk(chunk) FROM show_chunks('test_cagg_compress') chunk;
              compress_chunk             
 ----------------------------------------
- _timescaledb_internal._hyper_6_7_chunk
+ _timescaledb_internal._hyper_7_7_chunk
 
 -- Error - still cannot add column after chunks are compressed
 \set ON_ERROR_STOP 0
@@ -509,7 +505,7 @@ ERROR:  cannot add aggregate to continuous aggregate with compression enabled
 SELECT decompress_chunk(chunk) FROM show_chunks('test_cagg_compress') chunk;
             decompress_chunk            
 ----------------------------------------
- _timescaledb_internal._hyper_6_7_chunk
+ _timescaledb_internal._hyper_7_7_chunk
 
 -- Disable compression
 ALTER MATERIALIZED VIEW test_cagg_compress SET (timescaledb.compress = false);
@@ -529,22 +525,19 @@ SELECT add_continuous_aggregate_column('test_cagg_compress', 'sum(temperature) A
  avg_temp  | double precision         |           |          |         | plain   | 
  sum_temp  | double precision         |           |          |         | plain   | 
 View definition:
- SELECT _materialized_hypertable_6.bucket,
-    _materialized_hypertable_6.device_id,
-    _materialized_hypertable_6.avg_temp,
-    _materialized_hypertable_6.sum_temp
-   FROM _timescaledb_internal._materialized_hypertable_6;
+ SELECT _materialized_hypertable_7.bucket,
+    _materialized_hypertable_7.device_id,
+    _materialized_hypertable_7.avg_temp,
+    _materialized_hypertable_7.sum_temp
+   FROM _timescaledb_internal._materialized_hypertable_7;
 
+SET client_min_messages TO WARNING;
 -- Cleanup compression test CAgg
 DROP MATERIALIZED VIEW test_cagg_compress;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_7_chunk
 -- Cleanup
 DROP MATERIALIZED VIEW test_cagg_rt_level2;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_5_6_chunk
 DROP MATERIALIZED VIEW test_cagg_level2;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_5_chunk
 DROP MATERIALIZED VIEW test_cagg_mat;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
 DROP MATERIALIZED VIEW test_cagg_rt;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_4_chunk
 DROP TABLE test_ht;
+RESET client_min_messages;
