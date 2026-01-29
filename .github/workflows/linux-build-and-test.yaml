@@ -11,6 +11,7 @@ name: Regression
     branches:
       - main
       - ?.*.x
+      - prerelease_test
       - trigger/regression
   pull_request:
 jobs:

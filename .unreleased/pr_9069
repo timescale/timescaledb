@@ -1,1 +1,0 @@
-Fixes: #9069 Fix applying multikey sort for columnstore when one numeric key is pinned to a Const of different type
