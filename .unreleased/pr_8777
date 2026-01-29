@@ -1,1 +1,0 @@
-Implements: #8777 Enable direct compress on CAgg refresh using new GUC `timescaledb.enable_direct_compress_on_cagg_refresh`
