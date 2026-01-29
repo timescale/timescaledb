@@ -437,14 +437,9 @@ update_view_add_aggregate(Oid view_oid, const char *view_schema, const char *vie
 
 	/* Find the varno for the source relation */
 	int varno = find_rte_index_for_relid(query, source_relid);
-	if (varno == 0)
-	{
-		/* Source relation not directly in rtable - this can happen with hierarchical CAggs */
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot add aggregate to this continuous aggregate"),
-				 errhint("The source relation is not directly referenced in the view.")));
-	}
+
+	/* Source relation must be in rtable - this is guaranteed by CAgg structure */
+	Assert(varno != 0);
 
 	/* Add the aggregate to the query */
 	add_aggregate_to_query(query, varno, aggref, column_name);
