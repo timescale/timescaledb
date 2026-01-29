@@ -12,8 +12,8 @@ VACUUM FULL t1;
 VACUUM FULL t2;
 
 -- VACUUM FULL each chunk before compression to eliminate bloat and stabilize uncompressed sizes
-SELECT format('VACUUM FULL %s;', show_chunks) AS command FROM show_chunks('t1') \gexec
-SELECT format('VACUUM FULL %s;', show_chunks) AS command FROM show_chunks('t2') \gexec
+SELECT format('VACUUM FULL %s', show_chunks) FROM show_chunks('t1') \gexec
+SELECT format('VACUUM FULL %s', show_chunks) FROM show_chunks('t2') \gexec
 
 SELECT compress_chunk(chunk) FROM show_chunks('t1') AS chunk;
 SELECT compress_chunk(chunk) FROM show_chunks('t2') AS chunk;
