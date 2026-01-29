@@ -108,7 +108,7 @@ collect_column_walker(Node *node, CollectColumnContext *context)
  * Parse and validate an aggregate expression
  *
  * Returns an AggregateExprInfo structure with parsed information.
- * If the expression is not a valid aggregate, returns NULL.
+ * Errors out if the expression is not a valid aggregate.
  */
 static AggregateExprInfo *
 parse_aggregate_expression(const char *expr_str, Oid source_relid)
@@ -129,21 +129,26 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	if (list_length(raw_parsetree_list) != 1)
 	{
 		pfree(query_str);
-		return NULL;
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				 errmsg("invalid aggregate expression: \"%s\"", expr_str)));
 	}
 
 	raw_stmt = linitial_node(RawStmt, raw_parsetree_list);
 	if (!IsA(raw_stmt->stmt, SelectStmt))
 	{
 		pfree(query_str);
-		return NULL;
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				 errmsg("invalid aggregate expression: \"%s\"", expr_str)));
 	}
 
 	select_stmt = (SelectStmt *) raw_stmt->stmt;
 	if (list_length(select_stmt->targetList) != 1)
 	{
 		pfree(query_str);
-		return NULL;
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR), errmsg("only one aggregate expression allowed")));
 	}
 
 	res_target = linitial_node(ResTarget, select_stmt->targetList);
@@ -152,7 +157,10 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	if (!IsA(res_target->val, FuncCall))
 	{
 		pfree(query_str);
-		return NULL;
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("expression must be an aggregate function"),
+				 errhint("Use syntax like 'sum(column) AS alias' or 'avg(column)'.")));
 	}
 
 	FuncCall *func_call = (FuncCall *) res_target->val;
@@ -270,25 +278,6 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 }
 
 /*
- * Find the maximum ressortgroupref value in a query's targetList
- */
-static Index
-get_max_sortgroupref(Query *query)
-{
-	ListCell *lc;
-	Index max_ref = 0;
-
-	foreach (lc, query->targetList)
-	{
-		TargetEntry *tle = lfirst_node(TargetEntry, lc);
-		if (tle->ressortgroupref > max_ref)
-			max_ref = tle->ressortgroupref;
-	}
-
-	return max_ref;
-}
-
-/*
  * Check if a column name already exists in the query's targetList
  */
 static bool
@@ -327,12 +316,8 @@ find_rte_index_for_relid(Query *query, Oid relid)
 }
 
 /*
- * Add a column to a query's targetList and groupClause
- *
- * This function:
- * 1. Creates a Var node for the column
- * 2. Creates a TargetEntry and appends it to the targetList
- * 3. Creates a SortGroupClause and appends it to the groupClause
+ * Add a column reference to a query's targetList.
+ * Used to read pre-computed aggregate values from the materialization hypertable.
  */
 static void
 add_column_to_query(Query *query, int varno, AttrNumber attnum, Oid atttype, int32 atttypmod,
@@ -350,25 +335,6 @@ add_column_to_query(Query *query, int varno, AttrNumber attnum, Oid atttype, int
 
 	/* Add to targetList */
 	query->targetList = lappend(query->targetList, tle);
-
-	if (query->groupClause != NIL)
-	{
-		/* Get next sortgroupref value */
-		tle->ressortgroupref = get_max_sortgroupref(query) + 1;
-
-		/* Create SortGroupClause for GROUP BY */
-		TypeCacheEntry *tce = lookup_type_cache(atttype, TYPECACHE_EQ_OPR | TYPECACHE_LT_OPR);
-
-		SortGroupClause *sgc = makeNode(SortGroupClause);
-		sgc->tleSortGroupRef = tle->ressortgroupref;
-		sgc->eqop = tce->eq_opr;
-		sgc->sortop = tce->lt_opr;
-		sgc->nulls_first = false;
-		sgc->hashable = op_hashjoinable(tce->eq_opr, atttype);
-
-		/* Add to groupClause */
-		query->groupClause = lappend(query->groupClause, sgc);
-	}
 }
 
 /*
@@ -463,15 +429,12 @@ add_column_to_view_relation(Oid view_oid, const char *view_schema, const char *v
 }
 
 /*
- * Update a view's query definition to add a new column or aggregate expression.
- *
- * If aggref is NULL, adds a simple column (with GROUP BY).
- * If aggref is non-NULL, adds an aggregate expression (no GROUP BY).
+ * Update a view's query definition to add a new aggregate expression.
  */
 static void
-update_view_add_expr(Oid view_oid, const char *view_schema, const char *view_name, Oid source_relid,
-					 AttrNumber attnum, Aggref *aggref, Oid atttype, int32 atttypmod,
-					 Oid attcollation, const char *column_name)
+update_view_add_aggregate(Oid view_oid, const char *view_schema, const char *view_name,
+						  Oid source_relid, Aggref *aggref, Oid atttype, int32 atttypmod,
+						  Oid attcollation, const char *column_name)
 {
 	int sec_ctx;
 	Oid uid, saved_uid;
@@ -491,16 +454,12 @@ update_view_add_expr(Oid view_oid, const char *view_schema, const char *view_nam
 		/* Source relation not directly in rtable - this can happen with hierarchical CAggs */
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot add %s to this continuous aggregate",
-						aggref ? "aggregate" : "column"),
+				 errmsg("cannot add aggregate to this continuous aggregate"),
 				 errhint("The source relation is not directly referenced in the view.")));
 	}
 
-	/* Add the column or aggregate to the query */
-	if (aggref)
-		add_aggregate_to_query(query, varno, aggref, column_name);
-	else
-		add_column_to_query(query, varno, attnum, atttype, atttypmod, attcollation, column_name);
+	/* Add the aggregate to the query */
+	add_aggregate_to_query(query, varno, aggref, column_name);
 
 	/* Step 2: Add the column to the view relation */
 	add_column_to_view_relation(view_oid,
@@ -580,25 +539,43 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 				 errmsg("could not find raw hypertable for continuous aggregate")));
 	}
 
+	/* Get the materialization hypertable */
+	Hypertable *mat_ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
+	if (mat_ht == NULL)
+	{
+		ts_cache_release(&hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not find materialization hypertable for continuous aggregate")));
+	}
+
+	/* Check if the materialization hypertable has compressed chunks */
+	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(mat_ht) ||
+		TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
+	{
+		ts_cache_release(&hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot add column to continuous aggregate with compression enabled"),
+				 errhint("Disable compression on the continuous aggregate first.")));
+	}
+
 	/*
 	 * Determine the source relation for the partial/direct views:
 	 * - For regular CAggs: the raw hypertable
 	 * - For hierarchical CAggs: the parent CAgg's user view
 	 */
 	Oid source_relid = raw_ht->main_table_relid;
-	AttrNumber attnum = InvalidAttrNumber;
 	Oid atttype;
 	int32 atttypmod;
 	Oid attcollation;
 	const char *column_name;
-	ContinuousAgg *parent_cagg = NULL;
 	AggregateExprInfo *agg_info = NULL;
-	bool is_aggregate = false;
 
 	if (ContinuousAggIsHierarchical(cagg))
 	{
 		/* Get the parent continuous aggregate */
-		parent_cagg =
+		ContinuousAgg *parent_cagg =
 			ts_continuous_agg_find_by_mat_hypertable_id(cagg->data.parent_mat_hypertable_id, false);
 
 		if (parent_cagg == NULL)
@@ -617,60 +594,10 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 
 	/* Parse and validate the aggregate expression */
 	agg_info = parse_aggregate_expression(expr_str, source_relid);
-	if (agg_info)
-	{
-		is_aggregate = true;
-		column_name = agg_info->column_alias;
-		atttype = agg_info->result_type;
-		atttypmod = agg_info->result_typmod;
-		attcollation = agg_info->result_collation;
-	}
-	else
-	{
-		/* Simple column reference */
-		column_name = expr_str;
-
-		/* Check if column exists in source relation */
-		attnum = get_attnum(source_relid, column_name);
-		if (!AttributeNumberIsValid(attnum))
-		{
-			ts_cache_release(&hcache);
-			if (ContinuousAggIsHierarchical(cagg))
-				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_COLUMN),
-						 errmsg("column \"%s\" does not exist in parent continuous aggregate "
-								"\"%s\".\"%s\"",
-								column_name,
-								NameStr(parent_cagg->data.user_view_schema),
-								NameStr(parent_cagg->data.user_view_name))));
-			else
-				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_COLUMN),
-						 errmsg("column \"%s\" does not exist in hypertable \"%s\".\"%s\"",
-								column_name,
-								NameStr(raw_ht->fd.schema_name),
-								NameStr(raw_ht->fd.table_name))));
-		}
-
-		/* Get column type information from the source relation */
-		Relation source_rel = table_open(source_relid, AccessShareLock);
-		TupleDesc source_tupdesc = RelationGetDescr(source_rel);
-		Form_pg_attribute attr = TupleDescAttr(source_tupdesc, AttrNumberGetAttrOffset(attnum));
-		atttype = attr->atttypid;
-		atttypmod = attr->atttypmod;
-		attcollation = attr->attcollation;
-		table_close(source_rel, AccessShareLock);
-	}
-
-	/* Get the materialization hypertable */
-	Hypertable *mat_ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
-	if (mat_ht == NULL)
-	{
-		ts_cache_release(&hcache);
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find materialization hypertable for continuous aggregate")));
-	}
+	column_name = agg_info->column_alias;
+	atttype = agg_info->result_type;
+	atttypmod = agg_info->result_typmod;
+	attcollation = agg_info->result_collation;
 
 	/* Check if column already exists in the continuous aggregate */
 	Oid partial_view_oid = ts_get_relation_relid(NameStr(cagg->data.partial_view_schema),
@@ -696,20 +623,9 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 				 errmsg("column \"%s\" already exists in continuous aggregate", column_name)));
 	}
 
-	/* Check if the materialization hypertable has compressed chunks */
-	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(mat_ht) ||
-		TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
-	{
-		ts_cache_release(&hcache);
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot add column to continuous aggregate with compression enabled"),
-				 errhint("Disable compression on the continuous aggregate first.")));
-	}
-
 	/*
 	 * Step 1: Add column to materialization hypertable
-	 * (for both simple columns and aggregates, we store the result in mat_ht)
+	 * (aggregates are stored as computed values in mat_ht)
 	 */
 	add_column_to_mat_hypertable(mat_ht, column_name, atttype, atttypmod, attcollation);
 
@@ -717,17 +633,15 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	 * Step 2: Update partial view
 	 * The partial view queries the source relation (raw hypertable or parent CAgg's user view)
 	 */
-	Aggref *aggref = is_aggregate ? agg_info->aggref : NULL;
-	update_view_add_expr(partial_view_oid,
-						 NameStr(cagg->data.partial_view_schema),
-						 NameStr(cagg->data.partial_view_name),
-						 source_relid,
-						 attnum,
-						 aggref,
-						 atttype,
-						 atttypmod,
-						 attcollation,
-						 column_name);
+	update_view_add_aggregate(partial_view_oid,
+							  NameStr(cagg->data.partial_view_schema),
+							  NameStr(cagg->data.partial_view_name),
+							  source_relid,
+							  agg_info->aggref,
+							  atttype,
+							  atttypmod,
+							  attcollation,
+							  column_name);
 
 	/*
 	 * Step 3: Update direct view
@@ -736,16 +650,15 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	Oid direct_view_oid = ts_get_relation_relid(NameStr(cagg->data.direct_view_schema),
 												NameStr(cagg->data.direct_view_name),
 												false);
-	update_view_add_expr(direct_view_oid,
-						 NameStr(cagg->data.direct_view_schema),
-						 NameStr(cagg->data.direct_view_name),
-						 source_relid,
-						 attnum,
-						 aggref,
-						 atttype,
-						 atttypmod,
-						 attcollation,
-						 column_name);
+	update_view_add_aggregate(direct_view_oid,
+							  NameStr(cagg->data.direct_view_schema),
+							  NameStr(cagg->data.direct_view_name),
+							  source_relid,
+							  agg_info->aggref,
+							  atttype,
+							  atttypmod,
+							  attcollation,
+							  column_name);
 
 	/*
 	 * Step 4: Update user view
@@ -799,29 +712,12 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 				lappend(mat_rte->eref->colnames, makeString(pstrdup(column_name)));
 		}
 
-		/* Update raw subquery (queries source relation)
-		 * - For simple columns: add to GROUP BY
-		 * - For aggregates: compute the aggregate on the fly */
+		/* Update raw subquery (queries source relation) - compute the aggregate on the fly */
 		Query *raw_subquery = raw_rte->subquery;
 		int raw_varno = find_rte_index_for_relid(raw_subquery, source_relid);
 		if (raw_varno > 0)
 		{
-			if (is_aggregate)
-			{
-				/* Add aggregate expression to raw subquery */
-				add_aggregate_to_query(raw_subquery, raw_varno, agg_info->aggref, column_name);
-			}
-			else
-			{
-				/* Add simple column to raw subquery with GROUP BY */
-				add_column_to_query(raw_subquery,
-									raw_varno,
-									attnum,
-									atttype,
-									atttypmod,
-									attcollation,
-									column_name);
-			}
+			add_aggregate_to_query(raw_subquery, raw_varno, agg_info->aggref, column_name);
 			/* Also update the RTE's column names to match the subquery's targetList */
 			raw_rte->eref->colnames =
 				lappend(raw_rte->eref->colnames, makeString(pstrdup(column_name)));
