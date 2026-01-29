@@ -8,6 +8,7 @@ name: Regression Windows
     branches:
       - main
       - ?.*.x
+      - prerelease_test
       - trigger/windows_tests
       - trigger/regression
   pull_request:

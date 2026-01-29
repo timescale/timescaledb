@@ -1,1 +1,0 @@
-Fixes: #9120 Fix for pre PG17, where a DELETE from a partially compressed chunk may miss records if BitmapHeapScan is being used.

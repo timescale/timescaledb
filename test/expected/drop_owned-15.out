@@ -26,11 +26,11 @@ SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
   1 | hypertable_schema | default_perm_user | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
   2 | hypertable_schema | superuser         | _timescaledb_internal  | _hyper_2                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
 
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
-----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                     | f       |      0 | f
-  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     | f       |      0 | f
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                     |      0 | f
+  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     |      0 | f
 
 DROP OWNED BY :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
@@ -38,10 +38,10 @@ SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
 ----+-------------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
   2 | hypertable_schema | superuser  | _timescaledb_internal  | _hyper_2                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
 
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
-----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
-  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     | f       |      0 | f
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+--------+-----------
+  2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     |      0 | f
 
 DROP TABLE  hypertable_schema.superuser;
 --everything should be cleaned up
@@ -49,9 +49,9 @@ SELECT * FROM _timescaledb_catalog.hypertable GROUP BY id;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | chunk_target_size | compression_state | compressed_hypertable_id | status 
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+-------------------+--------------------------+--------
 
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
- id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status | osm_chunk 
-----+---------------+-------------+------------+---------------------+---------+--------+-----------
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
+ id | hypertable_id | schema_name | table_name | compressed_chunk_id | status | osm_chunk 
+----+---------------+-------------+------------+---------------------+--------+-----------
 
 SELECT * FROM _timescaledb_catalog.dimension;
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
