@@ -36,7 +36,7 @@ jobs:
       run:  |
         cd pg_ladybug
         cmake -S . -B build -DLLVM_ROOT=/usr/lib/llvm-19
-        make -C build
+        make -C build -j $(getconf _NPROCESSORS_ONLN)
         sudo make -C build install
 
     - name: Verify pg_ladybug
@@ -51,5 +51,5 @@ jobs:
 
     - name: Build timescaledb
       run: |
-        make -C build
+        make -C build -j $(getconf _NPROCESSORS_ONLN)
 

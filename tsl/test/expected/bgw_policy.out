@@ -645,3 +645,9 @@ ERROR:  config must not be NULL
 SELECT _timescaledb_functions.policy_retention_check(NULL);
 ERROR:  config must not be NULL
 \set ON_ERROR_STOP 1
+--TEST check if alias for bgw_job table works
+SELECT * from _timescaledb_config.bgw_job WHERE id = :retenion_id_missing_schedint ORDER BY id;
+  id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |    proc_name     |        owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                     config                      |      check_schema      |       check_name       | timezone 
+------+-------------------------+-------------------+-------------+-------------+--------------+------------------------+------------------+---------------------+-----------+----------------+---------------+---------------+-------------------------------------------------+------------------------+------------------------+----------
+ 1008 | Retention Policy [1008] | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention | default_perm_user_2 | t         | f              |               |             8 | {"drop_after": "@ 14 days", "hypertable_id": 8} | _timescaledb_functions | policy_retention_check | 
+

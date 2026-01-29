@@ -1,14 +1,28 @@
-name: Test Update and Downgrade
+name: Update and Downgrade
 "on":
   push:
     branches:
       - main
       - ?.*.x
+      - prerelease_test
   pull_request:
   workflow_dispatch:
 
 jobs:
+  check_paths:
+    runs-on: ubuntu-latest
+    outputs:
+      run_ci: ${{ steps.filter.outputs.sql == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: .github/filters.yaml
+
   update_test:
+    needs: check_paths
+    if: needs.check_paths.outputs.run_ci == 'true'
     name: Update test PG${{ matrix.pg }}
     runs-on: 'ubuntu-latest'
     strategy:
@@ -56,7 +70,7 @@ jobs:
         find update_test -name postgres.log -exec grep ERROR {} \;
 
     - name: Check for coredumps
-      if: always()
+      if: failure()
       id: collectlogs
       run: |
         # wait for in progress coredumps
@@ -98,3 +112,17 @@ jobs:
       with:
         name: Update test PG${{ matrix.pg }}
         path: update_test
+
+  report_status:
+    name: Update and Downgrade summary
+    needs: [check_paths, update_test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          # If the detector failed, or the matrix failed, exit with error
+          if [[ "${{ needs.update_test.result }}" == "failure" ]]; then
+            exit 1
+          fi
+          echo "All checks passed or were safely skipped."
+

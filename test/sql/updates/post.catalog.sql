@@ -146,16 +146,14 @@ ORDER BY 1, 2, 4;
 -- The list of tables configured to be dumped.
 SELECT unnest(extconfig)::regclass::text, unnest(extcondition) FROM pg_extension WHERE extname = 'timescaledb' ORDER BY 1;
 
--- Show chunks that are not dropped and include owner in the output
-SELECT c.id, c.hypertable_id, c.schema_name, c.table_name, c.dropped, cl.relowner::regrole
+-- Show chunks that include owner in the output
+SELECT c.id, c.hypertable_id, c.schema_name, c.table_name, cl.relowner::regrole
 FROM  _timescaledb_catalog.chunk c
 INNER JOIN pg_class cl ON (cl.oid=format('%I.%I', schema_name, table_name)::regclass)
-WHERE NOT c.dropped
 ORDER BY c.id, c.hypertable_id;
 
 SELECT chunk_constraint.* FROM _timescaledb_catalog.chunk_constraint
 JOIN _timescaledb_catalog.chunk ON chunk.id = chunk_constraint.chunk_id
-WHERE NOT chunk.dropped
 ORDER BY chunk_constraint.chunk_id, chunk_constraint.dimension_slice_id, chunk_constraint.constraint_name;
 
 -- Show attnum of all regclass objects belonging to our extension
