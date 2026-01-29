@@ -8,7 +8,6 @@
 #include <utils/numeric.h>
 
 #include "dimension_vector.h"
-#include "export.h"
 #include "hypercube.h"
 
 /*
