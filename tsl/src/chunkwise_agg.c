@@ -14,7 +14,6 @@
 
 #include "chunkwise_agg.h"
 
-#include "gapfill.h"
 #include "guc.h"
 #include "import/planner.h"
 #include "nodes/chunk_append/chunk_append.h"
