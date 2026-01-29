@@ -144,7 +144,7 @@ jobs:
         echo "Running tests: $TESTS"
 
         # Run all changed tests together, allow failure
-        make -C build installcheck TESTS="$TESTS" 2>&1 | tee installcheck.log || true
+        make -C build -k installcheck TESTS="$TESTS" 2>&1 | tee installcheck.log || true
 
     - name: Show regression diffs
       if: always() && steps.check.outputs.should_run == 'true'
