@@ -70,14 +70,8 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 			continue;
 		}
 		bool isnull;
-		Datum datum = slot_getattr(ti->slot, Anum_chunk_dropped, &isnull);
-		const bool is_dropped = isnull ? false : DatumGetBool(datum);
-		if (is_dropped)
-		{
-			continue;
-		}
 
-		/* We found a chunk that is not dropped. First, try to lock it. */
+		/* We found a chunk. First, try to lock it. */
 		Name schema_name = DatumGetName(slot_getattr(ti->slot, Anum_chunk_schema_name, &isnull));
 		Assert(!isnull);
 		Name table_name = DatumGetName(slot_getattr(ti->slot, Anum_chunk_table_name, &isnull));

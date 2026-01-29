@@ -147,7 +147,6 @@ CREATE TABLE _timescaledb_catalog.chunk (
   schema_name name NOT NULL,
   table_name name NOT NULL,
   compressed_chunk_id integer ,
-  dropped boolean NOT NULL DEFAULT FALSE,
   status integer NOT NULL DEFAULT 0,
   osm_chunk boolean NOT NULL DEFAULT FALSE,
   creation_time timestamptz NOT NULL,

@@ -39,13 +39,13 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 ----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
   1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
 
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
-----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
-  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                     | f       |      0 | f
-  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk |                     | f       |      0 | f
-  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |                     | f       |      0 | f
-  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |                     | f       |      0 | f
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                     |      0 | f
+  2 |             1 | _timescaledb_internal | _hyper_1_2_chunk |                     |      0 | f
+  3 |             1 | _timescaledb_internal | _hyper_1_3_chunk |                     |      0 | f
+  4 |             1 | _timescaledb_internal | _hyper_1_4_chunk |                     |      0 | f
 
 SELECT * FROM test.show_subtables('"two_Partitions"');
                  Child                  | Tablespace 
@@ -78,9 +78,9 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 ----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
   1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
 
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
- id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status | osm_chunk 
-----+---------------+-------------+------------+---------------------+---------+--------+-----------
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
+ id | hypertable_id | schema_name | table_name | compressed_chunk_id | status | osm_chunk 
+----+---------------+-------------+------------+---------------------+--------+-----------
 
 -- should be empty
 SELECT * FROM test.show_subtables('"two_Partitions"');
@@ -96,12 +96,12 @@ INSERT INTO public."two_Partitions"("timeCustom", device_id, series_0, series_1)
 (1257987600000000000, 'dev1', 1.5, 2),
 (1257894000000000000, 'dev2', 1.5, 1),
 (1257894002000000000, 'dev1', 2.5, 3);
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
- id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
-----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
-  5 |             1 | _timescaledb_internal | _hyper_1_5_chunk |                     | f       |      0 | f
-  6 |             1 | _timescaledb_internal | _hyper_1_6_chunk |                     | f       |      0 | f
-  7 |             1 | _timescaledb_internal | _hyper_1_7_chunk |                     | f       |      0 | f
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk FROM _timescaledb_catalog.chunk;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+--------+-----------
+  5 |             1 | _timescaledb_internal | _hyper_1_5_chunk |                     |      0 | f
+  6 |             1 | _timescaledb_internal | _hyper_1_6_chunk |                     |      0 | f
+  7 |             1 | _timescaledb_internal | _hyper_1_7_chunk |                     |      0 | f
 
 CREATE VIEW dependent_view AS SELECT * FROM _timescaledb_internal._hyper_1_5_chunk;
 CREATE OR REPLACE FUNCTION test_trigger()

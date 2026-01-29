@@ -851,7 +851,7 @@ BEGIN
 			_timescaledb_catalog.chunk comp,
 			(SELECT show_chunks('bool_table') as c UNION SELECT show_chunks('int_table') as c) as x
 		WHERE
-			uncomp.dropped IS FALSE AND uncomp.compressed_chunk_id IS NOT NULL AND
+			uncomp.compressed_chunk_id IS NOT NULL AND
 			comp.id = uncomp.compressed_chunk_id AND
 			x.c = format('%I.%I', uncomp.schema_name, uncomp.table_name)::regclass
 	LOOP

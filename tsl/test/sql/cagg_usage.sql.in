@@ -295,7 +295,7 @@ SELECT * FROM cagg4;
 -- should return 4 chunks
 SELECT
    c.table_name as chunk_name,
-   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+   c.status as chunk_status, c.compressed_chunk_id as comp_id
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
@@ -306,33 +306,29 @@ SELECT drop_chunks('metrics', older_than => '2000-01-01 00:00:00-02'::timestampt
 -- should return 3 chunks
 SELECT
    c.table_name as chunk_name,
-   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+   c.status as chunk_status, c.compressed_chunk_id as comp_id
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id AND h.table_name = 'metrics'
 ORDER BY 1;
 
--- dropping chunk should NOT remove the catalog data
+-- dropping chunk should remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-13 00:00:00-02'::timestamptz);
 
--- should return 3 chunks and one of them should be marked as dropped
+-- should return 2 chunks
 SELECT
    c.table_name as chunk_name,
-   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+   c.status as chunk_status, c.compressed_chunk_id as comp_id
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
 
--- remove the fake old format cagg
-DROP MATERIALIZED VIEW cagg1;
-
 -- dropping chunk should remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-25 00:00:00-02'::timestamptz);
 
--- should return 2 chunks and one of them should be marked as dropped
--- because we dropped chunk before when an old format cagg exists
+-- should return 1 chunk
 SELECT
    c.table_name as chunk_name,
-   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+   c.status as chunk_status, c.compressed_chunk_id as comp_id
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
