@@ -285,20 +285,57 @@ UNION ALL
   WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, test_ht."time")), test_ht.device_id;
 
+-- Test adding aggregate with double-quoted alias containing special characters
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'max(humidity) AS "weird and insane column name, but still valid on Postgres!"');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify it was added with the special alias
+\d+ test_cagg_rt
+                                                           View "public.test_cagg_rt"
+                           Column                           |           Type           | Collation | Nullable | Default | Storage | Description 
+------------------------------------------------------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket                                                     | timestamp with time zone |           |          |         | plain   | 
+ device_id                                                  | integer                  |           |          |         | plain   | 
+ avg_temp                                                   | double precision         |           |          |         | plain   | 
+ min_temp                                                   | double precision         |           |          |         | plain   | 
+ sum                                                        | double precision         |           |          |         | plain   | 
+ weird and insane column name, but still valid on Postgres! | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_4.bucket,
+    _materialized_hypertable_4.device_id,
+    _materialized_hypertable_4.avg_temp,
+    _materialized_hypertable_4.min_temp,
+    _materialized_hypertable_4.sum,
+    _materialized_hypertable_4."weird and insane column name, but still valid on Postgres!"
+   FROM _timescaledb_internal._materialized_hypertable_4
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, test_ht."time") AS bucket,
+    test_ht.device_id,
+    avg(test_ht.temperature) AS avg_temp,
+    min(test_ht.temperature) AS min_temp,
+    sum(test_ht.humidity) AS sum,
+    max(test_ht.humidity) AS "weird and insane column name, but still valid on Postgres!"
+   FROM test_ht
+  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 day'::interval, test_ht."time")), test_ht.device_id;
+
 -- Insert new data and check real-time aggregation works
 INSERT INTO test_ht VALUES
     ('2020-01-03 00:00:00', 1, 23.0, 56.0, 'indoor'),
     ('2020-01-03 01:00:00', 2, 32.0, 72.0, 'outdoor');
 -- Real-time CAgg should show new data without refresh
 SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
-            bucket            | device_id |     avg_temp     | min_temp | sum 
-------------------------------+-----------+------------------+----------+-----
- Tue Dec 31 16:00:00 2019 PST |         1 |               21 |       20 |    
- Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |       25 |    
- Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19 |    
- Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30 |    
- Thu Jan 02 16:00:00 2020 PST |         1 |               23 |       23 |  56
- Thu Jan 02 16:00:00 2020 PST |         2 |               32 |       32 |  72
+            bucket            | device_id |     avg_temp     | min_temp | sum | weird and insane column name, but still valid on Postgres! 
+------------------------------+-----------+------------------+----------+-----+------------------------------------------------------------
+ Tue Dec 31 16:00:00 2019 PST |         1 |               21 |       20 |     |                                                           
+ Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |       25 |     |                                                           
+ Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19 |     |                                                           
+ Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30 |     |                                                           
+ Thu Jan 02 16:00:00 2020 PST |         1 |               23 |       23 |  56 |                                                         56
+ Thu Jan 02 16:00:00 2020 PST |         2 |               32 |       32 |  72 |                                                         72
 
 -- =====================================================
 -- Hierarchical continuous aggregate tests

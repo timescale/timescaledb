@@ -136,6 +136,12 @@ SELECT add_continuous_aggregate_column('test_cagg_rt', 'sum(humidity)');
 -- Verify it was added with auto-generated alias
 \d+ test_cagg_rt
 
+-- Test adding aggregate with double-quoted alias containing special characters
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'max(humidity) AS "weird and insane column name, but still valid on Postgres!"');
+
+-- Verify it was added with the special alias
+\d+ test_cagg_rt
+
 -- Insert new data and check real-time aggregation works
 INSERT INTO test_ht VALUES
     ('2020-01-03 00:00:00', 1, 23.0, 56.0, 'indoor'),
