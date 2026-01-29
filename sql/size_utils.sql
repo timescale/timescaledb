@@ -35,7 +35,6 @@ SELECT
 FROM
     _timescaledb_catalog.hypertable h
     JOIN _timescaledb_catalog.chunk c ON h.id = c.hypertable_id
-        AND c.dropped IS FALSE
     JOIN pg_class cl ON cl.relname = c.table_name AND cl.relkind = 'r'
     JOIN pg_namespace n ON n.oid = cl.relnamespace
     AND n.nspname = c.schema_name
@@ -349,7 +348,7 @@ BEGIN
     IF FOUND THEN
         RETURN (SELECT coalesce(sum(_timescaledb_functions.get_approx_row_count(format('%I.%I',schema_name,table_name))),0)
           FROM _timescaledb_catalog.chunk
-          WHERE hypertable_id = v_hypertable_id AND NOT dropped);
+          WHERE hypertable_id = v_hypertable_id);
     END IF;
 
 		IF EXISTS (SELECT FROM pg_inherits WHERE inhparent = relation) THEN
@@ -419,7 +418,6 @@ FROM
     _timescaledb_catalog.hypertable AS srcht
     JOIN _timescaledb_catalog.chunk AS srcch ON srcht.id = srcch.hypertable_id
         AND srcht.compressed_hypertable_id IS NOT NULL
-        AND srcch.dropped = FALSE
     LEFT JOIN _timescaledb_catalog.compression_chunk_size map ON srcch.id = map.chunk_id;
 
 GRANT SELECT ON _timescaledb_internal.compressed_chunk_stats TO PUBLIC;
