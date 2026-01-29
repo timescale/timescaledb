@@ -1,1 +1,0 @@
-Implements: #9094 Enable the columnar pipeline for grouping without aggregation to speed up the queries of the form `select column from table group by column`.

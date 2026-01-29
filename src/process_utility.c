@@ -1423,7 +1423,7 @@ process_truncate(ProcessUtilityArgs *args)
 						{
 							Chunk *compressed_chunk =
 								ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
-							if (compressed_chunk != NULL && !compressed_chunk->fd.dropped)
+							if (compressed_chunk != NULL)
 							{
 								/* Create list item into the same context of the list. */
 								oldctx = MemoryContextSwitchTo(parsetreectx);
@@ -5615,11 +5615,7 @@ process_drop_table(EventTriggerDropObject *obj)
 	EventTriggerDropRelation *table = (EventTriggerDropRelation *) obj;
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE || obj->type == EVENT_TRIGGER_DROP_FOREIGN_TABLE);
-	ts_chunk_delete_by_relid_and_relname(table->relid,
-										 table->schema,
-										 table->name,
-										 DROP_RESTRICT,
-										 false);
+	ts_chunk_delete_by_relid_and_relname(table->relid, table->schema, table->name, DROP_RESTRICT);
 	ts_hypertable_delete_by_name(table->schema, table->name);
 	/*
 	 * Normally, dependent catalogs (like compression settings) are cleaned up

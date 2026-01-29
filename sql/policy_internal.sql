@@ -107,8 +107,7 @@ BEGIN
       INNER JOIN pg_class pgc ON pgc.oid = show.oid
       INNER JOIN pg_namespace pgns ON pgc.relnamespace = pgns.oid
       INNER JOIN _timescaledb_catalog.chunk ch ON ch.table_name = pgc.relname AND ch.schema_name = pgns.nspname AND ch.hypertable_id = htid
-    WHERE NOT ch.dropped
-    AND NOT ch.osm_chunk
+    WHERE NOT ch.osm_chunk
     -- Checking for chunks which are not fully compressed and not frozen
     AND ch.status != status_fully_compressed
     AND ch.status & bit_frozen = 0

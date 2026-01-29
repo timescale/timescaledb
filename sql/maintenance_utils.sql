@@ -158,7 +158,6 @@ BEGIN
   FOR _chunk_id IN
     SELECT id FROM _timescaledb_catalog.chunk
     WHERE hypertable_id = _hypertable_id
-    AND dropped IS TRUE
     AND NOT EXISTS (
         SELECT FROM information_schema.tables
         WHERE tables.table_schema = chunk.schema_name

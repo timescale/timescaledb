@@ -4,6 +4,7 @@ name: pg_upgrade test
     branches:
       - main
       - ?.*.x
+      - prerelease_test
   pull_request:
 
 jobs:
