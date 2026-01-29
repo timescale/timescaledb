@@ -1141,7 +1141,10 @@ chunk_fully_covered(HypertableRestrictInfo *hri, Chunk *chunk)
 	Ensure(dri->base.dimension->type == DIMENSION_TYPE_OPEN, "primary dimension must be open");
 	Ensure(hri->num_base_restrictions > 0, "must have base restrictions");
 
-	if (dri->lower_strategy == InvalidStrategy && dri->upper_strategy == InvalidStrategy)
+	if (IS_OSM_CHUNK(chunk) ||
+		(dri->lower_strategy == InvalidStrategy && dri->upper_strategy == InvalidStrategy) ||
+		(chunk->cube->slices[0]->fd.range_start == TS_TIME_NOBEGIN ||
+		 chunk->cube->slices[0]->fd.range_end == TS_TIME_NOEND))
 		return false;
 
 	/*

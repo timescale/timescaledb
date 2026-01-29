@@ -173,7 +173,10 @@ DROP FUNCTION IF EXISTS _timescaledb_debug.extension_state();
 DROP SCHEMA IF EXISTS _timescaledb_debug;
 
 ALTER TABLE _timescaledb_config.bgw_job SET SCHEMA _timescaledb_catalog;
-DROP SCHEMA IF EXISTS _timescaledb_config;
+--temporary alias for bgw_job
+CREATE OR REPLACE VIEW _timescaledb_config.bgw_job AS
+SELECT * from _timescaledb_catalog.bgw_job;
+GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_config TO PUBLIC;
 
 -- Remove legacy partialize/finalize aggregate functions. It should be
 -- conditional because on 2.12.0 we moved from internal to functions schema

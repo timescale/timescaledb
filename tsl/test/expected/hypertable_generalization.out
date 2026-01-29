@@ -19,6 +19,22 @@ ERROR:  dimension cannot be NULL
 SELECT add_dimension('n',NULL::_timescaledb_internal.dimension_info);
 ERROR:  dimension cannot be NULL
 \set ON_ERROR_STOP 1
+-- test int types
+SELECT by_range('id',2::int2);
+    by_range     
+-----------------
+ range//id//2//-
+
+SELECT by_range('id',4::int4);
+    by_range     
+-----------------
+ range//id//4//-
+
+SELECT by_range('id',8::int8);
+    by_range     
+-----------------
+ range//id//8//-
+
 SELECT by_range('id');
     by_range     
 -----------------
@@ -75,6 +91,8 @@ SELECT 'hash//id//3//-'::_timescaledb_internal.dimension_info;
 ERROR:  cannot construct type "dimension_info" from string at character 8
 SELECT by_range(NULL::name);
 ERROR:  column_name cannot be NULL
+SELECT by_range('foo',0::regproc);
+ERROR:  unsupported chunk interval type 24
 SELECT by_hash(NULL::name, 3);
 ERROR:  column_name cannot be NULL
 \set ON_ERROR_STOP 1

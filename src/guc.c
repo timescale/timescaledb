@@ -6,8 +6,10 @@
 #include <postgres.h>
 #include <miscadmin.h>
 #include <parser/parse_func.h>
+#include <utils/fmgrprotos.h>
 #include <utils/guc.h>
 #include <utils/regproc.h>
+#include <utils/timestamp.h>
 #include <utils/varlena.h>
 
 #include "compat/compat.h"
@@ -118,6 +120,7 @@ TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
 TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
 bool ts_guc_enable_event_triggers = false;
+bool ts_guc_enable_chunk_auto_publication = false;
 bool ts_guc_debug_skip_scan_info = false;
 
 /* Only settable in debug mode for testing */
@@ -127,7 +130,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
-TSDLLEXPORT bool ts_guc_enable_columnarindexscan = true;
+TSDLLEXPORT bool ts_guc_enable_columnarindexscan = false;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 #if PG16_GE
@@ -202,6 +205,7 @@ static bool ts_guc_enable_hypertable_create = true;
 static bool ts_guc_enable_hypertable_compression = true;
 static bool ts_guc_enable_cagg_create = true;
 static bool ts_guc_enable_policy_create = true;
+static char *ts_guc_default_chunk_time_interval = NULL;
 
 typedef struct
 {
@@ -403,6 +407,73 @@ chunk_skipping_assign_hook(bool newval, void *extra)
 {
 	if (newval)
 		ts_hypertable_cache_invalidate_callback();
+}
+
+#if PG16_LT
+/*
+ * guc_malloc is not public in PostgreSQL < 16.
+ */
+static void *
+guc_malloc(int elevel, size_t size)
+{
+	void *data;
+
+	/* Avoid unportable behavior of malloc(0) */
+	if (size == 0)
+		size = 1;
+	data = malloc(size);
+	if (data == NULL)
+		ereport(elevel, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("out of memory")));
+	return data;
+}
+#endif
+
+static bool
+check_default_chunk_time_interval(char **newval, void **extra, GucSource source)
+{
+	/*
+	 * If GUC is unset, we treat that as a valid value for "no default chunk interval".
+	 * The chunk interval is instead computed in the legacy way using hard-coded defaults.
+	 */
+	if (*newval == NULL)
+	{
+		Assert(*extra == NULL);
+		return true;
+	}
+
+	/* Test that the text value is a valid Interval */
+	LOCAL_FCINFO(fcinfo, 3);
+	InitFunctionCallInfoData(*fcinfo, NULL, 3, InvalidOid, NULL, NULL);
+	fcinfo->args[0].value = CStringGetDatum(*newval);
+	fcinfo->args[0].isnull = false;
+	fcinfo->args[1].value = ObjectIdGetDatum(INTERVALOID);
+	fcinfo->args[1].isnull = false;
+	fcinfo->args[2].value = Int32GetDatum(-1);
+	fcinfo->args[2].isnull = false;
+
+	Datum interval = interval_in(fcinfo);
+
+	if (fcinfo->isnull)
+	{
+		GUC_check_errdetail("The default chunk interval must be a valid INTERVAL.");
+		return false;
+	}
+
+	Interval *parsed = DatumGetIntervalP(interval);
+	/* Save the new Interval in extra. The old extra is freed automatically. */
+	*extra = guc_malloc(ERROR, sizeof(Interval));
+	memcpy(*extra, parsed, sizeof(Interval));
+	pfree(parsed);
+
+	return true;
+}
+
+Interval *default_chunk_time_interval = NULL;
+
+static void
+assign_default_chunk_time_interval(const char *newval, void *extra)
+{
+	default_chunk_time_interval = extra;
 }
 
 void
@@ -975,6 +1046,18 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_chunk_auto_publication"),
+							 "Enable automatic chunk publication",
+							 "Enable automatically adding newly created chunks to the publication "
+							 "of their hypertable",
+							 &ts_guc_enable_chunk_auto_publication,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_null_compression"),
 							 "Debug only flag to enable NULL compression",
@@ -1110,10 +1193,10 @@ _guc_init(void)
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarindexscan"),
 							 "Enable metadata-only optimization for ColumnarScans",
-							 "Enable returning results directly from compression "
-							 "metadata without decompression",
+							 "Enable experimental support for returning results directly from "
+							 "compression metadata without decompression",
 							 &ts_guc_enable_columnarindexscan,
-							 true,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -1332,6 +1415,22 @@ _guc_init(void)
 							 /* check_hook= */ NULL,
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
+
+	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("default_chunk_time_interval"),
+							   /* short_desc= */ "Default chunk time interval for new hypertables",
+							   /* long_desc= */
+							   "Chunk time interval to use for a new hypertable, unless a specific "
+							   "chunk time interval is set on the hypertable. The default chunk "
+							   "interval is only used for hypertables with a compatible time "
+							   "type, e.g., timestamp, date, and UUID (v7). Hypertables using an "
+							   "integer partitioning column have hard-coded defaults.",
+							   /* valueAddr= */ &ts_guc_default_chunk_time_interval,
+							   NULL,
+							   /* context= */ PGC_USERSET,
+							   /* flags= */ 0,
+							   /* check_hook= */ check_default_chunk_time_interval,
+							   /* assign_hook= */ assign_default_chunk_time_interval,
+							   /* show_hook= */ NULL);
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("shutdown_bgw_scheduler"),

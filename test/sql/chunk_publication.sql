@@ -1,0 +1,370 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+
+-- Test automatic addition of chunks to publications
+-- Publications require superuser privileges
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+SET client_min_messages = WARNING;
+SET timescaledb.enable_chunk_auto_publication = true;
+
+-- Test 1: Basic single publication
+CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
+
+-- Insert to create first chunk
+INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
+
+-- Create publication and add hypertable
+CREATE PUBLICATION test_pub FOR TABLE test_hypertable;
+
+-- Verify initial state (1 chunk)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub' ORDER BY schemaname, tablename;
+
+-- Insert to create 2 more chunks (total 3 chunks)
+INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
+INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
+
+-- Verify state (3 chunks)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub' ORDER BY schemaname, tablename;
+
+-- Insert to create 5 more chunks (total 8 chunks)
+INSERT INTO test_hypertable VALUES ('2024-01-04 00:00:00+00', 4, 4.0, 'data4');
+INSERT INTO test_hypertable VALUES ('2024-01-05 00:00:00+00', 5, 5.0, 'data5');
+INSERT INTO test_hypertable VALUES ('2024-01-06 00:00:00+00', 6, 6.0, 'data6');
+INSERT INTO test_hypertable VALUES ('2024-01-07 00:00:00+00', 7, 7.0, 'data7');
+INSERT INTO test_hypertable VALUES ('2024-01-08 00:00:00+00', 8, 8.0, 'data8');
+
+-- Verify final state (8 chunks)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub' ORDER BY schemaname, tablename;
+
+-- Verify chunk removal via DROP TABLE
+SELECT chunk_schema || '.' || chunk_name as "CHUNK_TO_DROP"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'test_hypertable'
+ORDER BY chunk_schema, chunk_name LIMIT 1 \gset
+
+-- Verify chunk removal via DROP TABLE
+DROP TABLE :CHUNK_TO_DROP;
+
+-- Verify chunk was removed from publication (7 chunks remaining)
+SELECT chunk_schema, chunk_name
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'test_hypertable'
+ORDER BY chunk_schema, chunk_name;
+
+SELECT schemaname, tablename, attnames, rowfilter
+FROM pg_publication_tables
+WHERE pubname = 'test_pub'
+ORDER BY schemaname, tablename;
+
+-- Verify chunk removal via drop_chunks()
+SELECT drop_chunks('test_hypertable', older_than => '2024-01-07 00:00:00+00'::timestamptz);
+
+-- Verify dropped chunks were removed from publication (2 chunks remaining: 2024-01-07 and 2024-01-08)
+SELECT chunk_schema, chunk_name
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'test_hypertable'
+ORDER BY chunk_schema, chunk_name;
+
+SELECT schemaname, tablename, attnames, rowfilter
+FROM pg_publication_tables
+WHERE pubname = 'test_pub'
+ORDER BY schemaname, tablename;
+
+-- Verify chunk removal via TRUNCATE
+TRUNCATE TABLE test_hypertable;
+
+-- Verify all chunks were removed from publication (0 chunks remaining)
+SELECT chunk_schema, chunk_name
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'test_hypertable'
+ORDER BY chunk_schema, chunk_name;
+
+SELECT schemaname, tablename, attnames, rowfilter
+FROM pg_publication_tables
+WHERE pubname = 'test_pub'
+ORDER BY schemaname, tablename;
+
+-- Cleanup
+DROP PUBLICATION test_pub CASCADE;
+DROP TABLE test_hypertable CASCADE;
+
+-- Test 2: Multiple publications
+CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
+
+-- Insert to create first chunk
+INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
+
+-- Create pub1 and add hypertable
+CREATE PUBLICATION test_pub1 FOR TABLE test_hypertable;
+
+-- Verify (1 chunk in pub1)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub1' ORDER BY schemaname, tablename;
+
+-- Insert to create 2 more chunks (total 3 chunks)
+INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
+INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
+
+-- Verify (3 chunks in pub1)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub1' ORDER BY schemaname, tablename;
+
+-- Create pub2 and add hypertable
+CREATE PUBLICATION test_pub2 FOR TABLE test_hypertable;
+
+-- Verify (3 chunks in pub1, 3 chunks in pub2)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub1' ORDER BY schemaname, tablename;
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub2' ORDER BY schemaname, tablename;
+
+-- Insert to create 5 more chunks (total 8 chunks)
+INSERT INTO test_hypertable VALUES ('2024-01-04 00:00:00+00', 4, 4.0, 'data4');
+INSERT INTO test_hypertable VALUES ('2024-01-05 00:00:00+00', 5, 5.0, 'data5');
+INSERT INTO test_hypertable VALUES ('2024-01-06 00:00:00+00', 6, 6.0, 'data6');
+INSERT INTO test_hypertable VALUES ('2024-01-07 00:00:00+00', 7, 7.0, 'data7');
+INSERT INTO test_hypertable VALUES ('2024-01-08 00:00:00+00', 8, 8.0, 'data8');
+
+-- Verify (8 chunks in pub1, 8 chunks in pub2)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub1' ORDER BY schemaname, tablename;
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub2' ORDER BY schemaname, tablename;
+
+-- Cleanup
+DROP PUBLICATION test_pub1 CASCADE;
+DROP PUBLICATION test_pub2 CASCADE;
+DROP TABLE test_hypertable CASCADE;
+
+-- Test 3: Row filtering (WHERE clause with multiple conditions)
+CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
+
+-- Insert to create first chunk
+INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
+
+-- Create publication with row filter (multiple conditions)
+CREATE PUBLICATION test_pub_row_filter FOR TABLE test_hypertable WHERE (device_id > 10 AND value > 1000);
+
+-- Verify initial state (1 chunk with row filter)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_row_filter' ORDER BY schemaname, tablename;
+
+-- Insert to create 2 more chunks (total 3 chunks)
+INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
+INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
+
+-- Verify state (3 chunks with row filters)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_row_filter' ORDER BY schemaname, tablename;
+
+-- Insert to create 5 more chunks (total 8 chunks)
+INSERT INTO test_hypertable VALUES ('2024-01-04 00:00:00+00', 4, 4.0, 'data4');
+INSERT INTO test_hypertable VALUES ('2024-01-05 00:00:00+00', 5, 5.0, 'data5');
+INSERT INTO test_hypertable VALUES ('2024-01-06 00:00:00+00', 6, 6.0, 'data6');
+INSERT INTO test_hypertable VALUES ('2024-01-07 00:00:00+00', 7, 7.0, 'data7');
+INSERT INTO test_hypertable VALUES ('2024-01-08 00:00:00+00', 8, 8.0, 'data8');
+
+-- Verify final state (8 chunks with row filters)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_row_filter' ORDER BY schemaname, tablename;
+
+-- Cleanup
+DROP PUBLICATION test_pub_row_filter CASCADE;
+DROP TABLE test_hypertable CASCADE;
+
+-- Test 4: Column filtering
+CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
+
+-- Insert to create first chunk
+INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
+
+-- Create publication with column filter
+CREATE PUBLICATION test_pub_col_filter FOR TABLE test_hypertable (time, device_id);
+
+-- Verify initial state (1 chunk with column filter)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_col_filter' ORDER BY schemaname, tablename;
+
+-- Insert to create 2 more chunks (total 3 chunks)
+INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
+INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
+
+-- Verify state (3 chunks with column filters)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_col_filter' ORDER BY schemaname, tablename;
+
+-- Insert to create 5 more chunks (total 8 chunks)
+INSERT INTO test_hypertable VALUES ('2024-01-04 00:00:00+00', 4, 4.0, 'data4');
+INSERT INTO test_hypertable VALUES ('2024-01-05 00:00:00+00', 5, 5.0, 'data5');
+INSERT INTO test_hypertable VALUES ('2024-01-06 00:00:00+00', 6, 6.0, 'data6');
+INSERT INTO test_hypertable VALUES ('2024-01-07 00:00:00+00', 7, 7.0, 'data7');
+INSERT INTO test_hypertable VALUES ('2024-01-08 00:00:00+00', 8, 8.0, 'data8');
+
+-- Verify final state (8 chunks with column filters)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_col_filter' ORDER BY schemaname, tablename;
+
+-- Cleanup
+DROP PUBLICATION test_pub_col_filter CASCADE;
+DROP TABLE test_hypertable CASCADE;
+
+-- Test 5: Combined row + column filtering
+CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
+
+-- Insert to create first chunk
+INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
+
+-- Create publication with both row and column filters
+CREATE PUBLICATION test_pub_combined FOR TABLE test_hypertable (time, device_id) WHERE (device_id > 10);
+
+-- Verify initial state (1 chunk with both filters)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_combined' ORDER BY schemaname, tablename;
+
+-- Insert to create 2 more chunks (total 3 chunks)
+INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
+INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
+
+-- Verify state (3 chunks with both filters)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_combined' ORDER BY schemaname, tablename;
+
+-- Insert to create 5 more chunks (total 8 chunks)
+INSERT INTO test_hypertable VALUES ('2024-01-04 00:00:00+00', 4, 4.0, 'data4');
+INSERT INTO test_hypertable VALUES ('2024-01-05 00:00:00+00', 5, 5.0, 'data5');
+INSERT INTO test_hypertable VALUES ('2024-01-06 00:00:00+00', 6, 6.0, 'data6');
+INSERT INTO test_hypertable VALUES ('2024-01-07 00:00:00+00', 7, 7.0, 'data7');
+INSERT INTO test_hypertable VALUES ('2024-01-08 00:00:00+00', 8, 8.0, 'data8');
+
+-- Verify final state (8 chunks with both filters)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_combined' ORDER BY schemaname, tablename;
+
+-- Cleanup
+DROP PUBLICATION test_pub_combined CASCADE;
+DROP TABLE test_hypertable CASCADE;
+
+-- Test 6: FOR ALL TABLES publication
+CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
+
+-- Insert to create first chunk
+INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
+
+-- Create FOR ALL TABLES publication
+CREATE PUBLICATION test_pub_all_tables FOR ALL TABLES;
+
+-- Verify initial state (1 chunk)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_all_tables' AND tablename LIKE '%test_hypertable%' OR tablename LIKE '_hyper_%' ORDER BY schemaname, tablename;
+
+-- Insert to create 2 more chunks (total 3 chunks)
+INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
+INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
+
+-- Verify state (3 chunks)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_all_tables' AND tablename LIKE '%test_hypertable%' OR tablename LIKE '_hyper_%' ORDER BY schemaname, tablename;
+
+-- Insert to create 5 more chunks (total 8 chunks)
+INSERT INTO test_hypertable VALUES ('2024-01-04 00:00:00+00', 4, 4.0, 'data4');
+INSERT INTO test_hypertable VALUES ('2024-01-05 00:00:00+00', 5, 5.0, 'data5');
+INSERT INTO test_hypertable VALUES ('2024-01-06 00:00:00+00', 6, 6.0, 'data6');
+INSERT INTO test_hypertable VALUES ('2024-01-07 00:00:00+00', 7, 7.0, 'data7');
+INSERT INTO test_hypertable VALUES ('2024-01-08 00:00:00+00', 8, 8.0, 'data8');
+
+-- Verify final state (8 chunks)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub_all_tables' AND tablename LIKE '%test_hypertable%' OR tablename LIKE '_hyper_%' ORDER BY schemaname, tablename;
+
+-- Cleanup
+DROP PUBLICATION test_pub_all_tables CASCADE;
+DROP TABLE test_hypertable CASCADE;
+
+-- Test 7: Edge case - Hypertable not in any publication
+CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
+
+-- Insert to create 8 chunks without any publication
+INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
+INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
+INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
+INSERT INTO test_hypertable VALUES ('2024-01-04 00:00:00+00', 4, 4.0, 'data4');
+INSERT INTO test_hypertable VALUES ('2024-01-05 00:00:00+00', 5, 5.0, 'data5');
+INSERT INTO test_hypertable VALUES ('2024-01-06 00:00:00+00', 6, 6.0, 'data6');
+INSERT INTO test_hypertable VALUES ('2024-01-07 00:00:00+00', 7, 7.0, 'data7');
+INSERT INTO test_hypertable VALUES ('2024-01-08 00:00:00+00', 8, 8.0, 'data8');
+
+-- Verify chunks were created successfully
+SELECT COUNT(*) as chunks_created FROM timescaledb_information.chunks
+WHERE hypertable_name = 'test_hypertable';
+
+-- Cleanup
+DROP TABLE test_hypertable CASCADE;
+
+-- Test 8: Edge case - Publication dropped before chunk creation
+CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
+
+-- Insert to create first chunk
+INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
+
+-- Create publication and add hypertable
+CREATE PUBLICATION test_pub FOR TABLE test_hypertable;
+
+-- Verify (1 chunk in publication)
+SELECT schemaname, tablename, attnames, rowfilter FROM pg_publication_tables WHERE pubname = 'test_pub' ORDER BY schemaname, tablename;
+
+-- Drop the publication
+DROP PUBLICATION test_pub;
+
+-- Insert to create 2 more chunks (total 3 chunks)
+-- Should succeed with WARNING, not error
+INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
+INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
+
+-- Verify chunks were created successfully despite missing publication
+SELECT COUNT(*) as chunks_after_pub_drop FROM timescaledb_information.chunks
+WHERE hypertable_name = 'test_hypertable';
+
+-- Cleanup
+DROP TABLE test_hypertable CASCADE;
+
+-- Test 9: GUC control of chunk publication
+CREATE TABLE test_hypertable (time timestamptz NOT NULL, device_id int, value float, extra text);
+SELECT create_hypertable('test_hypertable', 'time', chunk_time_interval => interval '1 day');
+
+-- Insert to create first chunk
+INSERT INTO test_hypertable VALUES ('2024-01-01 00:00:00+00', 1, 1.0, 'data1');
+
+-- Create publication
+CREATE PUBLICATION test_pub_guc FOR TABLE test_hypertable;
+
+-- Verify initial state (1 chunk)
+SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = 'test_pub_guc' ORDER BY schemaname, tablename;
+
+-- Test Part 1: GUC enabled - chunks should be added to publication automatically
+-- Insert to create a new chunk - should be added to publication automatically
+INSERT INTO test_hypertable VALUES ('2024-01-02 00:00:00+00', 2, 2.0, 'data2');
+
+-- Verify (2 chunks in publication)
+SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = 'test_pub_guc' ORDER BY schemaname, tablename;
+
+-- Test Part 2: Disable the GUC and create another chunk
+SET timescaledb.enable_chunk_auto_publication = false;
+
+-- Insert to create a new chunk - should NOT be added to publication
+INSERT INTO test_hypertable VALUES ('2024-01-03 00:00:00+00', 3, 3.0, 'data3');
+
+-- Verify (still 2 chunks in publication, chunk 3 should not be there)
+SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = 'test_pub_guc' ORDER BY schemaname, tablename;
+
+-- Verify that chunk 3 exists but is not in the publication
+SELECT chunk_schema, chunk_name FROM timescaledb_information.chunks WHERE hypertable_name = 'test_hypertable';
+
+-- Test Part 3: Re-enable the GUC and create another chunk
+SET timescaledb.enable_chunk_auto_publication = true;
+
+-- Insert to create a new chunk - should be added to publication again
+INSERT INTO test_hypertable VALUES ('2024-01-04 00:00:00+00', 4, 4.0, 'data4');
+
+-- Verify (3 chunks in publication: chunk 1, 2, and 4; chunk 3 still missing)
+SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = 'test_pub_guc' ORDER BY schemaname, tablename;
+
+SELECT chunk_schema, chunk_name FROM timescaledb_information.chunks WHERE hypertable_name = 'test_hypertable';
+
+-- Cleanup
+DROP PUBLICATION test_pub_guc CASCADE;
+DROP TABLE test_hypertable CASCADE;
+
+RESET client_min_messages;
