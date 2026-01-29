@@ -20,6 +20,7 @@
 #include <commands/tablecmds.h>
 #include <commands/view.h>
 #include <fmgr.h>
+#include <lib/stringinfo.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/parsenodes.h>
@@ -100,7 +101,7 @@ static AggregateExprInfo *
 parse_aggregate_expression(const char *expr_str, Oid source_relid)
 {
 	AggregateExprInfo *info;
-	char *query_str;
+	StringInfoData query_str;
 	RawStmt *raw_stmt;
 	List *raw_parsetree_list;
 	SelectStmt *select_stmt;
@@ -108,46 +109,35 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	List *column_names = NIL;
 
 	/* Build a SELECT statement to parse the expression */
-	query_str = psprintf("SELECT %s", expr_str);
+	initStringInfo(&query_str);
+	appendStringInfo(&query_str, "SELECT %s", expr_str);
 
 	/* Parse the query */
-	raw_parsetree_list = raw_parser(query_str, RAW_PARSE_DEFAULT);
+	raw_parsetree_list = raw_parser(query_str.data, RAW_PARSE_DEFAULT);
 	if (list_length(raw_parsetree_list) != 1)
-	{
-		pfree(query_str);
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("invalid aggregate expression: \"%s\"", expr_str)));
-	}
 
 	raw_stmt = linitial_node(RawStmt, raw_parsetree_list);
 	if (!IsA(raw_stmt->stmt, SelectStmt))
-	{
-		pfree(query_str);
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("invalid aggregate expression: \"%s\"", expr_str)));
-	}
 
 	select_stmt = (SelectStmt *) raw_stmt->stmt;
 	if (list_length(select_stmt->targetList) != 1)
-	{
-		pfree(query_str);
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR), errmsg("only one aggregate expression allowed")));
-	}
 
 	res_target = linitial_node(ResTarget, select_stmt->targetList);
 
 	/* Check if it's a FuncCall (aggregate functions are parsed as FuncCall initially) */
 	if (!IsA(res_target->val, FuncCall))
-	{
-		pfree(query_str);
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("expression must be an aggregate function"),
 				 errhint("Use syntax like 'sum(column) AS alias' or 'avg(column)'.")));
-	}
 
 	FuncCall *func_call = (FuncCall *) res_target->val;
 
@@ -183,12 +173,9 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	}
 
 	if (!OidIsValid(funcoid))
-	{
-		pfree(query_str);
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("\"%s\" is not an aggregate function", NameListToString(funcname))));
-	}
 
 	/* Collect column references from the aggregate arguments */
 	collect_column_walker((Node *) func_call->args, &column_names);
@@ -200,14 +187,11 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 		char *colname = strVal(lfirst(lc));
 		AttrNumber attnum = get_attnum(source_relid, colname);
 		if (!AttributeNumberIsValid(attnum))
-		{
-			pfree(query_str);
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
 					 errmsg("column \"%s\" referenced in aggregate does not exist in source "
 							"relation",
 							colname)));
-		}
 	}
 
 	/* Now we need to transform the expression to get the Aggref and type info */
@@ -227,12 +211,9 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	table_close(source_rel, AccessShareLock);
 
 	if (!IsA(transformed, Aggref))
-	{
-		pfree(query_str);
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("expression is not an aggregate function")));
-	}
 
 	Aggref *aggref = (Aggref *) transformed;
 
@@ -255,7 +236,6 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 		info->column_alias = strVal(linitial(func_call->funcname));
 	}
 
-	pfree(query_str);
 	return info;
 }
 
