@@ -72,7 +72,7 @@ This release features multiple improvements for continuous aggregates on the col
 * [#9175](https://github.com/timescale/timescaledb/pull/9175) Do not remove dimension constraints for OSM chunks
 
 **GUCs**
-* `enable_columnarindexscan`: Enable returning results directly from compression metadata without decompression. Default: `false` 
+* `enable_columnarindexscan`: Enable returning results directly from compression metadata without decompression. This feature is experimental, and in development towards a GA release. Not for production environments. Default: `false` 
 * `enable_direct_compress_on_cagg_refresh`: Enable experimental support for direct compression during Continuous Aggregate refresh. Default: `false`
 * `enable_qual_filtering`: Filter qualifiers on chunks when complete chunk would be included by filter. Default: `true`
 
