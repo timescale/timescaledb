@@ -17,7 +17,6 @@
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
 
-#include "compat/compat.h"
 #include "cross_module_fn.h"
 #include "debug_point.h"
 #include "dimension.h"
@@ -1322,7 +1321,7 @@ ts_dimension_info_create_open(Oid table_relid, Name column_name, Datum interval,
 							  regproc partitioning_func)
 {
 	DimensionInfo *info = palloc(sizeof(*info));
-	*info = (DimensionInfo){
+	*info = (DimensionInfo) {
 		.type = DIMENSION_TYPE_OPEN,
 		.table_relid = table_relid,
 		.partitioning_func = partitioning_func,
@@ -1339,7 +1338,7 @@ ts_dimension_info_create_closed(Oid table_relid, Name column_name, int32 num_sli
 								regproc partitioning_func)
 {
 	DimensionInfo *info = palloc(sizeof(*info));
-	*info = (DimensionInfo){
+	*info = (DimensionInfo) {
 		.type = DIMENSION_TYPE_CLOSED,
 		.table_relid = table_relid,
 		.num_slices = num_slices,
