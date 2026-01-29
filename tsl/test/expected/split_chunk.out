@@ -692,11 +692,11 @@ order by time;
  Sun Jan 07 09:03:11 2024 PST |      1 |   21 |       21
  Wed Jan 10 02:04:12 2024 PST |      1 |   17 |       32
 
-select table_name, dropped, status, compressed_chunk_id
+select table_name, status, compressed_chunk_id
 from _timescaledb_catalog.chunk where table_name = '_hyper_1_3_chunk';
-    table_name    | dropped | status | compressed_chunk_id 
-------------------+---------+--------+---------------------
- _hyper_1_3_chunk | f       |      9 |                  15
+    table_name    | status | compressed_chunk_id 
+------------------+--------+---------------------
+ _hyper_1_3_chunk |      9 |                  15
 
 analyze _timescaledb_internal._hyper_1_3_chunk;
 truncate chunk_summary_before_split;
@@ -735,13 +735,13 @@ select * from chunk_info;
  _hyper_1_7_chunk  | heap |      5760 | constraint_11 | (("time" >= 'Wed Dec 27 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Wed Jan 03 16:00:00 2024 PST'::timestamp with time zone))
  _hyper_1_8_chunk  | heap |     28800 | constraint_13 | (("time" >= 'Fri Jan 05 16:00:00 2024 PST'::timestamp with time zone) AND ("time" < 'Sun Jan 07 08:00:00 2024 PST'::timestamp with time zone))
 
-select table_name, dropped, status, compressed_chunk_id
+select table_name, status, compressed_chunk_id
 from _timescaledb_catalog.chunk
 where table_name in ('_hyper_1_3_chunk', '_hyper_1_16_chunk');
-    table_name     | dropped | status | compressed_chunk_id 
--------------------+---------+--------+---------------------
- _hyper_1_16_chunk | f       |      9 |                  17
- _hyper_1_3_chunk  | f       |      9 |                  15
+    table_name     | status | compressed_chunk_id 
+-------------------+--------+---------------------
+ _hyper_1_16_chunk |      9 |                  17
+ _hyper_1_3_chunk  |      9 |                  15
 
 -- Check that the non-compressed data rows ended up in separate partitions
 select *

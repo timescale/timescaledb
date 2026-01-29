@@ -538,11 +538,6 @@ SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
 ------+------
    30 |   30
 
---chunks are removed
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk WHERE dropped;
- id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status | osm_chunk 
-----+---------------+-------------+------------+---------------------+---------+--------+-----------
-
 --still see data in the view
 SELECT * FROM drop_chunks_view WHERE time_bucket < (integer_now_test2()-9) ORDER BY time_bucket DESC;
  time_bucket | max 
