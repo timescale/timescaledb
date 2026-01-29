@@ -128,7 +128,7 @@ try_disable_bulk_decompression(PlannerInfo *root, Node *node, List *required_pat
 	 * pathkeys differ. All subplan's rows will be read in this case, so the
 	 * optimization does not apply.
 	 */
-	if (!pathkeys_contained_in(custom_child->path.pathkeys, required_pathkeys))
+	if (!pathkeys_contained_in(required_pathkeys, custom_child->path.pathkeys))
 	{
 		return node;
 	}
