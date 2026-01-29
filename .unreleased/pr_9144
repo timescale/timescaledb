@@ -1,2 +1,0 @@
-Fixes: #9144 Fix handling implicit constraints in ALTER TABLE
-Thanks: @vahnrr for reporting a crash when adding columns and constraints to a hypertable at the same time

@@ -23,7 +23,6 @@ SELECT
     SELECT count(1)
     FROM _timescaledb_catalog.chunk ch
     WHERE ch.hypertable_id = ht.hypertable_id
-      AND ch.dropped IS FALSE
       AND ch.osm_chunk IS FALSE
   ) AS num_chunks,
   ht.compression_enabled,
@@ -218,7 +217,7 @@ FROM (
       WHERE pg_class.relnamespace = pg_namespace.oid) cl ON srcch.table_name = cl.relname
       AND srcch.schema_name = cl.schema_name
     LEFT OUTER JOIN pg_tablespace pgtab ON pgtab.oid = reltablespace
-  WHERE srcch.dropped IS FALSE AND srcch.osm_chunk IS FALSE
+  WHERE srcch.osm_chunk IS FALSE
     AND ht.compression_state != 2 ) finalq
 WHERE chunk_dimension_num = 1;
 

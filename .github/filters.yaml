@@ -3,6 +3,7 @@ shell:
   - .github/workflows/shellcheck.yaml
 sql:
   - 'sql/**'
+  - '.github/**'
 src:
   - 'cmake/**'
   - 'scripts/**'
@@ -11,3 +12,4 @@ src:
   - 'test/**'
   - 'tsl/**'
   - 'CMakeLists.txt'
+  - '.github/**'

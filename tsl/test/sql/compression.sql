@@ -684,7 +684,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
 SELECT drop_chunks('metrics', older_than=>'1 day'::interval);
 SELECT
    c.table_name as chunk_name,
-   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+   c.status as chunk_status, c.compressed_chunk_id as comp_id
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
@@ -696,7 +696,7 @@ INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10
 SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
 SELECT
    c.table_name as chunk_name,
-   c.status as chunk_status, c.dropped, c.compressed_chunk_id as comp_id
+   c.status as chunk_status, c.compressed_chunk_id as comp_id
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
