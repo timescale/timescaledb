@@ -88,6 +88,16 @@ SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'invalid_func(temperature) AS bad');
 \set ON_ERROR_STOP 1
 
+-- Error - syntax error in aggregate expression
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature AS bad_syntax');
+\set ON_ERROR_STOP 1
+
+-- Error - multiple aggregates in single expression
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature), avg(temperature)');
+\set ON_ERROR_STOP 1
+
 -- Error - aggregate already exists (same alias)
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp');

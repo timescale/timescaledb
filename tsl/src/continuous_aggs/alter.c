@@ -112,8 +112,32 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	initStringInfo(&query_str);
 	appendStringInfo(&query_str, "SELECT %s", expr_str);
 
-	/* Parse the query */
-	raw_parsetree_list = raw_parser(query_str.data, RAW_PARSE_DEFAULT);
+	const MemoryContext oldcontext = CurrentMemoryContext;
+
+	PG_TRY();
+	{
+		/* Parse the query */
+		raw_parsetree_list = raw_parser(query_str.data, RAW_PARSE_DEFAULT);
+	}
+	PG_CATCH();
+	{
+		/* We do this fandango to avoid exhausting the error stack if we get
+		 * anything else but a syntax error, for example, an out of memory
+		 * error. */
+		ErrorData *edata;
+		MemoryContextSwitchTo(oldcontext);
+		edata = CopyErrorData();
+		FlushErrorState();
+		if (edata->sqlerrcode == ERRCODE_SYNTAX_ERROR)
+		{
+			edata->cursorpos = edata->internalpos = 0;
+			edata->detail = edata->message;
+			edata->message = psprintf("unable to parse the aggregate expression \"%s\"", expr_str);
+		}
+		ReThrowError(edata);
+	}
+	PG_END_TRY();
+
 	if (list_length(raw_parsetree_list) != 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
