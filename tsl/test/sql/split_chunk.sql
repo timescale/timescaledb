@@ -438,7 +438,7 @@ select *
 from ONLY _timescaledb_internal._hyper_1_3_chunk
 order by time;
 
-select table_name, dropped, status, compressed_chunk_id
+select table_name, status, compressed_chunk_id
 from _timescaledb_catalog.chunk where table_name = '_hyper_1_3_chunk';
 analyze _timescaledb_internal._hyper_1_3_chunk;
 
@@ -458,7 +458,7 @@ call split_chunk('_timescaledb_internal._hyper_1_3_chunk');
 -- Check that the resulting chunks look OK and have the right access method
 select * from chunk_info;
 
-select table_name, dropped, status, compressed_chunk_id
+select table_name, status, compressed_chunk_id
 from _timescaledb_catalog.chunk
 where table_name in ('_hyper_1_3_chunk', '_hyper_1_16_chunk');
 

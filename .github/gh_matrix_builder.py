@@ -92,14 +92,14 @@ def build_debug_config(overrides):
         {
             "build_type": "Debug",
             "cc": "gcc",
-            "clang": "clang-14",
+            "clang": "clang",
             "coverage": True,
             "cxx": "g++",
-            "extra_packages": "clang-14 llvm-14 llvm-14-dev llvm-14-tools",
+            "extra_packages": "clang llvm llvm-dev",
             "ignored_tests": default_ignored_tests,
             "name": "Debug",
             "os": "ubuntu-22.04",
-            "pg_extra_args": "--enable-debug --enable-cassert --with-llvm LLVM_CONFIG=llvm-config-14",
+            "pg_extra_args": "--enable-debug --enable-cassert --with-llvm LLVM_CONFIG=llvm-config",
             "pg_extensions": "postgres_fdw test_decoding",
             "installcheck": True,
             "pginstallcheck": True,
@@ -240,8 +240,8 @@ m["include"].append(
     build_without_telemetry(
         {
             "pg": PG18_LATEST,
-            "cc": "clang-14",
-            "cxx": "clang++-14",
+            "cc": "clang",
+            "cxx": "clang++",
             "tsdb_build_args": "-DLINTER=ON -DWARNINGS_AS_ERRORS=ON",
         }
     )

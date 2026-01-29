@@ -1,1 +1,0 @@
-Fixes: #8989 Ensure no XID is assigned during chunk query
