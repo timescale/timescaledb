@@ -315,29 +315,7 @@ find_rte_index_for_relid(Query *query, Oid relid)
 }
 
 /*
- * Add a column reference to a query's targetList.
- * Used to read pre-computed aggregate values from the materialization hypertable.
- */
-static void
-add_column_to_query(Query *query, int varno, AttrNumber attnum, Oid atttype, int32 atttypmod,
-					Oid attcollation, const char *column_name)
-{
-	/* Create Var node for the column */
-	Var *var = makeVar(varno, attnum, atttype, atttypmod, attcollation, 0);
-
-	/* Create TargetEntry */
-	TargetEntry *tle = makeTargetEntry((Expr *) var,
-									   list_length(query->targetList) + 1,
-									   (char *) column_name,
-									   false); /* not resjunk */
-	tle->ressortgroupref = 0;
-
-	/* Add to targetList */
-	query->targetList = lappend(query->targetList, tle);
-}
-
-/*
- * Mutator function to adjust varno in Var nodes within an Aggref
+ * Mutator function to adjust varno in Var nodes within an expression
  */
 static Node *
 adjust_varno_mutator(Node *node, int *new_varno)
@@ -357,27 +335,19 @@ adjust_varno_mutator(Node *node, int *new_varno)
 }
 
 /*
- * Add an aggregate expression to a query's targetList
+ * Add an expression to a query's targetList
  *
- * This function:
- * 1. Copies the Aggref and adjusts varno to match the query's RTE
- * 2. Creates a TargetEntry and appends it to the targetList
- * Note: Aggregates are NOT added to groupClause
+ * Creates a TargetEntry for the expression and appends it to the targetList.
  */
 static void
-add_aggregate_to_query(Query *query, int varno, Aggref *aggref, const char *column_alias)
+add_expression_to_query(Query *query, Expr *expr, const char *column_name)
 {
-	/* Copy and adjust the Aggref's Var nodes to use the correct varno */
-	Aggref *new_aggref = (Aggref *) adjust_varno_mutator((Node *) aggref, &varno);
-
-	/* Create TargetEntry */
-	TargetEntry *tle = makeTargetEntry((Expr *) new_aggref,
+	TargetEntry *tle = makeTargetEntry(expr,
 									   list_length(query->targetList) + 1,
-									   (char *) column_alias,
+									   (char *) column_name,
 									   false); /* not resjunk */
-	tle->ressortgroupref = 0;				   /* Aggregates don't go in GROUP BY */
+	tle->ressortgroupref = 0;
 
-	/* Add to targetList */
 	query->targetList = lappend(query->targetList, tle);
 }
 
@@ -444,8 +414,9 @@ update_view_add_aggregate(Oid view_oid, const char *view_schema, const char *vie
 	/* Source relation must be in rtable - this is guaranteed by CAgg structure */
 	Assert(varno != 0);
 
-	/* Add the aggregate to the query */
-	add_aggregate_to_query(query, varno, aggref, column_name);
+	/* Add the aggregate to the query (adjust varno in Var nodes) */
+	Expr *adjusted_aggref = (Expr *) adjust_varno_mutator((Node *) aggref, &varno);
+	add_expression_to_query(query, adjusted_aggref, column_name);
 
 	/* Step 2: Add the column to the view relation */
 	add_column_to_view_relation(view_schema,
@@ -681,13 +652,9 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		int mat_varno = find_rte_index_for_relid(mat_subquery, mat_ht->main_table_relid);
 		if (mat_varno > 0)
 		{
-			add_column_to_query(mat_subquery,
-								mat_varno,
-								mat_attnum,
-								atttype,
-								atttypmod,
-								attcollation,
-								column_name);
+			Expr *var =
+				(Expr *) makeVar(mat_varno, mat_attnum, atttype, atttypmod, attcollation, 0);
+			add_expression_to_query(mat_subquery, var, column_name);
 			/* Also update the RTE's column names to match the subquery's targetList */
 			mat_rte->eref->colnames =
 				lappend(mat_rte->eref->colnames, makeString((char *) column_name));
@@ -698,7 +665,9 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		int raw_varno = find_rte_index_for_relid(raw_subquery, source_relid);
 		if (raw_varno > 0)
 		{
-			add_aggregate_to_query(raw_subquery, raw_varno, agg_info->aggref, column_name);
+			Expr *adjusted_aggref =
+				(Expr *) adjust_varno_mutator((Node *) agg_info->aggref, &raw_varno);
+			add_expression_to_query(raw_subquery, adjusted_aggref, column_name);
 			/* Also update the RTE's column names to match the subquery's targetList */
 			raw_rte->eref->colnames =
 				lappend(raw_rte->eref->colnames, makeString((char *) column_name));
@@ -711,19 +680,13 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		setop->colCollations = lappend_int(setop->colCollations, attcollation);
 
 		/* Add column to outer targetList (no GROUP BY for UNION ALL outer query) */
-		Var *outer_var = makeVar(1, /* first RTE is always the UNION result */
-								 list_length(user_query->targetList) + 1,
-								 atttype,
-								 atttypmod,
-								 attcollation,
-								 0);
-
-		TargetEntry *outer_tle = makeTargetEntry((Expr *) outer_var,
-												 list_length(user_query->targetList) + 1,
-												 (char *) column_name,
-												 false);
-		outer_tle->ressortgroupref = 0;
-		user_query->targetList = lappend(user_query->targetList, outer_tle);
+		Expr *outer_var = (Expr *) makeVar(1, /* first RTE is always the UNION result */
+										   list_length(user_query->targetList) + 1,
+										   atttype,
+										   atttypmod,
+										   attcollation,
+										   0);
+		add_expression_to_query(user_query, outer_var, column_name);
 	}
 	else
 	{
@@ -734,13 +697,8 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		int varno = find_rte_index_for_relid(user_query, mat_ht->main_table_relid);
 		if (varno > 0)
 		{
-			add_column_to_query(user_query,
-								varno,
-								mat_attnum,
-								atttype,
-								atttypmod,
-								attcollation,
-								column_name);
+			Expr *var = (Expr *) makeVar(varno, mat_attnum, atttype, atttypmod, attcollation, 0);
+			add_expression_to_query(user_query, var, column_name);
 		}
 	}
 
