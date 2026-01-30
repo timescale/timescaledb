@@ -83,7 +83,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "heap_size": 0,                                 +
          "toast_size": 8192,                             +
          "indexes_size": 0,                              +
-         "num_relations": 2,                             +
+         "num_relations": 3,                             +
          "num_reltuples": 0                              +
      },                                                  +
      "hypertables": {                                    +
@@ -186,7 +186,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "heap_size": 73728,                             +
          "toast_size": 8192,                             +
          "indexes_size": 0,                              +
-         "num_relations": 2,                             +
+         "num_relations": 3,                             +
          "num_reltuples": 697                            +
      },                                                  +
      "hypertables": {                                    +
@@ -299,7 +299,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "heap_size": 73728,                              +
          "toast_size": 8192,                              +
          "indexes_size": 0,                               +
-         "num_relations": 2,                              +
+         "num_relations": 3,                              +
          "num_reltuples": 697                             +
      },                                                   +
      "hypertables": {                                     +

@@ -258,6 +258,57 @@ create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const 
 }
 
 /*
+ * Create a per-cagg invalidation log table
+ *
+ * This creates a table in the _timescaledb_internal schema with the name
+ * _cagg_invalidation_<mat_hypertable_id> containing two columns of the primary
+ * dimension type:
+ *   - range_start: the start of a range
+ *   - range_end: the end of a range
+ *
+ * Parameters:
+ *   mat_hypertable_id: the materialization hypertable id
+ *   range_type: the type OID for range_start and range_end columns
+ *               (should be the primary dimension type)
+ *
+ * Returns the OID of the created table.
+ */
+static Oid
+create_cagg_invalidation_log_table(int32 mat_hypertable_id, Oid range_type)
+{
+	Oid uid, saved_uid;
+	int sec_ctx;
+	char relnamebuf[NAMEDATALEN];
+	ObjectAddress address;
+	Oid owner = GetUserId();
+	ColumnDef *range_start_col;
+	ColumnDef *range_end_col;
+
+	/* Create column definitions for range_start and range_end using the dimension type */
+	range_start_col = makeColumnDef("range_start", range_type, -1, InvalidOid);
+	range_start_col->is_not_null = true;
+	range_end_col = makeColumnDef("range_end", range_type, -1, InvalidOid);
+	range_end_col->is_not_null = true;
+
+	List *collist = list_make2(range_start_col, range_end_col);
+
+	makeMaterializedTableName(relnamebuf, "_cagg_invalidation_%d", mat_hypertable_id);
+
+	/* Build the CREATE TABLE statement */
+	CreateStmt *create = makeNode(CreateStmt);
+	create->relation = makeRangeVar(INTERNAL_SCHEMA_NAME, pstrdup(relnamebuf), -1);
+	create->tableElts = collist;
+
+	/* Create the table as the TimescaleDB user */
+	SWITCH_TO_TS_USER(INTERNAL_SCHEMA_NAME, uid, saved_uid, sec_ctx);
+	address = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
+	CommandCounterIncrement();
+	RESTORE_USER(uid, saved_uid, sec_ctx);
+
+	return address.objectId;
+}
+
+/*
  * Create hypertable for the table referred by mat_tbloid
  * matpartcolname - partition column for hypertable
  * timecol_interval - is the partitioning column's interval for hypertable partition
@@ -701,12 +752,15 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	dum_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	create_view_for_query(orig_userview_query, dum_rel);
 
-	/* Step 4: Add catalog table entry for the objects we just created. */
+	/* Step 4: Create the per-CAgg log table and add catalog entries. */
 	nspid = RangeVarGetCreationNamespace(stmt->view);
+
+	Oid cagg_log_oid =
+		create_cagg_invalidation_log_table(materialize_hypertable_id, bucket_info->htpartcoltype);
 
 	create_cagg_catalog_entry(materialize_hypertable_id,
 							  bucket_info->htid,
-							  InvalidOid,
+							  cagg_log_oid,
 							  get_namespace_name(nspid), /*schema name for user view */
 							  stmt->view->relname,
 							  part_rel->schemaname,
