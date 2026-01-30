@@ -265,6 +265,8 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 		Int32GetDatum(fd->mat_hypertable_id);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_raw_hypertable_id)] =
 		Int32GetDatum(fd->raw_hypertable_id);
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_invalidation_log)] =
+		Int32GetDatum(fd->invalidation_log);
 
 	if (fd->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
 		nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)] = true;
@@ -310,6 +312,8 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_continuous_agg_mat_hypertable_id)]);
 	fd->raw_hypertable_id =
 		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_continuous_agg_raw_hypertable_id)]);
+	fd->invalidation_log =
+		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_continuous_agg_invalidation_log)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)])
 		fd->parent_mat_hypertable_id = INVALID_HYPERTABLE_ID;
