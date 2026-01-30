@@ -650,26 +650,20 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		 * since data is pre-aggregated in the materialization hypertable */
 		Query *mat_subquery = mat_rte->subquery;
 		int mat_varno = find_rte_index_for_relid(mat_subquery, mat_ht->main_table_relid);
-		if (mat_varno > 0)
-		{
-			Expr *var =
-				(Expr *) makeVar(mat_varno, mat_attnum, atttype, atttypmod, attcollation, 0);
-			add_expression_to_query(mat_subquery, var, column_name);
-			/* Also update the RTE's column names to match the subquery's targetList */
-			mat_rte->eref->colnames = lappend(mat_rte->eref->colnames, makeString(column_name));
-		}
+		Assert(mat_varno != 0);
+		Expr *mat_var =
+			(Expr *) makeVar(mat_varno, mat_attnum, atttype, atttypmod, attcollation, 0);
+		add_expression_to_query(mat_subquery, mat_var, column_name);
+		mat_rte->eref->colnames = lappend(mat_rte->eref->colnames, makeString(column_name));
 
 		/* Update raw subquery (queries source relation) - compute the aggregate on the fly */
 		Query *raw_subquery = raw_rte->subquery;
 		int raw_varno = find_rte_index_for_relid(raw_subquery, source_relid);
-		if (raw_varno > 0)
-		{
-			Expr *adjusted_aggref =
-				(Expr *) adjust_varno_mutator((Node *) agg_info->aggref, &raw_varno);
-			add_expression_to_query(raw_subquery, adjusted_aggref, column_name);
-			/* Also update the RTE's column names to match the subquery's targetList */
-			raw_rte->eref->colnames = lappend(raw_rte->eref->colnames, makeString(column_name));
-		}
+		Assert(raw_varno != 0);
+		Expr *adjusted_aggref =
+			(Expr *) adjust_varno_mutator((Node *) agg_info->aggref, &raw_varno);
+		add_expression_to_query(raw_subquery, adjusted_aggref, column_name);
+		raw_rte->eref->colnames = lappend(raw_rte->eref->colnames, makeString(column_name));
 
 		/* Update SetOperationStmt column type lists */
 		SetOperationStmt *setop = castNode(SetOperationStmt, user_query->setOperations);
@@ -693,11 +687,9 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		 * No GROUP BY needed since data is pre-aggregated
 		 */
 		int varno = find_rte_index_for_relid(user_query, mat_ht->main_table_relid);
-		if (varno > 0)
-		{
-			Expr *var = (Expr *) makeVar(varno, mat_attnum, atttype, atttypmod, attcollation, 0);
-			add_expression_to_query(user_query, var, column_name);
-		}
+		Assert(varno != 0);
+		Expr *var = (Expr *) makeVar(varno, mat_attnum, atttype, atttypmod, attcollation, 0);
+		add_expression_to_query(user_query, var, column_name);
 	}
 
 	/* Add the column to the user view relation */
