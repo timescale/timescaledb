@@ -9,6 +9,11 @@ INSERT INTO t1 SELECT '2025-01-01'::timestamptz + format('%s ms', i)::interval, 
 INSERT INTO t2 SELECT '2025-01-01'::timestamptz + format('%s ms', i)::interval, i%1000, 1 + 1/i FROM generate_series(1, 100000) i;
 VACUUM FULL t1;
 VACUUM FULL t2;
+-- VACUUM FULL each chunk before compression to eliminate bloat and stabilize uncompressed sizes
+SELECT format('VACUUM FULL %s', show_chunks) FROM show_chunks('t1') \gexec
+VACUUM FULL _timescaledb_internal._hyper_1_1_chunk
+SELECT format('VACUUM FULL %s', show_chunks) FROM show_chunks('t2') \gexec
+VACUUM FULL _timescaledb_internal._hyper_3_2_chunk
 SELECT compress_chunk(chunk) FROM show_chunks('t1') AS chunk;
              compress_chunk             
 ----------------------------------------
