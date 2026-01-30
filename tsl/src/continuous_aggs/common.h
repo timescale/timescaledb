@@ -115,8 +115,6 @@ extern Query *destroy_union_query(Query *q);
 extern void RemoveRangeTableEntries(Query *query);
 extern Query *build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *q1,
 								Query *q2, int materialize_htid);
-extern void mattablecolumninfo_init(MaterializationHypertableColumnInfo *matcolinfo,
-									List *grouplist);
 extern bool function_allowed_in_cagg_definition(Oid funcid);
 extern Oid get_watermark_function_oid(void);
 extern Oid cagg_get_boundary_converter_funcoid(Oid typoid);
