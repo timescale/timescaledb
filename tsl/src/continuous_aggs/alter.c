@@ -352,6 +352,37 @@ add_expression_to_query(Query *query, Expr *expr, char *column_name)
 }
 
 /*
+ * Add a Var expression to a query's targetList for a given relation.
+ *
+ * Finds the varno for the relation in the query's rtable, creates a Var node,
+ * and adds it to the targetList.
+ */
+static void
+add_var_to_query(Query *query, Oid relid, AttrNumber attnum, Oid atttype, int32 atttypmod,
+				 Oid attcollation, char *column_name)
+{
+	int varno = find_rte_index_for_relid(query, relid);
+	Assert(varno != 0);
+	Expr *var = (Expr *) makeVar(varno, attnum, atttype, atttypmod, attcollation, 0);
+	add_expression_to_query(query, var, column_name);
+}
+
+/*
+ * Add an Aggref expression to a query's targetList for a given relation.
+ *
+ * Finds the varno for the relation in the query's rtable, adjusts the Aggref's
+ * Var nodes to use that varno, and adds it to the targetList.
+ */
+static void
+add_aggref_to_query(Query *query, Oid relid, Aggref *aggref, char *column_name)
+{
+	int varno = find_rte_index_for_relid(query, relid);
+	Assert(varno != 0);
+	Expr *adjusted_aggref = (Expr *) adjust_varno_mutator((Node *) aggref, &varno);
+	add_expression_to_query(query, adjusted_aggref, column_name);
+}
+
+/*
  * Add a column to a view relation using ALTER VIEW ADD COLUMN
  */
 static void
@@ -408,15 +439,8 @@ update_view_add_aggregate(Oid view_oid, char *view_schema, char *view_name, Oid 
 	/* Remove dummy RTEs for PG16+ */
 	RemoveRangeTableEntries(query);
 
-	/* Find the varno for the source relation */
-	int varno = find_rte_index_for_relid(query, source_relid);
-
-	/* Source relation must be in rtable - this is guaranteed by CAgg structure */
-	Assert(varno != 0);
-
-	/* Add the aggregate to the query (adjust varno in Var nodes) */
-	Expr *adjusted_aggref = (Expr *) adjust_varno_mutator((Node *) aggref, &varno);
-	add_expression_to_query(query, adjusted_aggref, column_name);
+	/* Add the aggregate to the query */
+	add_aggref_to_query(query, source_relid, aggref, column_name);
 
 	/* Step 2: Add the column to the view relation */
 	add_column_to_view_relation(view_schema,
@@ -649,20 +673,18 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		/* Update materialized subquery (queries mat_ht) - always a simple column read
 		 * since data is pre-aggregated in the materialization hypertable */
 		Query *mat_subquery = mat_rte->subquery;
-		int mat_varno = find_rte_index_for_relid(mat_subquery, mat_ht->main_table_relid);
-		Assert(mat_varno != 0);
-		Expr *mat_var =
-			(Expr *) makeVar(mat_varno, mat_attnum, atttype, atttypmod, attcollation, 0);
-		add_expression_to_query(mat_subquery, mat_var, column_name);
+		add_var_to_query(mat_subquery,
+						 mat_ht->main_table_relid,
+						 mat_attnum,
+						 atttype,
+						 atttypmod,
+						 attcollation,
+						 column_name);
 		mat_rte->eref->colnames = lappend(mat_rte->eref->colnames, makeString(column_name));
 
 		/* Update raw subquery (queries source relation) - compute the aggregate on the fly */
 		Query *raw_subquery = raw_rte->subquery;
-		int raw_varno = find_rte_index_for_relid(raw_subquery, source_relid);
-		Assert(raw_varno != 0);
-		Expr *adjusted_aggref =
-			(Expr *) adjust_varno_mutator((Node *) agg_info->aggref, &raw_varno);
-		add_expression_to_query(raw_subquery, adjusted_aggref, column_name);
+		add_aggref_to_query(raw_subquery, source_relid, agg_info->aggref, column_name);
 		raw_rte->eref->colnames = lappend(raw_rte->eref->colnames, makeString(column_name));
 
 		/* Update SetOperationStmt column type lists */
@@ -686,10 +708,13 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		 * Materialized-only mode: Direct query on mat_ht
 		 * No GROUP BY needed since data is pre-aggregated
 		 */
-		int varno = find_rte_index_for_relid(user_query, mat_ht->main_table_relid);
-		Assert(varno != 0);
-		Expr *var = (Expr *) makeVar(varno, mat_attnum, atttype, atttypmod, attcollation, 0);
-		add_expression_to_query(user_query, var, column_name);
+		add_var_to_query(user_query,
+						 mat_ht->main_table_relid,
+						 mat_attnum,
+						 atttype,
+						 atttypmod,
+						 attcollation,
+						 column_name);
 	}
 
 	/* Add the column to the user view relation */
