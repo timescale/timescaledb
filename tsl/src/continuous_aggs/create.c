@@ -83,10 +83,11 @@
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "with_clause/create_materialized_view_with_clause.h"
 
-static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
-									  const char *user_view, const char *partial_schema,
-									  const char *partial_view, bool materialized_only,
-									  const char *direct_schema, const char *direct_view,
+static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, Oid invalidation_log,
+									  const char *user_schema, const char *user_view,
+									  const char *partial_schema, const char *partial_view,
+									  bool materialized_only, const char *direct_schema,
+									  const char *direct_view,
 									  const int32 parent_mat_hypertable_id);
 static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function,
 												 const char *bucket_width, const char *origin,
@@ -119,11 +120,11 @@ makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
  * Create a entry for the materialization table in table CONTINUOUS_AGGS.
  */
 static void
-create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
-						  const char *user_view, const char *partial_schema,
-						  const char *partial_view, bool materialized_only,
-						  const char *direct_schema, const char *direct_view,
-						  const int32 parent_mat_hypertable_id)
+create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, Oid invalidation_log,
+						  const char *user_schema, const char *user_view,
+						  const char *partial_schema, const char *partial_view,
+						  bool materialized_only, const char *direct_schema,
+						  const char *direct_view, const int32 parent_mat_hypertable_id)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -145,6 +146,7 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 	memset(values, 0, sizeof(values));
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_mat_hypertable_id)] = matht_id;
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_raw_hypertable_id)] = rawht_id;
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_invalidation_log)] = invalidation_log;
 
 	if (parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
 		nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)] = true;
@@ -704,6 +706,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 	create_cagg_catalog_entry(materialize_hypertable_id,
 							  bucket_info->htid,
+							  InvalidOid,
 							  get_namespace_name(nspid), /*schema name for user view */
 							  stmt->view->relname,
 							  part_rel->schemaname,

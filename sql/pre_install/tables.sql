@@ -348,6 +348,8 @@ CREATE TABLE _timescaledb_catalog.telemetry_event (
 CREATE TABLE _timescaledb_catalog.continuous_agg (
   mat_hypertable_id integer NOT NULL,
   raw_hypertable_id integer NOT NULL,
+  -- FIXME: make NOT NULL
+  invalidation_log regclass,
   parent_mat_hypertable_id integer,
   user_view_schema name NOT NULL,
   user_view_name name NOT NULL,
