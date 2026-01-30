@@ -335,13 +335,24 @@ adjust_varno_mutator(Node *node, int *new_varno)
 }
 
 /*
- * Add an expression to a query's targetList
+ * Add an expression to a query's targetList, optionally adjusting Var nodes.
  *
- * Creates a TargetEntry for the expression and appends it to the targetList.
+ * If relid is valid, finds the varno for relid in the query's rtable and adjusts
+ * all Var nodes in the expression to use that varno. The input expression should
+ * use varno=0 as a placeholder in this case.
+ *
+ * If relid is InvalidOid, adds the expression as-is without adjustment.
  */
 static void
-add_expression_to_query(Query *query, Expr *expr, char *column_name)
+add_expr_to_query(Query *query, Oid relid, Expr *expr, char *column_name)
 {
+	if (OidIsValid(relid))
+	{
+		int varno = find_rte_index_for_relid(query, relid);
+		Assert(varno != 0);
+		expr = (Expr *) adjust_varno_mutator((Node *) expr, &varno);
+	}
+
 	TargetEntry *tle = makeTargetEntry(expr,
 									   list_length(query->targetList) + 1,
 									   column_name,
@@ -349,37 +360,6 @@ add_expression_to_query(Query *query, Expr *expr, char *column_name)
 	tle->ressortgroupref = 0;
 
 	query->targetList = lappend(query->targetList, tle);
-}
-
-/*
- * Add a Var expression to a query's targetList for a given relation.
- *
- * Finds the varno for the relation in the query's rtable, creates a Var node,
- * and adds it to the targetList.
- */
-static void
-add_var_to_query(Query *query, Oid relid, AttrNumber attnum, Oid atttype, int32 atttypmod,
-				 Oid attcollation, char *column_name)
-{
-	int varno = find_rte_index_for_relid(query, relid);
-	Assert(varno != 0);
-	Expr *var = (Expr *) makeVar(varno, attnum, atttype, atttypmod, attcollation, 0);
-	add_expression_to_query(query, var, column_name);
-}
-
-/*
- * Add an Aggref expression to a query's targetList for a given relation.
- *
- * Finds the varno for the relation in the query's rtable, adjusts the Aggref's
- * Var nodes to use that varno, and adds it to the targetList.
- */
-static void
-add_aggref_to_query(Query *query, Oid relid, Aggref *aggref, char *column_name)
-{
-	int varno = find_rte_index_for_relid(query, relid);
-	Assert(varno != 0);
-	Expr *adjusted_aggref = (Expr *) adjust_varno_mutator((Node *) aggref, &varno);
-	add_expression_to_query(query, adjusted_aggref, column_name);
 }
 
 /*
@@ -440,7 +420,7 @@ update_view_add_aggregate(Oid view_oid, char *view_schema, char *view_name, Oid 
 	RemoveRangeTableEntries(query);
 
 	/* Add the aggregate to the query */
-	add_aggref_to_query(query, source_relid, aggref, column_name);
+	add_expr_to_query(query, source_relid, (Expr *) aggref, column_name);
 
 	/* Step 2: Add the column to the view relation */
 	add_column_to_view_relation(view_schema,
@@ -673,18 +653,13 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		/* Update materialized subquery (queries mat_ht) - always a simple column read
 		 * since data is pre-aggregated in the materialization hypertable */
 		Query *mat_subquery = mat_rte->subquery;
-		add_var_to_query(mat_subquery,
-						 mat_ht->main_table_relid,
-						 mat_attnum,
-						 atttype,
-						 atttypmod,
-						 attcollation,
-						 column_name);
+		Expr *mat_var = (Expr *) makeVar(0, mat_attnum, atttype, atttypmod, attcollation, 0);
+		add_expr_to_query(mat_subquery, mat_ht->main_table_relid, mat_var, column_name);
 		mat_rte->eref->colnames = lappend(mat_rte->eref->colnames, makeString(column_name));
 
 		/* Update raw subquery (queries source relation) - compute the aggregate on the fly */
 		Query *raw_subquery = raw_rte->subquery;
-		add_aggref_to_query(raw_subquery, source_relid, agg_info->aggref, column_name);
+		add_expr_to_query(raw_subquery, source_relid, (Expr *) agg_info->aggref, column_name);
 		raw_rte->eref->colnames = lappend(raw_rte->eref->colnames, makeString(column_name));
 
 		/* Update SetOperationStmt column type lists */
@@ -700,7 +675,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 										   atttypmod,
 										   attcollation,
 										   0);
-		add_expression_to_query(user_query, outer_var, column_name);
+		add_expr_to_query(user_query, InvalidOid, outer_var, column_name);
 	}
 	else
 	{
@@ -708,13 +683,8 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		 * Materialized-only mode: Direct query on mat_ht
 		 * No GROUP BY needed since data is pre-aggregated
 		 */
-		add_var_to_query(user_query,
-						 mat_ht->main_table_relid,
-						 mat_attnum,
-						 atttype,
-						 atttypmod,
-						 attcollation,
-						 column_name);
+		Expr *var = (Expr *) makeVar(0, mat_attnum, atttype, atttypmod, attcollation, 0);
+		add_expr_to_query(user_query, mat_ht->main_table_relid, var, column_name);
 	}
 
 	/* Add the column to the user view relation */
