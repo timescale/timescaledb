@@ -340,11 +340,11 @@ adjust_varno_mutator(Node *node, int *new_varno)
  * Creates a TargetEntry for the expression and appends it to the targetList.
  */
 static void
-add_expression_to_query(Query *query, Expr *expr, const char *column_name)
+add_expression_to_query(Query *query, Expr *expr, char *column_name)
 {
 	TargetEntry *tle = makeTargetEntry(expr,
 									   list_length(query->targetList) + 1,
-									   (char *) column_name,
+									   column_name,
 									   false); /* not resjunk */
 	tle->ressortgroupref = 0;
 
@@ -355,8 +355,8 @@ add_expression_to_query(Query *query, Expr *expr, const char *column_name)
  * Add a column to a view relation using ALTER VIEW ADD COLUMN
  */
 static void
-add_column_to_view_relation(const char *view_schema, const char *view_name, const char *column_name,
-							Oid atttype, int32 atttypmod, Oid attcollation)
+add_column_to_view_relation(char *view_schema, char *view_name, char *column_name, Oid atttype,
+							int32 atttypmod, Oid attcollation)
 {
 	int sec_ctx;
 	Oid uid, saved_uid;
@@ -374,7 +374,7 @@ add_column_to_view_relation(const char *view_schema, const char *view_name, cons
 	/* Create AlterTableStmt for the view */
 	AlterTableStmt stmt = {
 		.type = T_AlterTableStmt,
-		.relation = makeRangeVar((char *) view_schema, (char *) view_name, -1),
+		.relation = makeRangeVar(view_schema, view_name, -1),
 		.cmds = list_make1(cmd),
 		.objtype = OBJECT_VIEW,
 		.missing_ok = false,
@@ -395,9 +395,9 @@ add_column_to_view_relation(const char *view_schema, const char *view_name, cons
  * Update a view's query definition to add a new aggregate expression.
  */
 static void
-update_view_add_aggregate(Oid view_oid, const char *view_schema, const char *view_name,
-						  Oid source_relid, Aggref *aggref, Oid atttype, int32 atttypmod,
-						  Oid attcollation, const char *column_name)
+update_view_add_aggregate(Oid view_oid, char *view_schema, char *view_name, Oid source_relid,
+						  Aggref *aggref, Oid atttype, int32 atttypmod, Oid attcollation,
+						  char *column_name)
 {
 	int sec_ctx;
 	Oid uid, saved_uid;
@@ -437,8 +437,8 @@ update_view_add_aggregate(Oid view_oid, const char *view_schema, const char *vie
  * Add a column to the materialization hypertable
  */
 static void
-add_column_to_mat_hypertable(Hypertable *mat_ht, const char *column_name, Oid atttype,
-							 int32 atttypmod, Oid attcollation)
+add_column_to_mat_hypertable(Hypertable *mat_ht, char *column_name, Oid atttype, int32 atttypmod,
+							 Oid attcollation)
 {
 	/* Create column definition */
 	ColumnDef *coldef = makeColumnDef(column_name, atttype, atttypmod, attcollation);
@@ -525,7 +525,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	Oid atttype;
 	int32 atttypmod;
 	Oid attcollation;
-	const char *column_name;
+	char *column_name;
 	AggregateExprInfo *agg_info = NULL;
 
 	if (ContinuousAggIsHierarchical(cagg))
@@ -656,8 +656,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 				(Expr *) makeVar(mat_varno, mat_attnum, atttype, atttypmod, attcollation, 0);
 			add_expression_to_query(mat_subquery, var, column_name);
 			/* Also update the RTE's column names to match the subquery's targetList */
-			mat_rte->eref->colnames =
-				lappend(mat_rte->eref->colnames, makeString((char *) column_name));
+			mat_rte->eref->colnames = lappend(mat_rte->eref->colnames, makeString(column_name));
 		}
 
 		/* Update raw subquery (queries source relation) - compute the aggregate on the fly */
@@ -669,8 +668,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 				(Expr *) adjust_varno_mutator((Node *) agg_info->aggref, &raw_varno);
 			add_expression_to_query(raw_subquery, adjusted_aggref, column_name);
 			/* Also update the RTE's column names to match the subquery's targetList */
-			raw_rte->eref->colnames =
-				lappend(raw_rte->eref->colnames, makeString((char *) column_name));
+			raw_rte->eref->colnames = lappend(raw_rte->eref->colnames, makeString(column_name));
 		}
 
 		/* Update SetOperationStmt column type lists */
