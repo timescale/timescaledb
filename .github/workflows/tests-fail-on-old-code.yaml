@@ -56,7 +56,7 @@ jobs:
         git diff --name-only base HEAD -- test/expected tsl/test/expected
 
         readarray -t CHANGED_TESTS < <( \
-            git diff --name-only base HEAD -- test/expected tsl/test/expected \
+            git diff --name-only base HEAD -- test/expected tsl/test/expected tsl/test/shared/expected \
             | sed -n 's!^.*expected/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out$!\1!gp')
 
         if ! ((${#CHANGED_TESTS[@]}))
@@ -117,7 +117,7 @@ jobs:
     - name: Revert code changes
       if: steps.check.outputs.should_run == 'true'
       run: |
-        readarray -t CODE_FILES -d '' < <(git diff -z --name-only base HEAD -- 'src/' 'tsl/src/')
+        readarray -d '' -t CODE_FILES < <(git diff -z --name-only base HEAD -- 'src/' 'tsl/src/')
         if ! ((${#CODE_FILES[@]}))
         then
             echo "Bug: this job shouldn't run when there are no code files modified"
@@ -144,7 +144,7 @@ jobs:
         echo "Running tests: $TESTS"
 
         # Run all changed tests together, allow failure
-        make -C build installcheck TESTS="$TESTS" 2>&1 | tee installcheck.log || true
+        make -C build -k installcheck TESTS="$TESTS" 2>&1 | tee installcheck.log || true
 
     - name: Show regression diffs
       if: always() && steps.check.outputs.should_run == 'true'
