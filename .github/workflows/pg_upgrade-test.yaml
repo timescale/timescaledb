@@ -11,7 +11,10 @@ jobs:
   check_paths:
     runs-on: ubuntu-latest
     outputs:
-      run_ci: ${{ steps.filter.outputs.sql == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
+      run_ci: >-
+        ${{ github.event_name == 'push'
+          || (steps.filter.outputs.sql == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
+         }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
