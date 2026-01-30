@@ -65,7 +65,7 @@ collect_column_walker(Node *node, List **column_names)
 
 	if (IsA(node, ColumnRef))
 	{
-		ColumnRef *cref = (ColumnRef *) node;
+		ColumnRef *cref = castNode(ColumnRef, node);
 		/* Get the column name (last element of fields list) */
 		Node *field = llast(cref->fields);
 		if (IsA(field, String))
@@ -325,7 +325,7 @@ adjust_varno_mutator(Node *node, int *new_varno)
 
 	if (IsA(node, Var))
 	{
-		Var *var = (Var *) node;
+		Var *var = castNode(Var, node);
 		Var *newvar = copyObject(var);
 		newvar->varno = *new_varno;
 		return (Node *) newvar;
@@ -674,7 +674,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		}
 
 		/* Update SetOperationStmt column type lists */
-		SetOperationStmt *setop = (SetOperationStmt *) user_query->setOperations;
+		SetOperationStmt *setop = castNode(SetOperationStmt, user_query->setOperations);
 		setop->colTypes = lappend_int(setop->colTypes, atttype);
 		setop->colTypmods = lappend_int(setop->colTypmods, atttypmod);
 		setop->colCollations = lappend_int(setop->colCollations, attcollation);
