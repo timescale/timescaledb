@@ -262,6 +262,21 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 }
 
 /*
+ * Get a copy of the view's query tree
+ *
+ * Opens the view relation, extracts and copies the query tree, then closes
+ * the relation. The returned Query is a deep copy that can be freely modified.
+ */
+static Query *
+get_view_query_tree(Oid reloid)
+{
+	Relation view_rel = relation_open(reloid, AccessShareLock);
+	Query *query = copyObject(get_view_query(view_rel));
+	relation_close(view_rel, NoLock);
+	return query;
+}
+
+/*
  * Check if a column name already exists in the query's targetList
  */
 static bool
@@ -417,10 +432,8 @@ update_view_add_aggregate(Oid view_oid, const char *view_schema, const char *vie
 	int sec_ctx;
 	Oid uid, saved_uid;
 
-	/* Step 1: Open the view and get its query BEFORE adding the column */
-	Relation view_rel = relation_open(view_oid, AccessShareLock);
-	Query *query = copyObject(get_view_query(view_rel));
-	relation_close(view_rel, NoLock);
+	/* Step 1: Get the view's query BEFORE adding the column */
+	Query *query = get_view_query_tree(view_oid);
 
 	/* Remove dummy RTEs for PG16+ */
 	RemoveRangeTableEntries(query);
@@ -576,9 +589,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 												 NameStr(cagg->data.partial_view_name),
 												 false);
 
-	Relation partial_view_rel = relation_open(partial_view_oid, AccessShareLock);
-	Query *partial_query = copyObject(get_view_query(partial_view_rel));
-	relation_close(partial_view_rel, NoLock);
+	Query *partial_query = get_view_query_tree(partial_view_oid);
 
 	if (column_exists_in_targetlist(partial_query, column_name))
 	{
@@ -644,9 +655,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	/* Get the new attnum from the materialization hypertable after adding the column */
 	AttrNumber mat_attnum = get_attnum(mat_ht->main_table_relid, column_name);
 
-	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
-	Query *user_query = copyObject(get_view_query(user_view_rel));
-	relation_close(user_view_rel, NoLock);
+	Query *user_query = get_view_query_tree(user_view_oid);
 	RemoveRangeTableEntries(user_query);
 
 	if (user_query->setOperations)
