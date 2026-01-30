@@ -2378,7 +2378,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 		path->custom_path.path.param_info = NULL;
 	}
 
-	path->custom_path.flags = 0;
+	path->custom_path.flags = CUSTOMPATH_SUPPORT_PROJECTION;
 	path->custom_path.methods = &columnar_scan_path_methods;
 	path->batch_sorted_merge = false;
 
