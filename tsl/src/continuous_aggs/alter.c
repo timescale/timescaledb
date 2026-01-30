@@ -149,7 +149,7 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("invalid aggregate expression: \"%s\"", expr_str)));
 
-	select_stmt = (SelectStmt *) raw_stmt->stmt;
+	select_stmt = castNode(SelectStmt, raw_stmt->stmt);
 	if (list_length(select_stmt->targetList) != 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR), errmsg("only one aggregate expression allowed")));
@@ -163,20 +163,18 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 				 errmsg("expression must be an aggregate function"),
 				 errhint("Use syntax like 'sum(column) AS alias' or 'avg(column)'.")));
 
-	FuncCall *func_call = (FuncCall *) res_target->val;
-
-	/* Look up the function to check if it's an aggregate */
-	List *funcname = func_call->funcname;
-	FuncCandidateList clist;
-	Oid funcoid = InvalidOid;
-	HeapTuple proc_tuple;
-	Form_pg_proc proc_form;
+	FuncCall *func_call = castNode(FuncCall, res_target->val);
 
 	/* Get the number of arguments - special case for count(*) which has agg_star=true */
 	int nargs = func_call->agg_star ? 0 : list_length(func_call->args);
 
-	/* Get function candidates with the correct number of arguments */
-	clist = FuncnameGetCandidates(funcname, nargs, NIL, true, false, false, false);
+	/* Look up the function to check if it's an aggregate */
+	List *funcname = func_call->funcname;
+	FuncCandidateList clist =
+		FuncnameGetCandidates(funcname, nargs, NIL, true, false, false, false);
+	Oid funcoid = InvalidOid;
+	HeapTuple proc_tuple;
+	Form_pg_proc proc_form;
 
 	/* Find an aggregate function among candidates */
 	while (clist)
@@ -232,14 +230,14 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	Node *transformed = transformExpr(pstate, res_target->val, EXPR_KIND_SELECT_TARGET);
 
 	/* Close the relation */
-	table_close(source_rel, AccessShareLock);
+	table_close(source_rel, NoLock);
 
 	if (!IsA(transformed, Aggref))
 		ereport(ERROR,
 				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 				 errmsg("expression is not an aggregate function")));
 
-	Aggref *aggref = (Aggref *) transformed;
+	Aggref *aggref = castNode(Aggref, transformed);
 
 	/* Build the result structure */
 	info = palloc0(sizeof(AggregateExprInfo));
