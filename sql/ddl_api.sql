@@ -217,3 +217,14 @@ CREATE OR REPLACE PROCEDURE @extschema@.refresh_continuous_aggregate(
     options                  JSONB = NULL
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh';
 
+-- Add a column or aggregate expression to a continuous aggregate.
+-- For simple columns: the column will be added to the GROUP BY clause and all internal views.
+-- For aggregate expressions (e.g., 'sum(value) AS total'): the aggregate will be computed
+-- and stored in the materialization hypertable.
+CREATE OR REPLACE FUNCTION @extschema@.add_continuous_aggregate_column(
+    continuous_aggregate     REGCLASS,
+    column_or_expr           TEXT,
+    if_not_exists            BOOLEAN = FALSE
+) RETURNS VOID
+LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_add_column';
+
