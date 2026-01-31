@@ -110,6 +110,9 @@ explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = any(null::text[]);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_minmax = any(null::text[]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[null, null]);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
@@ -214,3 +217,6 @@ explain (analyze, buffers off, costs off, timing off, summary off)
 execute array_param(null::text[]);
 
 reset timescaledb.enable_chunk_append;
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_minmax = any(array['1'::varchar(10), '10'::varchar(10)]);
