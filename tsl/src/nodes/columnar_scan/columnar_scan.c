@@ -1338,6 +1338,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 
 		path_copy->reverse = sort_info->reverse;
 		path_copy->batch_sorted_merge = true;
+		path_copy->enable_bulk_decompression = false;
 
 		/*
 		 * The segment by optimization is only enabled if it can deliver the tuples in the
@@ -2381,6 +2382,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 	path->custom_path.flags = 0;
 	path->custom_path.methods = &columnar_scan_path_methods;
 	path->batch_sorted_merge = false;
+	path->enable_bulk_decompression = ts_guc_enable_bulk_decompression;
 
 	/*
 	 * ColumnarScan doesn't manage any parallelism itself.
