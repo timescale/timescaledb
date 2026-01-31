@@ -40,16 +40,6 @@ static CustomScanMethods chunk_append_plan_methods = {
 bool
 ts_is_chunk_append_plan(Plan *plan)
 {
-	if (IsA(plan, Result))
-	{
-		if (castNode(Result, plan)->plan.lefttree &&
-			IsA(castNode(Result, plan)->plan.lefttree, CustomScan))
-		{
-			return castNode(CustomScan, castNode(Result, plan)->plan.lefttree)->methods ==
-				   &chunk_append_plan_methods;
-		}
-		return false;
-	}
 	return IsA(plan, CustomScan) &&
 		   castNode(CustomScan, plan)->methods == &chunk_append_plan_methods;
 }
