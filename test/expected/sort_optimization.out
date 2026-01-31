@@ -95,3 +95,43 @@ SELECT count(*) FROM (SELECT time, cte1.quantity + cte2.quantity FROM cte1 FULL 
 -------
    138
 
+-- github issue 9214
+-- test off-by one error in sort optimization
+CREATE TABLE i9214(time timestamptz NOT NULL, machine_id INT NOT NULL, name TEXT NOT NULL, value FLOAT NOT NULL) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+INSERT INTO i9214
+VALUES
+('2026-01-30 10:00:00+00', 1, 'tag1', 10.5),
+('2026-01-30 10:00:00+00', 1, 'tag2', 20.5),
+('2026-01-30 10:01:00+00', 1, 'tag1', 11.0),
+('2026-01-30 10:01:00+00', 1, 'tag2', 21.0);
+WITH rule1 AS (
+  SELECT date_trunc('minute', time) AS time, machine_id FROM i9214 WHERE machine_id = 1 AND name = 'tag1' AND value > 5
+), row_numbered AS (
+  SELECT time, machine_id, row_number() OVER (ORDER BY time) AS seqnum FROM rule1
+)
+SELECT min(time) AS start_time, machine_id, count(*) AS duration_minutes
+FROM row_numbered
+GROUP BY machine_id, (time - (seqnum * interval '1 minute'))
+ORDER BY min(time);
+          start_time          | machine_id | duration_minutes 
+------------------------------+------------+------------------
+ Fri Jan 30 11:00:00 2026 CET |          1 |                2
+
+WITH rule1 AS (
+	SELECT date_trunc('minute', time) AS time, machine_id FROM i9214 WHERE machine_id = 1 AND name = 'tag1' AND value > 5
+), rule2 AS (
+  SELECT date_trunc('minute', time) AS time, machine_id FROM i9214 WHERE machine_id = 1 AND name = 'tag2' AND value > 5
+), joined_rules AS (
+  SELECT r1.time, r1.machine_id FROM rule1 r1 INNER JOIN rule2 r2 USING(time,machine_id)
+), row_numbered AS (
+  SELECT time, machine_id, row_number() OVER (ORDER BY time) AS seqnum FROM joined_rules
+)
+SELECT min(time) AS start_time, machine_id, count(*) AS duration_minutes
+FROM row_numbered
+GROUP BY machine_id, (time - (seqnum * interval '1 minute'))
+ORDER BY min(time);
+          start_time          | machine_id | duration_minutes 
+------------------------------+------------+------------------
+ Fri Jan 30 11:00:00 2026 CET |          1 |                2
+
