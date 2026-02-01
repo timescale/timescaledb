@@ -759,15 +759,12 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 					invalidation_ctx->min_time_attno)];
 				Datum max_time_datum = decompressor.compressed_datums[AttrNumberGetAttrOffset(
 					invalidation_ctx->max_time_attno)];
-				int64 batch_min =
-					ts_time_value_to_internal(min_time_datum, invalidation_ctx->time_type_oid);
-				int64 batch_max =
-					ts_time_value_to_internal(max_time_datum, invalidation_ctx->time_type_oid);
 
 				continuous_agg_invalidate_range(invalidation_ctx->hypertable_id,
 												invalidation_ctx->chunk_relid,
-												batch_min,
-												batch_max);
+												invalidation_ctx->time_type_oid,
+												min_time_datum,
+												max_time_datum);
 			}
 		}
 		else
