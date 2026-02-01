@@ -217,6 +217,8 @@ TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 -- Each job runs for 5 minutes (job_id=100, pid=12345)
 -- Fix NOW to ensure the tests are deterministic
 
+\set NOW_TEST1 '2025-08-15 12:00:00'
+
 INSERT INTO _timescaledb_internal.bgw_job_stat_history
 (job_id, pid, succeeded, execution_start, execution_finish, data)
 SELECT
@@ -226,7 +228,7 @@ SELECT
     ts as execution_start,
     ts + interval '5 minutes' as execution_finish,
     '{}'::jsonb as data
-FROM generate_series(now() - interval '90 days', now(), interval '15 minutes') as ts;
+FROM generate_series(:'NOW_TEST1'::timestamptz - interval '90 days', :'NOW_TEST1'::timestamptz, interval '15 minutes') as ts;
 
 -- Check data after insertion
 select * from job_history_summary;
@@ -254,11 +256,11 @@ SELECT * FROM recent_job_history_summary;
 INSERT INTO _timescaledb_internal.bgw_job_stat_history
 (job_id, pid, succeeded, execution_start, execution_finish, data)
 VALUES
-(301, 3001, true, now() - interval '60 days', now() - interval '60 days' + interval '5 minutes', '{}'),
-(302, 3002, true, now() - interval '6 weeks', now() - interval '6 weeks' + interval '5 minutes', '{}'),
-(303, 3003, true, now() - interval '30 days', now() - interval '30 days' + interval '5 minutes', '{}'),
-(301, 3001, true, now() - interval '2 weeks', now() - interval '2 weeks' + interval '5 minutes', '{}'),
-(304, 3004, true, now() - interval '1 week', now() - interval '1 week' + interval '5 minutes', '{}');
+(301, 3001, true, :'NOW_TEST1'::timestamptz - interval '60 days', :'NOW_TEST1'::timestamptz - interval '60 days' + interval '5 minutes', '{}'),
+(302, 3002, true, :'NOW_TEST1'::timestamptz - interval '6 weeks', :'NOW_TEST1'::timestamptz - interval '6 weeks' + interval '5 minutes', '{}'),
+(303, 3003, true, :'NOW_TEST1'::timestamptz - interval '30 days', :'NOW_TEST1'::timestamptz - interval '30 days' + interval '5 minutes', '{}'),
+(301, 3001, true, :'NOW_TEST1'::timestamptz - interval '2 weeks', :'NOW_TEST1'::timestamptz - interval '2 weeks' + interval '5 minutes', '{}'),
+(304, 3004, true, :'NOW_TEST1'::timestamptz - interval '1 week', :'NOW_TEST1'::timestamptz - interval '1 week' + interval '5 minutes', '{}');
 
 SELECT * FROM job_history_summary;
 CALL run_job(3);
@@ -273,12 +275,12 @@ TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 INSERT INTO _timescaledb_internal.bgw_job_stat_history
 (job_id, pid, succeeded, execution_start, execution_finish, data)
 VALUES
-(401, 4001, true, now() - interval '90 days', now() - interval '90 days' + interval '5 minutes', '{}'),
-(402, 4002, true, now() - interval '60 days', now() - interval '60 days' + interval '5 minutes', '{}'),
-(403, 4003, true, now() - interval '6 weeks', now() - interval '6 weeks' + interval '5 minutes', '{}'),
-(401, 4001, true, now() - interval '30 days', now() - interval '30 days' + interval '5 minutes', '{}'),
-(404, 4004, true, now() - interval '2 weeks', now() - interval '2 weeks' + interval '5 minutes', '{}'),
-(402, 4002, true, now() - interval '1 week', now() - interval '1 week' + interval '5 minutes', '{}');
+(401, 4001, true, :'NOW_TEST1'::timestamptz - interval '90 days', :'NOW_TEST1'::timestamptz - interval '90 days' + interval '5 minutes', '{}'),
+(402, 4002, true, :'NOW_TEST1'::timestamptz - interval '60 days', :'NOW_TEST1'::timestamptz - interval '60 days' + interval '5 minutes', '{}'),
+(403, 4003, true, :'NOW_TEST1'::timestamptz - interval '6 weeks', :'NOW_TEST1'::timestamptz - interval '6 weeks' + interval '5 minutes', '{}'),
+(401, 4001, true, :'NOW_TEST1'::timestamptz - interval '30 days', :'NOW_TEST1'::timestamptz - interval '30 days' + interval '5 minutes', '{}'),
+(404, 4004, true, :'NOW_TEST1'::timestamptz - interval '2 weeks', :'NOW_TEST1'::timestamptz - interval '2 weeks' + interval '5 minutes', '{}'),
+(402, 4002, true, :'NOW_TEST1'::timestamptz - interval '1 week', :'NOW_TEST1'::timestamptz - interval '1 week' + interval '5 minutes', '{}');
 
 SELECT * FROM job_history_summary;
 CALL run_job(3);
@@ -299,7 +301,7 @@ SELECT
     ts as execution_start,
     ts + interval '5 minutes' as execution_finish,
     '{}'::jsonb as data
-FROM generate_series(now() - interval '60 days', now() - interval '1 week', interval '1 week') as ts;
+FROM generate_series(:'NOW_TEST1'::timestamptz - interval '60 days', :'NOW_TEST1'::timestamptz - interval '1 week', interval '1 week') as ts;
 
 -- Delete some records to create gaps
 DELETE FROM _timescaledb_internal.bgw_job_stat_history
@@ -318,9 +320,9 @@ TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 INSERT INTO _timescaledb_internal.bgw_job_stat_history
 (job_id, pid, succeeded, execution_start, execution_finish, data)
 VALUES
-(601, 6001, true, now() - interval '90 days', now() - interval '90 days' + interval '5 minutes', '{}'),
-(602, 6002, true, now() - interval '60 days', now() - interval '60 days' + interval '5 minutes', '{}'),
-(601, 6001, true, now() - interval '6 weeks', now() - interval '6 weeks' + interval '5 minutes', '{}');
+(601, 6001, true, :'NOW_TEST1'::timestamptz - interval '90 days', :'NOW_TEST1'::timestamptz - interval '90 days' + interval '5 minutes', '{}'),
+(602, 6002, true, :'NOW_TEST1'::timestamptz - interval '60 days', :'NOW_TEST1'::timestamptz - interval '60 days' + interval '5 minutes', '{}'),
+(601, 6001, true, :'NOW_TEST1'::timestamptz - interval '6 weeks', :'NOW_TEST1'::timestamptz - interval '6 weeks' + interval '5 minutes', '{}');
 
 SELECT * FROM job_history_summary;
 CALL run_job(3);
@@ -335,10 +337,10 @@ TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 INSERT INTO _timescaledb_internal.bgw_job_stat_history
 (job_id, pid, succeeded, execution_start, execution_finish, data)
 VALUES
-(701, 7001, true, now() - interval '1 week', now() - interval '1 week' + interval '7 minutes', '{}'),
-(702, 7002, true, now() - interval '6 days', now() - interval '6 days' + interval '7 minutes', '{}'),
-(703, 7003, true, now() - interval '7 days', now() - interval '7 days' + interval '7 minutes', '{}'),
-(701, 7001, true, now() - interval '4 days', now() - interval '4 days' + interval '7 minutes', '{}');
+(701, 7001, true, :'NOW_TEST1'::timestamptz - interval '1 week', :'NOW_TEST1'::timestamptz - interval '1 week' + interval '7 minutes', '{}'),
+(702, 7002, true, :'NOW_TEST1'::timestamptz - interval '6 days', :'NOW_TEST1'::timestamptz - interval '6 days' + interval '7 minutes', '{}'),
+(703, 7003, true, :'NOW_TEST1'::timestamptz - interval '7 days', :'NOW_TEST1'::timestamptz - interval '7 days' + interval '7 minutes', '{}'),
+(701, 7001, true, :'NOW_TEST1'::timestamptz - interval '4 days', :'NOW_TEST1'::timestamptz - interval '4 days' + interval '7 minutes', '{}');
 
 SELECT * FROM job_history_summary;
 CALL run_job(3);
@@ -357,17 +359,17 @@ SELECT config FROM alter_job(3,
 INSERT INTO _timescaledb_internal.bgw_job_stat_history
 (job_id, pid, succeeded, execution_start, execution_finish, data)
 VALUES
-(803, 7003, true, now() - interval '7 days', now() - interval '7 days' + interval '7 minutes', '{}'),
-(801, 7001, true, now() - interval '4 days', now() - interval '4 days' + interval '7 minutes', '{}');
+(803, 7003, true, :'NOW_TEST1'::timestamptz - interval '7 days', :'NOW_TEST1'::timestamptz - interval '7 days' + interval '7 minutes', '{}'),
+(801, 7001, true, :'NOW_TEST1'::timestamptz - interval '4 days', :'NOW_TEST1'::timestamptz - interval '4 days' + interval '7 minutes', '{}');
 
 INSERT INTO
    _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data)
-SELECT 801, 7001, true, now() - format('%s hour', hours)::interval, now() - interval '1 week' + interval '7 minutes', '{}'
+SELECT 801, 7001, true, :'NOW_TEST1'::timestamptz - format('%s hour', hours)::interval, :'NOW_TEST1'::timestamptz - interval '1 week' + interval '7 minutes', '{}'
 FROM generate_series(1,20) hours;
 
 INSERT INTO
    _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data)
-SELECT 802, 7001, false, now() - format('%s minutes', hours)::interval, now() - interval '6 days' + interval '7 minutes', '{}'
+SELECT 802, 7001, false, :'NOW_TEST1'::timestamptz - format('%s minutes', hours)::interval, :'NOW_TEST1'::timestamptz - interval '6 days' + interval '7 minutes', '{}'
 FROM generate_series(1,20) hours;
 
 SELECT * FROM job_history_summary;
