@@ -870,8 +870,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			ListCell *lc_attnums;
 			int bloom_idx = 0;
 
-			forboth(lc_builder, cdst->bloom_builders,
-					lc_attnums, cdst->bloom_insert_attnums)
+			forboth (lc_builder, cdst->bloom_builders, lc_attnums, cdst->bloom_insert_attnums)
 			{
 				AttrNumber compressed_attnum = cdst->upsert_bloom_attnums[bloom_idx++];
 				Datum bloom_datum =
@@ -892,8 +891,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 				{
 					bool isnull;
 					Datum val = slot_getattr(insert_slot, attnum, &isnull);
-					hash = isnull ? builder->update_null(builder)
-								  : builder->update_val(builder, val);
+					hash =
+						isnull ? builder->update_null(builder) : builder->update_val(builder, val);
 				}
 
 				if (!batch_metadata_builder_bloom1_hash_maybe_present(bloom_datum, hash))

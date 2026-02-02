@@ -43,6 +43,9 @@ explain (buffers off, costs off) select * from sparse where o = 1 and big2 = 1;
 explain (buffers off, costs off) select * from sparse where num = 1 and hello = md5('1')::bytea;
 explain (buffers off, costs off) select * from sparse where small1 = 1 and small2 = 1;
 explain (buffers off, costs off) select * from sparse where num = 1 and nowts = now()::timestamptz;
+explain (buffers off, costs off) select * from sparse where o in (1,2) and big2 = 1;
+explain (buffers off, costs off) select * from sparse where o = 1 and big2 in (1,2);
+explain (buffers off, costs off) select * from sparse where o in (1,2) and big2 in (1,2);
 
 -- segmentby = bloom
 explain (buffers off, costs off) select * from sparse where big1 = sby and value = 1;

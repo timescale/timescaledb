@@ -109,6 +109,28 @@ explain (buffers off, costs off) select * from sparse where num = 1 and nowts = 
          ->  Seq Scan on compress_hyper_2_2_chunk
                Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_num_nowts, ROW('1'::numeric, now()))
 
+explain (buffers off, costs off) select * from sparse where o in (1,2) and big2 = 1;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+   Vectorized Filter: ((o = ANY ('{1,2}'::bigint[])) AND (big2 = 1))
+   ->  Seq Scan on compress_hyper_2_2_chunk
+         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_big2, 1)
+
+explain (buffers off, costs off) select * from sparse where o = 1 and big2 in (1,2);
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+   Vectorized Filter: ((big2 = ANY ('{1,2}'::bigint[])) AND (o = 1))
+   ->  Index Scan using compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx on compress_hyper_2_2_chunk
+         Index Cond: ((_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1))
+         Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_big2, '{1,2}'::bigint[])
+
+explain (buffers off, costs off) select * from sparse where o in (1,2) and big2 in (1,2);
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+   Vectorized Filter: ((o = ANY ('{1,2}'::bigint[])) AND (big2 = ANY ('{1,2}'::bigint[])))
+   ->  Seq Scan on compress_hyper_2_2_chunk
+         Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_big2, '{1,2}'::bigint[])
+
 -- segmentby = bloom
 explain (buffers off, costs off) select * from sparse where big1 = sby and value = 1;
 --- QUERY PLAN ---
@@ -199,11 +221,23 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_4_4_chunk | regress-test-bloom_big1
  compress_hyper_4_4_chunk | regress-test-bloom_big1_big2
  compress_hyper_4_4_chunk | regress-test-bloom_big2
+ compress_hyper_4_4_chunk | regress-test-bloom_boo
  compress_hyper_4_4_chunk | regress-test-bloom_boo_big1
+ compress_hyper_4_4_chunk | regress-test-bloom_hello
  compress_hyper_4_4_chunk | regress-test-bloom_num_hello
  compress_hyper_4_4_chunk | regress-test-bloom_num_nowts
  compress_hyper_4_4_chunk | regress-test-bloom_o_big2
  compress_hyper_4_4_chunk | regress-test-bloom_small1_small2
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_nowts
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_num
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_small1
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_small2
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_value
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_nowts
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_num
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_small1
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_small2
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_value
 
 select index from settings where relid = (select oid from pg_class where relname = 'sparse_sister') and index is not null group by 1 order by 1;
  index 
@@ -219,6 +253,7 @@ explain (buffers off, costs off) select * from sparse_sister where value = 1;
  Custom Scan (ColumnarScan) on _hyper_3_3_chunk
    Vectorized Filter: (value = '1'::double precision)
    ->  Seq Scan on compress_hyper_4_4_chunk
+         Filter: ((_ts_meta_v2_min_value <= '1'::double precision) AND (_ts_meta_v2_max_value >= '1'::double precision))
 
 explain (buffers off, costs off) select * from sparse_sister where o = 1 and big2 = 1;
 --- QUERY PLAN ---
@@ -233,14 +268,14 @@ explain (buffers off, costs off) select * from sparse_sister where num = 1 and h
  Custom Scan (ColumnarScan) on _hyper_3_3_chunk
    Filter: ((num = '1'::numeric) AND (hello = '\x6334636134323338613062393233383230646363353039613666373538343962'::bytea))
    ->  Seq Scan on compress_hyper_4_4_chunk
-         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_num_hello, ROW('1'::numeric, '\x6334636134323338613062393233383230646363353039613666373538343962'::bytea))
+         Filter: ((_ts_meta_v2_min_num <= '1'::numeric) AND (_ts_meta_v2_max_num >= '1'::numeric) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_hello, '\x6334636134323338613062393233383230646363353039613666373538343962'::bytea) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_num_hello, ROW('1'::numeric, '\x6334636134323338613062393233383230646363353039613666373538343962'::bytea)))
 
 explain (buffers off, costs off) select * from sparse_sister where small1 = 1 and small2 = 1;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_3_3_chunk
    Vectorized Filter: ((small1 = 1) AND (small2 = 1))
    ->  Seq Scan on compress_hyper_4_4_chunk
-         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_small1_small2, ROW(1, 1))
+         Filter: ((_ts_meta_v2_min_small1 <= 1) AND (_ts_meta_v2_max_small1 >= 1) AND (_ts_meta_v2_min_small2 <= 1) AND (_ts_meta_v2_max_small2 >= 1) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_small1_small2, ROW(1, 1)))
 
 explain (buffers off, costs off) select * from sparse_sister where num = 1 and nowts = now()::timestamptz;
 --- QUERY PLAN ---
@@ -250,7 +285,7 @@ explain (buffers off, costs off) select * from sparse_sister where num = 1 and n
          Filter: (num = '1'::numeric)
          Vectorized Filter: (nowts = now())
          ->  Seq Scan on compress_hyper_4_4_chunk
-               Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_num_nowts, ROW('1'::numeric, now()))
+               Filter: ((_ts_meta_v2_min_num <= '1'::numeric) AND (_ts_meta_v2_max_num >= '1'::numeric) AND (_ts_meta_v2_min_nowts <= now()) AND (_ts_meta_v2_max_nowts >= now()) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_num_nowts, ROW('1'::numeric, now())))
 
 -- segmentby = bloom
 explain (buffers off, costs off) select * from sparse_sister where big1 = sby and value = 1;
@@ -259,7 +294,7 @@ explain (buffers off, costs off) select * from sparse_sister where big1 = sby an
    Filter: (big1 = sby)
    Vectorized Filter: (value = '1'::double precision)
    ->  Seq Scan on compress_hyper_4_4_chunk
-         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_big1, sby)
+         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_big1, sby) AND (_ts_meta_v2_min_value <= '1'::double precision) AND (_ts_meta_v2_max_value >= '1'::double precision))
 
 explain (buffers off, costs off) select * from sparse_sister where o = sby and big2 = sby;
 --- QUERY PLAN ---
@@ -313,11 +348,23 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_4_4_chunk | regress-test-bloom_big1
  compress_hyper_4_4_chunk | regress-test-bloom_big1_big2
  compress_hyper_4_4_chunk | regress-test-bloom_big2
+ compress_hyper_4_4_chunk | regress-test-bloom_boo
  compress_hyper_4_4_chunk | regress-test-bloom_boo_big1
+ compress_hyper_4_4_chunk | regress-test-bloom_hello
  compress_hyper_4_4_chunk | regress-test-bloom_num_hello
  compress_hyper_4_4_chunk | regress-test-bloom_num_nowts
  compress_hyper_4_4_chunk | regress-test-bloom_o_big2
  compress_hyper_4_4_chunk | regress-test-bloom_small1_small2
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_nowts
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_num
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_small1
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_small2
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_value
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_nowts
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_num
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_small1
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_small2
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_value
 
 select index from settings where relid = (select oid from pg_class where relname = 'sparse') and index is not null group by 1 order by 1;
                                                                                                                                                                                                                                                                                                                                                                                           index                                                                                                                                                                                                                                                                                                                                                                                          
@@ -352,11 +399,23 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_4_4_chunk | regress-test-bloom_big1
  compress_hyper_4_4_chunk | regress-test-bloom_big1_big2
  compress_hyper_4_4_chunk | regress-test-bloom_big2
+ compress_hyper_4_4_chunk | regress-test-bloom_boo
  compress_hyper_4_4_chunk | regress-test-bloom_boo_big1
+ compress_hyper_4_4_chunk | regress-test-bloom_hello
  compress_hyper_4_4_chunk | regress-test-bloom_num_hello
  compress_hyper_4_4_chunk | regress-test-bloom_num_nowts
  compress_hyper_4_4_chunk | regress-test-bloom_o_big2
  compress_hyper_4_4_chunk | regress-test-bloom_small1_small2
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_nowts
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_num
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_small1
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_small2
+ compress_hyper_4_4_chunk | _ts_meta_v2_max_value
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_nowts
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_num
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_small1
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_small2
+ compress_hyper_4_4_chunk | _ts_meta_v2_min_value
 
 select index from settings where relid = (select oid from pg_class where relname = 'sparse') and index is not null group by 1 order by 1;
                                                                                                                                                                                                                                                         index                                                                                                                                                                                                                                                        
@@ -456,7 +515,7 @@ ORDER BY 1,2,3,4;
          ->  Custom Scan (ColumnarScan) on _hyper_5_5_chunk (actual rows=0.00 loops=1)
                Vectorized Filter: ((a = 1) AND (b = 2))
                ->  Seq Scan on compress_hyper_6_8_chunk (actual rows=0.00 loops=1)
-                     Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2))
+                     Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_a, 1) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_b, 2) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2)))
                      Rows Removed by Filter: 2
    ->  Sort (actual rows=0.00 loops=1)
          Sort Key: _hyper_5_6_chunk.ts, _hyper_5_6_chunk.seg
@@ -464,7 +523,7 @@ ORDER BY 1,2,3,4;
          ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk (actual rows=0.00 loops=1)
                Vectorized Filter: ((a = 1) AND (b = 2))
                ->  Seq Scan on compress_hyper_6_9_chunk (actual rows=0.00 loops=1)
-                     Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2))
+                     Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_a, 1) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_b, 2) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2)))
                      Rows Removed by Filter: 3
    ->  Sort (actual rows=0.00 loops=1)
          Sort Key: _hyper_5_7_chunk.ts, _hyper_5_7_chunk.seg
@@ -501,7 +560,7 @@ ORDER BY 1,2,3,4;
          ->  Custom Scan (ColumnarScan) on _hyper_5_5_chunk (actual rows=0.00 loops=1)
                Vectorized Filter: ((a = 1) AND (b = 2))
                ->  Seq Scan on compress_hyper_6_8_chunk (actual rows=0.00 loops=1)
-                     Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2))
+                     Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_a, 1) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_b, 2) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2)))
                      Rows Removed by Filter: 2
    ->  Sort (actual rows=0.00 loops=1)
          Sort Key: _hyper_5_6_chunk.ts, _hyper_5_6_chunk.seg
@@ -509,7 +568,7 @@ ORDER BY 1,2,3,4;
          ->  Custom Scan (ColumnarScan) on _hyper_5_6_chunk (actual rows=0.00 loops=1)
                Vectorized Filter: ((a = 1) AND (b = 2))
                ->  Seq Scan on compress_hyper_6_9_chunk (actual rows=0.00 loops=1)
-                     Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2))
+                     Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_a, 1) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_b, 2) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2)))
                      Rows Removed by Filter: 3
    ->  Sort (actual rows=0.00 loops=1)
          Sort Key: _hyper_5_7_chunk.ts, _hyper_5_7_chunk.seg
@@ -616,7 +675,7 @@ ORDER BY 1,2,3,4;
          ->  Custom Scan (ColumnarScan) on _hyper_7_13_chunk (actual rows=0.00 loops=1)
                Vectorized Filter: ((a = 1) AND (b = 2))
                ->  Seq Scan on compress_hyper_8_16_chunk (actual rows=0.00 loops=1)
-                     Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2))
+                     Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_a, 1) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_b, 2) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2)))
                      Rows Removed by Filter: 1
 
 DROP TABLE IF EXISTS mixed_avail_add CASCADE;
@@ -894,13 +953,13 @@ ON CONFLICT (device_id, metric, ts) DO NOTHING;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches pruned by bloom: 2
-   Buffers: shared hit=219 read=2 dirtied=5 written=3
+   Buffers: shared hit=198 read=2 dirtied=5 written=3
    ->  Insert on explain_test (actual rows=0.00 loops=1)
          Conflict Resolution: NOTHING
          Conflict Arbiter Indexes: idx_explain
          Tuples Inserted: 1
          Conflicting Tuples: 0
-         Buffers: shared hit=219 read=2 dirtied=5 written=3
+         Buffers: shared hit=198 read=2 dirtied=5 written=3
          ->  Result (actual rows=1.00 loops=1)
  Planning:
    Buffers: shared hit=9

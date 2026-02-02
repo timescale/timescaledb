@@ -96,9 +96,9 @@ static void compression_settings_set_manually_for_create(Hypertable *ht,
 static void compression_settings_set_manually_for_alter(Hypertable *ht,
 														CompressionSettings *settings,
 														WithClauseResult *with_clause_options);
-static bool try_create_composite_bloom(IndexInfo *index_info, Hypertable *ht,
-									   CompressionSettings *settings, JsonbParseState *parse_state,
-									   TsBmsList *sparse_index_columns, bool *has_object);
+static void create_composite_bloom(IndexInfo *index_info, Hypertable *ht,
+								   CompressionSettings *settings, JsonbParseState *parse_state,
+								   TsBmsList *sparse_index_columns, bool *has_object);
 
 static char *
 compression_column_segment_metadata_name(const char *type, int16 column_index)
@@ -1564,10 +1564,10 @@ can_set_default_sparse_index(CompressionSettings *settings)
 												 [_SparseIndexSourceEnumConfig]);
 }
 
-static bool
-try_create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSettings *settings,
-						   JsonbParseState *parse_state, TsBmsList *sparse_index_columns,
-						   bool *has_object)
+static void
+create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSettings *settings,
+					   JsonbParseState *parse_state, TsBmsList *sparse_index_columns,
+					   bool *has_object)
 {
 	int num_cols = index_info->ii_NumIndexKeyAttrs;
 
@@ -1588,7 +1588,7 @@ try_create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSet
 	 */
 	if (!ts_guc_enable_sparse_index_bloom)
 	{
-		return false;
+		return;
 	}
 
 	/* Bitmapset of column attnums */
@@ -1603,10 +1603,7 @@ try_create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSet
 
 		/* Skip expression indexes */
 		if (attno == InvalidAttrNumber)
-		{
-			pfree(bloom_config.columns);
-			return false;
-		}
+			continue;
 
 		char *attname = get_attname(ht->main_table_relid, attno, false);
 
@@ -1653,7 +1650,7 @@ try_create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSet
 	{
 		pfree(bloom_config.columns);
 		bms_free(attnums_bitmap);
-		return false;
+		return;
 	}
 
 	/* Check if this exact bloom already exists */
@@ -1661,7 +1658,7 @@ try_create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSet
 	{
 		pfree(bloom_config.columns);
 		bms_free(attnums_bitmap);
-		return false;
+		return;
 	}
 
 	bloom_config.num_columns = valid_columns;
@@ -1680,7 +1677,6 @@ try_create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSet
 	*has_object = true;
 
 	pfree(bloom_config.columns);
-	return true;
 }
 
 static Jsonb *
@@ -1733,17 +1729,13 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 		int num_cols = index_info->ii_NumIndexKeyAttrs;
 		if (num_cols >= 2 && num_cols <= MAX_BLOOM_FILTER_COLUMNS)
 		{
-			/* Try to create composite bloom from this index */
-			if (try_create_composite_bloom(index_info,
-										   ht,
-										   settings,
-										   parse_state,
-										   &sparse_index_columns,
-										   &has_object))
-			{
-				/* Composite bloom created, skip column loop */
-				continue;
-			}
+			/* Create composite bloom from this index */
+			create_composite_bloom(index_info,
+								   ht,
+								   settings,
+								   parse_state,
+								   &sparse_index_columns,
+								   &has_object);
 		}
 
 		for (int i = 0; i < index_info->ii_NumIndexKeyAttrs; i++)
