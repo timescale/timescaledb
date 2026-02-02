@@ -70,8 +70,6 @@ jobs:
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         event_name: ["${{ github.event_name }}"]
         exclude:
-          - versions: { pg: 15, pg_version: "${{ needs.config.outputs.pg15_latest }}" }
-            event_name: "pull_request"
           - versions: { pg: 16, pg_version: "${{ needs.config.outputs.pg16_latest }}" }
             event_name: "pull_request"
     env:
@@ -202,7 +200,6 @@ jobs:
       run: cmake --install build_win --config ${{ matrix.build_type }}
 
     - name: Setup postgres cluster
-      if: github.event_name == 'schedule'
       run: |
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         mkdir -p ${{ env.TABLESPACE1 }}\_default
@@ -225,7 +222,6 @@ jobs:
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'SHOW data_directory;'
 
     - name: Install postgres for test runner
-      if: github.event_name == 'schedule'
       shell: wsl-bash {0}
       run: |
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh || true
@@ -235,7 +231,6 @@ jobs:
         apt-get install -y --force-yes postgresql-server-dev-${{ matrix.versions.pg }}
 
     - name: Run tests
-      if: github.event_name == 'schedule'
       shell: wsl-bash {0}
       env:
         WSLENV: "IGNORES:SKIPS"

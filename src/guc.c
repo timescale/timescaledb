@@ -461,8 +461,11 @@ check_default_chunk_time_interval(char **newval, void **extra, GucSource source)
 
 	Interval *parsed = DatumGetIntervalP(interval);
 	/* Save the new Interval in extra. The old extra is freed automatically. */
-	*extra = guc_malloc(ERROR, sizeof(Interval));
-	memcpy(*extra, parsed, sizeof(Interval));
+	Interval *myextra = guc_malloc(ERROR, sizeof(Interval));
+	myextra->time = parsed->time;
+	myextra->day = parsed->day;
+	myextra->month = parsed->month;
+	*extra = (void *) myextra;
 	pfree(parsed);
 
 	return true;
