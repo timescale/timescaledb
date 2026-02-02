@@ -14,9 +14,16 @@ typedef struct ColumnarIndexScanPath
 {
 	CustomPath custom_path;
 	const CompressionInfo *info;
-	AttrNumber aggregate_attno; /* Chunk attno of the aggregate column */
-	AttrNumber metadata_attno;	/* Compressed chunk attno for metadata */
+	List *aggregate_attnos; /* Chunk attnos of aggregate columns in target list order */
+	List *metadata_attnos;	/* Compressed chunk attnos for metadata in target list order */
+	List *aggregate_fnoids; /* Aggregate function OIDs in target list order */
 } ColumnarIndexScanPath;
+
+/*
+ * Post-process a plan tree to fix Aggref references for ColumnarIndexScan.
+ * This is needed when multiple aggregates reference the same column.
+ */
+extern void ts_columnar_index_scan_fix_aggrefs(Plan *plan);
 
 extern void _columnar_index_scan_init(void);
 extern bool ts_is_columnar_index_scan_path(Path *path);

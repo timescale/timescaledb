@@ -679,7 +679,7 @@ ts_remove_orderby_sparse_index(CompressionSettings *settings)
 		JsonbValue value;
 		getKeyJsonValueFromContainer(container, key_name_source, strlen(key_name_source), &value);
 		if (value.type == jbvString && ((int) strlen(value_name_orderby) == value.val.string.len) &&
-			(int) strncmp(value_name_orderby, value.val.string.val, value.val.string.len) == 0)
+			strncmp(value_name_orderby, value.val.string.val, value.val.string.len) == 0)
 		{
 			removed = true;
 			continue;

@@ -116,7 +116,6 @@ test upper bounds
  Sort
    Sort Key: _hyper_1_1_chunk.value
    ->  Seq Scan on _hyper_1_1_chunk
-         Filter: ("time" < 10)
 
 :PREFIX SELECT * FROM hyper WHERE time < 11 ORDER BY value;
 --- QUERY PLAN ---
@@ -124,7 +123,6 @@ test upper bounds
    Sort Key: hyper.value
    ->  Append
          ->  Seq Scan on _hyper_1_1_chunk
-               Filter: ("time" < 11)
          ->  Seq Scan on _hyper_1_2_chunk
                Filter: ("time" < 11)
 
@@ -141,7 +139,6 @@ test upper bounds
    Sort Key: hyper.value
    ->  Append
          ->  Seq Scan on _hyper_1_1_chunk
-               Filter: (10 >= "time")
          ->  Seq Scan on _hyper_1_2_chunk
                Filter: (10 >= "time")
 
@@ -152,7 +149,6 @@ test lower bounds
  Sort
    Sort Key: _hyper_1_2_chunk.value
    ->  Seq Scan on _hyper_1_2_chunk
-         Filter: (("time" >= 10) AND ("time" < 20))
 
 :PREFIX SELECT * FROM hyper WHERE 10 < time and 20 >= time ORDER BY value;
 --- QUERY PLAN ---
@@ -172,14 +168,12 @@ test lower bounds
          ->  Seq Scan on _hyper_1_1_chunk
                Filter: (("time" >= 9) AND ("time" < 20))
          ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" >= 9) AND ("time" < 20))
 
 :PREFIX SELECT * FROM hyper WHERE time > 9 and time < 20 ORDER BY value;
 --- QUERY PLAN ---
  Sort
    Sort Key: _hyper_1_2_chunk.value
    ->  Seq Scan on _hyper_1_2_chunk
-         Filter: (("time" > 9) AND ("time" < 20))
 
 \qecho test empty result
 test empty result
@@ -193,7 +187,6 @@ test expression evaluation
 :PREFIX SELECT * FROM hyper WHERE time < (5*2)::smallint;
 --- QUERY PLAN ---
  Seq Scan on _hyper_1_1_chunk
-   Filter: ("time" < '10'::smallint)
 
 \qecho test logic at INT64_MAX
 test logic at INT64_MAX
@@ -242,7 +235,6 @@ SELECT * FROM cte ORDER BY value;
  Sort
    Sort Key: _hyper_1_1_chunk.value
    ->  Seq Scan on _hyper_1_1_chunk
-         Filter: ("time" < 10)
 
 \qecho subquery
 subquery
@@ -251,7 +243,6 @@ subquery
  Result
    SubPlan 1
      ->  Seq Scan on _hyper_1_1_chunk
-           Filter: ("time" < 10)
 
 \qecho no space constraint
 no space constraint
@@ -773,14 +764,12 @@ should exclude chunks on m1 and propagate qual to m2 because of INNER JOIN
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
          Order: m1."time"
          ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
                Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
    ->  Materialize
          ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 m2
                Order: m2."time"
                ->  Index Only Scan Backward using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk m2_1
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Only Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 
@@ -793,14 +782,12 @@ should exclude chunks on m2 and propagate qual to m1 because of INNER JOIN
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
          Order: m1."time"
          ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
                Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
    ->  Materialize
          ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 m2
                Order: m2."time"
                ->  Index Only Scan Backward using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk m2_1
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Only Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 
@@ -845,7 +832,6 @@ should exclude chunks on m2
          ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 m2
                Order: m2."time"
                ->  Index Only Scan Backward using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk m2_1
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Only Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 
@@ -860,7 +846,6 @@ should exclude chunks on m1
          ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
                Order: m1."time"
                ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Materialize
@@ -906,7 +891,7 @@ time_bucket exclusion
  Sort
    Sort Key: _hyper_1_1_chunk."time"
    ->  Seq Scan on _hyper_1_1_chunk
-         Filter: (("time" < '10'::bigint) AND (time_bucket('10'::bigint, "time") < '10'::bigint))
+         Filter: (time_bucket('10'::bigint, "time") < '10'::bigint)
 
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) < 11::bigint ORDER BY time;
 --- QUERY PLAN ---
@@ -914,9 +899,9 @@ time_bucket exclusion
    Sort Key: hyper."time"
    ->  Append
          ->  Seq Scan on _hyper_1_1_chunk
-               Filter: (("time" < '21'::bigint) AND (time_bucket('10'::bigint, "time") < '11'::bigint))
+               Filter: (time_bucket('10'::bigint, "time") < '11'::bigint)
          ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" < '21'::bigint) AND (time_bucket('10'::bigint, "time") < '11'::bigint))
+               Filter: (time_bucket('10'::bigint, "time") < '11'::bigint)
          ->  Seq Scan on _hyper_1_3_chunk
                Filter: (("time" < '21'::bigint) AND (time_bucket('10'::bigint, "time") < '11'::bigint))
 
@@ -926,9 +911,9 @@ time_bucket exclusion
    Sort Key: hyper."time"
    ->  Append
          ->  Seq Scan on _hyper_1_1_chunk
-               Filter: (("time" <= '20'::bigint) AND (time_bucket('10'::bigint, "time") <= '10'::bigint))
+               Filter: (time_bucket('10'::bigint, "time") <= '10'::bigint)
          ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" <= '20'::bigint) AND (time_bucket('10'::bigint, "time") <= '10'::bigint))
+               Filter: (time_bucket('10'::bigint, "time") <= '10'::bigint)
          ->  Seq Scan on _hyper_1_3_chunk
                Filter: (("time" <= '20'::bigint) AND (time_bucket('10'::bigint, "time") <= '10'::bigint))
 
@@ -937,7 +922,7 @@ time_bucket exclusion
  Sort
    Sort Key: _hyper_1_1_chunk."time"
    ->  Seq Scan on _hyper_1_1_chunk
-         Filter: (("time" < '10'::bigint) AND ('10'::bigint > time_bucket('10'::bigint, "time")))
+         Filter: ('10'::bigint > time_bucket('10'::bigint, "time"))
 
 :PREFIX SELECT * FROM hyper WHERE 11::bigint > time_bucket(10, time) ORDER BY time;
 --- QUERY PLAN ---
@@ -945,9 +930,9 @@ time_bucket exclusion
    Sort Key: hyper."time"
    ->  Append
          ->  Seq Scan on _hyper_1_1_chunk
-               Filter: (("time" < '21'::bigint) AND ('11'::bigint > time_bucket('10'::bigint, "time")))
+               Filter: ('11'::bigint > time_bucket('10'::bigint, "time"))
          ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" < '21'::bigint) AND ('11'::bigint > time_bucket('10'::bigint, "time")))
+               Filter: ('11'::bigint > time_bucket('10'::bigint, "time"))
          ->  Seq Scan on _hyper_1_3_chunk
                Filter: (("time" < '21'::bigint) AND ('11'::bigint > time_bucket('10'::bigint, "time")))
 
@@ -957,9 +942,9 @@ time_bucket exclusion
    Sort Key: hyper."time"
    ->  Append
          ->  Seq Scan on _hyper_1_1_chunk
-               Filter: (("time" < '20'::bigint) AND (time_bucket('10'::bigint, "time", '5'::bigint) < '10'::bigint))
+               Filter: (time_bucket('10'::bigint, "time", '5'::bigint) < '10'::bigint)
          ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" < '20'::bigint) AND (time_bucket('10'::bigint, "time", '5'::bigint) < '10'::bigint))
+               Filter: (time_bucket('10'::bigint, "time", '5'::bigint) < '10'::bigint)
 
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time, 5) < 11::bigint ORDER BY time;
 --- QUERY PLAN ---
@@ -967,9 +952,9 @@ time_bucket exclusion
    Sort Key: hyper."time"
    ->  Append
          ->  Seq Scan on _hyper_1_1_chunk
-               Filter: (("time" < '21'::bigint) AND (time_bucket('10'::bigint, "time", '5'::bigint) < '11'::bigint))
+               Filter: (time_bucket('10'::bigint, "time", '5'::bigint) < '11'::bigint)
          ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" < '21'::bigint) AND (time_bucket('10'::bigint, "time", '5'::bigint) < '11'::bigint))
+               Filter: (time_bucket('10'::bigint, "time", '5'::bigint) < '11'::bigint)
          ->  Seq Scan on _hyper_1_3_chunk
                Filter: (("time" < '21'::bigint) AND (time_bucket('10'::bigint, "time", '5'::bigint) < '11'::bigint))
 
@@ -979,9 +964,9 @@ time_bucket exclusion
    Sort Key: hyper."time"
    ->  Append
          ->  Seq Scan on _hyper_1_1_chunk
-               Filter: (("time" <= '20'::bigint) AND (time_bucket('10'::bigint, "time", '5'::bigint) <= '10'::bigint))
+               Filter: (time_bucket('10'::bigint, "time", '5'::bigint) <= '10'::bigint)
          ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" <= '20'::bigint) AND (time_bucket('10'::bigint, "time", '5'::bigint) <= '10'::bigint))
+               Filter: (time_bucket('10'::bigint, "time", '5'::bigint) <= '10'::bigint)
          ->  Seq Scan on _hyper_1_3_chunk
                Filter: (("time" <= '20'::bigint) AND (time_bucket('10'::bigint, "time", '5'::bigint) <= '10'::bigint))
 
@@ -991,9 +976,9 @@ time_bucket exclusion
    Sort Key: hyper."time"
    ->  Append
          ->  Seq Scan on _hyper_1_1_chunk
-               Filter: (("time" < '20'::bigint) AND ('10'::bigint > time_bucket('10'::bigint, "time", '5'::bigint)))
+               Filter: ('10'::bigint > time_bucket('10'::bigint, "time", '5'::bigint))
          ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" < '20'::bigint) AND ('10'::bigint > time_bucket('10'::bigint, "time", '5'::bigint)))
+               Filter: ('10'::bigint > time_bucket('10'::bigint, "time", '5'::bigint))
 
 :PREFIX SELECT * FROM hyper WHERE 11::bigint > time_bucket(10, time, 5) ORDER BY time;
 --- QUERY PLAN ---
@@ -1001,9 +986,9 @@ time_bucket exclusion
    Sort Key: hyper."time"
    ->  Append
          ->  Seq Scan on _hyper_1_1_chunk
-               Filter: (("time" < '21'::bigint) AND ('11'::bigint > time_bucket('10'::bigint, "time", '5'::bigint)))
+               Filter: ('11'::bigint > time_bucket('10'::bigint, "time", '5'::bigint))
          ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" < '21'::bigint) AND ('11'::bigint > time_bucket('10'::bigint, "time", '5'::bigint)))
+               Filter: ('11'::bigint > time_bucket('10'::bigint, "time", '5'::bigint))
          ->  Seq Scan on _hyper_1_3_chunk
                Filter: (("time" < '21'::bigint) AND ('11'::bigint > time_bucket('10'::bigint, "time", '5'::bigint)))
 
@@ -1019,7 +1004,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamp;
  Custom Scan (ChunkAppend) on metrics_timestamp
    Order: metrics_timestamp."time"
    ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
-         Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time") < 'Wed Jan 05 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
          Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000'::timestamp without time zone)
@@ -1030,7 +1014,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamp;
  Custom Scan (ChunkAppend) on metrics_timestamp
    Order: metrics_timestamp."time"
    ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
-         Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time") <= 'Wed Jan 05 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
          Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000'::timestamp without time zone)
@@ -1044,7 +1027,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamp;
          Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time") > 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
-         Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time") > 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time) >= '2000-01-15' ORDER BY time;
@@ -1055,10 +1037,8 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamp;
          Index Cond: ("time" >= 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time") >= 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_158_chunk_metrics_timestamp_time_idx on _hyper_5_158_chunk
-         Index Cond: ("time" >= 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time") >= 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
-         Index Cond: ("time" >= 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time") >= 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time,'3d'::interval) < '2000-01-05' ORDER BY time;
@@ -1066,7 +1046,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamp;
  Custom Scan (ChunkAppend) on metrics_timestamp
    Order: metrics_timestamp."time"
    ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
-         Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", '@ 3 days'::interval) < 'Wed Jan 05 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
          Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000'::timestamp without time zone)
@@ -1077,7 +1056,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamp;
  Custom Scan (ChunkAppend) on metrics_timestamp
    Order: metrics_timestamp."time"
    ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
-         Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", '@ 3 days'::interval) <= 'Wed Jan 05 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
          Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000'::timestamp without time zone)
@@ -1091,7 +1069,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamp;
          Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", '@ 3 days'::interval) > 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
-         Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", '@ 3 days'::interval) > 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time,'3d'::interval) >= '2000-01-25' ORDER BY time;
@@ -1102,7 +1079,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamp;
          Index Cond: ("time" >= 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", '@ 3 days'::interval) >= 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
-         Index Cond: ("time" >= 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", '@ 3 days'::interval) >= 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time,'2000-01-10'::timestamp) < '2000-01-05' ORDER BY time;
@@ -1110,7 +1086,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamp;
  Custom Scan (ChunkAppend) on metrics_timestamp
    Order: metrics_timestamp."time"
    ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
-         Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) < 'Wed Jan 05 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
          Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000'::timestamp without time zone)
@@ -1121,7 +1096,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamp;
  Custom Scan (ChunkAppend) on metrics_timestamp
    Order: metrics_timestamp."time"
    ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
-         Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) <= 'Wed Jan 05 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
          Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000'::timestamp without time zone)
@@ -1135,7 +1109,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamp;
          Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) > 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
-         Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) > 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time,'2000-01-10'::timestamp) >= '2000-01-25' ORDER BY time;
@@ -1146,7 +1119,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamp;
          Index Cond: ("time" >= 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) >= 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
    ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
-         Index Cond: ("time" >= 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) >= 'Tue Jan 25 00:00:00 2000'::timestamp without time zone)
 
 \qecho timestamptz time_bucket exclusion
@@ -1161,7 +1133,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
  Custom Scan (ChunkAppend) on metrics_timestamptz
    Order: metrics_timestamptz."time"
    ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
-         Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time") < 'Wed Jan 05 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
          Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
@@ -1172,7 +1143,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
  Custom Scan (ChunkAppend) on metrics_timestamptz
    Order: metrics_timestamptz."time"
    ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
-         Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time") <= 'Wed Jan 05 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
          Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
@@ -1186,7 +1156,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
          Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time") > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
-         Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time") > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
 
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time) >= '2000-01-25' ORDER BY time;
@@ -1197,7 +1166,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
          Index Cond: ("time" >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time") >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
-         Index Cond: ("time" >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time") >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
 
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'3d'::interval) < '2000-01-05' ORDER BY time;
@@ -1205,7 +1173,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
  Custom Scan (ChunkAppend) on metrics_timestamptz
    Order: metrics_timestamptz."time"
    ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
-         Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", '@ 3 days'::interval) < 'Wed Jan 05 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
          Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
@@ -1216,7 +1183,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
  Custom Scan (ChunkAppend) on metrics_timestamptz
    Order: metrics_timestamptz."time"
    ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
-         Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", '@ 3 days'::interval) <= 'Wed Jan 05 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
          Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
@@ -1230,7 +1196,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
          Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", '@ 3 days'::interval) > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
-         Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", '@ 3 days'::interval) > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
 
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'3d'::interval) >= '2000-01-25' ORDER BY time;
@@ -1241,7 +1206,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
          Index Cond: ("time" >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", '@ 3 days'::interval) >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
-         Index Cond: ("time" >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", '@ 3 days'::interval) >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
 
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'2000-01-10'::timestamptz) < '2000-01-05' ORDER BY time;
@@ -1249,7 +1213,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
  Custom Scan (ChunkAppend) on metrics_timestamptz
    Order: metrics_timestamptz."time"
    ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
-         Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) < 'Wed Jan 05 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
          Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
@@ -1260,7 +1223,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
  Custom Scan (ChunkAppend) on metrics_timestamptz
    Order: metrics_timestamptz."time"
    ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
-         Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) <= 'Wed Jan 05 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
          Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
@@ -1274,7 +1236,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
          Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
-         Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
 
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'2000-01-10'::timestamptz) >= '2000-01-25' ORDER BY time;
@@ -1285,7 +1246,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
          Index Cond: ("time" >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
-         Index Cond: ("time" >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
 
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'Europe/Berlin') < '2000-01-05' ORDER BY time;
@@ -1293,7 +1253,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
  Custom Scan (ChunkAppend) on metrics_timestamptz
    Order: metrics_timestamptz."time"
    ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
-         Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Europe/Berlin'::text, NULL::timestamp with time zone, NULL::interval) < 'Wed Jan 05 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
          Index Cond: ("time" < 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
@@ -1304,7 +1263,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
  Custom Scan (ChunkAppend) on metrics_timestamptz
    Order: metrics_timestamptz."time"
    ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
-         Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Europe/Berlin'::text, NULL::timestamp with time zone, NULL::interval) <= 'Wed Jan 05 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
          Index Cond: ("time" <= 'Wed Jan 12 00:00:00 2000 PST'::timestamp with time zone)
@@ -1318,7 +1276,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
          Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Europe/Berlin'::text, NULL::timestamp with time zone, NULL::interval) > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
-         Index Cond: ("time" > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Europe/Berlin'::text, NULL::timestamp with time zone, NULL::interval) > 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
 
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'Europe/Berlin') >= '2000-01-25' ORDER BY time;
@@ -1329,7 +1286,6 @@ SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
          Index Cond: ("time" >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Europe/Berlin'::text, NULL::timestamp with time zone, NULL::interval) >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
-         Index Cond: ("time" >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
          Filter: (time_bucket('@ 7 days'::interval, "time", 'Europe/Berlin'::text, NULL::timestamp with time zone, NULL::interval) >= 'Tue Jan 25 00:00:00 2000 PST'::timestamp with time zone)
 
 \qecho test overflow behaviour of time_bucket exclusion
@@ -1342,15 +1298,15 @@ test overflow behaviour of time_bucket exclusion
          ->  Seq Scan on _hyper_1_96_chunk
                Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
          ->  Seq Scan on _hyper_1_97_chunk
-               Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
+               Filter: (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint)
          ->  Seq Scan on _hyper_1_98_chunk
-               Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
+               Filter: (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint)
          ->  Seq Scan on _hyper_1_99_chunk
-               Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
+               Filter: (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint)
          ->  Seq Scan on _hyper_1_100_chunk
-               Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
+               Filter: (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint)
          ->  Seq Scan on _hyper_1_101_chunk
-               Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
+               Filter: (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint)
          ->  Seq Scan on _hyper_1_102_chunk
                Filter: (("time" > 950) AND (time_bucket('10'::bigint, "time") < '9223372036854775807'::bigint))
 
@@ -1809,21 +1765,21 @@ DEALLOCATE P8;
          ->  Seq Scan on _hyper_1_2_chunk
                Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_3_chunk
-               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: ((time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_4_chunk
-               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: ((time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_5_chunk
-               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: ((time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_6_chunk
-               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: ((time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_7_chunk
-               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: ((time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_8_chunk
-               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: ((time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_9_chunk
-               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: ((time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_10_chunk
-               Filter: (("time" > '10'::bigint) AND ("time" < '100'::bigint) AND (time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
+               Filter: ((time_bucket('10'::bigint, "time") > 10) AND (time_bucket('10'::bigint, "time") < 100))
 
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) > 10 AND time_bucket(10, time) < 20 ORDER BY time;
 --- QUERY PLAN ---
@@ -1924,17 +1880,17 @@ time_bucket exclusion with timestamptz and day interval
 
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1d',time) >= '2000-01-03' AND time_bucket('7d',time) <= '2000-01-10' ORDER BY time;
 --- QUERY PLAN ---
- Custom Scan (ChunkAppend) on metrics_timestamptz
-   Order: metrics_timestamptz."time"
-   ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
-         Index Cond: (("time" >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND ("time" <= 'Mon Jan 17 00:00:00 2000 PST'::timestamp with time zone))
-         Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, "time") <= 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
-   ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
-         Index Cond: (("time" >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND ("time" <= 'Mon Jan 17 00:00:00 2000 PST'::timestamp with time zone))
-         Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, "time") <= 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
-   ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
-         Index Cond: (("time" >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND ("time" <= 'Mon Jan 17 00:00:00 2000 PST'::timestamp with time zone))
-         Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, "time") <= 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+ Sort
+   Sort Key: metrics_timestamptz."time"
+   ->  Append
+         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+               Index Cond: (("time" >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND ("time" <= 'Mon Jan 17 00:00:00 2000 PST'::timestamp with time zone))
+               Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, "time") <= 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Seq Scan on _hyper_6_161_chunk
+               Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, "time") <= 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
+               Index Cond: (("time" >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND ("time" <= 'Mon Jan 17 00:00:00 2000 PST'::timestamp with time zone))
+               Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Mon Jan 03 00:00:00 2000 PST'::timestamp with time zone) AND (time_bucket('@ 7 days'::interval, "time") <= 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
 
 \qecho no transformation
 no transformation
@@ -1945,35 +1901,35 @@ no transformation
    ->  Custom Scan (ChunkAppend) on hyper
          Chunks excluded during startup: 0
          ->  Seq Scan on _hyper_1_1_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_2_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_3_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_4_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_5_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_6_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_7_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_8_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_9_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_10_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_11_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_12_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_13_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_14_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
          ->  Seq Scan on _hyper_1_15_chunk
-               Filter: (("time" < 150) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
+               Filter: ((time_bucket(((10 + (floor(random()))::integer))::bigint, "time") > 10) AND (time_bucket(((10 + (floor(random()))::integer))::bigint, "time") < 100))
 
 \qecho exclude chunks based on time column with partitioning function. This
 exclude chunks based on time column with partitioning function. This
@@ -2191,14 +2147,12 @@ these will propagate even for LEFT/RIGHT JOIN because the constraints are not in
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
          Order: m1."time"
          ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
                Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
    ->  Materialize
          ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 m2
                Order: m2."time"
                ->  Index Only Scan Backward using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk m2_1
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Only Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 
@@ -2209,14 +2163,12 @@ these will propagate even for LEFT/RIGHT JOIN because the constraints are not in
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
          Order: m1."time"
          ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
                Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
    ->  Materialize
          ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 m2
                Order: m2."time"
                ->  Index Only Scan Backward using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk m2_1
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Only Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 
@@ -2227,7 +2179,6 @@ these will propagate even for LEFT/RIGHT JOIN because the constraints are not in
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
          Order: m1."time"
          ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
                Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
    ->  Materialize
@@ -2247,14 +2198,12 @@ these will propagate even for LEFT/RIGHT JOIN because the constraints are not in
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
          Order: m1."time"
          ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
                Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
    ->  Materialize
          ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 m2
                Order: m2."time"
                ->  Index Only Scan Backward using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk m2_1
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Only Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 
@@ -2495,14 +2444,12 @@ test equality condition not in ON clause
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
          Order: m1."time"
          ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
                Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
    ->  Materialize
          ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 m2
                Order: m2."time"
                ->  Index Only Scan Backward using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk m2_1
-                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Only Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
                      Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 
@@ -2512,20 +2459,20 @@ test constraints not joined on
 device_id constraint must not propagate
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON true WHERE m2.time = m1.time AND m2.time < '2000-01-10' AND m1.device_id = 1 ORDER BY m1.time;
 --- QUERY PLAN ---
- Nested Loop
-   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
-         Order: m1."time"
-         ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               Filter: (device_id = 1)
-         ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               Filter: (device_id = 1)
-   ->  Append
-         ->  Index Only Scan using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk m2_1
-               Index Cond: (("time" = m1."time") AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
-         ->  Index Only Scan using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
-               Index Cond: (("time" = m1."time") AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+ Sort
+   Sort Key: m1."time"
+   ->  Nested Loop
+         ->  Append
+               ->  Seq Scan on _hyper_6_160_chunk m1_1
+                     Filter: (device_id = 1)
+               ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (device_id = 1)
+         ->  Append
+               ->  Index Only Scan using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk m2_1
+                     Index Cond: ("time" = m1."time")
+               ->  Index Only Scan using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
+                     Index Cond: (("time" = m1."time") AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
 
 \qecho test multiple join conditions
 test multiple join conditions
@@ -2533,22 +2480,22 @@ test multiple join conditions
 device_id constraint should propagate
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN metrics_timestamptz_2 m2 ON true WHERE m2.time = m1.time AND m1.device_id = m2.device_id AND m2.time < '2000-01-10' AND m1.device_id = 1 ORDER BY m1.time;
 --- QUERY PLAN ---
- Nested Loop
-   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
-         Order: m1."time"
-         ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               Filter: (device_id = 1)
-         ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-               Filter: (device_id = 1)
-   ->  Append
-         ->  Index Scan using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk m2_1
-               Index Cond: (("time" = m1."time") AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
-               Filter: (device_id = 1)
-         ->  Index Scan using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
-               Index Cond: (("time" = m1."time") AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
-               Filter: (device_id = 1)
+ Sort
+   Sort Key: m1."time"
+   ->  Nested Loop
+         ->  Append
+               ->  Seq Scan on _hyper_6_160_chunk m1_1
+                     Filter: (device_id = 1)
+               ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+                     Filter: (device_id = 1)
+         ->  Append
+               ->  Index Scan using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk m2_1
+                     Index Cond: ("time" = m1."time")
+                     Filter: (device_id = 1)
+               ->  Index Scan using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk m2_2
+                     Index Cond: (("time" = m1."time") AND ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+                     Filter: (device_id = 1)
 
 \qecho test join with 3 tables
 test join with 3 tables
@@ -2710,7 +2657,6 @@ will not propagate because constraints are only added to hypertables
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
          Order: m1."time"
          ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
                Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
    ->  Sort
@@ -2722,17 +2668,17 @@ test JOINs with normal table
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 INNER JOIN regular_timestamptz m2 ON m1.time = m2.time WHERE m2.time < '2000-01-10' ORDER BY m1.time;
 --- QUERY PLAN ---
  Merge Join
-   Merge Cond: (m1."time" = m2."time")
-   ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
-         Order: m1."time"
-         ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   Merge Cond: (m2."time" = m1."time")
    ->  Sort
          Sort Key: m2."time"
          ->  Seq Scan on regular_timestamptz m2
                Filter: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+   ->  Materialize
+         ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1
+               Order: m1."time"
+               ->  Index Only Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk m1_1
+               ->  Index Only Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk m1_2
+                     Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
 
 \qecho test quals are not pushed into OUTER JOIN
 test quals are not pushed into OUTER JOIN
@@ -2948,19 +2894,16 @@ SELECT o2_m1.time FROM metrics_timestamptz o2_m1 FULL OUTER JOIN metrics_timesta
 --- QUERY PLAN ---
  Sort
    Sort Key: o1_m1."time", o2_m1."time"
-   ->  Merge Full Join
-         Merge Cond: (o2_m1."time" = o1_m1."time")
+   ->  Hash Full Join
+         Hash Cond: (o2_m1."time" = o1_m1."time")
          ->  Nested Loop
-               ->  Merge Append
-                     Sort Key: o2_m2."time"
+               ->  Append
                      ->  Index Scan Backward using _hyper_7_168_chunk_metrics_timestamptz_2_time_idx on _hyper_7_168_chunk o2_m2_1
                            Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
                            Filter: (device_id = 2)
-                     ->  Index Scan Backward using _hyper_7_169_chunk_metrics_timestamptz_2_time_idx on _hyper_7_169_chunk o2_m2_2
-                           Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_7_169_chunk o2_m2_2
                            Filter: (device_id = 2)
-                     ->  Index Scan Backward using _hyper_7_170_chunk_metrics_timestamptz_2_time_idx on _hyper_7_170_chunk o2_m2_3
-                           Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_7_170_chunk o2_m2_3
                            Filter: (device_id = 2)
                ->  Append
                      ->  Index Scan using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk o2_m1_1
@@ -2978,12 +2921,10 @@ SELECT o2_m1.time FROM metrics_timestamptz o2_m1 FULL OUTER JOIN metrics_timesta
                      ->  Index Scan using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk o2_m1_5
                            Index Cond: ("time" = o2_m2."time")
                            Filter: (device_id = 2)
-         ->  Materialize
+         ->  Hash
                ->  Nested Loop
-                     ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 o1_m2
-                           Order: o1_m2."time"
-                           ->  Index Scan Backward using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk o1_m2_1
-                                 Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+                     ->  Append
+                           ->  Seq Scan on _hyper_7_165_chunk o1_m2_1
                                  Filter: (device_id = 1)
                            ->  Index Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk o1_m2_2
                                  Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
@@ -3014,19 +2955,16 @@ SELECT o2_m1.time FROM metrics_timestamptz o2_m1 FULL OUTER JOIN metrics_timesta
 --- QUERY PLAN ---
  Sort
    Sort Key: o1_m1."time", o2_m1."time"
-   ->  Merge Full Join
-         Merge Cond: (o2_m1."time" = o1_m1."time")
+   ->  Hash Full Join
+         Hash Cond: (o2_m1."time" = o1_m1."time")
          ->  Nested Loop
-               ->  Merge Append
-                     Sort Key: o2_m2."time"
+               ->  Append
                      ->  Index Scan Backward using _hyper_7_168_chunk_metrics_timestamptz_2_time_idx on _hyper_7_168_chunk o2_m2_1
                            Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
                            Filter: (device_id = 2)
-                     ->  Index Scan Backward using _hyper_7_169_chunk_metrics_timestamptz_2_time_idx on _hyper_7_169_chunk o2_m2_2
-                           Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_7_169_chunk o2_m2_2
                            Filter: (device_id = 2)
-                     ->  Index Scan Backward using _hyper_7_170_chunk_metrics_timestamptz_2_time_idx on _hyper_7_170_chunk o2_m2_3
-                           Index Cond: ("time" > 'Thu Jan 20 00:00:00 2000 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_7_170_chunk o2_m2_3
                            Filter: (device_id = 2)
                ->  Append
                      ->  Index Scan using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk o2_m1_1
@@ -3044,12 +2982,10 @@ SELECT o2_m1.time FROM metrics_timestamptz o2_m1 FULL OUTER JOIN metrics_timesta
                      ->  Index Scan using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk o2_m1_5
                            Index Cond: ("time" = o2_m2."time")
                            Filter: (device_id = 2)
-         ->  Materialize
+         ->  Hash
                ->  Nested Loop
-                     ->  Custom Scan (ChunkAppend) on metrics_timestamptz_2 o1_m2
-                           Order: o1_m2."time"
-                           ->  Index Scan Backward using _hyper_7_165_chunk_metrics_timestamptz_2_time_idx on _hyper_7_165_chunk o1_m2_1
-                                 Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+                     ->  Append
+                           ->  Seq Scan on _hyper_7_165_chunk o1_m2_1
                                  Filter: (device_id = 1)
                            ->  Index Scan Backward using _hyper_7_166_chunk_metrics_timestamptz_2_time_idx on _hyper_7_166_chunk o1_m2_2
                                  Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
@@ -3087,14 +3023,12 @@ EXPLAIN (buffers off, costs off) SELECT * FROM t t1 INNER JOIN t t2 ON t1.time =
    ->  Merge Append
          Sort Key: t1."time"
          ->  Index Only Scan Backward using _hyper_15_182_chunk_t_time_idx on _hyper_15_182_chunk t1_1
-               Index Cond: ("time" < 'Fri Jan 01 00:00:00 2010 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_15_183_chunk_t_time_idx on _hyper_15_183_chunk t1_2
                Index Cond: ("time" < 'Fri Jan 01 00:00:00 2010 PST'::timestamp with time zone)
    ->  Materialize
          ->  Merge Append
                Sort Key: t2."time"
                ->  Index Only Scan Backward using _hyper_15_182_chunk_t_time_idx on _hyper_15_182_chunk t2_1
-                     Index Cond: ("time" < 'Fri Jan 01 00:00:00 2010 PST'::timestamp with time zone)
                ->  Index Only Scan Backward using _hyper_15_183_chunk_t_time_idx on _hyper_15_183_chunk t2_2
                      Index Cond: ("time" < 'Fri Jan 01 00:00:00 2010 PST'::timestamp with time zone)
 
@@ -3106,7 +3040,6 @@ EXPLAIN (buffers off, costs off) SELECT * FROM t t1 INNER JOIN t t2 ON t1.time =
    ->  Merge Append
          Sort Key: t1."time"
          ->  Index Only Scan Backward using _hyper_15_182_chunk_t_time_idx on _hyper_15_182_chunk t1_1
-               Index Cond: ("time" < 'Fri Jan 01 00:00:00 2010 PST'::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_15_183_chunk_t_time_idx on _hyper_15_183_chunk t1_2
                Index Cond: ("time" < 'Fri Jan 01 00:00:00 2010 PST'::timestamp with time zone)
    ->  Materialize
@@ -3215,5 +3148,211 @@ EXPLAIN (buffers off, costs off) SELECT * FROM f_t1_2(10) sc, f_t2(sc.a, 10);
                ->  Index Scan using t2_b_idx on t2 j_1
                      Index Cond: (b = 10)
                      Filter: (a = t1.a)
+
+CREATE TABLE metrics_int1(time int, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval=1);
+INSERT INTO metrics_int1 SELECT i, i::text, i FROM generate_series(3,7) i;
+SELECT tableoid::regclass, time FROM metrics_int1 ORDER BY time;
+                 tableoid                  | time 
+-------------------------------------------+------
+ _timescaledb_internal._hyper_19_189_chunk |    3
+ _timescaledb_internal._hyper_19_190_chunk |    4
+ _timescaledb_internal._hyper_19_191_chunk |    5
+ _timescaledb_internal._hyper_19_192_chunk |    6
+ _timescaledb_internal._hyper_19_193_chunk |    7
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_int1 WHERE time >= 2;
+--- QUERY PLAN ---
+ Append (actual rows=5.00 loops=1)
+   ->  Seq Scan on _hyper_19_189_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_190_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_191_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_192_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_193_chunk (actual rows=1.00 loops=1)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_int1 WHERE time >= 1 AND time >= 2;
+--- QUERY PLAN ---
+ Append (actual rows=5.00 loops=1)
+   ->  Seq Scan on _hyper_19_189_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_190_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_191_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_192_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_193_chunk (actual rows=1.00 loops=1)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_int1 WHERE time >= 4;
+--- QUERY PLAN ---
+ Append (actual rows=4.00 loops=1)
+   ->  Seq Scan on _hyper_19_190_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_191_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_192_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_193_chunk (actual rows=1.00 loops=1)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_int1 WHERE time > 4 AND time < 6;
+--- QUERY PLAN ---
+ Seq Scan on _hyper_19_191_chunk (actual rows=1.00 loops=1)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_int1 WHERE time > 4 AND time <= 6;
+--- QUERY PLAN ---
+ Append (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_19_191_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_192_chunk (actual rows=1.00 loops=1)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_int1 WHERE time >= 4 AND time < 6;
+--- QUERY PLAN ---
+ Append (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_19_190_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_191_chunk (actual rows=1.00 loops=1)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_int1 WHERE time >= 4 AND time <= 6;
+--- QUERY PLAN ---
+ Append (actual rows=3.00 loops=1)
+   ->  Seq Scan on _hyper_19_190_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_191_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_192_chunk (actual rows=1.00 loops=1)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_int1 WHERE time BETWEEN 4 AND 5;
+--- QUERY PLAN ---
+ Append (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_19_190_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_19_191_chunk (actual rows=1.00 loops=1)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_int1 WHERE time = 5;
+--- QUERY PLAN ---
+ Seq Scan on _hyper_19_191_chunk (actual rows=1.00 loops=1)
+
+SET TIMEZONE='UTC';
+CREATE TABLE metrics_tstz(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval='1day');
+INSERT INTO metrics_tstz SELECT '2000-01-01'::timestamptz + format('%s day',i)::interval, i::text, i FROM generate_series(2,6) i;
+SELECT tableoid::regclass, time FROM metrics_tstz ORDER BY time;
+                 tableoid                  |             time             
+-------------------------------------------+------------------------------
+ _timescaledb_internal._hyper_20_194_chunk | Mon Jan 03 00:00:00 2000 UTC
+ _timescaledb_internal._hyper_20_195_chunk | Tue Jan 04 00:00:00 2000 UTC
+ _timescaledb_internal._hyper_20_196_chunk | Wed Jan 05 00:00:00 2000 UTC
+ _timescaledb_internal._hyper_20_197_chunk | Thu Jan 06 00:00:00 2000 UTC
+ _timescaledb_internal._hyper_20_198_chunk | Fri Jan 07 00:00:00 2000 UTC
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_tstz WHERE time >= '2000-01-02';
+--- QUERY PLAN ---
+ Append (actual rows=5.00 loops=1)
+   ->  Seq Scan on _hyper_20_194_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_195_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_196_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_197_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_198_chunk (actual rows=1.00 loops=1)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_tstz WHERE time >= '2000-01-01' AND time >= '2000-01-02';
+--- QUERY PLAN ---
+ Append (actual rows=5.00 loops=1)
+   ->  Seq Scan on _hyper_20_194_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_195_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_196_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_197_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_198_chunk (actual rows=1.00 loops=1)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_tstz WHERE time >= '2000-01-04';
+--- QUERY PLAN ---
+ Append (actual rows=4.00 loops=1)
+   ->  Seq Scan on _hyper_20_195_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_196_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_197_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_198_chunk (actual rows=1.00 loops=1)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_tstz WHERE time > '2000-01-04' AND time < '2000-01-06';
+--- QUERY PLAN ---
+ Append (actual rows=1.00 loops=1)
+   ->  Index Scan using _hyper_20_195_chunk_metrics_tstz_time_idx on _hyper_20_195_chunk (actual rows=0.00 loops=1)
+         Index Cond: (("time" > 'Tue Jan 04 00:00:00 2000 UTC'::timestamp with time zone) AND ("time" < 'Thu Jan 06 00:00:00 2000 UTC'::timestamp with time zone))
+   ->  Seq Scan on _hyper_20_196_chunk (actual rows=1.00 loops=1)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_tstz WHERE time > '2000-01-04' AND time <= '2000-01-06';
+--- QUERY PLAN ---
+ Append (actual rows=2.00 loops=1)
+   ->  Index Scan using _hyper_20_195_chunk_metrics_tstz_time_idx on _hyper_20_195_chunk (actual rows=0.00 loops=1)
+         Index Cond: (("time" > 'Tue Jan 04 00:00:00 2000 UTC'::timestamp with time zone) AND ("time" <= 'Thu Jan 06 00:00:00 2000 UTC'::timestamp with time zone))
+   ->  Seq Scan on _hyper_20_196_chunk (actual rows=1.00 loops=1)
+   ->  Index Scan using _hyper_20_197_chunk_metrics_tstz_time_idx on _hyper_20_197_chunk (actual rows=1.00 loops=1)
+         Index Cond: (("time" > 'Tue Jan 04 00:00:00 2000 UTC'::timestamp with time zone) AND ("time" <= 'Thu Jan 06 00:00:00 2000 UTC'::timestamp with time zone))
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_tstz WHERE time >= '2000-01-04' AND time < '2000-01-06';
+--- QUERY PLAN ---
+ Append (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_20_195_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_196_chunk (actual rows=1.00 loops=1)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_tstz WHERE time >= '2000-01-04' AND time <= '2000-01-06';
+--- QUERY PLAN ---
+ Append (actual rows=3.00 loops=1)
+   ->  Seq Scan on _hyper_20_195_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_196_chunk (actual rows=1.00 loops=1)
+   ->  Index Scan using _hyper_20_197_chunk_metrics_tstz_time_idx on _hyper_20_197_chunk (actual rows=1.00 loops=1)
+         Index Cond: (("time" >= 'Tue Jan 04 00:00:00 2000 UTC'::timestamp with time zone) AND ("time" <= 'Thu Jan 06 00:00:00 2000 UTC'::timestamp with time zone))
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_tstz WHERE time BETWEEN '2000-01-04' AND '2000-01-05';
+--- QUERY PLAN ---
+ Append (actual rows=2.00 loops=1)
+   ->  Seq Scan on _hyper_20_195_chunk (actual rows=1.00 loops=1)
+   ->  Index Scan using _hyper_20_196_chunk_metrics_tstz_time_idx on _hyper_20_196_chunk (actual rows=1.00 loops=1)
+         Index Cond: (("time" >= 'Tue Jan 04 00:00:00 2000 UTC'::timestamp with time zone) AND ("time" <= 'Wed Jan 05 00:00:00 2000 UTC'::timestamp with time zone))
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_tstz WHERE time = '2000-01-05';
+--- QUERY PLAN ---
+ Index Scan using _hyper_20_196_chunk_metrics_tstz_time_idx on _hyper_20_196_chunk (actual rows=1.00 loops=1)
+   Index Cond: ("time" = 'Wed Jan 05 00:00:00 2000 UTC'::timestamp with time zone)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_tstz WHERE time >= '2000-01-04' AND time <= '2000-01-06' AND device = '5';
+--- QUERY PLAN ---
+ Append (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_20_195_chunk (actual rows=0.00 loops=1)
+         Filter: (device = '5'::text)
+         Rows Removed by Filter: 1
+   ->  Seq Scan on _hyper_20_196_chunk (actual rows=0.00 loops=1)
+         Filter: (device = '5'::text)
+         Rows Removed by Filter: 1
+   ->  Index Scan using _hyper_20_197_chunk_metrics_tstz_time_idx on _hyper_20_197_chunk (actual rows=1.00 loops=1)
+         Index Cond: (("time" >= 'Tue Jan 04 00:00:00 2000 UTC'::timestamp with time zone) AND ("time" <= 'Thu Jan 06 00:00:00 2000 UTC'::timestamp with time zone))
+         Filter: (device = '5'::text)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_tstz WHERE time >= '2000-01-04' AND time <= '2000-01-06' AND device IS NOT NULL;
+--- QUERY PLAN ---
+ Append (actual rows=3.00 loops=1)
+   ->  Seq Scan on _hyper_20_195_chunk (actual rows=1.00 loops=1)
+         Filter: (device IS NOT NULL)
+   ->  Seq Scan on _hyper_20_196_chunk (actual rows=1.00 loops=1)
+         Filter: (device IS NOT NULL)
+   ->  Index Scan using _hyper_20_197_chunk_metrics_tstz_time_idx on _hyper_20_197_chunk (actual rows=1.00 loops=1)
+         Index Cond: (("time" >= 'Tue Jan 04 00:00:00 2000 UTC'::timestamp with time zone) AND ("time" <= 'Thu Jan 06 00:00:00 2000 UTC'::timestamp with time zone))
+         Filter: (device IS NOT NULL)
+
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_tstz WHERE time >= '2000-01-04' AND time <= '2000-01-06' AND time < now();
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on metrics_tstz (actual rows=3.00 loops=1)
+   Chunks excluded during startup: 0
+   ->  Index Scan using _hyper_20_195_chunk_metrics_tstz_time_idx on _hyper_20_195_chunk (actual rows=1.00 loops=1)
+         Index Cond: ("time" < now())
+   ->  Index Scan using _hyper_20_196_chunk_metrics_tstz_time_idx on _hyper_20_196_chunk (actual rows=1.00 loops=1)
+         Index Cond: ("time" < now())
+   ->  Index Scan using _hyper_20_197_chunk_metrics_tstz_time_idx on _hyper_20_197_chunk (actual rows=1.00 loops=1)
+         Index Cond: (("time" >= 'Tue Jan 04 00:00:00 2000 UTC'::timestamp with time zone) AND ("time" <= 'Thu Jan 06 00:00:00 2000 UTC'::timestamp with time zone) AND ("time" < now()))
+
+CREATE TABLE metrics_space(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval='1day');
+SELECT add_dimension('metrics_space', 'device', 4);
+           add_dimension            
+------------------------------------
+ (25,public,metrics_space,device,t)
+
+INSERT INTO metrics_space SELECT '2000-01-01'::timestamptz + format('%s day',i)::interval, i::text, i FROM generate_series(2,6) i;
+EXPLAIN (buffers off, costs off, timing off, summary off, analyze) SELECT * FROM metrics_space WHERE time >= '2000-01-02';
+--- QUERY PLAN ---
+ Append (actual rows=5.00 loops=1)
+   ->  Index Scan using _hyper_21_199_chunk_metrics_space_time_idx on _hyper_21_199_chunk (actual rows=1.00 loops=1)
+         Index Cond: ("time" >= 'Sun Jan 02 00:00:00 2000 UTC'::timestamp with time zone)
+   ->  Index Scan using _hyper_21_200_chunk_metrics_space_time_idx on _hyper_21_200_chunk (actual rows=1.00 loops=1)
+         Index Cond: ("time" >= 'Sun Jan 02 00:00:00 2000 UTC'::timestamp with time zone)
+   ->  Index Scan using _hyper_21_201_chunk_metrics_space_time_idx on _hyper_21_201_chunk (actual rows=1.00 loops=1)
+         Index Cond: ("time" >= 'Sun Jan 02 00:00:00 2000 UTC'::timestamp with time zone)
+   ->  Index Scan using _hyper_21_202_chunk_metrics_space_time_idx on _hyper_21_202_chunk (actual rows=1.00 loops=1)
+         Index Cond: ("time" >= 'Sun Jan 02 00:00:00 2000 UTC'::timestamp with time zone)
+   ->  Index Scan using _hyper_21_203_chunk_metrics_space_time_idx on _hyper_21_203_chunk (actual rows=1.00 loops=1)
+         Index Cond: ("time" >= 'Sun Jan 02 00:00:00 2000 UTC'::timestamp with time zone)
 
 --TEST END--

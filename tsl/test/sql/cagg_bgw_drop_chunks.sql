@@ -52,7 +52,7 @@ SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test2');
 CREATE MATERIALIZED VIEW drop_chunks_view1 WITH (timescaledb.continuous)
 AS SELECT time_bucket('5', time), max(data)
     FROM drop_chunks_table
-    GROUP BY 1 WITH NO DATA;
+    GROUP BY 1 ORDER BY 1 WITH NO DATA;
 
 --raw hypertable will have 40 chunks and the mat. hypertable will have 2 and 4
 -- chunks respectively

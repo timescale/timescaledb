@@ -119,11 +119,6 @@ function_allowed_in_cagg_definition(Oid funcid)
 	if (finfo->allowed_in_cagg_definition)
 		return true;
 
-	/* Allow creation of CAggs with deprecated bucket function in debug builds for testing purposes
-	 */
-	if (ts_guc_debug_allow_cagg_with_deprecated_funcs && IS_DEPRECATED_TIME_BUCKET_NG_FUNC(finfo))
-		return true;
-
 	return false;
 }
 
@@ -437,23 +432,7 @@ caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause, 
 			 * deprecated time_bucket_ng function). */
 			if (!function_allowed_in_cagg_definition(fe->funcid))
 			{
-				if (IS_DEPRECATED_TIME_BUCKET_NG_FUNC(finfo))
-				{
-					if (is_cagg_create)
-					{
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("experimental bucket functions are not supported inside a "
-										"CAgg "
-										"definition"),
-								 errhint("Use a function from the %s schema instead.",
-										 FUNCTIONS_SCHEMA_NAME)));
-					}
-				}
-				else
-				{
-					continue;
-				}
+				continue;
 			}
 
 			if (found)
@@ -624,7 +603,7 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail)
 static Datum
 get_bucket_width_datum(ContinuousAggTimeBucketInfo bucket_info)
 {
-	Datum width = (Datum) 0;
+	Datum width = UnassignedDatum;
 
 	switch (bucket_info.bf->bucket_width_type)
 	{

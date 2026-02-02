@@ -1294,7 +1294,7 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 	init_scan_by_hypertable_id(&iterator, ht->fd.id);
 	ts_scanner_foreach(&iterator)
 	{
-		bool isnull, dropped, is_osm_chunk;
+		bool isnull, is_osm_chunk;
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		Datum id = slot_getattr(ti->slot, Anum_chunk_id, &isnull);
 		Datum comp_id = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_id, &isnull));
@@ -1303,12 +1303,6 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 		RelationSize chunk_relsize, compressed_chunk_relsize;
 
 		if (isnull)
-			continue;
-
-		/* only consider chunks that are not dropped */
-		dropped = DatumGetBool(slot_getattr(ti->slot, Anum_chunk_dropped, &isnull));
-		Assert(!isnull);
-		if (dropped)
 			continue;
 
 		chunk_id = DatumGetInt32(id);
@@ -1904,7 +1898,7 @@ relation_set_reloption_impl(Relation rel, List *options, LOCKMODE lockmode)
 
 	/* Generate new proposed reloptions (text array) */
 	Datum newOptions =
-		transformRelOptions(isnull ? (Datum) 0 : datum, options, NULL, NULL, false, false);
+		transformRelOptions(isnull ? UnassignedDatum : datum, options, NULL, NULL, false, false);
 	(void) heap_reloptions(rel->rd_rel->relkind, newOptions, true);
 
 	if (newOptions)

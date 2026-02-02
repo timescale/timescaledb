@@ -44,6 +44,22 @@ select count(compress_chunk(x)) from show_chunks('aggexpr') x;
 vacuum full analyze aggexpr;
 
 
+-- Some functions we are not able to vectorize at the moment.
+set timescaledb.debug_require_vector_agg = 'forbid';
+
+-- Volatile expression
+select sum((b and random() < 0.0)::int) from aggexpr;
+
+-- Non-strict expression
+select sum(length(format('%s', x))) from aggexpr;
+
+-- No columnar representation for the expression (numeric)
+select sum(factorial(i % 2)) from aggexpr;
+
+reset timescaledb.debug_require_vector_agg;
+
+
+-- Test some functions that are vectorizable.
 set timescaledb.debug_require_vector_agg = 'require';
 -- /* Uncomment to generate reference. */ set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
 

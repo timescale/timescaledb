@@ -5,6 +5,82 @@ This page lists all the latest features and updates to TimescaleDB. When
 you use psql to update your database, use the -X flag and prevent any .psqlrc 
 commands from accidentally triggering the load of a previous DB version.**
 
+## 2.25.0 (2026-01-29)
+
+This release contains performance improvements and bug fixes since the 2.24.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.25.0**
+This release features multiple improvements for continuous aggregates on the columnstore: 
+* Faster refreshes: You can now utilize direct compress during materialized view refreshes, resulting in higher throughput and reduced I/O usage.
+* Efficiency: The enablement of delete optimizations significantly lowers system resource requirements.
+* Smaller transactions: Adjusted defaults for `buckets_per_batch` to 10 reduces transaction sizes, requiring less WAL holding time.
+* Faster queries: Smarter defaults for `segmentby` and `orderby` yield improved query performance and better compression ratio on the columnstore.
+
+**Sunsetting announcements**
+* This release removes the WAL-based invalidation of continuous aggregates. This feature was introduced in [2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.22.0) as tech preview to use logical decoding for building the invalidation logs. The feature was designed for high ingest workloads, reducing the write amplification. With the upcoming stream of improvements to continuous aggregates, this feature was deprioritized and removed.
+* The old continuous aggregate format, deprecated in version [2.10.0](https://github.com/timescale/timescaledb/releases/tag/2.10.0), has been fully removed from TimescaleDB in this release. Users still on the old format should read the [migration documentation](https://www.tigerdata.com/docs/use-timescale/latest/continuous-aggregates/migrate) to migrate to the new format. Users of Tiger Cloud have already been automatically migrated.
+
+**Features**
+* [#8777](https://github.com/timescale/timescaledb/pull/8777) Enable direct compress on continuous aggregate refresh using new GUC `timescaledb.enable_direct_compress_on_cagg_refresh`
+* [#9031](https://github.com/timescale/timescaledb/pull/9031) Change default `buckets_per_batch` on continuous aggregate refresh policy to `10`
+* [#9032](https://github.com/timescale/timescaledb/pull/9032) Add in-memory recompression for unordered chunks
+* [#9017](https://github.com/timescale/timescaledb/pull/9017) Move `bgw_job` table into schema `_timescaledb_catalog`
+* [#9033](https://github.com/timescale/timescaledb/pull/9033) Add `rebuild_columnstore` procedure
+* [#9038](https://github.com/timescale/timescaledb/pull/9038) Change default configuration for compressed continuous aggregates
+* [#9042](https://github.com/timescale/timescaledb/pull/9042) Enable batch sorted merge on unordered compressed chunks
+* [#9046](https://github.com/timescale/timescaledb/pull/9046) Allow non timescaledb namespace `SET` option for continuous aggregates
+* [#9059](https://github.com/timescale/timescaledb/pull/9059) Allow configuring `work_mem` for background worker jobs
+* [#9074](https://github.com/timescale/timescaledb/pull/9074) Add function to estimate uncompressed size of compressed chunk
+* [#9085](https://github.com/timescale/timescaledb/pull/9085) Don't register timescaledb-tune specific GUCs
+* [#9088](https://github.com/timescale/timescaledb/pull/9088) Add `ColumnarIndexScan` custom node
+* [#9090](https://github.com/timescale/timescaledb/pull/9090) Support direct batch delete on hypertables with continuous aggregates
+* [#9094](https://github.com/timescale/timescaledb/pull/9094) Enable the columnar pipeline for grouping without aggregation to speed up the queries of the form `select column from table group by column`.
+* [#9103](https://github.com/timescale/timescaledb/pull/9103) Support `FIRST` and `LAST` in `ColumnarIndexScan`
+* [#9108](https://github.com/timescale/timescaledb/pull/9108) Support multiple aggregates in `ColumnarIndexScan`
+* [#9111](https://github.com/timescale/timescaledb/pull/9111) Allow recompression with orderby/index changes
+* [#9113](https://github.com/timescale/timescaledb/pull/9113) Use `enable_columnarscan` to control columnarscan
+* [#9127](https://github.com/timescale/timescaledb/pull/9127) Remove primary dimension constraints from fully covered chunks
+* [#8710](https://github.com/timescale/timescaledb/pull/8710) Add SQL function to fetch continuous aggregate grouping columns
+* [#9133](https://github.com/timescale/timescaledb/pull/9133) Allow pushing down sort into columnar unordered chunks when it is possible
+* [#8229](https://github.com/timescale/timescaledb/pull/8229) Removed `time_bucket_ng` function
+* [#8859](https://github.com/timescale/timescaledb/pull/8859) Remove support for partial continuous aggregate format
+* [#9022](https://github.com/timescale/timescaledb/pull/9022) Remove WAL based invalidation
+* [#9016](https://github.com/timescale/timescaledb/pull/9016) Remove `_timescaledb_debug` schema
+* [#9030](https://github.com/timescale/timescaledb/pull/9030) Add new chunks to hypertable publication
+
+**Bug fixes**
+* [#8706](https://github.com/timescale/timescaledb/pull/8706) Fix planning performance regression on Postgres 16 and later on some join queries.
+* [#8986](https://github.com/timescale/timescaledb/pull/8986) Add pathkey replacement for `ColumnarScanPath`
+* [#8989](https://github.com/timescale/timescaledb/pull/8989) Ensure no XID is assigned during chunk query
+* [#8990](https://github.com/timescale/timescaledb/pull/8990) Fix `EquivalenceClass` index update for `RelOptInfo`
+* [#9007](https://github.com/timescale/timescaledb/pull/9007) Add validation for compression index key limits
+* [#9024](https://github.com/timescale/timescaledb/pull/9024) Recompress some chunks on `VACUUM FULL`
+* [#9045](https://github.com/timescale/timescaledb/pull/9045) Fix missing UUID check in compression policy
+* [#9056](https://github.com/timescale/timescaledb/pull/9056) Fix split chunk `relfrozenxid`
+* [#9058](https://github.com/timescale/timescaledb/pull/9058) Fix missing chunk column stats bug
+* [#9061](https://github.com/timescale/timescaledb/pull/9061) Fix update race with background worker jobs
+* [#9069](https://github.com/timescale/timescaledb/pull/9069) Fix applying multikey sort for columnstore when one numeric key is pinned to a Const of different type
+* [#9102](https://github.com/timescale/timescaledb/pull/9102) Support retention policies on UUIDv7-partitioned hypertables
+* [#9120](https://github.com/timescale/timescaledb/pull/9120) Fix for pre Postgres 17, where a `DELETE` from a partially compressed chunk may miss records if `BitmapHeapScan` is being used
+* [#9121](https://github.com/timescale/timescaledb/pull/9121) Allow any immutable constant expressions as default values for compressed columns
+* [#9121](https://github.com/timescale/timescaledb/pull/9121) Fix a potential "unexpected column type 'bool'" error for compressed bool columns with missing value
+* [#9144](https://github.com/timescale/timescaledb/pull/9144) Fix handling implicit constraints in `ALTER TABLE`
+* [#9155](https://github.com/timescale/timescaledb/pull/9155) Fix column generation during compressed chunk insert
+* [#9129](https://github.com/timescale/timescaledb/pull/9129) Fix `time_bucket` with timezone during DST
+* [#9177](https://github.com/timescale/timescaledb/pull/9177) Add alias for `bgw_job`
+* [#9176](https://github.com/timescale/timescaledb/pull/9176) Handle `NULL` values in continuous aggregate invalidation more gracefully
+* [#9175](https://github.com/timescale/timescaledb/pull/9175) Do not remove dimension constraints for OSM chunks
+
+**GUCs**
+* `enable_columnarindexscan`: Enable returning results directly from compression metadata without decompression. This feature is experimental, and in development towards a GA release. Not for production environments. Default: `false` 
+* `enable_direct_compress_on_cagg_refresh`: Enable experimental support for direct compression during Continuous Aggregate refresh. Default: `false`
+* `enable_qual_filtering`: Filter qualifiers on chunks when complete chunk would be included by filter. Default: `true`
+
+**Thanks**
+* @t-aistleitner for reporting the planning performance regression on PG16 and later on some join queries.
+* @vahnrr for reporting a crash when adding columns and constraints to a hypertable at the same time
+* @cracksalad and @eyadmba for reporting a bug with timezone handling in `time_bucket`
+
 ## 2.24.0 (2025-12-03)
 
 This release contains performance improvements and bug fixes since the 2.23.1 release. We recommend that you upgrade at the next available opportunity.

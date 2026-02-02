@@ -104,4 +104,72 @@ $function$;
 :PREFIX SELECT * FROM f_t1_2(10);
 :PREFIX SELECT * FROM f_t1_2(10) sc, f_t2(sc.a, 10);
 
+\set PREFIX 'EXPLAIN (buffers off, costs off, timing off, summary off, analyze)'
+
+-- test qual filtering on hypertable with integer time column
+CREATE TABLE metrics_int1(time int, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval=1);
+INSERT INTO metrics_int1 SELECT i, i::text, i FROM generate_series(3,7) i;
+
+SELECT tableoid::regclass, time FROM metrics_int1 ORDER BY time;
+
+-- no contraint on any chunk
+:PREFIX SELECT * FROM metrics_int1 WHERE time >= 2;
+:PREFIX SELECT * FROM metrics_int1 WHERE time >= 1 AND time >= 2;
+
+-- no constraint on any chunk but first chunk excluded
+:PREFIX SELECT * FROM metrics_int1 WHERE time >= 4;
+
+-- test all four combinations of open/closed interval
+:PREFIX SELECT * FROM metrics_int1 WHERE time > 4 AND time < 6;
+:PREFIX SELECT * FROM metrics_int1 WHERE time > 4 AND time <= 6;
+:PREFIX SELECT * FROM metrics_int1 WHERE time >= 4 AND time < 6;
+:PREFIX SELECT * FROM metrics_int1 WHERE time >= 4 AND time <= 6;
+
+-- test between
+:PREFIX SELECT * FROM metrics_int1 WHERE time BETWEEN 4 AND 5;
+
+-- test equality
+:PREFIX SELECT * FROM metrics_int1 WHERE time = 5;
+
+-- test qual filtering on hypertable with integer time column
+SET TIMEZONE='UTC';
+CREATE TABLE metrics_tstz(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval='1day');
+INSERT INTO metrics_tstz SELECT '2000-01-01'::timestamptz + format('%s day',i)::interval, i::text, i FROM generate_series(2,6) i;
+
+SELECT tableoid::regclass, time FROM metrics_tstz ORDER BY time;
+
+-- no contraint on any chunk
+:PREFIX SELECT * FROM metrics_tstz WHERE time >= '2000-01-02';
+:PREFIX SELECT * FROM metrics_tstz WHERE time >= '2000-01-01' AND time >= '2000-01-02';
+
+-- no constraint on any chunk but first chunk excluded
+:PREFIX SELECT * FROM metrics_tstz WHERE time >= '2000-01-04';
+
+-- test all four combinations of open/closed interval
+:PREFIX SELECT * FROM metrics_tstz WHERE time > '2000-01-04' AND time < '2000-01-06';
+:PREFIX SELECT * FROM metrics_tstz WHERE time > '2000-01-04' AND time <= '2000-01-06';
+:PREFIX SELECT * FROM metrics_tstz WHERE time >= '2000-01-04' AND time < '2000-01-06';
+:PREFIX SELECT * FROM metrics_tstz WHERE time >= '2000-01-04' AND time <= '2000-01-06';
+
+-- test between (between is inclusive on both ends)
+:PREFIX SELECT * FROM metrics_tstz WHERE time BETWEEN '2000-01-04' AND '2000-01-05';
+
+-- test equality
+:PREFIX SELECT * FROM metrics_tstz WHERE time = '2000-01-05';
+
+-- constraints on non-dimension columns remain unaffected
+:PREFIX SELECT * FROM metrics_tstz WHERE time >= '2000-01-04' AND time <= '2000-01-06' AND device = '5';
+:PREFIX SELECT * FROM metrics_tstz WHERE time >= '2000-01-04' AND time <= '2000-01-06' AND device IS NOT NULL;
+
+-- non-constant constraints on time dimension column remain unaffected
+:PREFIX SELECT * FROM metrics_tstz WHERE time >= '2000-01-04' AND time <= '2000-01-06' AND time < now();
+
+-- test hypertable with space partitioning
+CREATE TABLE metrics_space(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval='1day');
+SELECT add_dimension('metrics_space', 'device', 4);
+INSERT INTO metrics_space SELECT '2000-01-01'::timestamptz + format('%s day',i)::interval, i::text, i FROM generate_series(2,6) i;
+
+-- no contraints removed due to space partitioning
+:PREFIX SELECT * FROM metrics_space WHERE time >= '2000-01-02';
+
 \qecho '--TEST END--'

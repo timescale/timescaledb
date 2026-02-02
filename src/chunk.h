@@ -33,7 +33,6 @@ typedef enum ChunkCompressionStatus
 	CHUNK_COMPRESS_NONE = 0,
 	CHUNK_COMPRESS_UNORDERED,
 	CHUNK_COMPRESS_ORDERED,
-	CHUNK_DROPPED
 } ChunkCompressionStatus;
 
 typedef enum ChunkOperation
@@ -199,8 +198,7 @@ extern int ts_chunk_delete_by_hypertable_id(int32 hypertable_id);
 extern TSDLLEXPORT int ts_chunk_delete_by_name(const char *schema, const char *table,
 											   DropBehavior behavior);
 extern int ts_chunk_delete_by_relid_and_relname(Oid relid, const char *schemaname,
-												const char *tablename, DropBehavior behavior,
-												bool preserve_chunk_catalog_row);
+												const char *tablename, DropBehavior behavior);
 extern bool ts_chunk_set_name(Chunk *chunk, const char *newname);
 extern bool ts_chunk_set_schema(Chunk *chunk, const char *newschema);
 extern TSDLLEXPORT List *ts_chunk_get_window(int32 dimension_id, int64 point, int count,
@@ -215,8 +213,6 @@ extern TSDLLEXPORT bool ts_chunk_is_frozen(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id);
 extern TSDLLEXPORT bool ts_chunk_clear_compressed_chunk(Chunk *chunk);
 extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level);
-extern TSDLLEXPORT void ts_chunk_drop_preserve_catalog_row(const Chunk *chunk,
-														   DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than,
 												 int32 log_level, Oid time_type, Oid arg_type,
 												 bool older_newer);
@@ -275,7 +271,6 @@ extern TSDLLEXPORT void ts_chunk_detach_by_relid(Oid relid);
 	do                                                                                             \
 	{                                                                                              \
 		Assert(chunk);                                                                             \
-		Assert(!(chunk)->fd.dropped);                                                              \
 		Assert((chunk)->fd.id > 0);                                                                \
 		Assert((chunk)->fd.hypertable_id > 0);                                                     \
 		Assert(OidIsValid((chunk)->table_id));                                                     \

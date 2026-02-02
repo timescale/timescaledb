@@ -964,7 +964,7 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 	cagg_invalidations_scan_by_hypertable_init(&iterator,
 											   state->cagg->data.mat_hypertable_id,
 											   RowExclusiveLock);
-	iterator.ctx.data = &state;
+	iterator.ctx.data = (void *) &state;
 	iterator.ctx.snapshot = state->snapshot;
 	ScanTupLock scantuplock = {
 		.waitpolicy = LockWaitBlock,

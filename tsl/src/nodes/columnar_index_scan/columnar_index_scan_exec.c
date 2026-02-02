@@ -8,6 +8,8 @@
 #include <executor/executor.h>
 #include <nodes/extensible.h>
 
+#include "utils.h"
+
 typedef struct ColumnarIndexScanState
 {
 	CustomScanState csstate;
@@ -39,6 +41,7 @@ columnar_index_scan_state_create(CustomScan *cscan)
 		(ColumnarIndexScanState *) newNode(sizeof(ColumnarIndexScanState), T_CustomScanState);
 
 	state->csstate.methods = &columnar_index_scan_state_methods;
+	/* custom_private contains (output_map, remap_info), we only need output_map for execution */
 	state->output_map = linitial(cscan->custom_private);
 
 	return (Node *) state;
@@ -80,7 +83,7 @@ columnar_index_scan_exec(CustomScanState *node)
 		bool isnull;
 		AttrNumber attno = lfirst_int(lc);
 		Datum value = slot_getattr(compressed_slot, attno, &isnull);
-		result_slot->tts_values[i] = isnull ? (Datum) 0 : value;
+		result_slot->tts_values[i] = isnull ? UnassignedDatum : value;
 		result_slot->tts_isnull[i] = isnull;
 		i++;
 	}

@@ -106,9 +106,15 @@ columnar_result_init_for_type(ColumnarResult *columnar_result,
 	}
 	else if (columnar_result->type == DT_ArrowText)
 	{
+		/*
+		 * Arrow variable-length types require n + 1 offsets to store the end
+		 * position of the last element. Pad to 64 bytes per Arrow spec.
+		 */
 		columnar_result->offset_buffer =
 			MemoryContextAllocZero(batch_state->per_batch_context,
-								   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1) + 1));
+								   pad_to_multiple(64,
+												   sizeof(*columnar_result->offset_buffer) *
+													   (nrows + 1)));
 		columnar_result->allocated_body_bytes = pad_to_multiple(64, 10);
 	}
 	else
@@ -177,12 +183,6 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 				 */
 				const int new_body_bytes =
 					required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) row + 1))) + 1;
-				//				fprintf(stderr,
-				//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
-				//						new_body_bytes,
-				//						new_body_bytes / (float) required_body_bytes,
-				//						i,
-				//						nrows);
 				Assert(new_body_bytes >= required_body_bytes);
 				columnar_result->body_buffer =
 					repalloc(columnar_result->body_buffer, new_body_bytes);
@@ -274,7 +274,6 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
 
 	const int nargs = list_length(args);
-	Ensure(nargs <= 5, "only <= 5 args supported");
 
 	FmgrInfo flinfo;
 	fmgr_info(funcoid, &flinfo);

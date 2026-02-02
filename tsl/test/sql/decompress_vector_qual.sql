@@ -4,6 +4,8 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+SET timescaledb.enable_qual_filtering = off;
+
 create function stable_abs(x int4) returns int4 as 'int4abs' language internal stable;
 
 create table vectorqual(metric1 int8, ts timestamp, metric2 int8, device int8);
@@ -849,7 +851,7 @@ BEGIN
 			_timescaledb_catalog.chunk comp,
 			(SELECT show_chunks('bool_table') as c UNION SELECT show_chunks('int_table') as c) as x
 		WHERE
-			uncomp.dropped IS FALSE AND uncomp.compressed_chunk_id IS NOT NULL AND
+			uncomp.compressed_chunk_id IS NOT NULL AND
 			comp.id = uncomp.compressed_chunk_id AND
 			x.c = format('%I.%I', uncomp.schema_name, uncomp.table_name)::regclass
 	LOOP
