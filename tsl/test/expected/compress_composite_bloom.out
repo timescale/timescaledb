@@ -413,6 +413,8 @@ alter table sparse set (
     timescaledb.order_by='o',
     timescaledb.segment_by='sby',
     timescaledb.compress_index = 'bloom(big1),bloom(value),bloom(boo,big1),bloom(o,boo)');
+DROP TABLE IF EXISTS sparse CASCADE;
+DROP TABLE IF EXISTS sparse_sister CASCADE;
 ---------------------------------------------------------------------
 -- Some chunks don't have a composite bloom index after index change
 ---------------------------------------------------------------------
@@ -866,3 +868,41 @@ ORDER BY 1,2,3,4;
                      Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_b_c, ROW(1, 2))
 
 DROP TABLE IF EXISTS mixed_avail_manual CASCADE;
+-------------------------------------------------------------------
+-- Upsert tests
+-------------------------------------------------------------------
+-- Explain test
+CREATE TABLE explain_test(ts timestamptz, device_id int, metric text, value float);
+SELECT create_hypertable('explain_test', by_range('ts'));
+ create_hypertable 
+-------------------
+ (11,t)
+
+CREATE UNIQUE INDEX idx_explain ON explain_test(device_id, metric, ts);
+ALTER TABLE explain_test SET (timescaledb.compress, timescaledb.compress_segmentby ='');
+INSERT INTO explain_test
+SELECT '2024-01-01'::timestamptz + (i || ' minutes')::interval, i % 10, 'temp', i
+FROM generate_series(1, 5000) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('explain_test') c;
+ count 
+-------
+     2
+
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO explain_test VALUES ('2024-01-01 00:05:30', 5, 'temp', 100)
+ON CONFLICT (device_id, metric, ts) DO NOTHING;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches pruned by bloom: 2
+   Buffers: shared hit=219 read=2 dirtied=5 written=3
+   ->  Insert on explain_test (actual rows=0.00 loops=1)
+         Conflict Resolution: NOTHING
+         Conflict Arbiter Indexes: idx_explain
+         Tuples Inserted: 1
+         Conflicting Tuples: 0
+         Buffers: shared hit=219 read=2 dirtied=5 written=3
+         ->  Result (actual rows=1.00 loops=1)
+ Planning:
+   Buffers: shared hit=9
+
+DROP TABLE IF EXISTS explain_test CASCADE;

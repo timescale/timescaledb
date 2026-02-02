@@ -9,12 +9,6 @@
 #include "sparse_index_bloom1.h"			 /* for bloom1_get_hash_function */
 #include "ts_catalog/compression_settings.h" /* for MAX_BLOOM_FILTER_COLUMNS */
 
-/* The NULL marker is chosen to be a value that doesn't cancel out with a left rotation and XOR
- * operation, so NULL positions are preserved in the composite hash. The value is coming from Golden
- * ratio constant that has no mathematical relationship with the UMASH GF(2^64) space, so it is
- * unlikely to degrade the collision resistance of the bloom filter. */
-#define NULL_MARKER 0x9E3779B97F4A7C15
-
 typedef struct Bloom1CompositeMetadataBuilder
 {
 	BatchMetadataBuilder functions;
@@ -24,9 +18,6 @@ typedef struct Bloom1CompositeMetadataBuilder
 
 	/* the accumulated hash for the current row */
 	uint64 accumulated_hash;
-
-	/* the last hash value just before the current row's hash is reset */
-	uint64 last_hash_value;
 
 	/* the number of times the reset function has been called.
 	 * this is used to ensure reset is only performed once, even if
@@ -59,8 +50,8 @@ typedef struct Bloom1CompositeMetadataBuilder
 	struct varlena *bloom_varlena;
 } Bloom1CompositeMetadataBuilder;
 
-static void composite_bloom_update_val(void *builder, Datum val);
-static void composite_bloom_update_null(void *builder);
+static uint64 composite_bloom_update_val(void *builder, Datum val);
+static uint64 composite_bloom_update_null(void *builder);
 static void composite_bloom_insert_to_compressed_row(void *builder, RowCompressor *compressor);
 static void composite_bloom_reset(void *builder, RowCompressor *compressor);
 
@@ -73,7 +64,7 @@ rotate_left_1(uint64 x)
 	return (x << 1) | (x >> 63);
 }
 
-static void
+static uint64
 composite_bloom_update_val(void *builder_, Datum val)
 {
 	Bloom1CompositeMetadataBuilder *builder = (Bloom1CompositeMetadataBuilder *) builder_;
@@ -90,20 +81,21 @@ composite_bloom_update_val(void *builder_, Datum val)
 	const uint64 datum_hash =
 		batch_metadata_builder_bloom1_calculate_hash(hash_fn, hash_finfo, val);
 	builder->accumulated_hash = rotate_left_1(builder->accumulated_hash) ^ datum_hash;
+	const uint64 last_hash_value = builder->accumulated_hash;
 
 	builder->update_call_count++;
 
 	if (builder->update_call_count == builder->num_columns)
 	{
-		builder->last_hash_value = builder->accumulated_hash;
 		batch_metadata_builder_bloom1_update_bloom_filter_with_hash(builder->bloom_varlena,
 																	builder->accumulated_hash);
 		builder->update_call_count = 0;
 		builder->accumulated_hash = 0;
 	}
+	return last_hash_value;
 }
 
-static void
+static uint64
 composite_bloom_update_null(void *builder_)
 {
 	Bloom1CompositeMetadataBuilder *builder = (Bloom1CompositeMetadataBuilder *) builder_;
@@ -117,16 +109,17 @@ composite_bloom_update_null(void *builder_)
 	 * to the accumulated hash. */
 	builder->accumulated_hash = rotate_left_1(builder->accumulated_hash) ^ NULL_MARKER;
 
+	const uint64 last_hash_value = builder->accumulated_hash;
 	builder->update_call_count++;
 
 	if (builder->update_call_count == builder->num_columns)
 	{
-		builder->last_hash_value = builder->accumulated_hash;
 		batch_metadata_builder_bloom1_update_bloom_filter_with_hash(builder->bloom_varlena,
 																	builder->accumulated_hash);
 		builder->update_call_count = 0;
 		builder->accumulated_hash = 0;
 	}
+	return last_hash_value;
 }
 
 static void
@@ -218,15 +211,6 @@ batch_metadata_builder_bloom1_composite_create(const Oid *type_oids, int num_col
 
 	SET_VARSIZE(builder->bloom_varlena, varlena_bytes);
 	return &builder->functions;
-}
-
-uint64
-batch_metadata_builder_bloom1_composite_get_last_hash(void *builder_)
-{
-	Bloom1CompositeMetadataBuilder *builder = (Bloom1CompositeMetadataBuilder *) builder_;
-	Assert(builder->functions.builder_type == METADATA_BUILDER_BLOOM1_COMPOSITE);
-
-	return builder->last_hash_value;
 }
 
 #ifndef NDEBUG
@@ -333,12 +317,13 @@ ts_bloom1_composite_debug_hash(PG_FUNCTION_ARGS)
 
 	/* Call update functions with type conversion */
 	Oid array_elemtype = ARR_ELEMTYPE(field_values_array);
+	uint64 hash = 0;
 
 	for (int i = 0; i < num_fields; i++)
 	{
 		if (field_nulls[i])
 		{
-			temp_builder->update_null(temp_builder);
+			hash = temp_builder->update_null(temp_builder);
 		}
 		else
 		{
@@ -360,12 +345,9 @@ ts_bloom1_composite_debug_hash(PG_FUNCTION_ARGS)
 				pfree(str);
 			}
 
-			temp_builder->update_val(temp_builder, value);
+			hash = temp_builder->update_val(temp_builder, value);
 		}
 	}
-
-	/* Get hash */
-	uint64 hash = batch_metadata_builder_bloom1_composite_get_last_hash(temp_builder);
 
 	pfree(temp_builder);
 

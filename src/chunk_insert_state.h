@@ -53,15 +53,26 @@ typedef struct CachedDecompressionState
 	 * They refer to (potentially) multiple bloom filters ordered
 	 * by the number of columns in the bloom filter.
 	 *
-	 * The three lists are parallel, where the first list contains
-	 * the column names of the bloom filters, the second one contains
-	 * the insert tuple attnums to be used to generate the bloom hash,
-	 * and the third list contains the attribute number corresponding
-	 * to the compressed chunk column that is the bloom filter.
+	 * The below collections are parallel, each have the same length
+	 * and the items are related to each other, holding data
+	 * for a given bloom filter.
+	 *
+	 * bloom_column_names: List of char* - compressed chunk column names for blooms
+	 *
+	 * bloom_insert_attnums: TsBmsList (List of Bitmapset*) - the INSERT tuple
+	 *   columns to extract for each bloom (hypertable attnums)
+	 *
+	 * upsert_bloom_attnums: AttrNumber[] - compressed chunk attnums for each bloom
+	 *   column (array parallel to bloom_column_names, all entries valid)
+	 *
+	 * bloom_builders: List of BatchMetadataBuilder* - cached builders for hash
+	 *   computation (parallel with bloom_column_names). Each builder caches the
+	 *   hash functions for its column types. Reusable across INSERT tuples.
 	 */
 	List *bloom_column_names;
 	TsBmsList bloom_insert_attnums;
 	AttrNumber *upsert_bloom_attnums;
+	List *bloom_builders;
 } CachedDecompressionState;
 
 typedef struct SharedCounters

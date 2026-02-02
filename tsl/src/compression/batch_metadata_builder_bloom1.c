@@ -193,13 +193,14 @@ bloom1_get_hash_function(Oid type, FmgrInfo **finfo)
 	}
 }
 
-static void
+static uint64
 bloom1_update_null(void *builder_)
 {
 	/*
 	 * A null value cannot match an equality condition that we're optimizing
 	 * with bloom filters, so we don't need to consider them here.
 	 */
+	return NULL_MARKER;
 }
 
 static void
@@ -413,7 +414,7 @@ batch_metadata_builder_bloom1_update_bloom_filter_with_hash(void *varlena_ptr, u
 	}
 }
 
-static void
+static uint64
 bloom1_update_val(void *builder_, Datum needle)
 {
 	Bloom1MetadataBuilder *builder = (Bloom1MetadataBuilder *) builder_;
@@ -424,6 +425,7 @@ bloom1_update_val(void *builder_, Datum needle)
 													 needle);
 	batch_metadata_builder_bloom1_update_bloom_filter_with_hash(builder->bloom_varlena,
 																datum_hash_1);
+	return datum_hash_1;
 }
 
 /*
@@ -572,6 +574,8 @@ bloom1_contains(PG_FUNCTION_ARGS)
 		PG_RETURN_BOOL(false);
 	}
 
+	uint64 hash = 0;
+
 	if (context->is_composite)
 	{
 		HeapTupleHeader tuple = DatumGetHeapTupleHeader(PG_GETARG_DATUM(1));
@@ -614,37 +618,21 @@ bloom1_contains(PG_FUNCTION_ARGS)
 		for (int i = 0; i < natts; i++)
 		{
 			if (field_nulls[i])
-				temp_builder->update_null(temp_builder);
+				hash = temp_builder->update_null(temp_builder);
 			else
-				temp_builder->update_val(temp_builder, field_values[i]);
+				hash = temp_builder->update_val(temp_builder, field_values[i]);
 		}
 
-		/* Get the calculated hash using getter */
-		uint64 composite_hash = batch_metadata_builder_bloom1_composite_get_last_hash(temp_builder);
-
 		pfree(temp_builder);
-
-		/* Check bloom filter bits */
-		const char *words_buf = bloom1_words_buf(bloom);
-		const uint32 num_bits = bloom1_num_bits(bloom);
-
-		CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
-		CheckCompressedData(num_bits >= 64);
-
-		bool result = check_bloom_bits(words_buf, num_bits, composite_hash);
-		PG_RETURN_BOOL(result);
 	}
-
-	const char *words_buf = bloom1_words_buf(bloom);
-	const uint32 num_bits = bloom1_num_bits(bloom);
-
-	Datum needle = PG_GETARG_DATUM(1);
-	const uint64 datum_hash_1 =
-		batch_metadata_builder_bloom1_calculate_hash(context->hash_function_pointer,
-													 context->hash_function_finfo,
-													 needle);
-	bool result = check_bloom_bits(words_buf, num_bits, datum_hash_1);
-	PG_RETURN_BOOL(result);
+	else
+	{
+		Datum needle = PG_GETARG_DATUM(1);
+		hash = batch_metadata_builder_bloom1_calculate_hash(context->hash_function_pointer,
+															context->hash_function_finfo,
+															needle);
+	}
+	PG_RETURN_BOOL(batch_metadata_builder_bloom1_hash_maybe_present(PointerGetDatum(bloom), hash));
 }
 
 #define ST_SORT sort_hashes
@@ -970,3 +958,20 @@ ts_bloom1_debug_hash(PG_FUNCTION_ARGS)
 #endif // #ifndef NDEBUG
 
 char const *bloom1_column_prefix = NULL;
+
+bool
+batch_metadata_builder_bloom1_hash_maybe_present(Datum bloom_datum, uint64 hash)
+{
+	struct varlena *bloom = DatumGetByteaPP(bloom_datum);
+	if (bloom == NULL)
+		return true; /* No bloom = might match */
+
+	const char *words_buf = VARDATA_ANY(bloom);
+	const uint32 num_bits = 8 * VARSIZE_ANY_EXHDR(bloom);
+
+	/* Validate bloom structure */
+	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
+	CheckCompressedData(num_bits >= 64);
+
+	return check_bloom_bits(words_buf, num_bits, hash);
+}

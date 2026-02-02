@@ -33,9 +33,6 @@ typedef struct ChunkTupleRouting
 	ChunkInsertState *cis;
 
 	SharedCounters *counters; /* shared counters for the current statement */
-
-	/* Bitmapset of conflict column attnums from the arbiter index. */
-	Bitmapset *conflict_attnums;
 } ChunkTupleRouting;
 
 ChunkTupleRouting *ts_chunk_tuple_routing_create(EState *estate, Hypertable *ht,

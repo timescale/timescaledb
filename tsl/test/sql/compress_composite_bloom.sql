@@ -150,6 +150,9 @@ alter table sparse set (
     timescaledb.segment_by='sby',
     timescaledb.compress_index = 'bloom(big1),bloom(value),bloom(boo,big1),bloom(o,boo)');
 
+DROP TABLE IF EXISTS sparse CASCADE;
+DROP TABLE IF EXISTS sparse_sister CASCADE;
+
 ---------------------------------------------------------------------
 -- Some chunks don't have a composite bloom index after index change
 ---------------------------------------------------------------------
@@ -195,7 +198,6 @@ SELECT * FROM mixed_avail_drop WHERE a = 1 AND b = 2
 ORDER BY 1,2,3,4;
 
 DROP TABLE IF EXISTS mixed_avail_drop CASCADE;
-
 
 ---------------------------------------------------------------------
 -- Index added after partial compression
@@ -312,3 +314,25 @@ SELECT * FROM mixed_avail_manual WHERE b = 1 AND c = 2
 ORDER BY 1,2,3,4;
 
 DROP TABLE IF EXISTS mixed_avail_manual CASCADE;
+
+-------------------------------------------------------------------
+-- Upsert tests
+-------------------------------------------------------------------
+
+-- Explain test
+CREATE TABLE explain_test(ts timestamptz, device_id int, metric text, value float);
+SELECT create_hypertable('explain_test', by_range('ts'));
+CREATE UNIQUE INDEX idx_explain ON explain_test(device_id, metric, ts);
+ALTER TABLE explain_test SET (timescaledb.compress, timescaledb.compress_segmentby ='');
+
+INSERT INTO explain_test
+SELECT '2024-01-01'::timestamptz + (i || ' minutes')::interval, i % 10, 'temp', i
+FROM generate_series(1, 5000) i;
+
+SELECT count(compress_chunk(c)) FROM show_chunks('explain_test') c;
+
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+INSERT INTO explain_test VALUES ('2024-01-01 00:05:30', 5, 'temp', 100)
+ON CONFLICT (device_id, metric, ts) DO NOTHING;
+
+DROP TABLE IF EXISTS explain_test CASCADE;

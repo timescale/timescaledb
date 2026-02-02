@@ -21,8 +21,6 @@
 #include <commands/explain_format.h>
 #endif
 
-static Bitmapset *get_arbiter_index_attnums(Hypertable *ht, List *arbiterIndexes);
-
 static AttrNumber
 rel_get_natts(Oid relid)
 {
@@ -92,36 +90,6 @@ should_use_direct_compress(ModifyHypertableState *state)
 }
 
 /*
- * Get arbiter index column attnums from arbiter index list.
- */
-static Bitmapset *
-get_arbiter_index_attnums(Hypertable *ht, List *arbiterIndexes)
-{
-	if (arbiterIndexes == NIL)
-		return NULL;
-
-	Oid arbiter_oid = linitial_oid(arbiterIndexes);
-	Relation index_rel = index_open(arbiter_oid, AccessShareLock);
-
-	Bitmapset *attnums = NULL;
-	for (int i = 0; i < index_rel->rd_index->indnkeyatts; i++)
-	{
-		AttrNumber attno = index_rel->rd_index->indkey.values[i];
-
-		if (!attno)
-		{
-			/* Expression index - can't use bloom optimization */
-			index_close(index_rel, AccessShareLock);
-			return NULL;
-		}
-		attnums = bms_add_member(attnums, attno);
-	}
-
-	index_close(index_rel, AccessShareLock);
-	return attnums;
-}
-
-/*
  * ModifyHypertable is a plan node that implements DML for hypertables.
  * It is a wrapper around the ModifyTable plan node that calls the wrapped ModifyTable
  * plan.
@@ -181,13 +149,6 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 		/* setup chunk tuple routing state for INSERT/MERGE */
 		state->ctr = ts_chunk_tuple_routing_create(estate, state->ht, mtstate->resultRelInfo);
 		state->ctr->mht_state = state;
-		ModifyTable *mt = (ModifyTable *) mtstate->ps.plan;
-
-		if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(state->ht) &&
-			mt->onConflictAction != ONCONFLICT_NONE)
-		{
-			state->ctr->conflict_attnums = get_arbiter_index_attnums(state->ht, mt->arbiterIndexes);
-		}
 
 		if (mtstate->operation == CMD_INSERT && should_use_direct_compress(state))
 		{
@@ -287,6 +248,7 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		state->batches_filtered += counters->batches_filtered;
 		state->batches_decompressed += counters->batches_decompressed;
 		state->tuples_decompressed += counters->tuples_decompressed;
+		state->batches_pruned_by_bloom += counters->batches_pruned_by_bloom;
 	}
 	if (state->batches_filtered > 0)
 		ExplainPropertyInteger("Batches filtered", NULL, state->batches_filtered, es);
@@ -296,6 +258,8 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		ExplainPropertyInteger("Tuples decompressed", NULL, state->tuples_decompressed, es);
 	if (state->batches_deleted > 0)
 		ExplainPropertyInteger("Batches deleted", NULL, state->batches_deleted, es);
+	if (state->batches_pruned_by_bloom > 0)
+		ExplainPropertyInteger("Batches pruned by bloom", NULL, state->batches_pruned_by_bloom, es);
 	if (ts_guc_enable_direct_compress_insert && state->mt->operation == CMD_INSERT)
 		ExplainPropertyBool("Direct Compress", state->columnstore_insert, es);
 }

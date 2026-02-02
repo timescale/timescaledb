@@ -19,8 +19,9 @@ enum BatchMetadataBuilderType
 
 typedef struct BatchMetadataBuilder
 {
-	void (*update_val)(void *builder, Datum val);
-	void (*update_null)(void *builder);
+	/* Return the current hash value for the builder */
+	uint64 (*update_val)(void *builder, Datum val);
+	uint64 (*update_null)(void *builder);
 
 	void (*insert_to_compressed_row)(void *builder, RowCompressor *compressor);
 
@@ -47,4 +48,13 @@ void batch_metadata_builder_bloom1_update_bloom_filter_with_hash(void *bloom_var
 void batch_metadata_builder_bloom1_insert_bloom_filter_to_compressed_row(void *bloom_varlena,
 																		 int16 bloom_attr_offset,
 																		 RowCompressor *compressor);
-uint64 batch_metadata_builder_bloom1_composite_get_last_hash(void *builder);
+
+/* The NULL marker is chosen to be a value that doesn't cancel out with a left rotation and XOR
+ * operation, so NULL positions are preserved in the composite hash. The value is coming from Golden
+ * ratio constant that has no mathematical relationship with the UMASH GF(2^64) space, so it is
+ * unlikely to degrade the collision resistance of the bloom filter. */
+#define NULL_MARKER 0x9E3779B97F4A7C15ULL
+
+/* Returns true if the hash is maybe present in a bloom filter, if the bloom filter data is
+ * NULL, it returns true, because we cannot be sure if the hash is present or not. */
+extern bool batch_metadata_builder_bloom1_hash_maybe_present(Datum bloom_data, uint64 hash);
