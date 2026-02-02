@@ -125,11 +125,11 @@ DO
 $TEST$
 DECLARE
   stmt TEXT;
-  njobs INT := 26;
+  njobs INT := 30;
 BEGIN
   RAISE INFO 'Creating % jobs', njobs;
   FOR stmt IN
-    SELECT format('CREATE PROCEDURE custom_job%s(job_id int, config jsonb) LANGUAGE PLPGSQL AS $$ BEGIN PERFORM pg_sleep(0.1); END; $$', i) FROM generate_series(1, njobs) AS i
+    SELECT format('CREATE PROCEDURE custom_job%s(job_id int, config jsonb) LANGUAGE PLPGSQL AS $$ BEGIN PERFORM pg_sleep(1); END; $$', i) FROM generate_series(1, njobs) AS i
   LOOP
     EXECUTE stmt;
   END LOOP;
@@ -146,7 +146,7 @@ SELECT _timescaledb_functions.restart_background_workers();
 DO
 $TEST$
 DECLARE
-  njobs INT := 26;
+  njobs INT := 30;
 BEGIN
   RAISE INFO 'Waiting for the % jobs to run', njobs;
   SET LOCAL client_min_messages TO WARNING;

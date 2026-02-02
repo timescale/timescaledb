@@ -188,11 +188,11 @@ DO
 $TEST$
 DECLARE
   stmt TEXT;
-  njobs INT := 26;
+  njobs INT := 30;
 BEGIN
   RAISE INFO 'Creating % jobs', njobs;
   FOR stmt IN
-    SELECT format('CREATE PROCEDURE custom_job%s(job_id int, config jsonb) LANGUAGE PLPGSQL AS $$ BEGIN PERFORM pg_sleep(0.1); END; $$', i) FROM generate_series(1, njobs) AS i
+    SELECT format('CREATE PROCEDURE custom_job%s(job_id int, config jsonb) LANGUAGE PLPGSQL AS $$ BEGIN PERFORM pg_sleep(1); END; $$', i) FROM generate_series(1, njobs) AS i
   LOOP
     EXECUTE stmt;
   END LOOP;
@@ -202,8 +202,8 @@ BEGIN
   FROM generate_series(1, njobs) AS i;
 END;
 $TEST$;
-INFO:  Creating 26 jobs
-INFO:  Scheduling 26 jobs
+INFO:  Creating 30 jobs
+INFO:  Scheduling 30 jobs
 SELECT _timescaledb_functions.restart_background_workers();
  restart_background_workers 
 ----------------------------
@@ -213,14 +213,14 @@ SELECT _timescaledb_functions.restart_background_workers();
 DO
 $TEST$
 DECLARE
-  njobs INT := 26;
+  njobs INT := 30;
 BEGIN
   RAISE INFO 'Waiting for the % jobs to run', njobs;
   SET LOCAL client_min_messages TO WARNING;
   PERFORM test.wait_for_job_to_run_or_fail(id) FROM _timescaledb_catalog.bgw_job WHERE id >= 1000;
 END;
 $TEST$;
-INFO:  Waiting for the 26 jobs to run
+INFO:  Waiting for the 30 jobs to run
 SELECT count(*) > 0 FROM timescaledb_information.job_history WHERE succeeded IS FALSE AND err_message ~ 'failed to start job';
  ?column? 
 ----------
