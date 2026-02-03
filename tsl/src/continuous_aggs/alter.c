@@ -176,6 +176,11 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	HeapTuple proc_tuple;
 	Form_pg_proc proc_form;
 
+	if (clist == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_FUNCTION),
+				 errmsg("function \"%s\" does not exist", NameListToString(funcname))));
+
 	/* Find an aggregate function among candidates */
 	while (clist)
 	{

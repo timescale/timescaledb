@@ -190,26 +190,26 @@ SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
  Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19 |       19 |             
  Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30 |       30 |             
 
--- Error - invalid aggregate function
+-- Error tests
 \set ON_ERROR_STOP 0
-SELECT add_continuous_aggregate_column('test_cagg_mat', 'invalid_func(temperature) AS bad');
-ERROR:  "invalid_func" is not an aggregate function
-\set ON_ERROR_STOP 1
--- Error - syntax error in aggregate expression
-\set ON_ERROR_STOP 0
+-- function does not exist
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'missing_func(temperature) AS bad');
+ERROR:  function "missing_func" does not exist
+-- function is not an aggregate
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'round(temperature)');
+ERROR:  "round" is not an aggregate function
+-- syntax error in aggregate expression
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature AS bad_syntax');
 ERROR:  unable to parse the aggregate expression "sum(temperature AS bad_syntax"
-\set ON_ERROR_STOP 1
--- Error - multiple aggregates in single expression
-\set ON_ERROR_STOP 0
+-- multiple aggregates in single expression
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature), avg(temperature)');
 ERROR:  only one aggregate expression allowed
-\set ON_ERROR_STOP 1
--- Error - aggregate already exists (same alias)
-\set ON_ERROR_STOP 0
+-- multiple SQL statements (SQL injection attempt)
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature); SELECT 1;');
+ERROR:  invalid aggregate expression: "sum(temperature); SELECT 1;"
+-- aggregate already exists (same alias)
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp');
 ERROR:  column "sum_temp" already exists in continuous aggregate
-\set ON_ERROR_STOP 1
 -- if_not_exists=true should not error
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp', true);
 NOTICE:  column "sum_temp" already exists in continuous aggregate, skipping
@@ -217,19 +217,14 @@ NOTICE:  column "sum_temp" already exists in continuous aggregate, skipping
 ---------------------------------
  
 
--- Error - column referenced in aggregate doesn't exist
-\set ON_ERROR_STOP 0
+-- column referenced in aggregate doesn't exist
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(nonexistent) AS bad');
 ERROR:  column "nonexistent" referenced in aggregate does not exist in source relation
-\set ON_ERROR_STOP 1
 -- Error - expression must be an aggregate function (simple column)
-\set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'category');
 ERROR:  expression must be an aggregate function
-\set ON_ERROR_STOP 1
--- Error - not a continuous aggregate
+-- not a continuous aggregate
 CREATE TABLE regular_table (id INT, data TEXT);
-\set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_column('regular_table', 'sum(id) AS total');
 ERROR:  relation "regular_table" is not a continuous aggregate
 \set ON_ERROR_STOP 1

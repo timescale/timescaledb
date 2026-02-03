@@ -83,42 +83,37 @@ SELECT add_continuous_aggregate_column('test_cagg_mat', 'avg(humidity) AS avg_hu
 CALL refresh_continuous_aggregate('test_cagg_mat', NULL, NULL);
 SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
 
--- Error - invalid aggregate function
+-- Error tests
 \set ON_ERROR_STOP 0
-SELECT add_continuous_aggregate_column('test_cagg_mat', 'invalid_func(temperature) AS bad');
-\set ON_ERROR_STOP 1
+-- function does not exist
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'missing_func(temperature) AS bad');
 
--- Error - syntax error in aggregate expression
-\set ON_ERROR_STOP 0
+-- function is not an aggregate
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'round(temperature)');
+
+-- syntax error in aggregate expression
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature AS bad_syntax');
-\set ON_ERROR_STOP 1
 
--- Error - multiple aggregates in single expression
-\set ON_ERROR_STOP 0
+-- multiple aggregates in single expression
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature), avg(temperature)');
-\set ON_ERROR_STOP 1
 
--- Error - aggregate already exists (same alias)
-\set ON_ERROR_STOP 0
+-- multiple SQL statements (SQL injection attempt)
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature); SELECT 1;');
+
+-- aggregate already exists (same alias)
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp');
-\set ON_ERROR_STOP 1
 
 -- if_not_exists=true should not error
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp', true);
 
--- Error - column referenced in aggregate doesn't exist
-\set ON_ERROR_STOP 0
+-- column referenced in aggregate doesn't exist
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(nonexistent) AS bad');
-\set ON_ERROR_STOP 1
 
 -- Error - expression must be an aggregate function (simple column)
-\set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'category');
-\set ON_ERROR_STOP 1
 
--- Error - not a continuous aggregate
+-- not a continuous aggregate
 CREATE TABLE regular_table (id INT, data TEXT);
-\set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_column('regular_table', 'sum(id) AS total');
 \set ON_ERROR_STOP 1
 DROP TABLE regular_table;
