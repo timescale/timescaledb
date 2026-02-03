@@ -1,0 +1,1 @@
+Fixes: #9226 Fix invalidation and batching issues for variable bucket continuous aggregates.
