@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
---set enable_indexscan=false;
+set max_parallel_workers_per_gather = 0;
 -- Helper function that returns the amount of memory currently allocated in a
 -- given memory context.
 create or replace function ts_debug_allocated_bytes(text = 'PortalContext') returns bigint
@@ -64,7 +64,6 @@ select * from log where (
 -- Test the vectorized aggregation with grouping by segmentby with various number
 -- of input row. We expect approximately constant memory usage.
 truncate log;
-set max_parallel_workers_per_gather = 0;
 set timescaledb.debug_require_vector_agg = 'require';
 set enable_sort to off;
 set enable_indexscan to off;
@@ -90,7 +89,6 @@ explain (buffers off, costs off) select ts_debug_allocated_bytes() bytes,
 
 \set ECHO none
 reset timescaledb.debug_require_vector_agg;
-reset max_parallel_workers_per_gather;
 reset work_mem;
 reset enable_sort;
 select * from log where (
@@ -103,3 +101,18 @@ select * from log where (
 ---+-------+---+---+---+---+---+---
 
 reset timescaledb.debug_require_vector_agg;
+-- Test vectorized grouping with expressions
+truncate log;
+set timescaledb.debug_require_vector_agg = 'require';
+\set ECHO none
+reset timescaledb.debug_require_vector_agg;
+select * from log where (
+    -- Memory usage shouldn't change much after the grouping cardinality stops
+    -- growing, but we should allow for small variations to make the test more
+    -- robust.
+    select regr_slope(bytes, n) > 0.01 from log
+);
+ n | bytes | a | b | c | d | e | f 
+---+-------+---+---+---+---+---+---
+
+reset max_parallel_workers_per_gather;
