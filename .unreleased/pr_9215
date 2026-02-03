@@ -1,2 +1,2 @@
-Fixes: #9215 Fix off by one error in sort optimization
+Fixes: #9215 Add missing handling for em_parent to sort_transform
 Thanks: @emapple for reporting a crash in a query with nested joins and subqueries
