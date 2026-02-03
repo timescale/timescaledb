@@ -24,7 +24,6 @@
 
 #if PG18_GE
 
-#include "postgres.h"
 #include "utils/pg_locale.h"
 
 static inline bool
