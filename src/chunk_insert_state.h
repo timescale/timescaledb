@@ -16,6 +16,7 @@
 typedef struct ChunkTupleRouting ChunkTupleRouting;
 typedef struct CompressionSettings CompressionSettings;
 typedef struct tuple_filtering_constraints tuple_filtering_constraints;
+typedef struct BatchMetadataBuilder BatchMetadataBuilder;
 
 /*
  * Bundle the ScanKey and the attribute numbers together
@@ -50,29 +51,14 @@ typedef struct CachedDecompressionState
 
 	/*
 	 * Bloom information for UPSERT bloom optimization.
-	 * They refer to (potentially) multiple bloom filters ordered
-	 * by the number of columns in the bloom filter.
-	 *
-	 * The below collections are parallel, each have the same length
-	 * and the items are related to each other, holding data
-	 * for a given bloom filter.
-	 *
-	 * bloom_column_names: List of char* - compressed chunk column names for blooms
-	 *
-	 * bloom_insert_attnums: TsBmsList (List of Bitmapset*) - the INSERT tuple
-	 *   columns to extract for each bloom (hypertable attnums)
-	 *
-	 * upsert_bloom_attnums: AttrNumber[] - compressed chunk attnums for each bloom
-	 *   column (array parallel to bloom_column_names, all entries valid)
-	 *
-	 * bloom_builders: List of BatchMetadataBuilder* - cached builders for hash
-	 *   computation (parallel with bloom_column_names). Each builder caches the
-	 *   hash functions for its column types. Reusable across INSERT tuples.
+	 * This is the best bloom filter match for the chunk out
+	 * of the (potentially) multiple bloom filters for the
+	 * chunk, based on the number of columns in the bloom filter.
 	 */
-	List *bloom_column_names;
-	TsBmsList bloom_insert_attnums;
-	AttrNumber *upsert_bloom_attnums;
-	List *bloom_builders;
+	char *bloom_column_name;
+	Bitmapset *bloom_insert_attnums;
+	AttrNumber upsert_bloom_attnum;
+	BatchMetadataBuilder *bloom_builder;
 } CachedDecompressionState;
 
 typedef struct SharedCounters

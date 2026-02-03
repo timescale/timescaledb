@@ -88,7 +88,6 @@ static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constra
 											Oid ht_relid, ScanKeyWithAttnos *mem_scankeys);
 static void update_scankeys(ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags);
 static void init_upsert_bloom_state(ChunkInsertState *cis);
-static int compare_matched_blooms(const void *a, const void *b);
 static Bitmapset *get_arbiter_index_attnums(ChunkInsertState *cis);
 
 static AttrNumber
@@ -103,10 +102,6 @@ TupleDescGetAttrNumber(TupleDesc desc, const char *name)
 	return InvalidAttrNumber;
 }
 
-/* This struct is used to collect and sort matched bloom columns based on
- * the number of columns in the bloom filter, assuming the more columns
- * the more selective the bloom filter is.
- */
 typedef struct MatchedBloom
 {
 	char *column_name;
@@ -114,14 +109,6 @@ typedef struct MatchedBloom
 	AttrNumber compressed_attnum;
 	int num_cols;
 } MatchedBloom;
-
-static int
-compare_matched_blooms(const void *a, const void *b)
-{
-	const MatchedBloom *ma = (const MatchedBloom *) a;
-	const MatchedBloom *mb = (const MatchedBloom *) b;
-	return mb->num_cols - ma->num_cols;
-}
 
 /*
  * Get arbiter index column attnums from the arbiter index list.
@@ -196,9 +183,7 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 
 	Assert(list_length(per_column_attnos) == list_length(parsed->objects));
 	Assert(list_length(per_column_attnos) > 0);
-	int max_blooms = list_length(per_column_attnos);
-	MatchedBloom *matched = palloc(max_blooms * sizeof(MatchedBloom));
-	int num_matched = 0;
+	MatchedBloom best_match = { .num_cols = 0 };
 
 	/** Parallel iteration over objects and their resolved attnums. */
 	ListCell *obj_cell;
@@ -217,6 +202,12 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 		if (!bms_is_subset(bloom_attnos, conflict_attnums))
 			continue;
 
+		int num_cols = bms_num_members(bloom_attnos);
+
+		/* Only keep the best match (most columns) */
+		if (num_cols <= best_match.num_cols)
+			continue;
+
 		/* Get column name for this bloom */
 		List *column_names = ts_get_column_names_from_parsed_object(obj);
 		char *col_name =
@@ -228,56 +219,36 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 		if (!AttributeNumberIsValid(compressed_attnum))
 			continue;
 
-		/* Bloom is usable */
-		matched[num_matched].column_name = col_name;
-		matched[num_matched].attnums = bms_copy(bloom_attnos);
-		matched[num_matched].compressed_attnum = compressed_attnum;
-		matched[num_matched].num_cols = bms_num_members(bloom_attnos);
-		num_matched++;
+		/* New best match */
+		best_match.column_name = col_name;
+		best_match.attnums = bms_copy(bloom_attnos);
+		best_match.compressed_attnum = compressed_attnum;
+		best_match.num_cols = num_cols;
 	}
 
-	/* Sort by column count descending */
-	if (num_matched > 1)
-		qsort(matched, num_matched, sizeof(MatchedBloom), compare_matched_blooms);
-
-	if (num_matched > 0)
+	/* Create builder for the best match, having the largest number of columns */
+	if (best_match.num_cols > 0)
 	{
-		int max_num_cols = matched[0].num_cols;
-		Oid *type_oids = palloc(max_num_cols * sizeof(Oid));
-		cdst->upsert_bloom_attnums = palloc(num_matched * sizeof(AttrNumber));
+		Oid *type_oids = palloc(best_match.num_cols * sizeof(Oid));
+		cdst->bloom_column_name = best_match.column_name;
+		cdst->bloom_insert_attnums = best_match.attnums;
+		cdst->upsert_bloom_attnum = best_match.compressed_attnum;
 
-		for (int i = 0; i < num_matched; i++)
+		int col_idx = 0;
+		int attnum = -1;
+		while ((attnum = bms_next_member(best_match.attnums, attnum)) >= 0)
 		{
-			cdst->bloom_column_names = lappend(cdst->bloom_column_names, matched[i].column_name);
-			cdst->bloom_insert_attnums =
-				ts_bmslist_add_set(cdst->bloom_insert_attnums, matched[i].attnums);
-			cdst->upsert_bloom_attnums[i] = matched[i].compressed_attnum;
-
-			/* Create cached builder for hash computation */
-			int num_cols = matched[i].num_cols;
-			int col_idx = 0;
-			int attnum = -1;
-			while ((attnum = bms_next_member(matched[i].attnums, attnum)) >= 0)
-			{
-				type_oids[col_idx++] = get_atttype(cis->hypertable_relid, attnum);
-			}
-
-			BatchMetadataBuilder *builder;
-			if (num_cols == 1)
-			{
-				builder = batch_metadata_builder_bloom1_create(type_oids[0], 0);
-			}
-			else
-			{
-				builder = batch_metadata_builder_bloom1_composite_create(type_oids, num_cols, 0);
-			}
-			cdst->bloom_builders = lappend(cdst->bloom_builders, builder);
+			type_oids[col_idx++] = get_atttype(cis->hypertable_relid, attnum);
 		}
 
+		if (best_match.num_cols == 1)
+			cdst->bloom_builder = batch_metadata_builder_bloom1_create(type_oids[0], 0);
+		else
+			cdst->bloom_builder =
+				batch_metadata_builder_bloom1_composite_create(type_oids, best_match.num_cols, 0);
 		pfree(type_oids);
 	}
 
-	pfree(matched);
 	ts_bmslist_free(per_column_attnos);
 	ts_free_parsed_compression_settings(parsed);
 }
@@ -863,50 +834,32 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 						  decompressor.compressed_is_nulls);
 
 		/* Bloom pre-filtering for UPSERT conflict detection */
-		if (insert_slot != NULL && list_length(cdst->bloom_builders) > 0)
+		if (insert_slot != NULL && cdst->bloom_builder != NULL)
 		{
-			bool filtered_by_bloom = false;
-			ListCell *lc_builder;
-			ListCell *lc_attnums;
-			int bloom_idx = 0;
+			Datum bloom_datum =
+				decompressor.compressed_datums[AttrNumberGetAttrOffset(cdst->upsert_bloom_attnum)];
+			bool bloom_isnull =
+				decompressor
+					.compressed_is_nulls[AttrNumberGetAttrOffset(cdst->upsert_bloom_attnum)];
 
-			forboth (lc_builder, cdst->bloom_builders, lc_attnums, cdst->bloom_insert_attnums)
+			if (!bloom_isnull)
 			{
-				AttrNumber compressed_attnum = cdst->upsert_bloom_attnums[bloom_idx++];
-				Datum bloom_datum =
-					decompressor.compressed_datums[AttrNumberGetAttrOffset(compressed_attnum)];
-				bool bloom_isnull =
-					decompressor.compressed_is_nulls[AttrNumberGetAttrOffset(compressed_attnum)];
-
-				if (bloom_isnull)
-					continue; /* Can't check NULL bloom */
-
-				BatchMetadataBuilder *builder = lfirst(lc_builder);
-				Bitmapset *attnums = lfirst(lc_attnums);
-
-				/* Compute hash using cached builder */
 				uint64 hash = 0;
 				int attnum = -1;
-				while ((attnum = bms_next_member(attnums, attnum)) >= 0)
+				while ((attnum = bms_next_member(cdst->bloom_insert_attnums, attnum)) >= 0)
 				{
 					bool isnull;
 					Datum val = slot_getattr(insert_slot, attnum, &isnull);
-					hash =
-						isnull ? builder->update_null(builder) : builder->update_val(builder, val);
+					hash = isnull ? cdst->bloom_builder->update_null(cdst->bloom_builder) :
+									cdst->bloom_builder->update_val(cdst->bloom_builder, val);
 				}
 
 				if (!batch_metadata_builder_bloom1_hash_maybe_present(bloom_datum, hash))
 				{
-					filtered_by_bloom = true;
-					break; /* Short-circuit on first "no match" */
+					row_decompressor_reset(&decompressor);
+					stats.batches_pruned_by_bloom++;
+					continue;
 				}
-			}
-
-			if (filtered_by_bloom)
-			{
-				row_decompressor_reset(&decompressor);
-				stats.batches_pruned_by_bloom++;
-				continue;
 			}
 		}
 
