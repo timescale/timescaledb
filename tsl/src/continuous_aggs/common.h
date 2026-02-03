@@ -121,6 +121,7 @@ extern Oid cagg_get_boundary_converter_funcoid(Oid typoid);
 
 extern ContinuousAgg *cagg_get_by_relid_or_fail(const Oid cagg_relid);
 extern List *cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht);
+extern int find_rte_index_for_relid(Query *query, Oid relid);
 
 static inline int64
 cagg_get_time_min(const ContinuousAgg *cagg)
