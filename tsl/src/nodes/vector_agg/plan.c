@@ -20,8 +20,10 @@
 #include "exec.h"
 #include "expression_utils.h"
 #include "import/list.h"
+#include "nodes/chunk_append/chunk_append.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/vector_quals.h"
+#include "nodes/modify_hypertable.h"
 #include "nodes/vector_agg.h"
 #include "utils.h"
 
@@ -585,7 +587,7 @@ has_vector_agg_node(Plan *plan, bool *has_some_agg)
 	else if (IsA(plan, CustomScan))
 	{
 		custom = castNode(CustomScan, plan);
-		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0)
+		if (ts_is_chunk_append_plan(plan) || ts_is_modify_hypertable_plan(plan))
 		{
 			append_plans = custom->custom_plans;
 		}
@@ -680,7 +682,7 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 	else if (IsA(plan, CustomScan))
 	{
 		CustomScan *custom = castNode(CustomScan, plan);
-		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0)
+		if (ts_is_chunk_append_plan(plan) || ts_is_modify_hypertable_plan(plan))
 		{
 			append_plans = custom->custom_plans;
 		}

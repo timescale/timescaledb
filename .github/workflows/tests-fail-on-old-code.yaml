@@ -1,0 +1,202 @@
+# This workflow verifies that new tests fail when run against old code.
+# It helps ensure tests are actually testing the new functionality.
+name: Tests should fail on old code
+
+"on":
+  pull_request:
+
+jobs:
+  verify-tests-fail:
+    name: Verify tests fail on old code
+    runs-on: timescaledb-runner-arm64
+
+    env:
+      PG_SRC_DIR: pgbuild
+      PG_INSTALL_DIR: postgresql
+
+    steps:
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set PostgreSQL version
+      id: pg
+      run: |
+        MAJOR=17
+        echo "major=$MAJOR" >> $GITHUB_OUTPUT
+
+        # Choose the latest version from config that matches our major version.
+        # This weird quote handling in sed is to remove the quotes around the
+        # value that the config reader produces, i.e. version="17.7".
+        GITHUB_OUTPUT=/dev/stdout .github/gh_config_reader.py \
+          | sed -n "s/PG${MAJOR}_LATEST=\"\([^\"]*\)\"/version=\1/p" \
+          >> $GITHUB_OUTPUT
+
+    - name: Check for code and test changes
+      id: check
+      run: |
+        git fetch origin ${{ github.base_ref }}:base
+
+        echo "Looking at PR event ref $(git rev-parse @) vs base $(git rev-parse base)"
+
+        # Code changes: anything under src/ directories
+        readarray -t CODE_CHANGES < <(git diff --name-only base HEAD -- 'src/' 'tsl/src/')
+
+        if ! ((${#CODE_CHANGES[@]}))
+        then
+          echo "No code changes found, skipping"
+          echo "should_run=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Test changes: changed .out files under test/expected directories.
+        # For versioned test outputs, we should only check the version that
+        # matches the Postgers version we build.
+        git diff --name-only base HEAD -- test/expected tsl/test/expected
+
+        readarray -t CHANGED_TESTS < <( \
+            git diff --name-only base HEAD -- test/expected tsl/test/expected tsl/test/shared/expected \
+            | sed -n 's!^.*expected/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out$!\1!gp')
+
+        if ! ((${#CHANGED_TESTS[@]}))
+        then
+          echo "No test output changes found, skipping"
+          echo "should_run=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        echo "Changed tests: ${CHANGED_TESTS[@]}"
+        echo "should_run=true" >> $GITHUB_OUTPUT
+        echo "changed_tests=${CHANGED_TESTS[@]}" >> $GITHUB_OUTPUT
+
+    - name: Install Linux Dependencies
+      if: steps.check.outputs.should_run == 'true'
+      run: |
+        sudo apt-get update
+        sudo apt-get install flex bison cmake
+
+    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # ages after the original problem.
+    - name: Get date for build caching
+      if: steps.check.outputs.should_run == 'true'
+      id: get-date
+      run: |
+        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+
+    # we cache the build directory instead of the install directory here
+    # because extension installation will write files to install directory
+    # leading to a tainted cache
+    - name: Cache PostgreSQL ${{ steps.pg.outputs.version }}
+      if: steps.check.outputs.should_run == 'true'
+      id: cache-postgresql
+      uses: actions/cache@v4
+      with:
+        path: ~/${{ env.PG_SRC_DIR }}
+        key: "pg-${{ steps.pg.outputs.version }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
+
+    - name: Build PostgreSQL ${{ steps.pg.outputs.version }}
+      if: steps.check.outputs.should_run == 'true' && steps.cache-postgresql.outputs.cache-hit != 'true'
+      run: |
+        wget -q -O postgresql.tar.bz2 \
+          https://ftp.postgresql.org/pub/source/v${{ steps.pg.outputs.version }}/postgresql-${{ steps.pg.outputs.version }}.tar.bz2
+        mkdir -p ~/$PG_SRC_DIR
+        tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
+        cd ~/$PG_SRC_DIR
+        ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
+          --without-readline --without-zlib --without-libxml
+        make -j $(getconf _NPROCESSORS_ONLN)
+
+    - name: Install PostgreSQL ${{ steps.pg.outputs.version }}
+      if: steps.check.outputs.should_run == 'true'
+      run: |
+        cd ~/$PG_SRC_DIR
+        make install
+        echo "$HOME/$PG_INSTALL_DIR/bin" >> $GITHUB_PATH
+
+    - name: Revert code changes
+      if: steps.check.outputs.should_run == 'true'
+      run: |
+        readarray -d '' -t CODE_FILES < <(git diff -z --name-only base HEAD -- 'src/' 'tsl/src/')
+        if ! ((${#CODE_FILES[@]}))
+        then
+            echo "Bug: this job shouldn't run when there are no code files modified"
+            exit 1
+        fi
+        git checkout base "${CODE_FILES[@]}"
+        echo "Reverted ${CODE_FILES[@]}:"
+        git status
+
+    - name: Build TimescaleDB
+      if: steps.check.outputs.should_run == 'true'
+      run: |
+        cmake -B build -S . \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR \
+          -DPG_PATH=$HOME/$PG_INSTALL_DIR
+        make -j $(getconf _NPROCESSORS_ONLN) -C build
+        make -C build install
+
+    - name: make installcheck
+      if: steps.check.outputs.should_run == 'true'
+      run: |
+        TESTS="${{ steps.check.outputs.changed_tests }}"
+        echo "Running tests: $TESTS"
+
+        # Run all changed tests together, allow failure
+        make -C build -k installcheck TESTS="$TESTS" 2>&1 | tee installcheck.log || true
+
+    - name: Show regression diffs
+      if: always() && steps.check.outputs.should_run == 'true'
+      id: collectlogs
+      run: |
+        find . -name regression.diffs -exec cat {} + > regression.log
+        if [[ -s regression.log ]]; then echo "regression_diff=true" >> $GITHUB_OUTPUT; fi
+        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
+        cat regression.log
+
+    - name: Save regression diffs
+      if: always() && steps.collectlogs.outputs.regression_diff == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Regression diff PG${{ steps.pg.outputs.version }}
+        path: |
+          regression.log
+          installcheck.log
+
+    - name: Save PostgreSQL log
+      if: always() && steps.check.outputs.should_run == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: PostgreSQL log ${{ steps.pg.outputs.version }}
+        path: postmaster.*
+
+    - name: Verify tests failed on old code
+      if: steps.check.outputs.should_run == 'true'
+      run: |
+        TESTS="${{ steps.check.outputs.changed_tests }}"
+
+        # Here we switch on results because there can be variant expected files
+        # using a _NNN suffix (pg_regress feature).
+        readarray -t FAILED_TESTS < <( \
+          sed -n 's!^\+\+\+.*results/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out[[:space:]].*$!\1!gp' regression.log)
+        echo "Tests failing with the old code: ${FAILED_TESTS[@]}"
+
+        # Check which changed tests did NOT fail
+        PASSED_TESTS=""
+        for TEST in $TESTS; do
+          if ! echo "${FAILED_TESTS[@]}" | grep -qw "$TEST"; then
+            PASSED_TESTS="$PASSED_TESTS $TEST"
+          fi
+        done
+
+        if [[ -n "$PASSED_TESTS" ]]; then
+          echo "WARNING: The following changed tests PASSED when they should have FAILED:"
+          echo " $PASSED_TESTS"
+          echo ""
+          echo "This suggests these tests may not be testing the new code changes."
+          echo "Please verify that your tests actually exercise the new functionality."
+          exit 1
+        fi
+
+        echo "All changed tests failed as expected."

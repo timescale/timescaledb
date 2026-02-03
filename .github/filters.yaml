@@ -5,11 +5,12 @@ sql:
   - 'sql/**'
   - '.github/**'
 src:
+  - 'CMakeLists.txt'
   - 'cmake/**'
+  - 'coverage/**'
   - 'scripts/**'
   - 'sql/**'
   - 'src/**'
   - 'test/**'
   - 'tsl/**'
-  - 'CMakeLists.txt'
   - '.github/**'
