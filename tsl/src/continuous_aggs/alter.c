@@ -295,26 +295,6 @@ column_exists_in_targetlist(Query *query, const char *column_name)
 }
 
 /*
- * Find the RTE index (varno) for a given relation OID in the query's rtable
- */
-static int
-find_rte_index_for_relid(Query *query, Oid relid)
-{
-	ListCell *lc;
-	int varno = 1;
-
-	foreach (lc, query->rtable)
-	{
-		RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
-		if (rte->rtekind == RTE_RELATION && rte->relid == relid)
-			return varno;
-		varno++;
-	}
-
-	return 0; /* Not found */
-}
-
-/*
  * Mutator function to adjust varno in Var nodes within an expression
  */
 static Node *
@@ -325,10 +305,9 @@ adjust_varno_mutator(Node *node, int *new_varno)
 
 	if (IsA(node, Var))
 	{
-		Var *var = castNode(Var, node);
-		Var *newvar = copyObject(var);
-		newvar->varno = *new_varno;
-		return (Node *) newvar;
+		Var *var = copyObject(castNode(Var, node));
+		var->varno = *new_varno;
+		return (Node *) var;
 	}
 
 	return expression_tree_mutator(node, adjust_varno_mutator, new_varno);
