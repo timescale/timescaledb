@@ -49,8 +49,11 @@ typedef struct ModifyHypertableState
 	int64 batches_filtered;
 	int64 batches_deleted;
 	int64 tuples_deleted;
+	int64 batches_checked_by_bloom;
 	int64 batches_pruned_by_bloom;
-
+	int64 batches_without_bloom;
+	int64 batches_bloom_false_positives;
+	int64 batches_scanned;
 } ModifyHypertableState;
 
 extern void ts_modify_hypertable_fixup_tlist(Plan *plan);

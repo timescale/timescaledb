@@ -477,7 +477,11 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 	cis->counters->batches_filtered += stats.batches_filtered;
 	cis->counters->batches_decompressed += stats.batches_decompressed;
 	cis->counters->tuples_decompressed += stats.tuples_decompressed;
+	cis->counters->batches_checked_by_bloom += stats.batches_checked_by_bloom;
 	cis->counters->batches_pruned_by_bloom += stats.batches_pruned_by_bloom;
+	cis->counters->batches_without_bloom += stats.batches_without_bloom;
+	cis->counters->batches_bloom_false_positives += stats.batches_bloom_false_positives;
+	cis->counters->batches_scanned += stats.batches_scanned;
 
 	CommandCounterIncrement();
 	table_close(in_rel, NoLock);
@@ -756,6 +760,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 
 	while (decompress_batch_scan_getnext_slot(scan, ForwardScanDirection, slot))
 	{
+		stats.batches_scanned++;
 		num_scanned_rows++;
 
 		/* Deconstruct the tuple */
@@ -832,6 +837,9 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
 
+		/* Too track false positives */
+		bool bloom_passed = false;
+
 		/* Bloom pre-filtering for UPSERT conflict detection */
 		if (insert_slot != NULL && cdst->bloom_hasher != NULL)
 		{
@@ -854,12 +862,18 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 				}
 				cdst->bloom_hasher->reset(cdst->bloom_hasher);
 
+				stats.batches_checked_by_bloom++;
 				if (!batch_metadata_builder_bloom1_hash_maybe_present(bloom_datum, hash))
 				{
 					row_decompressor_reset(&decompressor);
 					stats.batches_pruned_by_bloom++;
 					continue;
 				}
+				bloom_passed = true;
+			}
+			else
+			{
+				stats.batches_without_bloom++;
 			}
 		}
 
@@ -877,6 +891,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			/* If no rows pass, complete batch gets filtered */
 			if (summary == NoRowsPass)
 			{
+				if (bloom_passed)
+					stats.batches_bloom_false_positives++;
 				row_decompressor_reset(&decompressor);
 				stats.batches_filtered++;
 				continue;

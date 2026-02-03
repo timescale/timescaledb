@@ -334,7 +334,7 @@ FROM generate_series(1, 5000) i;
 
 SELECT count(compress_chunk(c)) FROM show_chunks('explain_test') c;
 
-EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF)
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
 INSERT INTO explain_test VALUES ('2024-01-01 00:05:30', 5, 'temp', 100)
 ON CONFLICT (device_id, metric, ts) DO NOTHING;
 
