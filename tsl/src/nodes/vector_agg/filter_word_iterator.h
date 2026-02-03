@@ -20,8 +20,6 @@ typedef struct
 
 	int start_row;
 	int end_row;
-
-	int stats_matched_rows;
 } FilterWordIterator;
 
 inline static void
