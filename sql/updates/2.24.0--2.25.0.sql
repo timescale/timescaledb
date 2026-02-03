@@ -148,6 +148,17 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg'
 
 GRANT SELECT ON TABLE _timescaledb_catalog.continuous_agg TO PUBLIC;
 
+-- clean up orphaned entries in related tables
+DELETE FROM _timescaledb_catalog.continuous_aggs_materialization_ranges range WHERE NOT EXISTS (
+    SELECT FROM _timescaledb_catalog.continuous_agg ca WHERE ca.mat_hypertable_id = range.materialization_id
+);
+DELETE FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log inval WHERE NOT EXISTS (
+    SELECT FROM _timescaledb_catalog.continuous_agg ca WHERE ca.mat_hypertable_id = inval.materialization_id
+);
+DELETE FROM _timescaledb_catalog.continuous_aggs_watermark wm WHERE NOT EXISTS (
+    SELECT FROM _timescaledb_catalog.continuous_agg ca WHERE ca.mat_hypertable_id = wm.mat_hypertable_id
+);
+
 ALTER TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges
     ADD CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey
         FOREIGN KEY (materialization_id)
@@ -223,10 +234,6 @@ DROP PROCEDURE IF EXISTS _timescaledb_functions.add_materialization_invalidation
 DROP PROCEDURE IF EXISTS _timescaledb_functions.process_hypertable_invalidations(name);
 DROP PROCEDURE IF EXISTS _timescaledb_functions.process_hypertable_invalidations(regclass);
 DROP PROCEDURE IF EXISTS _timescaledb_functions.process_hypertable_invalidations(regclass[]);
-
--- Remove orphaned entries in materialization ranges table
-DELETE FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
-WHERE NOT EXISTS (SELECT FROM _timescaledb_catalog.continuous_agg WHERE mat_hypertable_id = materialization_id);
 
 DROP PROCEDURE IF EXISTS _timescaledb_functions.cagg_migrate_to_time_bucket(regclass);
 
