@@ -652,14 +652,12 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 
 		/* Update materialized subquery (queries mat_ht) - always a simple column read
 		 * since data is pre-aggregated in the materialization hypertable */
-		Query *mat_subquery = mat_rte->subquery;
 		Expr *mat_var = (Expr *) makeVar(0, mat_attnum, atttype, atttypmod, attcollation, 0);
-		add_expr_to_query(mat_subquery, mat_ht->main_table_relid, mat_var, column_name);
+		add_expr_to_query(mat_rte->subquery, mat_ht->main_table_relid, mat_var, column_name);
 		mat_rte->eref->colnames = lappend(mat_rte->eref->colnames, makeString(column_name));
 
 		/* Update raw subquery (queries source relation) - compute the aggregate on the fly */
-		Query *raw_subquery = raw_rte->subquery;
-		add_expr_to_query(raw_subquery, source_relid, (Expr *) agg_info->aggref, column_name);
+		add_expr_to_query(raw_rte->subquery, source_relid, (Expr *) agg_info->aggref, column_name);
 		raw_rte->eref->colnames = lappend(raw_rte->eref->colnames, makeString(column_name));
 
 		/* Update SetOperationStmt column type lists */
