@@ -14,8 +14,8 @@
 
 #include "compression.h"
 
-static uint64 minmax_update_val(void *builder_, Datum val);
-static uint64 minmax_update_null(void *builder_);
+static void minmax_update_val(void *builder_, Datum val);
+static void minmax_update_null(void *builder_);
 static void minmax_insert_to_compressed_row(void *builder_, RowCompressor *compressor);
 static void minmax_reset(void *builder_, RowCompressor *compressor);
 
@@ -59,7 +59,7 @@ batch_metadata_builder_minmax_create(Oid type_oid, Oid collation, int min_attr_o
 	return &builder->functions;
 }
 
-uint64
+void
 minmax_update_val(void *builder_, Datum val)
 {
 	BatchMetadataBuilderMinMax *builder = (BatchMetadataBuilderMinMax *) builder_;
@@ -71,7 +71,7 @@ minmax_update_val(void *builder_, Datum val)
 		builder->min = datumCopy(val, builder->type_by_val, builder->type_len);
 		builder->max = datumCopy(val, builder->type_by_val, builder->type_len);
 		builder->empty = false;
-		return 0;
+		return;
 	}
 
 	cmp = ApplySortComparator(builder->min, false, val, false, &builder->ssup);
@@ -89,15 +89,13 @@ minmax_update_val(void *builder_, Datum val)
 			pfree(DatumGetPointer(builder->max));
 		builder->max = datumCopy(val, builder->type_by_val, builder->type_len);
 	}
-	return 0;
 }
 
-uint64
+void
 minmax_update_null(void *builder_)
 {
 	BatchMetadataBuilderMinMax *builder = (BatchMetadataBuilderMinMax *) builder_;
 	builder->has_null = true;
-	return 0;
 }
 
 static void

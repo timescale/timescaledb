@@ -242,10 +242,9 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 		}
 
 		if (best_match.num_cols == 1)
-			cdst->bloom_builder = batch_metadata_builder_bloom1_create(type_oids[0], 0);
+			cdst->bloom_hasher = bloom1_hasher_create(type_oids[0]);
 		else
-			cdst->bloom_builder =
-				batch_metadata_builder_bloom1_composite_create(type_oids, best_match.num_cols, 0);
+			cdst->bloom_hasher = bloom1_composite_hasher_create(type_oids, best_match.num_cols);
 		pfree(type_oids);
 	}
 
@@ -834,7 +833,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 						  decompressor.compressed_is_nulls);
 
 		/* Bloom pre-filtering for UPSERT conflict detection */
-		if (insert_slot != NULL && cdst->bloom_builder != NULL)
+		if (insert_slot != NULL && cdst->bloom_hasher != NULL)
 		{
 			Datum bloom_datum =
 				decompressor.compressed_datums[AttrNumberGetAttrOffset(cdst->upsert_bloom_attnum)];
@@ -850,9 +849,10 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 				{
 					bool isnull;
 					Datum val = slot_getattr(insert_slot, attnum, &isnull);
-					hash = isnull ? cdst->bloom_builder->update_null(cdst->bloom_builder) :
-									cdst->bloom_builder->update_val(cdst->bloom_builder, val);
+					hash = isnull ? cdst->bloom_hasher->update_null(cdst->bloom_hasher) :
+									cdst->bloom_hasher->update_val(cdst->bloom_hasher, val);
 				}
+				cdst->bloom_hasher->reset(cdst->bloom_hasher);
 
 				if (!batch_metadata_builder_bloom1_hash_maybe_present(bloom_datum, hash))
 				{

@@ -9,15 +9,30 @@
 #include "sparse_index_bloom1.h"			 /* for bloom1_get_hash_function */
 #include "ts_catalog/compression_settings.h" /* for MAX_BLOOM_FILTER_COLUMNS */
 
-typedef struct Bloom1CompositeMetadataBuilder
+typedef struct Bloom1CompositeCommon
 {
-	BatchMetadataBuilder functions;
-
 	/* the number of columns in the composite bloom filter */
 	int num_columns;
 
+	/* the number of times the update_val or update_null function has been called
+	 * for this row. this is used to determine if we should finalize the bloom filter. */
+	int update_call_count;
+
 	/* the accumulated hash for the current row */
 	uint64 accumulated_hash;
+
+	/* the hash functions for each column */
+	PGFunction hash_functions[MAX_BLOOM_FILTER_COLUMNS];
+
+	/* the function infos for each column */
+	FmgrInfo *hash_finfos[MAX_BLOOM_FILTER_COLUMNS];
+
+} Bloom1CompositeCommon;
+
+typedef struct Bloom1CompositeMetadataBuilder
+{
+	Bloom1CompositeCommon common;
+	BatchMetadataBuilder functions;
 
 	/* the number of times the reset function has been called.
 	 * this is used to ensure reset is only performed once, even if
@@ -25,20 +40,10 @@ typedef struct Bloom1CompositeMetadataBuilder
 	 */
 	int reset_call_count;
 
-	/* the number of times the update_val or update_null function has been called
-	 * for this row. this is used to determine if we should finalize the bloom filter. */
-	int update_call_count;
-
 	/* the number of times the insert_to_compressed_row function has been called
 	 * for this row. this is used to ensure insert_to_compressed_row is only called
 	 * once, even if the same builder is present in multiple columns. */
 	int insert_call_count;
-
-	/* the hash functions for each column */
-	PGFunction hash_functions[MAX_BLOOM_FILTER_COLUMNS];
-
-	/* the function infos for each column */
-	FmgrInfo *hash_finfos[MAX_BLOOM_FILTER_COLUMNS];
 
 	/* where to store the bloom filter in the compressed tuple */
 	int16 bloom_attr_offset;
@@ -50,10 +55,21 @@ typedef struct Bloom1CompositeMetadataBuilder
 	struct varlena *bloom_varlena;
 } Bloom1CompositeMetadataBuilder;
 
-static uint64 composite_bloom_update_val(void *builder, Datum val);
-static uint64 composite_bloom_update_null(void *builder);
+typedef struct Bloom1CompositeHasher
+{
+	Bloom1CompositeCommon common;
+	Bloom1Hasher functions;
+} Bloom1CompositeHasher;
+
+static void composite_bloom_update_val(void *builder, Datum val);
+static void composite_bloom_update_null(void *builder);
 static void composite_bloom_insert_to_compressed_row(void *builder, RowCompressor *compressor);
 static void composite_bloom_reset(void *builder, RowCompressor *compressor);
+static uint64 composite_bloom_hasher_update_val(void *builder, Datum val);
+static uint64 composite_bloom_hasher_update_null(void *builder);
+static void composite_bloom_hasher_reset(void *builder);
+static uint64 composite_bloom_common_update_val(void *builder, Datum val);
+static uint64 composite_bloom_common_update_null(void *builder);
 
 /*
  * Rotate left by 1 bit.
@@ -65,102 +81,152 @@ rotate_left_1(uint64 x)
 }
 
 static uint64
-composite_bloom_update_val(void *builder_, Datum val)
+composite_bloom_common_update_val(void *builder_, Datum val)
 {
-	Bloom1CompositeMetadataBuilder *builder = (Bloom1CompositeMetadataBuilder *) builder_;
-	Assert(builder->functions.builder_type == METADATA_BUILDER_BLOOM1_COMPOSITE);
-	/* when the call to update_null arrives, the reset and insert call counts should be 0
-	 * because at this stage we are accumulating hashes for the current column */
-	Assert(builder->reset_call_count == 0);
-	Assert(builder->insert_call_count == 0);
+	Bloom1CompositeCommon *common = (Bloom1CompositeCommon *) builder_;
+	Assert(common->update_call_count < common->num_columns);
 
 	/* calculate the hash for the current column */
-	PGFunction hash_fn = builder->hash_functions[builder->update_call_count];
-	FmgrInfo *hash_finfo = builder->hash_finfos[builder->update_call_count];
+	PGFunction hash_fn = common->hash_functions[common->update_call_count];
+	FmgrInfo *hash_finfo = common->hash_finfos[common->update_call_count];
 
 	const uint64 datum_hash =
 		batch_metadata_builder_bloom1_calculate_hash(hash_fn, hash_finfo, val);
-	builder->accumulated_hash = rotate_left_1(builder->accumulated_hash) ^ datum_hash;
-	const uint64 last_hash_value = builder->accumulated_hash;
+	common->accumulated_hash = rotate_left_1(common->accumulated_hash) ^ datum_hash;
+	common->update_call_count++;
 
-	builder->update_call_count++;
-
-	if (builder->update_call_count == builder->num_columns)
-	{
-		batch_metadata_builder_bloom1_update_bloom_filter_with_hash(builder->bloom_varlena,
-																	builder->accumulated_hash);
-		builder->update_call_count = 0;
-		builder->accumulated_hash = 0;
-	}
-	return last_hash_value;
+	return common->accumulated_hash;
 }
 
 static uint64
+composite_bloom_common_update_null(void *builder_)
+{
+	Bloom1CompositeCommon *common = (Bloom1CompositeCommon *) builder_;
+	Assert(common->update_call_count < common->num_columns);
+
+	/* The NULL values may be matched with an IS_NULL clause. For this reason we add the NULL marker
+	 * to the accumulated hash. */
+	common->accumulated_hash = rotate_left_1(common->accumulated_hash) ^ NULL_MARKER;
+	common->update_call_count++;
+
+	return common->accumulated_hash;
+}
+
+static void
+composite_bloom_update_val(void *builder_, Datum val)
+{
+	BatchMetadataBuilder *base = (BatchMetadataBuilder *) builder_;
+	Assert(base->builder_type == METADATA_BUILDER_BLOOM1_COMPOSITE);
+	Bloom1CompositeMetadataBuilder *builder =
+		(Bloom1CompositeMetadataBuilder *) (((char *) base) -
+											offsetof(Bloom1CompositeMetadataBuilder, functions));
+	Assert(builder->reset_call_count == 0);
+	Assert(builder->insert_call_count == 0);
+
+	composite_bloom_common_update_val(&builder->common, val);
+
+	if (builder->common.update_call_count == builder->common.num_columns)
+	{
+		batch_metadata_builder_bloom1_update_bloom_filter_with_hash(builder->bloom_varlena,
+																	builder->common
+																		.accumulated_hash);
+		builder->common.update_call_count = 0;
+		builder->common.accumulated_hash = 0;
+	}
+}
+
+static void
 composite_bloom_update_null(void *builder_)
 {
-	Bloom1CompositeMetadataBuilder *builder = (Bloom1CompositeMetadataBuilder *) builder_;
-	Assert(builder->functions.builder_type == METADATA_BUILDER_BLOOM1_COMPOSITE);
+	BatchMetadataBuilder *base = (BatchMetadataBuilder *) builder_;
+	Assert(base->builder_type == METADATA_BUILDER_BLOOM1_COMPOSITE);
+	Bloom1CompositeMetadataBuilder *builder =
+		(Bloom1CompositeMetadataBuilder *) (((char *) base) -
+											offsetof(Bloom1CompositeMetadataBuilder, functions));
 	/* when the call to update_null arrives, the reset and insert call counts should be 0
 	 * because at this stage we are accumulating hashes for the current column */
 	Assert(builder->reset_call_count == 0);
 	Assert(builder->insert_call_count == 0);
 
-	/* The NULL values may be matched with an IS_NULL clause. For this reason we add the NULL marker
-	 * to the accumulated hash. */
-	builder->accumulated_hash = rotate_left_1(builder->accumulated_hash) ^ NULL_MARKER;
+	composite_bloom_common_update_null(&builder->common);
 
-	const uint64 last_hash_value = builder->accumulated_hash;
-	builder->update_call_count++;
-
-	if (builder->update_call_count == builder->num_columns)
+	if (builder->common.update_call_count == builder->common.num_columns)
 	{
 		batch_metadata_builder_bloom1_update_bloom_filter_with_hash(builder->bloom_varlena,
-																	builder->accumulated_hash);
-		builder->update_call_count = 0;
-		builder->accumulated_hash = 0;
+																	builder->common
+																		.accumulated_hash);
+		builder->common.update_call_count = 0;
+		builder->common.accumulated_hash = 0;
 	}
-	return last_hash_value;
+}
+
+static uint64
+composite_bloom_hasher_update_val(void *hasher_, Datum val)
+{
+	Bloom1Hasher *base = (Bloom1Hasher *) hasher_;
+	Assert(base->builder_type == METADATA_BUILDER_BLOOM1_COMPOSITE);
+	Bloom1CompositeHasher *hasher =
+		(Bloom1CompositeHasher *) (((char *) base) - offsetof(Bloom1CompositeHasher, functions));
+
+	return composite_bloom_common_update_val(&hasher->common, val);
+}
+
+static uint64
+composite_bloom_hasher_update_null(void *hasher_)
+{
+	Bloom1Hasher *base = (Bloom1Hasher *) hasher_;
+	Assert(base->builder_type == METADATA_BUILDER_BLOOM1_COMPOSITE);
+	Bloom1CompositeHasher *hasher =
+		(Bloom1CompositeHasher *) (((char *) base) - offsetof(Bloom1CompositeHasher, functions));
+
+	return composite_bloom_common_update_null(&hasher->common);
 }
 
 static void
 composite_bloom_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 {
-	Bloom1CompositeMetadataBuilder *builder = (Bloom1CompositeMetadataBuilder *) builder_;
-	Assert(builder->functions.builder_type == METADATA_BUILDER_BLOOM1_COMPOSITE);
+	BatchMetadataBuilder *base = (BatchMetadataBuilder *) builder_;
+	Assert(base->builder_type == METADATA_BUILDER_BLOOM1_COMPOSITE);
+	Bloom1CompositeMetadataBuilder *builder =
+		(Bloom1CompositeMetadataBuilder *) (((char *) base) -
+											offsetof(Bloom1CompositeMetadataBuilder, functions));
 	/* when the call to insert_to_compressed_row arrives, the updates and reset call counts should
 	 * be 0 because at this stage we are collecting enough insert calls, but no longer accumulating
 	 * hashes and neither resetting the bloom filter */
 	Assert(builder->reset_call_count == 0);
-	Assert(builder->update_call_count == 0);
-	Assert(builder->accumulated_hash == 0);
+	Assert(builder->common.update_call_count == 0);
+	Assert(builder->common.accumulated_hash == 0);
 
 	builder->insert_call_count++;
 
-	if (builder->insert_call_count == builder->num_columns)
+	if (builder->insert_call_count == builder->common.num_columns)
 	{
 		batch_metadata_builder_bloom1_insert_bloom_filter_to_compressed_row(builder->bloom_varlena,
 																			builder
 																				->bloom_attr_offset,
 																			compressor);
 		builder->insert_call_count = 0;
-		builder->accumulated_hash = 0;
+		builder->common.accumulated_hash = 0;
 	}
 }
 
 static void
 composite_bloom_reset(void *builder_, RowCompressor *compressor)
 {
-	Bloom1CompositeMetadataBuilder *builder = (Bloom1CompositeMetadataBuilder *) builder_;
-	Assert(builder->functions.builder_type == METADATA_BUILDER_BLOOM1_COMPOSITE);
+	BatchMetadataBuilder *base = (BatchMetadataBuilder *) builder_;
+	Assert(base->builder_type == METADATA_BUILDER_BLOOM1_COMPOSITE);
+	Bloom1CompositeMetadataBuilder *builder =
+		(Bloom1CompositeMetadataBuilder *) (((char *) base) -
+											offsetof(Bloom1CompositeMetadataBuilder, functions));
 	/* when the call to reset arrives, we should have updated and flushed the bloom filter for each
 	 * column so we are not collectuing insert calls and neither accumulating hashes */
 	Assert(builder->insert_call_count == 0);
-	Assert(builder->update_call_count == 0);
-	Assert(builder->accumulated_hash == 0);
+	Assert(builder->common.update_call_count == 0);
+	Assert(builder->common.accumulated_hash == 0);
 
 	builder->reset_call_count++;
 
-	if (builder->reset_call_count == builder->num_columns)
+	if (builder->reset_call_count == builder->common.num_columns)
 	{
 		struct varlena *bloom = builder->bloom_varlena;
 		memset(bloom, 0, builder->allocated_varlena_bytes);
@@ -170,8 +236,20 @@ composite_bloom_reset(void *builder_, RowCompressor *compressor)
 		compressor->compressed_values[builder->bloom_attr_offset] = 0;
 
 		builder->reset_call_count = 0;
-		builder->accumulated_hash = 0;
+		builder->common.accumulated_hash = 0;
 	}
+}
+
+static void
+composite_bloom_hasher_reset(void *hasher_)
+{
+	Bloom1Hasher *base = (Bloom1Hasher *) hasher_;
+	Assert(base->builder_type == METADATA_BUILDER_BLOOM1_COMPOSITE);
+	Bloom1CompositeHasher *hasher =
+		(Bloom1CompositeHasher *) (((char *) base) - offsetof(Bloom1CompositeHasher, functions));
+	Assert(hasher->functions.builder_type == METADATA_BUILDER_BLOOM1_COMPOSITE);
+	hasher->common.accumulated_hash = 0;
+	hasher->common.update_call_count = 0;
 }
 
 BatchMetadataBuilder *
@@ -183,6 +261,12 @@ batch_metadata_builder_bloom1_composite_create(const Oid *type_oids, int num_col
 	const int varlena_bytes = batch_metadata_builder_bloom1_varlena_size();
 	Bloom1CompositeMetadataBuilder *builder = palloc0(sizeof(*builder));
 	*builder = (Bloom1CompositeMetadataBuilder){
+		.common =
+			(Bloom1CompositeCommon){
+				.num_columns = num_columns,
+				.update_call_count = 0,
+				.accumulated_hash = 0,
+			},
 		.functions =
 			(BatchMetadataBuilder){
 				.update_val = composite_bloom_update_val,
@@ -191,7 +275,6 @@ batch_metadata_builder_bloom1_composite_create(const Oid *type_oids, int num_col
 				.reset = composite_bloom_reset,
 				.builder_type = METADATA_BUILDER_BLOOM1_COMPOSITE,
 			},
-		.num_columns = num_columns,
 		.bloom_attr_offset = bloom_attr_offset,
 		.allocated_varlena_bytes = varlena_bytes,
 		.bloom_varlena = palloc0(varlena_bytes),
@@ -199,9 +282,9 @@ batch_metadata_builder_bloom1_composite_create(const Oid *type_oids, int num_col
 
 	for (int i = 0; i < num_columns; i++)
 	{
-		builder->hash_functions[i] =
-			bloom1_get_hash_function(type_oids[i], &builder->hash_finfos[i]);
-		if (builder->hash_functions[i] == NULL)
+		builder->common.hash_functions[i] =
+			bloom1_get_hash_function(type_oids[i], &builder->common.hash_finfos[i]);
+		if (builder->common.hash_functions[i] == NULL)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
@@ -211,6 +294,42 @@ batch_metadata_builder_bloom1_composite_create(const Oid *type_oids, int num_col
 
 	SET_VARSIZE(builder->bloom_varlena, varlena_bytes);
 	return &builder->functions;
+}
+
+Bloom1Hasher *
+bloom1_composite_hasher_create(const Oid *type_oids, int num_columns)
+{
+	Assert(num_columns >= 2 && num_columns <= MAX_BLOOM_FILTER_COLUMNS);
+	Bloom1CompositeHasher *hasher = palloc0(sizeof(*hasher));
+	*hasher = (Bloom1CompositeHasher){
+		.common =
+			(Bloom1CompositeCommon){
+				.num_columns = num_columns,
+				.update_call_count = 0,
+				.accumulated_hash = 0,
+			},
+		.functions =
+			(Bloom1Hasher){
+				.update_val = composite_bloom_hasher_update_val,
+				.update_null = composite_bloom_hasher_update_null,
+				.reset = composite_bloom_hasher_reset,
+				.builder_type = METADATA_BUILDER_BLOOM1_COMPOSITE,
+			},
+	};
+
+	for (int i = 0; i < num_columns; i++)
+	{
+		hasher->common.hash_functions[i] =
+			bloom1_get_hash_function(type_oids[i], &hasher->common.hash_finfos[i]);
+		if (hasher->common.hash_functions[i] == NULL)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("no hash function for type %u", type_oids[i])));
+		}
+	}
+
+	return &hasher->functions;
 }
 
 #ifndef NDEBUG
@@ -312,8 +431,7 @@ ts_bloom1_composite_debug_hash(PG_FUNCTION_ARGS)
 	}
 
 	/* Create temporary builder */
-	BatchMetadataBuilder *temp_builder =
-		batch_metadata_builder_bloom1_composite_create(type_oids, num_fields, 0);
+	Bloom1Hasher *hasher = bloom1_composite_hasher_create(type_oids, num_fields);
 
 	/* Call update functions with type conversion */
 	Oid array_elemtype = ARR_ELEMTYPE(field_values_array);
@@ -323,7 +441,7 @@ ts_bloom1_composite_debug_hash(PG_FUNCTION_ARGS)
 	{
 		if (field_nulls[i])
 		{
-			hash = temp_builder->update_null(temp_builder);
+			hash = composite_bloom_hasher_update_null(hasher);
 		}
 		else
 		{
@@ -345,11 +463,9 @@ ts_bloom1_composite_debug_hash(PG_FUNCTION_ARGS)
 				pfree(str);
 			}
 
-			hash = temp_builder->update_val(temp_builder, value);
+			hash = composite_bloom_hasher_update_val(hasher, value);
 		}
 	}
-
-	pfree(temp_builder);
 
 	PG_RETURN_INT64((int64) hash);
 }

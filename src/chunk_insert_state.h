@@ -16,7 +16,7 @@
 typedef struct ChunkTupleRouting ChunkTupleRouting;
 typedef struct CompressionSettings CompressionSettings;
 typedef struct tuple_filtering_constraints tuple_filtering_constraints;
-typedef struct BatchMetadataBuilder BatchMetadataBuilder;
+typedef struct Bloom1Hasher Bloom1Hasher;
 
 /*
  * Bundle the ScanKey and the attribute numbers together
@@ -58,7 +58,7 @@ typedef struct CachedDecompressionState
 	char *bloom_column_name;
 	Bitmapset *bloom_insert_attnums;
 	AttrNumber upsert_bloom_attnum;
-	BatchMetadataBuilder *bloom_builder;
+	Bloom1Hasher *bloom_hasher;
 } CachedDecompressionState;
 
 typedef struct SharedCounters

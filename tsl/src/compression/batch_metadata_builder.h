@@ -19,9 +19,8 @@ enum BatchMetadataBuilderType
 
 typedef struct BatchMetadataBuilder
 {
-	/* Return the current hash value for the builder */
-	uint64 (*update_val)(void *builder, Datum val);
-	uint64 (*update_null)(void *builder);
+	void (*update_val)(void *builder, Datum val);
+	void (*update_null)(void *builder);
 
 	void (*insert_to_compressed_row)(void *builder, RowCompressor *compressor);
 
@@ -39,6 +38,21 @@ BatchMetadataBuilder *batch_metadata_builder_bloom1_create(Oid type, int bloom_a
 BatchMetadataBuilder *batch_metadata_builder_bloom1_composite_create(const Oid *type_oids,
 																	 int num_columns,
 																	 int bloom_attr_offset);
+
+/* Hasher interface common to bloom filters, used to compute the hash without updating the bloom
+ * filter */
+typedef struct Bloom1Hasher
+{
+	/* Returns the current hash value for the builder */
+	uint64 (*update_val)(void *builder, Datum val);
+	uint64 (*update_null)(void *builder);
+	void (*reset)(void *builder);
+	enum BatchMetadataBuilderType builder_type;
+} Bloom1Hasher;
+
+Bloom1Hasher *bloom1_hasher_create(Oid type);
+
+Bloom1Hasher *bloom1_composite_hasher_create(const Oid *type_oids, int num_columns);
 
 /* Shared utilities between metadata builders */
 int batch_metadata_builder_bloom1_varlena_size(void);
