@@ -262,21 +262,6 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 }
 
 /*
- * Get a copy of the view's query tree
- *
- * Opens the view relation, extracts and copies the query tree, then closes
- * the relation. The returned Query is a deep copy that can be freely modified.
- */
-static Query *
-get_view_query_tree(Oid reloid)
-{
-	Relation view_rel = relation_open(reloid, AccessShareLock);
-	Query *query = copyObject(get_view_query(view_rel));
-	relation_close(view_rel, NoLock);
-	return query;
-}
-
-/*
  * Check if a column name already exists in the query's targetList
  */
 static bool
