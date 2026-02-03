@@ -41,7 +41,7 @@ jobs:
         echo "Looking at PR event ref $(git rev-parse @) vs base $(git rev-parse base)"
 
         # Code changes: anything under src/ directories
-        readarray -t CODE_CHANGES < <(git diff --name-only base HEAD -- 'src/' 'tsl/src/')
+        readarray -t CODE_CHANGES < <(git diff --name-only --diff-filter=a base HEAD -- 'src/' 'tsl/src/')
 
         if ! ((${#CODE_CHANGES[@]}))
         then
@@ -53,10 +53,10 @@ jobs:
         # Test changes: changed .out files under test/expected directories.
         # For versioned test outputs, we should only check the version that
         # matches the Postgers version we build.
-        git diff --name-only base HEAD -- test/expected tsl/test/expected
+        git diff --name-only --diff-filter=a base HEAD -- test/expected tsl/test/expected
 
         readarray -t CHANGED_TESTS < <( \
-            git diff --name-only base HEAD -- test/expected tsl/test/expected tsl/test/shared/expected \
+            git diff --name-only --diff-filter=a base HEAD -- test/expected tsl/test/expected tsl/test/shared/expected \
             | sed -n 's!^.*expected/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out$!\1!gp')
 
         if ! ((${#CHANGED_TESTS[@]}))
