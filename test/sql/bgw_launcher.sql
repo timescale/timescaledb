@@ -241,7 +241,17 @@ DROP DATABASE db_rename_test2 WITH (FORCE);
 
 -- test create database with timescaledb database as template
 SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
+-- Stop background workers and terminate scheduler to allow using the database as a template
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_functions.stop_background_workers();
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE backend_type = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME';
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+-- Now we can create the database from the template
 CREATE DATABASE db_from_template WITH TEMPLATE :TEST_DBNAME;
+-- Restart the background workers in TEST_DBNAME
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_functions.start_background_workers();
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
 SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
 DROP DATABASE db_from_template WITH (FORCE);
 
