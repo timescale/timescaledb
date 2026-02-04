@@ -16,12 +16,14 @@
 
 #include "gorilla.h"
 
-#include "adts/bit_array.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "float_utils.h"
+#include "guc.h"
 #include "simple8b_rle.h"
 #include "simple8b_rle_bitmap.h"
+
+#include "adts/bit_array.h"
 
 /*
  * Gorilla compressed data is stored as

@@ -2679,6 +2679,41 @@ SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_
             281
 
 ROLLBACK;
+-- Bigger limit.
+SET timescaledb.compression_batch_size_limit = 32767;
+BEGIN;
+SELECT compress_chunk(ch) FROM show_chunks('hyper_85') ch;
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_55_113_chunk
+
+SELECT ch1.id "CHUNK_ID"
+FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'hyper_85'
+ORDER BY ch1.id
+LIMIT 1 \gset
+select  compressed.schema_name|| '.' || compressed.table_name as "COMPRESSED_CHUNK_NAME"
+from _timescaledb_catalog.chunk uncompressed, _timescaledb_catalog.chunk compressed
+where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'CHUNK_ID' \gset
+SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_1 DESC;
+ _ts_meta_count 
+----------------
+           4321
+
+SELECT SUM(temp) FROM hyper_85;
+ sum  
+------
+ 4321
+
+ROLLBACK;
+-- Incorrect limits
+\set ON_ERROR_STOP 0
+SET timescaledb.compression_batch_size_limit = -1;
+ERROR:  -1 is outside the valid range for parameter "timescaledb.compression_batch_size_limit" (1 .. 32767)
+SET timescaledb.compression_batch_size_limit = 0;
+ERROR:  0 is outside the valid range for parameter "timescaledb.compression_batch_size_limit" (1 .. 32767)
+SET timescaledb.compression_batch_size_limit = 32768;
+ERROR:  32768 is outside the valid range for parameter "timescaledb.compression_batch_size_limit" (1 .. 32767)
+\set ON_ERROR_STOP 1
 -- Test poor compression ratio warning works as expected
 -- Turn GUC on
 SET timescaledb.enable_compression_ratio_warnings TO ON;
@@ -2696,12 +2731,12 @@ INSERT INTO badly_compressed_ht VALUES
 ('2025-04-25 02:00'::timestamp, 3, 3);
 \set VERBOSITY default
 SELECT compress_chunk(show_chunks('badly_compressed_ht'));
-WARNING:  poor compression ratio detected for chunk "_hyper_57_116_chunk"'
-DETAIL:  Chunk "_hyper_57_116_chunk" has a poor compression ratio: 0.60. Size before compression: 24576 bytes. Size after compression: 40960 bytes
+WARNING:  poor compression ratio detected for chunk "_hyper_57_117_chunk"'
+DETAIL:  Chunk "_hyper_57_117_chunk" has a poor compression ratio: 0.60. Size before compression: 24576 bytes. Size after compression: 40960 bytes
 HINT:  Changing compression settings for "badly_compressed_ht" can improve compression rate
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_57_116_chunk
+ _timescaledb_internal._hyper_57_117_chunk
 
 \set VERBOSITY terse
 RESET timescaledb.enable_compression_ratio_warnings;
@@ -2716,7 +2751,7 @@ ALTER TABLE test_xid_compressed SET (timescaledb.compress, timescaledb.compress_
 SELECT compress_chunk(show_chunks('test_xid_compressed'));
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_59_118_chunk
+ _timescaledb_internal._hyper_59_119_chunk
 
 SELECT show_chunks('test_xid_compressed') AS chunk LIMIT 1 \gset
 BEGIN;
