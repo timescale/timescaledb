@@ -100,13 +100,8 @@ collect_column_walker(Node *node, List **column_names)
 static AggregateExprInfo *
 parse_aggregate_expression(const char *expr_str, Oid source_relid)
 {
-	AggregateExprInfo *info;
 	StringInfoData query_str;
-	RawStmt *raw_stmt;
 	List *raw_parsetree_list;
-	SelectStmt *select_stmt;
-	ResTarget *res_target;
-	List *column_names = NIL;
 
 	/* Build a SELECT statement to parse the expression */
 	initStringInfo(&query_str);
@@ -143,18 +138,15 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("invalid aggregate expression: \"%s\"", expr_str)));
 
-	raw_stmt = linitial_node(RawStmt, raw_parsetree_list);
-	if (!IsA(raw_stmt->stmt, SelectStmt))
-		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
-				 errmsg("invalid aggregate expression: \"%s\"", expr_str)));
+	RawStmt *raw_stmt = linitial_node(RawStmt, raw_parsetree_list);
+	Assert(IsA(raw_stmt->stmt, SelectStmt));
 
-	select_stmt = castNode(SelectStmt, raw_stmt->stmt);
+	SelectStmt *select_stmt = castNode(SelectStmt, raw_stmt->stmt);
 	if (list_length(select_stmt->targetList) != 1)
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR), errmsg("only one aggregate expression allowed")));
 
-	res_target = linitial_node(ResTarget, select_stmt->targetList);
+	ResTarget *res_target = linitial_node(ResTarget, select_stmt->targetList);
 
 	/* Check if it's a FuncCall (aggregate functions are parsed as FuncCall initially) */
 	if (!IsA(res_target->val, FuncCall))
@@ -172,9 +164,6 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	List *funcname = func_call->funcname;
 	FuncCandidateList clist =
 		FuncnameGetCandidates(funcname, nargs, NIL, true, false, false, false);
-	Oid funcoid = InvalidOid;
-	HeapTuple proc_tuple;
-	Form_pg_proc proc_form;
 
 	if (clist == NULL)
 		ereport(ERROR,
@@ -182,12 +171,13 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 				 errmsg("function \"%s\" does not exist", NameListToString(funcname))));
 
 	/* Find an aggregate function among candidates */
+	Oid funcoid = InvalidOid;
 	while (clist)
 	{
-		proc_tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(clist->oid));
+		HeapTuple proc_tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(clist->oid));
 		if (HeapTupleIsValid(proc_tuple))
 		{
-			proc_form = (Form_pg_proc) GETSTRUCT(proc_tuple);
+			Form_pg_proc proc_form = (Form_pg_proc) GETSTRUCT(proc_tuple);
 			if (proc_form->prokind == PROKIND_AGGREGATE)
 			{
 				funcoid = clist->oid;
@@ -205,6 +195,7 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 				 errmsg("\"%s\" is not an aggregate function", NameListToString(funcname))));
 
 	/* Collect column references from the aggregate arguments */
+	List *column_names = NIL;
 	collect_column_walker((Node *) func_call->args, &column_names);
 
 	/* Validate that all referenced columns exist in source relation */
@@ -237,15 +228,12 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	/* Close the relation */
 	table_close(source_rel, NoLock);
 
-	if (!IsA(transformed, Aggref))
-		ereport(ERROR,
-				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-				 errmsg("expression is not an aggregate function")));
+	Assert(IsA(transformed, Aggref));
 
 	Aggref *aggref = castNode(Aggref, transformed);
 
 	/* Build the result structure */
-	info = palloc0(sizeof(AggregateExprInfo));
+	AggregateExprInfo *info = palloc0(sizeof(AggregateExprInfo));
 	info->result_type = aggref->aggtype;
 	info->result_typmod = -1; /* aggregates typically don't have typmod */
 	info->result_collation = aggref->aggcollid;
