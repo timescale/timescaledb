@@ -93,7 +93,7 @@ def build_debug_config(overrides):
             "build_type": "Debug",
             "cc": "gcc",
             "clang": "clang",
-            "coverage": True,
+            "coverage": False,
             "cxx": "g++",
             "extra_packages": "clang llvm llvm-dev",
             "ignored_tests": default_ignored_tests,
@@ -200,7 +200,7 @@ m["include"].append(
 
 m["include"].append(build_debug_config({"pg": PG17_LATEST}))
 
-m["include"].append(build_debug_config({"pg": PG18_LATEST}))
+m["include"].append(build_debug_config({"pg": PG18_LATEST, "coverage": True}))
 
 # Also test on ARM. The custom arm64 runner is only available in the
 # timescale/timescaledb repository.
