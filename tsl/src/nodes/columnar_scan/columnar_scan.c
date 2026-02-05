@@ -2378,7 +2378,6 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 		path->custom_path.path.param_info = NULL;
 	}
 
-
 	/*
 	 * Setting this flags means that Postgres can change the result targetlist
 	 * after the plan creation. This node can cope with this because it performs
