@@ -449,12 +449,14 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 	Ensure(case_expr->arg == NULL,
 		   "The CASE with explicit argument is not supported by vectorized aggregation");
 
-	uint64 const *branch_filters[5] = { 0 };
-	CompressedColumnValues branch_values[5] = { 0 };
-	Datum branch_data[5] = { 0 };
-	bool branch_isnull[5] = { 0 };
-
 	const int num_explicit_branches = list_length(case_expr->args);
+
+	uint64 const **branch_filters = palloc0(sizeof(*branch_filters) * (num_explicit_branches + 1));
+	CompressedColumnValues *branch_values =
+		palloc0(sizeof(*branch_values) * (num_explicit_branches + 1));
+	Datum *branch_data = palloc0(sizeof(*branch_values) * (num_explicit_branches + 1));
+	bool *branch_isnull = palloc0(sizeof(*branch_isnull) * (num_explicit_branches + 1));
+
 	for (int i = 0; i < num_explicit_branches + 1; i++)
 	{
 		Expr *condition_expression;
@@ -567,6 +569,11 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 	{
 		columnar_result.validity = (uint64 *) top_filter;
 	}
+
+	pfree(branch_filters);
+	pfree(branch_values);
+	pfree(branch_data);
+	pfree(branch_isnull);
 
 	return columnar_result_finalize(&columnar_result, batch_state);
 }

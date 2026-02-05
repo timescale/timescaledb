@@ -285,7 +285,6 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 
 		case T_CaseExpr:
 		{
-			//						return false;
 			CaseExpr *c = castNode(CaseExpr, expr);
 			if (c->arg != NULL)
 			{
@@ -293,12 +292,6 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 				 * We don't handle the "CASE testexpr WHEN comexpr ..." form at
 				 * the moment.
 				 */
-			}
-
-			if (list_length(c->args) >= 5)
-			{
-				/* FIXME */
-				return false;
 			}
 
 			ListCell *lc;
@@ -333,6 +326,7 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 			{
 				return false;
 			}
+
 			when->expr = (Expr *) condition_vectorized;
 			return true;
 		}
