@@ -148,6 +148,7 @@ typedef struct RowDecompressor
 	int64 tuples_decompressed;
 
 	TupleTableSlot **decompressed_slots;
+	int decompressed_slots_capacity;
 	int unprocessed_tuples;
 	AttrMap *attrmap;
 

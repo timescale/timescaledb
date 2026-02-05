@@ -1594,6 +1594,12 @@ build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc)
 	AttrMap *attrmap = build_decompress_attrmap(out_desc, in_desc, &count_meta_attnum);
 
 	Assert(AttributeNumberIsValid(count_meta_attnum));
+	
+	/*
+	 * Use a value that is lower than the typical target batch size, so that we
+	 * properly test the reallocation logic.
+     */
+	const int default_allocated_slots = 300;
 
 	RowDecompressor decompressor = {
 		.count_compressed_attindex = AttrNumberGetAttrOffset(count_meta_attnum),
@@ -1608,8 +1614,8 @@ build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc)
 		.per_compressed_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
 														"decompress chunk per-compressed row",
 														ALLOCSET_DEFAULT_SIZES),
-		.decompressed_slots =
-			(TupleTableSlot **) palloc0(sizeof(void *) * TARGET_COMPRESSED_BATCH_SIZE),
+		.decompressed_slots = (TupleTableSlot **) palloc0(sizeof(void *) * default_allocated_slots),
+		.decompressed_slots_capacity = default_allocated_slots,
 		.attrmap = attrmap,
 	};
 
@@ -1887,6 +1893,36 @@ decompress_batch(RowDecompressor *decompressor)
 		DatumGetInt32(decompressor->compressed_datums[decompressor->count_compressed_attindex]);
 	CheckCompressedData(n_batch_rows > 0);
 	CheckCompressedData(n_batch_rows <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+
+	/*
+	 * Ensure decompressed_slots array is large enough for this batch.
+	 */
+	if (n_batch_rows > decompressor->decompressed_slots_capacity)
+	{
+		int new_capacity = decompressor->decompressed_slots_capacity * 2;
+		
+		if (new_capacity > GLOBAL_MAX_ROWS_PER_COMPRESSION)
+		{
+			new_capacity = GLOBAL_MAX_ROWS_PER_COMPRESSION;
+		}
+		
+		if (new_capacity < n_batch_rows)
+		{
+			new_capacity = n_batch_rows;
+		}
+		
+		Assert(new_capacity <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+
+		MemoryContextSwitchTo(old_ctx);
+		decompressor->decompressed_slots =
+			(TupleTableSlot **) repalloc(decompressor->decompressed_slots,
+										 sizeof(void *) * new_capacity);
+		memset(decompressor->decompressed_slots + decompressor->decompressed_slots_capacity,
+			   0,
+			   sizeof(void *) * (new_capacity - decompressor->decompressed_slots_capacity));
+		decompressor->decompressed_slots_capacity = new_capacity;
+		MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
+	}
 
 	/*
 	 * Decompress all compressed columns for each row of the batch.
