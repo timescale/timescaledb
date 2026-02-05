@@ -2704,6 +2704,13 @@ SELECT SUM(temp) FROM hyper_85;
 ------
  4321
 
+-- Test that the GUC doesn't influence the SELECTs.
+SET timescaledb.compression_batch_size_limit = 1;
+SELECT SUM(temp) FROM hyper_85;
+ sum  
+------
+ 4321
+
 ROLLBACK;
 -- Incorrect limits
 \set ON_ERROR_STOP 0
@@ -2714,6 +2721,7 @@ ERROR:  0 is outside the valid range for parameter "timescaledb.compression_batc
 SET timescaledb.compression_batch_size_limit = 32768;
 ERROR:  32768 is outside the valid range for parameter "timescaledb.compression_batch_size_limit" (1 .. 32767)
 \set ON_ERROR_STOP 1
+RESET timescaledb.compression_batch_size_limit;
 -- Test poor compression ratio warning works as expected
 -- Turn GUC on
 SET timescaledb.enable_compression_ratio_warnings TO ON;

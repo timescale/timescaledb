@@ -1225,6 +1225,7 @@ where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'C
 SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_1 DESC;
 ROLLBACK;
 
+
 -- Bigger limit.
 SET timescaledb.compression_batch_size_limit = 32767;
 BEGIN;
@@ -1243,7 +1244,15 @@ SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_
 
 SELECT SUM(temp) FROM hyper_85;
 
+
+-- Test that the GUC doesn't influence the SELECTs.
+
+SET timescaledb.compression_batch_size_limit = 1;
+
+SELECT SUM(temp) FROM hyper_85;
+
 ROLLBACK;
+
 
 -- Incorrect limits
 \set ON_ERROR_STOP 0
@@ -1251,6 +1260,9 @@ SET timescaledb.compression_batch_size_limit = -1;
 SET timescaledb.compression_batch_size_limit = 0;
 SET timescaledb.compression_batch_size_limit = 32768;
 \set ON_ERROR_STOP 1
+
+RESET timescaledb.compression_batch_size_limit;
+
 
 -- Test poor compression ratio warning works as expected
 
