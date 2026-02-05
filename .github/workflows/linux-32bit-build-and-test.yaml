@@ -29,7 +29,10 @@ jobs:
   check_paths:
     runs-on: ubuntu-latest
     outputs:
-      run_ci: ${{ steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci') }}
+      run_ci: >-
+        ${{ github.event_name == 'push'
+          || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
+         }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -65,6 +68,7 @@ jobs:
           compress_bloom_sparse_compat
           compress_bloom_sparse_debug
           compress_qualpushdown_saop
+          compress_sort_transform
           compression_allocation
           merge_append_partially_compressed
           net
@@ -79,6 +83,7 @@ jobs:
           vector_agg_grouping
           vector_agg_text
           vector_agg_uuid
+          vector_agg_expr
           vectorized_aggregation
           ${{ matrix.pg < 16 && 'columnar_scan_cost' || '' }}
         SKIPS: chunk_adaptive histogram_test-*

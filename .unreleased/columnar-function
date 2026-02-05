@@ -1,0 +1,1 @@
+Implements: #9117 Support functions like `time_bucket` in the columnar aggregation and grouping pipeline.

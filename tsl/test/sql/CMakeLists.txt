@@ -73,6 +73,7 @@ set(TEST_FILES
     vector_agg_functions.sql
     vector_agg_groupagg.sql
     vector_agg_param.sql
+    vector_agg_expr.sql
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES
@@ -164,6 +165,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_agg_grouping.sql
     vector_agg_text.sql
     vector_agg_memory.sql
+    vector_agg_modify_hypertable.sql
     vector_agg_segmentby.sql
     vector_agg_uuid.sql
     vector_qual_default.sql

@@ -289,6 +289,13 @@ static CustomScanMethods modify_hypertable_plan_methods = {
 	.CreateCustomScanState = modify_hypertable_state_create,
 };
 
+bool
+ts_is_modify_hypertable_plan(Plan *plan)
+{
+	return IsA(plan, CustomScan) &&
+		   castNode(CustomScan, plan)->methods == &modify_hypertable_plan_methods;
+}
+
 /*
  * Make a targetlist to meet CustomScan expectations.
  *

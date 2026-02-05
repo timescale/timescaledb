@@ -1,0 +1,2 @@
+Fixes: #9215 Add missing handling for em_parent to sort_transform
+Thanks: @emapple for reporting a crash in a query with nested joins and subqueries

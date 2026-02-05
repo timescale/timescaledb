@@ -20,8 +20,10 @@
 #include "exec.h"
 #include "expression_utils.h"
 #include "import/list.h"
+#include "nodes/chunk_append/chunk_append.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/vector_quals.h"
+#include "nodes/modify_hypertable.h"
 #include "nodes/vector_agg.h"
 #include "utils.h"
 
@@ -177,6 +179,42 @@ is_vector_type(Oid typeoid)
 	}
 }
 
+static bool is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr);
+
+/*
+ * Whether we can evaluate this function as part of the columnar pipeline.
+ */
+static bool
+is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid resulttype,
+				   Oid inputcollid)
+{
+	if (!is_vector_type(resulttype))
+	{
+		return false;
+	}
+
+	ListCell *lc;
+	foreach (lc, args)
+	{
+		if (!is_vector_expr(vqinfo, (Expr *) lfirst(lc)))
+		{
+			return false;
+		}
+	}
+
+	if (!func_strict(funcoid))
+	{
+		return false;
+	}
+
+	if (func_volatile(funcoid) == PROVOLATILE_VOLATILE)
+	{
+		return false;
+	}
+
+	return true;
+}
+
 /*
  * Whether the expression can be used for vectorized processing: must be a Var
  * that refers to either a bulk-decompressed or a segmentby column.
@@ -184,8 +222,43 @@ is_vector_type(Oid typeoid)
 static bool
 is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 {
+	/*
+	 * Skip NULLs for uniform handling of the optional nodes.
+	 */
+	if (expr == NULL)
+	{
+		return true;
+	}
+
 	switch (((Node *) expr)->type)
 	{
+		case T_Const:
+		{
+			Const *c = (Const *) expr;
+			return is_vector_type(c->consttype);
+		}
+
+		case T_FuncExpr:
+		{
+			/* Can vectorize some functions! */
+			FuncExpr *f = castNode(FuncExpr, expr);
+			return is_vector_function(vqinfo,
+									  f->args,
+									  f->funcid,
+									  f->funcresulttype,
+									  f->inputcollid);
+		}
+
+		case T_OpExpr:
+		{
+			OpExpr *o = castNode(OpExpr, expr);
+			return is_vector_function(vqinfo,
+									  o->args,
+									  o->opfuncid,
+									  o->opresulttype,
+									  o->inputcollid);
+		}
+
 		case T_Var:
 		{
 			Var *var = castNode(Var, expr);
@@ -459,7 +532,7 @@ has_vector_agg_node(Plan *plan, bool *has_some_agg)
 	else if (IsA(plan, CustomScan))
 	{
 		custom = castNode(CustomScan, plan);
-		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0)
+		if (ts_is_chunk_append_plan(plan) || ts_is_modify_hypertable_plan(plan))
 		{
 			append_plans = custom->custom_plans;
 		}
@@ -554,7 +627,7 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 	else if (IsA(plan, CustomScan))
 	{
 		CustomScan *custom = castNode(CustomScan, plan);
-		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0)
+		if (ts_is_chunk_append_plan(plan) || ts_is_modify_hypertable_plan(plan))
 		{
 			append_plans = custom->custom_plans;
 		}
@@ -668,23 +741,6 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 				/* Aggregate function not vectorizable. */
 				return plan;
 			}
-		}
-		else if (IsA(target_entry->expr, Var))
-		{
-			if (!is_vector_expr(&vqi, target_entry->expr))
-			{
-				/* Variable not vectorizable. */
-				return plan;
-			}
-		}
-		else
-		{
-			/*
-			 * Sometimes the plan can require this node to perform a projection,
-			 * e.g. we can see a nested loop param in its output targetlist. We
-			 * can't handle this case currently.
-			 */
-			return plan;
 		}
 	}
 
