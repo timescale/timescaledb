@@ -1594,11 +1594,11 @@ build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc)
 	AttrMap *attrmap = build_decompress_attrmap(out_desc, in_desc, &count_meta_attnum);
 
 	Assert(AttributeNumberIsValid(count_meta_attnum));
-	
+
 	/*
 	 * Use a value that is lower than the typical target batch size, so that we
 	 * properly test the reallocation logic.
-     */
+	 */
 	const int default_allocated_slots = 300;
 
 	RowDecompressor decompressor = {
@@ -1900,17 +1900,17 @@ decompress_batch(RowDecompressor *decompressor)
 	if (n_batch_rows > decompressor->decompressed_slots_capacity)
 	{
 		int new_capacity = decompressor->decompressed_slots_capacity * 2;
-		
+
 		if (new_capacity > GLOBAL_MAX_ROWS_PER_COMPRESSION)
 		{
 			new_capacity = GLOBAL_MAX_ROWS_PER_COMPRESSION;
 		}
-		
+
 		if (new_capacity < n_batch_rows)
 		{
 			new_capacity = n_batch_rows;
 		}
-		
+
 		Assert(new_capacity <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 		MemoryContextSwitchTo(old_ctx);

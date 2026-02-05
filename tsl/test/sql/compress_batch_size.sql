@@ -26,7 +26,8 @@ select count(compress_chunk(x)) from show_chunks('batch_size') x;
 
 insert into batch_size
 select 2, ts, x % 32768 i2, x i4, x i8, x f4, x f8, x n,
-    '5b5442d6-c29c-44ca-b4cf-40ab5eb49bbe' u, x t, x % 2 = 0 b
+    to_uuidv7_boundary('2021-01-01 00:00:00+00'::timestamptz + interval '1 second' * x) u,
+    x t, x % 2 = 0 b
 from (
     select xx ts, case when xx % 3 = 0 then null else xx end x
     from generate_series(100000, 199999) xx
@@ -38,7 +39,8 @@ select count(compress_chunk(x)) from show_chunks('batch_size') x;
 
 insert into batch_size
 select 3, ts, x % 32768 i2, x i4, x i8, x f4, x f8, x n,
-    '3347c677-c1b3-436f-afb2-170e932e53cb' u, x t, x % 2 = 0 b
+    to_uuidv7_boundary('2022-02-02 00:00:00+00'::timestamptz + interval '1 second' * x) u,
+    x t, x % 2 = 0 b
 from (
     select xx ts, xx % 10 x
     from generate_series(200000, 299999) xx
