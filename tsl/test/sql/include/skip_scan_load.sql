@@ -3,6 +3,9 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 CREATE TABLE skip_scan(time int, dev int, dev_name text, val int);
+-- Turn off autovacuum to not trigger new vacuums that restores the
+-- adjusted statistics
+ALTER TABLE skip_scan SET (autovacuum_enabled = off);
 
 INSERT INTO skip_scan SELECT t, d, 'device_' || d::text, t*d FROM generate_series(1, 1000) t, generate_series(1, 10) d;
 INSERT INTO skip_scan VALUES (NULL, 0, -1, NULL), (0, NULL, -1, NULL);
@@ -11,6 +14,9 @@ INSERT INTO skip_scan(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FROM gen
 ANALYZE skip_scan;
 
 CREATE TABLE skip_scan_nulls(time int);
+-- Turn off autovacuum to not trigger new vacuums that restores the
+-- adjusted statistics
+ALTER TABLE skip_scan_nulls SET (autovacuum_enabled = off);
 CREATE INDEX ON skip_scan_nulls(time);
 INSERT INTO skip_scan_nulls SELECT NULL FROM generate_series(1,100);
 
@@ -18,6 +24,9 @@ ANALYZE skip_scan_nulls;
 
 -- create hypertable with different physical layouts in the chunks
 CREATE TABLE skip_scan_ht(f1 int, f2 int, f3 int, time int NOT NULL, dev int, dev_name text, val int);
+-- Turn off autovacuum to not trigger new vacuums that restores the
+-- adjusted statistics
+ALTER TABLE skip_scan_ht SET (autovacuum_enabled = off);
 SELECT create_hypertable('skip_scan_ht', 'time', chunk_time_interval => 250, create_default_indexes => false);
 
 INSERT INTO skip_scan_ht(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
@@ -36,6 +45,9 @@ ALTER TABLE skip_scan_ht SET (timescaledb.compress,timescaledb.compress_orderby=
 
 -- create compressed hypertable with different physical layouts in the chunks
 CREATE TABLE skip_scan_htc(f1 int, f2 int, f3 int, time int NOT NULL, dev int, dev_name text, val int);
+-- Turn off autovacuum to not trigger new vacuums that restores the
+-- adjusted statistics
+ALTER TABLE skip_scan_htc SET (autovacuum_enabled = off);
 SELECT create_hypertable('skip_scan_htc', 'time', chunk_time_interval => 250, create_default_indexes => false);
 
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
@@ -70,15 +82,11 @@ UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_htc'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_htc'::regclass);
 
--- Turn off autovacuum to not trigger new vacuums that restores the
--- adjusted statistics
-alter table skip_scan set (autovacuum_enabled = off);
-alter table skip_scan_nulls set (autovacuum_enabled = off);
-alter table skip_scan_ht set (autovacuum_enabled = off);
-alter table skip_scan_htc set (autovacuum_enabled = off);
-
 -- create compressed hypertable with different physical layouts in the compressed chunks
 CREATE TABLE skip_scan_htcl(f1 int, f2 int, f3 int, time int NOT NULL, dev int, dev_name text, val int);
+-- Turn off autovacuum to not trigger new vacuums that restores the
+-- adjusted statistics
+ALTER TABLE skip_scan_htcl SET (autovacuum_enabled = off);
 SELECT create_hypertable('skip_scan_htcl', 'time', chunk_time_interval => 250, create_default_indexes => false);
 
 ALTER TABLE skip_scan_htcl SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
@@ -106,6 +114,3 @@ ANALYZE skip_scan_htcl;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_htcl'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_htcl'::regclass);
 
--- Turn off autovacuum to not trigger new vacuums that restores the
--- adjusted statistics
-alter table skip_scan_htcl set (autovacuum_enabled = off);
