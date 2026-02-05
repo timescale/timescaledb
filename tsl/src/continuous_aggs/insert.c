@@ -232,10 +232,6 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	if (!entry->value_is_set)
 		return;
 
-	invalidation_cagg_add_entries(entry->hypertable_id,
-								  entry->lowest_modified_datum,
-								  entry->greatest_modified_datum);
-
 	/* The materialization worker uses a READ COMMITTED isolation level by default. Therefore, if we
 	 * use a stronger isolation level, the isolation threshold could update without us seeing the
 	 * new value. In order to prevent serialization errors, we always append invalidation entries in
@@ -245,6 +241,9 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	 */
 	if (IsolationUsesXactSnapshot())
 	{
+		invalidation_cagg_add_entries(entry->hypertable_id,
+									  entry->lowest_modified_datum,
+									  entry->greatest_modified_datum);
 		invalidation_hyper_log_add_entry(entry->hypertable_id,
 										 entry->lowest_modified_value,
 										 entry->greatest_modified_value);
@@ -254,9 +253,15 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	liv = cache_get_lowest_invalidated_time_for_hypertable(entry->hypertable_id);
 
 	if (entry->lowest_modified_value < liv)
+	{
+		// FIXME do proper check for cagg invalidation
+		invalidation_cagg_add_entries(entry->hypertable_id,
+									  entry->lowest_modified_datum,
+									  entry->greatest_modified_datum);
 		invalidation_hyper_log_add_entry(entry->hypertable_id,
 										 entry->lowest_modified_value,
 										 entry->greatest_modified_value);
+	}
 };
 
 static void
