@@ -111,6 +111,7 @@ typedef struct CrossModuleFunctions
 										  bool update);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
+	Query *(*continuous_agg_apply_rewrites_tsl)(Query *parse);
 	PGFunction continuous_agg_validate_query;
 	PGFunction continuous_agg_get_bucket_function;
 	PGFunction continuous_agg_get_bucket_function_info;
