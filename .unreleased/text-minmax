@@ -1,0 +1,1 @@
+Implements: #9104 Support min(text), max(text) for C collation in columnar aggregation pipeline
