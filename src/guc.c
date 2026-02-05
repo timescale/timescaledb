@@ -1011,7 +1011,10 @@ _guc_init(void)
 							"Setting this option to a number between 1 and 32767 will force "
 							"compression "
 							"to limit the size of compressed batches to that amount of "
-							"uncompressed tuples.",
+							"uncompressed tuples. The setting influences only the compression "
+							"process itself. The value of the setting is taken from the context "
+							"of the session where the compression is performed. It is not "
+							"persisted in any way.",
 							&ts_guc_compression_batch_size_limit,
 							TARGET_COMPRESSED_BATCH_SIZE,
 							1,
