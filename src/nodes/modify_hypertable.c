@@ -219,17 +219,17 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 	 * complain. PostgreSQL does something equivalent and does not print the targetlist
 	 * for ModifyTable for EXPLAIN VERBOSE.
 	 */
-	if (((ModifyTable *) mtstate->ps.plan)->operation == CMD_DELETE && es->verbose &&
+	const CmdType operation = ((ModifyTable *) mtstate->ps.plan)->operation;
+	if ((operation == CMD_MERGE || operation == CMD_DELETE) && es->verbose &&
 		is_chunk_append_or_projection(mtstate->ps.plan->lefttree))
 	{
 		mtstate->ps.plan->lefttree->targetlist = NULL;
-		castNode(CustomScan, mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
+		if (IsA(mtstate->ps.plan->lefttree, CustomScan))
+		{
+			castNode(CustomScan, mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
+		}
 	}
-	if (((ModifyTable *) mtstate->ps.plan)->operation == CMD_MERGE && es->verbose)
-	{
-		mtstate->ps.plan->lefttree->targetlist = NULL;
-		((CustomScan *) mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
-	}
+
 	/*
 	 * Since we hijack the ModifyTable node, instrumentation on ModifyTable will
 	 * be missing so we set it to instrumentation of ModifyHypertable node.
