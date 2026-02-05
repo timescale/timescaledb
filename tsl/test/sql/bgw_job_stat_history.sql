@@ -217,6 +217,7 @@ TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 -- Each job runs for 5 minutes (job_id=100, pid=12345)
 -- Fix NOW to ensure the tests are deterministic
 
+SET timezone TO 'UTC';
 INSERT INTO _timescaledb_internal.bgw_job_stat_history
 (job_id, pid, succeeded, execution_start, execution_finish, data)
 SELECT
