@@ -127,6 +127,42 @@ RemoveRangeTableEntries(Query *query)
 }
 
 /*
+ * Find the RTE index (varno) for a given relation OID in the query's rtable.
+ * Returns 0 if not found.
+ */
+int
+find_rte_index_for_relid(Query *query, Oid relid)
+{
+	ListCell *lc;
+	int varno = 1;
+
+	foreach (lc, query->rtable)
+	{
+		RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
+		if (rte->rtekind == RTE_RELATION && rte->relid == relid)
+			return varno;
+		varno++;
+	}
+
+	return 0; /* Not found */
+}
+
+/*
+ * Get a copy of the view's query tree.
+ *
+ * Opens the view relation, extracts and copies the query tree, then closes
+ * the relation. The returned Query is a deep copy that can be freely modified.
+ */
+Query *
+get_view_query_tree(Oid reloid)
+{
+	Relation view_rel = table_open(reloid, AccessShareLock);
+	Query *query = copyObject(get_view_query(view_rel));
+	table_close(view_rel, NoLock);
+	return query;
+}
+
+/*
  * Extract the final view from the UNION ALL query.
  *
  * q1 is the query on the materialization hypertable with the finalize call
@@ -1332,26 +1368,11 @@ build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *
 	 * If there is join in CAgg definition then adjust varno
 	 * to get time column from the hypertable in the join.
 	 */
-	varno = list_length(q2->rtable);
-
-	if (list_length(q2->rtable) > 1)
-	{
-		int nvarno = 1;
-		foreach (lc2, q2->rtable)
-		{
-			RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc2);
-			if (rte->rtekind == RTE_RELATION)
-			{
-				/* look for hypertable or parent hypertable in RangeTableEntry list */
-				if (rte->relid == tbinfo->htoid || rte->relid == tbinfo->htoidparent)
-				{
-					varno = nvarno;
-					break;
-				}
-			}
-			nvarno++;
-		}
-	}
+	varno = find_rte_index_for_relid(q2, tbinfo->htoid);
+	if (varno == 0)
+		varno = find_rte_index_for_relid(q2, tbinfo->htoidparent);
+	if (varno == 0)
+		varno = list_length(q2->rtable);
 
 	q2_quals = build_union_query_quals(materialize_htid,
 									   tbinfo->htpartcoltype,
@@ -1474,9 +1495,7 @@ cagg_get_by_relid_or_fail(const Oid cagg_relid)
 ContinuousAggBucketFunction *
 ts_cagg_get_bucket_function_info(Oid view_oid)
 {
-	Relation view_rel = relation_open(view_oid, AccessShareLock);
-	Query *query = copyObject(get_view_query(view_rel));
-	relation_close(view_rel, NoLock);
+	Query *query = get_view_query_tree(view_oid);
 
 	Assert(query != NULL);
 	Assert(query->commandType == CMD_SELECT);
