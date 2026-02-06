@@ -14,13 +14,12 @@
 
 #include <math.h>
 
-#include "compression.h"
-
-#include "batch_metadata_builder.h"
+#include "sparse_index_bloom1.h"
 
 #include "arrow_c_data_interface.h"
-
-#include "sparse_index_bloom1.h"
+#include "batch_metadata_builder.h"
+#include "compression.h"
+#include "guc.h"
 
 #ifdef TS_USE_UMASH
 #include "import/umash.h"
@@ -686,12 +685,19 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 }
 
 static int
-bloom1_varlena_alloc_size(int num_bits)
+bloom1_varlena_alloc_size(uint32 num_bits)
 {
 	/*
 	 * We are not supposed to go below 64 bits because we work in 64-bit words.
 	 */
 	Assert(num_bits % 64 == 0);
+	Assert(num_bits > 0);
+
+	/*
+	 * We must not go over varlena size limit.
+	 */
+	Assert(num_bits / 8 <= (1ULL << 30) - 1);
+
 	return VARHDRSZ + num_bits / 8;
 }
 
@@ -705,7 +711,13 @@ batch_metadata_builder_bloom1_create(Oid type_oid, int bloom_attr_offset)
 	 */
 	const int expected_elements = TARGET_COMPRESSED_BATCH_SIZE * 16;
 	const int lowest_power = pg_leftmost_one_pos32(expected_elements * 2 - 1);
-	Assert(lowest_power <= 16);
+
+	/*
+	 * The total number of elements must fit into uint32, since that's what we
+	 * use for addressing the elements.
+	 */
+	Assert(lowest_power < 32);
+
 	const int desired_bits = 1ULL << lowest_power;
 	const int varlena_bytes = bloom1_varlena_alloc_size(desired_bits);
 
