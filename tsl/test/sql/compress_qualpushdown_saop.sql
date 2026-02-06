@@ -19,6 +19,12 @@ create function volatile_lower(x text) returns text as 'lower' language internal
 
 set max_parallel_workers_per_gather = 0;
 
+-- On PG18 the btree indexes have support for scalar array operations, which
+-- leads to different query plans. We don't care about index scan in particular
+-- in this test, so switch it off to avoid versioned references.
+set enable_indexscan to off;
+set enable_bitmapscan to off;
+
 create table saop(ts int, segmentby text, with_minmax text, with_bloom text);
 
 select create_hypertable('saop', 'ts', chunk_time_interval => 50001);
@@ -236,6 +242,9 @@ reset timescaledb.enable_chunk_append;
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_minmax = any(array['1'::varchar(10), '10'::varchar(10)]);
 
+reset plan_cache_mode;
+
+
 -- Debug GUC.
 set timescaledb.enable_columnar_scan_filter_pushdown to off;
 
@@ -243,3 +252,10 @@ explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where segmentby = '3';
 
 reset timescaledb.enable_columnar_scan_filter_pushdown;
+
+
+reset max_parallel_workers_per_gather;
+
+reset enable_indexscan;
+
+reset enable_bitmapscan;
