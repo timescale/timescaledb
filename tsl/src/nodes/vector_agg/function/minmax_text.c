@@ -79,6 +79,7 @@ FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *arrow, const uint64 *fi
 		arrow->dictionary ? arrow->dictionary->buffers[1] : arrow->buffers[1];
 
 	const int n = arrow->length;
+	MemoryContext old = MemoryContextSwitchTo(agg_extra_mctx);
 	for (int row = 0; row < n; row++)
 	{
 		const int body_offset_index = body_offset_indexes == NULL ? row : body_offset_indexes[row];
@@ -91,6 +92,7 @@ FUNCTION_NAME(vector)(void *agg_state, const ArrowArray *arrow, const uint64 *fi
 			FUNCTION_NAME(one)(state, value);
 		}
 	}
+	MemoryContextSwitchTo(old);
 }
 
 static void
