@@ -478,7 +478,55 @@ typedef struct Bloom1ContainsContext
 	bool is_composite;
 	Bloom1Hasher *bloom_hasher;
 	int num_columns;
+
+	/* Stability detection and hash caching */
+	bool arg_is_stable;
+	bool hash_is_cached;
+	uint64 cached_hash;
 } Bloom1ContainsContext;
+
+/*
+ * Check if a single expression node is stable (Const or PARAM_EXTERN).
+ */
+static bool
+expr_is_stable(Node *node)
+{
+    if (node == NULL)
+        return false;
+    if (IsA(node, Const))
+        return true;
+    if (IsA(node, Param) && ((Param *) node)->paramkind == PARAM_EXTERN)
+        return true;
+    return false;
+}
+
+/*
+ * Check if the argument is stable for caching.
+ * For composite blooms, checks each element of the RowExpr.
+ */
+static bool
+bloom1_arg_is_stable(FmgrInfo *flinfo, bool is_composite)
+{
+    if (!flinfo || !flinfo->fn_expr || !IsA(flinfo->fn_expr, FuncExpr))
+        return false;
+
+    Node *arg = (Node *) lsecond(((FuncExpr *) flinfo->fn_expr)->args);
+
+    if (!is_composite)
+        return expr_is_stable(arg);
+
+    /* Composite: check each element of ROW(...) */
+    if (!IsA(arg, RowExpr))
+        return false;
+
+    ListCell *lc;
+    foreach (lc, ((RowExpr *) arg)->args)
+    {
+        if (!expr_is_stable((Node *) lfirst(lc)))
+            return false;
+    }
+    return true;
+}
 
 static Bloom1ContainsContext *
 bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
@@ -562,6 +610,10 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 							 &context->element_typbyval,
 							 &context->element_typalign);
 
+		/* Check stability now that we know is_composite */
+		context->arg_is_stable = bloom1_arg_is_stable(fcinfo->flinfo, context->is_composite);
+		context->hash_is_cached = false;
+
 		fcinfo->flinfo->fn_extra = context;
 	}
 
@@ -641,28 +693,40 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	}
 
 	uint64 hash = 0;
-
-	if (context->is_composite)
+	if (context->arg_is_stable && context->hash_is_cached)
 	{
-		HeapTupleHeader tuple = DatumGetHeapTupleHeader(PG_GETARG_DATUM(1));
-
-		for (int i = 0; i < context->num_columns; i++)
-		{
-			bool isnull;
-			Datum val = GetAttributeByNum(tuple, i + 1, &isnull);
-			if (isnull)
-				hash = context->bloom_hasher->update_null(context->bloom_hasher);
-			else
-				hash = context->bloom_hasher->update_val(context->bloom_hasher, val);
-		}
-		context->bloom_hasher->reset(context->bloom_hasher);
+		hash = context->cached_hash;
 	}
 	else
 	{
-		Datum needle = PG_GETARG_DATUM(1);
-		hash = batch_metadata_builder_bloom1_calculate_hash(context->hash_function_pointer,
-															context->hash_function_finfo,
-															needle);
+		if (context->is_composite)
+		{
+			HeapTupleHeader tuple = DatumGetHeapTupleHeader(PG_GETARG_DATUM(1));
+			Assert(context->bloom_hasher != NULL);
+
+			for (int i = 0; i < context->num_columns; i++)
+			{
+				bool isnull;
+				Datum val = GetAttributeByNum(tuple, i + 1, &isnull);
+				if (isnull)
+					hash = context->bloom_hasher->update_null(context->bloom_hasher);
+				else
+					hash = context->bloom_hasher->update_val(context->bloom_hasher, val);
+			}
+			context->bloom_hasher->reset(context->bloom_hasher);
+		}
+		else
+		{
+			Datum needle = PG_GETARG_DATUM(1);
+			hash = batch_metadata_builder_bloom1_calculate_hash(context->hash_function_pointer,
+																context->hash_function_finfo,
+																needle);
+		}
+		if (context->arg_is_stable)
+		{
+			context->cached_hash = hash;
+			context->hash_is_cached = true;
+		}
 	}
 	PG_RETURN_BOOL(batch_metadata_builder_bloom1_hash_maybe_present(PointerGetDatum(bloom), hash));
 }
