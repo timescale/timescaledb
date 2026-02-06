@@ -200,6 +200,7 @@ check_limit_bulk_decompression(PlannerInfo *root, Node *node)
 
 			if (limit > 0 && limit < 100)
 			{
+				return;
 				path->subpath = (Path *) try_disable_bulk_decompression(root,
 																		(Node *) path->subpath,
 																		path->subpath->pathkeys);
