@@ -51,8 +51,8 @@ copy_context(const QualPushdownContext *source)
 static Node *qual_pushdown_mutator(Node *node, QualPushdownContext *context);
 
 void
-pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chunk_rel,
-			   RelOptInfo *compressed_rel, bool chunk_partial)
+columnar_scan_filter_pushdown(PlannerInfo *root, CompressionSettings *settings,
+							  RelOptInfo *chunk_rel, RelOptInfo *compressed_rel, bool chunk_partial)
 {
 	ListCell *lc;
 	List *decompress_clauses = NIL;
@@ -737,6 +737,11 @@ pushdown_saop_boolexpr(QualPushdownContext *context, ScalarArrayOpExpr *saop)
 				return (Expr *) saop;
 			}
 
+			/*
+			 * If we pushed down the clause only partially, we have to mark that
+			 * it needs rechecking, even when the individual parts don't.
+			 */
+			context->needs_recheck = true;
 			continue;
 		}
 		context->needs_recheck |= tmp_context.needs_recheck;
@@ -992,6 +997,12 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 						return orig_node;
 					}
 
+					/*
+					 * If we pushed down the expression only partially, it means
+					 * we'll have to recheck it even if individual parts don't
+					 * require rechecking.
+					 */
+					context->needs_recheck = true;
 					continue;
 				}
 

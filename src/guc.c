@@ -84,6 +84,7 @@ bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
+TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
 bool ts_guc_enable_qual_filtering = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
@@ -718,6 +719,18 @@ _guc_init(void)
 							 "Enable qualifier propagation",
 							 "Enable propagation of qualifiers in JOINs",
 							 &ts_guc_enable_qual_propagation,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnar_scan_filter_pushdown"),
+							 "Enable columnar scan filter pushdown",
+							 "Enable pushing down the filters into the compressed scan part of the "
+							 "columnar scan",
+							 &ts_guc_enable_columnar_scan_filter_pushdown,
 							 true,
 							 PGC_USERSET,
 							 0,

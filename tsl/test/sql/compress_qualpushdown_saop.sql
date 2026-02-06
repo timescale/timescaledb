@@ -156,6 +156,21 @@ select * from saop where segmentby = '1' and with_bloom = all(array['1', with_mi
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where segmentby = '1' or with_bloom = all(array['1', with_minmax]);
 
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = all(array['1', null]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = all(array['1', nullif(with_minmax, with_minmax)]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = all(array[stable_lower('1'), volatile_lower('2')]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = stable_lower('1') and segmentby = volatile_lower('2');
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = '3' or (segmentby = stable_lower('1') and segmentby = volatile_lower('2'));
+
 
 -- Partial pushdown with volatile functions.
 explain (analyze, buffers off, costs off, timing off, summary off)
@@ -220,3 +235,11 @@ reset timescaledb.enable_chunk_append;
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_minmax = any(array['1'::varchar(10), '10'::varchar(10)]);
+
+-- Debug GUC.
+set timescaledb.enable_columnar_scan_filter_pushdown to off;
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = '3';
+
+reset timescaledb.enable_columnar_scan_filter_pushdown;
