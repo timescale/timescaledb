@@ -148,7 +148,7 @@ mm1 % 10 = 1 AND blm2 = 10 AND other = 11 AND blm1 = 12;
    Filter: ((mm1 % 10) = 1)
    Vectorized Filter: ((blm2 = 10) AND (other = 11) AND (blm1 = 12))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_blm1, 12) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2_other, ROW(10, 11)))
+         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_blm2_other, ROW(10, 11)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2, 10) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_blm1, 12))
 
 -- R2: we cannot omit any qual from a disjunction, so segby cannot be pushed down
 explain (buffers off, costs off)
@@ -214,7 +214,7 @@ blm2 = 10 AND other = 11;
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((blm2 = 10) AND (other = 11))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2_other, ROW(10, 11))
+         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_blm2_other, ROW(10, 11)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2, 10))
 
 -- another variation for the composite bloom, different order
 explain (buffers off, costs off)
@@ -224,7 +224,7 @@ other = 11 AND blm2 = 10;
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((other = 11) AND (blm2 = 10))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2_other, ROW(10, 11))
+         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_blm2_other, ROW(10, 11)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2, 10))
 
 -- partial composite bloom cannot be pushed down
 explain (buffers off, costs off)

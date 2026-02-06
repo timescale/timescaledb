@@ -119,6 +119,14 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 		ts_guc_enable_composite_bloom_indexes)
 	{
 		pushdown_composite_blooms(root, &base_context);
+		ListCell *lc;
+		foreach (lc, base_context.bloom_candidates->candidates)
+		{
+			BloomCandidate *cand = lfirst(lc);
+			base_context.compressed_rel->baserestrictinfo =
+				lappend(base_context.compressed_rel->baserestrictinfo,
+						make_simple_restrictinfo(root, cand->predicate));
+		}
 	}
 
 	foreach (lc, chunk_rel->baserestrictinfo)
@@ -167,18 +175,6 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 		}
 	}
 	chunk_rel->baserestrictinfo = decompress_clauses;
-	if (ts_guc_enable_composite_bloom_indexes)
-	{
-		/* Merge the composite bloom candidates into the baserestrictinfo as last quals. */
-		ListCell *lc;
-		foreach (lc, base_context.bloom_candidates->candidates)
-		{
-			BloomCandidate *cand = lfirst(lc);
-			base_context.compressed_rel->baserestrictinfo =
-				lappend(base_context.compressed_rel->baserestrictinfo,
-						make_simple_restrictinfo(root, cand->predicate));
-		}
-	}
 }
 
 static OpExpr *

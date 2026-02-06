@@ -974,6 +974,7 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 				}
 				else if (r == WJB_BEGIN_ARRAY)
 				{
+#ifdef USE_ASSERT_CHECKING
 					ParsedCompressionSettingsObject *current_object =
 						llast(parsed_settings->objects);
 					Assert(current_object != NULL);
@@ -981,7 +982,6 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 					/* The pair list should have been created in the key state */
 					Assert(list_length(current_object->pairs) > 0);
 
-#ifdef USE_ASSERT_CHECKING
 					ParsedCompressionSettingsPair *current_pair = llast(current_object->pairs);
 					Assert(current_pair != NULL);
 					/* The values list should be empty when we arrive to the array start */

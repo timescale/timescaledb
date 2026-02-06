@@ -97,7 +97,7 @@ ORDER BY 1,2,3,4;
          ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=0.00 loops=1)
                Vectorized Filter: ((a = 1) AND (b = 2))
                ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=0.00 loops=1)
-                     Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2))
+                     Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_a, 1) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_b, 2))
                      Rows Removed by Filter: 1
 
 DROP TABLE IF EXISTS mixed_avail_add CASCADE;
