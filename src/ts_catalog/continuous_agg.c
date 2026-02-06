@@ -265,6 +265,8 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 		Int32GetDatum(fd->mat_hypertable_id);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_raw_hypertable_id)] =
 		Int32GetDatum(fd->raw_hypertable_id);
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_invalidation_log)] =
+		Int32GetDatum(fd->invalidation_log);
 
 	if (fd->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
 		nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)] = true;
@@ -310,6 +312,8 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_continuous_agg_mat_hypertable_id)]);
 	fd->raw_hypertable_id =
 		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_continuous_agg_raw_hypertable_id)]);
+	fd->invalidation_log =
+		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_continuous_agg_invalidation_log)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)])
 		fd->parent_mat_hypertable_id = INVALID_HYPERTABLE_ID;
@@ -823,6 +827,7 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	ObjectAddress direct_view = { 0 };
 	ObjectAddress raw_hypertable = { 0 };
 	ObjectAddress mat_hypertable = { 0 };
+	ObjectAddress invalidation_log = { 0 };
 	bool raw_hypertable_has_other_caggs;
 
 	/* Delete the job before taking locks as it kills long-running jobs
@@ -891,6 +896,12 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 										   &cadata->direct_view_name,
 										   AccessExclusiveLock);
 
+	if (OidIsValid(cadata->invalidation_log))
+	{
+		LockRelationOid(cadata->invalidation_log, AccessExclusiveLock);
+		ObjectAddressSet(invalidation_log, RelationRelationId, cadata->invalidation_log);
+	}
+
 	/* Delete catalog entry */
 	iterator = ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
 	init_scan_by_mat_hypertable_id(&iterator, cadata->mat_hypertable_id);
@@ -934,6 +945,9 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		ts_compression_settings_delete(mat_hypertable.objectId);
 		ts_hypertable_delete_by_id(cadata->mat_hypertable_id);
 	}
+
+	if (OidIsValid(invalidation_log.objectId))
+		performDeletion(&invalidation_log, DROP_RESTRICT, 0);
 
 	if (OidIsValid(partial_view.objectId))
 		performDeletion(&partial_view, DROP_RESTRICT, 0);

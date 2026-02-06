@@ -262,6 +262,33 @@ invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
 		 end);
 }
 
+static void
+invalidation_cagg_add_entry(int32 mat_ht_id, Datum start, Datum end)
+{
+	CatalogSecurityContext sec_ctx;
+	ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_ht_id, false);
+	Relation rel = table_open(cagg->data.invalidation_log, RowExclusiveLock);
+	Datum values[2] = { start, end };
+	bool nulls[2] = { false, false };
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_insert_values(rel, RelationGetDescr(rel), values, nulls);
+	ts_catalog_restore_user(&sec_ctx);
+	table_close(rel, NoLock);
+}
+
+void
+invalidation_cagg_add_entries(int32 ht_id, Datum start, Datum end)
+{
+	ContinuousAggInfo info = ts_continuous_agg_get_all_caggs_info(ht_id);
+	ListCell *lc;
+	foreach (lc, info.mat_hypertable_ids)
+	{
+		int32 mat_ht_id = lfirst_int(lc);
+		invalidation_cagg_add_entry(mat_ht_id, start, end);
+	}
+}
+
 /*
  * Invalidate one or more continuous aggregates.
  *
