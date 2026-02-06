@@ -19,6 +19,26 @@
 #include "compat/compat.h"
 
 /*
+ * For PG18+: provide the old lc_collate_is_c() API using pg_locale_t flags.
+ */
+
+#if PG18_GE
+
+#include "utils/pg_locale.h"
+
+static inline bool
+lc_collate_is_c(Oid collation)
+{
+	return pg_newlocale_from_collation(collation)->collate_is_c;
+}
+
+#else
+
+#include <utils/pg_locale.h>
+
+#endif
+
+/*
  * Aggregate function count(*).
  */
 typedef struct
@@ -195,10 +215,14 @@ VectorAggFunctions count_any_agg = {
 
 /*
  * Return the vector aggregate definition corresponding to the given
- * PG aggregate function Oid.
+ * PG aggregate function Oid and collation.
+ *
+ * The collation parameter is used for text aggregates (min/max) which use
+ * memcmp for comparison. This only produces correct results for C collation,
+ * so we cannot use vectorized aggregation for non-C collations.
  */
 VectorAggFunctions *
-get_vector_aggregate(Oid aggfnoid)
+get_vector_aggregate(Oid aggfnoid, Oid collation)
 {
 	switch (aggfnoid)
 	{
