@@ -108,6 +108,8 @@ extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 extern TSDLLEXPORT bool ts_guc_enable_bulk_decompression;
 extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
 extern TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom;
+extern TSDLLEXPORT bool ts_guc_enable_composite_bloom_indexes;
+extern TSDLLEXPORT bool ts_guc_enable_bloom_index_pruning;
 extern TSDLLEXPORT bool ts_guc_enable_numeric_in_auto_composite_bloom;
 extern TSDLLEXPORT bool ts_guc_enable_time_types_in_auto_composite_bloom;
 extern TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1;

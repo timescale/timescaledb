@@ -951,6 +951,10 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 				while ((i = bms_next_member(per_column_settings->composite_bloom_index_obj_ids,
 											i)) >= 0)
 				{
+					/* Composite bloom indexes are disabled */
+					if (!ts_guc_enable_composite_bloom_indexes)
+						continue;
+
 					/* only create the composite bloom builder if it hasn't been created yet */
 					if (composite_bloom_builders[i] == NULL)
 					{

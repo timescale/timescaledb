@@ -242,9 +242,14 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 		}
 
 		if (best_match.num_cols == 1)
-			cdst->bloom_hasher = bloom1_hasher_create(type_oids[0]);
-		else
+		{
+			if (ts_guc_enable_sparse_index_bloom)
+				cdst->bloom_hasher = bloom1_hasher_create(type_oids[0]);
+		}
+		else if (ts_guc_enable_composite_bloom_indexes)
+		{
 			cdst->bloom_hasher = bloom1_composite_hasher_create(type_oids, best_match.num_cols);
+		}
 		pfree(type_oids);
 	}
 

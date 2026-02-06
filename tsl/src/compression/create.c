@@ -59,9 +59,9 @@
 
 #include "bgw_policy/compression_api.h"
 
+#ifdef USE_ASSERT_CHECKING
 static const char *sparse_index_types[] = { "min", "max" };
 
-#ifdef USE_ASSERT_CHECKING
 static bool
 is_sparse_index_type(const char *type)
 {
@@ -176,7 +176,9 @@ compressed_column_metadata_name_v2(const char *metadata_type, const char **colum
 	for (int i = 0; i < num_columns; i++)
 	{
 		Assert(column_names[i] != NULL);
+#ifdef USE_ASSERT_CHECKING
 		int col_len = strlen(column_names[i]);
+#endif
 		Assert(col_len > 0 && col_len < NAMEDATALEN);
 		if (i > 0)
 			appendStringInfoChar(&buf, '_');
@@ -1729,6 +1731,10 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 		int num_cols = index_info->ii_NumIndexKeyAttrs;
 		if (num_cols >= 2 && num_cols <= MAX_BLOOM_FILTER_COLUMNS)
 		{
+			/* Composite bloom indexes are disabled */
+			if (!ts_guc_enable_composite_bloom_indexes)
+				continue;
+
 			/* Create composite bloom from this index */
 			create_composite_bloom(index_info,
 								   ht,

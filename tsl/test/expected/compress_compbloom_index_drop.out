@@ -1,0 +1,108 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+---------------------------------------------------------------------
+-- Some chunks don't have a composite bloom index after index change
+---------------------------------------------------------------------
+CREATE TABLE mixed_avail_drop(ts timestamptz, a int, b int, seg int);
+SELECT create_hypertable('mixed_avail_drop', by_range('ts', interval '1 day'));
+ create_hypertable 
+-------------------
+ (1,t)
+
+-- Create index
+CREATE INDEX idx_ab ON mixed_avail_drop (a, b);
+ALTER TABLE mixed_avail_drop SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'seg',
+    timescaledb.compress_orderby = 'ts'
+);
+-- Insert data for 3 days (3 chunks)
+INSERT INTO mixed_avail_drop
+SELECT ts, (i % 10), (i % 5), 1
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-03', interval '1 hour') ts,
+     generate_series(1, 100) i;
+-- Compress first 2 chunks (will have composite bloom from index)
+SELECT compress_chunk(c) FROM show_chunks('mixed_avail_drop') c LIMIT 2;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+
+-- Before index drop
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT * FROM mixed_avail_drop WHERE a = 1 AND b = 2
+ORDER BY 1,2,3,4;
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on mixed_avail_drop (actual rows=0.00 loops=1)
+   Order: mixed_avail_drop.ts, mixed_avail_drop.seg
+   ->  Sort (actual rows=0.00 loops=1)
+         Sort Key: _hyper_1_1_chunk.ts, _hyper_1_1_chunk.seg
+         Sort Method: quicksort 
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+               Vectorized Filter: ((a = 1) AND (b = 2))
+               ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0.00 loops=1)
+                     Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2))
+                     Rows Removed by Filter: 2
+   ->  Sort (actual rows=0.00 loops=1)
+         Sort Key: _hyper_1_2_chunk.ts, _hyper_1_2_chunk.seg
+         Sort Method: quicksort 
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+               Vectorized Filter: ((a = 1) AND (b = 2))
+               ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=0.00 loops=1)
+                     Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2))
+                     Rows Removed by Filter: 3
+   ->  Sort (actual rows=0.00 loops=1)
+         Sort Key: _hyper_1_3_chunk.ts, _hyper_1_3_chunk.seg
+         Sort Method: quicksort 
+         ->  Index Scan using _hyper_1_3_chunk_idx_ab on _hyper_1_3_chunk (actual rows=0.00 loops=1)
+               Index Cond: ((a = 1) AND (b = 2))
+
+-- Drop index
+DROP INDEX idx_ab;
+-- Compress last chunk (no composite bloom, index is gone)
+SELECT compress_chunk(c) FROM show_chunks('mixed_avail_drop') c OFFSET 2;
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_3_chunk
+
+-- Query should work on all chunks
+SELECT COUNT(*) FROM mixed_avail_drop WHERE a = 1 AND b = 2;
+ count 
+-------
+     0
+
+-- After index drop
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+SELECT * FROM mixed_avail_drop WHERE a = 1 AND b = 2
+ORDER BY 1,2,3,4;
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on mixed_avail_drop (actual rows=0.00 loops=1)
+   Order: mixed_avail_drop.ts, mixed_avail_drop.seg
+   ->  Sort (actual rows=0.00 loops=1)
+         Sort Key: _hyper_1_1_chunk.ts, _hyper_1_1_chunk.seg
+         Sort Method: quicksort 
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+               Vectorized Filter: ((a = 1) AND (b = 2))
+               ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0.00 loops=1)
+                     Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2))
+                     Rows Removed by Filter: 2
+   ->  Sort (actual rows=0.00 loops=1)
+         Sort Key: _hyper_1_2_chunk.ts, _hyper_1_2_chunk.seg
+         Sort Method: quicksort 
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+               Vectorized Filter: ((a = 1) AND (b = 2))
+               ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=0.00 loops=1)
+                     Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2))
+                     Rows Removed by Filter: 3
+   ->  Sort (actual rows=0.00 loops=1)
+         Sort Key: _hyper_1_3_chunk.ts, _hyper_1_3_chunk.seg
+         Sort Method: quicksort 
+         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=0.00 loops=1)
+               Vectorized Filter: ((a = 1) AND (b = 2))
+               Rows Removed by Filter: 900
+               ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=1.00 loops=1)
+
+DROP TABLE IF EXISTS mixed_avail_drop CASCADE;
