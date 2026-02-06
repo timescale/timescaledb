@@ -1233,6 +1233,15 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		range->end_isnull = range_end_isnull;
 		range->type = original_refresh_window->type;
 
+		/* For variable-length buckets, circumscribe the batch to bucket boundaries.
+		 * The batch size calculation uses a 30-day approximation for months, so we need
+		 * to expand batches to cover complete buckets.*/
+		if (cagg->bucket_function->bucket_fixed_interval == false)
+		{
+			ts_compute_circumscribed_bucketed_refresh_window_variable(&range->start,
+																	  &range->end,
+																	  cagg->bucket_function);
+		}
 		/*
 		 * To make sure that the first range (or last range in case of refreshing from oldest to
 		 * newest) is aligned with the end of the refresh window we need to set the end to the

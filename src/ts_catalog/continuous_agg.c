@@ -1448,7 +1448,11 @@ ts_compute_circumscribed_bucketed_refresh_window_variable(int64 *start, int64 *e
 	start_new = generic_time_bucket(bf, start_old);
 	end_new = generic_time_bucket(bf, end_old);
 
-	if (DatumGetTimestamp(end_new) != DatumGetTimestamp(end_old))
+	/* Add interval to expand to next bucket if:
+	 * 1. end wasn't at a bucket boundary (end moved during bucketing), OR
+	 * 2. we have a single-point at a bucket boundary (start == end after bucketing) */
+	if (DatumGetTimestamp(end_new) != DatumGetTimestamp(end_old) ||
+		DatumGetTimestamp(start_new) == DatumGetTimestamp(end_new))
 	{
 		end_new = generic_add_interval(bf, end_new);
 	}
