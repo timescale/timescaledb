@@ -445,6 +445,9 @@ CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges (
   materialization_id integer,
   lowest_modified_value bigint NOT NULL,
   greatest_modified_value bigint NOT NULL,
+  job_id integer,
+  pid integer,
+  created_at timestamptz,
   -- table constraints
   CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
 );

@@ -80,3 +80,44 @@ GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 -- end rebuild _timescaledb_catalog.chunk table --
 
+--
+-- Rebuild the catalog table `_timescaledb_catalog.continuous_aggs_materialization_ranges`
+-- to add columns `job_id` and `pid`
+--
+
+CREATE TABLE _timescaledb_internal.tmp_continuous_aggs_materialization_ranges AS
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges;
+
+DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges;
+
+CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges (
+  materialization_id integer,
+  lowest_modified_value bigint NOT NULL,
+  greatest_modified_value bigint NOT NULL,
+  job_id integer,
+  pid integer,
+  created_at timestamptz,
+  -- table constraints
+  CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey
+    FOREIGN KEY (materialization_id)
+    REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+);
+
+INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_ranges
+  (materialization_id, lowest_modified_value, greatest_modified_value)
+SELECT materialization_id, lowest_modified_value, greatest_modified_value
+FROM _timescaledb_internal.tmp_continuous_aggs_materialization_ranges;
+
+CREATE INDEX continuous_aggs_materialization_ranges_idx
+  ON _timescaledb_catalog.continuous_aggs_materialization_ranges
+  (materialization_id, lowest_modified_value ASC);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_ranges', '');
+
+DROP TABLE _timescaledb_internal.tmp_continuous_aggs_materialization_ranges;
+
+GRANT SELECT ON _timescaledb_catalog.continuous_aggs_materialization_ranges TO PUBLIC;
+-- end rebuild _timescaledb_catalog.continuous_aggs_materialization_ranges table --
+
