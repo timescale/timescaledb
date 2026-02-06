@@ -45,6 +45,7 @@ jobs:
         ${{ github.event_name == 'push'
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
+      run_installcheck: ${{ github.event_name == 'push' || steps.filters.outputs.windows-workflow == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -204,7 +205,7 @@ jobs:
       run: cmake --install build_win --config ${{ matrix.build_type }}
 
     - name: Setup postgres cluster
-      if: github.event_name == 'schedule'
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       run: |
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         mkdir -p ${{ env.TABLESPACE1 }}\_default
@@ -227,7 +228,7 @@ jobs:
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'SHOW data_directory;'
 
     - name: Install postgres for test runner
-      if: github.event_name == 'schedule'
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       run: |
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh || true
@@ -237,7 +238,7 @@ jobs:
         apt-get install -y --force-yes postgresql-server-dev-${{ matrix.versions.pg }}
 
     - name: Run tests
-      if: github.event_name == 'schedule'
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       env:
         WSLENV: "IGNORES:SKIPS"
@@ -250,7 +251,7 @@ jobs:
         make -C build_wsl regresschecklocal IGNORES="${IGNORES}" SKIPS="${SKIPS}" | tee -a installcheck.log
 
     - name: Setup postgres cluster for TSL tests
-      if: github.event_name == 'schedule'
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       run: |
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_ctl stop
         timeout 10
@@ -262,7 +263,7 @@ jobs:
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
 
     - name: Run TSL tests
-      if: github.event_name == 'schedule'
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       env:
         WSLENV: "IGNORES:SKIPS"
