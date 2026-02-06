@@ -4,6 +4,8 @@
 
 -- Test grouping by uuid segmentby column (scalar by-reference fixed-width column).
 
+\pset null $
+
 CREATE TABLE public.plan_plus(
   "time"        timestamp with time zone NOT NULL,
   device        uuid                     NOT NULL,
@@ -89,8 +91,10 @@ SELECT count(*) FROM (SELECT device FROM plan_plus GROUP BY device) t;
 
 SELECT count(*) FROM (SELECT device, field FROM plan_plus GROUP BY device, field) t;
 
+drop table plan_plus;
 
--- UUID groupping
+
+-- UUID grouping
 create table uuid_table(ts int, u uuid);
 select count(*) from create_hypertable('uuid_table', 'ts', chunk_time_interval => 6);
 alter table uuid_table set (timescaledb.compress);
@@ -100,7 +104,9 @@ insert into uuid_table values
 	(9, '0197a7a9-b48b-7c78-ab14-78b3dd81dbbc'), (10, '0197a7a9-b48b-7c78-ab14-78b3dd81dbbc'), (11, '0197a7a9-b48b-7c7a-8d9e-5afc3bf15234'), (12, '0197a7a9-b48b-7c7b-bc49-7150f16d8d63'),
 	(13, '0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9'), (14, '0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9'), (15, '0197a7a9-b48b-7c7e-9ebb-acf63f5b625e'), (16, '0197a7a9-b48b-7c7f-a0c1-ba4adf950a2a'),
     (17, '01941f29-7c00-706a-bea9-105dad841304'), (18, '01941f2a-665f-7722-b4b5-cf4e70e666d0'),
-	(19, NULL::uuid), (20, NULL::uuid), (21, NULL::uuid);
+    (19, NULL::uuid), (20, NULL::uuid), (21, NULL::uuid),
+    (22, 'b71b048c-e63a-4322-bcb9-5b5a10eaf29c'), (23, '32c0036a-f9ae-4ad4-b948-ad351033d523'), (24, 'b1af1cc0-c96c-4bbc-9b96-d25e5ff277cd')
+;
 
 -- add a few derived columns
 alter table uuid_table add column ver int;
@@ -115,6 +121,10 @@ select count(compress_chunk(x, true)) from show_chunks('uuid_table') x;
 
 SET timescaledb.debug_require_vector_agg = 'require';
 
+---- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off;
+--set timescaledb.debug_require_vector_agg = 'allow';
+
 SELECT ver, u, ts, uuid_ts from uuid_table
 where uuid_ts < '2025-06-25 16:16:46.347779+01' and ver = 7
 order by 1,2;
@@ -123,4 +133,20 @@ SELECT ver, u, count(*), sum(ts) from uuid_table
 where uuid_ts < '2025-06-25 16:16:46.347779+01' and ver = 7
 group by 1,2 order by 1,2;
 
+select uuid_version(u), count(*) from uuid_table group by 1 order by 1;
+
+select to_uuidv7_boundary(uuid_ts), count(*)
+    from uuid_table group by 1 order by 1;
+
+select uuid_version(to_uuidv7_boundary(uuid_ts)), count(*)
+    from uuid_table group by 1 order by 1;
+
+select uuid_timestamp(u), count(*)
+    from uuid_table group by 1 order by 1;
+
+select uuid_timestamp(to_uuidv7_boundary(uuid_ts)), count(*)
+    from uuid_table group by 1 order by 1;
+
 RESET timescaledb.debug_require_vector_agg;
+
+drop table uuid_table;

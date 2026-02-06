@@ -92,20 +92,6 @@ caggtimebucketinfo_init(ContinuousAggTimeBucketInfo *src, int32 hypertable_id, O
 }
 
 /*
- * Initialize MaterializationHypertableColumnInfo.
- */
-void
-mattablecolumninfo_init(MaterializationHypertableColumnInfo *matcolinfo, List *grouplist)
-{
-	matcolinfo->matcollist = NIL;
-	matcolinfo->partial_seltlist = NIL;
-	matcolinfo->partial_grouplist = grouplist;
-	matcolinfo->mat_groupcolname_list = NIL;
-	matcolinfo->matpartcolno = -1;
-	matcolinfo->matpartcolname = NULL;
-}
-
-/*
  * Check if the supplied OID belongs to a valid bucket function
  * for continuous aggregates.
  */

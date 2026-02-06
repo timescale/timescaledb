@@ -1436,7 +1436,10 @@ _guc_init(void)
 							   "chunk time interval is set on the hypertable. The default chunk "
 							   "interval is only used for hypertables with a compatible time "
 							   "type, e.g., timestamp, date, and UUID (v7). Hypertables using an "
-							   "integer partitioning column have hard-coded defaults.",
+							   "integer partitioning column have hard-coded defaults."
+							   "Expert-level setting. These parameters are optimized for internal "
+							   "workflows; incorrect configurations can negatively impact query "
+							   "performance and system efficiency.",
 							   /* valueAddr= */ &ts_guc_default_chunk_time_interval,
 							   NULL,
 							   /* context= */ PGC_USERSET,
