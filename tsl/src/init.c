@@ -47,9 +47,7 @@
 #include "process_utility.h"
 #include "reorder.h"
 
-#ifdef PG_MODULE_MAGIC
-PG_MODULE_MAGIC;
-#endif
+TS_MODULE_MAGIC("timescaledb-tsl");
 
 #ifdef APACHE_ONLY
 #error "cannot compile the TSL for ApacheOnly mode"
