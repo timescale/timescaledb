@@ -102,6 +102,7 @@ typedef struct ContinuousAggInvalidationState
 	Relation cagg_queue_rel;
 	Snapshot snapshot;
 	Tuplestorestate *invalidations;
+	int32 job_id;
 } ContinuousAggInvalidationState;
 
 /*
@@ -129,12 +130,12 @@ static Relation open_cagg_table(ContinuousAggTableType type, LOCKMODE lockmode);
 static void hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id,
 											  LOCKMODE lockmode);
 static HeapTuple create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
-												   const InternalTimeRange range);
+												   const InternalTimeRange range, int32 job_id);
 static void check_materialization_ranges_overlap(const ContinuousAgg *cagg,
 												 const InternalTimeRange refresh_window);
 static void insert_new_cagg_materialization_ranges(const ContinuousAggInvalidationState *state,
 												   const InternalTimeRange refresh_window,
-												   int32 cagg_hyper_id);
+												   int32 cagg_hyper_id, int32 job_id);
 static bool save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 										  const Invalidation *invalidation);
 static void set_remainder_after_cut(Invalidation *remainder, int32 hyper_id,
@@ -297,7 +298,8 @@ continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat
 
 static HeapTuple
 create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
-								  const InternalTimeRange range)
+								  const InternalTimeRange range,
+								  int32 job_id)
 {
 	Datum values[Natts_continuous_aggs_materialization_ranges] = { 0 };
 	bool isnull[Natts_continuous_aggs_materialization_ranges] = { false };
@@ -311,6 +313,12 @@ create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_materialization_ranges_greatest_modified_value)] =
 		Int64GetDatum(range.end);
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_materialization_ranges_job_id)] =
+		Int32GetDatum(job_id);
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_materialization_ranges_pid)] =
+		Int32GetDatum(MyProcPid);
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_materialization_ranges_created_at)] =
+		TimestampTzGetDatum(GetCurrentTimestamp());
 
 	return heap_form_tuple(tupdesc, values, isnull);
 }
@@ -379,15 +387,18 @@ check_materialization_ranges_overlap(const ContinuousAgg *cagg,
 
 static void
 insert_new_cagg_materialization_ranges(const ContinuousAggInvalidationState *state,
-									   const InternalTimeRange refresh_window, int32 cagg_hyper_id)
+									   const InternalTimeRange refresh_window, int32 cagg_hyper_id,
+									   int32 job_id)
 {
 	CatalogSecurityContext sec_ctx;
 	TupleDesc tupdesc = RelationGetDescr(state->cagg_queue_rel);
-	HeapTuple tuple;
 
 	check_materialization_ranges_overlap(state->cagg, refresh_window);
 
-	tuple = create_materialization_ranges_tup(tupdesc, cagg_hyper_id, refresh_window);
+	HeapTuple tuple = create_materialization_ranges_tup(tupdesc,
+														cagg_hyper_id,
+														refresh_window,
+														job_id);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_only(state->cagg_queue_rel, tuple);
@@ -441,7 +452,10 @@ save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 													  &refresh_window,
 													  state->cagg->bucket_function);
 
-	insert_new_cagg_materialization_ranges(state, bucketed_refresh_window, cagg_hyper_id);
+	insert_new_cagg_materialization_ranges(state,
+										  bucketed_refresh_window,
+										  cagg_hyper_id,
+										  state->job_id);
 
 	return true;
 }
@@ -1186,6 +1200,7 @@ invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange
 	long count;
 
 	cagg_invalidation_state_init(&state, cagg);
+	state.job_id = context.job_id;
 	state.invalidations = tuplestore_begin_heap(false, false, work_mem);
 	clear_cagg_invalidations_for_refresh(&state, refresh_window, force);
 	count = tuplestore_tuple_count(state.invalidations);
