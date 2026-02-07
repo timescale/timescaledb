@@ -118,9 +118,9 @@ SELECT * FROM sorted_bgw_log;
      10 |         0 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
      11 |         0 | Refresh Continuous Aggregate Policy [1000] | inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
- materialization_id | lowest_modified_value | greatest_modified_value 
---------------------+-----------------------+-------------------------
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value | job_id 
+--------------------+-----------------------+-------------------------+--------
 
 CREATE MATERIALIZED VIEW conditions_by_day_manual_refresh
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
@@ -195,9 +195,9 @@ SELECT * FROM sorted_bgw_log;
       5 | 3600000000 | Refresh Continuous Aggregate Policy [1000] | inserted 50 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
       6 | 3600000000 | Refresh Continuous Aggregate Policy [1000] | reached maximum number of batches per execution (2), batches not processed (2)
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
- materialization_id | lowest_modified_value | greatest_modified_value 
---------------------+-----------------------+-------------------------
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value | job_id 
+--------------------+-----------------------+-------------------------+--------
 
 SELECT count(*) FROM conditions_by_day;
  count 
@@ -252,9 +252,9 @@ SELECT * FROM sorted_bgw_log;
       4 | 7200000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
       5 | 7200000000 | Refresh Continuous Aggregate Policy [1000] | inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
- materialization_id | lowest_modified_value | greatest_modified_value 
---------------------+-----------------------+-------------------------
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value | job_id 
+--------------------+-----------------------+-------------------------+--------
 
 -- Should have no differences
 SELECT
@@ -320,9 +320,9 @@ SELECT * FROM sorted_bgw_log;
      10 | 10800000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
      11 | 10800000000 | Refresh Continuous Aggregate Policy [1000] | inserted 20 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
- materialization_id | lowest_modified_value | greatest_modified_value 
---------------------+-----------------------+-------------------------
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value | job_id 
+--------------------+-----------------------+-------------------------+--------
 
 SELECT count(*) FROM conditions_by_day;
  count 
@@ -404,9 +404,9 @@ SELECT * FROM sorted_bgw_log;
       1 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | deleted 295 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
       2 | 14400000000 | Refresh Continuous Aggregate Policy [1000] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
- materialization_id | lowest_modified_value | greatest_modified_value 
---------------------+-----------------------+-------------------------
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value | job_id 
+--------------------+-----------------------+-------------------------+--------
 
 -- Should return zero rows
 SELECT count(*) FROM conditions_by_day;
@@ -446,9 +446,9 @@ SELECT * FROM sorted_bgw_log;
       1 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
       2 | 18000000000 | Refresh Continuous Aggregate Policy [1000] | inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
- materialization_id | lowest_modified_value | greatest_modified_value 
---------------------+-----------------------+-------------------------
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value | job_id 
+--------------------+-----------------------+-------------------------+--------
 
 -- Should return 10 rows because the bucket width is `1 day` and buckets per batch is `10`
 SELECT count(*) FROM conditions_by_day;
@@ -482,9 +482,9 @@ SELECT * FROM sorted_bgw_log;
       1 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
       2 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
- materialization_id | lowest_modified_value | greatest_modified_value 
---------------------+-----------------------+-------------------------
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value | job_id 
+--------------------+-----------------------+-------------------------+--------
 
 -- Should return 1 row
 SELECT count(*) FROM conditions_by_day;
@@ -556,9 +556,9 @@ SELECT * FROM sorted_bgw_log;
       1 |         0 | Refresh Continuous Aggregate Policy [1002] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
       2 |         0 | Refresh Continuous Aggregate Policy [1002] | inserted 80 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
- materialization_id | lowest_modified_value | greatest_modified_value 
---------------------+-----------------------+-------------------------
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value | job_id 
+--------------------+-----------------------+-------------------------+--------
 
 -- Both continuous aggregates should have the same data
 SELECT count(*) FROM conditions_by_day;
@@ -641,9 +641,9 @@ SELECT * FROM sorted_bgw_log;
      10 |         0 | Refresh Continuous Aggregate Policy [1003] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
      11 |         0 | Refresh Continuous Aggregate Policy [1003] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
- materialization_id | lowest_modified_value | greatest_modified_value 
---------------------+-----------------------+-------------------------
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value | job_id 
+--------------------+-----------------------+-------------------------+--------
 
 -- Both continuous aggregates should have the same data
 SELECT count(*) FROM conditions_by_day;
@@ -736,9 +736,9 @@ SELECT * FROM sorted_bgw_log;
       1 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
       2 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
- materialization_id | lowest_modified_value | greatest_modified_value 
---------------------+-----------------------+-------------------------
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+ materialization_id | lowest_modified_value | greatest_modified_value | job_id 
+--------------------+-----------------------+-------------------------+--------
 
 SELECT delete_job(:job_id);
  delete_job 
