@@ -60,7 +60,8 @@ static void continuous_agg_refresh_init(ContinuousAggRefreshState *refresh,
 										const InternalTimeRange *refresh_window,
 										bool bucketing_refresh_window);
 static void continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
-										   const InternalTimeRange *bucketed_refresh_window);
+										   const InternalTimeRange *bucketed_refresh_window,
+										   int32 job_id);
 static void log_refresh_window(int elevel, const ContinuousAgg *cagg,
 							   const InternalTimeRange *refresh_window,
 							   ContinuousAggRefreshContext context);
@@ -399,7 +400,7 @@ continuous_agg_refresh_init(ContinuousAggRefreshState *refresh, const Continuous
  */
 static void
 continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
-							   const InternalTimeRange *bucketed_refresh_window)
+							   const InternalTimeRange *bucketed_refresh_window, int32 job_id)
 {
 	SchemaAndName cagg_hypertable_name = {
 		.schema = &refresh->cagg_ht->fd.schema_name,
@@ -414,7 +415,8 @@ continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
 										  refresh->partial_view,
 										  cagg_hypertable_name,
 										  &time_dim->fd.column_name,
-										  *bucketed_refresh_window);
+										  *bucketed_refresh_window,
+										  job_id);
 }
 
 static void
@@ -454,7 +456,7 @@ continuous_agg_refresh_execute_wrapper(const InternalTimeRange *bucketed_refresh
 	(void) iteration;
 
 	log_refresh_window(CAGG_REFRESH_LOG_LEVEL, &refresh->cagg, bucketed_refresh_window, context);
-	continuous_agg_refresh_execute(refresh, bucketed_refresh_window);
+	continuous_agg_refresh_execute(refresh, bucketed_refresh_window, context.job_id);
 }
 
 static long
@@ -897,7 +899,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * by the refresh function*/
 	refresh_window = *refresh_window_arg;
 	bool has_pending_materializations =
-		continuous_agg_has_pending_materializations(cagg, refresh_window);
+		continuous_agg_has_pending_materializations(cagg, refresh_window, context.job_id);
 
 	if (has_pending_materializations)
 	{
@@ -934,7 +936,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 															  cagg->bucket_function);
 		}
 
-		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window);
+		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window, context.job_id);
 	}
 
 	if (!refreshed && !has_pending_materializations)
