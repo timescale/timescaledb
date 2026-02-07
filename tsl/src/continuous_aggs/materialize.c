@@ -66,6 +66,7 @@ typedef struct MaterializationContext
 	TimeRange materialization_range;
 	InternalTimeRange internal_materialization_range;
 	ItemPointer tupleid;
+	int32 job_id;
 	int nargs;
 } MaterializationContext;
 
@@ -123,7 +124,7 @@ static MaterializationPlan materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPES
 									 "deleted " UINT64_FORMAT
 									 " row(s) from materialization table \"%s.%s\"" },
 	[PLAN_TYPE_RANGES_SELECT] = { .catalog_security_context = true,
-								  .nargs = 3,
+								  .nargs = 4,
 								  .create_statement =
 									  create_materialization_ranges_select_statement,
 								  .error_message = "could not select invalidation entries for "
@@ -135,7 +136,7 @@ static MaterializationPlan materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPES
 								  .error_message = "could not delete invalidation entries for "
 												   "materialization table \"%s.%s\"" },
 	[PLAN_TYPE_RANGES_PENDING] = { .read_only = true,
-								   .nargs = 3,
+								   .nargs = 4,
 								   .create_statement =
 									   create_materialization_ranges_pending_statement,
 								   .error_message = "could not select pending materialization "
@@ -164,7 +165,7 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 									  SchemaAndName partial_view,
 									  SchemaAndName materialization_table,
 									  const NameData *time_column_name,
-									  InternalTimeRange materialization_range)
+									  InternalTimeRange materialization_range, int32 job_id)
 {
 	MaterializationContext context = {
 		.mat_ht = mat_ht,
@@ -174,6 +175,7 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 		.time_column_name = (NameData *) time_column_name,
 		.materialization_range = internal_time_range_to_time_range(materialization_range),
 		.internal_materialization_range = materialization_range,
+		.job_id = job_id,
 	};
 
 	/* Lock down search_path */
@@ -197,11 +199,12 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 /* API to check for pending materialization ranges */
 bool
 continuous_agg_has_pending_materializations(const ContinuousAgg *cagg,
-											InternalTimeRange materialization_range)
+											InternalTimeRange materialization_range, int32 job_id)
 {
 	MaterializationContext context = {
 		.cagg = cagg,
 		.internal_materialization_range = materialization_range,
+		.job_id = job_id,
 	};
 
 	/* Lock down search_path */
@@ -630,6 +633,7 @@ create_materialization_ranges_select_statement(MaterializationContext *context)
 					 "AND greatest_modified_value <= $3 "
 					 "AND pg_catalog.int8range(lowest_modified_value, greatest_modified_value) && "
 					 "pg_catalog.int8range($2, $3) "
+					 "AND job_id = $4 "
 					 "ORDER BY lowest_modified_value ASC "
 					 "LIMIT 1 "
 					 "FOR UPDATE SKIP LOCKED ");
@@ -666,6 +670,7 @@ create_materialization_ranges_pending_statement(MaterializationContext *context)
 					 "AND greatest_modified_value <= $3 "
 					 "AND pg_catalog.int8range(lowest_modified_value, greatest_modified_value) && "
 					 "pg_catalog.int8range($2, $3) "
+					 "AND job_id = $4 "
 					 "LIMIT 1 ");
 
 	return query.data;
@@ -679,11 +684,12 @@ create_materialization_plan_argtypes(MaterializationContext *context,
 
 	switch (plan_type)
 	{
-		case PLAN_TYPE_RANGES_SELECT: /* 3 arguments */
+		case PLAN_TYPE_RANGES_SELECT: /* 4 arguments */
 		case PLAN_TYPE_RANGES_PENDING:
 			argtypes[0] = INT4OID; /* materialization_id */
 			argtypes[1] = INT8OID;
 			argtypes[2] = INT8OID;
+			argtypes[3] = INT4OID; /* job_id */
 			break;
 
 		case PLAN_TYPE_RANGES_DELETE: /* 1 argument1 */
@@ -732,7 +738,7 @@ create_materialization_plan_args(MaterializationContext *context, Materializatio
 {
 	switch (plan_type)
 	{
-		case PLAN_TYPE_RANGES_SELECT: /* 3 arguments */
+		case PLAN_TYPE_RANGES_SELECT: /* 4 arguments */
 		case PLAN_TYPE_RANGES_PENDING:
 		{
 			/* read the maximum of one bucket before the window start and after the window end to
@@ -755,9 +761,11 @@ create_materialization_plan_args(MaterializationContext *context, Materializatio
 			(*values)[0] = Int32GetDatum(context->cagg->data.mat_hypertable_id);
 			(*values)[1] = Int64GetDatum(start_adjusted);
 			(*values)[2] = Int64GetDatum(end_adjusted);
+			(*values)[3] = Int32GetDatum(context->job_id);
 			(*nulls)[0] = false;
 			(*nulls)[1] = false;
 			(*nulls)[2] = false;
+			(*nulls)[3] = false;
 			break;
 		}
 
