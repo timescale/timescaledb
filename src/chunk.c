@@ -59,6 +59,7 @@
 #include "bgw_policy/chunk_stats.h"
 #include "cache.h"
 #include "chunk_index.h"
+#include "chunk_statistics.h"
 
 #include "cross_module_fn.h"
 #include "debug_assert.h"
@@ -986,6 +987,10 @@ chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 								  chunk->fd.id,
 								  chunk->table_id,
 								  InvalidOid);
+		ts_chunk_extended_statistics_create_all(chunk->fd.hypertable_id,
+												chunk->hypertable_relid,
+												chunk->fd.id,
+												chunk->table_id);
 
 		chunk_set_replica_identity(chunk);
 	}
