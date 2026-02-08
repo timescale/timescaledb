@@ -31,6 +31,8 @@ SELECT compress_chunk(c) FROM show_chunks('metrics') c;
 
 SET max_parallel_workers_per_gather = 0;
 SET timescaledb.enable_columnarindexscan = on;
+-- disable vectorized aggregation to prevent plan switches when running on 32-bit
+SET timescaledb.enable_vectorized_aggregation = off;
 -- simple query with 1 max aggregate that can use optimization
 :PREFIX SELECT device, max(time) FROM metrics GROUP BY device;
 --- QUERY PLAN ---
