@@ -252,31 +252,37 @@ select * from test.show_columns_ext(:'chunk'::regclass);
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
 --- QUERY PLAN ---
- Aggregate (actual rows=1.00 loops=1)
+ Finalize Aggregate (actual rows=1.00 loops=1)
    Output: count(*)
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_1_chunk (actual rows=1.00 loops=1)
-         Vectorized Filter: (_hyper_3_1_chunk.u = '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
-         Rows Removed by Filter: 999
-         Bulk Decompression: true
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_4_3_chunk (actual rows=1.00 loops=1)
-               Output: compress_hyper_4_3_chunk._ts_meta_count, compress_hyper_4_3_chunk._ts_meta_min_1, compress_hyper_4_3_chunk._ts_meta_max_1, compress_hyper_4_3_chunk.x, compress_hyper_4_3_chunk.value, compress_hyper_4_3_chunk.regress-test-bloom_u, compress_hyper_4_3_chunk.u, compress_hyper_4_3_chunk._ts_meta_v2_min_ts, compress_hyper_4_3_chunk._ts_meta_v2_max_ts, compress_hyper_4_3_chunk.ts, compress_hyper_4_3_chunk.data
-               Filter: _timescaledb_functions.bloom1_contains(compress_hyper_4_3_chunk.regress-test-bloom_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
-               Rows Removed by Filter: 9
+   ->  Custom Scan (VectorAgg) (actual rows=1.00 loops=1)
+         Output: (PARTIAL count(*))
+         Grouping Policy: all compressed batches
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_1_chunk (actual rows=1.00 loops=1)
+               Vectorized Filter: (_hyper_3_1_chunk.u = '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+               Rows Removed by Filter: 999
+               Bulk Decompression: true
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_4_3_chunk (actual rows=1.00 loops=1)
+                     Output: compress_hyper_4_3_chunk._ts_meta_count, compress_hyper_4_3_chunk._ts_meta_min_1, compress_hyper_4_3_chunk._ts_meta_max_1, compress_hyper_4_3_chunk.x, compress_hyper_4_3_chunk.value, compress_hyper_4_3_chunk.regress-test-bloom_u, compress_hyper_4_3_chunk.u, compress_hyper_4_3_chunk._ts_meta_v2_min_ts, compress_hyper_4_3_chunk._ts_meta_v2_max_ts, compress_hyper_4_3_chunk.ts, compress_hyper_4_3_chunk.data
+                     Filter: _timescaledb_functions.bloom1_contains(compress_hyper_4_3_chunk.regress-test-bloom_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+                     Rows Removed by Filter: 9
 
 -- Timestamp uses minmax
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-01-14';
 --- QUERY PLAN ---
- Aggregate (actual rows=1.00 loops=1)
+ Finalize Aggregate (actual rows=1.00 loops=1)
    Output: count(*)
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_1_chunk (actual rows=169.00 loops=1)
-         Vectorized Filter: ((_hyper_3_1_chunk.ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (_hyper_3_1_chunk.ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
-         Rows Removed by Filter: 831
-         Bulk Decompression: true
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_4_3_chunk (actual rows=1.00 loops=1)
-               Output: compress_hyper_4_3_chunk._ts_meta_count, compress_hyper_4_3_chunk._ts_meta_min_1, compress_hyper_4_3_chunk._ts_meta_max_1, compress_hyper_4_3_chunk.x, compress_hyper_4_3_chunk.value, compress_hyper_4_3_chunk.regress-test-bloom_u, compress_hyper_4_3_chunk.u, compress_hyper_4_3_chunk._ts_meta_v2_min_ts, compress_hyper_4_3_chunk._ts_meta_v2_max_ts, compress_hyper_4_3_chunk.ts, compress_hyper_4_3_chunk.data
-               Filter: ((compress_hyper_4_3_chunk._ts_meta_v2_max_ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (compress_hyper_4_3_chunk._ts_meta_v2_min_ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
-               Rows Removed by Filter: 9
+   ->  Custom Scan (VectorAgg) (actual rows=1.00 loops=1)
+         Output: (PARTIAL count(*))
+         Grouping Policy: all compressed batches
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_1_chunk (actual rows=169.00 loops=1)
+               Vectorized Filter: ((_hyper_3_1_chunk.ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (_hyper_3_1_chunk.ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
+               Rows Removed by Filter: 831
+               Bulk Decompression: true
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_4_3_chunk (actual rows=1.00 loops=1)
+                     Output: compress_hyper_4_3_chunk._ts_meta_count, compress_hyper_4_3_chunk._ts_meta_min_1, compress_hyper_4_3_chunk._ts_meta_max_1, compress_hyper_4_3_chunk.x, compress_hyper_4_3_chunk.value, compress_hyper_4_3_chunk.regress-test-bloom_u, compress_hyper_4_3_chunk.u, compress_hyper_4_3_chunk._ts_meta_v2_min_ts, compress_hyper_4_3_chunk._ts_meta_v2_max_ts, compress_hyper_4_3_chunk.ts, compress_hyper_4_3_chunk.data
+                     Filter: ((compress_hyper_4_3_chunk._ts_meta_v2_max_ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (compress_hyper_4_3_chunk._ts_meta_v2_min_ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
+                     Rows Removed by Filter: 9
 
 drop table test_sparse_index;
 -- Test configurable sparse index in CREATE TABLE .. WITH
@@ -326,31 +332,37 @@ select * from test.show_columns_ext(:'chunk'::regclass);
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
 --- QUERY PLAN ---
- Aggregate (actual rows=1.00 loops=1)
+ Finalize Aggregate (actual rows=1.00 loops=1)
    Output: count(*)
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_5_4_chunk (actual rows=1.00 loops=1)
-         Vectorized Filter: (_hyper_5_4_chunk.u = '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
-         Rows Removed by Filter: 999
-         Bulk Decompression: true
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_6_5_chunk (actual rows=1.00 loops=1)
-               Output: compress_hyper_6_5_chunk._ts_meta_count, compress_hyper_6_5_chunk._ts_meta_min_1, compress_hyper_6_5_chunk._ts_meta_max_1, compress_hyper_6_5_chunk.x, compress_hyper_6_5_chunk.value, compress_hyper_6_5_chunk.regress-test-bloom_u, compress_hyper_6_5_chunk.u, compress_hyper_6_5_chunk._ts_meta_v2_min_ts, compress_hyper_6_5_chunk._ts_meta_v2_max_ts, compress_hyper_6_5_chunk.ts
-               Filter: _timescaledb_functions.bloom1_contains(compress_hyper_6_5_chunk.regress-test-bloom_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
-               Rows Removed by Filter: 9
+   ->  Custom Scan (VectorAgg) (actual rows=1.00 loops=1)
+         Output: (PARTIAL count(*))
+         Grouping Policy: all compressed batches
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_5_4_chunk (actual rows=1.00 loops=1)
+               Vectorized Filter: (_hyper_5_4_chunk.u = '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+               Rows Removed by Filter: 999
+               Bulk Decompression: true
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_6_5_chunk (actual rows=1.00 loops=1)
+                     Output: compress_hyper_6_5_chunk._ts_meta_count, compress_hyper_6_5_chunk._ts_meta_min_1, compress_hyper_6_5_chunk._ts_meta_max_1, compress_hyper_6_5_chunk.x, compress_hyper_6_5_chunk.value, compress_hyper_6_5_chunk.regress-test-bloom_u, compress_hyper_6_5_chunk.u, compress_hyper_6_5_chunk._ts_meta_v2_min_ts, compress_hyper_6_5_chunk._ts_meta_v2_max_ts, compress_hyper_6_5_chunk.ts
+                     Filter: _timescaledb_functions.bloom1_contains(compress_hyper_6_5_chunk.regress-test-bloom_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+                     Rows Removed by Filter: 9
 
 -- Timestamp uses minmax
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-01-14';
 --- QUERY PLAN ---
- Aggregate (actual rows=1.00 loops=1)
+ Finalize Aggregate (actual rows=1.00 loops=1)
    Output: count(*)
-   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_5_4_chunk (actual rows=169.00 loops=1)
-         Vectorized Filter: ((_hyper_5_4_chunk.ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (_hyper_5_4_chunk.ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
-         Rows Removed by Filter: 831
-         Bulk Decompression: true
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_6_5_chunk (actual rows=1.00 loops=1)
-               Output: compress_hyper_6_5_chunk._ts_meta_count, compress_hyper_6_5_chunk._ts_meta_min_1, compress_hyper_6_5_chunk._ts_meta_max_1, compress_hyper_6_5_chunk.x, compress_hyper_6_5_chunk.value, compress_hyper_6_5_chunk.regress-test-bloom_u, compress_hyper_6_5_chunk.u, compress_hyper_6_5_chunk._ts_meta_v2_min_ts, compress_hyper_6_5_chunk._ts_meta_v2_max_ts, compress_hyper_6_5_chunk.ts
-               Filter: ((compress_hyper_6_5_chunk._ts_meta_v2_max_ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (compress_hyper_6_5_chunk._ts_meta_v2_min_ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
-               Rows Removed by Filter: 9
+   ->  Custom Scan (VectorAgg) (actual rows=1.00 loops=1)
+         Output: (PARTIAL count(*))
+         Grouping Policy: all compressed batches
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_5_4_chunk (actual rows=169.00 loops=1)
+               Vectorized Filter: ((_hyper_5_4_chunk.ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (_hyper_5_4_chunk.ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
+               Rows Removed by Filter: 831
+               Bulk Decompression: true
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_6_5_chunk (actual rows=1.00 loops=1)
+                     Output: compress_hyper_6_5_chunk._ts_meta_count, compress_hyper_6_5_chunk._ts_meta_min_1, compress_hyper_6_5_chunk._ts_meta_max_1, compress_hyper_6_5_chunk.x, compress_hyper_6_5_chunk.value, compress_hyper_6_5_chunk.regress-test-bloom_u, compress_hyper_6_5_chunk.u, compress_hyper_6_5_chunk._ts_meta_v2_min_ts, compress_hyper_6_5_chunk._ts_meta_v2_max_ts, compress_hyper_6_5_chunk.ts
+                     Filter: ((compress_hyper_6_5_chunk._ts_meta_v2_max_ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (compress_hyper_6_5_chunk._ts_meta_v2_min_ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
+                     Rows Removed by Filter: 9
 
 -- Test recompression when the bloom filter index is disabled by a GUC
 set timescaledb.enable_sparse_index_bloom to off;
