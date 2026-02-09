@@ -18,6 +18,10 @@ vacuum freeze analyze costtab;
 
 explain (buffers off) select * from costtab;
 
+set timescaledb.enable_bulk_decompression to off;
+explain (buffers off) select * from costtab;
+reset timescaledb.enable_bulk_decompression;
+
 explain (buffers off) select * from costtab where s = '1';
 
 explain (buffers off) select * from costtab where c = '100';

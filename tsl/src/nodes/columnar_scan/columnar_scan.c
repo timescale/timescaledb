@@ -724,18 +724,55 @@ ts_columnar_estimate_compressed_batch_size(const Oid relid)
  * we put cost of 1 tuple of compressed_scan as startup cost
  */
 static void
-cost_columnar_scan(PlannerInfo *root, const CompressionInfo *compression_info, Path *path,
+cost_columnar_scan(const CompressionInfo *compression_info, ColumnarScanPath *columnar_scan,
 				   Path *compressed_path)
 {
-	/* startup_cost is cost before fetching first tuple */
+	Path *path = &columnar_scan->custom_path.path;
+
 	const double compressed_rows = Max(1, compressed_path->rows);
-	path->startup_cost =
-		compressed_path->startup_cost +
+
+	/*
+	 * Startup cost is cost before fetching the first tuple. For the columnar
+	 * scan, it is composed of:
+	 *
+	 * 1) cost before fetching the first compressed tuple.
+	 */
+	path->startup_cost = compressed_path->startup_cost;
+
+	/*
+	 * 2) cost of actually fetching the first compressed tuple.
+	 */
+	path->startup_cost +=
 		(compressed_path->total_cost - compressed_path->startup_cost) / compressed_rows;
 
-	/* total_cost is cost for fetching all tuples */
+	/*
+	 * 3) in case of bulk decompression, cost of fully decompressing the first
+	 * batch.
+	 */
+	if (columnar_scan->enable_bulk_decompression)
+	{
+		path->startup_cost += compression_info->compressed_batch_size * cpu_tuple_cost;
+	}
+
+	/*
+	 * Estimate the resulting number of rows based on the batch size statistics.
+	 */
 	path->rows = compressed_path->rows * compression_info->compressed_batch_size;
-	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
+
+	/*
+	 * Bulk decompression is about 10x more efficient than row-by-row
+	 * decompression. In the startup cost calculation above, we assume the cost
+	 * of producing one uncompressed row by bulk decompression to be
+	 * cpu_tuple_cost.
+	 */
+	const double decompression_cost_per_uncompressed_row =
+		columnar_scan->enable_bulk_decompression ? cpu_tuple_cost : 10. * cpu_tuple_cost;
+
+	/*
+	 * total_cost is cost for fetching all tuples.
+	 */
+	path->total_cost =
+		compressed_path->total_cost + path->rows * decompression_cost_per_uncompressed_row;
 
 #if PG18_GE
 	/* PG18 changes the way we handle disabled nodes so we
@@ -1338,6 +1375,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 
 		path_copy->reverse = sort_info->reverse;
 		path_copy->batch_sorted_merge = true;
+		path_copy->enable_bulk_decompression = false;
 
 		/*
 		 * The segment by optimization is only enabled if it can deliver the tuples in the
@@ -1436,7 +1474,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 					  work_mem,
 					  -1);
 
-			cost_columnar_scan(root, compression_info, &path_copy->custom_path.path, &sort_path);
+			cost_columnar_scan(compression_info, path_copy, &sort_path);
 
 			decompressed_paths = lappend(decompressed_paths, path_copy);
 		}
@@ -2381,6 +2419,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 	path->custom_path.flags = 0;
 	path->custom_path.methods = &columnar_scan_path_methods;
 	path->batch_sorted_merge = false;
+	path->enable_bulk_decompression = ts_guc_enable_bulk_decompression;
 
 	/*
 	 * ColumnarScan doesn't manage any parallelism itself.
@@ -2397,7 +2436,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 	path->reverse = false;
 	path->chunk_status = compression_info->chunk_status;
 	path->required_compressed_pathkeys = NIL;
-	cost_columnar_scan(root, compression_info, &path->custom_path.path, compressed_path);
+	cost_columnar_scan(compression_info, path, compressed_path);
 
 	return path;
 }
