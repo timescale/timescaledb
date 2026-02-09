@@ -2187,13 +2187,14 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-    76 | XX001       | XX001
-     9 | XX001       | true
+    83 | XX001       | XX001
+    13 | XX001       | true
      5 | 08P01       | 08P01
+     4 | 22021       | 22021
      4 | true        | true
-     3 | 22021       | 22021
      1 | 3F000       | 3F000
      1 | false       | false
+     1 | XX000       | true
 
 \set algo bool
 \set type bool
