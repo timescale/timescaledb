@@ -638,7 +638,7 @@ gorilla_decompression_iterator_try_next_forward_internal(GorillaDecompressionIte
 			};
 		}
 
-		if (null.val & 1 != 0)
+		if ((null.val & 1) != 0)
 		{
 			return (DecompressResultInternal){
 				.is_null = true,
@@ -782,7 +782,7 @@ gorilla_decompression_iterator_try_next_reverse_internal(GorillaDecompressionIte
 				.is_done = true,
 			};
 
-		if (null.val & 1 != 0)
+		if ((null.val & 1) != 0)
 		{
 			return (DecompressResultInternal){
 				.is_null = true,

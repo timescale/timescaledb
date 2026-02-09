@@ -425,7 +425,7 @@ array_decompression_iterator_try_next_forward(DecompressionIterator *general_ite
 				.is_done = true,
 			};
 
-		if (null.val & 1 != 0)
+		if ((null.val & 1) != 0)
 		{
 			return (DecompressResult){
 				.is_null = true,
@@ -866,7 +866,7 @@ array_decompression_iterator_try_next_reverse(DecompressionIterator *base_iter)
 				.is_done = true,
 			};
 
-		if (null.val & 1 != 0)
+		if ((null.val & 1) != 0)
 		{
 			return (DecompressResult){
 				.is_null = true,
