@@ -239,10 +239,16 @@ step "R1_refresh2"
 {
     CALL refresh_continuous_aggregate('cond_10', 30, 120);
 }
-
 step "R1_drop"
 {
     DROP MATERIALIZED VIEW cond_10;
+}
+
+## generate invalidation that has overlaps for R1_refresh and R2_refresh
+session "RI2"
+step "RI2_invalidation"
+{
+    INSERT INTO conditions VALUES  (20, 1000), (30, 1000), (40, 1000), (50, 1000), (60, 1000), (70, 1000), (79, 1000);
 }
 
 session "R12"
@@ -299,6 +305,18 @@ setup
 step "R2_refresh"
 {
     CALL refresh_continuous_aggregate('cond_10', 35, 62);
+}
+step "R2_refresh_exact"
+{
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+}
+step "R2_refresh_left"
+{
+    CALL refresh_continuous_aggregate('cond_10', 15, 55);
+}
+step "R2_refresh_superset"
+{
+    CALL refresh_continuous_aggregate('cond_10', 15, 85);
 }
 
 # Refresh on same aggregate (cond_10) that doesn't overlap with R1 and R2
@@ -508,3 +526,18 @@ permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "R3_refresh" "WP
 # Concurrent refresh of caggs on non-overlapping ranges should not
 # block each other in the third transaction (materialization)
 permutation "WP_after_materialization_enable" "R1_refresh"("WP_after_materialization_enable") "WP_after_materialization_release" "R3_refresh" 
+
+# Concurrent refresh on same cagg that generate overlapping  materialization range will error out.Only 1 can proceed
+# R1 and R2 have overlap refresh and  we add invalidations. So R2 materialization range will overlap with R1
+## R1 will process invalidation first, add cagg ranges, then wait. R2 should fail as it attempts to process an
+## overlapping range
+permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "RI2_invalidation" "WP_after_enable" "WP_before_release" "R2_refresh" "WP_after_release"
+
+# Exact match overlap: R2 materializes [30, 70) which exactly matches R1's [30, 70)
+permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "RI2_invalidation" "WP_after_enable" "WP_before_release" "R2_refresh_exact" "WP_after_release"
+
+# Left overlap: R2 materializes [20, 50) which overlaps R1's [30, 70) from the left
+permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "RI2_invalidation" "WP_after_enable" "WP_before_release" "R2_refresh_left" "WP_after_release"
+
+# Superset overlap: R2 materializes [20, 80) which fully contains R1's [30, 70)
+permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "RI2_invalidation" "WP_after_enable" "WP_before_release" "R2_refresh_superset" "WP_after_release"
