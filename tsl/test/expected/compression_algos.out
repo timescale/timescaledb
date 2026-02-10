@@ -2139,8 +2139,8 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   143 | XX001       | true
-    82 | XX001       | XX001
+   144 | XX001       | true
+    89 | XX001       | XX001
     54 | true        | true
     23 | 08P01       | 08P01
 
@@ -2154,9 +2154,9 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-   106 | XX001       | XX001
+   107 | XX001       | XX001
     69 | true        | true
-    62 | XX001       | true
+    68 | XX001       | true
     13 | 08P01       | 08P01
      1 | false       | false
 
@@ -2190,11 +2190,10 @@ group by 2, 3 order by 1 desc
     83 | XX001       | XX001
     13 | XX001       | true
      5 | 08P01       | 08P01
+     5 | true        | true
      4 | 22021       | 22021
-     4 | true        | true
      1 | 3F000       | 3F000
      1 | false       | false
-     1 | XX000       | true
 
 \set algo bool
 \set type bool
@@ -2220,5 +2219,8 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
+    37 | XX001       | XX001
+     2 | 08P01       | 08P01
+     1 | true        | XX001
      1 | true        | true
 
