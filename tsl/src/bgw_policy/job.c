@@ -408,8 +408,10 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 						PGC_S_SESSION);
 	}
 
-	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY,
-										 .job_id = job_id };
+	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY, .job_id = job_id };
+
+	/* Clean up orphaned materialization ranges from interrupted manual refreshes */
+	continuous_agg_delete_orphaned_materialization_ranges(policy_data.cagg->data.mat_hypertable_id);
 
 	/* Try to split window range into a list of ranges */
 	List *refresh_window_list =
