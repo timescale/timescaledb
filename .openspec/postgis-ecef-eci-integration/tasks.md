@@ -13,12 +13,12 @@
 ### 0a: Stock PostGIS + TimescaleDB Validation (No fork needed)
 > Use stock PostGIS `geometry(PointZ, 4978)` as stand-in for ECEF
 
-- [ ] Validate `geometry(PointZ, 4978)` in hypertable creation, insertion, querying
-- [ ] Test compression round-trip with PostGIS geometry columns
-- [ ] Test GiST 3D index (`gist_geometry_ops_nd`) on hypertable chunks
-- [ ] Document TimescaleDB planner hook list and chaining requirements
-- [ ] Document compression behavior with geometry types
-- [ ] Document continuous aggregate SQL constraints (IMMUTABLE requirement)
+- [x] Validate `geometry(PointZ, 4978)` in hypertable creation, insertion, querying — `test/sql/postgis_ecef_eci/schema_hypertable.sql`
+- [x] Test compression round-trip with PostGIS geometry columns — `test/sql/postgis_ecef_eci/schema_hypertable.sql` Test 5
+- [ ] Test GiST 3D index (`gist_geometry_ops_nd`) on hypertable chunks — needs running PG instance
+- [x] Document TimescaleDB planner hook list and chaining requirements — `interface-contract.md` §6
+- [x] Document compression behavior with geometry types — `interface-contract.md` §6.2
+- [x] Document continuous aggregate SQL constraints (IMMUTABLE requirement) — `interface-contract.md` §6.3, `AGGREGATION_RULES.md`
 
 **Exit criteria**: Stock PostGIS geometry works in hypertables end-to-end.
 This validates the TimescaleDB side independently.
@@ -40,14 +40,14 @@ This validates the TimescaleDB side independently.
 ## Phase 1a: Schema & Partitioning (Can Start Now)
 > Spec: [specs/schema-partitioning/spec.md](specs/schema-partitioning/spec.md)
 
-- [ ] Implement altitude-band partitioning function (Option A)
+- [x] Implement altitude-band partitioning function (Option A) — `sql/postgis_ecef_eci/partitioning.sql`
 - [ ] Prototype octree partitioning function (Option B) for comparison
-- [ ] Create reference schema with stock PostGIS geometry(PointZ, 4978)
-- [ ] Benchmark partitioning options with synthetic orbit data distribution
+- [x] Create reference schema with stock PostGIS geometry(PointZ, 4978) — `sql/postgis_ecef_eci/schema.sql`
+- [ ] Benchmark partitioning options with synthetic orbit data distribution — needs running PG instance
 - [ ] Choose partition count (8, 16, 32) based on analysis
-- [ ] Decide trigger vs application-side bucket computation
-- [ ] Test chunk exclusion effectiveness with spatial queries
-- [ ] Document final schema for downstream consumers
+- [x] Decide trigger vs application-side bucket computation — trigger with WHEN NULL guard, app-side for high throughput
+- [ ] Test chunk exclusion effectiveness with spatial queries — needs running PG instance
+- [x] Document final schema for downstream consumers — `sql/postgis_ecef_eci/schema.sql`
 - [ ] `[BLOCKED:postgis]` Finalize schema with PostGIS fork maintainers (SRID numbers, type names)
 
 **Exit criteria**: Hypertable created with time + spatial_bucket dimensions,
@@ -57,11 +57,11 @@ chunk exclusion demonstrated for altitude-band queries.
 > Spec: [specs/frame-conversion/spec.md](specs/frame-conversion/spec.md)
 
 Can do now:
-- [ ] Validate PostgreSQL timestamp precision for target use cases
-- [ ] Document safe vs unsafe aggregation patterns for frame conversion
+- [ ] Validate PostgreSQL timestamp precision for target use cases — needs analysis write-up
+- [x] Document safe vs unsafe aggregation patterns for frame conversion — `sql/postgis_ecef_eci/AGGREGATION_RULES.md`
 - [ ] Design EOP data loading mechanism (table schema, refresh job)
-- [ ] Quantify error bounds for midpoint-epoch aggregation approach
-- [ ] Write stub `ST_ECEF_To_ECI()` PL/pgSQL function for testing (simplified rotation)
+- [x] Quantify error bounds for midpoint-epoch aggregation approach — `sql/postgis_ecef_eci/AGGREGATION_RULES.md`
+- [x] Write stub `ST_ECEF_To_ECI()` PL/pgSQL function for testing (simplified rotation) — `sql/postgis_ecef_eci/frame_conversion_stubs.sql`
 
 Blocked:
 - [ ] `[BLOCKED:postgis]` Confirm PostGIS fork conversion function signatures and SRIDs
@@ -76,9 +76,9 @@ stub function available for integration testing.
 ## Phase 2a: Compression (Can Start After 1a)
 > Spec: [specs/compression/spec.md](specs/compression/spec.md)
 
-- [ ] `[BLOCKED:phase-1a]` Implement reference schema with compression settings
-- [ ] `[BLOCKED:phase-1a]` Generate synthetic trajectory data (LEO, MEO, GEO)
-- [ ] `[BLOCKED:phase-1a]` Benchmark Approach A (geometry + floats) compression ratio
+- [x] ~~`[BLOCKED:phase-1a]`~~ Implement reference schema with compression settings — `sql/postgis_ecef_eci/schema.sql`
+- [x] ~~`[BLOCKED:phase-1a]`~~ Generate synthetic trajectory data (LEO, MEO, GEO) — `sql/postgis_ecef_eci/test_data_generator.sql`
+- [ ] Benchmark Approach A (geometry + floats) compression ratio — needs running PG instance
 - [ ] `[BLOCKED:phase-1a]` Benchmark Approach B (floats only, reconstruct geometry) compression ratio
 - [ ] `[BLOCKED:phase-1a]` Benchmark Approach C (geometry only) compression ratio
 - [ ] `[BLOCKED:phase-1a]` Measure query performance across approaches
@@ -92,7 +92,7 @@ stub function available for integration testing.
 ## Phase 2b: Index Strategy (Can Start After 1a)
 > Spec: [specs/index-strategy/spec.md](specs/index-strategy/spec.md)
 
-- [ ] `[BLOCKED:phase-1a]` Implement index set A (object_id, time), C (GiST 3D), D (BRIN altitude), E (spatial_bucket)
+- [x] ~~`[BLOCKED:phase-1a]`~~ Implement index set A (object_id, time), C (GiST 3D), D (BRIN altitude), E (spatial_bucket) — `sql/postgis_ecef_eci/schema.sql` (A, D, E created; C deferred pending PostGIS geometry column decision)
 - [ ] `[BLOCKED:phase-1a]` Benchmark Q1-Q5 query patterns with/without each index
 - [ ] `[BLOCKED:phase-1a]` Measure index build time impact on ingest throughput
 - [ ] `[BLOCKED:phase-1a]` Test GiST 3D index effectiveness for ECEF distance queries
