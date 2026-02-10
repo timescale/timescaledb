@@ -133,3 +133,66 @@ $$;
 
 COMMENT ON FUNCTION ecef_eci.altitude_band_label(INT)
 IS 'Returns human-readable label for a spatial partition bucket number';
+
+-- =============================================================================
+-- Option B: Octree Bucketing
+-- =============================================================================
+-- Recursively divides a bounding cube around Earth into octants.
+-- Each ECEF point is assigned to an octant at a configurable depth,
+-- then mapped to a bucket in [0, num_buckets).
+--
+-- Compared to altitude-band:
+--   + Spatially balanced across all 3 axes (not just radial)
+--   + Better for queries like "objects near this ECEF point"
+--   - Does not align with natural orbital regime boundaries
+--   - Slightly more computation per row
+--
+-- The bounding cube is centered at the origin with half-edge = max_radius_m.
+-- Default max_radius_m = 50,000 km covers up to HEO.
+-- =============================================================================
+
+CREATE OR REPLACE FUNCTION ecef_eci.octree_bucket(
+    x FLOAT8,
+    y FLOAT8,
+    z FLOAT8,
+    num_buckets INT DEFAULT 16,
+    max_radius_m FLOAT8 DEFAULT 50000000.0  -- 50,000 km
+) RETURNS INT
+LANGUAGE SQL
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+    -- Octree works by building a cell ID from successive octant choices.
+    -- At each level, we split the cube along X, Y, Z midpoints.
+    -- The 3-bit octant index at each level: bit0=X>mid, bit1=Y>mid, bit2=Z>mid.
+    -- We do ceil(log8(num_buckets)) levels, then modulo to num_buckets.
+    --
+    -- For 16 buckets: We need 2 levels of octree (8^2 = 64 cells) mod 16.
+    -- For 8 buckets: 1 level (8 cells) maps directly.
+
+    WITH octant_l1 AS (
+        -- Level 1: split the bounding cube at origin
+        SELECT
+            (CASE WHEN x >= 0 THEN 1 ELSE 0 END) +
+            (CASE WHEN y >= 0 THEN 2 ELSE 0 END) +
+            (CASE WHEN z >= 0 THEN 4 ELSE 0 END) AS oct1,
+            -- Midpoints for level 2
+            (CASE WHEN x >= 0 THEN max_radius_m/2.0 ELSE -max_radius_m/2.0 END) AS mx,
+            (CASE WHEN y >= 0 THEN max_radius_m/2.0 ELSE -max_radius_m/2.0 END) AS my,
+            (CASE WHEN z >= 0 THEN max_radius_m/2.0 ELSE -max_radius_m/2.0 END) AS mz
+    ),
+    octant_l2 AS (
+        -- Level 2: split each L1 octant at its midpoint
+        SELECT
+            o.oct1,
+            (CASE WHEN x >= o.mx THEN 1 ELSE 0 END) +
+            (CASE WHEN y >= o.my THEN 2 ELSE 0 END) +
+            (CASE WHEN z >= o.mz THEN 4 ELSE 0 END) AS oct2
+        FROM octant_l1 o
+    )
+    SELECT ((o.oct1 * 8 + o.oct2) % num_buckets)::INT
+    FROM octant_l2 o
+$$;
+
+COMMENT ON FUNCTION ecef_eci.octree_bucket(FLOAT8, FLOAT8, FLOAT8, INT, FLOAT8)
+IS 'Maps ECEF coordinates to a partition bucket using 2-level octree spatial subdivision. Alternative to altitude_band_bucket for spatially uniform partitioning.';

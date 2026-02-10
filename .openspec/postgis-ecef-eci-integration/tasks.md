@@ -41,7 +41,7 @@ This validates the TimescaleDB side independently.
 > Spec: [specs/schema-partitioning/spec.md](specs/schema-partitioning/spec.md)
 
 - [x] Implement altitude-band partitioning function (Option A) — `sql/postgis_ecef_eci/partitioning.sql`
-- [ ] Prototype octree partitioning function (Option B) for comparison
+- [x] Prototype octree partitioning function (Option B) for comparison — `sql/postgis_ecef_eci/partitioning.sql` (2-level octree)
 - [x] Create reference schema with stock PostGIS geometry(PointZ, 4978) — `sql/postgis_ecef_eci/schema.sql`
 - [ ] Benchmark partitioning options with synthetic orbit data distribution — needs running PG instance
 - [ ] Choose partition count (8, 16, 32) based on analysis
@@ -57,9 +57,9 @@ chunk exclusion demonstrated for altitude-band queries.
 > Spec: [specs/frame-conversion/spec.md](specs/frame-conversion/spec.md)
 
 Can do now:
-- [ ] Validate PostgreSQL timestamp precision for target use cases — needs analysis write-up
+- [x] Validate PostgreSQL timestamp precision for target use cases — `sql/postgis_ecef_eci/TIMESTAMP_PRECISION.md`
 - [x] Document safe vs unsafe aggregation patterns for frame conversion — `sql/postgis_ecef_eci/AGGREGATION_RULES.md`
-- [ ] Design EOP data loading mechanism (table schema, refresh job)
+- [x] Design EOP data loading mechanism (table schema, refresh job) — `sql/postgis_ecef_eci/eop.sql`
 - [x] Quantify error bounds for midpoint-epoch aggregation approach — `sql/postgis_ecef_eci/AGGREGATION_RULES.md`
 - [x] Write stub `ST_ECEF_To_ECI()` PL/pgSQL function for testing (simplified rotation) — `sql/postgis_ecef_eci/frame_conversion_stubs.sql`
 
@@ -78,9 +78,9 @@ stub function available for integration testing.
 
 - [x] ~~`[BLOCKED:phase-1a]`~~ Implement reference schema with compression settings — `sql/postgis_ecef_eci/schema.sql`
 - [x] ~~`[BLOCKED:phase-1a]`~~ Generate synthetic trajectory data (LEO, MEO, GEO) — `sql/postgis_ecef_eci/test_data_generator.sql`
-- [ ] Benchmark Approach A (geometry + floats) compression ratio — needs running PG instance
-- [ ] `[BLOCKED:phase-1a]` Benchmark Approach B (floats only, reconstruct geometry) compression ratio
-- [ ] `[BLOCKED:phase-1a]` Benchmark Approach C (geometry only) compression ratio
+- [ ] Benchmark Approach A (geometry + floats) compression ratio — needs running PG instance; test ready at `test/sql/postgis_ecef_eci/compression_benchmark.sql`
+- [ ] Benchmark Approach B (floats only, reconstruct geometry) compression ratio — schema at `sql/postgis_ecef_eci/schema_variants.sql`
+- [ ] Benchmark Approach C (geometry only) compression ratio — schema at `sql/postgis_ecef_eci/schema_variants.sql`
 - [ ] `[BLOCKED:phase-1a]` Measure query performance across approaches
 - [ ] `[BLOCKED:phase-1a]` Measure ingest throughput with/without compression policy
 - [ ] `[BLOCKED:phase-1a]` Test DML on compressed chunks
