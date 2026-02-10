@@ -7,6 +7,7 @@
 #include <postgres.h>
 #include "jsonb_utils.h"
 #include "test_utils.h"
+#include "ts_catalog/compression_settings.h"
 #include "utils/jsonb.h"
 #include <fmgr.h>
 #include <funcapi.h>
@@ -148,9 +149,100 @@ test_has_key_value_str_field()
 static void
 test_contains_sparse_index_config()
 {
-	/* TODO (dbeck): ts_contains_sparse_index_config */
-	/* TODO (dbeck): make sure that this function only works with single column sparse index
-	 * configurations */
+	{
+		/* Single column bloom filter */
+		CompressionSettings settings = {
+			.fd = { .index = cstring_to_jsonb(
+						"{\"type\": \"bloom\", \"column\": \"big1\", \"source\": \"config\"}") }
+		};
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "big1",
+														 "bloom",
+														 false /* skip_column_arrays */),
+						 true);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "big1",
+														 "bloom",
+														 true /* skip_column_arrays */),
+						 true);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "big1",
+														 "no_such_type",
+														 true /* skip_column_arrays */),
+						 false);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "big1",
+														 "no_such_type",
+														 false /* skip_column_arrays */),
+						 false);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "non_existent",
+														 "bloom",
+														 false /* skip_column_arrays */),
+						 false);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "non_existent",
+														 "bloom",
+														 true /* skip_column_arrays */),
+						 false);
+	}
+
+	{
+		/* Composite bloom filter */
+		CompressionSettings settings = { .fd = { .index = cstring_to_jsonb(
+													 "{\"type\": \"bloom\", \"column\": [\"big1\", "
+													 "\"big2\"], \"source\": \"config\"}") } };
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "big1",
+														 "bloom",
+														 true /* skip_column_arrays */),
+						 false);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "big1",
+														 "bloom",
+														 false /* skip_column_arrays */),
+						 true);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "big2",
+														 "bloom",
+														 true /* skip_column_arrays */),
+						 false);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "big2",
+														 "bloom",
+														 false /* skip_column_arrays */),
+						 true);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "big1",
+														 "no_such_type",
+														 true /* skip_column_arrays */),
+						 false);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "big1",
+														 "no_such_type",
+														 false /* skip_column_arrays */),
+						 false);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "big2",
+														 "no_such_type",
+														 true /* skip_column_arrays */),
+						 false);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "big2",
+														 "no_such_type",
+														 false /* skip_column_arrays */),
+						 false);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "non_existent",
+														 "bloom",
+														 true /* skip_column_arrays */),
+						 false);
+		TestAssertBoolEq(ts_contains_sparse_index_config(&settings,
+														 "non_existent",
+														 "bloom",
+														 false /* skip_column_arrays */),
+						 false);
+	}
 }
 
 TS_TEST_FN(ts_test_jsonb_utils)

@@ -443,7 +443,7 @@ ts_compression_settings_update(CompressionSettings *settings)
 				{
 					/* segmentby columns cannot have sparse indexes of any type, including composite
 					 * bloom that is why we set 'skip_column_arrays' to false, which will look
-					 * inside column name arrays */
+					 * inside column name arrays, so composite bloom filters are checked too */
 					ereport(ERROR,
 							(errcode(ERRCODE_SYNTAX_ERROR),
 							 errmsg("the segmentby column \"%s\" can not have sparse "
@@ -781,10 +781,10 @@ ts_remove_orderby_sparse_index(CompressionSettings *settings)
 int
 ts_qsort_attrnumber_cmp(const void *a, const void *b)
 {
-	AttrNumber *attrnum_a = (AttrNumber *) a;
-	AttrNumber *attrnum_b = (AttrNumber *) b;
+	SparseIndexColumn *col_a = (SparseIndexColumn *) a;
+	SparseIndexColumn *col_b = (SparseIndexColumn *) b;
 
-	return ((int) (*attrnum_a)) - ((int) (*attrnum_b));
+	return ((int) (col_a->attnum)) - ((int) (col_b->attnum));
 }
 
 ParsedCompressionSettings *
@@ -1372,7 +1372,7 @@ resolve_columns_to_attnos(List *column_names, Oid relid)
 
 /*
  * Resolve the column names in the parsed settings to attribute numbers for the given relation
- * and return a list of bitmapsets corresponging to each object in the parsed settings.
+ * and return a list of bitmapsets corresponding to each object in the parsed settings.
  */
 TsBmsList
 ts_resolve_columns_to_attnos_from_parsed_settings(ParsedCompressionSettings *settings, Oid relid)

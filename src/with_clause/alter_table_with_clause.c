@@ -469,7 +469,7 @@ column_name_list_as_string(BloomFilterConfig *config)
 	return buf.data;
 }
 
-/* parses the individual sparse index config entities. being called oncee for each sparse index
+/* parses the individual sparse index config entities. being called once for each sparse index
  * config entity in the list. */
 static void
 parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_details,

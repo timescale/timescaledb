@@ -42,7 +42,7 @@ typedef struct QualPushdownContext
 
 	/* Bloom candidates list to push down. This will be
 	 * merged into the baserestrictinfo in the end. But before
-	 * mergeing we will want to sort them and remove redundant ones.
+	 * merging we will want to sort them and remove redundant ones.
 	 */
 	BloomCandidates *bloom_candidates;
 
@@ -1160,7 +1160,7 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 		}
 	}
 
-	/* Early exit: no composite filter candidates. */
+	/* Check if there are composite filter candidates. */
 	if (bms_is_empty(composite_filter_candidates_ids))
 	{
 		pfree(attno_to_value);
@@ -1254,7 +1254,9 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 
 		/* Add to bloom candidates list. */
 		Assert(context->bloom_candidates != NULL);
-		add_composite_bloom_candidate(context->bloom_candidates, (Expr *) bloom_check, column_attnos);
+		add_composite_bloom_candidate(context->bloom_candidates,
+									  (Expr *) bloom_check,
+									  column_attnos);
 	}
 
 	/* Cleanup */

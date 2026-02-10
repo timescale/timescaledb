@@ -151,8 +151,8 @@ get_arbiter_index_attnums(ChunkInsertState *cis)
  *
  * Discovers which bloom columns match arbiter index columns, that is, being a subset of the
  * conflict columns. Builds the mapping from bloom columns to INSERT tuple attnums, and resolves
- * bloom column names to compressed chunk attnums. The mapping is stored in the
- * CachedDecompressionState struct as parallel lists.
+ * bloom column names to compressed chunk attnums. The chosen bloom filter is stored in the
+ * CachedDecompressionState struct.
  */
 static void
 init_upsert_bloom_state(ChunkInsertState *cis)
@@ -842,7 +842,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
 
-		/* Too track false positives */
+		/* To track false positives */
 		bool bloom_passed = false;
 
 		/* Bloom pre-filtering for UPSERT conflict detection */

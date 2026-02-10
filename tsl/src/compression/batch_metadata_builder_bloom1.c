@@ -491,13 +491,13 @@ typedef struct Bloom1ContainsContext
 static bool
 expr_is_stable(Node *node)
 {
-    if (node == NULL)
-        return false;
-    if (IsA(node, Const))
-        return true;
-    if (IsA(node, Param) && ((Param *) node)->paramkind == PARAM_EXTERN)
-        return true;
-    return false;
+	if (node == NULL)
+		return false;
+	if (IsA(node, Const))
+		return true;
+	if (IsA(node, Param) && ((Param *) node)->paramkind == PARAM_EXTERN)
+		return true;
+	return false;
 }
 
 /*
@@ -507,25 +507,25 @@ expr_is_stable(Node *node)
 static bool
 bloom1_arg_is_stable(FmgrInfo *flinfo, bool is_composite)
 {
-    if (!flinfo || !flinfo->fn_expr || !IsA(flinfo->fn_expr, FuncExpr))
-        return false;
+	if (!flinfo || !flinfo->fn_expr || !IsA(flinfo->fn_expr, FuncExpr))
+		return false;
 
-    Node *arg = (Node *) lsecond(((FuncExpr *) flinfo->fn_expr)->args);
+	Node *arg = (Node *) lsecond(((FuncExpr *) flinfo->fn_expr)->args);
 
-    if (!is_composite)
-        return expr_is_stable(arg);
+	if (!is_composite)
+		return expr_is_stable(arg);
 
-    /* Composite: check each element of ROW(...) */
-    if (!IsA(arg, RowExpr))
-        return false;
+	/* Composite: check each element of ROW(...) */
+	if (!IsA(arg, RowExpr))
+		return false;
 
-    ListCell *lc;
-    foreach (lc, ((RowExpr *) arg)->args)
-    {
-        if (!expr_is_stable((Node *) lfirst(lc)))
-            return false;
-    }
-    return true;
+	ListCell *lc;
+	foreach (lc, ((RowExpr *) arg)->args)
+	{
+		if (!expr_is_stable((Node *) lfirst(lc)))
+			return false;
+	}
+	return true;
 }
 
 static Bloom1ContainsContext *

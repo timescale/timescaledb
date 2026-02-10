@@ -57,10 +57,8 @@ typedef struct MinmaxIndexColumnConfig
 
 typedef struct SparseIndexColumn
 {
-	/* Sparse index columns are sorted by the attribute number and
-	 * the attrnum is intentionally used as the first member so the
-	 * struct can be cast'd to an AttrNumber*
-	 */
+	/* composite bloom indexes will have multiple SparseIndexColumn entries and
+	 * they will be sorted by the attribute number */
 	AttrNumber attnum;
 	const char *name;
 	Oid type;

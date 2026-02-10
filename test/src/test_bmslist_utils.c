@@ -16,7 +16,7 @@ test_empty_bmslist_contains_items(void)
 	TsBmsList bmslist = ts_bmslist_create();
 	int items[] = { 1, 2, 3 };
 	bool result = ts_bmslist_contains_items(bmslist, items, 3);
-	Assert(result == false);
+	TestAssertBoolEq(result, false);
 }
 
 static void
@@ -29,23 +29,23 @@ test_non_empty_bmslist_contains_items(void)
 	bmslist = ts_bmslist_add_member(bmslist, items, 3);
 
 	bool result = ts_bmslist_contains_items(bmslist, items, 3);
-	Assert(result == true);
+	TestAssertBoolEq(result, true);
 
 	result = ts_bmslist_contains_items(bmslist, items, 2);
-	Assert(result == true);
+	TestAssertBoolEq(result, true);
 
 	result = ts_bmslist_contains_items(bmslist, items, 1);
-	Assert(result == true);
+	TestAssertBoolEq(result, true);
 
 	items[0] = 4;
 	result = ts_bmslist_contains_items(bmslist, items, 3);
-	Assert(result == false);
+	TestAssertBoolEq(result, false);
 
 	result = ts_bmslist_contains_items(bmslist, items, 2);
-	Assert(result == false);
+	TestAssertBoolEq(result, false);
 
 	result = ts_bmslist_contains_items(bmslist, items, 1);
-	Assert(result == false);
+	TestAssertBoolEq(result, false);
 
 	ts_bmslist_free(bmslist);
 }
