@@ -61,12 +61,13 @@ for temporal management and a PostGIS fork for spatial semantics.
 
 ## Work Streams
 
-1. [Schema & Partitioning Design](spec-01-schema-partitioning.md)
-2. [Compression Profile](spec-02-compression.md)
-3. [Frame Conversion Integration](spec-03-frame-conversion.md)
-4. [Continuous Aggregate Templates](spec-04-continuous-aggregates.md)
-5. [Index Strategy](spec-05-index-strategy.md)
-6. [Extension Compatibility Layer](spec-06-extension-compatibility.md)
+1. [Schema & Partitioning Design](specs/schema-partitioning/spec.md)
+2. [Compression Profile](specs/compression/spec.md)
+3. [Frame Conversion Integration](specs/frame-conversion/spec.md)
+4. [Continuous Aggregate Templates](specs/continuous-aggregates/spec.md)
+5. [Index Strategy](specs/index-strategy/spec.md)
+6. [Extension Compatibility Layer](specs/extension-compatibility/spec.md)
+7. [Interface Contract](interface-contract.md) — cross-repo coordination
 
 ## Timeline
 

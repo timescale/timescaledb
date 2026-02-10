@@ -1,7 +1,7 @@
 # Master Task Checklist: PostGIS ECEF/ECI + TimescaleDB Integration
 
 ## Phase 0: Extension Compatibility (Gate)
-> Spec: [spec-06-extension-compatibility.md](spec-06-extension-compatibility.md)
+> Spec: [specs/extension-compatibility/spec.md](specs/extension-compatibility/spec.md)
 
 - [ ] Verify PostGIS fork loads alongside TimescaleDB without symbol conflicts
 - [ ] Test planner hook chain with both extensions active
@@ -19,7 +19,7 @@ can be created, inserted into, compressed, and queried successfully.
 ---
 
 ## Phase 1a: Schema & Partitioning
-> Spec: [spec-01-schema-partitioning.md](spec-01-schema-partitioning.md)
+> Spec: [specs/schema-partitioning/spec.md](specs/schema-partitioning/spec.md)
 
 - [ ] Finalize schema with PostGIS fork maintainers (SRID numbers, type names)
 - [ ] Implement altitude-band partitioning function (Option A)
@@ -34,7 +34,7 @@ can be created, inserted into, compressed, and queried successfully.
 chunk exclusion demonstrated for altitude-band queries.
 
 ## Phase 1b: Frame Conversion (Parallel with 1a)
-> Spec: [spec-03-frame-conversion.md](spec-03-frame-conversion.md)
+> Spec: [specs/frame-conversion/spec.md](specs/frame-conversion/spec.md)
 
 - [ ] Confirm PostGIS fork conversion function signatures and SRIDs
 - [ ] Validate PostgreSQL timestamp precision for target use cases
@@ -50,7 +50,7 @@ EOP loading mechanism designed.
 ---
 
 ## Phase 2a: Compression (After Phase 1a)
-> Spec: [spec-02-compression.md](spec-02-compression.md)
+> Spec: [specs/compression/spec.md](specs/compression/spec.md)
 
 - [ ] Implement reference schema with compression settings
 - [ ] Generate synthetic trajectory data (LEO, MEO, GEO)
@@ -66,7 +66,7 @@ EOP loading mechanism designed.
 compression policy configured.
 
 ## Phase 2b: Index Strategy (Parallel with 2a)
-> Spec: [spec-05-index-strategy.md](spec-05-index-strategy.md)
+> Spec: [specs/index-strategy/spec.md](specs/index-strategy/spec.md)
 
 - [ ] Implement index set A (object_id, time), C (GiST 3D), D (BRIN altitude), E (spatial_bucket)
 - [ ] Benchmark Q1-Q5 query patterns with/without each index
@@ -83,7 +83,7 @@ query patterns benchmarked.
 ---
 
 ## Phase 3: Continuous Aggregates (After Phase 1 + 2)
-> Spec: [spec-04-continuous-aggregates.md](spec-04-continuous-aggregates.md)
+> Spec: [specs/continuous-aggregates/spec.md](specs/continuous-aggregates/spec.md)
 
 - [ ] Implement Template 1: Per-object trajectory summary (hourly)
 - [ ] Implement Template 2: Spatial density (per altitude band, hourly)

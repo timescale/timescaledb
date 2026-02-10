@@ -1,0 +1,29 @@
+schema: spec-driven
+context: |
+  Project: TimescaleDB + PostGIS ECEF/ECI Integration
+  Tech stack: C (PostgreSQL extension), SQL, PL/pgSQL
+  Build system: CMake
+  Testing: PostgreSQL regression tests (pg_regress)
+
+  This is a multi-repo integration:
+  - timescaledb (this repo): time-series storage, partitioning, compression, continuous aggregates
+  - postgis fork (montge/postgis): ECEF/ECI types, SRIDs, frame conversions
+
+  The interface contract (interface-contract.md) defines the boundary between repos.
+  Any changes to the contract must be coordinated across both repositories.
+
+  Coordinate frames:
+  - ECEF (Earth-Centered, Earth-Fixed): SRID 4978, rotates with Earth
+  - ECI J2000 (Earth-Centered Inertial): SRID 900001 (proposed), inertial frame
+  - Conversion is time-dependent (Earth rotation angle + precession/nutation)
+rules:
+  specs:
+    - "Include coordination points section listing what is needed from/provided to PostGIS fork"
+    - "Reference interface-contract.md for any cross-repo type or function dependencies"
+    - "Include open questions that block implementation"
+  design:
+    - "Document which TimescaleDB extension points are used (no core modifications)"
+    - "Include performance implications and expected compression ratios"
+  tasks:
+    - "Mark tasks that depend on PostGIS fork deliverables with [BLOCKED:postgis]"
+    - "Include integration test tasks that require both extensions loaded"
