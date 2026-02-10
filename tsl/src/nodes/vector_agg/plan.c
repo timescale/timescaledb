@@ -37,70 +37,6 @@ _vector_agg_init(void)
 	TryRegisterCustomScanMethods(&scan_methods);
 }
 
-static Node *
-resolve_outer_special_vars_mutator(Node *node, void *context)
-{
-	if (node == NULL)
-	{
-		return NULL;
-	}
-
-	if (!IsA(node, Var))
-	{
-		return expression_tree_mutator(node, resolve_outer_special_vars_mutator, context);
-	}
-
-	Var *var = castNode(Var, node);
-	CustomScan *custom = castNode(CustomScan, context);
-	if ((Index) var->varno == (Index) custom->scan.scanrelid)
-	{
-		/*
-		 * This is already the uncompressed chunk var. We can see it referenced
-		 * by expressions in the output targetlist of the child scan node.
-		 */
-		return (Node *) copyObject(var);
-	}
-
-	if (var->varno == OUTER_VAR)
-	{
-		/*
-		 * Reference into the output targetlist of the child scan node.
-		 */
-		TargetEntry *columnar_scan_tentry =
-			castNode(TargetEntry, list_nth(custom->scan.plan.targetlist, var->varattno - 1));
-
-		return resolve_outer_special_vars_mutator((Node *) columnar_scan_tentry->expr, context);
-	}
-
-	if (var->varno == INDEX_VAR)
-	{
-		/*
-		 * This is a reference into the custom scan targetlist, we have to resolve
-		 * it as well.
-		 */
-		var = castNode(Var,
-					   castNode(TargetEntry, list_nth(custom->custom_scan_tlist, var->varattno - 1))
-						   ->expr);
-		Assert(var->varno > 0);
-
-		return (Node *) copyObject(var);
-	}
-
-	Ensure(false, "encountered unexpected varno %d as an aggregate argument", var->varno);
-	return node;
-}
-
-/*
- * Resolve the OUTER_VAR special variables, that are used in the output
- * targetlists of aggregation nodes, replacing them with the uncompressed chunk
- * variables.
- */
-static List *
-resolve_outer_special_vars(List *agg_tlist, Plan *childplan)
-{
-	return castNode(List, resolve_outer_special_vars_mutator((Node *) agg_tlist, childplan));
-}
-
 /*
  * Create a vectorized aggregation node to replace the given partial aggregation
  * node.
@@ -706,7 +642,7 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 	 * the subsequent checks are performed on the aggregated targetlist with
 	 * all variables resolved to uncompressed chunk variables.
 	 */
-	List *resolved_targetlist = resolve_outer_special_vars(agg->plan.targetlist, childplan);
+	List *resolved_targetlist = ts_resolve_outer_special_vars(agg->plan.targetlist, childplan);
 
 	const VectorAggGroupingType grouping_type =
 		get_vectorized_grouping_type(&vqi, agg, resolved_targetlist);
