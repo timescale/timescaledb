@@ -48,6 +48,7 @@ RETURNS TIMESTAMPTZ
 LANGUAGE SQL
 IMMUTABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     -- MJD 51544.0 = 2000-01-01 00:00:00 UTC
     SELECT '2000-01-01 00:00:00+00'::timestamptz + ((mjd - 51544.0) * INTERVAL '1 day')
@@ -58,6 +59,7 @@ RETURNS FLOAT8
 LANGUAGE SQL
 IMMUTABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     -- MJD 51544.0 = 2000-01-01 00:00:00 UTC
     SELECT 51544.0 + EXTRACT(EPOCH FROM ts - '2000-01-01 00:00:00+00'::timestamptz) / 86400.0
@@ -82,6 +84,7 @@ CREATE OR REPLACE FUNCTION ecef_eci.eop_at_epoch(
 LANGUAGE SQL
 STABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     WITH target AS (
         SELECT ecef_eci.timestamp_to_mjd(epoch) AS mjd
@@ -141,6 +144,7 @@ CREATE OR REPLACE FUNCTION ecef_eci.load_eop_finals2000a(
     raw_text TEXT
 ) RETURNS INT
 LANGUAGE plpgsql
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
 DECLARE
     line TEXT;
@@ -232,6 +236,7 @@ IS 'Parses IERS finals2000A fixed-width text and upserts into eop_data table. Re
 
 CREATE OR REPLACE PROCEDURE ecef_eci.refresh_eop(job_id INT, config JSONB)
 LANGUAGE plpgsql
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
 DECLARE
     eop_file TEXT;
@@ -272,6 +277,7 @@ RETURNS TABLE (
 LANGUAGE SQL
 STABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     SELECT
         count(*),

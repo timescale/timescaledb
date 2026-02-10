@@ -66,6 +66,7 @@ RETURNS geometry
 LANGUAGE SQL
 IMMUTABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     -- Requires PostGIS. Returns geometry(PointZ, 4978).
     SELECT ST_SetSRID(ST_MakePoint(x, y, z), 4978)
@@ -133,6 +134,7 @@ CREATE OR REPLACE FUNCTION ecef_eci.load_benchmark_data(
     p_interval     INTERVAL DEFAULT '10 seconds'
 ) RETURNS TABLE(approach TEXT, row_count BIGINT)
 LANGUAGE plpgsql
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
 DECLARE
     n_a BIGINT;
@@ -177,6 +179,7 @@ RETURNS TABLE (
     ratio             NUMERIC
 )
 LANGUAGE plpgsql
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
 DECLARE
     size_before_a BIGINT; size_after_a BIGINT;

@@ -104,6 +104,7 @@ SELECT add_dimension(
 CREATE OR REPLACE FUNCTION ecef_eci.trajectories_compute_derived()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
 BEGIN
     NEW.altitude_km := ecef_eci.ecef_altitude_km(NEW.x, NEW.y, NEW.z);

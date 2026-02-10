@@ -26,6 +26,7 @@ CREATE OR REPLACE FUNCTION ecef_eci.altitude_band_bucket(
 LANGUAGE SQL
 IMMUTABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     SELECT CASE
         -- Sub-orbital / terrestrial / inside Earth
@@ -93,6 +94,7 @@ CREATE OR REPLACE FUNCTION ecef_eci.ecef_altitude_km(
 LANGUAGE SQL
 IMMUTABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     SELECT sqrt(x*x + y*y + z*z) / 1000.0 - 6371.0
 $$;
@@ -109,6 +111,7 @@ RETURNS TEXT
 LANGUAGE SQL
 IMMUTABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     SELECT CASE bucket
         WHEN 0  THEN 'LEO 0-500km'
@@ -161,6 +164,7 @@ CREATE OR REPLACE FUNCTION ecef_eci.octree_bucket(
 LANGUAGE SQL
 IMMUTABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     -- Octree works by building a cell ID from successive octant choices.
     -- At each level, we split the cube along X, Y, Z midpoints.

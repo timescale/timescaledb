@@ -45,6 +45,7 @@ CREATE OR REPLACE FUNCTION ecef_eci.generate_circular_orbit(
 LANGUAGE SQL
 IMMUTABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     WITH params AS (
         SELECT
@@ -140,6 +141,7 @@ CREATE OR REPLACE FUNCTION ecef_eci.generate_test_dataset(
 LANGUAGE SQL
 STABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     -- LEO objects (ISS-like): 400 km, various inclinations
     SELECT * FROM ecef_eci.generate_circular_orbit(25544, 0::SMALLINT, 400.0,  51.6,   0.0, p_start_time, p_duration, p_interval)

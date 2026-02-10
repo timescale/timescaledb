@@ -32,6 +32,7 @@ CREATE OR REPLACE FUNCTION ecef_eci.stub_ecef_to_eci(
 LANGUAGE SQL
 STABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     WITH params AS (
         SELECT
@@ -69,6 +70,7 @@ CREATE OR REPLACE FUNCTION ecef_eci.stub_eci_to_ecef(
 LANGUAGE SQL
 STABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     WITH params AS (
         SELECT
@@ -104,6 +106,7 @@ CREATE OR REPLACE FUNCTION ecef_eci.test_roundtrip(
 LANGUAGE SQL
 STABLE
 PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
 AS $$
     SELECT
         abs(rt.ecef_x - x) < tolerance_m AND

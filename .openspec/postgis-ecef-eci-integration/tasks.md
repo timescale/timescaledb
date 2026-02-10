@@ -146,3 +146,58 @@ stub function available for integration testing.
 - [x] Continuous aggregate SQL constraints — documented in interface-contract.md
 - [x] `add_job()` API documentation for EOP scheduling — documented in interface-contract.md
 - [ ] Per-chunk index overhead data — Phase 2b output
+
+---
+
+## Phase T: Testing & Security Coverage
+> Spec: [specs/testing-security/spec.md](specs/testing-security/spec.md)
+> Target: 90% overall coverage; 80%+ per category (unit, branch, integration, E2E)
+
+### Security / Static Analysis
+- [x] pgspot compliance — `SET search_path` added to all 19 functions/procedures
+- [ ] Run pgspot on all SQL files in CI — needs CI workflow
+- [ ] Enable CodeQL for PostGIS fork C code — `[BLOCKED:postgis]`
+- [ ] Enable Dependabot for dependency updates
+- [ ] Add codespell to CI for typo detection
+
+### Unit Tests (Target: 80%+ branch coverage)
+- [x] Partitioning boundary tests — `test/sql/postgis_ecef_eci/unit_partitioning.sql`
+  - All 16 altitude bands, off-axis points, zero vector, negative coords, octree 8 octants
+- [x] EOP edge case tests — `test/sql/postgis_ecef_eci/unit_eop.sql`
+  - Empty table, single entry, interpolation precision, malformed input, upsert
+- [x] Frame conversion unit tests — `test/sql/postgis_ecef_eci/unit_frame_conversion.sql`
+  - J2000 epoch, Z-axis invariance, radius preservation, round-trip, zero vector
+
+### Isolation / Concurrency Tests (Target: 80%+ coverage)
+- [x] Concurrent insert to same/different spatial buckets — `test/isolation/specs/ecef_eci_concurrent_insert.spec`
+- [x] Insert during compression — `test/isolation/specs/ecef_eci_insert_compress.spec`
+- [ ] Concurrent cagg refresh + insert — needs running PG instance
+- [ ] Concurrent compression + decompression — needs running PG instance
+
+### Integration Tests (Existing)
+- [x] Schema hypertable creation + compression — `test/sql/postgis_ecef_eci/schema_hypertable.sql`
+- [x] Partitioning integration — `test/sql/postgis_ecef_eci/partitioning.sql`
+- [x] Frame conversion round-trip — `test/sql/postgis_ecef_eci/frame_conversion.sql`
+- [x] Continuous aggregates templates — `test/sql/postgis_ecef_eci/continuous_aggregates.sql`
+- [x] EOP mechanism — `test/sql/postgis_ecef_eci/eop.sql`
+- [x] Compression benchmark harness — `test/sql/postgis_ecef_eci/compression_benchmark.sql`
+
+### End-to-End Tests (Target: 80%+ coverage)
+- [x] Full SSA pipeline — `test/sql/postgis_ecef_eci/e2e_ssa_pipeline.sql`
+  - Generate → insert → compress → cagg → dashboard queries → incremental update → integrity check
+- [x] Conjunction screening — `test/sql/postgis_ecef_eci/e2e_conjunction.sql`
+  - Crossing orbits → prefilter cagg → multi-object detection → pairwise distance → regime separation
+- [ ] Data retention / drop_chunks pipeline — needs running PG instance
+- [ ] Multi-tenant (multiple object_type) pipeline — future
+
+### Coverage Summary (Current Estimate)
+| Category      | Files | Coverage Est. |
+|---------------|-------|---------------|
+| Unit          | 3     | ~85%          |
+| Integration   | 6     | ~80%          |
+| Isolation     | 2     | ~75%          |
+| End-to-End    | 2     | ~80%          |
+| **Overall**   | **13**| **~82%**      |
+
+> Note: Accurate coverage numbers require running tests against a live PG+TimescaleDB instance.
+> Remaining gaps: concurrent cagg operations, retention policies, multi-tenant scenarios.
