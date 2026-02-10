@@ -20,5 +20,5 @@ typedef enum
 
 extern void _vector_agg_init(void);
 extern void vectoragg_plan_columnar_scan(Plan *childplan, VectorQualInfo *vqi);
-Plan *try_insert_vector_agg_node(Plan *plan, List *rtable);
+Plan *try_insert_vector_agg_node(Plan *plan);
 bool has_vector_agg_node(Plan *plan, bool *has_some_agg);
