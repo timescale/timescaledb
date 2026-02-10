@@ -25,3 +25,4 @@ InternalTimeRange
 compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 											  const InternalTimeRange *const refresh_window,
 											  const ContinuousAggBucketFunction *bucket_function);
+extern uint64 continuous_agg_delete_orphaned_materialization_ranges(int32 materialization_id);

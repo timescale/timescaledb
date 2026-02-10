@@ -1294,3 +1294,65 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	return refresh_window_list;
 }
+
+/*
+ * Delete orphaned rows from the materialization_ranges table.
+ *
+ * Orphaned rows are those with job_id = 0 whose pid is no longer an active
+ * backend (i.e., not present in pg_stat_activity). These rows are left behind
+ * when a manual refresh is interrupted or fails.
+ */
+uint64
+continuous_agg_delete_orphaned_materialization_ranges(int32 materialization_id)
+{
+	int res;
+	uint64 ndeleted;
+	Oid types[] = { INT4OID };
+	Datum values[] = { Int32GetDatum(materialization_id) };
+	char nulls[] = { false };
+	CatalogSecurityContext sec_ctx;
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	/* Lock down search_path */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+
+	res = SPI_execute_with_args("DELETE FROM "
+								"_timescaledb_catalog.continuous_aggs_materialization_ranges mr "
+								"WHERE mr.materialization_id = $1 "
+								"AND mr.job_id = 0 "
+								"AND NOT EXISTS ("
+								"SELECT 1 FROM pg_stat_activity sa WHERE sa.pid = mr.pid"
+								")",
+								1,
+								types,
+								values,
+								nulls,
+								false /* read_only */,
+								0 /* count */);
+
+	ts_catalog_restore_user(&sec_ctx);
+
+	if (res < 0)
+		elog(LOG, "could not delete orphaned materialization ranges");
+
+	ndeleted = SPI_processed;
+
+	elog(DEBUG2,
+		 "deleted " UINT64_FORMAT " orphaned materialization range(s) for materialization_id %d",
+		 ndeleted,
+		 materialization_id);
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
+
+	res = SPI_finish();
+	if (res != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+
+	return ndeleted;
+}

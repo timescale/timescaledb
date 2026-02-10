@@ -876,6 +876,51 @@ SELECT * FROM sorted_bgw_log;
 DROP TABLE test_data CASCADE;
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
+-- Test: orphaned materialization ranges cleanup
+-- Insert fake orphaned rows (job_id = 0, dead pid) and a row for a non-existing job,
+-- then verify the policy cleans up only the orphaned rows.
+SELECT mat_hypertable_id AS mat_id FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'conditions_by_month' \gset
+\c :TEST_DBNAME :ROLE_SUPERUSER
+INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_ranges
+    (materialization_id, lowest_modified_value, greatest_modified_value, job_id, pid)
+VALUES
+    (:mat_id, 1000, 2000, 0, -1),
+    (:mat_id, 3000, 4000, 0, -1),
+    (:mat_id, 5000, 6000, 99999, -1);
+\c :TEST_DBNAME test_cagg_refresh_policy_user
+SELECT *
+FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
+WHERE materialization_id = :mat_id ORDER BY 1, 2;
+ materialization_id | lowest_modified_value | greatest_modified_value | job_id | pid | created_at 
+--------------------+-----------------------+-------------------------+--------+-----+------------
+                  4 |                  1000 |                    2000 |      0 |  -1 | 
+                  4 |                  3000 |                    4000 |      0 |  -1 | 
+                  4 |                  5000 |                    6000 |  99999 |  -1 | 
+
+TRUNCATE bgw_log;
+-- Advance time so the policy runs again
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '1 day')::bigint * 1000000, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+
+-- Verify orphaned rows are gone
+-- Verify non-existing job row is still there (not cleaned up)
+SELECT * 
+FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
+WHERE materialization_id = :mat_id ORDER By 1, 2;
+ materialization_id | lowest_modified_value | greatest_modified_value | job_id | pid | created_at 
+--------------------+-----------------------+-------------------------+--------+-----+------------
+                  4 |                  1000 |                    2000 |      0 |  -1 | 
+                  4 |                  3000 |                    4000 |      0 |  -1 | 
+                  4 |                  5000 |                    6000 |  99999 |  -1 | 
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_SUPERUSER;
 REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_policy_user;

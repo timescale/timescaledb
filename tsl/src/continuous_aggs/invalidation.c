@@ -453,9 +453,9 @@ save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 													  state->cagg->bucket_function);
 
 	insert_new_cagg_materialization_ranges(state,
-										  bucketed_refresh_window,
-										  cagg_hyper_id,
-										  state->job_id);
+										   bucketed_refresh_window,
+										   cagg_hyper_id,
+										   state->job_id);
 
 	return true;
 }
