@@ -515,7 +515,7 @@ has_vector_agg_node(Plan *plan, bool *has_some_agg)
  * Returns true if the scan node is a supported child, otherwise false.
  */
 static bool
-vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi)
+vectoragg_plan_possible(Plan *childplan, VectorQualInfo *vqi)
 {
 	if (!IsA(childplan, CustomScan))
 		return false;
@@ -540,16 +540,16 @@ vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi
  * vectorized aggregation node. The replacement is done in-place.
  */
 Plan *
-try_insert_vector_agg_node(Plan *plan, List *rtable)
+try_insert_vector_agg_node(Plan *plan)
 {
 	if (plan->lefttree)
 	{
-		plan->lefttree = try_insert_vector_agg_node(plan->lefttree, rtable);
+		plan->lefttree = try_insert_vector_agg_node(plan->lefttree);
 	}
 
 	if (plan->righttree)
 	{
-		plan->righttree = try_insert_vector_agg_node(plan->righttree, rtable);
+		plan->righttree = try_insert_vector_agg_node(plan->righttree);
 	}
 
 	List *append_plans = NIL;
@@ -580,7 +580,7 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 		ListCell *lc;
 		foreach (lc, append_plans)
 		{
-			lfirst(lc) = try_insert_vector_agg_node(lfirst(lc), rtable);
+			lfirst(lc) = try_insert_vector_agg_node(lfirst(lc));
 		}
 		return plan;
 	}
@@ -631,7 +631,7 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 	 * Build supplementary info to determine whether we can vectorize the
 	 * aggregate FILTER clauses.
 	 */
-	if (!vectoragg_plan_possible(childplan, rtable, &vqi))
+	if (!vectoragg_plan_possible(childplan, &vqi))
 	{
 		/* Not a compatible vectoragg child node */
 		return plan;
