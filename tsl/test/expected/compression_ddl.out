@@ -1301,8 +1301,9 @@ ORDER BY device_id;
    ->  Sort
          Sort Key: compression_insert.device_id
          ->  Append
-               ->  Custom Scan (VectorAgg)
-                     ->  Custom Scan (ColumnarScan) on _hyper_31_110_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_31_110_chunk.device_id
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_31_110_chunk
                            ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
                ->  Partial GroupAggregate
                      Group Key: _hyper_31_110_chunk.device_id
@@ -1378,11 +1379,13 @@ ORDER BY device_id;
    Group Key: compression_insert.device_id
    ->  Merge Append
          Sort Key: compression_insert.device_id
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_110_chunk
+         ->  Partial GroupAggregate
+               Group Key: device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_110_chunk compression_insert
                      ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_112_chunk
+         ->  Partial GroupAggregate
+               Group Key: _hyper_31_112_chunk.device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_112_chunk
                      ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_112_chunk.device_id
@@ -1458,14 +1461,17 @@ ORDER BY device_id;
    Group Key: compression_insert.device_id
    ->  Merge Append
          Sort Key: compression_insert.device_id
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_110_chunk
+         ->  Partial GroupAggregate
+               Group Key: device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_110_chunk compression_insert
                      ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_112_chunk
+         ->  Partial GroupAggregate
+               Group Key: device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_112_chunk compression_insert
                      ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_114_chunk
+         ->  Partial GroupAggregate
+               Group Key: _hyper_31_114_chunk.device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_114_chunk
                      ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_114_chunk.device_id
@@ -1541,17 +1547,21 @@ ORDER BY device_id;
    Group Key: compression_insert.device_id
    ->  Merge Append
          Sort Key: compression_insert.device_id
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_110_chunk
+         ->  Partial GroupAggregate
+               Group Key: device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_110_chunk compression_insert
                      ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_112_chunk
+         ->  Partial GroupAggregate
+               Group Key: device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_112_chunk compression_insert
                      ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_114_chunk
+         ->  Partial GroupAggregate
+               Group Key: device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_114_chunk compression_insert
                      ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_116_chunk
+         ->  Partial GroupAggregate
+               Group Key: _hyper_31_116_chunk.device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_116_chunk
                      ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_117_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_116_chunk.device_id
@@ -1627,20 +1637,25 @@ ORDER BY device_id;
    Group Key: compression_insert.device_id
    ->  Merge Append
          Sort Key: compression_insert.device_id
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_110_chunk
+         ->  Partial GroupAggregate
+               Group Key: device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_110_chunk compression_insert
                      ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_112_chunk
+         ->  Partial GroupAggregate
+               Group Key: device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_112_chunk compression_insert
                      ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_114_chunk
+         ->  Partial GroupAggregate
+               Group Key: device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_114_chunk compression_insert
                      ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_116_chunk
+         ->  Partial GroupAggregate
+               Group Key: device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_116_chunk compression_insert
                      ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_117_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_31_118_chunk
+         ->  Partial GroupAggregate
+               Group Key: _hyper_31_118_chunk.device_id
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_31_118_chunk
                      ->  Index Scan using compress_hyper_32_119_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_119_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_118_chunk.device_id

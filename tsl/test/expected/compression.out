@@ -535,8 +535,8 @@ EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE prep_plan;
 --- QUERY PLAN ---
  Finalize Aggregate
    ->  Append
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (ColumnarScan) on _hyper_7_16_chunk
+         ->  Partial Aggregate
+               ->  Custom Scan (ColumnarIndexScan) on _hyper_7_16_chunk plan_inval
                      ->  Seq Scan on compress_hyper_8_18_chunk
          ->  Partial Aggregate
                ->  Seq Scan on _hyper_7_17_chunk

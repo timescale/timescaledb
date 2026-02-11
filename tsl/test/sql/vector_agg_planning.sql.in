@@ -2,6 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+SET timescaledb.enable_columnarindexscan = off;
 SET max_parallel_workers_per_gather = 0;
 \set EXPLAIN 'EXPLAIN (costs off, timing off)'
 
