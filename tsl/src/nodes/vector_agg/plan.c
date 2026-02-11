@@ -572,7 +572,7 @@ try_insert_vector_agg_node(Plan *plan)
 	else if (IsA(plan, SubqueryScan))
 	{
 		SubqueryScan *subquery = castNode(SubqueryScan, plan);
-		append_plans = list_make1(subquery->subplan);
+		subquery->subplan = try_insert_vector_agg_node(subquery->subplan);
 	}
 
 	if (append_plans)

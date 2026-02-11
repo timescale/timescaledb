@@ -1,0 +1,37 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+SET max_parallel_workers_per_gather = 0;
+\set EXPLAIN 'EXPLAIN (costs off, timing off)'
+
+CREATE TABLE metrics(time timestamptz not null, device text, value float) WITH (tsdb.hypertable);
+
+-- create initial chunk
+INSERT INTO metrics SELECT '2025-01-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, random() from generate_series(1,1000) g(i);
+SELECT compress_chunk(c) FROM show_chunks('metrics') c;
+
+-- run queries with single chunk
+-- SubqueryScan
+:EXPLAIN SELECT mx, mn, device FROM (SELECT device, count(time) mn, max(time) mx FROM metrics GROUP BY device) sub;
+
+-- CteScan
+:EXPLAIN WITH q1 AS MATERIALIZED (SELECT count(*) FROM metrics) SELECT * FROM q1;
+
+-- InitPlan
+:EXPLAIN SELECT FROM pg_class WHERE EXISTS (SELECT count(*) FROM metrics) LIMIT 1;
+
+-- create 2nd chunk
+INSERT INTO metrics SELECT '2025-02-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, random() from generate_series(1,1000) g(i);
+SELECT compress_chunk(c) FROM show_chunks('metrics') c;
+
+-- run queries with two chunks
+-- SubqueryScan
+:EXPLAIN SELECT mx, mn, device FROM (SELECT device, count(time) mn, max(time) mx FROM metrics GROUP BY device) sub;
+
+-- CteScan
+:EXPLAIN WITH q1 AS MATERIALIZED (SELECT count(*) FROM metrics) SELECT * FROM q1;
+
+-- InitPlan
+:EXPLAIN SELECT FROM pg_class WHERE EXISTS (SELECT count(*) FROM metrics) LIMIT 1;
+
