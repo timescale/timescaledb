@@ -36,7 +36,6 @@
 #include "debug_assert.h"
 #include "import/allpaths.h"
 #include "import/planner.h"
-#include "nodes/columnar_index_scan/columnar_index_scan.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/planner.h"
 #include "nodes/columnar_scan/qual_pushdown.h"
@@ -1369,22 +1368,6 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("debug: batch sorted merge is required but not possible at planning "
 						"time")));
-	}
-
-	/*
-	 * Try to create a ColumnarIndexScan path for the metadata-only optimization.
-	 */
-	{
-		ColumnarIndexScanPath *index_scan_path =
-			ts_columnar_index_scan_path_create(root,
-											   chunk,
-											   chunk_rel,
-											   compression_info,
-											   compressed_path);
-		if (index_scan_path)
-		{
-			decompressed_paths = lappend(decompressed_paths, index_scan_path);
-		}
 	}
 
 	/*

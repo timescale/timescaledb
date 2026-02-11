@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+set timescaledb.enable_columnarindexscan = off;
+
 -- Tests for grouping by single-byte data types. Only bool for now, because char
 -- lacks a vectorized representation.
 

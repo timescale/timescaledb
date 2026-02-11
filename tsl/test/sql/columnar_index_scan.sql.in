@@ -39,8 +39,11 @@ INSERT INTO metrics VALUES
 -- Compress all chunks
 SELECT compress_chunk(c) FROM show_chunks('metrics') c;
 
+-- first run with hypertable with 1 fully compressed chunk
+
 -- get query plans
 \set PREFIX 'EXPLAIN (costs off)'
+\set ECHO all
 SET timescaledb.enable_columnarindexscan = on;
 \ir :TEST_QUERY_NAME
 
@@ -62,21 +65,70 @@ SET timescaledb.enable_columnarindexscan = on;
 -- compare optimized vs non-optimized results
 :DIFF_CMD
 
--- test with multiple chunks to verify Append/MergeAppend handling
+-- make initial chunk partial
+INSERT INTO metrics VALUES
+('2025-01-01 00:00:00 PST', 'd1', 'A', 1.0, 1.1),
+('2025-01-01 00:00:00 PST', 'd3', 'A', 50.0, 50.1),
+('2025-01-01 00:00:00 PST', 'd3', 'B', 52.0, 52.1);
+
+-- second run with hypertable with 1 partial chunk
+
+-- get query plans
+\set PREFIX 'EXPLAIN (costs off)'
+\set ECHO all
+SET timescaledb.enable_columnarindexscan = on;
+\ir :TEST_QUERY_NAME
+
+\set PREFIX ''
+\set ECHO errors
+
+-- get query results with columnar index scan disabled
+SET timescaledb.enable_columnarindexscan = off;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+-- get query results with columnar index scan enabled
+SET timescaledb.enable_columnarindexscan = on;
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+-- compare optimized vs non-optimized results
+:DIFF_CMD
+
+-- create a second chunk
 INSERT INTO metrics VALUES
 ('2025-02-01 00:00:00 PST', 'd1', 'A', 100.0, 100.1),
 ('2025-02-01 01:00:00 PST', 'd1', 'B', 200.0, 200.1),
 ('2025-02-01 00:00:00 PST', 'd2', 'A', 150.0, 150.1),
 ('2025-02-01 01:00:00 PST', 'd2', 'C', 250.0, 250.1);
 
-SELECT compress_chunk(c) FROM show_chunks('metrics') c;
+SELECT compress_chunk(c) FROM show_chunks('metrics') c LIMIT 1 OFFSET 1;
 
+-- third run with hypertable with 1 partial and 1 fully compressed chunk
+
+-- get query plans
 \set PREFIX 'EXPLAIN (costs off)'
--- query across multiple chunks with ColumnarIndexScan
-:PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device;
-SELECT device, min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
+\set ECHO all
+SET timescaledb.enable_columnarindexscan = on;
+\ir :TEST_QUERY_NAME
 
--- multiple aggregates across multiple chunks
-:PREFIX SELECT device, min(time), max(time), min(value), max(value) FROM metrics GROUP BY device;
-SELECT device, min(time), max(time), min(value), max(value) FROM metrics GROUP BY device ORDER BY device;
+\set PREFIX ''
+\set ECHO errors
+
+-- get query results with columnar index scan disabled
+SET timescaledb.enable_columnarindexscan = off;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+-- get query results with columnar index scan enabled
+SET timescaledb.enable_columnarindexscan = on;
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+-- compare optimized vs non-optimized results
+:DIFF_CMD
 
