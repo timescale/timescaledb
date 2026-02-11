@@ -515,7 +515,7 @@ permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "R3_refresh" "WP
 # block each other in the third transaction (materialization)
 permutation "WP_after_materialization_enable" "R1_refresh"("WP_after_materialization_enable") "WP_after_materialization_release" "R3_refresh" 
 
-# Concurrent refresh on same cagg that generate overlapping  materialization range will error out.Only 1 can proceed
+# Concurrent refresh on same cagg that generate overlapping  materialization range will error out. Only 1 can proceed
 # R1 and R2 have overlap refresh and  we add invalidations. So R2 materialization range will overlap with R1
 ## R1 will process invalidation first, add cagg ranges, then wait. R2 should fail as it attempts to process an
 ## overlapping range
