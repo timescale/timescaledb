@@ -129,7 +129,9 @@ static Relation open_cagg_table(ContinuousAggTableType type, LOCKMODE lockmode);
 static void hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id,
 											  LOCKMODE lockmode);
 static HeapTuple create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
-												   int64 start, int64 end);
+												   const InternalTimeRange range);
+static void check_materialization_ranges_overlap(const ContinuousAgg *cagg,
+												 const InternalTimeRange refresh_window);
 static void insert_new_cagg_materialization_ranges(const ContinuousAggInvalidationState *state,
 												   const InternalTimeRange refresh_window,
 												   int32 cagg_hyper_id);
@@ -294,7 +296,8 @@ continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat
 }
 
 static HeapTuple
-create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id, int64 start, int64 end)
+create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
+								  const InternalTimeRange range)
 {
 	Datum values[Natts_continuous_aggs_materialization_ranges] = { 0 };
 	bool isnull[Natts_continuous_aggs_materialization_ranges] = { false };
@@ -303,9 +306,11 @@ create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id, int64 
 		Anum_continuous_aggs_materialization_ranges_materialization_id)] =
 		Int32GetDatum(cagg_hyper_id);
 	values[AttrNumberGetAttrOffset(
-		Anum_continuous_aggs_materialization_ranges_lowest_modified_value)] = Int64GetDatum(start);
+		Anum_continuous_aggs_materialization_ranges_lowest_modified_value)] =
+		Int64GetDatum(range.start);
 	values[AttrNumberGetAttrOffset(
-		Anum_continuous_aggs_materialization_ranges_greatest_modified_value)] = Int64GetDatum(end);
+		Anum_continuous_aggs_materialization_ranges_greatest_modified_value)] =
+		Int64GetDatum(range.end);
 
 	return heap_form_tuple(tupdesc, values, isnull);
 }
@@ -316,9 +321,9 @@ create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id, int64 
  * s1 < e2 AND e1 > s2.
  */
 static void
-check_materialization_ranges_overlap(const ContinuousAgg *cagg, int64 new_start, int64 new_end)
+check_materialization_ranges_overlap(const ContinuousAgg *cagg,
+									 const InternalTimeRange refresh_window)
 {
-	int32 cagg_hyper_id = cagg->data.mat_hypertable_id;
 	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
 													AccessShareLock,
 													CurrentMemoryContext);
@@ -332,7 +337,7 @@ check_materialization_ranges_overlap(const ContinuousAgg *cagg, int64 new_start,
 		Anum_continuous_aggs_materialization_ranges_idx_materialization_id,
 		BTEqualStrategyNumber,
 		F_INT4EQ,
-		Int32GetDatum(cagg_hyper_id));
+		Int32GetDatum(cagg->data.mat_hypertable_id));
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -349,16 +354,16 @@ check_materialization_ranges_overlap(const ContinuousAgg *cagg, int64 new_start,
 						 &isnull));
 		Assert(!isnull);
 
-		if (new_start < existing_end && new_end > existing_start)
+		if (refresh_window.start < existing_end && refresh_window.end > existing_start)
 		{
 			ts_scan_iterator_close(&iterator);
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("materialization range [%s,%s) overlaps with existing range [%s, %s)"
+					 errmsg("materialization range [%s, %s) overlaps with existing range [%s, %s)"
 							" in materialization_ranges table for continuous aggregate "
 							"\"%s\".\"%s\"",
-							ts_internal_to_time_string(new_start, cagg->partition_type),
-							ts_internal_to_time_string(new_end, cagg->partition_type),
+							ts_internal_to_time_string(refresh_window.start, cagg->partition_type),
+							ts_internal_to_time_string(refresh_window.end, cagg->partition_type),
 							ts_internal_to_time_string(existing_start, cagg->partition_type),
 							ts_internal_to_time_string(existing_end, cagg->partition_type),
 							NameStr(cagg->data.user_view_schema),
@@ -380,12 +385,9 @@ insert_new_cagg_materialization_ranges(const ContinuousAggInvalidationState *sta
 	TupleDesc tupdesc = RelationGetDescr(state->cagg_queue_rel);
 	HeapTuple tuple;
 
-	check_materialization_ranges_overlap(state->cagg, refresh_window.start, refresh_window.end);
+	check_materialization_ranges_overlap(state->cagg, refresh_window);
 
-	tuple = create_materialization_ranges_tup(tupdesc,
-											  cagg_hyper_id,
-											  refresh_window.start,
-											  refresh_window.end);
+	tuple = create_materialization_ranges_tup(tupdesc, cagg_hyper_id, refresh_window);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_only(state->cagg_queue_rel, tuple);
