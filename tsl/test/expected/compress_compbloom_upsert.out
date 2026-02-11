@@ -202,10 +202,9 @@ INSERT INTO upsert_demographics VALUES ('2024-01-01 00:01:00', 1, 18, 1, 200)
 ON CONFLICT (user_id, age, gender, time) DO NOTHING;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 1
    Batches scanned: 1
    Batches checked by bloom: 1
-   Batches bloom false positives: 1
+   Batches pruned by bloom: 1
    ->  Insert on upsert_demographics (actual rows=0.00 loops=1)
          Conflict Resolution: NOTHING
          Conflict Arbiter Indexes: idx_demo

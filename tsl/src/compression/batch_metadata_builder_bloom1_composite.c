@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include "batch_metadata_builder.h"
+#include "city_combine.h" /* for city_hash_combine */
 #include "compression.h"
 #include "postgres.h"
 #include "sparse_index_bloom1.h"			 /* for bloom1_get_hash_function */
@@ -71,15 +72,6 @@ static void composite_bloom_hasher_reset(void *builder);
 static uint64 composite_bloom_common_update_val(void *builder, Datum val);
 static uint64 composite_bloom_common_update_null(void *builder);
 
-/*
- * Rotate left by 1 bit.
- */
-static inline uint64
-rotate_left_1(uint64 x)
-{
-	return (x << 1) | (x >> 63);
-}
-
 static uint64
 composite_bloom_common_update_val(void *builder_, Datum val)
 {
@@ -92,7 +84,7 @@ composite_bloom_common_update_val(void *builder_, Datum val)
 
 	const uint64 datum_hash =
 		batch_metadata_builder_bloom1_calculate_hash(hash_fn, hash_finfo, val);
-	common->accumulated_hash = rotate_left_1(common->accumulated_hash) ^ datum_hash;
+	common->accumulated_hash = city_hash_combine(common->accumulated_hash, datum_hash);
 	common->update_call_count++;
 
 	return common->accumulated_hash;
@@ -106,7 +98,7 @@ composite_bloom_common_update_null(void *builder_)
 
 	/* The NULL values may be matched with an IS_NULL clause. For this reason we add the NULL marker
 	 * to the accumulated hash. */
-	common->accumulated_hash = rotate_left_1(common->accumulated_hash) ^ NULL_MARKER;
+	common->accumulated_hash = city_hash_combine(common->accumulated_hash, NULL_MARKER);
 	common->update_call_count++;
 
 	return common->accumulated_hash;

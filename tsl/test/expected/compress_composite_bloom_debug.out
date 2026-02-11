@@ -24,16 +24,16 @@ SELECT ts_bloom1_composite_debug_hash(
 ) AS hash_1_2;
        hash_1_2       
 ----------------------
- -7031803523315923982
+ -3537141470987660334
 
 SELECT ts_bloom1_composite_debug_hash(
     ARRAY['int4', 'int4']::regtype[]::oid[],
     ARRAY[2,1]::int4[],
     ARRAY[false,false]::bool[]
 ) AS hash_2_1;
-      hash_2_1       
----------------------
- 8668151656067064948
+       hash_2_1       
+----------------------
+ -2972869582358219640
 
 -- Order matters
 SELECT ts_bloom1_composite_debug_hash(
@@ -43,16 +43,16 @@ SELECT ts_bloom1_composite_debug_hash(
 ) AS hash_1_1;
        hash_1_1       
 ----------------------
- -4356440294766337680
+ -5526834761705253741
 
 SELECT ts_bloom1_composite_debug_hash(
     ARRAY['int4', 'int4']::regtype[]::oid[],
     ARRAY[100,200]::int4[],
     ARRAY[false,false]::bool[]
 ) AS hash_100_200;
-    hash_100_200     
----------------------
- 4854040877867665123
+     hash_100_200     
+----------------------
+ -3715852749908519751
 
 -- NULL handling
 SELECT ts_bloom1_composite_debug_hash(
@@ -62,16 +62,16 @@ SELECT ts_bloom1_composite_debug_hash(
 ) AS hash_1_null;
      hash_1_null     
 ---------------------
- 2072809743474998709
+ 6515185729574306191
 
 SELECT ts_bloom1_composite_debug_hash(
     ARRAY['int4', 'int4']::regtype[]::oid[],
     ARRAY[NULL::int4,1]::int4[],
     ARRAY[true,false]::bool[]
 ) AS hash_null_1;
-     hash_null_1     
----------------------
- 9013746928597604603
+     hash_null_1      
+----------------------
+ -3309482660200236325
 
 -- NULL position matters
 SELECT ts_bloom1_composite_debug_hash(
@@ -81,7 +81,7 @@ SELECT ts_bloom1_composite_debug_hash(
 ) AS hash_null_null;
     hash_null_null    
 ----------------------
- -6748209959976139714
+ -2654377530796396567
 
 -- Deterministic
 -- INT4 + TEXT
@@ -90,18 +90,18 @@ SELECT ts_bloom1_composite_debug_hash(
     ARRAY[1,'hello']::text[],
     ARRAY[false,false]::bool[]
 ) AS hash_int_text;
-    hash_int_text     
-----------------------
- -3922699354977383563
+    hash_int_text    
+---------------------
+ -803927994710788405
 
 SELECT ts_bloom1_composite_debug_hash(
     ARRAY['text'::regtype, 'int4'::regtype]::oid[],
     ARRAY['hello',1]::text[],
     ARRAY[false,false]::bool[]
 ) AS hash_text_int;
-    hash_text_int     
-----------------------
- -2918057033161378438
+    hash_text_int    
+---------------------
+ 5421937932685643694
 
 -- Type order matters
 -- TEXT + TEXT
@@ -110,9 +110,9 @@ SELECT ts_bloom1_composite_debug_hash(
     ARRAY['hello','world']::text[],
     ARRAY[false,false]::bool[]
 ) AS hash_hello_world;
-   hash_hello_world   
-----------------------
- -8260867126755849154
+  hash_hello_world   
+---------------------
+ 1482890032545525068
 
 SELECT ts_bloom1_composite_debug_hash(
     ARRAY['text', 'text']::regtype[]::oid[],
@@ -121,7 +121,7 @@ SELECT ts_bloom1_composite_debug_hash(
 ) AS hash_world_hello;
   hash_world_hello   
 ---------------------
- 8951241460163328509
+ 8072354158961717912
 
 -- INT8 + INT8
 SELECT ts_bloom1_composite_debug_hash(
@@ -131,7 +131,7 @@ SELECT ts_bloom1_composite_debug_hash(
 ) AS hash_bigint_1_2;
    hash_bigint_1_2    
 ----------------------
- -7031803523315923982
+ -3537141470987660334
 
 -- FLOAT8 + FLOAT8
 SELECT ts_bloom1_composite_debug_hash(
@@ -141,7 +141,7 @@ SELECT ts_bloom1_composite_debug_hash(
 ) AS hash_pi_e;
       hash_pi_e       
 ----------------------
- -2732537827462138625
+ -4163625211971057078
 
 -- DATE + INT4
 SELECT ts_bloom1_composite_debug_hash(
@@ -151,7 +151,7 @@ SELECT ts_bloom1_composite_debug_hash(
 ) AS hash_date_int;
     hash_date_int     
 ----------------------
- -7621685245462327740
+ -1315996195257500581
 
 -- TIMESTAMPTZ + INT4
 SELECT ts_bloom1_composite_debug_hash(
@@ -161,7 +161,7 @@ SELECT ts_bloom1_composite_debug_hash(
 ) AS hash_ts_int;
      hash_ts_int      
 ----------------------
- -9109788093207744644
+ -3629826720350119715
 
 -- UUID + INT4
 SELECT ts_bloom1_composite_debug_hash(
@@ -171,7 +171,7 @@ SELECT ts_bloom1_composite_debug_hash(
 ) AS hash_uuid_int;
     hash_uuid_int    
 ---------------------
- -624146033345293485
+ 2081263155587566512
 
 -- Triples
 SELECT ts_bloom1_composite_debug_hash(
@@ -179,9 +179,9 @@ SELECT ts_bloom1_composite_debug_hash(
     ARRAY[1,'test',3.14]::text[],
     ARRAY[false,false,false]::bool[]
 ) AS hash_triple_1;
-    hash_triple_1    
----------------------
- 6701640699855803571
+   hash_triple_1   
+-------------------
+ 37937582272288231
 
 SELECT ts_bloom1_composite_debug_hash(
     ARRAY['int4'::regtype, 'text'::regtype, 'float8'::regtype]::oid[],
@@ -190,7 +190,7 @@ SELECT ts_bloom1_composite_debug_hash(
 ) AS hash_triple_2;
     hash_triple_2    
 ---------------------
- 8949297242348982520
+ 5939440182803799337
 
 -- Triples with NULL
 SELECT ts_bloom1_composite_debug_hash(
@@ -200,7 +200,7 @@ SELECT ts_bloom1_composite_debug_hash(
 ) AS hash_triple_null_middle;
  hash_triple_null_middle 
 -------------------------
-     8028505867470498566
+    -7275726004199958454
 
 -----------------------------------------------------------
 -- Actual Filtering Tests - Basic Setup
@@ -467,7 +467,7 @@ SELECT ts_bloom1_composite_debug_hash(
 );
  ts_bloom1_composite_debug_hash 
 --------------------------------
-           -6304477875383242117
+            4391793013704008293
 
 -- INT4 + INT8 (mixed integer sizes)
 SELECT ts_bloom1_composite_debug_hash(
@@ -475,7 +475,7 @@ SELECT ts_bloom1_composite_debug_hash(
 );
  ts_bloom1_composite_debug_hash 
 --------------------------------
-           -7031803523315923982
+           -3537141470987660334
 
 -- FLOAT4 + FLOAT8 (mixed float sizes)
 SELECT ts_bloom1_composite_debug_hash(
@@ -483,7 +483,7 @@ SELECT ts_bloom1_composite_debug_hash(
 );
  ts_bloom1_composite_debug_hash 
 --------------------------------
-           -5575985155072405833
+           -3656230006088498231
 
 -- VARCHAR + TEXT (string types)
 SELECT ts_bloom1_composite_debug_hash(
@@ -491,7 +491,7 @@ SELECT ts_bloom1_composite_debug_hash(
 );
  ts_bloom1_composite_debug_hash 
 --------------------------------
-           -8260867126755849154
+            1482890032545525068
 
 -- TIMESTAMP + TIMESTAMPTZ
 SELECT ts_bloom1_composite_debug_hash(
@@ -501,7 +501,7 @@ SELECT ts_bloom1_composite_debug_hash(
 );
  ts_bloom1_composite_debug_hash 
 --------------------------------
-            4687109031466562696
+           -7039007965488113874
 
 -- BOOL + INT4
 SELECT ts_bloom1_composite_debug_hash(
@@ -509,7 +509,7 @@ SELECT ts_bloom1_composite_debug_hash(
 );
  ts_bloom1_composite_debug_hash 
 --------------------------------
-           -2637029204488171939
+           -8326650871017800236
 
 -----------------------------------------------------------
 -- 3 or more fields
@@ -519,27 +519,27 @@ SELECT ts_bloom1_composite_debug_hash(
     ARRAY[42,'answer',3.14159]::text[],
     ARRAY[false,false,false]::bool[]
 ) AS hash_triple;
-     hash_triple      
-----------------------
- -6546215987475786862
+     hash_triple     
+---------------------
+ 3151880692155759840
 
 SELECT ts_bloom1_composite_debug_hash(
     ARRAY['int4','int4','int4','int4']::regtype[]::oid[],
     ARRAY[1,2,3,4]::int4[],
     ARRAY[false,false,false,false]::bool[]
 ) AS hash_quad;
-      hash_quad       
-----------------------
- -1266006783873081158
+      hash_quad      
+---------------------
+ 3586312208694903168
 
 SELECT ts_bloom1_composite_debug_hash(
     ARRAY['int4','int4','int4','int4','int4']::regtype[]::oid[],
     ARRAY[1,2,3,4,5]::int4[],
     ARRAY[false,false,false,false,false]::bool[]
 ) AS hash_quint;
-      hash_quint      
-----------------------
- -1857101024840815071
+     hash_quint      
+---------------------
+ 7449003179526154070
 
 SELECT ts_bloom1_composite_debug_hash(
     ARRAY['int4','int4','int4','int4','int4','int4','int4','int4']::regtype[]::oid[],
@@ -548,7 +548,7 @@ SELECT ts_bloom1_composite_debug_hash(
 ) AS hash_octet;
       hash_octet      
 ----------------------
- -1360512109260487889
+ -6331739213078322737
 
 -----------------------------------------------------------
 -- Triple Column Tests
