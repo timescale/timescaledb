@@ -64,12 +64,15 @@ else()
   # Final tracefile for code coverage
   set(OUTPUT_FILE "timescaledb-coverage.info")
 
-  # Common options for lcov capture commands
+  # Common options for lcov capture commands. We disable branch coverage for
+  # Assert and Ensure, because these are never supposed to be hit and always
+  # have partial coverage. The ereport macro also has some internal conditions
+  # that lead to partial coverage.
   set(LCOV_CAPTURE_OPTS
       --rc
       lcov_branch_coverage=1
       --rc
-      "lcov_excl_br_line=Assert\\(|Ensure\\("
+      "lcov_excl_br_line=Assert\\(|Ensure\\(|ereport\\("
       --no-external
       --base-directory
       ${CMAKE_SOURCE_DIR}
