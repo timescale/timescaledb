@@ -307,11 +307,7 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 	if (ts_guc_enable_vectorized_aggregation)
 	{
 		stmt->planTree = try_insert_vector_agg_node(stmt->planTree);
-		ListCell *lc;
-		foreach (lc, stmt->subplans)
-		{
-			lfirst(lc) = try_insert_vector_agg_node(lfirst(lc));
-		}
+		stmt->subplans = (List *) try_insert_vector_agg_node((Plan *) stmt->subplans);
 	}
 
 #ifdef TS_DEBUG

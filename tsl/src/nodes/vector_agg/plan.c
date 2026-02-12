@@ -37,6 +37,12 @@ _vector_agg_init(void)
 	TryRegisterCustomScanMethods(&scan_methods);
 }
 
+bool
+ts_is_vector_agg_plan(Plan *plan)
+{
+	return IsA(plan, CustomScan) && castNode(CustomScan, plan)->methods == &scan_methods;
+}
+
 /*
  * Create a vectorized aggregation node to replace the given partial aggregation
  * node.
@@ -426,6 +432,75 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 #endif
 }
 
+typedef Plan *(*walkerfunc)(Plan *, void *);
+
+static Plan *
+agg_walker(Plan *plan, walkerfunc func, void *context)
+{
+	if (!plan)
+		return NULL;
+
+	if (IsA(plan, List))
+	{
+		ListCell *lc;
+		foreach (lc, castNode(List, plan))
+		{
+			lfirst(lc) = agg_walker(lfirst(lc), func, context);
+		}
+		return plan;
+	}
+
+	if (plan->lefttree)
+		plan->lefttree = agg_walker(plan->lefttree, func, context);
+	if (plan->righttree)
+		plan->righttree = agg_walker(plan->righttree, func, context);
+
+	if (IsA(plan, Append))
+	{
+		Append *append = castNode(Append, plan);
+		append->appendplans = (List *) agg_walker((Plan *) append->appendplans, func, context);
+	}
+	else if (IsA(plan, MergeAppend))
+	{
+		MergeAppend *append = castNode(MergeAppend, plan);
+		append->mergeplans = (List *) agg_walker((Plan *) append->mergeplans, func, context);
+	}
+	else if (IsA(plan, CustomScan))
+	{
+		CustomScan *custom = castNode(CustomScan, plan);
+		custom->custom_plans = (List *) agg_walker((Plan *) custom->custom_plans, func, context);
+	}
+	if (IsA(plan, SubqueryScan))
+	{
+		SubqueryScan *subquery = castNode(SubqueryScan, plan);
+		subquery->subplan = agg_walker(castNode(SubqueryScan, plan)->subplan, func, context);
+		return plan;
+	}
+
+	return func(plan, context);
+};
+
+typedef struct HasVectorAggContext
+{
+	bool has_agg;
+	bool has_vector_agg;
+} HasVectorAggContext;
+
+static Plan *
+has_vector_agg(Plan *plan, void *context)
+{
+	HasVectorAggContext *ctx = (HasVectorAggContext *) context;
+	if (IsA(plan, Agg))
+	{
+		ctx->has_agg = true;
+	}
+	else if (ts_is_vector_agg_plan(plan))
+	{
+		ctx->has_vector_agg = true;
+	}
+	return plan;
+}
+
 /*
  * Whether we have a vectorized aggregation node and any aggregate node at all
  * in the plan tree. This is used for testing.
@@ -433,77 +508,10 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 bool
 has_vector_agg_node(Plan *plan, bool *has_some_agg)
 {
-	if (IsA(plan, Agg))
-	{
-		*has_some_agg = true;
-	}
-
-	if (IsA(plan, Agg) && castNode(Agg, plan)->aggsplit == AGGSPLIT_INITIAL_SERIAL)
-	{
-		/*
-		 * Postgres partial aggregation.
-		 */
-		return false;
-	}
-
-	if (plan->lefttree && has_vector_agg_node(plan->lefttree, has_some_agg))
-	{
-		return true;
-	}
-
-	if (plan->righttree && has_vector_agg_node(plan->righttree, has_some_agg))
-	{
-		return true;
-	}
-
-	CustomScan *custom = NULL;
-	List *append_plans = NIL;
-	if (IsA(plan, Append))
-	{
-		append_plans = castNode(Append, plan)->appendplans;
-	}
-	if (IsA(plan, MergeAppend))
-	{
-		append_plans = castNode(MergeAppend, plan)->mergeplans;
-	}
-	else if (IsA(plan, CustomScan))
-	{
-		custom = castNode(CustomScan, plan);
-		if (ts_is_chunk_append_plan(plan) || ts_is_modify_hypertable_plan(plan))
-		{
-			append_plans = custom->custom_plans;
-		}
-	}
-	else if (IsA(plan, SubqueryScan))
-	{
-		SubqueryScan *subquery = castNode(SubqueryScan, plan);
-		append_plans = list_make1(subquery->subplan);
-	}
-
-	if (append_plans)
-	{
-		ListCell *lc;
-		foreach (lc, append_plans)
-		{
-			if (has_vector_agg_node(lfirst(lc), has_some_agg))
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-
-	if (custom == NULL)
-	{
-		return false;
-	}
-
-	if (strcmp(VECTOR_AGG_NODE_NAME, custom->methods->CustomName) == 0)
-	{
-		return true;
-	}
-
-	return false;
+	HasVectorAggContext context = { .has_agg = false, .has_vector_agg = false };
+	agg_walker(plan, has_vector_agg, &context);
+	*has_some_agg = context.has_agg;
+	return context.has_vector_agg;
 }
 
 /*
@@ -535,57 +543,18 @@ vectoragg_plan_possible(Plan *childplan, VectorQualInfo *vqi)
 	return false;
 }
 
-/*
- * Where possible, replace the partial aggregation plan nodes with our own
- * vectorized aggregation node. The replacement is done in-place.
- */
+static Plan *insert_vector_agg(Plan *plan, void *context);
+
 Plan *
 try_insert_vector_agg_node(Plan *plan)
 {
-	if (plan->lefttree)
-	{
-		plan->lefttree = try_insert_vector_agg_node(plan->lefttree);
-	}
+	return agg_walker(plan, insert_vector_agg, NULL);
+}
 
-	if (plan->righttree)
-	{
-		plan->righttree = try_insert_vector_agg_node(plan->righttree);
-	}
-
-	List *append_plans = NIL;
-	if (IsA(plan, Append))
-	{
-		append_plans = castNode(Append, plan)->appendplans;
-	}
-	else if (IsA(plan, MergeAppend))
-	{
-		append_plans = castNode(MergeAppend, plan)->mergeplans;
-	}
-	else if (IsA(plan, CustomScan))
-	{
-		CustomScan *custom = castNode(CustomScan, plan);
-		if (ts_is_chunk_append_plan(plan) || ts_is_modify_hypertable_plan(plan))
-		{
-			append_plans = custom->custom_plans;
-		}
-	}
-	else if (IsA(plan, SubqueryScan))
-	{
-		SubqueryScan *subquery = castNode(SubqueryScan, plan);
-		subquery->subplan = try_insert_vector_agg_node(subquery->subplan);
-	}
-
-	if (append_plans)
-	{
-		ListCell *lc;
-		foreach (lc, append_plans)
-		{
-			lfirst(lc) = try_insert_vector_agg_node(lfirst(lc));
-		}
-		return plan;
-	}
-
-	if (plan->type != T_Agg)
+static Plan *
+insert_vector_agg(Plan *plan, void *context)
+{
+	if (!IsA(plan, Agg))
 	{
 		return plan;
 	}
@@ -613,7 +582,6 @@ try_insert_vector_agg_node(Plan *plan)
 		 */
 		return plan;
 	}
-
 	if (agg->plan.lefttree == NULL)
 	{
 		/*
