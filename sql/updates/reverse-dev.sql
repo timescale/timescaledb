@@ -115,3 +115,7 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_catalog TO PUBLIC;
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_catalog TO PUBLIC;
 
+CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_stat_history (job_id);
+DROP INDEX _timescaledb_internal.bgw_job_stat_history_execution_start_idx;
+DROP INDEX _timescaledb_internal.bgw_job_stat_history_job_id_execution_start_idx;
+
