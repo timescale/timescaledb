@@ -450,6 +450,9 @@ explain (analyze, buffers off, costs off, timing off, summary off)
 select * from bloom_composite where x = (2, 3)::ctype;
 
 explain (analyze, buffers off, costs off, timing off, summary off)
+select * from bloom_composite where x = (3, 4);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from bloom_composite where x = (3, 4)::ctype;
 
 

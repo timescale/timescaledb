@@ -850,6 +850,14 @@ select * from bloom_composite where x = (2, 3)::ctype;
          Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_x, '(2,3)'::ctype)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
+select * from bloom_composite where x = (3, 4);
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_11_13_chunk (actual rows=0.00 loops=1)
+   Filter: (x = '(3,4)'::record)
+   Rows Removed by Filter: 1
+   ->  Seq Scan on compress_hyper_12_14_chunk (actual rows=1.00 loops=1)
+
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from bloom_composite where x = (3, 4)::ctype;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_11_13_chunk (actual rows=0.00 loops=1)
