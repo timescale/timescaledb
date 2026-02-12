@@ -483,6 +483,22 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 	Assert(pushed_down_rightop != NULL);
 
 	/*
+	 * We can have cross-type equality operator, but in this case the our hashes
+	 * or Postgres hashes for the respective types are guaranteed to have the
+	 * same result for both types, so we don't need any type conversion here.
+	 * The only special case is composite types. The right-hand constant would
+	 * have the anonymous type "record" and would be compared polymorphically
+	 * at rutime with the record_eq() function. However, this type doesn't have
+	 * an extended hash function. Just refuse to work with it.
+	 */
+	const Oid compared_type = exprType((Node *) pushed_down_rightop);
+	if (compared_type == RECORDOID)
+	{
+		context->can_pushdown = false;
+		return orig_opexpr;
+	}
+
+	/*
 	 * var = expr implies bloom1_contains(var_bloom, expr).
 	 */
 	Var *bloom_var = makeVar(context->compressed_rel->relid,
