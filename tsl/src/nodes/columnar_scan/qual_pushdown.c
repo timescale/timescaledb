@@ -488,7 +488,7 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 	 * same result for both types, so we don't need any type conversion here.
 	 * The only special case is composite types. The right-hand constant would
 	 * have the anonymous type "record" and would be compared polymorphically
-	 * at rutime with the record_eq() function. However, this type doesn't have
+	 * at runtime with the record_eq() function. However, this type doesn't have
 	 * an extended hash function. Just refuse to work with it.
 	 */
 	const Oid compared_type = exprType((Node *) pushed_down_rightop);
