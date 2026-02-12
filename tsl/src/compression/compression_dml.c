@@ -486,7 +486,6 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 	cis->counters->batches_pruned_by_bloom += stats.batches_pruned_by_bloom;
 	cis->counters->batches_without_bloom += stats.batches_without_bloom;
 	cis->counters->batches_bloom_false_positives += stats.batches_bloom_false_positives;
-	cis->counters->batches_scanned += stats.batches_scanned;
 
 	CommandCounterIncrement();
 	table_close(in_rel, NoLock);
@@ -765,7 +764,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 
 	while (decompress_batch_scan_getnext_slot(scan, ForwardScanDirection, slot))
 	{
-		stats.batches_scanned++;
 		num_scanned_rows++;
 
 		/* Deconstruct the tuple */

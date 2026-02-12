@@ -27,7 +27,6 @@ INSERT INTO explain_test VALUES ('2024-01-01 00:05:30', 5, 'temp', 100)
 ON CONFLICT (device_id, metric, ts) DO NOTHING;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches scanned: 2
    Batches checked by bloom: 2
    Batches pruned by bloom: 2
    ->  Insert on explain_test (actual rows=0.00 loops=1)
@@ -44,7 +43,6 @@ ON CONFLICT (device_id, metric, ts)
 DO UPDATE SET value = EXCLUDED.value;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches scanned: 2
    Batches checked by bloom: 2
    Batches pruned by bloom: 2
    ->  Insert on explain_test (actual rows=0.00 loops=1)
@@ -96,7 +94,6 @@ INSERT INTO upsert_test VALUES ('2024-01-01 00:03:30', 50, 'login', 1)
 ON CONFLICT (uid, event, ts) DO NOTHING;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches scanned: 3
    Batches checked by bloom: 3
    Batches pruned by bloom: 3
    ->  Insert on upsert_test (actual rows=0.00 loops=1)
@@ -142,7 +139,6 @@ INSERT INTO upsert_temporal VALUES ('2024-01-15 10:00:00', 1, 'temp', 26.0)
 ON CONFLICT (sensor_id, metric, time) DO NOTHING;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches scanned: 1
    Batches checked by bloom: 1
    ->  Insert on upsert_temporal (actual rows=0.00 loops=1)
          Conflict Resolution: NOTHING
@@ -156,7 +152,6 @@ INSERT INTO upsert_temporal VALUES ('2024-01-15 10:30:00', 5, 'temp', 26.0)
 ON CONFLICT (sensor_id, metric, time) DO NOTHING;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches scanned: 1
    Batches checked by bloom: 1
    Batches pruned by bloom: 1
    ->  Insert on upsert_temporal (actual rows=0.00 loops=1)
@@ -202,7 +197,6 @@ INSERT INTO upsert_demographics VALUES ('2024-01-01 00:01:00', 1, 18, 1, 200)
 ON CONFLICT (user_id, age, gender, time) DO NOTHING;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches scanned: 1
    Batches checked by bloom: 1
    Batches pruned by bloom: 1
    ->  Insert on upsert_demographics (actual rows=0.00 loops=1)
@@ -217,7 +211,6 @@ INSERT INTO upsert_demographics VALUES ('2024-01-01 00:01:30', 50, 30, 1, 200)
 ON CONFLICT (user_id, age, gender, time) DO NOTHING;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches scanned: 1
    Batches checked by bloom: 1
    Batches pruned by bloom: 1
    ->  Insert on upsert_demographics (actual rows=0.00 loops=1)
@@ -262,7 +255,6 @@ ON CONFLICT (device_id, metric, ts) DO NOTHING;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches filtered: 1
-   Batches scanned: 1
    Batches checked by bloom: 1
    Batches bloom false positives: 1
    ->  Insert on explain_partial (actual rows=0.00 loops=1)
@@ -278,7 +270,6 @@ INSERT INTO explain_partial VALUES ('2024-01-01 00:05:00', 5, 'humidity', 100)
 ON CONFLICT (device_id, metric, ts) DO NOTHING;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches scanned: 1
    Batches checked by bloom: 1
    Batches pruned by bloom: 1
    ->  Insert on explain_partial (actual rows=0.00 loops=1)

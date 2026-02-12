@@ -79,8 +79,6 @@ typedef struct SharedCounters
 	int64 batches_without_bloom;
 	/* Number of batches bloom false positives */
 	int64 batches_bloom_false_positives;
-	/* Number of batches scanned */
-	int64 batches_scanned;
 } SharedCounters;
 
 typedef struct ChunkInsertState

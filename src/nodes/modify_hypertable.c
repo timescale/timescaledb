@@ -252,7 +252,6 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		state->batches_pruned_by_bloom += counters->batches_pruned_by_bloom;
 		state->batches_without_bloom += counters->batches_without_bloom;
 		state->batches_bloom_false_positives += counters->batches_bloom_false_positives;
-		state->batches_scanned += counters->batches_scanned;
 	}
 	if (state->batches_filtered > 0)
 		ExplainPropertyInteger("Batches filtered", NULL, state->batches_filtered, es);
@@ -262,8 +261,6 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		ExplainPropertyInteger("Tuples decompressed", NULL, state->tuples_decompressed, es);
 	if (state->batches_deleted > 0)
 		ExplainPropertyInteger("Batches deleted", NULL, state->batches_deleted, es);
-	if (state->batches_scanned > 0)
-		ExplainPropertyInteger("Batches scanned", NULL, state->batches_scanned, es);
 	if (state->batches_checked_by_bloom > 0)
 		ExplainPropertyInteger("Batches checked by bloom",
 							   NULL,
