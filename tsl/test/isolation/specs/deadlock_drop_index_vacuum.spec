@@ -123,8 +123,22 @@ step "S3_vacuum" {
 }
 
 session "S4"
+setup {
+    START TRANSACTION;
+    SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+    SET LOCAL lock_timeout = '10s';
+    SET LOCAL deadlock_timeout = '300ms';
+}
+
 step "S4_drop_index" {
     DROP INDEX metrics_device_time_idx;
 }
 
-permutation S1_lock S3_vacuum S2_lock S1_commit S4_drop_index S2_commit
+step "S4_commit" {
+    COMMIT;
+}
+
+# To ensure deterministic output, S4 holds a transaction open.
+# After S2_commit, S4_drop_index completes but S4 remains in transaction.
+# Then S4_commit releases all locks, allowing S3_vacuum to complete.
+permutation S1_lock S3_vacuum S2_lock S1_commit S4_drop_index S2_commit S4_commit
