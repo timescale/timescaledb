@@ -17,8 +17,8 @@ step S2_lock: <... completed>
 step S4_drop_index: 
     DROP INDEX metrics_device_time_idx;
  <waiting ...>
-step S2_commit: 
+step S2_commit:
     COMMIT;
 
-step S3_vacuum: <... completed>
 step S4_drop_index: <... completed>
+step S3_vacuum: <... completed>
