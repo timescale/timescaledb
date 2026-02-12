@@ -22,16 +22,6 @@
 
 #include "qual_pushdown.h"
 
-typedef struct BloomCandidate
-{
-	Expr *predicate;
-	Bitmapset *col_attnos;
-} BloomCandidate;
-
-typedef struct BloomCandidates
-{
-	List *candidates;
-} BloomCandidates;
 typedef struct QualPushdownContext
 {
 	RelOptInfo *chunk_rel;
@@ -39,12 +29,6 @@ typedef struct QualPushdownContext
 	RangeTblEntry *chunk_rte;
 	RangeTblEntry *compressed_rte;
 	CompressionSettings *settings;
-
-	/* Bloom candidates list to push down. This will be
-	 * merged into the baserestrictinfo in the end. But before
-	 * merging we will want to sort them and remove redundant ones.
-	 */
-	BloomCandidates *bloom_candidates;
 
 	/*
 	 * This is actually the result, not the static input context like above, but
@@ -91,8 +75,6 @@ static Var *extract_var_for_bloom1(OpExpr *opexpr, QualPushdownContext *context,
 static Var *extract_var_for_composite_bloom(OpExpr *opexpr, QualPushdownContext *context,
 											Expr **value_out, Oid *op_oid_out);
 static void pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context);
-static void add_composite_bloom_candidate(BloomCandidates *bloom_candidates, Expr *predicate,
-										  const Bitmapset *col_attnos);
 
 void
 pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chunk_rel,
@@ -100,14 +82,12 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 {
 	ListCell *lc;
 	List *decompress_clauses = NIL;
-	BloomCandidates *bloom_candidates = palloc0(sizeof(BloomCandidates));
 	QualPushdownContext base_context = {
 		.chunk_rel = chunk_rel,
 		.compressed_rel = compressed_rel,
 		.chunk_rte = planner_rt_fetch(chunk_rel->relid, root),
 		.compressed_rte = planner_rt_fetch(compressed_rel->relid, root),
 		.settings = settings,
-		.bloom_candidates = bloom_candidates,
 	};
 
 	/*
@@ -119,14 +99,6 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 		ts_guc_enable_composite_bloom_indexes)
 	{
 		pushdown_composite_blooms(root, &base_context);
-		ListCell *lc;
-		foreach (lc, base_context.bloom_candidates->candidates)
-		{
-			BloomCandidate *cand = lfirst(lc);
-			base_context.compressed_rel->baserestrictinfo =
-				lappend(base_context.compressed_rel->baserestrictinfo,
-						make_simple_restrictinfo(root, cand->predicate));
-		}
 	}
 
 	foreach (lc, chunk_rel->baserestrictinfo)
@@ -681,24 +653,6 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 	}
 	Assert(pushed_down_rightop != NULL);
 
-	if (ts_guc_enable_bloom_index_pruning && context->bloom_candidates != NULL)
-	{
-		Bitmapset *single_col = bms_make_singleton(var->varattno);
-		ListCell *lc;
-		foreach (lc, context->bloom_candidates->candidates)
-		{
-			BloomCandidate *composite = lfirst(lc);
-			if (bms_is_subset(single_col, composite->col_attnos))
-			{
-				/* Single bloom is covered by a composite - skip it */
-				bms_free(single_col);
-				context->can_pushdown = false;
-				return orig_opexpr;
-			}
-		}
-		bms_free(single_col);
-	}
-
 	/*
 	 * var = expr implies bloom1_contains(var_bloom, expr).
 	 */
@@ -997,43 +951,6 @@ extract_var_for_composite_bloom(OpExpr *opexpr, QualPushdownContext *context, Ex
 	return NULL;
 }
 
-/* When adding a composite bloom candidate */
-static void
-add_composite_bloom_candidate(BloomCandidates *bloom_candidates, Expr *predicate,
-							  const Bitmapset *col_attnos)
-{
-	ListCell *lc;
-	foreach (lc, bloom_candidates->candidates)
-	{
-		BloomCandidate *existing = lfirst(lc);
-		if (bms_is_subset(col_attnos, existing->col_attnos))
-		{
-			if (ts_guc_enable_bloom_index_pruning)
-				return;
-		}
-	}
-
-	/* Remove any existing composites that are subsets of this one */
-	if (ts_guc_enable_bloom_index_pruning)
-	{
-		foreach (lc, bloom_candidates->candidates)
-		{
-			BloomCandidate *existing = lfirst(lc);
-			if (bms_is_subset(existing->col_attnos, col_attnos))
-			{
-				bloom_candidates->candidates =
-					foreach_delete_current(bloom_candidates->candidates, lc);
-			}
-		}
-	}
-
-	/* Add this composite */
-	BloomCandidate *candidate = palloc(sizeof(BloomCandidate));
-	candidate->predicate = predicate;
-	candidate->col_attnos = bms_copy(col_attnos);
-	bloom_candidates->candidates = lappend(bloom_candidates->candidates, candidate);
-}
-
 /*
  * Scan baserestrictinfo for composite bloom opportunities.
  * For each applicable composite bloom, generate bloom1_contains(bloom, ROW(...)).
@@ -1252,11 +1169,10 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 											 InvalidOid,
 											 COERCE_EXPLICIT_CALL);
 
-		/* Add to bloom candidates list. */
-		Assert(context->bloom_candidates != NULL);
-		add_composite_bloom_candidate(context->bloom_candidates,
-									  (Expr *) bloom_check,
-									  column_attnos);
+		/* Add to baserestrictinfo. */
+		context->compressed_rel->baserestrictinfo =
+			lappend(context->compressed_rel->baserestrictinfo,
+					make_simple_restrictinfo(root, (Expr *) bloom_check));
 	}
 
 	/* Cleanup */

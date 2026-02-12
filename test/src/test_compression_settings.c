@@ -237,7 +237,7 @@ test_convert_to_parsed_compression_settings()
 		TestAssertParsedCompressionSettingsEqCstring(parsed_settings, "[{\"key\": \"value\"}]");
 		Jsonb *result = ts_convert_from_parsed_compression_settings(parsed_settings);
 		TestAssertJsonbEqCstring(result, "[{\"key\": \"value\"}]");
-		/* per colmn should be empty because there is no column and no index type */
+		/* per column should be empty because there is no column and no index type */
 		List *per_column_settings = ts_get_per_column_compression_settings(parsed_settings);
 		TestAssertPtrEq(per_column_settings, NIL);
 		ts_free_parsed_compression_settings(parsed_settings);

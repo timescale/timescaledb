@@ -177,7 +177,7 @@ ERROR:  bloom index has too many columns: 9 > max 8
 alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = 'bloom(u,ts,u)');
-ERROR:  duplicate column name ('u') in compsite bloom index configuration: ('u','ts','u')
+ERROR:  duplicate column name ('u') in composite bloom index configuration: ('u','ts','u')
 -- duplicate blooms in different orders
 -- 2 cols
 alter table test_settings set (timescaledb.compress,

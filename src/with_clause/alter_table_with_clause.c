@@ -546,7 +546,7 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 				if (bms_num_members(attnums_bitmap) <= i)
 					ereport(ERROR,
 							(errcode(ERRCODE_SYNTAX_ERROR),
-							 errmsg("duplicate column name ('%s') in compsite bloom index "
+							 errmsg("duplicate column name ('%s') in composite bloom index "
 									"configuration: %s",
 									bloom_config.columns[i].name,
 									column_name_list_as_string(&bloom_config)),

@@ -549,6 +549,9 @@ compression_settings_tuple_update(TupleInfo *ti, void *data)
 void
 ts_convert_sparse_index_config_to_jsonb(JsonbParseState *parse_state, SparseIndexConfigBase *config)
 {
+	MinmaxIndexColumnConfig *minmax_config = NULL;
+	BloomFilterConfig *bloom_config = NULL;
+
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	ts_jsonb_add_str(parse_state,
 					 ts_sparse_index_common_keys[SparseIndexKeyType],
@@ -556,13 +559,13 @@ ts_convert_sparse_index_config_to_jsonb(JsonbParseState *parse_state, SparseInde
 	switch (config->type)
 	{
 		case _SparseIndexTypeEnumMinmax:
-			MinmaxIndexColumnConfig *minmax_config = (MinmaxIndexColumnConfig *) config;
+			minmax_config = (MinmaxIndexColumnConfig *) config;
 			ts_jsonb_add_str(parse_state,
 							 ts_sparse_index_common_keys[SparseIndexKeyCol],
 							 minmax_config->col); /* column */
 			break;
 		case _SparseIndexTypeEnumBloom:
-			BloomFilterConfig *bloom_config = (BloomFilterConfig *) config;
+			bloom_config = (BloomFilterConfig *) config;
 
 			if (bloom_config->num_columns > 1)
 			{
@@ -1345,7 +1348,7 @@ static Bitmapset *
 resolve_columns_to_attnos(List *column_names, Oid relid)
 {
 	Assert(column_names != NULL);
-	Assert(relid != InvalidOid);
+	Assert(OidIsValid(relid));
 
 	Bitmapset *result = NULL;
 	ListCell *name_cell = NULL;
@@ -1378,7 +1381,7 @@ TsBmsList
 ts_resolve_columns_to_attnos_from_parsed_settings(ParsedCompressionSettings *settings, Oid relid)
 {
 	Assert(settings != NULL);
-	Assert(relid != InvalidOid);
+	Assert(OidIsValid(relid));
 
 	TsBmsList result = NIL;
 	ListCell *obj_cell = NULL;

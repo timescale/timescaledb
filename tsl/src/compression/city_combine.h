@@ -1,3 +1,9 @@
+/*
+ * This file and its contents are licensed under the Timescale License.
+ * Please see the included NOTICE for copyright information and
+ * LICENSE-TIMESCALE for a copy of the license.
+ */
+
 /* The code below is taken from the CityHash project: https://github.com/google/cityhash
  * specifically from here: https://github.com/google/cityhash/blob/master/src/city.h#L101
  */

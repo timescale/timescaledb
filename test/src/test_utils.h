@@ -117,8 +117,8 @@ strip_path(const char *filename)
 	Datum name(PG_FUNCTION_ARGS)
 
 #ifdef __JSONB_H__
-extern TSDLLEXPORT const char *jsonb_to_cstring(Jsonb *jsonb);
-extern TSDLLEXPORT Jsonb *cstring_to_jsonb(const char *cstring);
+extern const char *jsonb_to_cstring(Jsonb *jsonb);
+extern Jsonb *cstring_to_jsonb(const char *cstring);
 
 #define TestAssertJsonbEqCstring(a, b)                                                             \
 	do                                                                                             \

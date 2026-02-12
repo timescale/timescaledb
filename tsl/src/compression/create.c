@@ -1623,16 +1623,6 @@ create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSetting
 		TypeCacheEntry *type = lookup_type_cache(atttypid, TYPECACHE_HASH_EXTENDED_PROC);
 		total_width += (type->typlen > 0 ? type->typlen : 4);
 
-		/* Numeric columns can be added to a composite index, but the user may disable it. */
-		if (atttypid == NUMERICOID && !ts_guc_enable_numeric_in_auto_composite_bloom)
-			continue;
-
-		/* Time types can be added to a composite index, but the user may disable it. */
-		if ((atttypid == TIMESTAMPTZOID || atttypid == TIMESTAMPOID || atttypid == TIMEOID ||
-			 atttypid == TIMETZOID || atttypid == DATEOID) &&
-			!ts_guc_enable_time_types_in_auto_composite_bloom)
-			continue;
-
 		/* Equality queries are unlikely for floating-point types, so we skip them. */
 		if (atttypid == FLOAT4OID || atttypid == FLOAT8OID)
 			continue;

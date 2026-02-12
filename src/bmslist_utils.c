@@ -24,10 +24,12 @@ ts_bmslist_add_member(TsBmsList bmslist, const int *items, int num_items)
 		return bmslist;
 
 	/* Create a new Bitmapset for the items */
-	Bitmapset *set = bms_make_singleton(items[0]);
+	int first_item = items[0];
+	Bitmapset *set = bms_make_singleton(first_item);
 	for (int i = 1; i < num_items; i++)
 	{
-		set = bms_add_member(set, items[i]);
+		int item = items[i];
+		set = bms_add_member(set, item);
 	}
 
 	/* Add the new set to the list */
@@ -53,10 +55,12 @@ ts_bmslist_contains_items(TsBmsList bmslist, const int *items, int num_items)
 		return false;
 
 	/* Create a new Bitmapset for the items */
-	Bitmapset *set = bms_make_singleton(items[0]);
+	int first_item = items[0];
+	Bitmapset *set = bms_make_singleton(first_item);
 	for (int i = 1; i < num_items; i++)
 	{
-		set = bms_add_member(set, items[i]);
+		int item = items[i];
+		set = bms_add_member(set, item);
 	}
 
 	result = ts_bmslist_contains_set(bmslist, set);

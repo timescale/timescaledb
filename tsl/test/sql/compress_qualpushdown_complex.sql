@@ -26,7 +26,7 @@
 -- Supporting the partial expressions may happen when one qual cannot satisfy
 -- the above pushdown constraints.
 --
--- The rules to decide if the partial expression is not more restrictive 
+-- The rules to decide if the partial expression is not more restrictive
 -- than the original are as follows with respect to conjunctions and disjunctions:
 --
 --  - R1: we can omit any qual from a conjunction. i.e given a qual like:

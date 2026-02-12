@@ -945,7 +945,7 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 																	  NameStr(attr->attname));
 			if (per_column_settings != NULL)
 			{
-				/* iterate over the composite bloom index object ids assiciated with the current
+				/* iterate over the composite bloom index object ids associated with the current
 				 * column */
 				int i = -1;
 				while ((i = bms_next_member(per_column_settings->composite_bloom_index_obj_ids,

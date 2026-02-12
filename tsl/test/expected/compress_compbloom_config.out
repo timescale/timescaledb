@@ -41,9 +41,9 @@ ERROR:  duplicate sparse index configuration ('f','g','h')
 -- Creating a composite bloom index with the same columns should fail
 \set ON_ERROR_STOP 0
 ALTER TABLE t SET (timescaledb.compress_index = 'bloom("a","b","a")');
-ERROR:  duplicate column name ('a') in compsite bloom index configuration: ('a','b','a')
+ERROR:  duplicate column name ('a') in composite bloom index configuration: ('a','b','a')
 ALTER TABLE t SET (timescaledb.compress_index = 'bloom("g","g")');
-ERROR:  duplicate column name ('g') in compsite bloom index configuration: ('g','g')
+ERROR:  duplicate column name ('g') in composite bloom index configuration: ('g','g')
 \set ON_ERROR_STOP 1
 DROP TABLE t CASCADE;
 -- Creating a composite bloom index based on a primary key, and create the same manually again
@@ -164,6 +164,6 @@ select relname,attname from compressedcols order by 1,2;
 -- Make sure the duplicate column detection works for long column names
 \set ON_ERROR_STOP 0
 ALTER TABLE v SET (timescaledb.compress_index = 'bloom("a_01234567890123456789","b_01234567890123456789","c_01234567890123456789","a_01234567890123456789")');
-ERROR:  duplicate column name ('a_01234567890123456789') in compsite bloom index configuration: ('a_01234567890123456789','b_01234567890123456789','c_01234567890123456789','a_01234567890123456789')
+ERROR:  duplicate column name ('a_01234567890123456789') in composite bloom index configuration: ('a_01234567890123456789','b_01234567890123456789','c_01234567890123456789','a_01234567890123456789')
 \set ON_ERROR_STOP 1
 DROP TABLE v CASCADE;
