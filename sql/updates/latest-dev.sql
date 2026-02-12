@@ -82,16 +82,15 @@ GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 
 --
 -- Rebuild the catalog table `_timescaledb_catalog.continuous_aggs_materialization_ranges`
--- to add columns `job_id` and `pid`
+-- to add columns job_id, pid and created_at
 --
 
 CREATE TABLE _timescaledb_internal.tmp_continuous_aggs_materialization_ranges AS
 SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
-ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges;
-
 DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
+--don't add data back. This is state information for active jobs
 CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges (
   materialization_id integer,
   lowest_modified_value bigint NOT NULL,
@@ -104,11 +103,6 @@ CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges (
     FOREIGN KEY (materialization_id)
     REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
 );
-
-INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_ranges
-  (materialization_id, lowest_modified_value, greatest_modified_value)
-SELECT materialization_id, lowest_modified_value, greatest_modified_value
-FROM _timescaledb_internal.tmp_continuous_aggs_materialization_ranges;
 
 CREATE INDEX continuous_aggs_materialization_ranges_idx
   ON _timescaledb_catalog.continuous_aggs_materialization_ranges
