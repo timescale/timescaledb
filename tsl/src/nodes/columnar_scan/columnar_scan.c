@@ -148,16 +148,16 @@ append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortI
 }
 
 static EquivalenceClass *
-append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Var *var, PathKey *pk)
+append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Expr *expr, PathKey *pk)
 {
 	MemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
 	EquivalenceMember *em = makeNode(EquivalenceMember);
 
-	em->em_expr = (Expr *) var;
+	em->em_expr = expr;
 	em->em_relids = bms_make_singleton(info->compressed_rel->relid);
 	em->em_is_const = false;
 	em->em_is_child = false;
-	em->em_datatype = var->vartype;
+	em->em_datatype = exprType((Node *) expr);
 	EquivalenceClass *ec = makeNode(EquivalenceClass);
 	ec->ec_opfamilies = pk->pk_eclass->ec_opfamilies;
 	ec->ec_collation = pk->pk_eclass->ec_collation;
@@ -295,7 +295,10 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 				pk = lfirst(lc);
 				expr = ts_find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
 
-				Assert(expr != NULL && IsA(expr, Var));
+				Assert(expr);
+				Oid opcintype = exprType((Node *) expr);
+				Oid collation = exprCollation((Node *) expr);
+				expr = (Expr *) strip_implicit_coercions((Node *) expr);
 				var = castNode(Var, expr);
 				Assert(var->varattno > 0);
 
@@ -323,26 +326,30 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 					nulls_first = orderby_nullsfirst;
 				}
 
-				var = makeVar(info->compressed_rel->relid,
-							  varattno,
-							  var->vartype,
-							  var->vartypmod,
-							  var->varcollid,
-							  var->varlevelsup);
-				EquivalenceClass *min_ec = append_ec_for_metadata_col(root, info, var, pk);
+				Var *metadata_var = makeVar(info->compressed_rel->relid,
+											varattno,
+											var->vartype,
+											var->vartypmod,
+											var->varcollid,
+											var->varlevelsup);
+				Expr *min_expr =
+					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
+				EquivalenceClass *min_ec = append_ec_for_metadata_col(root, info, min_expr, pk);
 				PathKey *min =
 					make_canonical_pathkey(root, min_ec, pk->pk_opfamily, strategy, nulls_first);
 				required_compressed_pathkeys = lappend(required_compressed_pathkeys, min);
 
 				varattno =
 					get_attnum(info->compressed_rte->relid, column_segment_max_name(orderby_index));
-				var = makeVar(info->compressed_rel->relid,
-							  varattno,
-							  var->vartype,
-							  var->vartypmod,
-							  var->varcollid,
-							  var->varlevelsup);
-				EquivalenceClass *max_ec = append_ec_for_metadata_col(root, info, var, pk);
+				metadata_var = makeVar(info->compressed_rel->relid,
+									   varattno,
+									   var->vartype,
+									   var->vartypmod,
+									   var->varcollid,
+									   var->varlevelsup);
+				Expr *max_expr =
+					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
+				EquivalenceClass *max_ec = append_ec_for_metadata_col(root, info, max_expr, pk);
 				PathKey *max =
 					make_canonical_pathkey(root, max_ec, pk->pk_opfamily, strategy, nulls_first);
 
