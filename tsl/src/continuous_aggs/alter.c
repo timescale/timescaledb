@@ -596,6 +596,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 		 * Real-time mode: UNION ALL query
 		 * Need to update both subqueries and the SetOperationStmt
 		 */
+		Assert(list_length(user_query->rtable) == 2);
 		RangeTblEntry *mat_rte = linitial(user_query->rtable);
 		RangeTblEntry *raw_rte = lsecond(user_query->rtable);
 
