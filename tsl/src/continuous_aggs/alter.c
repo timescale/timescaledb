@@ -400,6 +400,96 @@ update_view_add_aggregate(Oid view_oid, char *view_schema, char *view_name, Oid 
 }
 
 /*
+ * Update the user view to include a new column.
+ *
+ * Handles both real-time mode (UNION ALL query with materialized + raw subqueries)
+ * and materialized-only mode (direct query on mat_ht).
+ */
+static void
+update_user_view_add_column(ContinuousAgg *cagg, Hypertable *mat_ht, Oid source_relid,
+							Aggref *aggref, Oid atttype, int32 atttypmod, Oid attcollation,
+							char *column_name)
+{
+	int sec_ctx;
+	Oid uid, saved_uid;
+
+	Oid user_view_oid = ts_get_relation_relid(NameStr(cagg->data.user_view_schema),
+											  NameStr(cagg->data.user_view_name),
+											  false);
+
+	/* Get the new attnum from the materialization hypertable after adding the column */
+	AttrNumber mat_attnum = get_attnum(mat_ht->main_table_relid, column_name);
+
+	Query *user_query = get_view_query_tree(user_view_oid);
+	RemoveRangeTableEntries(user_query);
+
+	if (user_query->setOperations)
+	{
+		/*
+		 * Real-time mode: UNION ALL query
+		 * Need to update both subqueries and the SetOperationStmt
+		 */
+		Assert(list_length(user_query->rtable) == 2);
+		RangeTblEntry *mat_rte = linitial(user_query->rtable);
+		RangeTblEntry *raw_rte = lsecond(user_query->rtable);
+
+		if (mat_rte->rtekind != RTE_SUBQUERY || raw_rte->rtekind != RTE_SUBQUERY)
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("unexpected query structure in real-time continuous aggregate")));
+
+		/* Update materialized subquery (queries mat_ht) - always a simple column read
+		 * since data is pre-aggregated in the materialization hypertable */
+		Expr *mat_var = (Expr *) makeVar(0, mat_attnum, atttype, atttypmod, attcollation, 0);
+		add_expr_to_query(mat_rte->subquery, mat_ht->main_table_relid, mat_var, column_name);
+		mat_rte->eref->colnames = lappend(mat_rte->eref->colnames, makeString(column_name));
+
+		/* Update raw subquery (queries source relation) - compute the aggregate on the fly */
+		add_expr_to_query(raw_rte->subquery, source_relid, (Expr *) aggref, column_name);
+		raw_rte->eref->colnames = lappend(raw_rte->eref->colnames, makeString(column_name));
+
+		/* Update SetOperationStmt column type lists */
+		SetOperationStmt *setop = castNode(SetOperationStmt, user_query->setOperations);
+		setop->colTypes = lappend_int(setop->colTypes, atttype);
+		setop->colTypmods = lappend_int(setop->colTypmods, atttypmod);
+		setop->colCollations = lappend_int(setop->colCollations, attcollation);
+
+		/* Add column to outer targetList (no GROUP BY for UNION ALL outer query) */
+		Expr *outer_var = (Expr *) makeVar(1, /* first RTE is always the UNION result */
+										   list_length(user_query->targetList) + 1,
+										   atttype,
+										   atttypmod,
+										   attcollation,
+										   0);
+		add_expr_to_query(user_query, InvalidOid, outer_var, column_name);
+	}
+	else
+	{
+		/*
+		 * Materialized-only mode: Direct query on mat_ht
+		 * No GROUP BY needed since data is pre-aggregated
+		 */
+		Expr *var = (Expr *) makeVar(0, mat_attnum, atttype, atttypmod, attcollation, 0);
+		add_expr_to_query(user_query, mat_ht->main_table_relid, var, column_name);
+	}
+
+	/* Add the column to the user view relation */
+	add_column_to_relation(NameStr(cagg->data.user_view_schema),
+						   NameStr(cagg->data.user_view_name),
+						   column_name,
+						   atttype,
+						   atttypmod,
+						   attcollation,
+						   true);
+
+	/* Store the updated user view query */
+	SWITCH_TO_TS_USER(NameStr(cagg->data.user_view_schema), uid, saved_uid, sec_ctx);
+	StoreViewQuery(user_view_oid, user_query, true);
+	CommandCounterIncrement();
+	RESTORE_USER(uid, saved_uid, sec_ctx);
+}
+
+/*
  * Main function to add an aggregate expression to a continuous aggregate
  */
 Datum
@@ -551,88 +641,15 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 
 	/*
 	 * Step 4: Update user view
-	 * The user view queries the materialization hypertable (and possibly raw hypertable in
-	 * real-time mode)
 	 */
-	Oid user_view_oid = ts_get_relation_relid(NameStr(cagg->data.user_view_schema),
-											  NameStr(cagg->data.user_view_name),
-											  false);
-
-	/* Get the new attnum from the materialization hypertable after adding the column */
-	AttrNumber mat_attnum = get_attnum(mat_ht->main_table_relid, column_name);
-
-	Query *user_query = get_view_query_tree(user_view_oid);
-	RemoveRangeTableEntries(user_query);
-
-	if (user_query->setOperations)
-	{
-		/*
-		 * Real-time mode: UNION ALL query
-		 * Need to update both subqueries and the SetOperationStmt
-		 */
-		Assert(list_length(user_query->rtable) == 2);
-		RangeTblEntry *mat_rte = linitial(user_query->rtable);
-		RangeTblEntry *raw_rte = lsecond(user_query->rtable);
-
-		if (mat_rte->rtekind != RTE_SUBQUERY || raw_rte->rtekind != RTE_SUBQUERY)
-		{
-			ts_cache_release(&hcache);
-			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
-					 errmsg("unexpected query structure in real-time continuous aggregate")));
-		}
-
-		/* Update materialized subquery (queries mat_ht) - always a simple column read
-		 * since data is pre-aggregated in the materialization hypertable */
-		Expr *mat_var = (Expr *) makeVar(0, mat_attnum, atttype, atttypmod, attcollation, 0);
-		add_expr_to_query(mat_rte->subquery, mat_ht->main_table_relid, mat_var, column_name);
-		mat_rte->eref->colnames = lappend(mat_rte->eref->colnames, makeString(column_name));
-
-		/* Update raw subquery (queries source relation) - compute the aggregate on the fly */
-		add_expr_to_query(raw_rte->subquery, source_relid, (Expr *) agg_info->aggref, column_name);
-		raw_rte->eref->colnames = lappend(raw_rte->eref->colnames, makeString(column_name));
-
-		/* Update SetOperationStmt column type lists */
-		SetOperationStmt *setop = castNode(SetOperationStmt, user_query->setOperations);
-		setop->colTypes = lappend_int(setop->colTypes, atttype);
-		setop->colTypmods = lappend_int(setop->colTypmods, atttypmod);
-		setop->colCollations = lappend_int(setop->colCollations, attcollation);
-
-		/* Add column to outer targetList (no GROUP BY for UNION ALL outer query) */
-		Expr *outer_var = (Expr *) makeVar(1, /* first RTE is always the UNION result */
-										   list_length(user_query->targetList) + 1,
-										   atttype,
-										   atttypmod,
-										   attcollation,
-										   0);
-		add_expr_to_query(user_query, InvalidOid, outer_var, column_name);
-	}
-	else
-	{
-		/*
-		 * Materialized-only mode: Direct query on mat_ht
-		 * No GROUP BY needed since data is pre-aggregated
-		 */
-		Expr *var = (Expr *) makeVar(0, mat_attnum, atttype, atttypmod, attcollation, 0);
-		add_expr_to_query(user_query, mat_ht->main_table_relid, var, column_name);
-	}
-
-	/* Add the column to the user view relation */
-	add_column_to_relation(NameStr(cagg->data.user_view_schema),
-						   NameStr(cagg->data.user_view_name),
-						   column_name,
-						   atttype,
-						   atttypmod,
-						   attcollation,
-						   true);
-
-	/* Store the updated user view query */
-	int sec_ctx;
-	Oid uid, saved_uid;
-	SWITCH_TO_TS_USER(NameStr(cagg->data.user_view_schema), uid, saved_uid, sec_ctx);
-	StoreViewQuery(user_view_oid, user_query, true);
-	CommandCounterIncrement();
-	RESTORE_USER(uid, saved_uid, sec_ctx);
+	update_user_view_add_column(cagg,
+								mat_ht,
+								source_relid,
+								agg_info->aggref,
+								atttype,
+								atttypmod,
+								attcollation,
+								column_name);
 
 	ts_cache_release(&hcache);
 
