@@ -1544,6 +1544,13 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("relation cannot be NULL")));
 
+	if (get_rel_name(table_relid) == NULL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_TABLE),
+				 errmsg("relation with oid %d not found", table_relid)));
+	}
+
 	if (!open_dim_name)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
