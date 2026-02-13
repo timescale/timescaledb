@@ -28,7 +28,7 @@ typedef struct HashingStrategy
 	void (*prepare_for_batch)(GroupingPolicyHash *policy, TupleTableSlot *vector_slot);
 	void (*fill_offsets)(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, int start_row,
 						 int end_row);
-	void (*emit_key)(GroupingPolicyHash *policy, uint32 current_key,
+	void (*emit_key)(GroupingPolicyHash *policy, uint16 current_key,
 					 TupleTableSlot *aggregated_slot);
 
 	/*
@@ -52,7 +52,7 @@ typedef struct HashingStrategy
 	/*
 	 * The last used index of an unique grouping key. Key index 0 is invalid.
 	 */
-	uint32 last_used_key_index;
+	uint16 last_used_key_index;
 
 	/*
 	 * In single-column grouping, we store the null key outside of the hash
@@ -60,7 +60,7 @@ typedef struct HashingStrategy
 	 * This is done to avoid having an "is null" flag in the hash table entries,
 	 * to reduce the hash table size.
 	 */
-	uint32 null_key_index;
+	uint16 null_key_index;
 
 #ifdef TS_USE_UMASH
 	/*
@@ -78,5 +78,5 @@ typedef struct HashingStrategy
 } HashingStrategy;
 
 void hash_strategy_output_key_alloc(GroupingPolicyHash *policy, uint16 nrows);
-void hash_strategy_output_key_single_emit(GroupingPolicyHash *policy, uint32 current_key,
+void hash_strategy_output_key_single_emit(GroupingPolicyHash *policy, uint16 current_key,
 										  TupleTableSlot *aggregated_slot);

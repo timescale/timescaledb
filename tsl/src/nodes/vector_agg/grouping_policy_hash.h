@@ -84,7 +84,7 @@ typedef struct GroupingPolicyHash
 	 * the policy because it is potentially too big to keep on stack, and we
 	 * don't want to reallocate it for each batch.
 	 */
-	uint32 *restrict key_index_for_row;
+	uint16 *restrict key_index_for_row;
 	uint64 num_key_index_for_row;
 
 	/*
@@ -119,7 +119,7 @@ typedef struct GroupingPolicyHash
 	 * If we are, track the index of the last returned grouping key.
 	 */
 	bool returning_results;
-	uint32 last_returned_key;
+	uint16 last_returned_key;
 
 	/*
 	 * Some statistics for debugging.

@@ -11,7 +11,7 @@
  * aggregate function state.
  */
 static pg_attribute_always_inline void
-FUNCTION_NAME(many_vector_impl)(void *restrict agg_states, const uint32 *offsets,
+FUNCTION_NAME(many_vector_impl)(void *restrict agg_states, const uint16 *offsets,
 								const uint64 *filter, int start_row, int end_row,
 								const ArrowArray *vector, MemoryContext agg_extra_mctx)
 {
@@ -32,7 +32,7 @@ FUNCTION_NAME(many_vector_impl)(void *restrict agg_states, const uint32 *offsets
 }
 
 static pg_noinline void
-FUNCTION_NAME(many_vector_all_valid)(void *restrict agg_states, const uint32 *offsets,
+FUNCTION_NAME(many_vector_all_valid)(void *restrict agg_states, const uint16 *offsets,
 									 int start_row, int end_row, const ArrowArray *vector,
 									 MemoryContext agg_extra_mctx)
 {
@@ -41,7 +41,7 @@ FUNCTION_NAME(many_vector_all_valid)(void *restrict agg_states, const uint32 *of
 }
 
 static void
-FUNCTION_NAME(many_vector)(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+FUNCTION_NAME(many_vector)(void *restrict agg_states, const uint16 *offsets, const uint64 *filter,
 						   int start_row, int end_row, const ArrowArray *vector,
 						   MemoryContext agg_extra_mctx)
 {

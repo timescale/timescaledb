@@ -53,7 +53,7 @@ count_star_scalar(void *agg_state, Datum constvalue, bool constisnull, int n,
 }
 
 static pg_attribute_always_inline void
-count_star_many_scalar_impl(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+count_star_many_scalar_impl(void *restrict agg_states, const uint16 *offsets, const uint64 *filter,
 							int start_row, int end_row, Datum constvalue, bool constisnull,
 							MemoryContext agg_extra_mctx)
 {
@@ -68,7 +68,7 @@ count_star_many_scalar_impl(void *restrict agg_states, const uint32 *offsets, co
 }
 
 static pg_noinline void
-count_star_many_scalar_nofilter(void *restrict agg_states, const uint32 *offsets, int start_row,
+count_star_many_scalar_nofilter(void *restrict agg_states, const uint16 *offsets, int start_row,
 								int end_row, Datum constvalue, bool constisnull,
 								MemoryContext agg_extra_mctx)
 {
@@ -83,7 +83,7 @@ count_star_many_scalar_nofilter(void *restrict agg_states, const uint32 *offsets
 }
 
 static void
-count_star_many_scalar(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+count_star_many_scalar(void *restrict agg_states, const uint16 *offsets, const uint64 *filter,
 					   int start_row, int end_row, Datum constvalue, bool constisnull,
 					   MemoryContext agg_extra_mctx)
 {
@@ -170,7 +170,7 @@ count_any_vector(void *agg_state, const ArrowArray *vector, const uint64 *filter
 }
 
 static void
-count_any_many_vector(void *restrict agg_states, const uint32 *offsets, const uint64 *filter,
+count_any_many_vector(void *restrict agg_states, const uint16 *offsets, const uint64 *filter,
 					  int start_row, int end_row, const ArrowArray *vector,
 					  MemoryContext agg_extra_mctx)
 {

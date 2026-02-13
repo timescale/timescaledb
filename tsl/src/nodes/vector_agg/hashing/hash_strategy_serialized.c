@@ -384,7 +384,7 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 }
 
 static pg_attribute_always_inline void
-serialized_key_hashing_store_new(HashingStrategy *restrict hashing, uint32 new_key_index,
+serialized_key_hashing_store_new(HashingStrategy *restrict hashing, uint16 new_key_index,
 								 text *output_key)
 {
 	/*
@@ -399,7 +399,7 @@ serialized_key_hashing_store_new(HashingStrategy *restrict hashing, uint32 new_k
 }
 
 static void
-serialized_emit_key(GroupingPolicyHash *policy, uint32 current_key, TupleTableSlot *aggregated_slot)
+serialized_emit_key(GroupingPolicyHash *policy, uint16 current_key, TupleTableSlot *aggregated_slot)
 {
 	const HashingStrategy *hashing = &policy->hashing;
 	const int num_key_columns = policy->num_grouping_columns;

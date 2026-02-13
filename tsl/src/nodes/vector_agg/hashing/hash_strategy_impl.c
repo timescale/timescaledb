@@ -16,7 +16,7 @@
 typedef struct FUNCTION_NAME(entry)
 {
 	/* Key index 0 is invalid. */
-	uint32 key_index;
+	uint16 key_index;
 
 	uint8 status;
 
@@ -88,12 +88,12 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 {
 	HashingStrategy *restrict hashing = params.hashing;
 
-	uint32 *restrict indexes = params.result_key_indexes;
+	uint16 *restrict indexes = params.result_key_indexes;
 
 	struct FUNCTION_NAME(hash) *restrict table = hashing->table;
 
 	HASH_TABLE_KEY_TYPE prev_hash_table_key = { 0 };
-	uint32 previous_key_index = 0;
+	uint16 previous_key_index = 0;
 	for (int row = start_row; row < end_row; row++)
 	{
 		if (!arrow_row_is_valid(params.batch_filter, row))
@@ -153,7 +153,7 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 			/*
 			 * New key, have to store it persistently.
 			 */
-			const uint32 index = ++hashing->last_used_key_index;
+			const uint16 index = ++hashing->last_used_key_index;
 			entry->key_index = index;
 			FUNCTION_NAME(key_hashing_store_new)(hashing, index, output_key);
 			DEBUG_PRINT("%p: row %d new key index %d\n", hashing, row, index);

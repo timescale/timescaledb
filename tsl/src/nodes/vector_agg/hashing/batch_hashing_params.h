@@ -24,7 +24,7 @@ typedef struct BatchHashingParams
 	GroupingPolicyHash *policy;
 	HashingStrategy *restrict hashing;
 
-	uint32 *restrict result_key_indexes;
+	uint16 *restrict result_key_indexes;
 } BatchHashingParams;
 
 static pg_attribute_always_inline BatchHashingParams

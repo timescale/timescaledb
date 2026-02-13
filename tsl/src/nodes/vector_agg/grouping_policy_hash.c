@@ -125,7 +125,7 @@ static void
 compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext,
 						 TupleTableSlot *vector_slot, const VectorAggDef *agg_def, void *agg_states)
 {
-	const uint32 *offsets = policy->key_index_for_row;
+	const uint16 *offsets = policy->key_index_for_row;
 	MemoryContext agg_extra_mctx = policy->agg_extra_mctx;
 
 	/*
@@ -282,7 +282,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlo
 	 * Remember which grouping keys have already existed, and which we
 	 * have to initialize. State index zero is invalid.
 	 */
-	const uint32 last_initialized_key_index = policy->hashing.last_used_key_index;
+	const uint16 last_initialized_key_index = policy->hashing.last_used_key_index;
 	Assert(last_initialized_key_index <= policy->num_allocated_per_key_agg_states);
 
 	/*
@@ -367,10 +367,10 @@ gp_hash_should_emit(GroupingPolicy *gp)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
 
-	if (policy->hashing.last_used_key_index > UINT32_MAX - GLOBAL_MAX_ROWS_PER_COMPRESSION)
+	if (policy->hashing.last_used_key_index > UINT16_MAX - GLOBAL_MAX_ROWS_PER_COMPRESSION)
 	{
 		/*
-		 * The max valid key index is UINT32_MAX, so we have to spill if the next
+		 * The max valid key index is UINT16_MAX, so we have to spill if the next
 		 * batch can possibly lead to key index overflow.
 		 */
 		return true;
@@ -417,8 +417,8 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		policy->last_returned_key++;
 	}
 
-	const uint32 current_key = policy->last_returned_key;
-	const uint32 keys_end = policy->hashing.last_used_key_index + 1;
+	const uint16 current_key = policy->last_returned_key;
+	const uint32 keys_end = (uint32) policy->hashing.last_used_key_index + 1;
 	if (current_key >= keys_end)
 	{
 		policy->returning_results = false;

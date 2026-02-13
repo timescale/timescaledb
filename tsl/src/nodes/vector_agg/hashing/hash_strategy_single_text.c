@@ -111,7 +111,7 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 }
 
 static pg_attribute_always_inline void
-single_text_key_hashing_store_new(HashingStrategy *restrict hashing, uint32 new_key_index,
+single_text_key_hashing_store_new(HashingStrategy *restrict hashing, uint16 new_key_index,
 								  BytesView output_key)
 {
 	const int total_bytes = output_key.len + VARHDRSZ;
@@ -125,7 +125,7 @@ single_text_key_hashing_store_new(HashingStrategy *restrict hashing, uint32 new_
  * We use the standard single-key key output functions.
  */
 static void
-single_text_emit_key(GroupingPolicyHash *policy, uint32 current_key,
+single_text_emit_key(GroupingPolicyHash *policy, uint16 current_key,
 					 TupleTableSlot *aggregated_slot)
 {
 	return hash_strategy_output_key_single_emit(policy, current_key, aggregated_slot);

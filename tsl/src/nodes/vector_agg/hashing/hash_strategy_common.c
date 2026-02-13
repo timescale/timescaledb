@@ -18,7 +18,7 @@ void
 hash_strategy_output_key_alloc(GroupingPolicyHash *policy, uint16 nrows)
 {
 	HashingStrategy *hashing = &policy->hashing;
-	const uint32 num_possible_keys = hashing->last_used_key_index + 1 + nrows;
+	const uint32 num_possible_keys = (uint32) hashing->last_used_key_index + 1 + nrows;
 
 	if (num_possible_keys > hashing->num_allocated_output_keys)
 	{
@@ -40,7 +40,7 @@ hash_strategy_output_key_alloc(GroupingPolicyHash *policy, uint16 nrows)
  * slot.
  */
 void
-hash_strategy_output_key_single_emit(GroupingPolicyHash *policy, uint32 current_key,
+hash_strategy_output_key_single_emit(GroupingPolicyHash *policy, uint16 current_key,
 									 TupleTableSlot *aggregated_slot)
 {
 	HashingStrategy *hashing = &policy->hashing;
