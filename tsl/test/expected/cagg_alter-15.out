@@ -223,6 +223,9 @@ ERROR:  column "nonexistent" referenced in aggregate does not exist in source re
 -- Error - expression must be an aggregate function (simple column)
 SELECT add_continuous_aggregate_column('test_cagg_mat', 'category');
 ERROR:  expression must be an aggregate function
+-- Error - window function is not allowed
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'row_number() OVER () AS rn');
+ERROR:  "row_number" is not an aggregate function
 -- not a continuous aggregate
 CREATE TABLE regular_table (id INT, data TEXT);
 SELECT add_continuous_aggregate_column('regular_table', 'sum(id) AS total');
@@ -329,20 +332,71 @@ UNION ALL
   WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, test_ht."time")), test_ht.device_id;
 
+-- Test adding aggregate with DISTINCT
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'count(DISTINCT device_id) AS distinct_devices');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Test adding aggregate with FILTER clause
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) FILTER (WHERE temperature > 20) AS sum_temp_gt20');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Create and test a custom aggregate
+CREATE AGGREGATE custom_sum (float8) (
+    sfunc = float8pl,
+    stype = float8,
+    initcond = '0'
+);
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'custom_sum(temperature) AS custom_sum_temp');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Refresh and verify all new aggregates
+CALL refresh_continuous_aggregate('test_cagg_mat', NULL, NULL);
+NOTICE:  continuous aggregate "test_cagg_mat" is already up-to-date
+SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | sum_temp | max_temp | avg_humidity | row_count | distinct_devices | sum_temp_gt20 | custom_sum_temp 
+------------------------------+-----------+------------------+----------+----------+--------------+-----------+------------------+---------------+-----------------
+ Tue Dec 31 16:00:00 2019 PST |         1 |               21 |       63 |       22 |              |           |                  |               |                
+ Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |       79 |       28 |              |           |                  |               |                
+ Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19 |       19 |              |           |                  |               |                
+ Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30 |       30 |              |           |                  |               |                
+
+-- Test adding aggregate with ORDER BY (string_agg)
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'string_agg(category, '','' ORDER BY category) AS categories');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Refresh and verify
+CALL refresh_continuous_aggregate('test_cagg_rt', NULL, NULL);
+NOTICE:  continuous aggregate "test_cagg_rt" is already up-to-date
+SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | min_temp | sum | count | weird and insane column name, but still valid on Postgres! | categories 
+------------------------------+-----------+------------------+----------+-----+-------+------------------------------------------------------------+------------
+ Tue Dec 31 16:00:00 2019 PST |         1 |               21 |       20 |     |       |                                                            | 
+ Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |       25 |     |       |                                                            | 
+ Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19 |     |       |                                                            | 
+ Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30 |     |       |                                                            | 
+
 -- Insert new data and check real-time aggregation works
 INSERT INTO test_ht VALUES
     ('2020-01-03 00:00:00', 1, 23.0, 56.0, 'indoor'),
     ('2020-01-03 01:00:00', 2, 32.0, 72.0, 'outdoor');
 -- Real-time CAgg should show new data without refresh
 SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
-            bucket            | device_id |     avg_temp     | min_temp | sum | count | weird and insane column name, but still valid on Postgres! 
-------------------------------+-----------+------------------+----------+-----+-------+------------------------------------------------------------
- Tue Dec 31 16:00:00 2019 PST |         1 |               21 |       20 |     |       |                                                           
- Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |       25 |     |       |                                                           
- Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19 |     |       |                                                           
- Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30 |     |       |                                                           
- Thu Jan 02 16:00:00 2020 PST |         1 |               23 |       23 |  56 |     1 |                                                         56
- Thu Jan 02 16:00:00 2020 PST |         2 |               32 |       32 |  72 |     1 |                                                         72
+            bucket            | device_id |     avg_temp     | min_temp | sum | count | weird and insane column name, but still valid on Postgres! | categories 
+------------------------------+-----------+------------------+----------+-----+-------+------------------------------------------------------------+------------
+ Tue Dec 31 16:00:00 2019 PST |         1 |               21 |       20 |     |       |                                                            | 
+ Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |       25 |     |       |                                                            | 
+ Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19 |     |       |                                                            | 
+ Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30 |     |       |                                                            | 
+ Thu Jan 02 16:00:00 2020 PST |         1 |               23 |       23 |  56 |     1 |                                                         56 | indoor
+ Thu Jan 02 16:00:00 2020 PST |         2 |               32 |       32 |  72 |     1 |                                                         72 | outdoor
 
 -- =====================================================
 -- Hierarchical continuous aggregate tests
