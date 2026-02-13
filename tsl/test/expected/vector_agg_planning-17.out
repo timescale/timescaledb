@@ -1,0 +1,103 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SET max_parallel_workers_per_gather = 0;
+\set EXPLAIN 'EXPLAIN (costs off, timing off)'
+CREATE TABLE metrics(time timestamptz not null, device text, value float) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+-- create initial chunk
+INSERT INTO metrics SELECT '2025-01-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, random() from generate_series(1,1000) g(i);
+SELECT compress_chunk(c) FROM show_chunks('metrics') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+
+-- run queries with single chunk
+-- SubqueryScan
+:EXPLAIN SELECT mx, mn, device FROM (SELECT device, count(time) mn, max(time) mx FROM metrics GROUP BY device) sub;
+--- QUERY PLAN ---
+ Subquery Scan on sub
+   ->  Finalize HashAggregate
+         Group Key: _hyper_1_1_chunk.device
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+
+-- CteScan
+:EXPLAIN WITH q1 AS MATERIALIZED (SELECT count(*) FROM metrics) SELECT * FROM q1;
+--- QUERY PLAN ---
+ CTE Scan on q1
+   CTE q1
+     ->  Finalize Aggregate
+           ->  Custom Scan (VectorAgg)
+                 ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                       ->  Seq Scan on compress_hyper_2_2_chunk
+
+-- InitPlan
+:EXPLAIN SELECT FROM pg_class WHERE EXISTS (SELECT count(*) FROM metrics) LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   InitPlan 1
+     ->  Finalize Aggregate
+           ->  Custom Scan (VectorAgg)
+                 ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                       ->  Seq Scan on compress_hyper_2_2_chunk
+   ->  Result
+         One-Time Filter: (InitPlan 1).col1
+         ->  Seq Scan on pg_class
+
+-- create 2nd chunk
+INSERT INTO metrics SELECT '2025-02-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, random() from generate_series(1,1000) g(i);
+SELECT compress_chunk(c) FROM show_chunks('metrics') c;
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+
+-- run queries with two chunks
+-- SubqueryScan
+:EXPLAIN SELECT mx, mn, device FROM (SELECT device, count(time) mn, max(time) mx FROM metrics GROUP BY device) sub;
+--- QUERY PLAN ---
+ Subquery Scan on sub
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                           ->  Seq Scan on compress_hyper_2_4_chunk
+
+-- CteScan
+:EXPLAIN WITH q1 AS MATERIALIZED (SELECT count(*) FROM metrics) SELECT * FROM q1;
+--- QUERY PLAN ---
+ CTE Scan on q1
+   CTE q1
+     ->  Finalize Aggregate
+           ->  Append
+                 ->  Custom Scan (VectorAgg)
+                       ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                             ->  Seq Scan on compress_hyper_2_2_chunk
+                 ->  Custom Scan (VectorAgg)
+                       ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                             ->  Seq Scan on compress_hyper_2_4_chunk
+
+-- InitPlan
+:EXPLAIN SELECT FROM pg_class WHERE EXISTS (SELECT count(*) FROM metrics) LIMIT 1;
+--- QUERY PLAN ---
+ Limit
+   InitPlan 1
+     ->  Finalize Aggregate
+           ->  Append
+                 ->  Custom Scan (VectorAgg)
+                       ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                             ->  Seq Scan on compress_hyper_2_2_chunk
+                 ->  Custom Scan (VectorAgg)
+                       ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                             ->  Seq Scan on compress_hyper_2_4_chunk
+   ->  Result
+         One-Time Filter: (InitPlan 1).col1
+         ->  Seq Scan on pg_class
+

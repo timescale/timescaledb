@@ -309,17 +309,19 @@ SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
 VACUUM FULL ANALYZE deleteme;
 EXPLAIN (buffers off, costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
 --- QUERY PLAN ---
- Aggregate
-   ->  Custom Scan (ColumnarScan) on _hyper_7_8_chunk
-         ->  Seq Scan on compress_hyper_8_9_chunk
-               Filter: ((segment)::text ~~ '%4%'::text)
+ Finalize Aggregate
+   ->  Custom Scan (VectorAgg)
+         ->  Custom Scan (ColumnarScan) on _hyper_7_8_chunk
+               ->  Seq Scan on compress_hyper_8_9_chunk
+                     Filter: ((segment)::text ~~ '%4%'::text)
 
 EXPLAIN (buffers off, costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
 --- QUERY PLAN ---
- Aggregate
-   ->  Custom Scan (ColumnarScan) on _hyper_7_8_chunk
-         ->  Seq Scan on compress_hyper_8_9_chunk
-               Filter: ('4'::text = (segment)::text)
+ Finalize Aggregate
+   ->  Custom Scan (VectorAgg)
+         ->  Custom Scan (ColumnarScan) on _hyper_7_8_chunk
+               ->  Seq Scan on compress_hyper_8_9_chunk
+                     Filter: ('4'::text = (segment)::text)
 
 CREATE TABLE deleteme_with_bytea(time bigint NOT NULL, bdata bytea);
 SELECT create_hypertable('deleteme_with_bytea', 'time', chunk_time_interval => 1000000);
