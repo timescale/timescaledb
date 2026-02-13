@@ -80,3 +80,9 @@ GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 -- end rebuild _timescaledb_catalog.chunk table --
 
+--
+-- Add this index to speed up queries for recent job history
+-- This statement is idempotent to allow the index to have been precreated.
+--
+CREATE INDEX IF NOT EXISTS bgw_job_stat_history_job_id_execution_start_idx
+    ON _timescaledb_internal.bgw_job_stat_history(job_id, execution_start DESC);

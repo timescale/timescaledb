@@ -311,6 +311,9 @@ ALTER SEQUENCE _timescaledb_internal.bgw_job_stat_history_id_seq OWNED BY _times
 
 CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_stat_history (job_id);
 
+CREATE INDEX bgw_job_stat_history_job_id_execution_start_idx
+    ON _timescaledb_internal.bgw_job_stat_history(job_id, execution_start DESC);
+
 --The job_stat table is not dumped by pg_dump on purpose because
 --the statistics probably aren't very meaningful across instances.
 -- Now we define a special stats table for each job/chunk pair. This will be used by the scheduler

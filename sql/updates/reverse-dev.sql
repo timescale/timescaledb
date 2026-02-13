@@ -79,3 +79,5 @@ DROP TABLE _timescaledb_internal.tmp_chunk_seq_value;
 GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 -- end recreate _timescaledb_catalog.chunk table --
+
+DROP INDEX _timescaledb_internal.bgw_job_stat_history_job_id_execution_start_idx;
