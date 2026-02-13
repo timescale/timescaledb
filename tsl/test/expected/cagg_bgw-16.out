@@ -64,8 +64,8 @@ SELECT * FROM timescaledb_information.job_stats;
 -------------------+-----------------+--------+---------------------+------------------------+-----------------+------------+-------------------+------------+------------+-----------------+----------------
 
 SELECT * FROM _timescaledb_catalog.continuous_agg;
- mat_hypertable_id | raw_hypertable_id | parent_mat_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | direct_view_schema | direct_view_name | materialized_only 
--------------------+-------------------+--------------------------+------------------+----------------+---------------------+-------------------+--------------------+------------------+-------------------
+ mat_hypertable_id | raw_hypertable_id | invalidation_log | parent_mat_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | direct_view_schema | direct_view_name | materialized_only 
+-------------------+-------------------+------------------+--------------------------+------------------+----------------+---------------------+-------------------+--------------------+------------------+-------------------
 
 -- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
 GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
