@@ -52,6 +52,7 @@ typedef struct AggregateExprInfo
 	int32 result_typmod;  /* typmod of result type */
 	Oid result_collation; /* collation of result */
 	Aggref *aggref;		  /* the parsed Aggref node */
+	Oid source_relid;	  /* source relation OID used for parsing */
 } AggregateExprInfo;
 
 /*
@@ -239,6 +240,7 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	info->result_typmod = -1; /* aggregates typically don't have typmod */
 	info->result_collation = aggref->aggcollid;
 	info->aggref = aggref;
+	info->source_relid = source_relid;
 
 	/* Determine the column alias */
 	if (res_target->name != NULL)
@@ -370,7 +372,7 @@ add_column_to_relation(char *schema_name, char *rel_name, AggregateExprInfo *agg
  * Update a view's query definition to add a new aggregate expression.
  */
 static void
-update_view_add_aggregate(Oid view_oid, char *view_schema, char *view_name, Oid source_relid,
+update_view_add_aggregate(Oid view_oid, char *view_schema, char *view_name,
 						  AggregateExprInfo *agg_info)
 {
 	int sec_ctx;
@@ -379,11 +381,14 @@ update_view_add_aggregate(Oid view_oid, char *view_schema, char *view_name, Oid 
 	/* Step 1: Get the view's query BEFORE adding the column */
 	Query *query = get_view_query_tree(view_oid);
 
-	/* Remove dummy RTEs for PG16< */
+	/* Remove dummy RTEs for PG16+ */
 	RemoveRangeTableEntries(query);
 
 	/* Add the aggregate to the query */
-	add_expr_to_query(query, source_relid, (Expr *) agg_info->aggref, agg_info->column_alias);
+	add_expr_to_query(query,
+					  agg_info->source_relid,
+					  (Expr *) agg_info->aggref,
+					  agg_info->column_alias);
 
 	/* Step 2: Add the column to the view relation */
 	add_column_to_relation(view_schema, view_name, agg_info, true);
@@ -402,8 +407,7 @@ update_view_add_aggregate(Oid view_oid, char *view_schema, char *view_name, Oid 
  * and materialized-only mode (direct query on mat_ht).
  */
 static void
-update_user_view_add_column(ContinuousAgg *cagg, Hypertable *mat_ht, Oid source_relid,
-							AggregateExprInfo *agg_info)
+update_user_view_add_column(ContinuousAgg *cagg, Hypertable *mat_ht, AggregateExprInfo *agg_info)
 {
 	int sec_ctx;
 	Oid uid, saved_uid;
@@ -450,7 +454,7 @@ update_user_view_add_column(ContinuousAgg *cagg, Hypertable *mat_ht, Oid source_
 
 		/* Update raw subquery (queries source relation) - compute the aggregate on the fly */
 		add_expr_to_query(raw_rte->subquery,
-						  source_relid,
+						  agg_info->source_relid,
 						  (Expr *) agg_info->aggref,
 						  agg_info->column_alias);
 		raw_rte->eref->colnames =
@@ -614,7 +618,6 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	update_view_add_aggregate(partial_view_oid,
 							  NameStr(cagg->data.partial_view_schema),
 							  NameStr(cagg->data.partial_view_name),
-							  source_relid,
 							  agg_info);
 
 	/*
@@ -627,13 +630,12 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	update_view_add_aggregate(direct_view_oid,
 							  NameStr(cagg->data.direct_view_schema),
 							  NameStr(cagg->data.direct_view_name),
-							  source_relid,
 							  agg_info);
 
 	/*
 	 * Step 4: Update user view
 	 */
-	update_user_view_add_column(cagg, mat_ht, source_relid, agg_info);
+	update_user_view_add_column(cagg, mat_ht, agg_info);
 
 	ts_cache_release(&hcache);
 
