@@ -130,7 +130,7 @@ jobs:
             { algo: bool,       pgtype: bool  , bulk: true , runs:  1000000000 },
             # uuid tests are slower because it is more work to compare
             { algo: dictionary, pgtype: uuid  , bulk: false, runs:   200000000 },
-            { algo: dictionary, pgtype: uuid  , bulk: true , runs:   100000000 },
+            { algo: dictionary, pgtype: uuid  , bulk: true , runs:   500000000 },
             { algo: uuid,       pgtype: uuid  , bulk: false, runs:   200000000 },
             { algo: uuid,       pgtype: uuid  , bulk: true , runs:   400000000 },
             ]
