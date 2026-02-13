@@ -320,11 +320,13 @@ add_expr_to_query(Query *query, Oid relid, Expr *expr, char *column_name)
 }
 
 /*
- * Add a column to a view relation using ALTER VIEW ADD COLUMN
+ * Add a column to a relation (table or view) using ALTER TABLE/VIEW ADD COLUMN.
+ *
+ * For views, switches to the TimescaleDB internal user for the operation.
  */
 static void
-add_column_to_view_relation(char *view_schema, char *view_name, char *column_name, Oid atttype,
-							int32 atttypmod, Oid attcollation)
+add_column_to_relation(char *schema_name, char *rel_name, char *column_name, Oid atttype,
+					   int32 atttypmod, Oid attcollation, bool is_view)
 {
 	int sec_ctx;
 	Oid uid, saved_uid;
@@ -332,31 +334,33 @@ add_column_to_view_relation(char *view_schema, char *view_name, char *column_nam
 	/* Create column definition */
 	ColumnDef *coldef = makeColumnDef(column_name, atttype, atttypmod, attcollation);
 
-	/* Create ALTER VIEW ADD COLUMN command */
+	/* Create ALTER TABLE/VIEW ADD COLUMN command */
 	AlterTableCmd *cmd = makeNode(AlterTableCmd);
-	cmd->subtype = AT_AddColumnToView;
+	cmd->subtype = is_view ? AT_AddColumnToView : AT_AddColumn;
 	cmd->def = (Node *) coldef;
 	cmd->behavior = DROP_RESTRICT;
 	cmd->missing_ok = false;
 
-	/* Create AlterTableStmt for the view */
 	AlterTableStmt stmt = {
 		.type = T_AlterTableStmt,
-		.relation = makeRangeVar(view_schema, view_name, -1),
+		.relation = makeRangeVar(schema_name, rel_name, -1),
 		.cmds = list_make1(cmd),
-		.objtype = OBJECT_VIEW,
+		.objtype = is_view ? OBJECT_VIEW : OBJECT_TABLE,
 		.missing_ok = false,
 	};
 
-	/* Execute the ALTER VIEW */
-	SWITCH_TO_TS_USER(view_schema, uid, saved_uid, sec_ctx);
+	if (is_view)
+		SWITCH_TO_TS_USER(schema_name, uid, saved_uid, sec_ctx);
+
 	LOCKMODE lockmode = AlterTableGetLockLevel(stmt.cmds);
 	AlterTableUtilityContext atcontext = {
 		.relid = AlterTableLookupRelation(&stmt, lockmode),
 	};
 	AlterTable(&stmt, lockmode, &atcontext);
 	CommandCounterIncrement();
-	RESTORE_USER(uid, saved_uid, sec_ctx);
+
+	if (is_view)
+		RESTORE_USER(uid, saved_uid, sec_ctx);
 }
 
 /*
@@ -380,55 +384,19 @@ update_view_add_aggregate(Oid view_oid, char *view_schema, char *view_name, Oid 
 	add_expr_to_query(query, source_relid, (Expr *) aggref, column_name);
 
 	/* Step 2: Add the column to the view relation */
-	add_column_to_view_relation(view_schema,
-								view_name,
-								column_name,
-								atttype,
-								atttypmod,
-								attcollation);
+	add_column_to_relation(view_schema,
+						   view_name,
+						   column_name,
+						   atttype,
+						   atttypmod,
+						   attcollation,
+						   true);
 
 	/* Step 3: Store the updated query */
 	SWITCH_TO_TS_USER(view_schema, uid, saved_uid, sec_ctx);
 	StoreViewQuery(view_oid, query, true);
 	CommandCounterIncrement();
 	RESTORE_USER(uid, saved_uid, sec_ctx);
-}
-
-/*
- * Add a column to the materialization hypertable
- */
-static void
-add_column_to_mat_hypertable(Hypertable *mat_ht, char *column_name, Oid atttype, int32 atttypmod,
-							 Oid attcollation)
-{
-	/* Create column definition */
-	ColumnDef *coldef = makeColumnDef(column_name, atttype, atttypmod, attcollation);
-
-	/* Create ALTER TABLE ADD COLUMN command */
-	AlterTableCmd *cmd = makeNode(AlterTableCmd);
-	cmd->subtype = AT_AddColumn;
-	cmd->def = (Node *) coldef;
-	cmd->behavior = DROP_RESTRICT;
-	cmd->missing_ok = false;
-
-	/* Create AlterTableStmt */
-	AlterTableStmt stmt = {
-		.type = T_AlterTableStmt,
-		.relation =
-			makeRangeVar(NameStr(mat_ht->fd.schema_name), NameStr(mat_ht->fd.table_name), -1),
-		.cmds = list_make1(cmd),
-		.objtype = OBJECT_TABLE,
-		.missing_ok = false,
-	};
-
-	/* Execute the ALTER TABLE using correct PG18 signature */
-	LOCKMODE lockmode = AlterTableGetLockLevel(stmt.cmds);
-	AlterTableUtilityContext atcontext = {
-		.relid = AlterTableLookupRelation(&stmt, lockmode),
-	};
-
-	AlterTable(&stmt, lockmode, &atcontext);
-	CommandCounterIncrement();
 }
 
 /*
@@ -542,7 +510,13 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	 * Step 1: Add column to materialization hypertable
 	 * (aggregates are stored as computed values in mat_ht)
 	 */
-	add_column_to_mat_hypertable(mat_ht, column_name, atttype, atttypmod, attcollation);
+	add_column_to_relation(NameStr(mat_ht->fd.schema_name),
+						   NameStr(mat_ht->fd.table_name),
+						   column_name,
+						   atttype,
+						   atttypmod,
+						   attcollation,
+						   false);
 
 	/*
 	 * Step 2: Update partial view
@@ -644,12 +618,13 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	}
 
 	/* Add the column to the user view relation */
-	add_column_to_view_relation(NameStr(cagg->data.user_view_schema),
-								NameStr(cagg->data.user_view_name),
-								column_name,
-								atttype,
-								atttypmod,
-								attcollation);
+	add_column_to_relation(NameStr(cagg->data.user_view_schema),
+						   NameStr(cagg->data.user_view_name),
+						   column_name,
+						   atttype,
+						   atttypmod,
+						   attcollation,
+						   true);
 
 	/* Store the updated user view query */
 	int sec_ctx;
