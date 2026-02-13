@@ -1,0 +1,256 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+
+-- =============================================
+-- Test: CREATE STATISTICS propagation to chunks
+-- Complete test coverage for Issue #2433
+-- =============================================
+
+\set ON_ERROR_STOP 0
+
+-- =============================================
+-- Setup: Create schemas and tables
+-- =============================================
+
+-- =============================================
+-- Test Group 1: Basic CREATE STATISTICS Propagation
+-- =============================================
+
+-- Setup: Main test table
+CREATE TABLE stats_test (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INTEGER,
+    temp FLOAT,
+    humidity FLOAT,
+    location TEXT
+);
+
+SELECT create_hypertable('stats_test', 'time', chunk_time_interval => INTERVAL '1 day');
+
+-- Insert data to create 3 chunks
+INSERT INTO stats_test VALUES
+    ('2024-01-01 00:00:00', 1, 20.5, 65.0, 'room_a'),
+    ('2024-01-02 00:00:00', 2, 21.0, 70.0, 'room_b'),
+    ('2024-01-03 00:00:00', 3, 19.5, 68.0, 'room_c');
+
+-- Verify 3 chunks created
+SELECT count(*) AS chunk_count FROM show_chunks('stats_test');
+
+-- =============================================
+-- Test 1: Basic CREATE STATISTICS propagation
+-- =============================================
+SELECT '=== Test 1: Basic CREATE STATISTICS ===' AS test_name;
+
+CREATE STATISTICS stats_test_stat ON device_id, temp FROM stats_test;
+
+-- Should have 4 statistics: 1 on hypertable + 3 on chunks
+SELECT count(*) AS stat_count
+FROM pg_statistic_ext s
+WHERE s.stxname LIKE '%stats_test_stat%';
+
+-- =============================================
+-- Test 2: CREATE STATISTICS IF NOT EXISTS
+-- =============================================
+SELECT '=== Test 2: IF NOT EXISTS ===' AS test_name;
+
+-- Should produce NOTICE, not error
+CREATE STATISTICS IF NOT EXISTS stats_test_stat ON device_id, temp FROM stats_test;
+
+-- Count should remain the same
+SELECT count(*) AS stat_count_after_if_not_exists
+FROM pg_statistic_ext s
+WHERE s.stxname LIKE '%stats_test_stat%';
+
+-- =============================================
+-- Test 3: Multiple column statistics with specific kinds
+-- =============================================
+SELECT '=== Test 3: Statistics with kinds (ndistinct, dependencies, mcv) ===' AS test_name;
+
+CREATE STATISTICS stats_test_ndistinct (ndistinct) ON device_id, temp FROM stats_test;
+CREATE STATISTICS stats_test_deps (dependencies) ON device_id, temp FROM stats_test;
+CREATE STATISTICS stats_test_mcv (mcv) ON device_id, temp FROM stats_test;
+
+-- Each should have 4 entries
+SELECT s.stxname, count(*) AS count
+FROM pg_statistic_ext s
+WHERE s.stxname IN ('stats_test_ndistinct', 'stats_test_deps', 'stats_test_mcv')
+   OR s.stxname LIKE '_hyper_%stats_test_ndistinct%'
+   OR s.stxname LIKE '_hyper_%stats_test_deps%'
+   OR s.stxname LIKE '_hyper_%stats_test_mcv%'
+GROUP BY s.stxname
+ORDER BY s.stxname;
+
+-- =============================================
+-- Test 4: New chunk gets statistics automatically
+-- =============================================
+SELECT '=== Test 4: New chunk propagation ===' AS test_name;
+
+-- Insert data to create a NEW chunk (4th day)
+INSERT INTO stats_test VALUES ('2024-01-04 00:00:00', 4, 22.0, 72.0, 'room_d');
+
+-- Verify 4 chunks now exist
+SELECT count(*) AS chunk_count_after FROM show_chunks('stats_test');
+
+-- Statistics should now be on 5 objects (1 hypertable + 4 chunks)
+SELECT count(*) AS after_new_chunk
+FROM pg_statistic_ext s
+WHERE s.stxname LIKE '%stats_test_stat%';
+
+-- =============================================
+-- Test 5: Multiple statistics on new chunk
+-- =============================================
+SELECT '=== Test 5: Multiple statistics on new chunk ===' AS test_name;
+
+-- All statistics (stats_test_stat, ndistinct, deps, mcv) should be on new chunk
+-- Use show_chunks() to get the OID of the most recently created chunk
+SELECT count(*) AS stats_on_new_chunk
+FROM pg_statistic_ext s
+WHERE s.stxrelid = (
+    SELECT show_chunks FROM show_chunks('stats_test')
+    ORDER BY show_chunks DESC
+    LIMIT 1
+);
+
+-- =============================================
+-- Test 6: Empty hypertable then insert
+-- =============================================
+SELECT '=== Test 6: Empty hypertable ===' AS test_name;
+
+CREATE TABLE empty_stats_test (
+    time TIMESTAMPTZ NOT NULL,
+    val1 INTEGER,
+    val2 INTEGER
+);
+
+SELECT create_hypertable('empty_stats_test', 'time', chunk_time_interval => INTERVAL '1 day');
+
+-- Create statistics on empty table (no chunks yet)
+CREATE STATISTICS empty_stat ON val1, val2 FROM empty_stats_test;
+
+-- Should only be on hypertable (1)
+SELECT count(*) AS empty_stat_before
+FROM pg_statistic_ext s
+WHERE s.stxname LIKE '%empty_stat%';
+
+-- Now insert data
+INSERT INTO empty_stats_test VALUES ('2024-01-01 00:00:00', 1, 2);
+
+-- Statistics should now be on 2 objects (1 hypertable + 1 chunk)
+SELECT count(*) AS empty_stat_after_insert
+FROM pg_statistic_ext s
+WHERE s.stxname LIKE '%empty_stat%';
+
+-- =============================================
+-- Test Group 2: DROP STATISTICS Propagation
+-- =============================================
+
+-- =============================================
+-- Test 7: Basic DROP STATISTICS propagation
+-- =============================================
+SELECT '=== Test 7: DROP STATISTICS ===' AS test_name;
+
+-- Create a statistics to drop
+CREATE STATISTICS drop_test_stat ON device_id, humidity FROM stats_test;
+
+SELECT count(*) AS before_drop
+FROM pg_statistic_ext s
+WHERE s.stxname LIKE '%drop_test_stat%';
+
+-- Drop it
+DROP STATISTICS drop_test_stat;
+
+-- All should be gone (hypertable + all chunks)
+SELECT count(*) AS after_drop
+FROM pg_statistic_ext s
+WHERE s.stxname LIKE '%drop_test_stat%';
+
+-- =============================================
+-- Test 8: DROP one of multiple statistics
+-- =============================================
+SELECT '=== Test 8: Drop one of multiple ===' AS test_name;
+
+-- Create two statistics
+CREATE STATISTICS multi_drop_stat1 ON device_id, temp FROM stats_test;
+CREATE STATISTICS multi_drop_stat2 ON device_id, humidity FROM stats_test;
+
+-- Count both
+SELECT count(*) AS before_partial_drop
+FROM pg_statistic_ext s
+WHERE s.stxname LIKE '%multi_drop_stat%';
+
+-- Drop only one
+DROP STATISTICS multi_drop_stat1;
+
+-- Only stat2 should remain
+SELECT count(*) AS after_partial_drop
+FROM pg_statistic_ext s
+WHERE s.stxname LIKE '%multi_drop_stat%';
+
+-- Verify stat2 still exists
+SELECT count(*) AS stat2_count
+FROM pg_statistic_ext s
+WHERE s.stxname LIKE '%multi_drop_stat2%';
+
+-- Cleanup
+DROP STATISTICS multi_drop_stat2;
+
+-- =============================================
+-- Test Group 3: RENAME STATISTICS Propagation
+-- =============================================
+
+-- =============================================
+-- Test 9: Basic RENAME STATISTICS propagation
+-- =============================================
+SELECT '=== Test 9: RENAME STATISTICS ===' AS test_name;
+
+CREATE STATISTICS rename_test_stat ON device_id, temp FROM stats_test;
+
+-- Rename the statistics
+ALTER STATISTICS rename_test_stat RENAME TO renamed_stat;
+
+-- Old name should have 0
+SELECT count(*) AS old_name_count
+FROM pg_statistic_ext s
+WHERE s.stxname LIKE '%rename_test_stat%';
+
+-- New name should have all (hypertable + chunks)
+SELECT count(*) AS new_name_count
+FROM pg_statistic_ext s
+WHERE s.stxname LIKE '%renamed_stat%';
+
+-- Cleanup
+DROP STATISTICS renamed_stat;
+
+-- =============================================
+-- Test Group 4: Expression and Edge Cases
+-- =============================================
+
+-- =============================================
+-- Test 10: Expression in CREATE STATISTICS
+-- =============================================
+SELECT '=== Test 10: Expression in CREATE STATISTICS ===' AS test_name;
+
+-- Create statistics with expression
+CREATE STATISTICS stats_test_expr ON (device_id + temp), humidity FROM stats_test;
+
+-- Expression statistics should be propagated to all chunks
+SELECT
+    stxrelid::regclass AS table_name,
+    stxname AS statistics_name,
+    stxkind AS stat_types
+FROM pg_statistic_ext
+WHERE stxname LIKE '%stats_test_expr%'
+ORDER BY stxrelid;
+
+-- =============================================
+-- Cleanup
+-- =============================================
+SELECT '=== Cleanup ===' AS test_name;
+
+-- Drop test tables
+DROP TABLE IF EXISTS stats_test CASCADE;
+DROP TABLE IF EXISTS empty_stats_test CASCADE;
+
+
+SELECT '=== All tests completed ===' AS test_name;
