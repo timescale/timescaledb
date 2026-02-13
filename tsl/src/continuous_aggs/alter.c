@@ -247,8 +247,8 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	}
 	else
 	{
-		/* Generate alias from function name */
-		info->column_alias = strVal(linitial(func_call->funcname));
+		/* Generate alias from function name (use last element to skip schema qualification) */
+		info->column_alias = strVal(llast(func_call->funcname));
 	}
 
 	return info;

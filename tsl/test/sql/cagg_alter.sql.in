@@ -128,7 +128,10 @@ SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
 -- Test adding aggregate without explicit alias (uses function name)
 SELECT add_continuous_aggregate_column('test_cagg_rt', 'sum(humidity)');
 
--- Verify it was added with auto-generated alias
+-- Test adding schema-qualified aggregate without explicit alias (should use function name, not schema)
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'pg_catalog.count(*)');
+
+-- Verify they were added with auto-generated aliases
 \d+ test_cagg_rt
 
 -- Test adding aggregate with double-quoted alias containing special characters
