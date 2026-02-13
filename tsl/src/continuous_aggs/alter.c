@@ -225,8 +225,9 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 	/* Transform the expression */
 	Node *transformed = transformExpr(pstate, res_target->val, EXPR_KIND_SELECT_TARGET);
 
-	/* Close the relation */
+	/* Clean up */
 	table_close(source_rel, NoLock);
+	free_parsestate(pstate);
 
 	Assert(IsA(transformed, Aggref));
 
