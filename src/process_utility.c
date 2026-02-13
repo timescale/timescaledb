@@ -1423,7 +1423,7 @@ process_truncate(ProcessUtilityArgs *args)
 						{
 							Chunk *compressed_chunk =
 								ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
-							if (compressed_chunk != NULL && !compressed_chunk->fd.dropped)
+							if (compressed_chunk != NULL)
 							{
 								/* Create list item into the same context of the list. */
 								oldctx = MemoryContextSwitchTo(parsetreectx);
@@ -2673,11 +2673,9 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 				IndexElem *elem = lfirst_node(IndexElem, lc);
 				appendStringInfo(&command,
 								 "%s IS NOT NULL",
-								 elem->name ? quote_identifier(elem->name) :
-											  deparse_expression((Node *) elem->expr,
-																 dpcontext,
-																 false,
-																 false));
+								 elem->name ?
+									 quote_identifier(elem->name) :
+									 deparse_expression(elem->expr, dpcontext, false, false));
 				if (i < list_length(stmt->indexParams))
 					appendStringInfo(&command, " AND ");
 			}
@@ -2692,9 +2690,8 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 			IndexElem *elem = lfirst_node(IndexElem, lc);
 			appendStringInfo(&command,
 							 "%s",
-							 elem->name ?
-								 quote_identifier(elem->name) :
-								 deparse_expression((Node *) elem->expr, dpcontext, false, false));
+							 elem->name ? quote_identifier(elem->name) :
+										  deparse_expression(elem->expr, dpcontext, false, false));
 			if (j < list_length(stmt->indexParams))
 				appendStringInfo(&command, ",");
 		}
@@ -4677,7 +4674,14 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			if (conname == NULL)
 				conname = get_rel_name(obj->objectId);
 
-			process_altertable_add_constraint(ht, cmd, conname);
+			/*
+			 * Implicit constraints (e.g., those created by PRIMARY KEY or UNIQUE
+			 * constraints) have already been processed when the index was created.
+			 * These will have no objectId in the ObjectAddress passed to this
+			 * function and no conname.
+			 */
+			if (conname)
+				process_altertable_add_constraint(ht, cmd, conname);
 		}
 		break;
 		case AT_AlterColumnType:
@@ -5611,11 +5615,7 @@ process_drop_table(EventTriggerDropObject *obj)
 	EventTriggerDropRelation *table = (EventTriggerDropRelation *) obj;
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE || obj->type == EVENT_TRIGGER_DROP_FOREIGN_TABLE);
-	ts_chunk_delete_by_relid_and_relname(table->relid,
-										 table->schema,
-										 table->name,
-										 DROP_RESTRICT,
-										 false);
+	ts_chunk_delete_by_relid_and_relname(table->relid, table->schema, table->name, DROP_RESTRICT);
 	ts_hypertable_delete_by_name(table->schema, table->name);
 	/*
 	 * Normally, dependent catalogs (like compression settings) are cleaned up

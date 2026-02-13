@@ -318,6 +318,8 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig, Relids child_relids
 			em->em_relids = bms_copy(ec_mem->em_relids);
 #if PG16_LT
 			em->em_nullable_relids = bms_copy(ec_mem->em_nullable_relids);
+#else
+			em->em_parent = ec_mem->em_parent;
 #endif
 			em->em_is_const = ec_mem->em_is_const;
 			em->em_is_child = ec_mem->em_is_child;
@@ -375,17 +377,19 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig, Relids child_relids
 				ts_add_child_eq_member(root, newec, em, it.current_relid);
 			else
 				newec->ec_members = lappend(newec->ec_members, em);
-
 #endif
+
 			int i = -1;
 			while ((i = bms_next_member(em->em_relids, i)) >= 0)
 			{
 				RelOptInfo *rel = root->simple_rel_array[i];
 
-				rel->eclass_indexes = bms_add_member(rel->eclass_indexes, root->eq_classes->length);
+				rel->eclass_indexes =
+					bms_add_member(rel->eclass_indexes, list_length(root->eq_classes));
 			}
 		}
 	}
+
 	/* if any transforms were found return new ec */
 	if (newec != NULL)
 	{

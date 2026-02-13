@@ -41,58 +41,11 @@
 #define UnassignedDatum (Datum) 0
 
 static inline int64
-interval_to_usec(Interval *interval)
+interval_to_usec(const Interval *interval)
 {
 	return (interval->month * DAYS_PER_MONTH * USECS_PER_DAY) + (interval->day * USECS_PER_DAY) +
 		   interval->time;
 }
-
-#ifdef TS_DEBUG
-
-static inline const char *
-yes_no(bool value)
-{
-	return value ? "yes" : "no";
-}
-
-/* Convert datum to string using the output function. */
-static inline const char *
-datum_as_string(Oid typid, Datum value, bool is_null)
-{
-	Oid typoutput;
-	bool typIsVarlena;
-
-	if (is_null)
-		return "<NULL>";
-
-	getTypeOutputInfo(typid, &typoutput, &typIsVarlena);
-	return OidOutputFunctionCall(typoutput, value);
-}
-
-static inline const char *
-slot_as_string(TupleTableSlot *slot)
-{
-	StringInfoData info;
-	initStringInfo(&info);
-	appendStringInfoString(&info, "{");
-	for (int i = 0; i < slot->tts_tupleDescriptor->natts; i++)
-	{
-		Form_pg_attribute att = TupleDescAttr(slot->tts_tupleDescriptor, i);
-
-		if (att->attisdropped)
-			continue;
-		appendStringInfo(&info,
-						 "%s: %s",
-						 NameStr(att->attname),
-						 datum_as_string(att->atttypid, slot->tts_values[i], slot->tts_isnull[i]));
-		if (i + 1 < slot->tts_tupleDescriptor->natts)
-			appendStringInfoString(&info, ", ");
-	}
-	appendStringInfoString(&info, "}");
-	return info.data;
-}
-
-#endif /* TS_DEBUG */
 
 /*
  * Get the function name in a PG_FUNCTION.

@@ -829,6 +829,8 @@ SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timesc
 -- should have 1 uncompressed and 1 compressed chunk
 EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_insert;
 
+RESET timescaledb.enable_direct_compress_insert;
+
 -- test direct compress copy invalidation
 CREATE TABLE direct_compress_copy(time timestamptz) WITH (tsdb.hypertable);
 INSERT INTO direct_compress_copy SELECT '2025-01-01';
@@ -862,6 +864,8 @@ SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timesc
 -- should have 1 uncompressed and 3 compressed chunk
 EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_copy;
 
+RESET timescaledb.enable_direct_compress_copy;
+
 -- test direct compress invalidation with custom partitioning function (not supported atm)
 CREATE OR REPLACE FUNCTION f_month(timestamptz) returns int language sql AS $$ SELECT 12 * extract(year from $1) + extract(month from $1);$$ immutable;
 CREATE TABLE part_cagg (time timestamptz);
@@ -870,3 +874,85 @@ SELECT create_hypertable('part_cagg', 'time', time_partitioning_func => 'f_month
 CREATE MATERIALIZED VIEW part_cagg1 WITH (tsdb.continuous) AS SELECT time_bucket('1day', time) FROM part_cagg GROUP BY 1;
 \set ON_ERROR_STOP 1
 
+
+-- test UPDATE invalidation
+CREATE TABLE inval_update(time timestamptz) WITH (tsdb.hypertable);
+INSERT INTO inval_update SELECT '2025-01-01';
+CREATE MATERIALIZED VIEW cagg_inval_update WITH (tsdb.continuous) AS SELECT time_bucket('1day', time) FROM inval_update GROUP BY 1;
+
+-- check setting to NULL is handled gracefully
+\set ON_ERROR_STOP 0
+UPDATE inval_update SET time = NULL WHERE time = '2025-01-01';
+\set ON_ERROR_STOP 1
+
+UPDATE inval_update SET time = '2025-01-01 00:00:23' WHERE time = '2025-01-01';
+-- should have 1 entries now
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timescaledb_functions.to_timestamp(greatest_modified_value) end from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log WHERE hypertable_id = 25 ORDER BY 1,2;
+
+------------------------------------------------------------------------------------------
+--Test that invalidation's greatest_modified value are handle correctly for variable bucket
+-------------------------------------------------------------------------------------------
+
+CREATE TABLE test_data (
+    time TIMESTAMPTZ NOT NULL,
+    value INT
+);
+
+SELECT public.create_hypertable(
+        relation => 'test_data',
+        time_column_name => 'time',
+        chunk_time_interval => interval '1 months'
+);
+-- Insert initial data
+INSERT INTO test_data
+SELECT time, 1
+FROM generate_series('2024-01-01'::timestamptz, '2024-12-31'::timestamptz, '1 day'::interval) time;
+
+-- Create continuous aggregate with variable bucket
+CREATE MATERIALIZED VIEW test_cagg
+WITH (timescaledb.continuous) AS
+SELECT
+    time_bucket('1 month'::interval, time) AS bucket,
+    count(*) as count
+FROM test_data
+GROUP BY bucket
+WITH NO DATA;
+
+--Do the first refresh and check materialization invalidation log
+call refresh_continuous_aggregate ('test_cagg','2023-12-29 15:00:00', '2026-01-28 15:00:00');
+
+SELECT materialization_id,
+       _timescaledb_functions.to_timestamp(lowest_modified_value) as low,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) as high
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id IN
+      (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+       WHERE user_view_name = 'test_cagg')
+ORDER BY low;
+
+--now do the same refresh again, it should say the cagg is already up to date
+CALL refresh_continuous_aggregate ('test_cagg','2023-12-29 15:00:00', '2026-01-28 15:00:00');
+
+--Insert data to test that invalidation is moved correctly from hypertable invalidation log
+-- to materialization invalidation log
+INSERT INTO test_data
+SELECT time, 2
+FROM generate_series('2024-01-01'::timestamptz, '2024-12-31'::timestamptz, '10 day'::interval) time;
+
+--Refresh some first part of the updated range. The range show up in the materialization log
+--should end with the last timestamp of the bucket (i.e., has the .999999 at the end),
+--rather than the start of the next bucket
+
+CALL refresh_continuous_aggregate ('test_cagg','2023-12-29 15:00:00', '2024-03-15 15:00:00');
+
+SELECT materialization_id,
+       _timescaledb_functions.to_timestamp(lowest_modified_value) as low,
+       _timescaledb_functions.to_timestamp(greatest_modified_value) as high
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id IN
+      (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+       WHERE user_view_name = 'test_cagg')
+ORDER BY low;
+
+--clean up
+DROP TABLE test_data CASCADE;

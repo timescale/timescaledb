@@ -1,0 +1,1 @@
+Fixes: #9256 Error "record type has no extended hash function" on some queries using a sparse bloom filter index on a column of composite type.

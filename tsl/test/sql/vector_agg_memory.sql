@@ -4,7 +4,7 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
---set enable_indexscan=false;
+set max_parallel_workers_per_gather = 0;
 
 -- Helper function that returns the amount of memory currently allocated in a
 -- given memory context.
@@ -62,7 +62,6 @@ select * from log where (
 -- Test the vectorized aggregation with grouping by segmentby with various number
 -- of input row. We expect approximately constant memory usage.
 truncate log;
-set max_parallel_workers_per_gather = 0;
 set timescaledb.debug_require_vector_agg = 'require';
 set enable_sort to off;
 set enable_indexscan to off;
@@ -79,13 +78,13 @@ format('insert into log
     select %1$s,
         ts_debug_allocated_bytes() bytes,
         count(*) a, count(t) b, sum(t) c, avg(t) d, min(t) e, max(t) f
-    from mvagg where t >= -1 and t < %1$s group by s1',
+    from mvagg where t >= -1 and t < %1$s group by s1
+    order by count(*) desc limit 1',
     pow(10, generate_series(1, 7)))
 \gexec
 \set ECHO all
 
 reset timescaledb.debug_require_vector_agg;
-reset max_parallel_workers_per_gather;
 reset work_mem;
 reset enable_sort;
 
@@ -97,3 +96,34 @@ select * from log where (
 );
 
 reset timescaledb.debug_require_vector_agg;
+
+
+-- Test vectorized grouping with expressions
+truncate log;
+
+set timescaledb.debug_require_vector_agg = 'require';
+
+\set ECHO none
+select
+format('insert into log
+    select %1$s,
+        ts_debug_allocated_bytes() bytes,
+        count(*),
+        sum(-abs(-abs(-abs(-abs(-abs(s0))))))
+    from mvagg where t >= -1 and t < %1$s
+    group by abs(-abs(-abs(-abs(-abs(t %% 100)))))
+    order by count(*) desc limit 1',
+    pow(10, generate_series(1, 7)))
+\gexec
+\set ECHO all
+
+reset timescaledb.debug_require_vector_agg;
+
+select * from log where (
+    -- Memory usage shouldn't change much after the grouping cardinality stops
+    -- growing, but we should allow for small variations to make the test more
+    -- robust.
+    select regr_slope(bytes, n) > 0.01 from log
+);
+
+reset max_parallel_workers_per_gather;

@@ -8,19 +8,10 @@ name: Regression Windows
     branches:
       - main
       - ?.*.x
+      - prerelease_test
       - trigger/windows_tests
       - trigger/regression
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE*'
-      - NOTICE
-      - 'bootstrap*'
   pull_request:
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE*'
-      - NOTICE
-      - 'bootstrap*'
   workflow_dispatch:
 jobs:
   config:
@@ -47,11 +38,27 @@ jobs:
           echo "build_type=['Debug','Release']" >>$GITHUB_OUTPUT
         fi
 
+  check_paths:
+    runs-on: ubuntu-latest
+    outputs:
+      run_ci: >-
+        ${{ github.event_name == 'push'
+          || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
+         }}
+      run_installcheck: ${{ github.event_name == 'push' || steps.filters.outputs.windows-workflow == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: .github/filters.yaml
+
   build:
     # Change the JOB_NAME variable below when changing the name.
     name: PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
     runs-on: windows-2025
-    needs: config
+    needs: [config, check_paths]
+    if: needs.check_paths.outputs.run_ci == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -80,12 +87,14 @@ jobs:
         compress_bloom_sparse_compat
         compress_bloom_sparse_debug
         compress_qualpushdown_saop
+        compress_sort_transform
         compression_algos
         compression_uuid
         direct_compress_copy
         merge_append_partially_compressed
         metadata
         telemetry
+        vector_agg_expr
         vector_agg_byte
         vector_agg_filter
         vector_agg_groupagg
@@ -196,7 +205,7 @@ jobs:
       run: cmake --install build_win --config ${{ matrix.build_type }}
 
     - name: Setup postgres cluster
-      if: github.event_name == 'schedule'
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       run: |
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         mkdir -p ${{ env.TABLESPACE1 }}\_default
@@ -219,7 +228,7 @@ jobs:
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'SHOW data_directory;'
 
     - name: Install postgres for test runner
-      if: github.event_name == 'schedule'
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       run: |
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh || true
@@ -229,7 +238,7 @@ jobs:
         apt-get install -y --force-yes postgresql-server-dev-${{ matrix.versions.pg }}
 
     - name: Run tests
-      if: github.event_name == 'schedule'
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       env:
         WSLENV: "IGNORES:SKIPS"
@@ -242,7 +251,7 @@ jobs:
         make -C build_wsl regresschecklocal IGNORES="${IGNORES}" SKIPS="${SKIPS}" | tee -a installcheck.log
 
     - name: Setup postgres cluster for TSL tests
-      if: github.event_name == 'schedule'
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       run: |
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_ctl stop
         timeout 10
@@ -254,7 +263,7 @@ jobs:
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
 
     - name: Run TSL tests
-      if: github.event_name == 'schedule'
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       env:
         WSLENV: "IGNORES:SKIPS"
@@ -339,3 +348,17 @@ jobs:
         fi
         export GITHUB_PR_NUMBER
         scripts/upload_ci_stats.sh
+
+  report_status:
+    name: Regression Windows summary
+    needs: [check_paths, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          # If the detector failed, or the matrix failed, exit with error
+          if [[ "${{ needs.build.result }}" == "failure" ]]; then
+            exit 1
+          fi
+          echo "All checks passed or were safely skipped."
+

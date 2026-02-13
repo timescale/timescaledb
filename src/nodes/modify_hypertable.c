@@ -197,6 +197,16 @@ modify_hypertable_rescan(CustomScanState *node)
 	ExecReScan(linitial(node->custom_ps));
 }
 
+static bool
+is_chunk_append_or_projection(Plan *plan)
+{
+	if (IsA(plan, Result) && plan->lefttree != NULL)
+	{
+		return ts_is_chunk_append_plan(plan->lefttree);
+	}
+	return ts_is_chunk_append_plan(plan);
+}
+
 static void
 modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
@@ -209,17 +219,17 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 	 * complain. PostgreSQL does something equivalent and does not print the targetlist
 	 * for ModifyTable for EXPLAIN VERBOSE.
 	 */
-	if (((ModifyTable *) mtstate->ps.plan)->operation == CMD_DELETE && es->verbose &&
-		ts_is_chunk_append_plan(mtstate->ps.plan->lefttree))
+	const CmdType operation = ((ModifyTable *) mtstate->ps.plan)->operation;
+	if ((operation == CMD_MERGE || operation == CMD_DELETE) && es->verbose &&
+		is_chunk_append_or_projection(mtstate->ps.plan->lefttree))
 	{
 		mtstate->ps.plan->lefttree->targetlist = NULL;
-		((CustomScan *) mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
+		if (IsA(mtstate->ps.plan->lefttree, CustomScan))
+		{
+			castNode(CustomScan, mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
+		}
 	}
-	if (((ModifyTable *) mtstate->ps.plan)->operation == CMD_MERGE && es->verbose)
-	{
-		mtstate->ps.plan->lefttree->targetlist = NULL;
-		((CustomScan *) mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
-	}
+
 	/*
 	 * Since we hijack the ModifyTable node, instrumentation on ModifyTable will
 	 * be missing so we set it to instrumentation of ModifyHypertable node.
@@ -288,6 +298,13 @@ static CustomScanMethods modify_hypertable_plan_methods = {
 	.CustomName = "ModifyHypertable",
 	.CreateCustomScanState = modify_hypertable_state_create,
 };
+
+bool
+ts_is_modify_hypertable_plan(Plan *plan)
+{
+	return IsA(plan, CustomScan) &&
+		   castNode(CustomScan, plan)->methods == &modify_hypertable_plan_methods;
+}
 
 /*
  * Make a targetlist to meet CustomScan expectations.
@@ -449,7 +466,7 @@ modify_hypertable_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 		cscan->scan.plan.targetlist =
 			ts_replace_rowid_vars(root, cscan->scan.plan.targetlist, mt->nominalRelation);
 
-		if (mt->operation == CMD_UPDATE && ts_is_chunk_append_plan(mt->plan.lefttree))
+		if (mt->operation == CMD_UPDATE && is_chunk_append_or_projection(mt->plan.lefttree))
 		{
 			mt->plan.lefttree->targetlist =
 				ts_replace_rowid_vars(root, mt->plan.lefttree->targetlist, mt->nominalRelation);

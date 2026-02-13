@@ -438,7 +438,7 @@ select *
 from ONLY _timescaledb_internal._hyper_1_3_chunk
 order by time;
 
-select table_name, dropped, status, compressed_chunk_id
+select table_name, status, compressed_chunk_id
 from _timescaledb_catalog.chunk where table_name = '_hyper_1_3_chunk';
 analyze _timescaledb_internal._hyper_1_3_chunk;
 
@@ -458,7 +458,7 @@ call split_chunk('_timescaledb_internal._hyper_1_3_chunk');
 -- Check that the resulting chunks look OK and have the right access method
 select * from chunk_info;
 
-select table_name, dropped, status, compressed_chunk_id
+select table_name, status, compressed_chunk_id
 from _timescaledb_catalog.chunk
 where table_name in ('_hyper_1_3_chunk', '_hyper_1_16_chunk');
 
@@ -716,3 +716,37 @@ select ch as chunk3 from show_chunks('time_part_func') ch limit 1 offset 2 \gset
 select to_timestamp(time), * from :chunk1;
 select to_timestamp(time), * from :chunk2;
 select to_timestamp(time), * from :chunk3;
+
+-- Test: Verify split chunks are added to publication
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timescaledb.enable_chunk_auto_publication = true;
+
+CREATE TABLE pub_split_test(time timestamptz not null, device int, temp float);
+SELECT create_hypertable('pub_split_test', 'time', chunk_time_interval => interval '1 month');
+
+-- Create publication
+CREATE PUBLICATION test_split_pub FOR TABLE pub_split_test;
+
+-- Insert data to create a single chunk
+INSERT INTO pub_split_test VALUES
+    ('2024-01-03 01:00', 1, 1.0),
+    ('2024-01-09 01:00', 2, 2.0);
+
+-- Verify 1 chunk in publication
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_split_pub'
+ORDER BY schemaname, tablename;
+
+SELECT show_chunks('pub_split_test') chunk_to_split \gset
+CALL split_chunk(:'chunk_to_split', split_at => '2024-01-06 00:00');
+
+-- Verify both split chunks are in publication
+SELECT schemaname, tablename
+FROM pg_publication_tables
+WHERE pubname = 'test_split_pub'
+ORDER BY schemaname, tablename;
+
+-- Cleanup
+DROP PUBLICATION test_split_pub CASCADE;
+DROP TABLE pub_split_test CASCADE;

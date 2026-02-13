@@ -1,0 +1,19 @@
+shell:
+  - '**.sh'
+  - .github/workflows/shellcheck.yaml
+sql:
+  - 'sql/**'
+  - '.github/**'
+src:
+  - 'CMakeLists.txt'
+  - 'cmake/**'
+  - 'coverage/**'
+  - 'scripts/**'
+  - 'sql/**'
+  - 'src/**'
+  - 'test/**'
+  - 'tsl/**'
+  - '.github/**'
+
+windows-workflow:
+  - '.github/workflows/windows-build-and-test.yaml'

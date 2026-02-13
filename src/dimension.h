@@ -14,10 +14,43 @@
 #include "export.h"
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
+#include "utils.h"
 
 typedef struct PartitioningInfo PartitioningInfo;
 typedef struct DimensionSlice DimensionSlice;
 typedef struct DimensionVec DimensionVec;
+
+/*
+ * The chunk interval of an open partitioning dimension.
+ *
+ * The type can either be INTERVALOID or an INT(2|4|8)OID.
+ */
+typedef struct ChunkInterval
+{
+	Oid type;
+	/* Interval value storage */
+	union
+	{
+		int64 integer_interval; /* For INT8OID, INT4OID, INT2OID */
+		Interval interval;		/* For INTERVALOID */
+	};
+} ChunkInterval;
+
+static inline void
+chunk_interval_set(ChunkInterval *chunk_interval, Datum interval, Oid type)
+{
+	chunk_interval->type = type;
+
+	/* Store interval value in appropriate union field */
+	if (type == INT8OID)
+		chunk_interval->integer_interval = DatumGetInt64(interval);
+	else if (type == INTERVALOID)
+		chunk_interval->interval = *DatumGetIntervalP(interval);
+	else if (type == INT4OID)
+		chunk_interval->integer_interval = DatumGetInt32(interval);
+	else if (type == INT2OID)
+		chunk_interval->integer_interval = DatumGetInt16(interval);
+}
 
 typedef enum DimensionType
 {
@@ -105,8 +138,7 @@ typedef struct DimensionInfo
 	NameData colname;
 	Oid coltype;
 	DimensionType type;
-	Datum interval_datum;
-	Oid interval_type; /* Type of the interval datum */
+	ChunkInterval chunk_interval;
 	int64 interval;
 	int32 num_slices;
 	regproc partitioning_func;
@@ -119,7 +151,8 @@ typedef struct DimensionInfo
 } DimensionInfo;
 
 #define DIMENSION_INFO_IS_SET(di) (di != NULL && OidIsValid((di)->table_relid))
-#define DIMENSION_INFO_IS_VALID(di) (info->num_slices_is_set || OidIsValid(info->interval_type))
+#define DIMENSION_INFO_IS_VALID(di)                                                                \
+	(info->num_slices_is_set || OidIsValid(info->chunk_interval.type))
 
 extern Hyperspace *ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension,
 									 MemoryContext mctx);

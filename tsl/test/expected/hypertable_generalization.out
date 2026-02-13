@@ -19,6 +19,22 @@ ERROR:  dimension cannot be NULL
 SELECT add_dimension('n',NULL::_timescaledb_internal.dimension_info);
 ERROR:  dimension cannot be NULL
 \set ON_ERROR_STOP 1
+-- test int types
+SELECT by_range('id',2::int2);
+    by_range     
+-----------------
+ range//id//2//-
+
+SELECT by_range('id',4::int4);
+    by_range     
+-----------------
+ range//id//4//-
+
+SELECT by_range('id',8::int8);
+    by_range     
+-----------------
+ range//id//8//-
+
 SELECT by_range('id');
     by_range     
 -----------------
@@ -75,6 +91,8 @@ SELECT 'hash//id//3//-'::_timescaledb_internal.dimension_info;
 ERROR:  cannot construct type "dimension_info" from string at character 8
 SELECT by_range(NULL::name);
 ERROR:  column_name cannot be NULL
+SELECT by_range('foo',0::regproc);
+ERROR:  unsupported chunk interval type 24
 SELECT by_hash(NULL::name, 3);
 ERROR:  column_name cannot be NULL
 \set ON_ERROR_STOP 1
@@ -167,29 +185,25 @@ FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00':: TIMESTA
 -- Verify chunk pruning
 EXPLAIN VERBOSE SELECT * FROM jobs_serial WHERE job_id < 30;
 --- QUERY PLAN ---
- Index Scan using "10_1_jobs_serial_pkey" on _timescaledb_internal._hyper_4_10_chunk  (cost=0.15..20.30 rows=523 width=24)
+ Seq Scan on _timescaledb_internal._hyper_4_10_chunk  (cost=0.00..25.70 rows=1570 width=24)
    Output: _hyper_4_10_chunk.job_id, _hyper_4_10_chunk.device_id, _hyper_4_10_chunk.start_time, _hyper_4_10_chunk.end_time
-   Index Cond: (_hyper_4_10_chunk.job_id < 30)
 
 EXPLAIN VERBOSE SELECT * FROM jobs_serial WHERE job_id >= 30 AND job_id < 90;
 --- QUERY PLAN ---
- Append  (cost=0.15..14.71 rows=16 width=24)
-   ->  Index Scan using "11_2_jobs_serial_pkey" on _timescaledb_internal._hyper_4_11_chunk  (cost=0.15..7.31 rows=8 width=24)
+ Append  (cost=0.00..67.10 rows=3140 width=24)
+   ->  Seq Scan on _timescaledb_internal._hyper_4_11_chunk  (cost=0.00..25.70 rows=1570 width=24)
          Output: _hyper_4_11_chunk.job_id, _hyper_4_11_chunk.device_id, _hyper_4_11_chunk.start_time, _hyper_4_11_chunk.end_time
-         Index Cond: ((_hyper_4_11_chunk.job_id >= 30) AND (_hyper_4_11_chunk.job_id < 90))
-   ->  Index Scan using "12_3_jobs_serial_pkey" on _timescaledb_internal._hyper_4_12_chunk  (cost=0.15..7.31 rows=8 width=24)
+   ->  Seq Scan on _timescaledb_internal._hyper_4_12_chunk  (cost=0.00..25.70 rows=1570 width=24)
          Output: _hyper_4_12_chunk.job_id, _hyper_4_12_chunk.device_id, _hyper_4_12_chunk.start_time, _hyper_4_12_chunk.end_time
-         Index Cond: ((_hyper_4_12_chunk.job_id >= 30) AND (_hyper_4_12_chunk.job_id < 90))
 
 EXPLAIN VERBOSE SELECT * FROM jobs_serial WHERE job_id > 90;
 --- QUERY PLAN ---
- Append  (cost=0.15..45.84 rows=1046 width=24)
+ Append  (cost=0.15..56.47 rows=2093 width=24)
    ->  Index Scan using "13_4_jobs_serial_pkey" on _timescaledb_internal._hyper_4_13_chunk  (cost=0.15..20.30 rows=523 width=24)
          Output: _hyper_4_13_chunk.job_id, _hyper_4_13_chunk.device_id, _hyper_4_13_chunk.start_time, _hyper_4_13_chunk.end_time
          Index Cond: (_hyper_4_13_chunk.job_id > 90)
-   ->  Index Scan using "14_5_jobs_serial_pkey" on _timescaledb_internal._hyper_4_14_chunk  (cost=0.15..20.30 rows=523 width=24)
+   ->  Seq Scan on _timescaledb_internal._hyper_4_14_chunk  (cost=0.00..25.70 rows=1570 width=24)
          Output: _hyper_4_14_chunk.job_id, _hyper_4_14_chunk.device_id, _hyper_4_14_chunk.start_time, _hyper_4_14_chunk.end_time
-         Index Cond: (_hyper_4_14_chunk.job_id > 90)
 
 -- Update rows
 UPDATE jobs_serial SET end_time = end_time + INTERVAL '1 hour' where job_id = 1;

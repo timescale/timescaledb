@@ -115,15 +115,6 @@ makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
 	}
 }
 
-/* STATIC functions defined on the structs above. */
-static int32 mattablecolumninfo_create_materialization_table(
-	MaterializationHypertableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
-	ContinuousAggTimeBucketInfo *bucket_info, bool create_addl_index, char *tablespacename,
-	char *table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress);
-static Query *
-mattablecolumninfo_get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo,
-											Query *userview_query);
-
 /*
  * Create a entry for the materialization table in table CONTINUOUS_AGGS.
  */
@@ -374,16 +365,15 @@ mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matco
  *    bucket_info: bucket information used for setting up the
  *                 hypertable partitioning (`chunk_interval_size`).
  *    tablespace_name: Name of the tablespace for the materialization table.
- *    table_access_method: Name of the table access method to use for the
- *        materialization table.
- *    mataddress: return the ObjectAddress RETURNS: hypertable id of the
- *        materialization table
+ *    mataddress: return the ObjectAddress
+ *
+ *  RETURNS: hypertable id of the materialization table
  */
 static int32
-mattablecolumninfo_create_materialization_table(
-	MaterializationHypertableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
-	ContinuousAggTimeBucketInfo *bucket_info, bool create_addl_index, char *const tablespacename,
-	char *const table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress)
+create_materialization_table(MaterializationHypertableColumnInfo *matcolinfo, int32 hypertable_id,
+							 RangeVar *mat_rel, ContinuousAggTimeBucketInfo *bucket_info,
+							 bool create_addl_index, IntoClause *into, int64 matpartcol_interval,
+							 ObjectAddress *mataddress)
 {
 	Oid uid, saved_uid;
 	int sec_ctx;
@@ -409,8 +399,8 @@ mattablecolumninfo_create_materialization_table(
 	create->constraints = NIL;
 	create->options = NULL;
 	create->oncommit = ONCOMMIT_NOOP;
-	create->tablespacename = tablespacename;
-	create->accessMethod = table_access_method;
+	create->tablespacename = into->tableSpaceName;
+	create->accessMethod = into->accessMethod;
 	create->if_not_exists = false;
 
 	/*  Create the materialization table.  */
@@ -421,7 +411,7 @@ mattablecolumninfo_create_materialization_table(
 
 	/* NewRelationCreateToastTable calls CommandCounterIncrement. */
 	toast_options =
-		transformRelOptions((Datum) 0, create->options, "toast", validnsps, true, false);
+		transformRelOptions(UnassignedDatum, create->options, "toast", validnsps, true, false);
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 	NewRelationCreateToastTable(mat_relid, toast_options);
 	RESTORE_USER(uid, saved_uid, sec_ctx);
@@ -453,8 +443,7 @@ mattablecolumninfo_create_materialization_table(
  * the materialization columns and remove HAVING clause and ORDER BY.
  */
 static Query *
-mattablecolumninfo_get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo,
-											Query *userview_query)
+get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo, Query *userview_query)
 {
 	Query *partial_selquery = NULL;
 
@@ -606,7 +595,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 {
 	ObjectAddress mataddress;
 	char relnamebuf[NAMEDATALEN];
-	MaterializationHypertableColumnInfo mattblinfo;
 	FinalizeQueryInfo finalqinfo;
 	CatalogSecurityContext sec_ctx;
 	bool is_create_mattbl_index;
@@ -640,7 +628,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	 * No other modifications to panquery.
 	 */
 	fixup_userview_query_tlist(panquery, stmt->aliases);
-	mattablecolumninfo_init(&mattblinfo, copyObject(panquery->groupClause));
+	MaterializationHypertableColumnInfo mattblinfo = { .partial_grouplist =
+														   copyObject(panquery->groupClause) };
 	finalizequery_init(&finalqinfo, panquery, &mattblinfo);
 
 	/*
@@ -650,9 +639,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	stmt->options = NULL;
 
 	/*
-	 * Old format caggs are not supported anymore, there is no need to add
-	 * an internal chunk id column for materialized hypertable.
-	 *
 	 * Step 1: create the materialization table.
 	 */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -662,15 +648,14 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	mat_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	is_create_mattbl_index =
 		DatumGetBool(with_clause_options[CreateMaterializedViewFlagCreateGroupIndexes].parsed);
-	mattablecolumninfo_create_materialization_table(&mattblinfo,
-													materialize_hypertable_id,
-													mat_rel,
-													bucket_info,
-													is_create_mattbl_index,
-													create_stmt->into->tableSpaceName,
-													create_stmt->into->accessMethod,
-													matpartcol_interval,
-													&mataddress);
+	create_materialization_table(&mattblinfo,
+								 materialize_hypertable_id,
+								 mat_rel,
+								 bucket_info,
+								 is_create_mattbl_index,
+								 create_stmt->into,
+								 matpartcol_interval,
+								 &mataddress);
 
 	/*
 	 * Step 2: Create view with select finalize from materialization table.
@@ -694,7 +679,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	/*
 	 * Step 3: create the internal view with select partialize(..).
 	 */
-	partial_selquery = mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery);
+	partial_selquery = get_partial_select_query(&mattblinfo, panquery);
 
 	makeMaterializedTableName(relnamebuf, "_partial_view_%d", materialize_hypertable_id);
 	part_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);

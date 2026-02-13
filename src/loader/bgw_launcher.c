@@ -859,7 +859,7 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 	 * init_database_htab (eg. due to running out of shared memory) but
 	 * doesn't deregister itself from the shared bgw_message_queue.
 	 */
-	before_shmem_exit(launcher_pre_shmem_cleanup, PointerGetDatum(htab_storage));
+	before_shmem_exit(launcher_pre_shmem_cleanup, PointerGetDatum((void *) htab_storage));
 
 	ts_bgw_message_queue_set_reader();
 

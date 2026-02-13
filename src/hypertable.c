@@ -374,9 +374,10 @@ ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid)
 
 	ts_scanner_scan(&scanctx);
 
-	Ensure(return_invalid || OidIsValid(relid),
-		   "unable to get valid parent Oid for hypertable %d",
-		   hypertable_id);
+	if (!OidIsValid(relid) && !return_invalid)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+				 errmsg("hypertable with id %d does not exist", hypertable_id)));
 
 	return relid;
 }
@@ -1542,6 +1543,13 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	if (!OidIsValid(table_relid))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("relation cannot be NULL")));
+
+	if (get_rel_name(table_relid) == NULL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_TABLE),
+				 errmsg("relation with oid %d not found", table_relid)));
+	}
 
 	if (!open_dim_name)
 		ereport(ERROR,

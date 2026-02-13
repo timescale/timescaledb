@@ -429,10 +429,38 @@ select count(*) from arraybloom where value = array[7248::int];
 select count(*) from arraybloom where value = array[7248::int];
 
 
+-- Test a composite type
+create type ctype as (a int, b int);
+
+create table bloom_composite(ts int, x ctype) with (tsdb.hypertable,
+    tsdb.partition_column = 'ts', tsdb.compress, tsdb.compress_orderby = 'ts',
+    tsdb.sparse_index = 'bloom(x)')
+;
+
+insert into bloom_composite values (1, row(2, 3)::ctype);
+
+select count(compress_chunk(x)) from show_chunks('bloom_composite') x;
+
+vacuum full analyze bloom_composite;
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from bloom_composite where x = (2, 3);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from bloom_composite where x = (2, 3)::ctype;
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from bloom_composite where x = (3, 4);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from bloom_composite where x = (3, 4)::ctype;
+
+
 -- Cleanup
 drop table bloom;
 drop table corner;
 drop table badtable;
 drop table byref;
 drop table arraybloom;
+drop table bloom_composite;
 

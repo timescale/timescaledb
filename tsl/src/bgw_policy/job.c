@@ -172,8 +172,16 @@ static List *
 get_chunk_to_recompress(const Dimension *dim, const Jsonb *config)
 {
 	Oid partitioning_type = ts_dimension_get_partition_type(dim);
+	Oid boundary_type = partitioning_type;
 	StrategyNumber end_strategy = BTLessStrategyNumber;
 	int32 numchunks = policy_compression_get_maxchunks_per_job(config);
+
+	/*
+	 * For UUID-partitioned hypertables, the boundary is computed as TIMESTAMPTZ
+	 * by get_window_boundary, so we need to use TIMESTAMPTZOID for conversion.
+	 */
+	if (IS_UUID_TYPE(partitioning_type))
+		boundary_type = TIMESTAMPTZOID;
 
 	Datum boundary = get_window_boundary(dim,
 										 config,
@@ -185,7 +193,7 @@ get_chunk_to_recompress(const Dimension *dim, const Jsonb *config)
 													   -1,				/*start_value*/
 													   end_strategy,
 													   ts_time_value_to_internal(boundary,
-																				 partitioning_type),
+																				 boundary_type),
 													   false,
 													   true,
 													   numchunks);

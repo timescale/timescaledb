@@ -6,9 +6,12 @@
 
 #include <postgres.h>
 #include <catalog/pg_type.h>
+#include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/primnodes.h>
 #include <utils/lsyscache.h>
 
+#include "debug_assert.h"
 #include "export.h"
 #include "expression_utils.h"
 
@@ -104,4 +107,100 @@ ts_extract_expr_args(Expr *expr, Var **var, Expr **arg_value, Oid *opno, Oid *op
 	}
 
 	return false;
+}
+
+/*
+ * Build an output targetlist for a custom node that just references all the
+ * custom scan targetlist entries.
+ */
+List *
+ts_build_trivial_custom_output_targetlist(List *scan_targetlist)
+{
+	List *result = NIL;
+
+	ListCell *lc;
+	foreach (lc, scan_targetlist)
+	{
+		TargetEntry *scan_entry = (TargetEntry *) lfirst(lc);
+
+		Var *var = makeVar(INDEX_VAR,
+						   scan_entry->resno,
+						   exprType((Node *) scan_entry->expr),
+						   exprTypmod((Node *) scan_entry->expr),
+						   exprCollation((Node *) scan_entry->expr),
+						   /* varlevelsup = */ 0);
+
+		TargetEntry *output_entry = makeTargetEntry((Expr *) var,
+													scan_entry->resno,
+													scan_entry->resname,
+													scan_entry->resjunk);
+
+		result = lappend(result, output_entry);
+	}
+
+	return result;
+}
+
+static Node *
+resolve_outer_special_vars_mutator(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return NULL;
+	}
+
+	if (!IsA(node, Var))
+	{
+		return expression_tree_mutator(node, resolve_outer_special_vars_mutator, context);
+	}
+
+	Var *var = castNode(Var, node);
+	CustomScan *custom = castNode(CustomScan, context);
+	if ((Index) var->varno == (Index) custom->scan.scanrelid)
+	{
+		/*
+		 * This is already the uncompressed chunk var. We can see it referenced
+		 * by expressions in the output targetlist of the child scan node.
+		 */
+		return (Node *) copyObject(var);
+	}
+
+	if (var->varno == OUTER_VAR)
+	{
+		/*
+		 * Reference into the output targetlist of the child scan node.
+		 */
+		TargetEntry *columnar_scan_tentry =
+			castNode(TargetEntry, list_nth(custom->scan.plan.targetlist, var->varattno - 1));
+
+		return resolve_outer_special_vars_mutator((Node *) columnar_scan_tentry->expr, context);
+	}
+
+	if (var->varno == INDEX_VAR)
+	{
+		/*
+		 * This is a reference into the custom scan targetlist, we have to resolve
+		 * it as well.
+		 */
+		var = castNode(Var,
+					   castNode(TargetEntry, list_nth(custom->custom_scan_tlist, var->varattno - 1))
+						   ->expr);
+		Assert(var->varno > 0);
+
+		return (Node *) copyObject(var);
+	}
+
+	Ensure(false, "encountered unexpected varno %d as an aggregate argument", var->varno);
+	return node;
+}
+
+/*
+ * Resolve the OUTER_VAR special variables, that are used in the output
+ * targetlists of aggregation nodes, replacing them with the uncompressed chunk
+ * variables.
+ */
+List *
+ts_resolve_outer_special_vars(List *agg_tlist, Plan *childplan)
+{
+	return castNode(List, resolve_outer_special_vars_mutator((Node *) agg_tlist, childplan));
 }

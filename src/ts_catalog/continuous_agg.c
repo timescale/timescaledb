@@ -499,11 +499,18 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 {
 	Oid nspid = get_namespace_oid(NameStr(fd->user_view_schema), false);
 	Hypertable *cagg_ht = ts_hypertable_get_by_id(fd->mat_hypertable_id);
+	if (!cagg_ht)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("continuous aggregate hypertable with ID %d does not exist",
+						fd->mat_hypertable_id)));
 	const Dimension *time_dim;
-
-	Assert(NULL != cagg_ht);
 	time_dim = hyperspace_get_open_dimension(cagg_ht->space, 0);
-	Assert(NULL != time_dim);
+	if (!time_dim)
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("continuous aggregate hypertable with ID %d has no open dimension",
+						fd->mat_hypertable_id)));
 	cagg->partition_type = ts_dimension_get_partition_type(time_dim);
 	cagg->relid = get_relname_relid(NameStr(fd->user_view_name), nspid);
 	memcpy(&cagg->data, fd, sizeof(cagg->data));
@@ -1285,7 +1292,7 @@ ts_continuous_agg_bucket_on_interval(Oid bucket_function)
 
 	/* The function has to be a currently allowed function or one of the deprecated bucketing
 	 * functions */
-	Assert(func_info->allowed_in_cagg_definition || IS_DEPRECATED_TIME_BUCKET_NG_FUNC(func_info));
+	Assert(func_info->allowed_in_cagg_definition);
 
 	Oid first_bucket_arg = func_info->arg_types[0];
 
@@ -1302,85 +1309,42 @@ generic_time_bucket(const ContinuousAggBucketFunction *bf, Datum timestamp)
 {
 	FuncInfo *func_info = ts_func_cache_get_bucketing_func(bf->bucket_function);
 	Ensure(func_info != NULL, "unable to get bucket function for Oid %d", bf->bucket_function);
-	bool is_experimental = func_info->origin == ORIGIN_TIMESCALE_EXPERIMENTAL;
 
-	if (!is_experimental)
+	if (bf->bucket_time_timezone != NULL)
 	{
-		if (bf->bucket_time_timezone != NULL)
-		{
-			if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
-			{
-				/* using default origin */
-				return DirectFunctionCall3(ts_timestamptz_timezone_bucket,
-										   IntervalPGetDatum(bf->bucket_time_width),
-										   timestamp,
-										   CStringGetTextDatum(bf->bucket_time_timezone));
-			}
-			else
-			{
-				/* custom origin specified */
-				return DirectFunctionCall4(ts_timestamptz_timezone_bucket,
-										   IntervalPGetDatum(bf->bucket_time_width),
-										   timestamp,
-										   CStringGetTextDatum(bf->bucket_time_timezone),
-										   TimestampTzGetDatum(bf->bucket_time_origin));
-			}
-		}
-
 		if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
 		{
 			/* using default origin */
-			return DirectFunctionCall2(ts_timestamp_bucket,
+			return DirectFunctionCall3(ts_timestamptz_timezone_bucket,
 									   IntervalPGetDatum(bf->bucket_time_width),
-									   timestamp);
+									   timestamp,
+									   CStringGetTextDatum(bf->bucket_time_timezone));
 		}
 		else
 		{
 			/* custom origin specified */
-			return DirectFunctionCall3(ts_timestamp_bucket,
+			return DirectFunctionCall4(ts_timestamptz_timezone_bucket,
 									   IntervalPGetDatum(bf->bucket_time_width),
 									   timestamp,
+									   CStringGetTextDatum(bf->bucket_time_timezone),
 									   TimestampTzGetDatum(bf->bucket_time_origin));
 		}
 	}
+
+	if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
+	{
+		/* using default origin */
+		return DirectFunctionCall2(ts_timestamp_bucket,
+								   IntervalPGetDatum(bf->bucket_time_width),
+								   timestamp);
+	}
 	else
 	{
-		if (bf->bucket_time_timezone != NULL)
-		{
-			if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
-			{
-				/* using default origin */
-				return DirectFunctionCall3(ts_time_bucket_ng_timezone,
-										   IntervalPGetDatum(bf->bucket_time_width),
-										   timestamp,
-										   CStringGetTextDatum(bf->bucket_time_timezone));
-			}
-			else
-			{
-				/* custom origin specified */
-				return DirectFunctionCall4(ts_time_bucket_ng_timezone_origin,
-										   IntervalPGetDatum(bf->bucket_time_width),
-										   timestamp,
-										   TimestampTzGetDatum(bf->bucket_time_origin),
-										   CStringGetTextDatum(bf->bucket_time_timezone));
-			}
-		}
-
-		if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
-		{
-			/* using default origin */
-			return DirectFunctionCall2(ts_time_bucket_ng_timestamp,
-									   IntervalPGetDatum(bf->bucket_time_width),
-									   timestamp);
-		}
-		else
-		{
-			/* custom origin specified */
-			return DirectFunctionCall3(ts_time_bucket_ng_timestamp,
-									   IntervalPGetDatum(bf->bucket_time_width),
-									   timestamp,
-									   TimestampTzGetDatum(bf->bucket_time_origin));
-		}
+		/* custom origin specified */
+		return DirectFunctionCall3(ts_timestamp_bucket,
+								   IntervalPGetDatum(bf->bucket_time_width),
+								   timestamp,
+								   TimestampTzGetDatum(bf->bucket_time_origin));
 	}
 }
 
@@ -1484,7 +1448,11 @@ ts_compute_circumscribed_bucketed_refresh_window_variable(int64 *start, int64 *e
 	start_new = generic_time_bucket(bf, start_old);
 	end_new = generic_time_bucket(bf, end_old);
 
-	if (DatumGetTimestamp(end_new) != DatumGetTimestamp(end_old))
+	/* Add interval to expand to next bucket if:
+	 * 1. end wasn't at a bucket boundary (end moved during bucketing), OR
+	 * 2. we have a single-point at a bucket boundary (start == end after bucketing) */
+	if (DatumGetTimestamp(end_new) != DatumGetTimestamp(end_old) ||
+		DatumGetTimestamp(start_new) == DatumGetTimestamp(end_new))
 	{
 		end_new = generic_add_interval(bf, end_new);
 	}

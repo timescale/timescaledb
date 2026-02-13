@@ -372,7 +372,6 @@ psql:include/append_query.sql:82: NOTICE:  Stable function now_s() called!
    Sort Key: _hyper_1_3_chunk."time"
    Sort Method: quicksort 
    ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-         Filter: ("time" > 'Thu Jun 22 10:00:00 2017 PDT'::timestamp with time zone)
 
 DEALLOCATE query_param;
 --test with cte
@@ -512,9 +511,7 @@ reset enable_material;
    ->  Index Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk (actual rows=1152.00 loops=1)
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk (actual rows=2016.00 loops=1)
-         Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk (actual rows=1441.00 loops=1)
-         Index Cond: ("time" > '01-15-2000'::date)
 
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamp ORDER BY time;
 --- QUERY PLAN ---
@@ -523,9 +520,7 @@ reset enable_material;
    ->  Index Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk (actual rows=1152.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk (actual rows=2016.00 loops=1)
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk (actual rows=1441.00 loops=1)
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
 
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamptz ORDER BY time;
 --- QUERY PLAN ---
@@ -548,9 +543,7 @@ reset enable_material;
    ->  Index Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk (actual rows=1152.00 loops=1)
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk (actual rows=2016.00 loops=1)
-         Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk (actual rows=1441.00 loops=1)
-         Index Cond: ("time" > '01-15-2000'::date)
 
 :PREFIX SELECT * FROM metrics_date WHERE '2000-01-15'::timestamp < time ORDER BY time;
 --- QUERY PLAN ---
@@ -559,9 +552,7 @@ reset enable_material;
    ->  Index Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk (actual rows=1152.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk (actual rows=2016.00 loops=1)
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk (actual rows=1441.00 loops=1)
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
 
 :PREFIX SELECT * FROM metrics_date WHERE '2000-01-15'::timestamptz < time ORDER BY time;
 --- QUERY PLAN ---
@@ -614,9 +605,7 @@ reset enable_material;
    ->  Index Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk (actual rows=1439.00 loops=1)
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk (actual rows=2016.00 loops=1)
-         Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk (actual rows=1441.00 loops=1)
-         Index Cond: ("time" > '01-15-2000'::date)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamp ORDER BY time;
 --- QUERY PLAN ---
@@ -625,9 +614,7 @@ reset enable_material;
    ->  Index Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk (actual rows=1439.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk (actual rows=2016.00 loops=1)
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk (actual rows=1441.00 loops=1)
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamptz ORDER BY time;
 --- QUERY PLAN ---
@@ -650,9 +637,7 @@ reset enable_material;
    ->  Index Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk (actual rows=1439.00 loops=1)
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk (actual rows=2016.00 loops=1)
-         Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk (actual rows=1441.00 loops=1)
-         Index Cond: ("time" > '01-15-2000'::date)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE '2000-01-15'::timestamp < time ORDER BY time;
 --- QUERY PLAN ---
@@ -661,9 +646,7 @@ reset enable_material;
    ->  Index Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk (actual rows=1439.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk (actual rows=2016.00 loops=1)
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk (actual rows=1441.00 loops=1)
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE '2000-01-15'::timestamptz < time ORDER BY time;
 --- QUERY PLAN ---
@@ -740,9 +723,7 @@ reset enable_material;
    ->  Index Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk (actual rows=4029.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk (actual rows=6048.00 loops=1)
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk (actual rows=4611.00 loops=1)
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
 
 -- test Const OP Var
 -- the queries should all have 3 chunks
@@ -777,9 +758,7 @@ reset enable_material;
    ->  Index Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk (actual rows=4029.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk (actual rows=6048.00 loops=1)
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk (actual rows=4611.00 loops=1)
-         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
 
 -- test 2 constraints
 -- the queries should all have 2 chunks
@@ -1330,10 +1309,8 @@ ORDER BY time DESC;
    ->  Append (actual rows=217.00 loops=1)
          ->  Sample Scan on _hyper_3_11_chunk (actual rows=72.00 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
-               Filter: ("time" > '01-15-2000'::date)
          ->  Sample Scan on _hyper_3_10_chunk (actual rows=94.00 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
-               Filter: ("time" > '01-15-2000'::date)
          ->  Sample Scan on _hyper_3_9_chunk (actual rows=51.00 loops=1)
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > '01-15-2000'::date)
@@ -1572,7 +1549,6 @@ ORDER BY time DESC, device_id;
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1 (actual rows=7776.00 loops=1)
          Order: m1."time"
          ->  Index Scan Backward using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m1_1 (actual rows=4032.00 loops=1)
-               Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_2 (actual rows=3744.00 loops=1)
                Index Cond: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
    SubPlan 1
@@ -1781,20 +1757,15 @@ DROP INDEX :INDEX_NAME;
                            Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            Rows Removed by Filter: 650
                ->  Index Scan using _hyper_8_36_chunk_join_limit_time_device_id_idx on _hyper_8_36_chunk m2_2 (never executed)
-                     Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                ->  Index Scan using _hyper_8_37_chunk_join_limit_time_device_id_idx on _hyper_8_37_chunk m2_3 (never executed)
-                     Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
          ->  Materialize (actual rows=22.00 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1 (actual rows=19.00 loops=1)
                      Order: m1."time"
                      ->  Index Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m1_1 (actual rows=19.00 loops=1)
                            Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk m1_2 (never executed)
-                           Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk m1_3 (never executed)
-                           Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_4 (never executed)
-                           Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
 
 DROP TABLE join_limit;
 -- test ChunkAppend projection #2661
