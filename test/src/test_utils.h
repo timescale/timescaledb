@@ -29,7 +29,7 @@ strip_path(const char *filename)
 #define TestFailure(fmt, ...)                                                                      \
 	do                                                                                             \
 	{                                                                                              \
-		elog(WARNING, "TestFailure in %s() at %s:%d", __func__, __FILE__, __LINE__);               \
+		elog(WARNING, "TestFailure in %s() at line:%d", __func__, __LINE__);                       \
 		elog(ERROR, "TestFailure | " fmt "", ##__VA_ARGS__);                                       \
 		pg_unreachable();                                                                          \
 	} while (0)

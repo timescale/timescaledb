@@ -378,6 +378,14 @@ create_sparse_index_column_def(List *attributes, const char *metadata_type)
 		 * result is almost incompressible with lz4 (~2%), so disable it.
 		 */
 		column_def->storage = TYPSTORAGE_EXTERNAL;
+
+		/*
+		 * For composite blooms, we have fewer and higher impact so try to store them inline.
+		 */
+		if (list_length(column_names) > 1)
+		{
+			column_def->storage = TYPSTORAGE_MAIN;
+		}
 	}
 	else /* either min or max */
 	{
