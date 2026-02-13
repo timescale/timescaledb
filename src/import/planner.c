@@ -430,7 +430,7 @@ ts_make_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids)
 }
 
 /*
- * prepare_sort_from_pathkeys
+ * ts_prepare_sort_from_pathkeys
  *	  Prepare to sort according to given pathkeys
  *
  * This is used to set up for Sort, MergeAppend, and Gather Merge nodes.  It
