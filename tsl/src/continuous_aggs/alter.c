@@ -326,14 +326,16 @@ add_expr_to_query(Query *query, Oid relid, Expr *expr, char *column_name)
  * For views, switches to the TimescaleDB internal user for the operation.
  */
 static void
-add_column_to_relation(char *schema_name, char *rel_name, char *column_name, Oid atttype,
-					   int32 atttypmod, Oid attcollation, bool is_view)
+add_column_to_relation(char *schema_name, char *rel_name, AggregateExprInfo *agg_info, bool is_view)
 {
 	int sec_ctx;
 	Oid uid, saved_uid;
 
 	/* Create column definition */
-	ColumnDef *coldef = makeColumnDef(column_name, atttype, atttypmod, attcollation);
+	ColumnDef *coldef = makeColumnDef(agg_info->column_alias,
+									  agg_info->result_type,
+									  agg_info->result_typmod,
+									  agg_info->result_collation);
 
 	/* Create ALTER TABLE/VIEW ADD COLUMN command */
 	AlterTableCmd *cmd = makeNode(AlterTableCmd);
@@ -369,8 +371,7 @@ add_column_to_relation(char *schema_name, char *rel_name, char *column_name, Oid
  */
 static void
 update_view_add_aggregate(Oid view_oid, char *view_schema, char *view_name, Oid source_relid,
-						  Aggref *aggref, Oid atttype, int32 atttypmod, Oid attcollation,
-						  char *column_name)
+						  AggregateExprInfo *agg_info)
 {
 	int sec_ctx;
 	Oid uid, saved_uid;
@@ -378,20 +379,14 @@ update_view_add_aggregate(Oid view_oid, char *view_schema, char *view_name, Oid 
 	/* Step 1: Get the view's query BEFORE adding the column */
 	Query *query = get_view_query_tree(view_oid);
 
-	/* Remove dummy RTEs for PG16+ */
+	/* Remove dummy RTEs for PG16< */
 	RemoveRangeTableEntries(query);
 
 	/* Add the aggregate to the query */
-	add_expr_to_query(query, source_relid, (Expr *) aggref, column_name);
+	add_expr_to_query(query, source_relid, (Expr *) agg_info->aggref, agg_info->column_alias);
 
 	/* Step 2: Add the column to the view relation */
-	add_column_to_relation(view_schema,
-						   view_name,
-						   column_name,
-						   atttype,
-						   atttypmod,
-						   attcollation,
-						   true);
+	add_column_to_relation(view_schema, view_name, agg_info, true);
 
 	/* Step 3: Store the updated query */
 	SWITCH_TO_TS_USER(view_schema, uid, saved_uid, sec_ctx);
@@ -408,8 +403,7 @@ update_view_add_aggregate(Oid view_oid, char *view_schema, char *view_name, Oid 
  */
 static void
 update_user_view_add_column(ContinuousAgg *cagg, Hypertable *mat_ht, Oid source_relid,
-							Aggref *aggref, Oid atttype, int32 atttypmod, Oid attcollation,
-							char *column_name)
+							AggregateExprInfo *agg_info)
 {
 	int sec_ctx;
 	Oid uid, saved_uid;
@@ -419,7 +413,7 @@ update_user_view_add_column(ContinuousAgg *cagg, Hypertable *mat_ht, Oid source_
 											  false);
 
 	/* Get the new attnum from the materialization hypertable after adding the column */
-	AttrNumber mat_attnum = get_attnum(mat_ht->main_table_relid, column_name);
+	AttrNumber mat_attnum = get_attnum(mat_ht->main_table_relid, agg_info->column_alias);
 
 	Query *user_query = get_view_query_tree(user_view_oid);
 	RemoveRangeTableEntries(user_query);
@@ -441,28 +435,41 @@ update_user_view_add_column(ContinuousAgg *cagg, Hypertable *mat_ht, Oid source_
 
 		/* Update materialized subquery (queries mat_ht) - always a simple column read
 		 * since data is pre-aggregated in the materialization hypertable */
-		Expr *mat_var = (Expr *) makeVar(0, mat_attnum, atttype, atttypmod, attcollation, 0);
-		add_expr_to_query(mat_rte->subquery, mat_ht->main_table_relid, mat_var, column_name);
-		mat_rte->eref->colnames = lappend(mat_rte->eref->colnames, makeString(column_name));
+		Expr *mat_var = (Expr *) makeVar(0,
+										 mat_attnum,
+										 agg_info->result_type,
+										 agg_info->result_typmod,
+										 agg_info->result_collation,
+										 0);
+		add_expr_to_query(mat_rte->subquery,
+						  mat_ht->main_table_relid,
+						  mat_var,
+						  agg_info->column_alias);
+		mat_rte->eref->colnames =
+			lappend(mat_rte->eref->colnames, makeString(agg_info->column_alias));
 
 		/* Update raw subquery (queries source relation) - compute the aggregate on the fly */
-		add_expr_to_query(raw_rte->subquery, source_relid, (Expr *) aggref, column_name);
-		raw_rte->eref->colnames = lappend(raw_rte->eref->colnames, makeString(column_name));
+		add_expr_to_query(raw_rte->subquery,
+						  source_relid,
+						  (Expr *) agg_info->aggref,
+						  agg_info->column_alias);
+		raw_rte->eref->colnames =
+			lappend(raw_rte->eref->colnames, makeString(agg_info->column_alias));
 
 		/* Update SetOperationStmt column type lists */
 		SetOperationStmt *setop = castNode(SetOperationStmt, user_query->setOperations);
-		setop->colTypes = lappend_int(setop->colTypes, atttype);
-		setop->colTypmods = lappend_int(setop->colTypmods, atttypmod);
-		setop->colCollations = lappend_int(setop->colCollations, attcollation);
+		setop->colTypes = lappend_int(setop->colTypes, agg_info->result_type);
+		setop->colTypmods = lappend_int(setop->colTypmods, agg_info->result_typmod);
+		setop->colCollations = lappend_int(setop->colCollations, agg_info->result_collation);
 
 		/* Add column to outer targetList (no GROUP BY for UNION ALL outer query) */
 		Expr *outer_var = (Expr *) makeVar(1, /* first RTE is always the UNION result */
 										   list_length(user_query->targetList) + 1,
-										   atttype,
-										   atttypmod,
-										   attcollation,
+										   agg_info->result_type,
+										   agg_info->result_typmod,
+										   agg_info->result_collation,
 										   0);
-		add_expr_to_query(user_query, InvalidOid, outer_var, column_name);
+		add_expr_to_query(user_query, InvalidOid, outer_var, agg_info->column_alias);
 	}
 	else
 	{
@@ -470,17 +477,19 @@ update_user_view_add_column(ContinuousAgg *cagg, Hypertable *mat_ht, Oid source_
 		 * Materialized-only mode: Direct query on mat_ht
 		 * No GROUP BY needed since data is pre-aggregated
 		 */
-		Expr *var = (Expr *) makeVar(0, mat_attnum, atttype, atttypmod, attcollation, 0);
-		add_expr_to_query(user_query, mat_ht->main_table_relid, var, column_name);
+		Expr *var = (Expr *) makeVar(0,
+									 mat_attnum,
+									 agg_info->result_type,
+									 agg_info->result_typmod,
+									 agg_info->result_collation,
+									 0);
+		add_expr_to_query(user_query, mat_ht->main_table_relid, var, agg_info->column_alias);
 	}
 
 	/* Add the column to the user view relation */
 	add_column_to_relation(NameStr(cagg->data.user_view_schema),
 						   NameStr(cagg->data.user_view_name),
-						   column_name,
-						   atttype,
-						   atttypmod,
-						   attcollation,
+						   agg_info,
 						   true);
 
 	/* Store the updated user view query */
@@ -542,11 +551,6 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	 * - For hierarchical CAggs: the parent CAgg's user view
 	 */
 	Oid source_relid = raw_ht->main_table_relid;
-	Oid atttype;
-	int32 atttypmod;
-	Oid attcollation;
-	char *column_name;
-	AggregateExprInfo *agg_info = NULL;
 
 	if (ContinuousAggIsHierarchical(cagg))
 	{
@@ -569,11 +573,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	}
 
 	/* Parse and validate the aggregate expression */
-	agg_info = parse_aggregate_expression(expr_str, source_relid);
-	column_name = agg_info->column_alias;
-	atttype = agg_info->result_type;
-	atttypmod = agg_info->result_typmod;
-	attcollation = agg_info->result_collation;
+	AggregateExprInfo *agg_info = parse_aggregate_expression(expr_str, source_relid);
 
 	/* Check if column already exists in the continuous aggregate */
 	Oid partial_view_oid = ts_get_relation_relid(NameStr(cagg->data.partial_view_schema),
@@ -582,19 +582,20 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 
 	Query *partial_query = get_view_query_tree(partial_view_oid);
 
-	if (column_exists_in_targetlist(partial_query, column_name))
+	if (column_exists_in_targetlist(partial_query, agg_info->column_alias))
 	{
 		ts_cache_release(&hcache);
 		if (if_not_exists)
 		{
 			ereport(NOTICE,
 					(errmsg("column \"%s\" already exists in continuous aggregate, skipping",
-							column_name)));
+							agg_info->column_alias)));
 			PG_RETURN_VOID();
 		}
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_COLUMN),
-				 errmsg("column \"%s\" already exists in continuous aggregate", column_name)));
+				 errmsg("column \"%s\" already exists in continuous aggregate",
+						agg_info->column_alias)));
 	}
 
 	/*
@@ -603,10 +604,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	 */
 	add_column_to_relation(NameStr(mat_ht->fd.schema_name),
 						   NameStr(mat_ht->fd.table_name),
-						   column_name,
-						   atttype,
-						   atttypmod,
-						   attcollation,
+						   agg_info,
 						   false);
 
 	/*
@@ -617,11 +615,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 							  NameStr(cagg->data.partial_view_schema),
 							  NameStr(cagg->data.partial_view_name),
 							  source_relid,
-							  agg_info->aggref,
-							  atttype,
-							  atttypmod,
-							  attcollation,
-							  column_name);
+							  agg_info);
 
 	/*
 	 * Step 3: Update direct view
@@ -634,23 +628,12 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 							  NameStr(cagg->data.direct_view_schema),
 							  NameStr(cagg->data.direct_view_name),
 							  source_relid,
-							  agg_info->aggref,
-							  atttype,
-							  atttypmod,
-							  attcollation,
-							  column_name);
+							  agg_info);
 
 	/*
 	 * Step 4: Update user view
 	 */
-	update_user_view_add_column(cagg,
-								mat_ht,
-								source_relid,
-								agg_info->aggref,
-								atttype,
-								atttypmod,
-								attcollation,
-								column_name);
+	update_user_view_add_column(cagg, mat_ht, source_relid, agg_info);
 
 	ts_cache_release(&hcache);
 
