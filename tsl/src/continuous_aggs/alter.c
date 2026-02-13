@@ -511,7 +511,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 {
 	Oid cagg_relid = PG_GETARG_OID(0);
 	char *expr_str = text_to_cstring(PG_GETARG_TEXT_PP(1));
-	bool if_not_exists = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+	bool if_not_exists = PG_GETARG_BOOL(2);
 
 	/* Get the continuous aggregate */
 	ContinuousAgg *cagg = cagg_get_by_relid_or_fail(cagg_relid);

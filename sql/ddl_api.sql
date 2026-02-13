@@ -225,5 +225,4 @@ CREATE OR REPLACE FUNCTION @extschema@.add_continuous_aggregate_column(
     column_or_expr           TEXT,
     if_not_exists            BOOLEAN = FALSE
 ) RETURNS VOID
-LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_add_column';
-
+AS '@MODULE_PATHNAME@', 'ts_continuous_agg_add_column' LANGUAGE C VOLATILE STRICT;
