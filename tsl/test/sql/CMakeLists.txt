@@ -89,6 +89,7 @@ set(TEST_TEMPLATES
     modify_exclusion.sql.in
     ordered_append.sql.in
     plan_skip_scan.sql.in
+    vector_agg_planning.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
 

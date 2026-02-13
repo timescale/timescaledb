@@ -10,3 +10,4 @@
 /modify_exclusion-*.sql
 /plan_skip_scan_dagg-*.sql
 /columnar_index_scan-*.sql
+/vector_agg_planning-*.sql

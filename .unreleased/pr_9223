@@ -1,0 +1,1 @@
+Fixes: #9223 Clean up orphaned entries in continuous aggregate invalidaton logs

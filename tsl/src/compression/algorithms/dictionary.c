@@ -797,10 +797,12 @@ dictionary_decompression_iterator_try_next_forward(DecompressionIterator *iter_b
 				.is_done = true,
 			};
 
-		if (null.val != 0)
+		if ((null.val & 1) != 0)
+		{
 			return (DecompressResult){
 				.is_null = true,
 			};
+		}
 	}
 
 	result = simple8brle_decompression_iterator_try_next_forward(&iter->bitmap);
@@ -836,10 +838,12 @@ dictionary_decompression_iterator_try_next_reverse(DecompressionIterator *iter_b
 				.is_done = true,
 			};
 
-		if (null.val != 0)
+		if ((null.val & 1) != 0)
+		{
 			return (DecompressResult){
 				.is_null = true,
 			};
+		}
 	}
 
 	result = simple8brle_decompression_iterator_try_next_reverse(&iter->bitmap);
