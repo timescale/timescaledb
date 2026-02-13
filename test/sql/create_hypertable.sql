@@ -949,3 +949,6 @@ DROP TABLE test_uuid_legacy;
 
 -- Cleanup
 RESET timescaledb.default_chunk_time_interval;
+
+-- Check that we produce the proper error code for nonexistent tables.
+select create_hypertable(77777777, 'nonexistent');
