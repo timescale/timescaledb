@@ -101,11 +101,6 @@ typedef struct
 	Bitmapset *uncompressed_attrs_needed;
 
 	/*
-	 * If we produce at least some columns that support bulk decompression.
-	 */
-	bool have_bulk_decompression_columns;
-
-	/*
 	 * Maps the uncompressed chunk attno to the respective column compression
 	 * info. This lives only during planning so that we can understand on which
 	 * columns we can apply vectorized quals, and which uncompressed attno goes
@@ -311,7 +306,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 	 * Go over the scan targetlist and determine to which output column each
 	 * scan column goes, saving other additional info as we do that.
 	 */
-	context->have_bulk_decompression_columns = false;
+	bool bulk_decompression_possible_for_some_columns = false;
 	context->decompression_map = NIL;
 	foreach (lc, compressed_output_tlist)
 	{
@@ -401,7 +396,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 			!is_segment && destination_attno > 0 &&
 			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) !=
 				NULL;
-		context->have_bulk_decompression_columns |= bulk_decompression_possible;
+		bulk_decompression_possible_for_some_columns |= bulk_decompression_possible;
 
 		/*
 		 * Save information about decompressed columns in uncompressed chunk
@@ -420,6 +415,16 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 			.uncompressed_chunk_attno = destination_attno,
 			.is_segmentby = is_segment,
 		};
+	}
+
+	if (!bulk_decompression_possible_for_some_columns)
+	{
+		/*
+		 * This is mostly a cosmetic thing for EXPLAIN -- don't say that we're
+		 * using bulk decompression, if it is enabled but we have no columns
+		 * that support it.
+		 */
+		path->enable_bulk_decompression = false;
 	}
 
 	/*
@@ -1396,18 +1401,15 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 
 	Assert(list_length(custom_plans) == 1);
 
-	const bool enable_bulk_decompression = !dcpath->batch_sorted_merge &&
-										   ts_guc_enable_bulk_decompression &&
-										   context.have_bulk_decompression_columns;
-
 	/*
 	 * For some predicates, we have more efficient implementation that work on
 	 * the entire compressed batch in one go. They go to this list, and the rest
 	 * goes into the usual scan.plan.qual.
 	 */
 	List *vectorized_quals = NIL;
-	if (enable_bulk_decompression)
+	if (dcpath->enable_bulk_decompression)
 	{
+		Assert(!dcpath->batch_sorted_merge);
 		List *nonvectorized_quals = NIL;
 		find_vectorized_quals(&context,
 							  dcpath,
@@ -1447,7 +1449,8 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	lfirst_int(list_nth_cell(settings, DCS_ChunkRelid)) = dcpath->info->chunk_rte->relid;
 	lfirst_int(list_nth_cell(settings, DCS_Reverse)) = dcpath->reverse;
 	lfirst_int(list_nth_cell(settings, DCS_BatchSortedMerge)) = dcpath->batch_sorted_merge;
-	lfirst_int(list_nth_cell(settings, DCS_EnableBulkDecompression)) = enable_bulk_decompression;
+	lfirst_int(list_nth_cell(settings, DCS_EnableBulkDecompression)) =
+		dcpath->enable_bulk_decompression;
 	lfirst_int(list_nth_cell(settings, DCS_HasRowMarks)) = root->parse->rowMarks != NIL;
 	lfirst_int(list_nth_cell(settings, DCS_ChunkStatus)) = dcpath->chunk_status;
 

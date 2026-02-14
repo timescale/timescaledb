@@ -20,6 +20,7 @@
 #include "continuous_aggs/planner.h"
 #include "guc.h"
 #include "hypertable.h"
+#include "nodes/chunk_append/chunk_append.h"
 #include "nodes/columnar_index_scan/columnar_index_scan.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/gapfill/gapfill.h"
@@ -49,6 +50,183 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *parent)
 		}
 	}
 	return false;
+}
+
+/*
+ * Try to disable bulk decompression on ColumnarScanPath, skipping the above
+ * Projection path and also handling Lists.
+ */
+static Node *
+try_disable_bulk_decompression(PlannerInfo *root, Node *node, List *required_pathkeys)
+{
+	if (node == NULL)
+	{
+		/*
+		 * We can have e.g. AppendPath.subpaths == NULL in case of relations
+		 * proven empty, so handle NULLs for simplicity here.
+		 */
+		return NULL;
+	}
+
+	if (IsA(node, List))
+	{
+		ListCell *lc;
+		foreach (lc, (List *) node)
+		{
+			lfirst(lc) =
+				try_disable_bulk_decompression(root, (Node *) lfirst(lc), required_pathkeys);
+		}
+		return node;
+	}
+
+	if (IsA(node, ProjectionPath))
+	{
+		ProjectionPath *path = castNode(ProjectionPath, node);
+		path->subpath = (Path *) try_disable_bulk_decompression(root,
+																(Node *) path->subpath,
+																required_pathkeys);
+		return node;
+	}
+
+	if (IsA(node, AppendPath))
+	{
+		try_disable_bulk_decompression(root,
+									   (Node *) castNode(AppendPath, node)->subpaths,
+									   required_pathkeys);
+		return node;
+	}
+
+	if (IsA(node, MergeAppendPath))
+	{
+		try_disable_bulk_decompression(root,
+									   (Node *) castNode(MergeAppendPath, node)->subpaths,
+									   required_pathkeys);
+		return node;
+	}
+
+	if (!IsA(node, CustomPath))
+	{
+		return node;
+	}
+
+	CustomPath *custom_child = castNode(CustomPath, node);
+	if (ts_is_chunk_append_path(&custom_child->path))
+	{
+		try_disable_bulk_decompression(root,
+									   (Node *) custom_child->custom_paths,
+									   required_pathkeys);
+		return node;
+	}
+
+	if (!ts_is_columnar_scan_path(&custom_child->path))
+	{
+		return node;
+	}
+
+	/*
+	 * At the Path level, a Sort is implied anywhere in the Path tree where the
+	 * pathkeys differ. All subplan's rows will be read in this case, so the
+	 * optimization does not apply.
+	 */
+	if (!pathkeys_contained_in(required_pathkeys, custom_child->path.pathkeys))
+	{
+		return node;
+	}
+
+	ColumnarScanPath *dcpath = (ColumnarScanPath *) custom_child;
+	if (!dcpath->enable_bulk_decompression)
+	{
+		return node;
+	}
+
+	ColumnarScanPath *path_copy = copy_columnar_scan_path(dcpath);
+	path_copy->enable_bulk_decompression = false;
+	return (Node *) path_copy;
+}
+
+/*
+ * When we have a small limit above chunk decompression, it is more efficient to
+ * use the row-by-row decompression iterators than the bulk decompression. Since
+ * bulk decompression is about 10x faster than row-by-row, this advantage goes
+ * away on limits > 100. This hook disables bulk decompression under small limits.
+ */
+static void
+check_limit_bulk_decompression(PlannerInfo *root, Node *node)
+{
+	ListCell *lc;
+	switch (node->type)
+	{
+		case T_List:
+			foreach (lc, (List *) node)
+			{
+				check_limit_bulk_decompression(root, lfirst(lc));
+			}
+			break;
+		case T_LimitPath:
+		{
+			double limit = -1;
+			LimitPath *path = castNode(LimitPath, node);
+
+			if (path->limitCount != NULL && IsA(path->limitCount, Const))
+			{
+				Const *count = castNode(Const, path->limitCount);
+				Assert(count->consttype == INT8OID);
+				int64 count_value = DatumGetInt64(count->constvalue);
+				if (count_value < 0)
+				{
+					/*
+					 * The negative LIMIT values produce an error only at the
+					 * execution stage, so we have to handle them here. Just
+					 * skip the processing in this case, because the query will
+					 * fail anyway.
+					 */
+					break;
+				}
+				limit = count_value;
+			}
+
+			if (path->limitOffset != NULL && IsA(path->limitOffset, Const))
+			{
+				Const *offset = castNode(Const, path->limitOffset);
+				Assert(offset->consttype == INT8OID);
+				int64 offset_value = DatumGetInt64(offset->constvalue);
+				if (offset_value < 0)
+				{
+					/* See the comment for LIMIT handling above. */
+					break;
+				}
+				limit += offset_value;
+			}
+
+			if (limit > 0 && limit < 100)
+			{
+				return;
+				path->subpath = (Path *) try_disable_bulk_decompression(root,
+																		(Node *) path->subpath,
+																		path->subpath->pathkeys);
+			}
+
+			break;
+		}
+		case T_MemoizePath:
+			check_limit_bulk_decompression(root, (Node *) castNode(MemoizePath, node)->subpath);
+			break;
+		case T_ProjectionPath:
+			check_limit_bulk_decompression(root, (Node *) castNode(ProjectionPath, node)->subpath);
+			break;
+		case T_SubqueryScanPath:
+			check_limit_bulk_decompression(root,
+										   (Node *) castNode(SubqueryScanPath, node)->subpath);
+			break;
+		case T_NestPath:
+		case T_MergePath:
+		case T_HashPath:
+			check_limit_bulk_decompression(root, (Node *) ((JoinPath *) node)->outerjoinpath);
+			check_limit_bulk_decompression(root, (Node *) ((JoinPath *) node)->innerjoinpath);
+			break;
+		default:
+			break;
+	}
 }
 
 void
@@ -82,6 +260,9 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 			break;
 		case UPPERREL_DISTINCT:
 			tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
+			break;
+		case UPPERREL_FINAL:
+			check_limit_bulk_decompression(root, (Node *) output_rel->pathlist);
 			break;
 		default:
 			break;
