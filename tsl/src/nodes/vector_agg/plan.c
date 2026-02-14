@@ -202,6 +202,21 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 									  o->inputcollid);
 		}
 
+		case T_RelabelType:
+		{
+			/*
+			 * RelabelType represents a binary-coercible type cast (e.g., VARCHAR to TEXT).
+			 * We need to check the underlying expression, but the result type must still
+			 * have a vectorized representation.
+			 */
+			RelabelType *r = castNode(RelabelType, expr);
+			if (!is_vector_type(r->resulttype))
+			{
+				return false;
+			}
+			return is_vector_expr(vqinfo, r->arg);
+		}
+
 		case T_Var:
 		{
 			Var *var = castNode(Var, expr);
