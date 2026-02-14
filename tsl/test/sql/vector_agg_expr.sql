@@ -43,6 +43,10 @@ select count(compress_chunk(x)) from show_chunks('aggexpr') x;
 
 vacuum full analyze aggexpr;
 
+-- The batch sorted merge has very close costs for one query, and prevents
+-- vectorized aggregation, so we have to get it out of the way.
+set timescaledb.enable_decompression_sorted_merge to off;
+
 
 -- Some functions we are not able to vectorize at the moment.
 set timescaledb.debug_require_vector_agg = 'forbid';
@@ -62,6 +66,7 @@ reset timescaledb.debug_require_vector_agg;
 -- Test some functions that are vectorizable.
 set timescaledb.debug_require_vector_agg = 'require';
 -- /* Uncomment to generate reference. */ set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
+
 
 select always_null(i) from aggexpr group by 1;
 
@@ -103,3 +108,5 @@ order by grouping.n, condition.n, function.n
 
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
+
+reset timescaledb.enable_decompression_sorted_merge;
