@@ -217,7 +217,7 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 			const bool is_vector = vqinfo->vector_attrs && vqinfo->vector_attrs[var->varattno];
 
 			/*
-			 * The segmentby colums are considered vectorizable, but their type might not actually
+			 * The segmentby columns are considered vectorizable, but their type might not actually
 			 * have a columnar representation. Theoretically this can work because they are always
 			 * represented as DT_Scalar, but in practice this is poorly tested and of limited
 			 * utility, so we consider such columns not to be vectorizable at the moment.
@@ -431,54 +431,6 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 #endif
 }
 
-typedef Plan *(*walkerfunc)(Plan *, void *);
-
-static Plan *
-agg_walker(Plan *plan, walkerfunc func, void *context)
-{
-	if (!plan)
-		return NULL;
-
-	if (IsA(plan, List))
-	{
-		ListCell *lc;
-		foreach (lc, castNode(List, plan))
-		{
-			lfirst(lc) = agg_walker(lfirst(lc), func, context);
-		}
-		return plan;
-	}
-
-	if (plan->lefttree)
-		plan->lefttree = agg_walker(plan->lefttree, func, context);
-	if (plan->righttree)
-		plan->righttree = agg_walker(plan->righttree, func, context);
-
-	if (IsA(plan, Append))
-	{
-		Append *append = castNode(Append, plan);
-		append->appendplans = (List *) agg_walker((Plan *) append->appendplans, func, context);
-	}
-	else if (IsA(plan, MergeAppend))
-	{
-		MergeAppend *append = castNode(MergeAppend, plan);
-		append->mergeplans = (List *) agg_walker((Plan *) append->mergeplans, func, context);
-	}
-	else if (IsA(plan, CustomScan))
-	{
-		CustomScan *custom = castNode(CustomScan, plan);
-		custom->custom_plans = (List *) agg_walker((Plan *) custom->custom_plans, func, context);
-	}
-	if (IsA(plan, SubqueryScan))
-	{
-		SubqueryScan *subquery = castNode(SubqueryScan, plan);
-		subquery->subplan = agg_walker(castNode(SubqueryScan, plan)->subplan, func, context);
-		return plan;
-	}
-
-	return func(plan, context);
-};
-
 typedef struct HasVectorAggContext
 {
 	bool has_agg;
@@ -508,7 +460,7 @@ bool
 has_vector_agg_node(Plan *plan, bool *has_some_agg)
 {
 	HasVectorAggContext context = { .has_agg = false, .has_vector_agg = false };
-	agg_walker(plan, has_vector_agg, &context);
+	ts_plan_tree_walker(plan, has_vector_agg, &context);
 	*has_some_agg = context.has_agg;
 	return context.has_vector_agg;
 }
@@ -547,7 +499,7 @@ static Plan *insert_vector_agg(Plan *plan, void *context);
 Plan *
 try_insert_vector_agg_node(Plan *plan)
 {
-	return agg_walker(plan, insert_vector_agg, NULL);
+	return ts_plan_tree_walker(plan, insert_vector_agg, NULL);
 }
 
 static Plan *

@@ -6,8 +6,10 @@
 
 #include <postgres.h>
 #include <catalog/pg_type.h>
+#include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/plannodes.h>
 #include <nodes/primnodes.h>
 #include <utils/lsyscache.h>
 
@@ -192,6 +194,59 @@ resolve_outer_special_vars_mutator(Node *node, void *context)
 
 	Ensure(false, "encountered unexpected varno %d as an aggregate argument", var->varno);
 	return node;
+}
+
+/*
+ * Walk a plan tree recursively descending into child plans.
+ * At each leaf, call the user-supplied callback which may replace the node.
+ */
+Plan *
+ts_plan_tree_walker(Plan *plan, ts_plan_tree_walkerfunc func, void *context)
+{
+	if (!plan)
+		return NULL;
+
+	if (IsA(plan, List))
+	{
+		ListCell *lc;
+		foreach (lc, castNode(List, plan))
+		{
+			lfirst(lc) = ts_plan_tree_walker(lfirst(lc), func, context);
+		}
+		return plan;
+	}
+
+	if (plan->lefttree)
+		plan->lefttree = ts_plan_tree_walker(plan->lefttree, func, context);
+	if (plan->righttree)
+		plan->righttree = ts_plan_tree_walker(plan->righttree, func, context);
+
+	if (IsA(plan, Append))
+	{
+		Append *append = castNode(Append, plan);
+		append->appendplans =
+			(List *) ts_plan_tree_walker((Plan *) append->appendplans, func, context);
+	}
+	else if (IsA(plan, MergeAppend))
+	{
+		MergeAppend *append = castNode(MergeAppend, plan);
+		append->mergeplans =
+			(List *) ts_plan_tree_walker((Plan *) append->mergeplans, func, context);
+	}
+	else if (IsA(plan, CustomScan))
+	{
+		CustomScan *custom = castNode(CustomScan, plan);
+		custom->custom_plans =
+			(List *) ts_plan_tree_walker((Plan *) custom->custom_plans, func, context);
+	}
+	if (IsA(plan, SubqueryScan))
+	{
+		SubqueryScan *subquery = castNode(SubqueryScan, plan);
+		subquery->subplan = ts_plan_tree_walker(subquery->subplan, func, context);
+		return plan;
+	}
+
+	return func(plan, context);
 }
 
 /*
