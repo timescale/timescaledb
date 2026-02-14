@@ -60,7 +60,8 @@ static void continuous_agg_refresh_init(ContinuousAggRefreshState *refresh,
 										const InternalTimeRange *refresh_window,
 										bool bucketing_refresh_window);
 static void continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
-										   const InternalTimeRange *bucketed_refresh_window);
+										   const InternalTimeRange *bucketed_refresh_window,
+										   int32 job_id);
 static void log_refresh_window(int elevel, const ContinuousAgg *cagg,
 							   const InternalTimeRange *refresh_window,
 							   ContinuousAggRefreshContext context);
@@ -399,7 +400,7 @@ continuous_agg_refresh_init(ContinuousAggRefreshState *refresh, const Continuous
  */
 static void
 continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
-							   const InternalTimeRange *bucketed_refresh_window)
+							   const InternalTimeRange *bucketed_refresh_window, int32 job_id)
 {
 	SchemaAndName cagg_hypertable_name = {
 		.schema = &refresh->cagg_ht->fd.schema_name,
@@ -414,7 +415,8 @@ continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
 										  refresh->partial_view,
 										  cagg_hypertable_name,
 										  &time_dim->fd.column_name,
-										  *bucketed_refresh_window);
+										  *bucketed_refresh_window,
+										  job_id);
 }
 
 static void
@@ -454,7 +456,7 @@ continuous_agg_refresh_execute_wrapper(const InternalTimeRange *bucketed_refresh
 	(void) iteration;
 
 	log_refresh_window(CAGG_REFRESH_LOG_LEVEL, &refresh->cagg, bucketed_refresh_window, context);
-	continuous_agg_refresh_execute(refresh, bucketed_refresh_window);
+	continuous_agg_refresh_execute(refresh, bucketed_refresh_window, context.job_id);
 }
 
 static long
@@ -897,7 +899,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * by the refresh function*/
 	refresh_window = *refresh_window_arg;
 	bool has_pending_materializations =
-		continuous_agg_has_pending_materializations(cagg, refresh_window);
+		continuous_agg_has_pending_materializations(cagg, refresh_window, context.job_id);
 
 	if (has_pending_materializations)
 	{
@@ -934,7 +936,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 															  cagg->bucket_function);
 		}
 
-		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window);
+		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window, context.job_id);
 	}
 
 	if (!refreshed && !has_pending_materializations)
@@ -1291,4 +1293,66 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	}
 
 	return refresh_window_list;
+}
+
+/*
+ * Delete orphaned rows from the materialization_ranges table.
+ *
+ * Orphaned rows are those with job_id = 0 whose pid is no longer an active
+ * backend (i.e., not present in pg_stat_activity). These rows are left behind
+ * when a manual refresh is interrupted or fails.
+ */
+uint64
+continuous_agg_delete_orphaned_materialization_ranges(int32 materialization_id)
+{
+	int res;
+	uint64 ndeleted;
+	Oid types[] = { INT4OID };
+	Datum values[] = { Int32GetDatum(materialization_id) };
+	char nulls[] = { false };
+	CatalogSecurityContext sec_ctx;
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	/* Lock down search_path */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+
+	res = SPI_execute_with_args("DELETE FROM "
+								"_timescaledb_catalog.continuous_aggs_materialization_ranges mr "
+								"WHERE mr.materialization_id = $1 "
+								"AND mr.job_id = 0 "
+								"AND NOT EXISTS ("
+								"SELECT 1 FROM pg_stat_activity sa WHERE sa.pid = mr.pid"
+								")",
+								1,
+								types,
+								values,
+								nulls,
+								false /* read_only */,
+								0 /* count */);
+
+	ts_catalog_restore_user(&sec_ctx);
+
+	if (res < 0)
+		elog(LOG, "could not delete orphaned materialization ranges");
+
+	ndeleted = SPI_processed;
+
+	elog(DEBUG2,
+		 "deleted " UINT64_FORMAT " orphaned materialization range(s) for materialization_id %d",
+		 ndeleted,
+		 materialization_id);
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
+
+	res = SPI_finish();
+	if (res != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+
+	return ndeleted;
 }
