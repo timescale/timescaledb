@@ -494,6 +494,74 @@ vectoragg_plan_possible(Plan *childplan, VectorQualInfo *vqi)
 	return false;
 }
 
+static Node *
+mark_partial_aggref_mutator(Node *node, void *context)
+{
+	if (node == NULL)
+		return NULL;
+
+	if (IsA(node, Aggref))
+	{
+		mark_partial_aggref(castNode(Aggref, node), AGGSPLIT_INITIAL_SERIAL);
+		return node;
+	}
+
+	return expression_tree_mutator(node, mark_partial_aggref_mutator, context);
+}
+
+typedef struct MakeFinalizeAggContext
+{
+	Agg *agg;
+	List *vector_agg_targetlist;
+} MakeFinalizeAggContext;
+
+static Node *
+make_finalize_agg_mutator(Node *node, void *context)
+{
+	if (node == NULL)
+		return NULL;
+
+	if (IsA(node, TargetEntry))
+	{
+		TargetEntry *tle = castNode(TargetEntry, node);
+		MakeFinalizeAggContext *ctx = (MakeFinalizeAggContext *) context;
+
+		if (IsA(tle->expr, Var))
+		{
+			Var *var = castNode(Var, tle->expr);
+			Assert(var->varno == OUTER_VAR);
+			AttrNumber old_attno = var->varattno;
+			var->varattno = tle->resno;
+			for (int k = 0; k < ctx->agg->numCols; k++)
+			{
+				if (ctx->agg->grpColIdx[k] == old_attno)
+					ctx->agg->grpColIdx[k] = tle->resno;
+			}
+			return node;
+		}
+
+		if (IsA(tle->expr, Aggref))
+		{
+			Aggref *aggref = castNode(Aggref, tle->expr);
+
+			/*
+			 * Look up the VectorAgg output type for this column, which is
+			 * the transition type set by mark_partial_aggref above.
+			 */
+			TargetEntry *vag_tle = list_nth(ctx->vector_agg_targetlist, tle->resno - 1);
+			Oid var_type = exprType((Node *) vag_tle->expr);
+
+			mark_partial_aggref(aggref, AGGSPLIT_FINAL_DESERIAL);
+
+			Var *var = makeVar(OUTER_VAR, tle->resno, var_type, -1, aggref->aggcollid, 0);
+			aggref->args = list_make1(makeTargetEntry((Expr *) var, 1, NULL, false));
+			return node;
+		}
+	}
+
+	return expression_tree_mutator(node, make_finalize_agg_mutator, context);
+}
+
 static Plan *insert_vector_agg(Plan *plan, void *context);
 
 Plan *
@@ -614,15 +682,10 @@ insert_vector_agg(Plan *plan, void *context)
 		 * aggregation with VectorAgg performing the partial step.
 		 */
 		CustomScan *vector_agg = castNode(CustomScan, vector_agg_plan);
-		ListCell *lc;
-		foreach (lc, vector_agg->custom_scan_tlist)
-		{
-			TargetEntry *tle = lfirst_node(TargetEntry, lc);
-			if (IsA(tle->expr, Aggref))
-			{
-				mark_partial_aggref(castNode(Aggref, tle->expr), AGGSPLIT_INITIAL_SERIAL);
-			}
-		}
+		vector_agg->custom_scan_tlist =
+			(List *) expression_tree_mutator((Node *) vector_agg->custom_scan_tlist,
+											 mark_partial_aggref_mutator,
+											 NULL);
 
 		/*
 		 * Rebuild the plan output targetlist to reflect the updated types.
@@ -639,38 +702,16 @@ insert_vector_agg(Plan *plan, void *context)
 		agg->aggsplit = AGGSPLIT_FINAL_DESERIAL;
 		agg->plan.lefttree = vector_agg_plan;
 
-		foreach (lc, agg->plan.targetlist)
-		{
-			TargetEntry *tle = lfirst_node(TargetEntry, lc);
-			if (IsA(tle->expr, Var))
-			{
-				Var *var = castNode(Var, tle->expr);
-				Assert(var->varno == OUTER_VAR);
-				AttrNumber old_attno = var->varattno;
-				var->varattno = tle->resno;
-				for (int k = 0; k < agg->numCols; k++)
-				{
-					if (agg->grpColIdx[k] == old_attno)
-						agg->grpColIdx[k] = tle->resno;
-				}
-			}
-			else if (IsA(tle->expr, Aggref))
-			{
-				Aggref *aggref = castNode(Aggref, tle->expr);
-
-				/*
-				 * Look up the VectorAgg output type for this column, which is
-				 * the transition type set by mark_partial_aggref above.
-				 */
-				TargetEntry *vag_tle = list_nth(vector_agg->scan.plan.targetlist, tle->resno - 1);
-				Oid var_type = exprType((Node *) vag_tle->expr);
-
-				mark_partial_aggref(aggref, AGGSPLIT_FINAL_DESERIAL);
-
-				Var *var = makeVar(OUTER_VAR, tle->resno, var_type, -1, aggref->aggcollid, 0);
-				aggref->args = list_make1(makeTargetEntry((Expr *) var, 1, NULL, false));
-			}
-		}
+		MakeFinalizeAggContext finalize_ctx = {
+			.agg = agg,
+			.vector_agg_targetlist = vector_agg->scan.plan.targetlist,
+		};
+		agg->plan.targetlist = (List *) expression_tree_mutator((Node *) agg->plan.targetlist,
+																make_finalize_agg_mutator,
+																&finalize_ctx);
+		agg->plan.qual = (List *) expression_tree_mutator((Node *) agg->plan.qual,
+														  make_finalize_agg_mutator,
+														  &finalize_ctx);
 
 		return (Plan *) agg;
 	}

@@ -6,7 +6,7 @@ SET max_parallel_workers_per_gather = 0;
 CREATE TABLE metrics(time timestamptz not null, device text, value float) WITH (tsdb.hypertable);
 NOTICE:  using column "time" as partitioning column
 -- create initial chunk
-INSERT INTO metrics SELECT '2025-01-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, random() from generate_series(1,1000) g(i);
+INSERT INTO metrics SELECT '2025-01-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, i % 100 from generate_series(1,1000) g(i);
 SELECT compress_chunk(c) FROM show_chunks('metrics') c;
              compress_chunk             
 ----------------------------------------
@@ -47,7 +47,7 @@ SELECT compress_chunk(c) FROM show_chunks('metrics') c;
          ->  Seq Scan on pg_class
 
 -- create 2nd chunk
-INSERT INTO metrics SELECT '2025-02-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, random() from generate_series(1,1000) g(i);
+INSERT INTO metrics SELECT '2025-02-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, i % 100 from generate_series(1,1000) g(i);
 SELECT compress_chunk(c) FROM show_chunks('metrics') c;
 NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
              compress_chunk             
@@ -100,4 +100,201 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
    ->  Result
          One-Time Filter: $0
          ->  Seq Scan on pg_class
+
+-- HAVING on aggregate without GROUP BY.
+:EXPLAIN SELECT sum(value) from metrics HAVING sum(value) > 0;
+--- QUERY PLAN ---
+ Finalize Aggregate
+   Filter: (sum(metrics.value) > '0'::double precision)
+   ->  Append
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                     ->  Seq Scan on compress_hyper_2_4_chunk
+
+:EXPLAIN SELECT sum(value) from metrics HAVING sum(value) < 0;
+--- QUERY PLAN ---
+ Finalize Aggregate
+   Filter: (sum(metrics.value) < '0'::double precision)
+   ->  Append
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                     ->  Seq Scan on compress_hyper_2_4_chunk
+
+-- HAVING on aggregate with GROUP BY.
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING sum(value) > 500 ORDER BY device;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         Filter: (sum(metrics.value) > '500'::double precision)
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                           ->  Seq Scan on compress_hyper_2_4_chunk
+
+:EXPLAIN SELECT device, count(*) from metrics GROUP BY device HAVING count(*) > 100 ORDER BY device;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         Filter: (count(*) > 100)
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                           ->  Seq Scan on compress_hyper_2_4_chunk
+
+-- HAVING referencing a different aggregate than the target list.
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING count(*) > 100 ORDER BY device;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         Filter: (count(*) > 100)
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                           ->  Seq Scan on compress_hyper_2_4_chunk
+
+:EXPLAIN SELECT device, count(*) from metrics GROUP BY device HAVING sum(value) > 500 ORDER BY device;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         Filter: (sum(metrics.value) > '500'::double precision)
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                           ->  Seq Scan on compress_hyper_2_4_chunk
+
+-- HAVING with multiple conditions.
+:EXPLAIN SELECT device, sum(value), count(*) from metrics GROUP BY device
+    HAVING sum(value) > 500 and count(*) > 100 ORDER BY device;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         Filter: ((sum(metrics.value) > '500'::double precision) AND (count(*) > 100))
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                           ->  Seq Scan on compress_hyper_2_4_chunk
+
+-- HAVING on grouping column (pushed down by planner to WHERE).
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING device = 'dev 5' ORDER BY device;
+--- QUERY PLAN ---
+ Finalize GroupAggregate
+   Group Key: metrics.device
+   ->  Append
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     Vectorized Filter: (device = 'dev 5'::text)
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                     Vectorized Filter: (device = 'dev 5'::text)
+                     ->  Seq Scan on compress_hyper_2_4_chunk
+
+-- HAVING with expressions on aggregates.
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING sum(value) * 2 > 1000 ORDER BY device;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         Filter: ((sum(metrics.value) * '2'::double precision) > '1000'::double precision)
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                           ->  Seq Scan on compress_hyper_2_4_chunk
+
+-- HAVING with different aggregate functions.
+:EXPLAIN SELECT device, min(value) from metrics GROUP BY device HAVING min(value) = 0 ORDER BY device;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         Filter: (min(metrics.value) = '0'::double precision)
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                           ->  Seq Scan on compress_hyper_2_4_chunk
+
+:EXPLAIN SELECT device, max(value) from metrics GROUP BY device HAVING max(value) < 90 ORDER BY device;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         Filter: (max(metrics.value) < '90'::double precision)
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                           ->  Seq Scan on compress_hyper_2_4_chunk
+
+:EXPLAIN SELECT device, avg(value) from metrics GROUP BY device HAVING avg(value) > 49 ORDER BY device;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         Filter: (avg(metrics.value) > '49'::double precision)
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                           ->  Seq Scan on compress_hyper_2_4_chunk
+
+-- HAVING with segmentby grouping.
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING sum(value) > 10000 ORDER BY device;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device
+   ->  Finalize HashAggregate
+         Group Key: metrics.device
+         Filter: (sum(metrics.value) > '10000'::double precision)
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                           ->  Seq Scan on compress_hyper_2_4_chunk
 
