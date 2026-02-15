@@ -8,7 +8,7 @@ SET max_parallel_workers_per_gather = 0;
 CREATE TABLE metrics(time timestamptz not null, device text, value float) WITH (tsdb.hypertable);
 
 -- create initial chunk
-INSERT INTO metrics SELECT '2025-01-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, random() from generate_series(1,1000) g(i);
+INSERT INTO metrics SELECT '2025-01-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, i % 100 from generate_series(1,1000) g(i);
 SELECT compress_chunk(c) FROM show_chunks('metrics') c;
 
 -- run queries with single chunk
@@ -22,7 +22,7 @@ SELECT compress_chunk(c) FROM show_chunks('metrics') c;
 :EXPLAIN SELECT FROM pg_class WHERE EXISTS (SELECT count(*) FROM metrics) LIMIT 1;
 
 -- create 2nd chunk
-INSERT INTO metrics SELECT '2025-02-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, random() from generate_series(1,1000) g(i);
+INSERT INTO metrics SELECT '2025-02-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, i % 100 from generate_series(1,1000) g(i);
 SELECT compress_chunk(c) FROM show_chunks('metrics') c;
 
 -- run queries with two chunks
@@ -34,4 +34,34 @@ SELECT compress_chunk(c) FROM show_chunks('metrics') c;
 
 -- InitPlan
 :EXPLAIN SELECT FROM pg_class WHERE EXISTS (SELECT count(*) FROM metrics) LIMIT 1;
+
+-- HAVING on aggregate without GROUP BY.
+:EXPLAIN SELECT sum(value) from metrics HAVING sum(value) > 0;
+:EXPLAIN SELECT sum(value) from metrics HAVING sum(value) < 0;
+
+-- HAVING on aggregate with GROUP BY.
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING sum(value) > 500 ORDER BY device;
+:EXPLAIN SELECT device, count(*) from metrics GROUP BY device HAVING count(*) > 100 ORDER BY device;
+
+-- HAVING referencing a different aggregate than the target list.
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING count(*) > 100 ORDER BY device;
+:EXPLAIN SELECT device, count(*) from metrics GROUP BY device HAVING sum(value) > 500 ORDER BY device;
+
+-- HAVING with multiple conditions.
+:EXPLAIN SELECT device, sum(value), count(*) from metrics GROUP BY device
+    HAVING sum(value) > 500 and count(*) > 100 ORDER BY device;
+
+-- HAVING on grouping column (pushed down by planner to WHERE).
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING device = 'dev 5' ORDER BY device;
+
+-- HAVING with expressions on aggregates.
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING sum(value) * 2 > 1000 ORDER BY device;
+
+-- HAVING with different aggregate functions.
+:EXPLAIN SELECT device, min(value) from metrics GROUP BY device HAVING min(value) = 0 ORDER BY device;
+:EXPLAIN SELECT device, max(value) from metrics GROUP BY device HAVING max(value) < 90 ORDER BY device;
+:EXPLAIN SELECT device, avg(value) from metrics GROUP BY device HAVING avg(value) > 49 ORDER BY device;
+
+-- HAVING with segmentby grouping.
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING sum(value) > 10000 ORDER BY device;
 
