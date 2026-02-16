@@ -612,7 +612,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	else
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
-	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_WINDOW };
+	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_WINDOW, .job_id = 0 };
+	continuous_agg_delete_orphaned_materialization_ranges(cagg->data.mat_hypertable_id);
 	continuous_agg_refresh_internal(cagg,
 									&refresh_window,
 									context,
@@ -893,52 +894,62 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 															bucketing_refresh_window,
 															force);
 
-	/* check if we have any pending materializations in our refresh window range,
-	 * if so, we need to process them
+	/* If this is being run via a job, check if we have any pending materializations in
+	 * our refresh window range,  if so, we need to process them.
+	 * If there are failed ranges from manual refreshes, we will not process them and let them be
+	 * cleaned up via oprphaned materialization range cleanup
+	 * TODO: failed refreshes outside this window are not being handled here.
 	 * Note that we use the original refresh window range here, not the one that has been processed
 	 * by the refresh function*/
-	refresh_window = *refresh_window_arg;
-	bool has_pending_materializations =
-		continuous_agg_has_pending_materializations(cagg, refresh_window, context.job_id);
-
-	if (has_pending_materializations)
+	bool has_pending_materializations = false;
+	if (context.job_id > 0)
 	{
-		ContinuousAggRefreshState refresh;
-		continuous_agg_refresh_init(&refresh, cagg, &refresh_window, bucketing_refresh_window);
+		refresh_window = *refresh_window_arg;
+		has_pending_materializations =
+			continuous_agg_has_pending_materializations(cagg, refresh_window, context.job_id);
 
-#ifdef TS_DEBUG
-		elog(NOTICE,
-			 "continuous aggregate \"%s\" has pending materializations in window [ %s, %s ]",
-			 NameStr(cagg->data.user_view_name),
-			 ts_internal_to_time_string(refresh_window.start, refresh_window.type),
-			 ts_internal_to_time_string(refresh_window.end, refresh_window.type));
-#endif
-
-		InternalTimeRange invalidation = {
-			.type = refresh_window.type,
-			.start = refresh_window.start,
-			/* Invalidations are inclusive at the end, while refresh windows
-			 * aren't, so add one to the end of the invalidated region */
-			.end = ts_time_saturating_add(refresh_window.end, 1, refresh_window.type),
-		};
-
-		InternalTimeRange bucketed_refresh_window = {
-			.type = invalidation.type,
-			.start = invalidation.start,
-			.end = invalidation.end,
-		};
-
-		if (bucketing_refresh_window)
+		if (has_pending_materializations)
 		{
-			bucketed_refresh_window =
-				compute_circumscribed_bucketed_refresh_window(cagg,
-															  &invalidation,
-															  cagg->bucket_function);
+			ContinuousAggRefreshState refresh;
+			continuous_agg_refresh_init(&refresh, cagg, &refresh_window, bucketing_refresh_window);
+
+			elog(LOG,
+				 "continuous aggregate \"%s\" has pending materializations in window [ %s, %s ]",
+				 NameStr(cagg->data.user_view_name),
+				 ts_internal_to_time_string(refresh_window.start, refresh_window.type),
+				 ts_internal_to_time_string(refresh_window.end, refresh_window.type));
+
+			InternalTimeRange invalidation = {
+				.type = refresh_window.type,
+				.start = refresh_window.start,
+				/* Invalidations are inclusive at the end, while refresh windows
+				 * aren't, so add one to the end of the invalidated region */
+				.end = ts_time_saturating_add(refresh_window.end, 1, refresh_window.type),
+			};
+
+			InternalTimeRange bucketed_refresh_window = {
+				.type = invalidation.type,
+				.start = invalidation.start,
+				.end = invalidation.end,
+			};
+
+			if (bucketing_refresh_window)
+			{
+				bucketed_refresh_window =
+					compute_circumscribed_bucketed_refresh_window(cagg,
+																  &invalidation,
+																  cagg->bucket_function);
+			}
+			elog(LOG,
+				 "continuous aggregate \"%s\" going to exec window [ %s, %s ]",
+				 NameStr(cagg->data.user_view_name),
+				 ts_internal_to_time_string(bucketed_refresh_window.start,
+											bucketed_refresh_window.type),
+				 ts_internal_to_time_string(bucketed_refresh_window.end, refresh_window.type));
+
+			continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window, context.job_id);
 		}
-
-		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window, context.job_id);
 	}
-
 	if (!refreshed && !has_pending_materializations)
 		emit_up_to_date_notice(cagg, context);
 
