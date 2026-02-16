@@ -239,26 +239,80 @@ LANGUAGE plpgsql
 SET search_path = ecef_eci, pg_catalog, public
 AS $$
 DECLARE
+    source_path TEXT;
     eop_file TEXT;
     n_loaded INT;
-    source_path TEXT;
+    n_synced INT;
+    staleness RECORD;
+    stale_threshold INT;
 BEGIN
-    -- Config can specify a file path for environments without HTTP access
+    -- Extract config
     source_path := config->>'eop_file_path';
+    stale_threshold := COALESCE((config->>'staleness_threshold_days')::INT, 7);
 
-    IF source_path IS NOT NULL THEN
-        -- Load from local file (requires superuser or pg_read_server_files)
+    -- Validate config
+    IF source_path IS NULL THEN
+        RAISE WARNING 'EOP refresh (job %): no eop_file_path in config. '
+            'Schedule with: SELECT add_job(''ecef_eci.refresh_eop'', ''1 day'', '
+            'config => ''{"eop_file_path": "/path/to/finals2000A.all"}''::jsonb);',
+            job_id;
+        RETURN;
+    END IF;
+
+    -- Read file with error handling
+    BEGIN
         eop_file := pg_read_file(source_path);
-        n_loaded := ecef_eci.load_eop_finals2000a(eop_file);
-        RAISE NOTICE 'EOP refresh: loaded % entries from %', n_loaded, source_path;
-    ELSE
-        RAISE NOTICE 'EOP refresh: no eop_file_path in config. Load manually with ecef_eci.load_eop_finals2000a().';
+    EXCEPTION
+        WHEN undefined_file THEN
+            RAISE WARNING 'EOP refresh (job %): file not found: %', job_id, source_path;
+            RETURN;
+        WHEN insufficient_privilege THEN
+            RAISE WARNING 'EOP refresh (job %): permission denied reading: %', job_id, source_path;
+            RETURN;
+        WHEN OTHERS THEN
+            RAISE WARNING 'EOP refresh (job %): error reading %: %', job_id, source_path, SQLERRM;
+            RETURN;
+    END;
+
+    -- Validate file content
+    IF eop_file IS NULL OR length(eop_file) < 1000 THEN
+        RAISE WARNING 'EOP refresh (job %): file too small or empty (% bytes). '
+            'Expected finals2000A format (~500KB+).',
+            job_id, COALESCE(length(eop_file), 0);
+        RETURN;
+    END IF;
+
+    -- Load into eop_data
+    n_loaded := ecef_eci.load_eop_finals2000a(eop_file);
+
+    IF n_loaded = 0 THEN
+        RAISE WARNING 'EOP refresh (job %): 0 rows parsed from %. File may be corrupt.',
+            job_id, source_path;
+        RETURN;
+    END IF;
+
+    RAISE NOTICE 'EOP refresh (job %): loaded % entries from %', job_id, n_loaded, source_path;
+
+    -- Sync to PostGIS table
+    n_synced := ecef_eci.sync_eop_to_postgis();
+    IF n_synced >= 0 THEN
+        RAISE NOTICE 'EOP refresh (job %): synced % entries to postgis_eop', job_id, n_synced;
+    END IF;
+
+    -- Post-load staleness check
+    SELECT * INTO staleness FROM ecef_eci.eop_staleness();
+    IF staleness.is_stale THEN
+        RAISE WARNING 'EOP refresh (job %): data is stale — latest EOP is % days old (threshold: % days). '
+            'Check that the external download script is running.',
+            job_id, staleness.gap_days, stale_threshold;
     END IF;
 END;
 $$;
 
 COMMENT ON PROCEDURE ecef_eci.refresh_eop(INT, JSONB)
-IS 'Background job procedure for refreshing EOP data. Schedule with: SELECT add_job(''ecef_eci.refresh_eop'', ''1 day'', config => ''{"eop_file_path": "/path/to/finals2000A.all"}'');';
+IS 'Background job procedure for refreshing EOP data from a local file. '
+   'An external scheduler (cron/systemd) must download the IERS file first. '
+   'Schedule with: SELECT ecef_eci.setup_eop_refresh(''/path/to/finals2000A.all'');';
 
 -- =============================================================================
 -- Convenience: EOP status summary
@@ -292,3 +346,123 @@ $$;
 
 COMMENT ON FUNCTION ecef_eci.eop_status()
 IS 'Returns summary of EOP data coverage: total entries, date range, observed vs predicted count, last load time.';
+
+-- =============================================================================
+-- EOP Sync to PostGIS
+-- =============================================================================
+-- Copies eop_data into the PostGIS-managed postgis_eop table.
+-- Data flows through the TimescaleDB parser only (avoids PostGIS parser
+-- column offset bugs documented in §8.3).
+
+CREATE OR REPLACE FUNCTION ecef_eci.sync_eop_to_postgis()
+RETURNS INT
+LANGUAGE plpgsql
+SET search_path = ecef_eci, pg_catalog, public
+AS $$
+DECLARE
+    n_synced INT;
+    postgis_table_exists BOOLEAN;
+BEGIN
+    -- Check if postgis_eop table exists (PostGIS extension may not be installed)
+    SELECT EXISTS (
+        SELECT 1 FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public' AND c.relname = 'postgis_eop'
+    ) INTO postgis_table_exists;
+
+    IF NOT postgis_table_exists THEN
+        RAISE NOTICE 'sync_eop_to_postgis: postgis_eop table not found (PostGIS ECEF/ECI extension not installed). Skipping sync.';
+        RETURN -1;
+    END IF;
+
+    -- Sync: INSERT from eop_data into postgis_eop, upsert on conflict
+    INSERT INTO public.postgis_eop (mjd, xp, yp, dut1, dx, dy)
+    SELECT mjd, xp, yp, dut1, dx, dy
+    FROM ecef_eci.eop_data
+    ON CONFLICT (mjd) DO UPDATE SET
+        xp   = EXCLUDED.xp,
+        yp   = EXCLUDED.yp,
+        dut1 = EXCLUDED.dut1,
+        dx   = EXCLUDED.dx,
+        dy   = EXCLUDED.dy;
+
+    GET DIAGNOSTICS n_synced = ROW_COUNT;
+    RETURN n_synced;
+END;
+$$;
+
+COMMENT ON FUNCTION ecef_eci.sync_eop_to_postgis()
+IS 'Syncs eop_data table to PostGIS postgis_eop table. Returns row count, or -1 if postgis_eop does not exist.';
+
+-- =============================================================================
+-- EOP Staleness Detection
+-- =============================================================================
+-- Reports how current the EOP data is relative to today.
+
+CREATE OR REPLACE FUNCTION ecef_eci.eop_staleness(
+    threshold_days INT DEFAULT 7
+)
+RETURNS TABLE (
+    latest_date    DATE,
+    gap_days       INT,
+    is_stale       BOOLEAN,
+    load_age_hours FLOAT8
+)
+LANGUAGE SQL
+STABLE
+PARALLEL SAFE
+SET search_path = ecef_eci, pg_catalog, public
+AS $$
+    SELECT
+        max(e.date)                                              AS latest_date,
+        COALESCE((CURRENT_DATE - max(e.date))::INT, -1)          AS gap_days,
+        COALESCE((CURRENT_DATE - max(e.date))::INT, -1) > threshold_days AS is_stale,
+        COALESCE(
+            EXTRACT(EPOCH FROM (now() - max(e.loaded_at))) / 3600.0,
+            -1
+        )                                                        AS load_age_hours
+    FROM ecef_eci.eop_data e
+$$;
+
+COMMENT ON FUNCTION ecef_eci.eop_staleness(INT)
+IS 'Returns EOP data freshness: latest date, gap in days from today, staleness flag, hours since last load.';
+
+-- =============================================================================
+-- EOP Refresh Setup Convenience Wrapper
+-- =============================================================================
+-- One-call setup for the background job.
+
+CREATE OR REPLACE FUNCTION ecef_eci.setup_eop_refresh(
+    file_path   TEXT,
+    refresh_interval INTERVAL DEFAULT INTERVAL '1 day',
+    staleness_threshold_days INT DEFAULT 7
+)
+RETURNS INT
+LANGUAGE plpgsql
+SET search_path = ecef_eci, pg_catalog, public
+AS $$
+DECLARE
+    job_config JSONB;
+    new_job_id INT;
+BEGIN
+    job_config := jsonb_build_object(
+        'eop_file_path', file_path,
+        'staleness_threshold_days', staleness_threshold_days
+    );
+
+    SELECT add_job(
+        'ecef_eci.refresh_eop'::regproc,
+        refresh_interval,
+        config => job_config
+    ) INTO new_job_id;
+
+    RAISE NOTICE 'EOP refresh job created: id=%, interval=%, file=%',
+        new_job_id, refresh_interval, file_path;
+
+    RETURN new_job_id;
+END;
+$$;
+
+COMMENT ON FUNCTION ecef_eci.setup_eop_refresh(TEXT, INTERVAL, INT)
+IS 'Convenience wrapper to create a TimescaleDB background job for EOP refresh. '
+   'Returns the job ID. Example: SELECT ecef_eci.setup_eop_refresh(''/var/lib/postgresql/eop/finals2000A.all'')';
