@@ -214,13 +214,6 @@ typedef struct PerColumn
 {
 	/* the compressor to use for regular columns, NULL for segmenters */
 	Compressor *compressor;
-	/*
-	 * List of sparse index builders for this column, currently these types are supported:
-	 *  - min/max : BatchMetadataBuilderMinMax
-	 *  - single bloom : BatchMetadataBuilderBloom1
-	 *  - composite bloom : BatchMetadataBuilderBloom1Composite
-	 */
-	List *metadata_builders;
 
 	/* segment info; only used if compressor is NULL */
 	SegmentInfo *segment_info;
@@ -281,6 +274,8 @@ typedef struct RowCompressor
 	Tuplesortstate *sort_state;
 	int64 tuples_to_sort;	/* number of tuples to sort with tuplesort */
 	int64 tuple_sort_limit; /* number of tuples to flush the compressor on */
+
+	List *metadata_builders; /* List of BatchMetadataBuilder */
 } RowCompressor;
 
 /*

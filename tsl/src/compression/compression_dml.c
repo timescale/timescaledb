@@ -229,7 +229,7 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 	/* Create builder for the best match, having the largest number of columns */
 	if (best_match.num_cols > 0)
 	{
-		Oid *type_oids = palloc(best_match.num_cols * sizeof(Oid));
+		Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
 		cdst->bloom_column_name = best_match.column_name;
 		cdst->bloom_insert_attnums = best_match.attnums;
 		cdst->upsert_bloom_attnum = best_match.compressed_attnum;
@@ -237,20 +237,10 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 		int col_idx = 0;
 		int attnum = -1;
 		while ((attnum = bms_next_member(best_match.attnums, attnum)) >= 0)
-		{
 			type_oids[col_idx++] = get_atttype(cis->hypertable_relid, attnum);
-		}
 
-		if (best_match.num_cols == 1)
-		{
-			if (ts_guc_enable_sparse_index_bloom)
-				cdst->bloom_hasher = bloom1_hasher_create(type_oids[0]);
-		}
-		else if (ts_guc_enable_composite_bloom_indexes)
-		{
-			cdst->bloom_hasher = bloom1_composite_hasher_create(type_oids, best_match.num_cols);
-		}
-		pfree(type_oids);
+		if (ts_guc_enable_sparse_index_bloom)
+			cdst->bloom_hasher = bloom1_hasher_create(type_oids, best_match.num_cols);
 	}
 
 	ts_bmslist_free(per_column_attnos);
@@ -854,16 +844,16 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 
 			if (!bloom_isnull)
 			{
-				uint64 hash = 0;
+				NullableDatum values[MAX_BLOOM_FILTER_COLUMNS];
+				int col_idx = 0;
 				int attnum = -1;
 				while ((attnum = bms_next_member(cdst->bloom_insert_attnums, attnum)) >= 0)
 				{
-					bool isnull;
-					Datum val = slot_getattr(insert_slot, attnum, &isnull);
-					hash = isnull ? cdst->bloom_hasher->update_null(cdst->bloom_hasher) :
-									cdst->bloom_hasher->update_val(cdst->bloom_hasher, val);
+					values[col_idx].value =
+						slot_getattr(insert_slot, attnum, &values[col_idx].isnull);
+					col_idx++;
 				}
-				cdst->bloom_hasher->reset(cdst->bloom_hasher);
+				uint64 hash = cdst->bloom_hasher->hash_values(cdst->bloom_hasher, values);
 
 				stats.batches_checked_by_bloom++;
 				if (!batch_metadata_builder_bloom1_hash_maybe_present(bloom_datum, hash))

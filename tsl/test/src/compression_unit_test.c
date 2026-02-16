@@ -1687,16 +1687,26 @@ ts_segment_meta_min_max_append(PG_FUNCTION_ARGS)
 
 	old_context = MemoryContextSwitchTo(agg_context);
 
+	TupleTableSlot *slot = (TupleTableSlot *) fcinfo->flinfo->fn_extra;
 	if (builder == NULL)
 	{
 		Oid type_to_compress = get_fn_expr_argtype(fcinfo->flinfo, 1);
-		builder =
-			batch_metadata_builder_minmax_create(type_to_compress, fcinfo->fncollation, -1, -1);
+		builder = batch_metadata_builder_minmax_create(type_to_compress,
+													   fcinfo->fncollation,
+													   (AttrNumber) 1,
+													   -1,
+													   -1);
+
+		TupleDesc tupdesc = CreateTemplateTupleDesc(1);
+		TupleDescInitEntry(tupdesc, 1, "val", type_to_compress, -1, 0);
+		slot = MakeSingleTupleTableSlot(tupdesc, &TTSOpsVirtual);
+		fcinfo->flinfo->fn_extra = slot;
 	}
-	if (PG_ARGISNULL(1))
-		builder->update_null(builder);
-	else
-		builder->update_val(builder, PG_GETARG_DATUM(1));
+
+	slot->tts_values[0] = PG_GETARG_DATUM(1);
+	slot->tts_isnull[0] = PG_ARGISNULL(1);
+	ExecStoreVirtualTuple(slot);
+	builder->update_row(builder, slot);
 
 	MemoryContextSwitchTo(old_context);
 	PG_RETURN_POINTER(builder);
