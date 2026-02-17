@@ -845,6 +845,54 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(false);
 }
 
+/*
+ * Checks whether any hashes of the given array can be present in the given
+ * bloom filter. This is used for predicate pushdown where the values are
+ * pre-hashed at planning time.
+ *
+ * The SQL signature is:
+ * _timescaledb_functions.bloom1_contains_hashes(bloom1, int8[])
+ */
+Datum
+bloom1_contains_hashes(PG_FUNCTION_ARGS)
+{
+	if (PG_ARGISNULL(0))
+		PG_RETURN_BOOL(true);
+	if (PG_ARGISNULL(1))
+		PG_RETURN_BOOL(false);
+
+	struct varlena *bloom = PG_GETARG_VARLENA_P(0);
+
+	int num_hashes;
+	Datum *hash_datums;
+	bool *hash_nulls;
+	deconstruct_array(PG_GETARG_ARRAYTYPE_P(1),
+					  INT8OID,
+					  sizeof(int64),
+					  true,
+					  TYPALIGN_DOUBLE,
+					  &hash_datums,
+					  &hash_nulls,
+					  &num_hashes);
+
+	if (num_hashes == 0)
+		PG_RETURN_BOOL(false);
+
+	const char *words_buf = bloom1_words_buf(bloom);
+	const uint32 num_bits = bloom1_num_bits(bloom);
+
+	for (int i = 0; i < num_hashes; i++)
+	{
+		if (hash_nulls[i])
+			continue;
+		uint64 hash = (uint64) DatumGetInt64(hash_datums[i]);
+		if (check_bloom_bits(words_buf, num_bits, hash))
+			PG_RETURN_BOOL(true);
+	}
+
+	PG_RETURN_BOOL(false);
+}
+
 static int
 bloom1_varlena_alloc_size(int num_bits)
 {

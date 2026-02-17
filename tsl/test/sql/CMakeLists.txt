@@ -25,6 +25,7 @@ set(TEST_FILES
     compress_bloom_hash.sql
     compress_compbloom_basics.sql
     compress_compbloom_config.sql
+    compress_compbloom_hash_pushdown.sql
     compress_compbloom_index_add.sql
     compress_compbloom_index_drop.sql
     compress_compbloom_manual_config.sql

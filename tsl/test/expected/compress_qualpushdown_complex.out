@@ -45,6 +45,9 @@
 --     (a = 1 AND b = 2) OR (c = 3 AND d = 4), but we cannot push down b = 2, and
 --     we cannot push down a = 1, we cannot push down anything.
 --
+-- disable hash pushdown so we don't include the hash values in the plans
+-- which makes the test stable. the hash pushdown is tested separately
+set timescaledb.enable_bloom1_hash_pushdown = false;
 DROP TABLE IF EXISTS complex_pushdown;
 NOTICE:  table "complex_pushdown" does not exist, skipping
 CREATE TABLE complex_pushdown(

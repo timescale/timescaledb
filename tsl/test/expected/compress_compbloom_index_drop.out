@@ -4,6 +4,9 @@
 ---------------------------------------------------------------------
 -- Some chunks don't have a composite bloom index after index change
 ---------------------------------------------------------------------
+-- disable hash pushdown so we don't include the hash values in the plans
+-- which makes the test stable. the hash pushdown is tested separately
+set timescaledb.enable_bloom1_hash_pushdown = false;
 CREATE TABLE mixed_avail_drop(ts timestamptz, a int, b int, seg int);
 SELECT create_hypertable('mixed_avail_drop', by_range('ts', interval '1 day'));
  create_hypertable 

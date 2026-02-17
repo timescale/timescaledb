@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- disable hash pushdown so we don't include the hash values in the plans
+-- which makes the test stable. the hash pushdown is tested separately
+set timescaledb.enable_bloom1_hash_pushdown = false;
+
 ---------------------------------------------------------------------
 -- Manual config change between chunk compressions
 ---------------------------------------------------------------------

@@ -14,6 +14,7 @@
 #include <utils/typcache.h>
 
 #include "columnar_scan.h"
+#include "compression/batch_metadata_builder.h"
 #include "compression/create.h"
 #include "compression/sparse_index_bloom1.h"
 #include "custom_type_cache.h"
@@ -679,6 +680,43 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 							 InvalidOid,
 							 0);
 
+	/*
+	 * If the right operand is a Const, pre-compute the hash at planning time
+	 * and emit bloom1_contains_hashes(bloom, ARRAY[hash]) instead.
+	 */
+	if (ts_guc_enable_bloom1_hash_pushdown && IsA(pushed_down_rightop, Const))
+	{
+		Const *c = (Const *) pushed_down_rightop;
+		if (c->constisnull)
+		{
+			/* NULL cannot match equality — bloom1_contains returns false for NULL */
+			return (Expr *) makeBoolConst(false, false);
+		}
+
+		Bloom1Hasher *hasher = bloom1_hasher_create(&c->consttype, 1);
+		NullableDatum val = { .value = c->constvalue, .isnull = false };
+		uint64 hash = hasher->hash_values(hasher, &val);
+
+		Datum hash_datum = Int64GetDatum((int64) hash);
+		ArrayType *arr =
+			construct_array(&hash_datum, 1, INT8OID, sizeof(int64), true, TYPALIGN_DOUBLE);
+		Const *hash_array_const =
+			makeConst(INT8ARRAYOID, -1, InvalidOid, -1, PointerGetDatum(arr), false, false);
+
+		Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+											 makeString("bloom1_contains_hashes")),
+								  -1,
+								  (void *) -1,
+								  false);
+
+		return (Expr *) makeFuncExpr(func,
+									 BOOLOID,
+									 list_make2(bloom_var, hash_array_const),
+									 InvalidOid,
+									 InvalidOid,
+									 COERCE_EXPLICIT_CALL);
+	}
+
 	Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
 										 makeString("bloom1_contains")),
 							  /* nargs = */ -1,
@@ -794,6 +832,115 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 							 -1,
 							 InvalidOid,
 							 0);
+
+	if (ts_guc_enable_bloom1_hash_pushdown && IsA(pushed_down_rightop, Const))
+	{
+		Const *arr_const = (Const *) pushed_down_rightop;
+		if (!arr_const->constisnull && type_is_array(arr_const->consttype))
+		{
+			Oid elem_type = get_element_type(arr_const->consttype);
+			int16 elem_len;
+			bool elem_byval;
+			char elem_align;
+			get_typlenbyvalalign(elem_type, &elem_len, &elem_byval, &elem_align);
+
+			Datum *elem_datums;
+			bool *elem_nulls;
+			int num_elems;
+			deconstruct_array(DatumGetArrayTypeP(arr_const->constvalue),
+							  elem_type,
+							  elem_len,
+							  elem_byval,
+							  elem_align,
+							  &elem_datums,
+							  &elem_nulls,
+							  &num_elems);
+
+			Bloom1Hasher *hasher = bloom1_hasher_create(&elem_type, 1);
+			Datum *hash_datums = palloc(sizeof(Datum) * num_elems);
+			int valid = 0;
+			for (int i = 0; i < num_elems; i++)
+			{
+				if (elem_nulls[i])
+					continue;
+				NullableDatum val = { .value = elem_datums[i], .isnull = false };
+				hash_datums[valid++] = Int64GetDatum((int64) hasher->hash_values(hasher, &val));
+			}
+
+			ArrayType *arr =
+				construct_array(hash_datums, valid, INT8OID, sizeof(int64), true, TYPALIGN_DOUBLE);
+			Const *hash_array_const =
+				makeConst(INT8ARRAYOID, -1, InvalidOid, -1, PointerGetDatum(arr), false, false);
+
+			Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+												 makeString("bloom1_contains_hashes")),
+									  -1,
+									  (void *) -1,
+									  false);
+
+			return makeFuncExpr(func,
+								BOOLOID,
+								list_make2(bloom_var, hash_array_const),
+								InvalidOid,
+								InvalidOid,
+								COERCE_EXPLICIT_CALL);
+		}
+	}
+
+	/*
+	 * If the array argument is an ArrayExpr with all Const elements,
+	 * pre-compute hashes at planning time.
+	 */
+	if (ts_guc_enable_bloom1_hash_pushdown && IsA(pushed_down_rightop, ArrayExpr))
+	{
+		ArrayExpr *arrexpr = (ArrayExpr *) pushed_down_rightop;
+		bool all_const = true;
+		ListCell *lc;
+		foreach (lc, arrexpr->elements)
+		{
+			if (!IsA(lfirst(lc), Const))
+			{
+				all_const = false;
+				break;
+			}
+		}
+
+		if (all_const)
+		{
+			Oid elem_type = arrexpr->element_typeid;
+			Bloom1Hasher *hasher = bloom1_hasher_create(&elem_type, 1);
+			int num_elems = list_length(arrexpr->elements);
+			Datum *hash_datums = palloc(sizeof(Datum) * num_elems);
+			int valid = 0;
+
+			foreach (lc, arrexpr->elements)
+			{
+				Const *c = (Const *) lfirst(lc);
+				if (c->constisnull)
+					continue;
+				NullableDatum val = { .value = c->constvalue, .isnull = false };
+				hash_datums[valid++] = Int64GetDatum((int64) hasher->hash_values(hasher, &val));
+			}
+
+			ArrayType *arr =
+				construct_array(hash_datums, valid, INT8OID, sizeof(int64), true, TYPALIGN_DOUBLE);
+			Const *hash_array_const =
+				makeConst(INT8ARRAYOID, -1, InvalidOid, -1, PointerGetDatum(arr), false, false);
+
+			Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+												 makeString("bloom1_contains_hashes")),
+									  -1,
+									  (void *) -1,
+									  false);
+
+			return makeFuncExpr(func,
+								BOOLOID,
+								list_make2(bloom_var, hash_array_const),
+								InvalidOid,
+								InvalidOid,
+								COERCE_EXPLICIT_CALL);
+		}
+	}
 
 	Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
 										 makeString("bloom1_contains_any")),
@@ -1156,14 +1303,6 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 			continue;
 		}
 
-		/* Build ROW(val1, val2, ...) expression using pushed-down values */
-		RowExpr *row_expr = makeNode(RowExpr);
-		row_expr->args = pushed_value_exprs;
-		row_expr->row_typeid = RECORDOID;
-		row_expr->row_format = COERCE_IMPLICIT_CAST;
-		row_expr->colnames = NIL;
-		row_expr->location = -1;
-
 		/* Build bloom1_contains(composite_bloom, ROW(...)) */
 		Var *bloom_var = makeVar(context->compressed_rel->relid,
 								 composite_attno,
@@ -1172,18 +1311,78 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 								 InvalidOid,
 								 0);
 
-		Oid func_oid = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
-												 makeString("bloom1_contains")),
-									  -1,
-									  (void *) -1,
-									  false);
+		/* If all pushed-down values are Const, pre-hash at planning time. */
+		bool all_const = true;
+		ListCell *lc2;
+		foreach (lc2, pushed_value_exprs)
+		{
+			if (!IsA(lfirst(lc2), Const))
+			{
+				all_const = false;
+				break;
+			}
+		}
+		FuncExpr *bloom_check = NULL;
+		if (ts_guc_enable_bloom1_hash_pushdown && all_const)
+		{
+			int num_columns = list_length(pushed_value_exprs);
+			Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+			NullableDatum values[MAX_BLOOM_FILTER_COLUMNS];
+			int i = 0;
+			foreach (lc2, pushed_value_exprs)
+			{
+				Const *c = (Const *) lfirst(lc2);
+				type_oids[i] = c->consttype;
+				values[i].value = c->constvalue;
+				values[i].isnull = c->constisnull;
+				i++;
+			}
 
-		FuncExpr *bloom_check = makeFuncExpr(func_oid,
-											 BOOLOID,
-											 list_make2(bloom_var, row_expr),
-											 InvalidOid,
-											 InvalidOid,
-											 COERCE_EXPLICIT_CALL);
+			Bloom1Hasher *hasher = bloom1_hasher_create(type_oids, num_columns);
+			uint64 hash = hasher->hash_values(hasher, values);
+
+			Datum hash_datum = Int64GetDatum((int64) hash);
+			ArrayType *arr =
+				construct_array(&hash_datum, 1, INT8OID, sizeof(int64), true, TYPALIGN_DOUBLE);
+			Const *hash_array_const =
+				makeConst(INT8ARRAYOID, -1, InvalidOid, -1, PointerGetDatum(arr), false, false);
+
+			/* Pre-hash at planning time. */
+			Oid func_oid = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+													 makeString("bloom1_contains_hashes")),
+										  -1,
+										  (void *) -1,
+										  false);
+			bloom_check = makeFuncExpr(func_oid,
+									   BOOLOID,
+									   list_make2(bloom_var, hash_array_const),
+									   InvalidOid,
+									   InvalidOid,
+									   COERCE_EXPLICIT_CALL);
+		}
+		else
+		{
+			/* Build ROW(val1, val2, ...) expression using pushed-down values */
+			RowExpr *row_expr = makeNode(RowExpr);
+			row_expr->args = pushed_value_exprs;
+			row_expr->row_typeid = RECORDOID;
+			row_expr->row_format = COERCE_IMPLICIT_CAST;
+			row_expr->colnames = NIL;
+			row_expr->location = -1;
+
+			Oid func_oid = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+													 makeString("bloom1_contains")),
+										  -1,
+										  (void *) -1,
+										  false);
+
+			bloom_check = makeFuncExpr(func_oid,
+									   BOOLOID,
+									   list_make2(bloom_var, row_expr),
+									   InvalidOid,
+									   InvalidOid,
+									   COERCE_EXPLICIT_CALL);
+		}
 
 		/* Add to baserestrictinfo. */
 		context->compressed_rel->baserestrictinfo =

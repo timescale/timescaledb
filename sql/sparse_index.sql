@@ -12,6 +12,15 @@ RETURNS bool
 AS '@MODULE_PATHNAME@', 'ts_bloom1_contains_any'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
+-- Takes pre-computed hash array and checks if ANY of the hashes
+-- match the bloom1 parameter. This function doesn't hash only compares.
+-- Handles both single equality (1-element array) and ANY (N-element array).
+-- Returns true if the bloom maybe-contains ANY of the given hashes.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.bloom1_contains_hashes(_timescaledb_internal.bloom1, bigint[])
+RETURNS bool
+AS '@MODULE_PATHNAME@', 'ts_bloom1_contains_hashes'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
 -- This function matches a column name string and checks if the corresponding sparse
 -- index entry has the given type. It does not handle composite bloom filters, where the
 -- column field is an array. This function is no longer used and can be removed in a

@@ -1,6 +1,9 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+-- disable hash pushdown so we don't include the hash values in the plans
+-- which makes the test stable. the hash pushdown is tested separately
+set timescaledb.enable_bloom1_hash_pushdown = false;
 CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY upper(relid::text) COLLATE "C";
 CREATE VIEW metacols AS select relname,attname,count(*) from pg_attribute a, pg_class c where c.oid=a.attrelid and attname like '%_ts_meta%' and relname like '%chunk' GROUP BY 1,2 ORDER BY relname::text COLLATE "C", attname::text COLLATE "C";
 CREATE VIEW compressedcols AS select relname,attname,c.oid as reloid,attnum from pg_attribute a, pg_class c where c.oid=a.attrelid and relname like '%compress_hyper_%' order by c.oid asc, a.attnum asc;

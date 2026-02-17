@@ -80,3 +80,11 @@ GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 -- end rebuild _timescaledb_catalog.chunk table --
 
+-- Takes pre-computed hash array and checks if ANY of the hashes
+-- match the bloom1 parameter. This function doesn't hash only compares.
+-- Handles both single equality (1-element array) and ANY (N-element array).
+-- Returns true if the bloom maybe-contains ANY of the given hashes.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.bloom1_contains_hashes(_timescaledb_internal.bloom1, bigint[])
+RETURNS bool
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;

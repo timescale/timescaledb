@@ -47,6 +47,10 @@
 --     we cannot push down a = 1, we cannot push down anything.
 --
 
+-- disable hash pushdown so we don't include the hash values in the plans
+-- which makes the test stable. the hash pushdown is tested separately
+set timescaledb.enable_bloom1_hash_pushdown = false;
+
 DROP TABLE IF EXISTS complex_pushdown;
 CREATE TABLE complex_pushdown(
     ts int,

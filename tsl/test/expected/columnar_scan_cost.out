@@ -3,6 +3,9 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Some primitive tests that show cost of DecompressChunk node so that we can
 -- monitor the changes.
+-- disable hash pushdown so we don't include the hash values in the plans
+-- which makes the test stable. the hash pushdown is tested separately
+set timescaledb.enable_bloom1_hash_pushdown = false;
 create table costtab(ts int, s text, c text, ti text, fi float);
 select create_hypertable('costtab', 'ts');
   create_hypertable   

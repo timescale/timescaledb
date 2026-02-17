@@ -3,6 +3,11 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- disable hash pushdown so we don't include the hash values in the plans
+-- which makes the test stable. the hash pushdown is tested separately
+set timescaledb.enable_bloom1_hash_pushdown = false;
+
 CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY upper(relid::text) COLLATE "C";
 
 -- Test configurable sparse indexes settings
