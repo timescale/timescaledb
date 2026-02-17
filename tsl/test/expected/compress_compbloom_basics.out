@@ -74,7 +74,7 @@ explain (buffers off, costs off) select * from sparse where value = 1;
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: (value = '1'::double precision)
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_value, '1'::double precision)
+         Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_value, '{4033440226552636220}'::bigint[])
 
 explain (buffers off, costs off) select * from sparse where o = 1 and big2 = 1;
 --- QUERY PLAN ---
@@ -82,21 +82,21 @@ explain (buffers off, costs off) select * from sparse where o = 1 and big2 = 1;
    Vectorized Filter: ((o = 1) AND (big2 = 1))
    ->  Index Scan using compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx on compress_hyper_2_2_chunk
          Index Cond: ((_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1))
-         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_o_big2, ROW(1, 1)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_big2, 1))
+         Filter: (_timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_o_big2, '{-5526834761705253741}'::bigint[]) AND _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_big2, '{4717996019076358352}'::bigint[]))
 
 explain (buffers off, costs off) select * from sparse where num = 1 and hello = md5('1')::bytea;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Filter: ((num = '1'::numeric) AND (hello = '\x6334636134323338613062393233383230646363353039613666373538343962'::bytea))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_num_hello, ROW('1'::numeric, '\x6334636134323338613062393233383230646363353039613666373538343962'::bytea))
+         Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_num_hello, '{-2941380702697359141}'::bigint[])
 
 explain (buffers off, costs off) select * from sparse where small1 = 1 and small2 = 1;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((small1 = 1) AND (small2 = 1))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_small1_small2, ROW(1, 1))
+         Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_small1_small2, '{-5526834761705253741}'::bigint[])
 
 explain (buffers off, costs off) select * from sparse where num = 1 and nowts = now()::timestamptz;
 --- QUERY PLAN ---
@@ -113,7 +113,7 @@ explain (buffers off, costs off) select * from sparse where o in (1,2) and big2 
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((o = ANY ('{1,2}'::bigint[])) AND (big2 = 1))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_big2, 1)
+         Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_big2, '{4717996019076358352}'::bigint[])
 
 explain (buffers off, costs off) select * from sparse where o = 1 and big2 in (1,2);
 --- QUERY PLAN ---
@@ -121,14 +121,14 @@ explain (buffers off, costs off) select * from sparse where o = 1 and big2 in (1
    Vectorized Filter: ((big2 = ANY ('{1,2}'::bigint[])) AND (o = 1))
    ->  Index Scan using compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx on compress_hyper_2_2_chunk
          Index Cond: ((_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1))
-         Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_big2, '{1,2}'::bigint[])
+         Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_big2, '{4717996019076358352,2060787363917578834}'::bigint[])
 
 explain (buffers off, costs off) select * from sparse where o in (1,2) and big2 in (1,2);
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((o = ANY ('{1,2}'::bigint[])) AND (big2 = ANY ('{1,2}'::bigint[])))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_big2, '{1,2}'::bigint[])
+         Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_big2, '{4717996019076358352,2060787363917578834}'::bigint[])
 
 -- segmentby = bloom
 explain (buffers off, costs off) select * from sparse where big1 = sby and value = 1;
@@ -137,7 +137,7 @@ explain (buffers off, costs off) select * from sparse where big1 = sby and value
    Filter: (big1 = sby)
    Vectorized Filter: (value = '1'::double precision)
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_big1, sby) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_value, '1'::double precision))
+         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_big1, sby) AND _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_value, '{4033440226552636220}'::bigint[]))
 
 explain (buffers off, costs off) select * from sparse where o = sby and big2 = sby;
 --- QUERY PLAN ---
@@ -161,7 +161,7 @@ explain (buffers off, costs off) select * from sparse where o = sby and big2 = 1
    Filter: (o = sby)
    Vectorized Filter: (big2 = 1)
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_o_big2, ROW(sby, 1)) AND (_ts_meta_min_1 <= sby) AND (_ts_meta_max_1 >= sby) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_big2, 1))
+         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_o_big2, ROW(sby, 1)) AND (_ts_meta_min_1 <= sby) AND (_ts_meta_max_1 >= sby) AND _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_big2, '{4717996019076358352}'::bigint[]))
 
 -- create a sister table where the same composite blooms should be auto created
 create table sparse_sister as select * from sparse where ts < -1;
@@ -260,21 +260,21 @@ explain (buffers off, costs off) select * from sparse_sister where o = 1 and big
    Vectorized Filter: ((o = 1) AND (big2 = 1))
    ->  Index Scan using compress_hyper_4_4_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx on compress_hyper_4_4_chunk
          Index Cond: ((_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1))
-         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_o_big2, ROW(1, 1)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_big2, 1))
+         Filter: (_timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_o_big2, '{-5526834761705253741}'::bigint[]) AND _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_big2, '{4717996019076358352}'::bigint[]))
 
 explain (buffers off, costs off) select * from sparse_sister where num = 1 and hello = md5('1')::bytea;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_3_3_chunk
    Filter: ((num = '1'::numeric) AND (hello = '\x6334636134323338613062393233383230646363353039613666373538343962'::bytea))
    ->  Seq Scan on compress_hyper_4_4_chunk
-         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_num_hello, ROW('1'::numeric, '\x6334636134323338613062393233383230646363353039613666373538343962'::bytea)) AND (_ts_meta_v2_min_num <= '1'::numeric) AND (_ts_meta_v2_max_num >= '1'::numeric) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_hello, '\x6334636134323338613062393233383230646363353039613666373538343962'::bytea))
+         Filter: (_timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_num_hello, '{-2941380702697359141}'::bigint[]) AND (_ts_meta_v2_min_num <= '1'::numeric) AND (_ts_meta_v2_max_num >= '1'::numeric) AND _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_hello, '{-4173973330273441054}'::bigint[]))
 
 explain (buffers off, costs off) select * from sparse_sister where small1 = 1 and small2 = 1;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_3_3_chunk
    Vectorized Filter: ((small1 = 1) AND (small2 = 1))
    ->  Seq Scan on compress_hyper_4_4_chunk
-         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_small1_small2, ROW(1, 1)) AND (_ts_meta_v2_min_small1 <= 1) AND (_ts_meta_v2_max_small1 >= 1) AND (_ts_meta_v2_min_small2 <= 1) AND (_ts_meta_v2_max_small2 >= 1))
+         Filter: (_timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_small1_small2, '{-5526834761705253741}'::bigint[]) AND (_ts_meta_v2_min_small1 <= 1) AND (_ts_meta_v2_max_small1 >= 1) AND (_ts_meta_v2_min_small2 <= 1) AND (_ts_meta_v2_max_small2 >= 1))
 
 explain (buffers off, costs off) select * from sparse_sister where num = 1 and nowts = now()::timestamptz;
 --- QUERY PLAN ---
@@ -317,7 +317,7 @@ explain (buffers off, costs off) select * from sparse_sister where o = sby and b
    Filter: (o = sby)
    Vectorized Filter: (big2 = 1)
    ->  Seq Scan on compress_hyper_4_4_chunk
-         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_o_big2, ROW(sby, 1)) AND (_ts_meta_min_1 <= sby) AND (_ts_meta_max_1 >= sby) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_big2, 1))
+         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_o_big2, ROW(sby, 1)) AND (_ts_meta_min_1 <= sby) AND (_ts_meta_max_1 >= sby) AND _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_big2, '{4717996019076358352}'::bigint[]))
 
 -- renaming a column that participates in a composite bloom filter
 alter table sparse rename big2 to xxl;

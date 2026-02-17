@@ -249,3 +249,13 @@ DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts 
 DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ);
 
 DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, origin TIMESTAMPTZ);
+
+-- Takes pre-computed hash array and checks if ANY of the hashes
+-- match the bloom1 parameter. This function doesn't hash only compares.
+-- Handles both single equality (1-element array) and ANY (N-element array).
+-- Returns true if the bloom maybe-contains ANY of the given hashes.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.bloom1_contains_hashes(_timescaledb_internal.bloom1, int8[])
+RETURNS bool
+AS '@MODULE_PATHNAME@', 'ts_bloom1_contains_hashes'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
+

@@ -82,7 +82,7 @@ segby = 1 AND mm1 = 1 AND blm1 = 1;
    Vectorized Filter: ((mm1 = 1) AND (blm1 = 1))
    ->  Index Scan using compress_hyper_2_2_chunk_segby__ts_meta_min_1__ts_meta_max__idx on compress_hyper_2_2_chunk
          Index Cond: ((segby = 1) AND (_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1))
-         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_blm1, 1)
+         Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm1, '{4717996019076358352}'::bigint[])
 
 explain (buffers off, costs off)
 SELECT * FROM complex_pushdown WHERE
@@ -91,7 +91,7 @@ segby = 1 OR mm1 = 1 OR blm1 = 1;
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Filter: ((segby = 1) OR (mm1 = 1) OR (blm1 = 1))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: ((segby = 1) OR ((_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1)) OR _timescaledb_functions.bloom1_contains(regress-test-bloom_blm1, 1))
+         Filter: ((segby = 1) OR ((_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1)) OR _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm1, '{4717996019076358352}'::bigint[]))
 
 explain (buffers off, costs off)
 SELECT * FROM complex_pushdown WHERE
@@ -125,7 +125,7 @@ SELECT * FROM complex_pushdown WHERE
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Filter: ((((segby = 1) OR (mm1 = 1)) AND (blm1 = 1)) OR (blm2 = 10))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: ((((segby = 1) OR ((_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1))) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_blm1, 1)) OR _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2, 10))
+         Filter: ((((segby = 1) OR ((_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1))) AND _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm1, '{4717996019076358352}'::bigint[])) OR _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm2, '{5527453332085100658}'::bigint[]))
 
 -- R1: we can omit any qual from a conjunction
 explain (buffers off, costs off)
@@ -137,7 +137,7 @@ segby = 1 AND mm1 % 10 = 1 AND blm1 = 1;
    Vectorized Filter: (blm1 = 1)
    ->  Index Scan using compress_hyper_2_2_chunk_segby__ts_meta_min_1__ts_meta_max__idx on compress_hyper_2_2_chunk
          Index Cond: (segby = 1)
-         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_blm1, 1)
+         Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm1, '{4717996019076358352}'::bigint[])
 
 -- R1: composite bloom index and another to omit
 explain (buffers off, costs off)
@@ -148,7 +148,7 @@ mm1 % 10 = 1 AND blm2 = 10 AND other = 11 AND blm1 = 12;
    Filter: ((mm1 % 10) = 1)
    Vectorized Filter: ((blm2 = 10) AND (other = 11) AND (blm1 = 12))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_blm2_other, ROW(10, 11)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2, 10) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_blm1, 12))
+         Filter: (_timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm2_other, '{-3645162476924143469}'::bigint[]) AND _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm2, '{5527453332085100658}'::bigint[]) AND _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm1, '{-669938259986195341}'::bigint[]))
 
 -- R2: we cannot omit any qual from a disjunction, so segby cannot be pushed down
 explain (buffers off, costs off)
@@ -167,7 +167,7 @@ SELECT * FROM complex_pushdown WHERE
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Filter: (((segby = 1) AND (mm1 = 1)) OR ((blm1 = 1) AND (blm2 = 10)))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: (((segby = 1) AND (_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1)) OR (_timescaledb_functions.bloom1_contains(regress-test-bloom_blm1, 1) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2, 10)))
+         Filter: (((segby = 1) AND (_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1)) OR (_timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm1, '{4717996019076358352}'::bigint[]) AND _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm2, '{5527453332085100658}'::bigint[])))
 
 -- R3: base case with composite bloom index
 explain (buffers off, costs off)
@@ -214,7 +214,7 @@ blm2 = 10 AND other = 11;
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((blm2 = 10) AND (other = 11))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_blm2_other, ROW(10, 11)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2, 10))
+         Filter: (_timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm2_other, '{-3645162476924143469}'::bigint[]) AND _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm2, '{5527453332085100658}'::bigint[]))
 
 -- another variation for the composite bloom, different order
 explain (buffers off, costs off)
@@ -224,7 +224,7 @@ other = 11 AND blm2 = 10;
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((other = 11) AND (blm2 = 10))
    ->  Seq Scan on compress_hyper_2_2_chunk
-         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_blm2_other, ROW(10, 11)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2, 10))
+         Filter: (_timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm2_other, '{-3645162476924143469}'::bigint[]) AND _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_blm2, '{5527453332085100658}'::bigint[]))
 
 -- partial composite bloom cannot be pushed down
 explain (buffers off, costs off)

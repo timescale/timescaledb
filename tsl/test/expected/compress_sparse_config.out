@@ -322,7 +322,7 @@ select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_3_chunk (actual rows=1.00 loops=1)
                Output: compress_hyper_4_3_chunk._ts_meta_count, compress_hyper_4_3_chunk._ts_meta_min_1, compress_hyper_4_3_chunk._ts_meta_max_1, compress_hyper_4_3_chunk.x, compress_hyper_4_3_chunk.value, compress_hyper_4_3_chunk.regress-test-bloom_u, compress_hyper_4_3_chunk.u, compress_hyper_4_3_chunk._ts_meta_v2_min_ts, compress_hyper_4_3_chunk._ts_meta_v2_max_ts, compress_hyper_4_3_chunk.ts, compress_hyper_4_3_chunk.data
-               Filter: _timescaledb_functions.bloom1_contains(compress_hyper_4_3_chunk.regress-test-bloom_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+               Filter: _timescaledb_functions.bloom1_contains_hashes(compress_hyper_4_3_chunk.regress-test-bloom_u, '{-7762612738130733302}'::bigint[])
                Rows Removed by Filter: 9
 
 -- Timestamp uses minmax
@@ -396,7 +396,7 @@ select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_6_5_chunk (actual rows=1.00 loops=1)
                Output: compress_hyper_6_5_chunk._ts_meta_count, compress_hyper_6_5_chunk._ts_meta_min_1, compress_hyper_6_5_chunk._ts_meta_max_1, compress_hyper_6_5_chunk.x, compress_hyper_6_5_chunk.value, compress_hyper_6_5_chunk.regress-test-bloom_u, compress_hyper_6_5_chunk.u, compress_hyper_6_5_chunk._ts_meta_v2_min_ts, compress_hyper_6_5_chunk._ts_meta_v2_max_ts, compress_hyper_6_5_chunk.ts
-               Filter: _timescaledb_functions.bloom1_contains(compress_hyper_6_5_chunk.regress-test-bloom_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+               Filter: _timescaledb_functions.bloom1_contains_hashes(compress_hyper_6_5_chunk.regress-test-bloom_u, '{-7762612738130733302}'::bigint[])
                Rows Removed by Filter: 9
 
 -- Timestamp uses minmax

@@ -88,6 +88,7 @@ CROSSMODULE_WRAPPER(decompress_chunk);
 CROSSMODULE_WRAPPER(rebuild_columnstore);
 CROSSMODULE_WRAPPER(bloom1_contains);
 CROSSMODULE_WRAPPER(bloom1_contains_any);
+CROSSMODULE_WRAPPER(bloom1_contains_hashes);
 
 /* continuous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
@@ -373,6 +374,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.uuid_compressor_finish = error_no_default_fn_pg_community,
 	.bloom1_contains = error_no_default_fn_pg_community,
 	.bloom1_contains_any = error_no_default_fn_pg_community,
+	.bloom1_contains_hashes = error_no_default_fn_pg_community,
 	.bloom1_get_hash_function = bloom1_get_hash_function_default,
 
 	.decompress_batches_for_insert = error_no_default_fn_chunk_insert_state_community,

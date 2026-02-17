@@ -80,13 +80,13 @@ select * from saop where with_bloom = any(array['1', '10']);
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
          Rows Removed by Filter: 47605
          ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=56.00 loops=1)
-               Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_with_bloom, '{1,10}'::text[])
+               Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_with_bloom, '{1854754847885451586,-1132221183165775383}'::bigint[])
                Rows Removed by Filter: 13
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=135.00 loops=1)
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
          Rows Removed by Filter: 47604
          ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=56.00 loops=1)
-               Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_with_bloom, '{1,10}'::text[])
+               Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_with_bloom, '{1854754847885451586,-1132221183165775383}'::bigint[])
                Rows Removed by Filter: 13
 
 set timescaledb.enable_sparse_index_bloom to off;
@@ -112,13 +112,13 @@ select * from saop where with_bloom = any(array['1', '10']::varchar(255)[]);
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
          Rows Removed by Filter: 47605
          ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=56.00 loops=1)
-               Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_with_bloom, '{1,10}'::text[])
+               Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_with_bloom, '{1854754847885451586,-1132221183165775383}'::bigint[])
                Rows Removed by Filter: 13
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=135.00 loops=1)
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
          Rows Removed by Filter: 47604
          ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=56.00 loops=1)
-               Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_with_bloom, '{1,10}'::text[])
+               Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_with_bloom, '{1854754847885451586,-1132221183165775383}'::bigint[])
                Rows Removed by Filter: 13
 
 explain (analyze, buffers off, costs off, timing off, summary off)
@@ -129,13 +129,13 @@ select * from saop where with_bloom::varchar = any(array['1', '10']);
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
          Rows Removed by Filter: 47605
          ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=56.00 loops=1)
-               Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_with_bloom, '{1,10}'::text[])
+               Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_with_bloom, '{1854754847885451586,-1132221183165775383}'::bigint[])
                Rows Removed by Filter: 13
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=135.00 loops=1)
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
          Rows Removed by Filter: 47604
          ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=56.00 loops=1)
-               Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_with_bloom, '{1,10}'::text[])
+               Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_with_bloom, '{1854754847885451586,-1132221183165775383}'::bigint[])
                Rows Removed by Filter: 13
 
 select * from (
@@ -165,13 +165,13 @@ select * from saop where with_bloom in ('1', '10');
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
          Rows Removed by Filter: 47605
          ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=56.00 loops=1)
-               Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_with_bloom, '{1,10}'::text[])
+               Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_with_bloom, '{1854754847885451586,-1132221183165775383}'::bigint[])
                Rows Removed by Filter: 13
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=135.00 loops=1)
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
          Rows Removed by Filter: 47604
          ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=56.00 loops=1)
-               Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_with_bloom, '{1,10}'::text[])
+               Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_with_bloom, '{1854754847885451586,-1132221183165775383}'::bigint[])
                Rows Removed by Filter: 13
 
 explain (analyze, buffers off, costs off, timing off, summary off)
@@ -313,12 +313,12 @@ select * from saop where with_bloom = any(array[null, null]);
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
          Vectorized Filter: (with_bloom = ANY ('{NULL,NULL}'::text[]))
          ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=0.00 loops=1)
-               Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_with_bloom, '{NULL,NULL}'::text[])
+               Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_with_bloom, '{}'::bigint[])
                Rows Removed by Filter: 69
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
          Vectorized Filter: (with_bloom = ANY ('{NULL,NULL}'::text[]))
          ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0.00 loops=1)
-               Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_with_bloom, '{NULL,NULL}'::text[])
+               Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_with_bloom, '{}'::bigint[])
                Rows Removed by Filter: 69
 
 explain (analyze, buffers off, costs off, timing off, summary off)
@@ -704,13 +704,13 @@ execute array_param(array['1', '10']);
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
          Rows Removed by Filter: 47605
          ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=56.00 loops=1)
-               Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_with_bloom, '{1,10}'::text[])
+               Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_with_bloom, '{1854754847885451586,-1132221183165775383}'::bigint[])
                Rows Removed by Filter: 13
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=135.00 loops=1)
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
          Rows Removed by Filter: 47604
          ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=56.00 loops=1)
-               Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_with_bloom, '{1,10}'::text[])
+               Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_with_bloom, '{1854754847885451586,-1132221183165775383}'::bigint[])
                Rows Removed by Filter: 13
 
 explain (analyze, buffers off, costs off, timing off, summary off)

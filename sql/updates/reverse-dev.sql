@@ -112,3 +112,4 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_column_size(_time
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.estimate_uncompressed_size;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.bloom1_contains_any(_timescaledb_internal.bloom1, int8[]);

@@ -354,4 +354,3 @@ TS_TEST_FN(ts_test_compression_settings)
 	test_convert_to_parsed_compression_settings();
 	PG_RETURN_VOID();
 }
-
