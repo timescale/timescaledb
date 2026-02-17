@@ -33,12 +33,5 @@ extern TSDLLEXPORT bool ts_bmslist_contains_items(TsBmsList bmslist, const int *
 												  int num_items);
 extern TSDLLEXPORT bool ts_bmslist_contains_set(TsBmsList bmslist, Bitmapset *set);
 
-/* Largest subset of the argument 'items' that is found in the list. Note that it is
- * not a proper subset, that is equal sets may be returned too. The function returns
- * the result as a Bitmapset pointer or NULL if no subset is found.
- */
-extern TSDLLEXPORT Bitmapset *ts_bmslist_largest_subset(TsBmsList bmslist, int *items,
-														int num_items);
-
 /* Frees the list and all the Bitmapsets it contains. */
 extern TSDLLEXPORT void ts_bmslist_free(TsBmsList bmslist);

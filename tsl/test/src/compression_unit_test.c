@@ -1703,6 +1703,7 @@ ts_segment_meta_min_max_append(PG_FUNCTION_ARGS)
 		fcinfo->flinfo->fn_extra = slot;
 	}
 
+	ExecClearTuple(slot);
 	slot->tts_values[0] = PG_GETARG_DATUM(1);
 	slot->tts_isnull[0] = PG_ARGISNULL(1);
 	ExecStoreVirtualTuple(slot);

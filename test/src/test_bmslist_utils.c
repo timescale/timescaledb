@@ -9,6 +9,7 @@
 #include "test_utils.h"
 #include <fmgr.h>
 #include <funcapi.h>
+#include <ts_catalog/compression_settings.h>
 
 static void
 test_empty_bmslist_contains_items(void)

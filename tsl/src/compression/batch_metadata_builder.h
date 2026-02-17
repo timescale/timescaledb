@@ -29,7 +29,7 @@ BatchMetadataBuilder *batch_metadata_builder_minmax_create(Oid type, Oid collati
 														   int max_attr_offset);
 
 BatchMetadataBuilder *batch_metadata_builder_bloom1_create(int num_columns, const Oid *type_oids,
-														   const AttrNumber *input_columns,
+														   const AttrNumber *attnums,
 														   int bloom_attr_offset);
 
 /* Hasher interface common to bloom filters, used to compute the hash without updating the bloom
@@ -46,11 +46,11 @@ Bloom1Hasher *bloom1_hasher_create(const Oid *type_oids, int num_columns);
 int batch_metadata_builder_bloom1_varlena_size(void);
 uint64 batch_metadata_builder_bloom1_calculate_hash(PGFunction hash_function, FmgrInfo *finfo,
 													Datum needle);
-void batch_metadata_builder_bloom1_update_bloom_filter_with_hash(void *bloom_varlena, uint64 hash);
+void batch_metadata_builder_bloom1_update_bloom_filter_with_hash(void *varlena_ptr, uint64 hash);
 void batch_metadata_builder_bloom1_insert_bloom_filter_to_compressed_row(void *bloom_varlena,
 																		 int16 bloom_attr_offset,
 																		 RowCompressor *compressor);
 
 /* Returns true if the hash is maybe present in a bloom filter, if the bloom filter data is
  * NULL, it returns true, because we cannot be sure if the hash is present or not. */
-extern bool batch_metadata_builder_bloom1_hash_maybe_present(Datum bloom_data, uint64 hash);
+extern bool batch_metadata_builder_bloom1_hash_maybe_present(Datum bloom_datum, uint64 hash);

@@ -551,7 +551,7 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 		Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
 		int num_columns;
 
-		if (type_is_rowtype(context->element_type))
+		if (context->element_type == RECORDOID)
 		{
 			HeapTupleHeader tuple = DatumGetHeapTupleHeader(PG_GETARG_DATUM(1));
 			Oid tupType = HeapTupleHeaderGetTypeId(tuple);

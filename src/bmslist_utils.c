@@ -88,35 +88,6 @@ ts_bmslist_contains_set(TsBmsList bmslist, Bitmapset *set)
 	return false;
 }
 
-Bitmapset *
-ts_bmslist_largest_subset(TsBmsList bmslist, int *items, int num_items)
-{
-	Bitmapset *result = NULL;
-	int max_subset_size = 0;
-	ListCell *lc;
-
-	/* Create a new Bitmapset for the items */
-	Bitmapset *larger_set = bms_make_singleton(items[0]);
-	for (int i = 1; i < num_items; i++)
-	{
-		larger_set = bms_add_member(larger_set, items[i]);
-	}
-
-	foreach (lc, bmslist)
-	{
-		Bitmapset *item = (Bitmapset *) lfirst(lc);
-		int subset_size = bms_num_members(item);
-		if (bms_is_subset(item, larger_set) && subset_size > max_subset_size)
-		{
-			max_subset_size = subset_size;
-			result = item;
-		}
-	}
-
-	bms_free(larger_set);
-	return result;
-}
-
 void
 ts_bmslist_free(TsBmsList bmslist)
 {

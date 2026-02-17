@@ -671,24 +671,36 @@ static bool
 decompress_batch_scan_getnext_slot(DecompressBatchScanDesc scan, ScanDirection direction,
 								   struct TupleTableSlot *slot)
 {
-	if (scan->index_scan)
+	if (scan == NULL)
+	{
+		return false;
+	}
+	else if (scan->index_scan)
 	{
 		return index_getnext_slot(scan->index_scan, direction, slot);
 	}
-	else
+	else if (scan->scan)
 	{
 		return table_scan_getnextslot(scan->scan, direction, slot);
+	}
+	else
+	{
+		return false;
 	}
 }
 
 static void
 decompress_batch_endscan(DecompressBatchScanDesc scan)
 {
-	if (scan->index_scan)
+	if (scan == NULL)
+	{
+		return;
+	}
+	else if (scan->index_scan)
 	{
 		index_endscan(scan->index_scan);
 	}
-	else
+	else if (scan->scan)
 	{
 		table_endscan(scan->scan);
 	}

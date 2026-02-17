@@ -482,20 +482,23 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 																	  NameStr(attr->attname)) :
 				NULL;
 
-		if (per_column_setting != NULL)
+		if (per_column_setting != NULL && composite_attr_lists != NULL)
 		{
-			if (per_column_setting->minmax_obj_id != -1)
+			if (per_column_setting->minmax_obj_id != -1 &&
+				per_column_setting->minmax_obj_id < num_sparse_index_objects)
 			{
 				/* Minmax index configuration objects will have a single element list */
-				Assert(composite_attr_lists[per_column_setting->minmax_obj_id] == NULL);
+				Assert(list_length(composite_attr_lists[per_column_setting->minmax_obj_id]) == 0);
 				composite_attr_lists[per_column_setting->minmax_obj_id] =
 					lappend(composite_attr_lists[per_column_setting->minmax_obj_id], attr);
 			}
 
-			if (per_column_setting->single_bloom_obj_id != -1)
+			if (per_column_setting->single_bloom_obj_id != -1 &&
+				per_column_setting->single_bloom_obj_id < num_sparse_index_objects)
 			{
 				/* Single bloom filter configuration objects will have a single element list */
-				Assert(composite_attr_lists[per_column_setting->single_bloom_obj_id] == NULL);
+				Assert(list_length(composite_attr_lists[per_column_setting->single_bloom_obj_id]) ==
+					   0);
 				composite_attr_lists[per_column_setting->single_bloom_obj_id] =
 					lappend(composite_attr_lists[per_column_setting->single_bloom_obj_id], attr);
 			}
@@ -555,7 +558,7 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 			def->storage = TYPSTORAGE_PLAIN;
 			compressed_column_defs = lappend(compressed_column_defs, def);
 		}
-		else if (per_column_setting != NULL)
+		else if (per_column_setting != NULL && composite_attr_lists != NULL)
 		{
 			/* check sparse index columndefs is applicable */
 			bool is_bloom = per_column_setting->single_bloom_obj_id != -1;
