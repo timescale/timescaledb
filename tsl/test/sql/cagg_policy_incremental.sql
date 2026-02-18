@@ -620,13 +620,37 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '1 day')::bigint * 1
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * from bgw_log;
 
---fake job id entry will be left behind. manula refresh should be cleaned up.
+--fake job id entry will be left behind. manual refresh should be cleaned up.
 --entries for this job will be processed
 SELECT *
 FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
 ORDER BY 1, 2;
 SELECT _timescaledb_functions.cagg_watermark(:mat_id);
 
+SELECT * FROM cond_20_int ORDER BY 1, 2;
+
+-- TEST: leftover mat ranges from previous  manual refresh is cleaned up by another manula refresh
+--but not processed
+\c :TEST_DBNAME :ROLE_SUPERUSER
+INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_ranges
+    (materialization_id, lowest_modified_value, greatest_modified_value, job_id, pid)
+VALUES
+    (:mat_id, 140, 160, 0, -1),   -- fake entry for failed manual refresh
+    (:mat_id, 40, 60, 0, -1);   -- fake entry for failed manual refresh
+\c :TEST_DBNAME test_cagg_refresh_policy_user
+--add invalidation overlapping with one of the left behind ranges
+INSERT INTO conditions_int VALUES ( 81, 100, 11);
+SELECT _timescaledb_functions.cagg_watermark(:mat_id);
+
+CALL refresh_continuous_aggregate('cond_20_int', 0, 100);
+
+--all entries for this mat_id should have been removed
+SELECT *
+FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
+ORDER BY 1, 2;
+-- should not change watermark as we still refreshed only between [0, 100). The fake ranges were
+--not processed 
+SELECT _timescaledb_functions.cagg_watermark(:mat_id);
 SELECT * FROM cond_20_int ORDER BY 1, 2;
 
 --when we drop the cagg , all entries related to it should get dropped
