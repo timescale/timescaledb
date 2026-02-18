@@ -718,6 +718,11 @@ select count(*) from _timescaledb_catalog.continuous_aggs_hypertable_invalidatio
 -------
      8
 
+select count(*) from _timescaledb_internal._cagg_invalidation_18;
+ count 
+-------
+     8
+
 DROP TABLE conditions CASCADE;
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects

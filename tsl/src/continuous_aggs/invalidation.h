@@ -36,6 +36,7 @@ typedef struct InvalidationStore
 
 typedef struct Hypertable Hypertable;
 
+extern void invalidation_cagg_add_entries(int32 mat_ht_id, Datum start_datum, Datum end_datum);
 extern void invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, int64 end);
 extern void invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end);
 extern void continuous_agg_invalidate_raw_ht(const Hypertable *raw_ht, int64 start, int64 end);

@@ -44,6 +44,8 @@ typedef struct ContinuousAggsCacheInvalEntry
 	bool value_is_set;
 	int64 lowest_modified_value;
 	int64 greatest_modified_value;
+	Datum lowest_modified_datum;
+	Datum greatest_modified_datum;
 } ContinuousAggsCacheInvalEntry;
 
 typedef struct ContinuousAggsCacheHyperInvalThresholdEntry
@@ -130,9 +132,15 @@ update_cache_from_tuple(ContinuousAggsCacheInvalEntry *cache_entry, HeapTuple tu
 
 	cache_entry->value_is_set = true;
 	if (timeval < cache_entry->lowest_modified_value)
+	{
 		cache_entry->lowest_modified_value = timeval;
+		cache_entry->lowest_modified_datum = datum;
+	}
 	if (timeval > cache_entry->greatest_modified_value)
+	{
 		cache_entry->greatest_modified_value = timeval;
+		cache_entry->greatest_modified_datum = datum;
+	}
 }
 
 static inline void
@@ -178,16 +186,26 @@ get_cache_inval_entry(int32 hypertable_id, Oid chunk_relid)
  * Used by direct compress invalidation
  */
 void
-continuous_agg_invalidate_range(int32 hypertable_id, Oid chunk_relid, int64 start, int64 end)
+continuous_agg_invalidate_range(int32 hypertable_id, Oid chunk_relid, Oid typoid, Datum start,
+								Datum end)
 {
 	ContinuousAggsCacheInvalEntry *cache_entry = get_cache_inval_entry(hypertable_id, chunk_relid);
 
+	int64 int_start = ts_time_value_to_internal(start, typoid);
+	int64 int_end = ts_time_value_to_internal(end, typoid);
+
 	cache_entry->value_is_set = true;
-	Assert(start <= end);
-	if (start < cache_entry->lowest_modified_value)
-		cache_entry->lowest_modified_value = start;
-	if (end > cache_entry->greatest_modified_value)
-		cache_entry->greatest_modified_value = end;
+	Assert(int_start <= int_end);
+	if (int_start < cache_entry->lowest_modified_value)
+	{
+		cache_entry->lowest_modified_value = int_start;
+		cache_entry->lowest_modified_datum = start;
+	}
+	if (int_end > cache_entry->greatest_modified_value)
+	{
+		cache_entry->greatest_modified_value = int_end;
+		cache_entry->greatest_modified_datum = end;
+	}
 }
 
 void
@@ -223,6 +241,9 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	 */
 	if (IsolationUsesXactSnapshot())
 	{
+		invalidation_cagg_add_entries(entry->hypertable_id,
+									  entry->lowest_modified_datum,
+									  entry->greatest_modified_datum);
 		invalidation_hyper_log_add_entry(entry->hypertable_id,
 										 entry->lowest_modified_value,
 										 entry->greatest_modified_value);
@@ -232,9 +253,15 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	liv = cache_get_lowest_invalidated_time_for_hypertable(entry->hypertable_id);
 
 	if (entry->lowest_modified_value < liv)
+	{
+		// FIXME do proper check for cagg invalidation
+		invalidation_cagg_add_entries(entry->hypertable_id,
+									  entry->lowest_modified_datum,
+									  entry->greatest_modified_datum);
 		invalidation_hyper_log_add_entry(entry->hypertable_id,
 										 entry->lowest_modified_value,
 										 entry->greatest_modified_value);
+	}
 };
 
 static void

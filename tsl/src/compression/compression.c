@@ -1366,9 +1366,11 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 			(BatchMetadataBuilderMinMax *) dim_col->metadata_builder;
 		Datum min = row_compressor->compressed_values[builder->min_metadata_attr_offset];
 		Datum max = row_compressor->compressed_values[builder->max_metadata_attr_offset];
-		int64 start = ts_time_value_to_internal(min, builder->type_oid);
-		int64 end = ts_time_value_to_internal(max, builder->type_oid);
-		continuous_agg_invalidate_range(settings->hypertable_id, settings->chunk_relid, start, end);
+		continuous_agg_invalidate_range(settings->hypertable_id,
+										settings->chunk_relid,
+										builder->type_oid,
+										min,
+										max);
 	}
 
 	Assert(writer->bistate != NULL);

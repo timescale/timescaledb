@@ -83,10 +83,11 @@
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "with_clause/create_materialized_view_with_clause.h"
 
-static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
-									  const char *user_view, const char *partial_schema,
-									  const char *partial_view, bool materialized_only,
-									  const char *direct_schema, const char *direct_view,
+static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, Oid invalidation_log,
+									  const char *user_schema, const char *user_view,
+									  const char *partial_schema, const char *partial_view,
+									  bool materialized_only, const char *direct_schema,
+									  const char *direct_view,
 									  const int32 parent_mat_hypertable_id);
 static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function,
 												 const char *bucket_width, const char *origin,
@@ -119,11 +120,11 @@ makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
  * Create a entry for the materialization table in table CONTINUOUS_AGGS.
  */
 static void
-create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
-						  const char *user_view, const char *partial_schema,
-						  const char *partial_view, bool materialized_only,
-						  const char *direct_schema, const char *direct_view,
-						  const int32 parent_mat_hypertable_id)
+create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, Oid invalidation_log,
+						  const char *user_schema, const char *user_view,
+						  const char *partial_schema, const char *partial_view,
+						  bool materialized_only, const char *direct_schema,
+						  const char *direct_view, const int32 parent_mat_hypertable_id)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -145,6 +146,7 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 	memset(values, 0, sizeof(values));
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_mat_hypertable_id)] = matht_id;
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_raw_hypertable_id)] = rawht_id;
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_invalidation_log)] = invalidation_log;
 
 	if (parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
 		nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)] = true;
@@ -253,6 +255,57 @@ create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const 
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
 	table_close(rel, RowExclusiveLock);
+}
+
+/*
+ * Create a per-cagg invalidation log table
+ *
+ * This creates a table in the _timescaledb_internal schema with the name
+ * _cagg_invalidation_<mat_hypertable_id> containing two columns of the primary
+ * dimension type:
+ *   - range_start: the start of a range
+ *   - range_end: the end of a range
+ *
+ * Parameters:
+ *   mat_hypertable_id: the materialization hypertable id
+ *   range_type: the type OID for range_start and range_end columns
+ *               (should be the primary dimension type)
+ *
+ * Returns the OID of the created table.
+ */
+static Oid
+create_cagg_invalidation_log_table(int32 mat_hypertable_id, Oid range_type)
+{
+	Oid uid, saved_uid;
+	int sec_ctx;
+	char relnamebuf[NAMEDATALEN];
+	ObjectAddress address;
+	Oid owner = GetUserId();
+	ColumnDef *range_start_col;
+	ColumnDef *range_end_col;
+
+	/* Create column definitions for range_start and range_end using the dimension type */
+	range_start_col = makeColumnDef("range_start", range_type, -1, InvalidOid);
+	range_start_col->is_not_null = true;
+	range_end_col = makeColumnDef("range_end", range_type, -1, InvalidOid);
+	range_end_col->is_not_null = true;
+
+	List *collist = list_make2(range_start_col, range_end_col);
+
+	makeMaterializedTableName(relnamebuf, "_cagg_invalidation_%d", mat_hypertable_id);
+
+	/* Build the CREATE TABLE statement */
+	CreateStmt *create = makeNode(CreateStmt);
+	create->relation = makeRangeVar(INTERNAL_SCHEMA_NAME, pstrdup(relnamebuf), -1);
+	create->tableElts = collist;
+
+	/* Create the table as the TimescaleDB user */
+	SWITCH_TO_TS_USER(INTERNAL_SCHEMA_NAME, uid, saved_uid, sec_ctx);
+	address = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
+	CommandCounterIncrement();
+	RESTORE_USER(uid, saved_uid, sec_ctx);
+
+	return address.objectId;
 }
 
 /*
@@ -699,11 +752,15 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	dum_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	create_view_for_query(orig_userview_query, dum_rel);
 
-	/* Step 4: Add catalog table entry for the objects we just created. */
+	/* Step 4: Create the per-CAgg log table and add catalog entries. */
 	nspid = RangeVarGetCreationNamespace(stmt->view);
+
+	Oid cagg_log_oid =
+		create_cagg_invalidation_log_table(materialize_hypertable_id, bucket_info->htpartcoltype);
 
 	create_cagg_catalog_entry(materialize_hypertable_id,
 							  bucket_info->htid,
+							  cagg_log_oid,
 							  get_namespace_name(nspid), /*schema name for user view */
 							  stmt->view->relname,
 							  part_rel->schemaname,
