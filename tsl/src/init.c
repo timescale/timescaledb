@@ -140,6 +140,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
 	.continuous_agg_get_grouping_columns = continuous_agg_get_grouping_columns,
 	.continuous_agg_add_column = continuous_agg_add_column,
+	.continuous_agg_drop_column = continuous_agg_drop_column,
 
 	/* Compression */
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,

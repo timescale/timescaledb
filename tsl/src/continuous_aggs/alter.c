@@ -13,9 +13,13 @@
 
 #include "export.h"
 
+#include <access/htup_details.h>
 #include <access/table.h>
 #include <access/xact.h>
+#include <catalog/indexing.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_attribute.h>
+#include <catalog/pg_class.h>
 #include <catalog/pg_proc.h>
 #include <commands/tablecmds.h>
 #include <commands/view.h>
@@ -505,6 +509,285 @@ update_user_view_add_column(ContinuousAgg *cagg, Hypertable *mat_ht, AggregateEx
 }
 
 /*
+ * Remove an expression from a query's targetList by column name.
+ *
+ * Returns the 1-based position (resno) of the removed entry, which is needed
+ * for removing corresponding items from SetOperationStmt lists and
+ * eref->colnames in the user view.
+ */
+static int
+remove_expr_from_query(Query *query, const char *column_name)
+{
+	ListCell *lc;
+	int found_resno = 0;
+
+	foreach (lc, query->targetList)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+		if (tle->resname && strcmp(tle->resname, column_name) == 0)
+		{
+			found_resno = tle->resno;
+			query->targetList = foreach_delete_current(query->targetList, lc);
+			break;
+		}
+	}
+
+	if (found_resno == 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column \"%s\" does not exist in continuous aggregate", column_name)));
+
+	/* Renumber remaining entries */
+	foreach (lc, query->targetList)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+		if (tle->resno > found_resno)
+			tle->resno--;
+	}
+
+	return found_resno;
+}
+
+/*
+ * Delete a column's pg_attribute entry from a view and renumber remaining
+ * attributes. This is needed because PostgreSQL does not support
+ * AT_DropColumn on views, and RemoveAttributeById (which marks columns as
+ * dropped) is incompatible with StoreViewQuery's checkViewColumns which
+ * rejects views containing dropped columns.
+ *
+ * This function physically deletes the pg_attribute row and renumbers
+ * subsequent attributes so the view's TupleDesc stays contiguous.
+ */
+static void
+delete_view_column(Oid view_oid, const char *column_name)
+{
+	AttrNumber target_attnum = get_attnum(view_oid, column_name);
+
+	if (!AttributeNumberIsValid(target_attnum))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column \"%s\" does not exist", column_name)));
+
+	/* Lock the view relation before modifying its catalog entries */
+	LockRelationOid(view_oid, AccessExclusiveLock);
+
+	/* Open pg_attribute for modification */
+	Relation attrel = table_open(AttributeRelationId, RowExclusiveLock);
+
+	/* Delete the target attribute tuple */
+	HeapTuple tuple =
+		SearchSysCacheCopy2(ATTNUM, ObjectIdGetDatum(view_oid), Int16GetDatum(target_attnum));
+	if (!HeapTupleIsValid(tuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column \"%s\" does not exist in pg_attribute", column_name)));
+
+	CatalogTupleDelete(attrel, &tuple->t_self);
+	heap_freetuple(tuple);
+
+	/* Get the current number of attributes from pg_class */
+	Relation classrel = table_open(RelationRelationId, RowExclusiveLock);
+	HeapTuple classtuple = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(view_oid));
+
+	if (!HeapTupleIsValid(classtuple))
+		elog(ERROR, "cache lookup failed for relation %u", view_oid);
+
+	Form_pg_class classform = (Form_pg_class) GETSTRUCT(classtuple);
+	int16 old_natts = classform->relnatts;
+
+	/* Renumber remaining attributes with attnum > target_attnum */
+	for (AttrNumber attnum = target_attnum + 1; attnum <= old_natts; attnum++)
+	{
+		HeapTuple atttuple =
+			SearchSysCacheCopy2(ATTNUM, ObjectIdGetDatum(view_oid), Int16GetDatum(attnum));
+		if (HeapTupleIsValid(atttuple))
+		{
+			Form_pg_attribute attform = (Form_pg_attribute) GETSTRUCT(atttuple);
+			attform->attnum = attnum - 1;
+			CatalogTupleUpdate(attrel, &atttuple->t_self, atttuple);
+			heap_freetuple(atttuple);
+		}
+	}
+
+	/* Update pg_class.relnatts */
+	classform->relnatts = old_natts - 1;
+	CatalogTupleUpdate(classrel, &classtuple->t_self, classtuple);
+	heap_freetuple(classtuple);
+
+	table_close(classrel, RowExclusiveLock);
+	table_close(attrel, RowExclusiveLock);
+
+	CommandCounterIncrement();
+}
+
+/*
+ * Drop a column from a relation (table or view).
+ *
+ * For tables, uses ALTER TABLE DROP COLUMN via AlterTable.
+ * For views, directly modifies pg_attribute since PostgreSQL does not
+ * support AT_DropColumn on views.
+ */
+static void
+drop_column_from_relation(char *schema_name, char *rel_name, char *column_name, bool is_view)
+{
+	int sec_ctx;
+	Oid uid, saved_uid;
+
+	if (is_view)
+	{
+		SWITCH_TO_TS_USER(schema_name, uid, saved_uid, sec_ctx);
+
+		Oid view_oid = ts_get_relation_relid(schema_name, rel_name, false);
+		delete_view_column(view_oid, column_name);
+
+		RESTORE_USER(uid, saved_uid, sec_ctx);
+	}
+	else
+	{
+		/* For tables, use standard ALTER TABLE DROP COLUMN */
+		AlterTableCmd *cmd = makeNode(AlterTableCmd);
+		cmd->subtype = AT_DropColumn;
+		cmd->name = column_name;
+		cmd->behavior = DROP_RESTRICT;
+		cmd->missing_ok = false;
+
+		AlterTableStmt stmt = {
+			.type = T_AlterTableStmt,
+			.relation = makeRangeVar(schema_name, rel_name, -1),
+			.cmds = list_make1(cmd),
+			.objtype = OBJECT_TABLE,
+			.missing_ok = false,
+		};
+
+		LOCKMODE lockmode = AlterTableGetLockLevel(stmt.cmds);
+		AlterTableUtilityContext atcontext = {
+			.relid = AlterTableLookupRelation(&stmt, lockmode),
+		};
+		AlterTable(&stmt, lockmode, &atcontext);
+		CommandCounterIncrement();
+	}
+}
+
+/*
+ * Update a view's query definition to remove an aggregate expression.
+ * Reverse of update_view_add_aggregate().
+ */
+static void
+update_view_drop_aggregate(Oid view_oid, char *view_schema, char *view_name, char *column_name)
+{
+	int sec_ctx;
+	Oid uid, saved_uid;
+
+	/* Step 1: Get the view's query BEFORE dropping the column */
+	Query *query = get_view_query_tree(view_oid);
+
+	/* Remove dummy RTEs for PG16+ */
+	RemoveRangeTableEntries(query);
+
+	/* Remove the expression from the query */
+	remove_expr_from_query(query, column_name);
+
+	/* Step 2: Drop the column from the view relation */
+	drop_column_from_relation(view_schema, view_name, column_name, true);
+
+	/* Step 3: Store the updated query */
+	SWITCH_TO_TS_USER(view_schema, uid, saved_uid, sec_ctx);
+	StoreViewQuery(view_oid, query, true);
+	CommandCounterIncrement();
+	RESTORE_USER(uid, saved_uid, sec_ctx);
+}
+
+/*
+ * Update the user view to remove a column.
+ * Reverse of update_user_view_add_column().
+ *
+ * Handles both real-time mode (UNION ALL query with materialized + raw subqueries)
+ * and materialized-only mode (direct query on mat_ht).
+ */
+static void
+update_user_view_drop_column(ContinuousAgg *cagg, char *column_name)
+{
+	int sec_ctx;
+	Oid uid, saved_uid;
+
+	Oid user_view_oid = ts_get_relation_relid(NameStr(cagg->data.user_view_schema),
+											  NameStr(cagg->data.user_view_name),
+											  false);
+
+	Query *user_query = get_view_query_tree(user_view_oid);
+	RemoveRangeTableEntries(user_query);
+
+	if (user_query->setOperations)
+	{
+		/*
+		 * Real-time mode: UNION ALL query
+		 * Need to update both subqueries and the SetOperationStmt
+		 */
+		Assert(list_length(user_query->rtable) == 2);
+		RangeTblEntry *mat_rte = linitial(user_query->rtable);
+		RangeTblEntry *raw_rte = lsecond(user_query->rtable);
+
+		if (mat_rte->rtekind != RTE_SUBQUERY || raw_rte->rtekind != RTE_SUBQUERY)
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("unexpected query structure in real-time continuous aggregate")));
+
+		/* Remove from materialized subquery - returns the position index */
+		int pos = remove_expr_from_query(mat_rte->subquery, column_name);
+
+		/* Remove from mat_rte eref->colnames at same position (0-based) */
+		mat_rte->eref->colnames = list_delete_nth_cell(mat_rte->eref->colnames, pos - 1);
+
+		/* Remove from raw subquery */
+		remove_expr_from_query(raw_rte->subquery, column_name);
+
+		/* Remove from raw_rte eref->colnames */
+		raw_rte->eref->colnames = list_delete_nth_cell(raw_rte->eref->colnames, pos - 1);
+
+		/* Remove from SetOperationStmt column type lists */
+		SetOperationStmt *setop = castNode(SetOperationStmt, user_query->setOperations);
+		setop->colTypes = list_delete_nth_cell(setop->colTypes, pos - 1);
+		setop->colTypmods = list_delete_nth_cell(setop->colTypmods, pos - 1);
+		setop->colCollations = list_delete_nth_cell(setop->colCollations, pos - 1);
+
+		/* Remove from outer targetList */
+		remove_expr_from_query(user_query, column_name);
+
+		/* Fix up Var varattno references in remaining outer entries */
+		ListCell *lc;
+		foreach (lc, user_query->targetList)
+		{
+			TargetEntry *tle = lfirst_node(TargetEntry, lc);
+			if (IsA(tle->expr, Var))
+			{
+				Var *var = castNode(Var, tle->expr);
+				if (var->varattno > pos)
+					var->varattno--;
+			}
+		}
+	}
+	else
+	{
+		/*
+		 * Materialized-only mode: Direct query on mat_ht
+		 */
+		remove_expr_from_query(user_query, column_name);
+	}
+
+	/* Drop the column from the user view relation */
+	drop_column_from_relation(NameStr(cagg->data.user_view_schema),
+							  NameStr(cagg->data.user_view_name),
+							  column_name,
+							  true);
+
+	/* Store the updated user view query */
+	SWITCH_TO_TS_USER(NameStr(cagg->data.user_view_schema), uid, saved_uid, sec_ctx);
+	StoreViewQuery(user_view_oid, user_query, true);
+	CommandCounterIncrement();
+	RESTORE_USER(uid, saved_uid, sec_ctx);
+}
+
+/*
  * Main function to add an aggregate expression to a continuous aggregate
  */
 Datum
@@ -647,6 +930,143 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 	 * Step 4: Update user view
 	 */
 	update_user_view_add_column(cagg, mat_ht, agg_info);
+
+	ts_cache_release(&hcache);
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * Main function to drop an aggregate column from a continuous aggregate.
+ * Reverse of continuous_agg_add_column().
+ *
+ * Drop order is reversed from add order (user view first, mat_ht last)
+ * to avoid referencing a dropped column.
+ */
+Datum
+continuous_agg_drop_column(PG_FUNCTION_ARGS)
+{
+	Oid cagg_relid = PG_GETARG_OID(0);
+	char *column_name = NameStr(*PG_GETARG_NAME(1));
+
+	/* Only the owner of the continuous aggregate can alter it */
+	ts_cagg_permissions_check(cagg_relid, GetUserId());
+
+	/*
+	 * Take an AccessExclusiveLock on the continuous aggregate relation to
+	 * prevent concurrent modifications. This ensures that concurrent
+	 * add/drop_continuous_aggregate_column calls are properly serialized.
+	 */
+	LockRelationOid(cagg_relid, AccessExclusiveLock);
+
+	/* Get the continuous aggregate */
+	ContinuousAgg *cagg = cagg_get_by_relid_or_fail(cagg_relid);
+
+	/* Get the raw hypertable */
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *raw_ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.raw_hypertable_id);
+
+	if (raw_ht == NULL)
+	{
+		ts_cache_release(&hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("could not find raw hypertable for continuous aggregate")));
+	}
+
+	/* Get the materialization hypertable */
+	Hypertable *mat_ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
+	if (mat_ht == NULL)
+	{
+		ts_cache_release(&hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not find materialization hypertable for continuous aggregate")));
+	}
+
+	/* Check if the materialization hypertable has compressed chunks */
+	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(mat_ht) ||
+		TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
+	{
+		ts_cache_release(&hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot drop aggregate from continuous aggregate with compression enabled"),
+				 errhint("Disable compression on the continuous aggregate first.")));
+	}
+
+	/* Get the partial view to validate the column */
+	Oid partial_view_oid = ts_get_relation_relid(NameStr(cagg->data.partial_view_schema),
+												 NameStr(cagg->data.partial_view_name),
+												 false);
+
+	Query *partial_query = get_view_query_tree(partial_view_oid);
+
+	/* Validate column exists in partial view targetList */
+	TargetEntry *found_tle = NULL;
+	ListCell *lc;
+	foreach (lc, partial_query->targetList)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+		if (tle->resname && strcmp(tle->resname, column_name) == 0)
+		{
+			found_tle = tle;
+			break;
+		}
+	}
+
+	if (found_tle == NULL)
+	{
+		ts_cache_release(&hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column \"%s\" does not exist in continuous aggregate", column_name)));
+	}
+
+	/* Validate column is NOT a GROUP BY column (ressortgroupref > 0 means GROUP BY) */
+	if (found_tle->ressortgroupref > 0)
+	{
+		ts_cache_release(&hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot drop GROUP BY column \"%s\" from continuous aggregate",
+						column_name),
+				 errhint("Only aggregate columns can be dropped.")));
+	}
+
+	/*
+	 * Drop order is reversed from add order to avoid referencing a dropped column.
+	 *
+	 * Step 1: Update user view (drop column from user-facing view)
+	 */
+	update_user_view_drop_column(cagg, column_name);
+
+	/*
+	 * Step 2: Update direct view
+	 */
+	Oid direct_view_oid = ts_get_relation_relid(NameStr(cagg->data.direct_view_schema),
+												NameStr(cagg->data.direct_view_name),
+												false);
+	update_view_drop_aggregate(direct_view_oid,
+							   NameStr(cagg->data.direct_view_schema),
+							   NameStr(cagg->data.direct_view_name),
+							   column_name);
+
+	/*
+	 * Step 3: Update partial view
+	 */
+	update_view_drop_aggregate(partial_view_oid,
+							   NameStr(cagg->data.partial_view_schema),
+							   NameStr(cagg->data.partial_view_name),
+							   column_name);
+
+	/*
+	 * Step 4: Drop column from materialization hypertable
+	 */
+	drop_column_from_relation(NameStr(mat_ht->fd.schema_name),
+							  NameStr(mat_ht->fd.table_name),
+							  column_name,
+							  false);
 
 	ts_cache_release(&hcache);
 
