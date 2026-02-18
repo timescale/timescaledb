@@ -263,10 +263,11 @@ parse_aggregate_expression(const char *expr_str, Oid source_relid)
 }
 
 /*
- * Check if a column name already exists in the query's targetList
+ * Find a TargetEntry by column name in a query's targetList.
+ * Returns the TargetEntry if found, NULL otherwise.
  */
-static bool
-column_exists_in_targetlist(Query *query, const char *column_name)
+static TargetEntry *
+find_tle_by_name(Query *query, const char *column_name)
 {
 	ListCell *lc;
 
@@ -274,10 +275,10 @@ column_exists_in_targetlist(Query *query, const char *column_name)
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
 		if (tle->resname && strcmp(tle->resname, column_name) == 0)
-			return true;
+			return tle;
 	}
 
-	return false;
+	return NULL;
 }
 
 /*
@@ -518,26 +519,18 @@ update_user_view_add_column(ContinuousAgg *cagg, Hypertable *mat_ht, AggregateEx
 static int
 remove_expr_from_query(Query *query, const char *column_name)
 {
-	ListCell *lc;
-	int found_resno = 0;
+	TargetEntry *found_tle = find_tle_by_name(query, column_name);
 
-	foreach (lc, query->targetList)
-	{
-		TargetEntry *tle = lfirst_node(TargetEntry, lc);
-		if (tle->resname && strcmp(tle->resname, column_name) == 0)
-		{
-			found_resno = tle->resno;
-			query->targetList = foreach_delete_current(query->targetList, lc);
-			break;
-		}
-	}
-
-	if (found_resno == 0)
+	if (found_tle == NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_COLUMN),
 				 errmsg("column \"%s\" does not exist in continuous aggregate", column_name)));
 
+	int found_resno = found_tle->resno;
+	query->targetList = list_delete_ptr(query->targetList, found_tle);
+
 	/* Renumber remaining entries */
+	ListCell *lc;
 	foreach (lc, query->targetList)
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
@@ -559,7 +552,7 @@ remove_expr_from_query(Query *query, const char *column_name)
  * subsequent attributes so the view's TupleDesc stays contiguous.
  */
 static void
-delete_view_column(Oid view_oid, const char *column_name)
+drop_view_column(Oid view_oid, const char *column_name)
 {
 	AttrNumber target_attnum = get_attnum(view_oid, column_name);
 
@@ -638,7 +631,7 @@ drop_column_from_relation(char *schema_name, char *rel_name, char *column_name, 
 		SWITCH_TO_TS_USER(schema_name, uid, saved_uid, sec_ctx);
 
 		Oid view_oid = ts_get_relation_relid(schema_name, rel_name, false);
-		delete_view_column(view_oid, column_name);
+		drop_view_column(view_oid, column_name);
 
 		RESTORE_USER(uid, saved_uid, sec_ctx);
 	}
@@ -880,7 +873,7 @@ continuous_agg_add_column(PG_FUNCTION_ARGS)
 
 	Query *partial_query = get_view_query_tree(partial_view_oid);
 
-	if (column_exists_in_targetlist(partial_query, agg_info->column_alias))
+	if (find_tle_by_name(partial_query, agg_info->column_alias) != NULL)
 	{
 		ts_cache_release(&hcache);
 		if (if_not_exists)
@@ -1004,17 +997,7 @@ continuous_agg_drop_column(PG_FUNCTION_ARGS)
 	Query *partial_query = get_view_query_tree(partial_view_oid);
 
 	/* Validate column exists in partial view targetList */
-	TargetEntry *found_tle = NULL;
-	ListCell *lc;
-	foreach (lc, partial_query->targetList)
-	{
-		TargetEntry *tle = lfirst_node(TargetEntry, lc);
-		if (tle->resname && strcmp(tle->resname, column_name) == 0)
-		{
-			found_tle = tle;
-			break;
-		}
-	}
+	TargetEntry *found_tle = find_tle_by_name(partial_query, column_name);
 
 	if (found_tle == NULL)
 	{
