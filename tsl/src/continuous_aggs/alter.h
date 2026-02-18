@@ -9,3 +9,4 @@
 #include <fmgr.h>
 
 extern Datum continuous_agg_add_column(PG_FUNCTION_ARGS);
+extern Datum continuous_agg_drop_column(PG_FUNCTION_ARGS);

@@ -226,3 +226,12 @@ CREATE OR REPLACE FUNCTION @extschema@.add_continuous_aggregate_column(
     if_not_exists            BOOLEAN = FALSE
 ) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_continuous_agg_add_column' LANGUAGE C VOLATILE STRICT;
+
+-- Drop an aggregate column from a continuous aggregate.
+-- The column must be an aggregate (not a GROUP BY column).
+-- Example: drop_continuous_aggregate_column('my_cagg', 'total')
+CREATE OR REPLACE FUNCTION @extschema@.drop_continuous_aggregate_column(
+    continuous_aggregate     REGCLASS,
+    column_name              NAME
+) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_continuous_agg_drop_column' LANGUAGE C VOLATILE STRICT;

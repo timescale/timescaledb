@@ -322,7 +322,123 @@ SET client_min_messages TO WARNING;
 -- Cleanup compression test CAgg
 DROP MATERIALIZED VIEW test_cagg_compress;
 
+RESET client_min_messages;
+
+-- =====================================================
+-- Tests for drop_continuous_aggregate_column
+-- =====================================================
+
+-- Show current state before drops
+\d+ test_cagg_mat
+\d+ test_cagg_rt
+
+-- Basic drop from materialized-only CAgg
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'sum_temp');
+
+-- Verify column was removed
+\d+ test_cagg_mat
+
+-- Drop another column
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'max_temp');
+
+-- Verify
+\d+ test_cagg_mat
+
+-- Drop from real-time CAgg
+SELECT drop_continuous_aggregate_column('test_cagg_rt', 'min_temp');
+
+-- Verify column was removed
+\d+ test_cagg_rt
+
+-- Refresh after drop should still work
+CALL refresh_continuous_aggregate('test_cagg_mat', NULL, NULL);
+CALL refresh_continuous_aggregate('test_cagg_rt', NULL, NULL);
+
+-- Verify data is correct after drop
+SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
+SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
+
+-- Drop from hierarchical CAgg
+SELECT drop_continuous_aggregate_column('test_cagg_level2', 'total_sum_temp');
+
+-- Verify
+\d+ test_cagg_level2
+
+-- Refresh hierarchical CAgg after drop
+CALL refresh_continuous_aggregate('test_cagg_level2', NULL, NULL);
+SELECT * FROM test_cagg_level2 ORDER BY bucket, device_id;
+
+-- Drop from real-time hierarchical CAgg
+SELECT drop_continuous_aggregate_column('test_cagg_rt_level2', 'max_of_min');
+
+-- Verify
+\d+ test_cagg_rt_level2
+
+-- Refresh and verify
+CALL refresh_continuous_aggregate('test_cagg_rt_level2', NULL, NULL);
+SELECT * FROM test_cagg_rt_level2 ORDER BY bucket, device_id;
+
+-- Error tests for drop
+\set ON_ERROR_STOP 0
+-- Column doesn't exist
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'nonexistent');
+
+-- GROUP BY column cannot be dropped
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'device_id');
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'bucket');
+
+-- NULL arguments (STRICT function returns NULL for any NULL input)
+SELECT drop_continuous_aggregate_column(NULL, 'avg_temp');
+SELECT drop_continuous_aggregate_column('test_cagg_mat', NULL);
+
+-- Not a continuous aggregate
+SELECT drop_continuous_aggregate_column('regular_table'::regclass, 'id');
+
+-- Permission denied: non-owner cannot alter the continuous aggregate
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'avg_humidity');
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 1
+
+-- Error test for compression
+CREATE MATERIALIZED VIEW test_cagg_compress2
+    WITH (timescaledb.continuous)
+AS SELECT
+    time_bucket('1 day', time) AS bucket,
+    device_id,
+    avg(temperature) AS avg_temp
+FROM test_ht
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Add a column to drop later
+SELECT add_continuous_aggregate_column('test_cagg_compress2', 'sum(temperature) AS sum_temp');
+
+-- Refresh to materialize data
+CALL refresh_continuous_aggregate('test_cagg_compress2', NULL, NULL);
+
+-- Enable compression on the CAgg
+ALTER MATERIALIZED VIEW test_cagg_compress2 SET (timescaledb.compress);
+
+-- Error - cannot drop column from CAgg with compression enabled
+\set ON_ERROR_STOP 0
+SELECT drop_continuous_aggregate_column('test_cagg_compress2', 'sum_temp');
+\set ON_ERROR_STOP 1
+
+-- Decompress and disable compression
+SELECT decompress_chunk(chunk) FROM show_chunks('test_cagg_compress2') chunk;
+ALTER MATERIALIZED VIEW test_cagg_compress2 SET (timescaledb.compress = false);
+
+-- Now we should be able to drop the column
+SELECT drop_continuous_aggregate_column('test_cagg_compress2', 'sum_temp');
+
+-- Verify
+\d+ test_cagg_compress2
+
+SET client_min_messages TO WARNING;
+
 -- Cleanup
+DROP MATERIALIZED VIEW test_cagg_compress2;
 DROP MATERIALIZED VIEW test_cagg_rt_level2;
 DROP MATERIALIZED VIEW test_cagg_level2;
 DROP MATERIALIZED VIEW test_cagg_mat;

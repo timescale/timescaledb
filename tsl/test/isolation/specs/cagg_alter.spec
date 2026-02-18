@@ -86,6 +86,38 @@ step "s3_select"
     SELECT * FROM cagg_test ORDER BY bucket, device;
 }
 
+# Session 1: drop sum(humidity) -- added by s1_add_column
+session "S1D"
+setup
+{
+    SET lock_timeout = '5s';
+}
+step "s1_drop_column"
+{
+    BEGIN;
+    SELECT drop_continuous_aggregate_column('cagg_test', 'sum_humidity');
+}
+step "s1_drop_column_commit"
+{
+    COMMIT;
+}
+
+# Session 2: drop max(pressure) -- added by s2_add_column
+session "S2D"
+setup
+{
+    SET lock_timeout = '5s';
+}
+step "s2_drop_column"
+{
+    BEGIN;
+    SELECT drop_continuous_aggregate_column('cagg_test', 'max_pressure');
+}
+step "s2_drop_column_commit"
+{
+    COMMIT;
+}
+
 # Test 1: add_continuous_aggregate_column blocks when cagg is locked.
 # L1 holds AccessExclusiveLock, S1 blocks waiting for it, then proceeds
 # after L1 releases the lock.
@@ -95,3 +127,11 @@ permutation "l1_lock" "s1_add_column" "l1_unlock" "s1_add_column_commit" "s3_sel
 # S1 takes AccessExclusiveLock, S2 blocks until S1 completes.
 # Both columns should be present in the final view.
 permutation "s1_add_column" "s2_add_column" "s1_add_column_commit" "s2_add_column_commit" "s3_select"
+
+# Test 3: Two concurrent drop_continuous_aggregate_column calls serialize.
+# First add both columns, then drop them concurrently.
+permutation "s1_add_column" "s1_add_column_commit" "s2_add_column" "s2_add_column_commit" "s1_drop_column" "s2_drop_column" "s1_drop_column_commit" "s2_drop_column_commit" "s3_select"
+
+# Test 4: Concurrent add and drop on same CAgg serialize.
+# First add a column, commit, then concurrently add another and drop the first.
+permutation "s1_add_column" "s1_add_column_commit" "s2_add_column" "s1_drop_column" "s2_add_column_commit" "s1_drop_column_commit" "s3_select"
