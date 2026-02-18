@@ -267,14 +267,20 @@ extern void _conn_ssl_fini(void);
 void
 _conn_ssl_init(void)
 {
+#if (OPENSSL_VERSION_NUMBER < 0x1010000fL)
+	/* OpenSSL < 1.1.0 requires explicit initialization */
 	SSL_library_init();
 	/* Always returns 1 */
 	SSL_load_error_strings();
+#endif
 	ts_connection_register(CONNECTION_SSL, &ssl_ops);
 }
 
 void
 _conn_ssl_fini(void)
 {
+#if (OPENSSL_VERSION_NUMBER < 0x1010000fL)
+	/* OpenSSL < 1.1.0 requires explicit cleanup */
 	ERR_free_strings();
+#endif
 }
