@@ -930,6 +930,13 @@ SELECT * FROM test_cagg_rt_level2 ORDER BY bucket, device_id;
 -- Column doesn't exist
 SELECT drop_continuous_aggregate_column('test_cagg_mat', 'nonexistent');
 ERROR:  column "nonexistent" does not exist in continuous aggregate
+-- if_exists=true should not error when column doesn't exist
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'nonexistent', true);
+NOTICE:  column "nonexistent" does not exist in continuous aggregate, skipping
+ drop_continuous_aggregate_column 
+----------------------------------
+ 
+
 -- GROUP BY column cannot be dropped
 SELECT drop_continuous_aggregate_column('test_cagg_mat', 'device_id');
 ERROR:  cannot drop GROUP BY column "device_id" from continuous aggregate
@@ -942,6 +949,11 @@ SELECT drop_continuous_aggregate_column(NULL, 'avg_temp');
  
 
 SELECT drop_continuous_aggregate_column('test_cagg_mat', NULL);
+ drop_continuous_aggregate_column 
+----------------------------------
+ 
+
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'avg_temp', NULL);
  drop_continuous_aggregate_column 
 ----------------------------------
  

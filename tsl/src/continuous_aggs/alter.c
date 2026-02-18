@@ -948,6 +948,7 @@ continuous_agg_drop_column(PG_FUNCTION_ARGS)
 {
 	Oid cagg_relid = PG_GETARG_OID(0);
 	char *column_name = NameStr(*PG_GETARG_NAME(1));
+	bool if_exists = PG_GETARG_BOOL(2);
 
 	/* Only the owner of the continuous aggregate can alter it */
 	ts_cagg_permissions_check(cagg_relid, GetUserId());
@@ -1018,6 +1019,13 @@ continuous_agg_drop_column(PG_FUNCTION_ARGS)
 	if (found_tle == NULL)
 	{
 		ts_cache_release(&hcache);
+		if (if_exists)
+		{
+			ereport(NOTICE,
+					(errmsg("column \"%s\" does not exist in continuous aggregate, skipping",
+							column_name)));
+			PG_RETURN_VOID();
+		}
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_COLUMN),
 				 errmsg("column \"%s\" does not exist in continuous aggregate", column_name)));

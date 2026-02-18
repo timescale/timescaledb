@@ -232,6 +232,7 @@ AS '@MODULE_PATHNAME@', 'ts_continuous_agg_add_column' LANGUAGE C VOLATILE STRIC
 -- Example: drop_continuous_aggregate_column('my_cagg', 'total')
 CREATE OR REPLACE FUNCTION @extschema@.drop_continuous_aggregate_column(
     continuous_aggregate     REGCLASS,
-    column_name              NAME
+    column_name              NAME,
+    if_exists                BOOLEAN = FALSE
 ) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_continuous_agg_drop_column' LANGUAGE C VOLATILE STRICT;
