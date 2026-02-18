@@ -35,6 +35,9 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
      2
 
 vacuum full analyze aggexpr;
+-- The batch sorted merge has very close costs for one query, and prevents
+-- vectorized aggregation, so we have to get it out of the way.
+set timescaledb.enable_decompression_sorted_merge to off;
 -- Some functions we are not able to vectorize at the moment.
 set timescaledb.debug_require_vector_agg = 'forbid';
 -- Volatile expression
@@ -1913,3 +1916,4 @@ select v - 501 > 0, sum(abs(v - 500)) from aggexpr where i % 2 = 0 group by v - 
 
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
+reset timescaledb.enable_decompression_sorted_merge;

@@ -1,4 +1,5 @@
 set(TEST_FILES_SHARED
+    bulk_decompression_limit.sql
     chunkwise_agg_gather_sort.sql
     classify_relation.sql
     compat.sql
