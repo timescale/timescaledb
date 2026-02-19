@@ -2382,6 +2382,14 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 	 * */
 	if (ht)
 	{
+		/* The column rename needs to be processed before the compression settings updated
+		 * because the composite bloom filter renaming need to have the old column names
+		 * and this comes from the compression settings.
+		 */
+		if (ts_cm_functions->process_rename_cmd)
+			ts_cm_functions->process_rename_cmd(relid, hcache, stmt);
+
+		/* The compression settings update can only proceed after the columns are renamed */
 		ts_compression_settings_rename_column_cascade(ht->main_table_relid,
 													  stmt->subname,
 													  stmt->newname);
@@ -2408,9 +2416,6 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 														   ts_cache_memory_ctx(hcache));
 			}
 		}
-
-		if (ts_cm_functions->process_rename_cmd)
-			ts_cm_functions->process_rename_cmd(relid, hcache, stmt);
 	}
 
 	/*
