@@ -147,7 +147,8 @@ append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortI
 }
 
 static EquivalenceClass *
-append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Expr *expr, PathKey *pk)
+append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Expr *expr, PathKey *pk,
+						   Oid em_datatype)
 {
 	MemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
 	EquivalenceMember *em = makeNode(EquivalenceMember);
@@ -156,7 +157,7 @@ append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Expr 
 	em->em_relids = bms_make_singleton(info->compressed_rel->relid);
 	em->em_is_const = false;
 	em->em_is_child = false;
-	em->em_datatype = exprType((Node *) expr);
+	em->em_datatype = em_datatype;
 	EquivalenceClass *ec = makeNode(EquivalenceClass);
 	ec->ec_opfamilies = pk->pk_eclass->ec_opfamilies;
 	ec->ec_collation = pk->pk_eclass->ec_collation;
@@ -292,10 +293,19 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 			for (; lc != NULL; lc = lnext(chunk_pathkeys, lc))
 			{
 				pk = lfirst(lc);
-				expr = ts_find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
+				EquivalenceMember *chunk_em = ts_find_em_for_rel(pk->pk_eclass, info->chunk_rel);
 
-				Assert(expr);
-				Oid opcintype = exprType((Node *) expr);
+				Assert(chunk_em);
+				expr = chunk_em->em_expr;
+				/*
+				 * Use em_datatype from the original equivalence member as the
+				 * opcintype. For polymorphic types like anyenum,
+				 * canonicalize_ec_expression will not add a RelabelType (it
+				 * replaces polymorphic req_type with the concrete type), so we
+				 * must explicitly pass the correct em_datatype to the metadata
+				 * column EC.
+				 */
+				Oid opcintype = chunk_em->em_datatype;
 				Oid collation = exprCollation((Node *) expr);
 				expr = (Expr *) strip_implicit_coercions((Node *) expr);
 				var = castNode(Var, expr);
@@ -333,7 +343,8 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 											var->varlevelsup);
 				Expr *min_expr =
 					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-				EquivalenceClass *min_ec = append_ec_for_metadata_col(root, info, min_expr, pk);
+				EquivalenceClass *min_ec =
+					append_ec_for_metadata_col(root, info, min_expr, pk, opcintype);
 				PathKey *min =
 					make_canonical_pathkey(root, min_ec, pk->pk_opfamily, strategy, nulls_first);
 				required_compressed_pathkeys = lappend(required_compressed_pathkeys, min);
@@ -348,7 +359,8 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 									   var->varlevelsup);
 				Expr *max_expr =
 					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-				EquivalenceClass *max_ec = append_ec_for_metadata_col(root, info, max_expr, pk);
+				EquivalenceClass *max_ec =
+					append_ec_for_metadata_col(root, info, max_expr, pk, opcintype);
 				PathKey *max =
 					make_canonical_pathkey(root, max_ec, pk->pk_opfamily, strategy, nulls_first);
 
