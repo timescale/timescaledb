@@ -423,8 +423,8 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 	List *compressed_column_defs = NIL;
 	List *segmentby_column_defs = NIL;
 	Jsonb *sparse_cfg = settings->fd.index;
-	ParsedCompressionSettings *parsed_settings =
-		sparse_cfg ? ts_convert_to_parsed_compression_settings(sparse_cfg) : NULL;
+	SparseIndexSettings *parsed_settings =
+		sparse_cfg ? ts_convert_to_sparse_index_settings(sparse_cfg) : NULL;
 	Bitmapset *all_composite_bloom_obj_ids = NULL;
 	List *per_column_settings = ts_get_per_column_compression_settings(parsed_settings);
 
@@ -1054,7 +1054,7 @@ drop_column_from_compression_table(CompressionSettings *comp_settings, char *nam
 
 	if (jb)
 	{
-		ParsedCompressionSettings *parsed_settings = ts_convert_to_parsed_compression_settings(jb);
+		SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(jb);
 		if (parsed_settings)
 		{
 			bool removed_any = false;
@@ -1064,13 +1064,11 @@ drop_column_from_compression_table(CompressionSettings *comp_settings, char *nam
 			{
 				bool removed = false;
 				const char *bloom_column_name = NULL;
-				ParsedCompressionSettingsObject *obj =
-					(ParsedCompressionSettingsObject *) lfirst(obj_cell);
+				SparseIndexSettingsObject *obj = (SparseIndexSettingsObject *) lfirst(obj_cell);
 				ListCell *pair_cell = NULL;
 				foreach (pair_cell, obj->pairs)
 				{
-					ParsedCompressionSettingsPair *pair =
-						(ParsedCompressionSettingsPair *) lfirst(pair_cell);
+					SparseIndexSettingsPair *pair = (SparseIndexSettingsPair *) lfirst(pair_cell);
 					if (strcmp(pair->key, ts_sparse_index_common_keys[SparseIndexKeyCol]) != 0)
 					{
 						continue;
@@ -1115,11 +1113,11 @@ drop_column_from_compression_table(CompressionSettings *comp_settings, char *nam
 
 			if (removed_any)
 			{
-				jb = ts_convert_from_parsed_compression_settings(parsed_settings);
+				jb = ts_convert_from_sparse_index_settings(parsed_settings);
 				comp_settings->fd.index = jb;
 				ts_compression_settings_update(comp_settings);
 			}
-			ts_free_parsed_compression_settings(parsed_settings);
+			ts_free_sparse_index_settings(parsed_settings);
 		}
 	}
 
@@ -2033,7 +2031,7 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 	/* update the compression settings for the main table */
 	if (jb)
 	{
-		ParsedCompressionSettings *parsed_settings = ts_convert_to_parsed_compression_settings(jb);
+		SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(jb);
 		if (parsed_settings)
 		{
 			bool removed_any = false;
@@ -2042,13 +2040,11 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 			{
 				bool removed = false;
 				ListCell *pair_cell = NULL;
-				ParsedCompressionSettingsObject *obj =
-					(ParsedCompressionSettingsObject *) lfirst(obj_cell);
+				SparseIndexSettingsObject *obj = (SparseIndexSettingsObject *) lfirst(obj_cell);
 				Assert(obj != NULL);
 				foreach (pair_cell, obj->pairs)
 				{
-					ParsedCompressionSettingsPair *pair =
-						(ParsedCompressionSettingsPair *) lfirst(pair_cell);
+					SparseIndexSettingsPair *pair = (SparseIndexSettingsPair *) lfirst(pair_cell);
 					if (strcmp(pair->key, ts_sparse_index_common_keys[SparseIndexKeyCol]) != 0)
 					{
 						continue;
@@ -2078,11 +2074,11 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 			}
 			if (removed_any)
 			{
-				jb = ts_convert_from_parsed_compression_settings(parsed_settings);
+				jb = ts_convert_from_sparse_index_settings(parsed_settings);
 				settings->fd.index = jb;
 				ts_compression_settings_update(settings);
 			}
-			ts_free_parsed_compression_settings(parsed_settings);
+			ts_free_sparse_index_settings(parsed_settings);
 		}
 	}
 }
@@ -2178,8 +2174,8 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 
 		if (settings && settings->fd.index != NULL)
 		{
-			ParsedCompressionSettings *parsed_settings =
-				ts_convert_to_parsed_compression_settings(settings->fd.index);
+			SparseIndexSettings *parsed_settings =
+				ts_convert_to_sparse_index_settings(settings->fd.index);
 			List *per_column_settings = ts_get_per_column_compression_settings(parsed_settings);
 			PerColumnCompressionSettings *per_column_setting =
 				per_column_settings ?
@@ -2199,9 +2195,8 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 					while ((i = bms_next_member(per_column_setting->composite_bloom_index_obj_ids,
 												i)) >= 0)
 					{
-						ParsedCompressionSettingsObject *obj =
-							(ParsedCompressionSettingsObject *) list_nth(parsed_settings->objects,
-																		 i);
+						SparseIndexSettingsObject *obj =
+							(SparseIndexSettingsObject *) list_nth(parsed_settings->objects, i);
 						Assert(obj != NULL);
 						List *column_names = ts_get_column_names_from_parsed_object(obj);
 						Assert(column_names != NULL);
@@ -2235,7 +2230,7 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 					}
 				}
 			}
-			ts_free_parsed_compression_settings(parsed_settings);
+			ts_free_sparse_index_settings(parsed_settings);
 		}
 
 		compressed_index_stmt->relation = compressed_col_stmt->relation;

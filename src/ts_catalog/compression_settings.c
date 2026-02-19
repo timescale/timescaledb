@@ -310,22 +310,20 @@ compression_settings_rename_column(CompressionSettings *settings, const char *ol
 	replacejsonb = settings->fd.index;
 	if (replacejsonb)
 	{
-		ParsedCompressionSettings *parsed_settings =
-			ts_convert_to_parsed_compression_settings(replacejsonb);
+		SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(replacejsonb);
 		if (parsed_settings)
 		{
 			ListCell *obj_cell = NULL;
 			foreach (obj_cell, parsed_settings->objects)
 			{
-				ParsedCompressionSettingsObject *obj =
-					(ParsedCompressionSettingsObject *) lfirst(obj_cell);
+				SparseIndexSettingsObject *obj = (SparseIndexSettingsObject *) lfirst(obj_cell);
 				if (obj)
 				{
 					ListCell *pair_cell = NULL;
 					foreach (pair_cell, obj->pairs)
 					{
-						ParsedCompressionSettingsPair *pair =
-							(ParsedCompressionSettingsPair *) lfirst(pair_cell);
+						SparseIndexSettingsPair *pair =
+							(SparseIndexSettingsPair *) lfirst(pair_cell);
 						if (pair)
 						{
 							ListCell *value_cell = NULL;
@@ -337,8 +335,7 @@ compression_settings_rename_column(CompressionSettings *settings, const char *ol
 									if (strcmp(value, old) == 0)
 									{
 										value_cell->ptr_value =
-											ts_parsed_compression_settings_pstrdup(parsed_settings,
-																				   new);
+											ts_sparse_index_settings_pstrdup(parsed_settings, new);
 										replaced = true;
 									}
 								}
@@ -349,9 +346,9 @@ compression_settings_rename_column(CompressionSettings *settings, const char *ol
 			}
 			if (replaced)
 			{
-				replacejsonb = ts_convert_from_parsed_compression_settings(parsed_settings);
+				replacejsonb = ts_convert_from_sparse_index_settings(parsed_settings);
 			}
-			ts_free_parsed_compression_settings(parsed_settings);
+			ts_free_sparse_index_settings(parsed_settings);
 		}
 	}
 
@@ -606,8 +603,7 @@ ts_contains_sparse_index_config(CompressionSettings *settings, const char *attna
 	if (settings == NULL || settings->fd.index == NULL || attname == NULL)
 		return false;
 
-	ParsedCompressionSettings *parsed =
-		ts_convert_to_parsed_compression_settings(settings->fd.index);
+	SparseIndexSettings *parsed = ts_convert_to_sparse_index_settings(settings->fd.index);
 
 	if (parsed == NULL)
 	{
@@ -617,14 +613,13 @@ ts_contains_sparse_index_config(CompressionSettings *settings, const char *attna
 	ListCell *cell = NULL;
 	foreach (cell, parsed->objects)
 	{
-		ParsedCompressionSettingsObject *obj = (ParsedCompressionSettingsObject *) lfirst(cell);
+		SparseIndexSettingsObject *obj = (SparseIndexSettingsObject *) lfirst(cell);
 		ListCell *pair_cell = NULL;
 		const char *index_type = NULL;
 		bool attname_found = false;
 		foreach (pair_cell, obj->pairs)
 		{
-			ParsedCompressionSettingsPair *pair =
-				(ParsedCompressionSettingsPair *) lfirst(pair_cell);
+			SparseIndexSettingsPair *pair = (SparseIndexSettingsPair *) lfirst(pair_cell);
 			if (strcmp(pair->key, ts_sparse_index_common_keys[SparseIndexKeyCol]) == 0)
 			{
 				ListCell *value_cell = NULL;
@@ -667,7 +662,7 @@ ts_contains_sparse_index_config(CompressionSettings *settings, const char *attna
 		}
 	}
 
-	ts_free_parsed_compression_settings(parsed);
+	ts_free_sparse_index_settings(parsed);
 	return result;
 }
 
@@ -790,8 +785,8 @@ ts_qsort_attrnumber_cmp(const void *a, const void *b)
 	return ((int) (col_a->attnum)) - ((int) (col_b->attnum));
 }
 
-ParsedCompressionSettings *
-ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
+SparseIndexSettings *
+ts_convert_to_sparse_index_settings(Jsonb *jsonb)
 {
 	enum ParseState
 	{
@@ -816,7 +811,7 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 	if (JB_ROOT_IS_SCALAR(jsonb))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("cannot convert scalar to ParsedCompressionSettings")));
+				 errmsg("cannot convert scalar to SparseIndexSettings")));
 
 	if (JB_ROOT_COUNT(jsonb) == 0)
 		return NULL;
@@ -824,13 +819,13 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 	it = JsonbIteratorInit(&jsonb->root);
 
 	new_context = AllocSetContextCreate(CurrentMemoryContext,
-										"ParsedCompressionSettings",
+										"SparseIndexSettings",
 										ALLOCSET_DEFAULT_MINSIZE,
 										ALLOCSET_DEFAULT_INITSIZE,
 										ALLOCSET_DEFAULT_MAXSIZE);
 
-	ParsedCompressionSettings *parsed_settings =
-		MemoryContextAllocZero(new_context, sizeof(ParsedCompressionSettings));
+	SparseIndexSettings *parsed_settings =
+		MemoryContextAllocZero(new_context, sizeof(SparseIndexSettings));
 
 	parsed_settings->objects = NIL;
 	parsed_settings->context = new_context;
@@ -846,7 +841,7 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 				}
 				else if (r == WJB_BEGIN_OBJECT)
 				{
-					ParsedCompressionSettingsObject *current_object = NULL;
+					SparseIndexSettingsObject *current_object = NULL;
 
 					/* If the previous object has no pairs, reuse its space for the new object */
 					if (list_length(parsed_settings->objects) > 0)
@@ -863,7 +858,7 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 					{
 						/* Create a new object */
 						tmp_context = MemoryContextSwitchTo(parsed_settings->context);
-						current_object = palloc0(sizeof(ParsedCompressionSettingsObject));
+						current_object = palloc0(sizeof(SparseIndexSettingsObject));
 						parsed_settings->objects =
 							lappend(parsed_settings->objects, current_object);
 						MemoryContextSwitchTo(tmp_context);
@@ -877,14 +872,13 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 						   "INIT",
 						   JsonbTypeName(&jsonb_value));
 
-					ParsedCompressionSettingsObject *current_object =
-						llast(parsed_settings->objects);
+					SparseIndexSettingsObject *current_object = llast(parsed_settings->objects);
 					Assert(current_object != NULL);
 					tmp_context = MemoryContextSwitchTo(parsed_settings->context);
 					char *tmp_str =
 						pnstrdup(jsonb_value.val.string.val, jsonb_value.val.string.len);
-					ParsedCompressionSettingsPair *current_pair =
-						palloc0(sizeof(ParsedCompressionSettingsPair));
+					SparseIndexSettingsPair *current_pair =
+						palloc0(sizeof(SparseIndexSettingsPair));
 					current_object->pairs = lappend(current_object->pairs, current_pair);
 					current_pair->key = tmp_str;
 					current_pair->values = NIL;
@@ -921,14 +915,13 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 						   "KEY",
 						   JsonbTypeName(&jsonb_value));
 
-					ParsedCompressionSettingsObject *current_object =
-						llast(parsed_settings->objects);
+					SparseIndexSettingsObject *current_object = llast(parsed_settings->objects);
 					Assert(current_object != NULL);
 					tmp_context = MemoryContextSwitchTo(parsed_settings->context);
 					char *tmp_str =
 						pnstrdup(jsonb_value.val.string.val, jsonb_value.val.string.len);
-					ParsedCompressionSettingsPair *current_pair =
-						palloc0(sizeof(ParsedCompressionSettingsPair));
+					SparseIndexSettingsPair *current_pair =
+						palloc0(sizeof(SparseIndexSettingsPair));
 					current_object->pairs = lappend(current_object->pairs, current_pair);
 					current_pair->key = tmp_str;
 					current_pair->values = NIL;
@@ -952,8 +945,7 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 			case PARSE_STATE_VALUE:
 				if (r == WJB_VALUE)
 				{
-					ParsedCompressionSettingsObject *current_object =
-						llast(parsed_settings->objects);
+					SparseIndexSettingsObject *current_object = llast(parsed_settings->objects);
 					Assert(current_object != NULL);
 
 					Ensure(jsonb_value.type == jbvString,
@@ -964,7 +956,7 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 					tmp_context = MemoryContextSwitchTo(parsed_settings->context);
 					char *tmp_str =
 						pnstrdup(jsonb_value.val.string.val, jsonb_value.val.string.len);
-					ParsedCompressionSettingsPair *current_pair = llast(current_object->pairs);
+					SparseIndexSettingsPair *current_pair = llast(current_object->pairs);
 
 					/* The pair should have been created in the KEY state, but no values should have
 					 * been added yet */
@@ -978,14 +970,13 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 				else if (r == WJB_BEGIN_ARRAY)
 				{
 #ifdef USE_ASSERT_CHECKING
-					ParsedCompressionSettingsObject *current_object =
-						llast(parsed_settings->objects);
+					SparseIndexSettingsObject *current_object = llast(parsed_settings->objects);
 					Assert(current_object != NULL);
 
 					/* The pair list should have been created in the key state */
 					Assert(list_length(current_object->pairs) > 0);
 
-					ParsedCompressionSettingsPair *current_pair = llast(current_object->pairs);
+					SparseIndexSettingsPair *current_pair = llast(current_object->pairs);
 					Assert(current_pair != NULL);
 					/* The values list should be empty when we arrive to the array start */
 					Assert(current_pair->values == NIL);
@@ -1005,11 +996,10 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 			case PARSE_STATE_ARRAY_ENTRIES:
 				if (r == WJB_ELEM)
 				{
-					ParsedCompressionSettingsObject *current_object =
-						llast(parsed_settings->objects);
+					SparseIndexSettingsObject *current_object = llast(parsed_settings->objects);
 					Assert(current_object != NULL);
 
-					ParsedCompressionSettingsPair *current_pair = llast(current_object->pairs);
+					SparseIndexSettingsPair *current_pair = llast(current_object->pairs);
 					Assert(current_pair != NULL);
 
 					Ensure(jsonb_value.type == jbvString,
@@ -1043,7 +1033,7 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 	/* If the last object has no pairs, remove it */
 	if (list_length(parsed_settings->objects) > 0)
 	{
-		ParsedCompressionSettingsObject *current_object = llast(parsed_settings->objects);
+		SparseIndexSettingsObject *current_object = llast(parsed_settings->objects);
 		Assert(current_object != NULL);
 		if (list_length(current_object->pairs) == 0)
 		{
@@ -1054,14 +1044,14 @@ ts_convert_to_parsed_compression_settings(Jsonb *jsonb)
 	/* If there are no objects, free the parsed settings */
 	if (list_length(parsed_settings->objects) == 0)
 	{
-		ts_free_parsed_compression_settings(parsed_settings);
+		ts_free_sparse_index_settings(parsed_settings);
 		parsed_settings = NULL;
 	}
 	return parsed_settings;
 }
 
 Jsonb *
-ts_convert_from_parsed_compression_settings(ParsedCompressionSettings *settings)
+ts_convert_from_sparse_index_settings(SparseIndexSettings *settings)
 {
 	JsonbParseState *parse_state = NULL;
 	ListCell *obj_cell = NULL;
@@ -1079,12 +1069,11 @@ ts_convert_from_parsed_compression_settings(ParsedCompressionSettings *settings)
 	foreach (obj_cell, settings->objects)
 	{
 		pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-		ParsedCompressionSettingsObject *obj = (ParsedCompressionSettingsObject *) lfirst(obj_cell);
+		SparseIndexSettingsObject *obj = (SparseIndexSettingsObject *) lfirst(obj_cell);
 		Assert(list_length(obj->pairs) > 0);
 		foreach (pair_cell, obj->pairs)
 		{
-			ParsedCompressionSettingsPair *pair =
-				(ParsedCompressionSettingsPair *) lfirst(pair_cell);
+			SparseIndexSettingsPair *pair = (SparseIndexSettingsPair *) lfirst(pair_cell);
 			Assert(pair->key != NULL);
 			Assert(list_length(pair->values) > 0);
 			JsonbValue key = { .type = jbvString,
@@ -1126,7 +1115,7 @@ ts_convert_from_parsed_compression_settings(ParsedCompressionSettings *settings)
 }
 
 void
-ts_free_parsed_compression_settings(ParsedCompressionSettings *settings)
+ts_free_sparse_index_settings(SparseIndexSettings *settings)
 {
 	if (settings == NULL)
 		return;
@@ -1136,7 +1125,7 @@ ts_free_parsed_compression_settings(ParsedCompressionSettings *settings)
 }
 
 const char *
-ts_parsed_compression_settings_to_cstring(const ParsedCompressionSettings *settings)
+ts_sparse_index_settings_to_cstring(const SparseIndexSettings *settings)
 {
 	StringInfoData buf;
 	ListCell *obj_cell = NULL;
@@ -1149,7 +1138,7 @@ ts_parsed_compression_settings_to_cstring(const ParsedCompressionSettings *setti
 
 	foreach (obj_cell, settings->objects)
 	{
-		ParsedCompressionSettingsObject *obj = (ParsedCompressionSettingsObject *) lfirst(obj_cell);
+		SparseIndexSettingsObject *obj = (SparseIndexSettingsObject *) lfirst(obj_cell);
 		if (i > 0)
 			appendStringInfo(&buf, ", ");
 		appendStringInfo(&buf, "{");
@@ -1157,8 +1146,7 @@ ts_parsed_compression_settings_to_cstring(const ParsedCompressionSettings *setti
 		j = 0;
 		foreach (pair_cell, obj->pairs)
 		{
-			ParsedCompressionSettingsPair *pair =
-				(ParsedCompressionSettingsPair *) lfirst(pair_cell);
+			SparseIndexSettingsPair *pair = (SparseIndexSettingsPair *) lfirst(pair_cell);
 			if (j > 0)
 				appendStringInfo(&buf, ", ");
 			escape_json(&buf, pair->key);
@@ -1193,7 +1181,7 @@ ts_parsed_compression_settings_to_cstring(const ParsedCompressionSettings *setti
 }
 
 char *
-ts_parsed_compression_settings_pstrdup(ParsedCompressionSettings *settings, const char *str)
+ts_sparse_index_settings_pstrdup(SparseIndexSettings *settings, const char *str)
 {
 	Assert(settings != NULL);
 	Assert(str != NULL);
@@ -1207,7 +1195,7 @@ ts_parsed_compression_settings_pstrdup(ParsedCompressionSettings *settings, cons
 
 /* returns a list of PerColumnCompressionSettings objects */
 List *
-ts_get_per_column_compression_settings(const ParsedCompressionSettings *settings)
+ts_get_per_column_compression_settings(const SparseIndexSettings *settings)
 {
 	if (settings == NULL)
 		return NIL;
@@ -1218,16 +1206,15 @@ ts_get_per_column_compression_settings(const ParsedCompressionSettings *settings
 	foreach (obj_cell, settings->objects)
 	{
 		const char *index_type = NULL;
-		ParsedCompressionSettingsPair *column_names_pair = NULL;
+		SparseIndexSettingsPair *column_names_pair = NULL;
 
-		ParsedCompressionSettingsObject *obj = (ParsedCompressionSettingsObject *) lfirst(obj_cell);
+		SparseIndexSettingsObject *obj = (SparseIndexSettingsObject *) lfirst(obj_cell);
 		Assert(obj != NULL);
 
 		ListCell *pair_cell = NULL;
 		foreach (pair_cell, obj->pairs)
 		{
-			ParsedCompressionSettingsPair *pair =
-				(ParsedCompressionSettingsPair *) lfirst(pair_cell);
+			SparseIndexSettingsPair *pair = (SparseIndexSettingsPair *) lfirst(pair_cell);
 			if (strcmp(pair->key, ts_sparse_index_common_keys[SparseIndexKeyType]) == 0)
 			{
 				Assert(list_length(pair->values) > 0);
@@ -1329,13 +1316,13 @@ ts_get_per_column_compression_settings_by_column_name(List *per_column_settings,
 }
 
 List *
-ts_get_column_names_from_parsed_object(ParsedCompressionSettingsObject *obj)
+ts_get_column_names_from_parsed_object(SparseIndexSettingsObject *obj)
 {
 	Assert(obj != NULL);
 	ListCell *pair_cell = NULL;
 	foreach (pair_cell, obj->pairs)
 	{
-		ParsedCompressionSettingsPair *pair = (ParsedCompressionSettingsPair *) lfirst(pair_cell);
+		SparseIndexSettingsPair *pair = (SparseIndexSettingsPair *) lfirst(pair_cell);
 		if (strcmp(pair->key, ts_sparse_index_common_keys[SparseIndexKeyCol] /* "column" */) == 0)
 		{
 			return pair->values;
@@ -1378,7 +1365,7 @@ resolve_columns_to_attnos(List *column_names, Oid relid)
  * and return a list of bitmapsets corresponding to each object in the parsed settings.
  */
 TsBmsList
-ts_resolve_columns_to_attnos_from_parsed_settings(ParsedCompressionSettings *settings, Oid relid)
+ts_resolve_columns_to_attnos_from_parsed_settings(SparseIndexSettings *settings, Oid relid)
 {
 	Assert(settings != NULL);
 	Assert(OidIsValid(relid));
@@ -1387,7 +1374,7 @@ ts_resolve_columns_to_attnos_from_parsed_settings(ParsedCompressionSettings *set
 	ListCell *obj_cell = NULL;
 	foreach (obj_cell, settings->objects)
 	{
-		ParsedCompressionSettingsObject *obj = (ParsedCompressionSettingsObject *) lfirst(obj_cell);
+		SparseIndexSettingsObject *obj = (SparseIndexSettingsObject *) lfirst(obj_cell);
 		List *column_names = ts_get_column_names_from_parsed_object(obj);
 		Bitmapset *attnos = resolve_columns_to_attnos(column_names, relid);
 		result = lappend(result, attnos);
@@ -1397,7 +1384,7 @@ ts_resolve_columns_to_attnos_from_parsed_settings(ParsedCompressionSettings *set
 }
 
 List *
-ts_get_values_by_key_from_parsed_object(ParsedCompressionSettingsObject *obj, const char *key)
+ts_get_values_by_key_from_parsed_object(SparseIndexSettingsObject *obj, const char *key)
 {
 	Assert(obj != NULL);
 	Assert(key != NULL);
@@ -1406,7 +1393,7 @@ ts_get_values_by_key_from_parsed_object(ParsedCompressionSettingsObject *obj, co
 	ListCell *pair_cell = NULL;
 	foreach (pair_cell, obj->pairs)
 	{
-		ParsedCompressionSettingsPair *pair = (ParsedCompressionSettingsPair *) lfirst(pair_cell);
+		SparseIndexSettingsPair *pair = (SparseIndexSettingsPair *) lfirst(pair_cell);
 		if (strcmp(pair->key, key) == 0)
 		{
 			result = pair->values;

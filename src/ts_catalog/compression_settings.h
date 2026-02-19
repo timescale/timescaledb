@@ -74,7 +74,7 @@ typedef struct BloomFilterConfig
 } BloomFilterConfig;
 
 /*
- * The ParsedCompressionSettings structure is used to parse the compression
+ * The SparseIndexSettings structure is used to parse the compression
  * settings from the JSONB structure.
  * With this we can turn the stored JSONB into this structure, modify it and
  * turn it back into JSONB and we can avoid the messy and error prone JSONB
@@ -93,21 +93,21 @@ typedef struct BloomFilterConfig
  *
  * Notice that the "column" key can have a string or an array of strings as value.
  */
-typedef struct ParsedCompressionSettingsPair
+typedef struct SparseIndexSettingsPair
 {
 	char *key;
 	List *values; /* List of strings */
-} ParsedCompressionSettingsPair;
-typedef struct ParsedCompressionSettingsObject
+} SparseIndexSettingsPair;
+typedef struct SparseIndexSettingsObject
 {
-	List *pairs; /* List of ParsedCompressionSettingsPair */
-} ParsedCompressionSettingsObject;
+	List *pairs; /* List of SparseIndexSettingsPair */
+} SparseIndexSettingsObject;
 
-typedef struct ParsedCompressionSettings
+typedef struct SparseIndexSettings
 {
 	MemoryContext context;
-	List *objects; /* List of ParsedCompressionSettingsObject */
-} ParsedCompressionSettings;
+	List *objects; /* List of SparseIndexSettingsObject */
+} SparseIndexSettings;
 
 typedef struct PerColumnCompressionSettings
 {
@@ -155,25 +155,22 @@ TSDLLEXPORT Jsonb *ts_add_orderby_sparse_index(CompressionSettings *settings);
 
 TSDLLEXPORT Jsonb *ts_remove_orderby_sparse_index(CompressionSettings *settings);
 
-extern TSDLLEXPORT ParsedCompressionSettings *
-ts_convert_to_parsed_compression_settings(Jsonb *jsonb);
-extern TSDLLEXPORT Jsonb *
-ts_convert_from_parsed_compression_settings(ParsedCompressionSettings *settings);
-extern TSDLLEXPORT void ts_free_parsed_compression_settings(ParsedCompressionSettings *settings);
+extern TSDLLEXPORT SparseIndexSettings *ts_convert_to_sparse_index_settings(Jsonb *jsonb);
+extern TSDLLEXPORT Jsonb *ts_convert_from_sparse_index_settings(SparseIndexSettings *settings);
+extern TSDLLEXPORT void ts_free_sparse_index_settings(SparseIndexSettings *settings);
 extern TSDLLEXPORT const char *
-ts_parsed_compression_settings_to_cstring(const ParsedCompressionSettings *settings);
-extern TSDLLEXPORT char *ts_parsed_compression_settings_pstrdup(ParsedCompressionSettings *settings,
-																const char *str);
+ts_sparse_index_settings_to_cstring(const SparseIndexSettings *settings);
+extern TSDLLEXPORT char *ts_sparse_index_settings_pstrdup(SparseIndexSettings *settings,
+														  const char *str);
 extern TSDLLEXPORT List *
-ts_get_per_column_compression_settings(const ParsedCompressionSettings *settings);
+ts_get_per_column_compression_settings(const SparseIndexSettings *settings);
 extern TSDLLEXPORT PerColumnCompressionSettings *
 ts_get_per_column_compression_settings_by_column_name(List *per_column_settings,
 													  const char *column_name);
-extern TSDLLEXPORT List *
-ts_get_column_names_from_parsed_object(ParsedCompressionSettingsObject *obj);
+extern TSDLLEXPORT List *ts_get_column_names_from_parsed_object(SparseIndexSettingsObject *obj);
 
 extern TSDLLEXPORT TsBmsList
-ts_resolve_columns_to_attnos_from_parsed_settings(ParsedCompressionSettings *settings, Oid relid);
+ts_resolve_columns_to_attnos_from_parsed_settings(SparseIndexSettings *settings, Oid relid);
 
-extern TSDLLEXPORT List *
-ts_get_values_by_key_from_parsed_object(ParsedCompressionSettingsObject *obj, const char *key);
+extern TSDLLEXPORT List *ts_get_values_by_key_from_parsed_object(SparseIndexSettingsObject *obj,
+																 const char *key);

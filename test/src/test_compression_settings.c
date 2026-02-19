@@ -13,13 +13,12 @@
 /* Include test_utils.h after all other headers */
 #include <test_utils.h>
 
-#define TestAssertParsedCompressionSettingsEqCstring(a, b)                                         \
+#define TestAssertSparseIndexSettingsEqCstring(a, b)                                               \
 	do                                                                                             \
 	{                                                                                              \
-		ParsedCompressionSettings *a_ps = (a);                                                     \
+		SparseIndexSettings *a_ps = (a);                                                           \
 		Assert(a_ps != NULL);                                                                      \
-		const char *a_i =                                                                          \
-			(a) == NULL ? "<null>" : ts_parsed_compression_settings_to_cstring(a_ps);              \
+		const char *a_i = (a) == NULL ? "<null>" : ts_sparse_index_settings_to_cstring(a_ps);      \
 		const char *b_i = (b) == NULL ? "<null>" : (b);                                            \
 		if (strcmp(a_i, b_i) != 0)                                                                 \
 			TestFailure("(%s == %s)", a_i, b_i);                                                   \
@@ -47,21 +46,20 @@ test_alter_table_rename_column_effect_jsonb()
 		"{\"type\": \"minmax\", \"column\": \"ts\", \"source\": \"orderby\"}]";
 
 	Jsonb *jb = cstring_to_jsonb(jsonb_str);
-	ParsedCompressionSettings *parsed_settings = ts_convert_to_parsed_compression_settings(jb);
+	SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(jb);
 
 	TestAssertInt64Eq(list_length(parsed_settings->objects), 6);
 	ListCell *obj_cell = NULL;
 	foreach (obj_cell, parsed_settings->objects)
 	{
-		ParsedCompressionSettingsObject *obj = (ParsedCompressionSettingsObject *) lfirst(obj_cell);
+		SparseIndexSettingsObject *obj = (SparseIndexSettingsObject *) lfirst(obj_cell);
 		Assert(obj != NULL);
 		TestAssertInt64Eq(list_length(obj->pairs), 3);
 
 		ListCell *pair_cell = NULL;
 		foreach (pair_cell, obj->pairs)
 		{
-			ParsedCompressionSettingsPair *pair =
-				(ParsedCompressionSettingsPair *) lfirst(pair_cell);
+			SparseIndexSettingsPair *pair = (SparseIndexSettingsPair *) lfirst(pair_cell);
 			Assert(pair != NULL);
 			if (strcmp(pair->key, "column") != 0)
 			{
@@ -77,15 +75,15 @@ test_alter_table_rename_column_effect_jsonb()
 					/* Replace the value with the new one, allocate from the parsed settings context
 					 */
 					value_cell->ptr_value =
-						ts_parsed_compression_settings_pstrdup(parsed_settings, "xxl");
+						ts_sparse_index_settings_pstrdup(parsed_settings, "xxl");
 				}
 			}
 		}
 	}
 
-	Jsonb *result = ts_convert_from_parsed_compression_settings(parsed_settings);
+	Jsonb *result = ts_convert_from_sparse_index_settings(parsed_settings);
 	TestAssertJsonbEqCstring(result, jsonb_str_expected);
-	TestAssertParsedCompressionSettingsEqCstring(parsed_settings, jsonb_str_expected);
+	TestAssertSparseIndexSettingsEqCstring(parsed_settings, jsonb_str_expected);
 
 	/* test the per column settings */
 	List *per_column_settings = ts_get_per_column_compression_settings(parsed_settings);
@@ -148,7 +146,7 @@ test_alter_table_rename_column_effect_jsonb()
 	}
 
 	pfree(result);
-	ts_free_parsed_compression_settings(parsed_settings);
+	ts_free_sparse_index_settings(parsed_settings);
 	pfree(jb);
 }
 
@@ -174,21 +172,20 @@ test_alter_table_drop_column_effect_jsonb()
 		"{\"type\": \"minmax\", \"column\": \"ts\", \"source\": \"orderby\"}]";
 
 	Jsonb *jb = cstring_to_jsonb(jsonb_str);
-	ParsedCompressionSettings *parsed_settings = ts_convert_to_parsed_compression_settings(jb);
+	SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(jb);
 
 	TestAssertInt64Eq(list_length(parsed_settings->objects), 6);
 	ListCell *obj_cell = NULL;
 	foreach (obj_cell, parsed_settings->objects)
 	{
-		ParsedCompressionSettingsObject *obj = (ParsedCompressionSettingsObject *) lfirst(obj_cell);
+		SparseIndexSettingsObject *obj = (SparseIndexSettingsObject *) lfirst(obj_cell);
 		Assert(obj != NULL);
 		TestAssertInt64Eq(list_length(obj->pairs), 3);
 		bool to_remove = false;
 		ListCell *pair_cell = NULL;
 		foreach (pair_cell, obj->pairs)
 		{
-			ParsedCompressionSettingsPair *pair =
-				(ParsedCompressionSettingsPair *) lfirst(pair_cell);
+			SparseIndexSettingsPair *pair = (SparseIndexSettingsPair *) lfirst(pair_cell);
 			Assert(pair != NULL);
 			if (strcmp(pair->key, "column") != 0)
 			{
@@ -218,59 +215,59 @@ test_alter_table_drop_column_effect_jsonb()
 	}
 
 	TestAssertInt64Eq(list_length(parsed_settings->objects), 3);
-	Jsonb *result = ts_convert_from_parsed_compression_settings(parsed_settings);
+	Jsonb *result = ts_convert_from_sparse_index_settings(parsed_settings);
 	TestAssertJsonbEqCstring(result, jsonb_str_expected);
-	TestAssertParsedCompressionSettingsEqCstring(parsed_settings, jsonb_str_expected);
-	ts_free_parsed_compression_settings(parsed_settings);
+	TestAssertSparseIndexSettingsEqCstring(parsed_settings, jsonb_str_expected);
+	ts_free_sparse_index_settings(parsed_settings);
 	pfree(result);
 	pfree(jb);
 }
 
 static void
-test_convert_to_parsed_compression_settings()
+test_convert_to_sparse_index_settings()
 {
 	{
-		/* Objects with a single pair are converted to ParsedCompressionSettings */
+		/* Objects with a single pair are converted to SparseIndexSettings */
 		Jsonb *jb = cstring_to_jsonb("{\"key\": \"value\"}");
-		ParsedCompressionSettings *parsed_settings = ts_convert_to_parsed_compression_settings(jb);
+		SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(jb);
 		TestAssertInt64Eq(list_length(parsed_settings->objects), 1);
-		TestAssertParsedCompressionSettingsEqCstring(parsed_settings, "[{\"key\": \"value\"}]");
-		Jsonb *result = ts_convert_from_parsed_compression_settings(parsed_settings);
+		TestAssertSparseIndexSettingsEqCstring(parsed_settings, "[{\"key\": \"value\"}]");
+		Jsonb *result = ts_convert_from_sparse_index_settings(parsed_settings);
 		TestAssertJsonbEqCstring(result, "[{\"key\": \"value\"}]");
 		/* per column should be empty because there is no column and no index type */
 		List *per_column_settings = ts_get_per_column_compression_settings(parsed_settings);
 		TestAssertPtrEq(per_column_settings, NIL);
-		ts_free_parsed_compression_settings(parsed_settings);
+		ts_free_sparse_index_settings(parsed_settings);
 		pfree(jb);
 		pfree(result);
 	}
 
 	{
-		/* Objects with an array value are converted to ParsedCompressionSettings */
+		/* Objects with an array value are converted to SparseIndexSettings */
 		Jsonb *jb = cstring_to_jsonb("{\"key\": [\"value\", \"value2\"]}");
-		ParsedCompressionSettings *parsed_settings = ts_convert_to_parsed_compression_settings(jb);
+		SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(jb);
 		TestAssertInt64Eq(list_length(parsed_settings->objects), 1);
-		TestAssertParsedCompressionSettingsEqCstring(parsed_settings,
-													 "[{\"key\": [\"value\", \"value2\"]}]");
-		Jsonb *result = ts_convert_from_parsed_compression_settings(parsed_settings);
+		TestAssertSparseIndexSettingsEqCstring(parsed_settings,
+											   "[{\"key\": [\"value\", \"value2\"]}]");
+		Jsonb *result = ts_convert_from_sparse_index_settings(parsed_settings);
 		TestAssertJsonbEqCstring(result, "[{\"key\": [\"value\", \"value2\"]}]");
-		ts_free_parsed_compression_settings(parsed_settings);
+		ts_free_sparse_index_settings(parsed_settings);
 		pfree(jb);
 		pfree(result);
 	}
 
 	{
-		/* Objects with multiple pairs are converted to ParsedCompressionSettings */
+		/* Objects with multiple pairs are converted to SparseIndexSettings */
 		Jsonb *jb = cstring_to_jsonb("{\"key\": [\"value\", \"value2\"], \"key2\": \"value3\"}");
-		ParsedCompressionSettings *parsed_settings = ts_convert_to_parsed_compression_settings(jb);
+		SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(jb);
 		TestAssertInt64Eq(list_length(parsed_settings->objects), 1);
-		TestAssertParsedCompressionSettingsEqCstring(parsed_settings,
-													 "[{\"key\": [\"value\", \"value2\"], "
-													 "\"key2\": \"value3\"}]");
-		Jsonb *result = ts_convert_from_parsed_compression_settings(parsed_settings);
+		TestAssertSparseIndexSettingsEqCstring(parsed_settings,
+											   "[{\"key\": [\"value\", \"value2\"], "
+											   "\"key2\": \"value3\"}]");
+		Jsonb *result = ts_convert_from_sparse_index_settings(parsed_settings);
 		TestAssertJsonbEqCstring(result,
 								 "[{\"key\": [\"value\", \"value2\"], \"key2\": \"value3\"}]");
-		ts_free_parsed_compression_settings(parsed_settings);
+		ts_free_sparse_index_settings(parsed_settings);
 		pfree(jb);
 		pfree(result);
 	}
@@ -278,7 +275,7 @@ test_convert_to_parsed_compression_settings()
 	{
 		/* Empty objects are converted to NULL */
 		Jsonb *jb = cstring_to_jsonb("{}");
-		ParsedCompressionSettings *parsed_settings = ts_convert_to_parsed_compression_settings(jb);
+		SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(jb);
 		TestAssertPtrEq(parsed_settings, NULL);
 		pfree(jb);
 	}
@@ -286,7 +283,7 @@ test_convert_to_parsed_compression_settings()
 	{
 		/* Empty arrays are ignored and converted to NULL */
 		Jsonb *jb = cstring_to_jsonb("[]");
-		ParsedCompressionSettings *parsed_settings = ts_convert_to_parsed_compression_settings(jb);
+		SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(jb);
 		TestAssertPtrEq(parsed_settings, NULL);
 		pfree(jb);
 	}
@@ -294,12 +291,12 @@ test_convert_to_parsed_compression_settings()
 	{
 		/* Empty objects are ignored */
 		Jsonb *jb = cstring_to_jsonb("[{}, {\"key\": \"value\"}, {}, {}]");
-		ParsedCompressionSettings *parsed_settings = ts_convert_to_parsed_compression_settings(jb);
+		SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(jb);
 		TestAssertInt64Eq(list_length(parsed_settings->objects), 1);
-		TestAssertParsedCompressionSettingsEqCstring(parsed_settings, "[{\"key\": \"value\"}]");
-		Jsonb *result = ts_convert_from_parsed_compression_settings(parsed_settings);
+		TestAssertSparseIndexSettingsEqCstring(parsed_settings, "[{\"key\": \"value\"}]");
+		Jsonb *result = ts_convert_from_sparse_index_settings(parsed_settings);
 		TestAssertJsonbEqCstring(result, "[{\"key\": \"value\"}]");
-		ts_free_parsed_compression_settings(parsed_settings);
+		ts_free_sparse_index_settings(parsed_settings);
 		pfree(jb);
 		pfree(result);
 	}
@@ -307,42 +304,42 @@ test_convert_to_parsed_compression_settings()
 	{
 		/* Unexpected nesting of objects return an error */
 		Jsonb *jb = cstring_to_jsonb("{\"key\": [{\"key2\": \"value2\"}]}");
-		TestEnsureError(ts_convert_to_parsed_compression_settings(jb));
+		TestEnsureError(ts_convert_to_sparse_index_settings(jb));
 		pfree(jb);
 	}
 
 	{
 		/* Unexpected nesting of objects return an error */
 		Jsonb *jb = cstring_to_jsonb("{\"key\": {\"key2\": \"value2\"}}");
-		TestEnsureError(ts_convert_to_parsed_compression_settings(jb));
+		TestEnsureError(ts_convert_to_sparse_index_settings(jb));
 		pfree(jb);
 	}
 
 	{
 		/* Unexpected nesting of objects return an error */
 		Jsonb *jb = cstring_to_jsonb("{\"key\": [{\"key2\": \"value2\"}, {\"key3\": \"value3\"}]}");
-		TestEnsureError(ts_convert_to_parsed_compression_settings(jb));
+		TestEnsureError(ts_convert_to_sparse_index_settings(jb));
 		pfree(jb);
 	}
 
 	{
 		/* Unexpected nesting of arrays return an error */
 		Jsonb *jb = cstring_to_jsonb("{\"key\": [[\"value2\", \"value3\"]]}");
-		TestEnsureError(ts_convert_to_parsed_compression_settings(jb));
+		TestEnsureError(ts_convert_to_sparse_index_settings(jb));
 		pfree(jb);
 	}
 
 	{
 		/* Unexpected nesting of arrays return an error */
 		Jsonb *jb = cstring_to_jsonb("[[{\"key\": [\"value2\", \"value3\"]}]]");
-		TestEnsureError(ts_convert_to_parsed_compression_settings(jb));
+		TestEnsureError(ts_convert_to_sparse_index_settings(jb));
 		pfree(jb);
 	}
 
 	{
 		/* Unexpected nesting of arrays return an error */
 		Jsonb *jb = cstring_to_jsonb("[{\"key\": [\"value2\", [\"value3\"]]}]");
-		TestEnsureError(ts_convert_to_parsed_compression_settings(jb));
+		TestEnsureError(ts_convert_to_sparse_index_settings(jb));
 		pfree(jb);
 	}
 }
@@ -351,6 +348,6 @@ TS_TEST_FN(ts_test_compression_settings)
 {
 	test_alter_table_rename_column_effect_jsonb();
 	test_alter_table_drop_column_effect_jsonb();
-	test_convert_to_parsed_compression_settings();
+	test_convert_to_sparse_index_settings();
 	PG_RETURN_VOID();
 }

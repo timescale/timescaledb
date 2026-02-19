@@ -780,16 +780,16 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 	int16 *map = palloc0(sizeof(int16) * in_desc->natts);
 	List *metadata_builders = NIL;
 
-	ParsedCompressionSettings *parsed_settings = NULL;
+	SparseIndexSettings *parsed_settings = NULL;
 	if (settings && settings->fd.index)
-		parsed_settings = ts_convert_to_parsed_compression_settings(settings->fd.index);
+		parsed_settings = ts_convert_to_sparse_index_settings(settings->fd.index);
 
 	if (parsed_settings != NULL && ts_guc_enable_composite_bloom_indexes)
 	{
 		ListCell *lc;
 		foreach (lc, parsed_settings->objects)
 		{
-			ParsedCompressionSettingsObject *obj = lfirst(lc);
+			SparseIndexSettingsObject *obj = lfirst(lc);
 			List *column_names = ts_get_column_names_from_parsed_object(obj);
 			int num_columns = list_length(column_names);
 			if (num_columns < 2)
@@ -823,7 +823,7 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 																			 bloom_attr_offset));
 		}
 	}
-	ts_free_parsed_compression_settings(parsed_settings);
+	ts_free_sparse_index_settings(parsed_settings);
 
 	if (settings != NULL && OidIsValid(settings->fd.compress_relid))
 	{

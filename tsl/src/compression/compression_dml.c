@@ -170,8 +170,7 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 
 	Oid compressed_relid = settings->fd.compress_relid;
 
-	ParsedCompressionSettings *parsed =
-		ts_convert_to_parsed_compression_settings(settings->fd.index);
+	SparseIndexSettings *parsed = ts_convert_to_sparse_index_settings(settings->fd.index);
 	Assert(parsed != NULL);
 	if (parsed == NULL)
 		return;
@@ -190,7 +189,7 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 	ListCell *attno_cell;
 	forboth (obj_cell, parsed->objects, attno_cell, per_column_attnos)
 	{
-		ParsedCompressionSettingsObject *obj = lfirst(obj_cell);
+		SparseIndexSettingsObject *obj = lfirst(obj_cell);
 		Bitmapset *bloom_attnos = lfirst(attno_cell);
 
 		/* Check if bloom type */
@@ -244,7 +243,7 @@ init_upsert_bloom_state(ChunkInsertState *cis)
 	}
 
 	ts_bmslist_free(per_column_attnos);
-	ts_free_parsed_compression_settings(parsed);
+	ts_free_sparse_index_settings(parsed);
 }
 
 void

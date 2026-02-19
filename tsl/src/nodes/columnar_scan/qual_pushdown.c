@@ -1178,8 +1178,7 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 		return;
 
 	/* Parse settings to get per-column compression settings. */
-	ParsedCompressionSettings *parsed =
-		ts_convert_to_parsed_compression_settings(settings->fd.index);
+	SparseIndexSettings *parsed = ts_convert_to_sparse_index_settings(settings->fd.index);
 	if (parsed == NULL)
 	{
 		bms_free(var_attnos);
@@ -1210,7 +1209,7 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 		if (bms_is_subset(attnos, var_attnos))
 		{
 			/* This sparse index object matches the vars with equality predicates. */
-			ParsedCompressionSettingsObject *obj = list_nth(parsed->objects, sparse_index_obj_id);
+			SparseIndexSettingsObject *obj = list_nth(parsed->objects, sparse_index_obj_id);
 			Assert(obj != NULL);
 			if (obj == NULL)
 			{
@@ -1246,7 +1245,7 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 		pfree(attno_to_value);
 		bms_free(var_attnos);
 		ts_bmslist_free(per_column_attnos);
-		ts_free_parsed_compression_settings(parsed);
+		ts_free_sparse_index_settings(parsed);
 		return;
 	}
 
@@ -1255,7 +1254,7 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 	while ((candidate_filter_id =
 				bms_next_member(composite_filter_candidates_ids, candidate_filter_id)) >= 0)
 	{
-		ParsedCompressionSettingsObject *obj = list_nth(parsed->objects, candidate_filter_id);
+		SparseIndexSettingsObject *obj = list_nth(parsed->objects, candidate_filter_id);
 		Assert(obj != NULL);
 		/* The column attnos generated from the parsed object is a list indexed by the object id.*/
 		Bitmapset *column_attnos = list_nth(per_column_attnos, candidate_filter_id);
@@ -1393,7 +1392,7 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 	/* Cleanup */
 	bms_free(var_attnos);
 	bms_free(composite_filter_candidates_ids);
-	ts_free_parsed_compression_settings(parsed);
+	ts_free_sparse_index_settings(parsed);
 	ts_bmslist_free(per_column_attnos);
 	pfree(attno_to_value);
 }
