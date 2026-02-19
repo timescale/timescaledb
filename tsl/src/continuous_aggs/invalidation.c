@@ -102,6 +102,7 @@ typedef struct ContinuousAggInvalidationState
 	Relation cagg_queue_rel;
 	Snapshot snapshot;
 	Tuplestorestate *invalidations;
+	int32 job_id;
 } ContinuousAggInvalidationState;
 
 /*
@@ -125,16 +126,25 @@ typedef enum ContinuousAggTableType
 	CAGG_MATERIALIZATION_RANGES,
 } ContinuousAggTableType;
 
+typedef struct MaterializationRangeOverlap
+{
+	bool found;
+	int64 lowest_modified_value;
+	int64 greatest_modified_value;
+	int32 job_id;
+} MaterializationRangeOverlap;
+
 static Relation open_cagg_table(ContinuousAggTableType type, LOCKMODE lockmode);
 static void hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id,
 											  LOCKMODE lockmode);
 static HeapTuple create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
-												   const InternalTimeRange range);
+												   const InternalTimeRange range, int32 job_id);
 static void check_materialization_ranges_overlap(const ContinuousAgg *cagg,
-												 const InternalTimeRange refresh_window);
+												 const InternalTimeRange refresh_window,
+												 MaterializationRangeOverlap *overlap);
 static void insert_new_cagg_materialization_ranges(const ContinuousAggInvalidationState *state,
 												   const InternalTimeRange refresh_window,
-												   int32 cagg_hyper_id);
+												   int32 cagg_hyper_id, int32 job_id);
 static bool save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 										  const Invalidation *invalidation);
 static void set_remainder_after_cut(Invalidation *remainder, int32 hyper_id,
@@ -297,7 +307,7 @@ continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat
 
 static HeapTuple
 create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
-								  const InternalTimeRange range)
+								  const InternalTimeRange range, int32 job_id)
 {
 	Datum values[Natts_continuous_aggs_materialization_ranges] = { 0 };
 	bool isnull[Natts_continuous_aggs_materialization_ranges] = { false };
@@ -311,6 +321,12 @@ create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
 	values[AttrNumberGetAttrOffset(
 		Anum_continuous_aggs_materialization_ranges_greatest_modified_value)] =
 		Int64GetDatum(range.end);
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_materialization_ranges_job_id)] =
+		Int32GetDatum(job_id);
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_materialization_ranges_pid)] =
+		Int32GetDatum(MyProcPid);
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_materialization_ranges_created_at)] =
+		TimestampTzGetDatum(GetCurrentTimestamp());
 
 	return heap_form_tuple(tupdesc, values, isnull);
 }
@@ -322,7 +338,8 @@ create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
  */
 static void
 check_materialization_ranges_overlap(const ContinuousAgg *cagg,
-									 const InternalTimeRange refresh_window)
+									 const InternalTimeRange refresh_window,
+									 MaterializationRangeOverlap *overlap)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
 													AccessShareLock,
@@ -356,38 +373,72 @@ check_materialization_ranges_overlap(const ContinuousAgg *cagg,
 
 		if (refresh_window.start < existing_end && refresh_window.end > existing_start)
 		{
+			int32 existing_job_id =
+				DatumGetInt32(slot_getattr(ti->slot,
+										   Anum_continuous_aggs_materialization_ranges_job_id,
+										   &isnull));
+			Assert(!isnull);
+
+			overlap->found = true;
+			overlap->lowest_modified_value = existing_start;
+			overlap->greatest_modified_value = existing_end;
+			overlap->job_id = existing_job_id;
+
 			ts_scan_iterator_close(&iterator);
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("materialization range [%s, %s) overlaps with existing range [%s, %s)"
-							" in materialization_ranges table for continuous aggregate "
-							"\"%s\".\"%s\"",
-							ts_internal_to_time_string(refresh_window.start, cagg->partition_type),
-							ts_internal_to_time_string(refresh_window.end, cagg->partition_type),
-							ts_internal_to_time_string(existing_start, cagg->partition_type),
-							ts_internal_to_time_string(existing_end, cagg->partition_type),
-							NameStr(cagg->data.user_view_schema),
-							NameStr(cagg->data.user_view_name)),
-					 errdetail("A concurrent refresh is working on this range or a previously"
-							   " failed refresh left an overlapping range in the"
-							   " materialization_ranges table.")));
+			return;
 		}
 	}
 
 	ts_scan_iterator_close(&iterator);
 }
 
+/* we add entries to materialization ranges to detect if concurrent refresh jobs can end up
+ * refreshing overlapping ranges. Concurrent refresh jobs should NEVER refresh the same range. If
+ * job_d=0 and we attempt to add an overlapping row, then error out. If job_id !=0 and we attempt to
+ * add an overlapping row for the same policy job, then don't insert a new row. we will just process
+ * the existing row in the current execution
+ */
 static void
 insert_new_cagg_materialization_ranges(const ContinuousAggInvalidationState *state,
-									   const InternalTimeRange refresh_window, int32 cagg_hyper_id)
+									   const InternalTimeRange refresh_window, int32 cagg_hyper_id,
+									   int32 job_id)
 {
 	CatalogSecurityContext sec_ctx;
 	TupleDesc tupdesc = RelationGetDescr(state->cagg_queue_rel);
-	HeapTuple tuple;
 
-	check_materialization_ranges_overlap(state->cagg, refresh_window);
-
-	tuple = create_materialization_ranges_tup(tupdesc, cagg_hyper_id, refresh_window);
+	MaterializationRangeOverlap overlap = { .found = false };
+	check_materialization_ranges_overlap(state->cagg, refresh_window, &overlap);
+	// previous execution of this job left behind same range. so don't insert
+	if (overlap.found && job_id != 0 && overlap.job_id == job_id)
+	{
+		if (refresh_window.end == overlap.greatest_modified_value &&
+			refresh_window.start == overlap.lowest_modified_value)
+			return;
+	}
+	if (overlap.found)
+	{
+		// manual jobs have job_id=0. 2 manual jobs should never have overlapping ranges.
+		//  2 refresh policy jobs can never have overlapping ranges
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("materialization range [%s, %s) overlaps with existing range [%s, %s)"
+						" in materialization_ranges table for continuous aggregate "
+						"\"%s\".\"%s\"",
+						ts_internal_to_time_string(refresh_window.start,
+												   state->cagg->partition_type),
+						ts_internal_to_time_string(refresh_window.end, state->cagg->partition_type),
+						ts_internal_to_time_string(overlap.lowest_modified_value,
+												   state->cagg->partition_type),
+						ts_internal_to_time_string(overlap.greatest_modified_value,
+												   state->cagg->partition_type),
+						NameStr(state->cagg->data.user_view_schema),
+						NameStr(state->cagg->data.user_view_name)),
+				 errdetail("A concurrent refresh job is working on this range or a previously"
+						   " failed refresh left an overlapping range in the"
+						   " materialization_ranges table.")));
+	}
+	HeapTuple tuple =
+		create_materialization_ranges_tup(tupdesc, cagg_hyper_id, refresh_window, job_id);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_only(state->cagg_queue_rel, tuple);
@@ -441,7 +492,10 @@ save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 													  &refresh_window,
 													  state->cagg->bucket_function);
 
-	insert_new_cagg_materialization_ranges(state, bucketed_refresh_window, cagg_hyper_id);
+	insert_new_cagg_materialization_ranges(state,
+										   bucketed_refresh_window,
+										   cagg_hyper_id,
+										   state->job_id);
 
 	return true;
 }
@@ -1186,6 +1240,7 @@ invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange
 	long count;
 
 	cagg_invalidation_state_init(&state, cagg);
+	state.job_id = context.job_id;
 	state.invalidations = tuplestore_begin_heap(false, false, work_mem);
 	clear_cagg_invalidations_for_refresh(&state, refresh_window, force);
 	count = tuplestore_tuple_count(state.invalidations);

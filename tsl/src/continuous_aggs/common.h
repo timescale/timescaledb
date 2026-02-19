@@ -88,6 +88,7 @@ typedef struct ContinuousAggRefreshContext
 	ContinuousAggRefreshCallContext callctx;
 	int32 processing_batch;
 	int32 number_of_batches;
+	int32 job_id;
 } ContinuousAggRefreshContext;
 
 #define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_function)                                            \

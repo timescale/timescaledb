@@ -100,7 +100,7 @@ WHERE
 SELECT ts_bgw_params_reset_time(0, true);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 CREATE MATERIALIZED VIEW conditions_by_day_manual_refresh
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
@@ -146,7 +146,7 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '1 hour')::bigint * 
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 SELECT count(*) FROM conditions_by_day;
 SELECT count(*) FROM conditions_by_day_manual_refresh;
@@ -164,7 +164,7 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '2 hour')::bigint * 
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 -- Should have no differences
 SELECT
@@ -202,7 +202,7 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '3 hour')::bigint * 
 -- Should process all four batches in the past
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 SELECT count(*) FROM conditions_by_day;
 SELECT count(*) FROM conditions_by_day_manual_refresh;
@@ -249,7 +249,7 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '4 hour')::bigint * 
 -- Should fallback to single batch processing because there's no data to be refreshed on the original hypertable
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 -- Should return zero rows
 SELECT count(*) FROM conditions_by_day;
@@ -273,7 +273,7 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '5 hour')::bigint * 
 -- Should fallback to single batch processing because the refresh size is too small
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 -- Should return 10 rows because the bucket width is `1 day` and buckets per batch is `10`
 SELECT count(*) FROM conditions_by_day;
@@ -290,7 +290,7 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '6 hour')::bigint * 
 -- Should fallback to single batch processing because the refresh size is too small
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 -- Should return 1 row
 SELECT count(*) FROM conditions_by_day;
@@ -331,7 +331,7 @@ FROM
 SELECT ts_bgw_params_reset_time(0, true);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 -- Both continuous aggregates should have the same data
 SELECT count(*) FROM conditions_by_day;
@@ -371,7 +371,7 @@ TRUNCATE bgw_log, conditions_by_day;
 SELECT ts_bgw_params_reset_time(0, true);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 -- Both continuous aggregates should have the same data
 SELECT count(*) FROM conditions_by_day;
@@ -437,7 +437,7 @@ TRUNCATE bgw_log, conditions_by_day;
 SELECT ts_bgw_params_reset_time(0, true);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
-SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 SELECT delete_job(:job_id);
 ------------------------------------------------------------------------------------------
@@ -510,6 +510,154 @@ SELECT * FROM sorted_bgw_log;
 
 --clean up
 DROP TABLE test_data CASCADE;
+
+-- Test: orphaned materialization ranges cleanup
+-- Insert fake orphaned rows (job_id = 0, dead pid) and a row for a non-existing job,
+-- then verify the policy cleans up only the orphaned rows.
+SELECT mat_hypertable_id AS mat_id FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'conditions_by_month' \gset
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_ranges
+    (materialization_id, lowest_modified_value, greatest_modified_value, job_id, pid)
+VALUES
+    (:mat_id, 1000, 2000, 0, -1),
+    (:mat_id, 3000, 4000, 0, -1),
+    (:mat_id, 5000, 6000, 99999, -1);
+\c :TEST_DBNAME test_cagg_refresh_policy_user
+
+SELECT *
+FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
+WHERE materialization_id = :mat_id ORDER BY 1, 2;
+
+TRUNCATE bgw_log;
+
+-- Advance time so the policy runs again
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '1 day')::bigint * 1000000, true);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+
+-- Verify orphaned rows are gone
+-- Verify non-existing job row is still there (not cleaned up)
+SELECT * 
+FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
+WHERE materialization_id = :mat_id ORDER By 1, 2;
+
+-- TEST: leftover mat ranges from previous job run is processed in the next run if it matches the refresh window
+--Verify that if we have a job and leftover ranges from a job run, these are picked up when the job runs the next time
+CREATE TABLE conditions_int (time int NOT NULL, device int, temp float);
+SELECT create_hypertable('conditions_int', 'time', chunk_time_interval => 20);
+
+INSERT INTO conditions_int
+SELECT t, 100, 10
+FROM generate_series(1, 100, 1) t;
+
+CREATE OR REPLACE FUNCTION int_now()
+RETURNS int LANGUAGE SQL STABLE AS
+$$
+    SELECT coalesce(max(time), 0)
+    FROM conditions_int
+$$;
+
+SELECT set_integer_now_func('conditions_int', 'int_now');
+
+CREATE MATERIALIZED VIEW cond_20_int
+WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+AS
+SELECT time_bucket(INT '20', time) AS bucket, device, count(temp) AS cnt
+FROM conditions_int
+GROUP BY 1,2 WITH NO DATA;
+
+SELECT
+    add_continuous_aggregate_policy(
+        'cond_20_int',
+        start_offset => NULL,
+        end_offset => NULL,
+        schedule_interval => INTERVAL '1 h',
+        buckets_per_batch => 10
+    ) AS cond_20_job_id \gset
+
+SELECT  raw_hypertable_id AS raw_htid ,mat_hypertable_id AS mat_id FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'cond_20_int' \gset
+
+SELECT ts_bgw_params_reset_time(0, true);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+
+-- you will see entries for another failed mat_id (from test above), not the current one.
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id FROM _timescaledb_catalog.continuous_aggs_materialization_ranges ORDER BY 1, 2;
+SELECT materialization_id, lowest_modified_value, greatest_modified_value, job_id 
+FROM _timescaledb_catalog.continuous_aggs_materialization_ranges WHERE materialization_id = :'mat_id';
+SELECT *
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :'raw_htid';
+
+SELECT * FROM cond_20_int ORDER BY 1, 2;
+
+--now add the fake ranges
+-- only entry for fake job id =1 should remain.
+-- job_id=0 will be remoevd as orphaned. Others will be processed on this run.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_ranges
+    (materialization_id, lowest_modified_value, greatest_modified_value, job_id, pid)
+VALUES
+    (:mat_id, 0, 20, :cond_20_job_id, -1),
+    (:mat_id, 20, 40, :cond_20_job_id, -1),
+    (:mat_id, 40, 60, 0, -1),   -- fake entry for failed manual refresh
+    (:mat_id, 60, 80, 1, -1),   --fake job id
+    (:mat_id, 80, 100, :cond_20_job_id, -1);
+
+\c :TEST_DBNAME test_cagg_refresh_policy_user
+--add invalidation overlapping with one of the left behind ranges
+INSERT INTO conditions_int VALUES ( 31, 100, 11);
+SELECT _timescaledb_functions.cagg_watermark(:mat_id);
+                  
+SELECT *
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = :'raw_htid';
+-- Advance time so the policy runs again
+TRUNCATE TABLE bgw_log;
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '1 day')::bigint * 1000000, true);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT * from bgw_log;
+
+--fake job id entry will be left behind. manual refresh should be cleaned up.
+--entries for this job will be processed
+SELECT *
+FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
+ORDER BY 1, 2;
+SELECT _timescaledb_functions.cagg_watermark(:mat_id);
+
+SELECT * FROM cond_20_int ORDER BY 1, 2;
+
+-- TEST: leftover mat ranges from previous  manual refresh is cleaned up by another manula refresh
+--but not processed
+\c :TEST_DBNAME :ROLE_SUPERUSER
+INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_ranges
+    (materialization_id, lowest_modified_value, greatest_modified_value, job_id, pid)
+VALUES
+    (:mat_id, 140, 160, 0, -1),   -- fake entry for failed manual refresh
+    (:mat_id, 40, 60, 0, -1);   -- fake entry for failed manual refresh
+\c :TEST_DBNAME test_cagg_refresh_policy_user
+--add invalidation overlapping with one of the left behind ranges
+INSERT INTO conditions_int VALUES ( 81, 100, 11);
+SELECT _timescaledb_functions.cagg_watermark(:mat_id);
+
+CALL refresh_continuous_aggregate('cond_20_int', 0, 100);
+
+--all entries for this mat_id should have been removed
+SELECT *
+FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
+ORDER BY 1, 2;
+-- should not change watermark as we still refreshed only between [0, 100). The fake ranges were
+--not processed 
+SELECT _timescaledb_functions.cagg_watermark(:mat_id);
+SELECT * FROM cond_20_int ORDER BY 1, 2;
+
+--when we drop the cagg , all entries related to it should get dropped
+DROP MATERIALIZED VIEW cond_20_int;
+SELECT *
+FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
+ORDER BY 1, 2;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_SUPERUSER;
