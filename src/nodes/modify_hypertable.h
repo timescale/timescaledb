@@ -50,6 +50,15 @@ typedef struct ModifyHypertableState
 	int64 batches_deleted;
 	int64 tuples_deleted;
 
+	/*
+	 * When EXPLAIN VERBOSE is used, we temporarily nullify the targetlist of the
+	 * lefttree of the ModifyTable to avoid printing out the full targetlist since
+	 * they can't be resolved by EXPLAIN. To not corrupt cached plans we need to
+	 * restore them to their original value afterwards.
+	 */
+	List *explain_saved_tlist;
+	List *explain_saved_custom_scan_tlist;
+
 } ModifyHypertableState;
 
 extern void ts_modify_hypertable_fixup_tlist(Plan *plan);
