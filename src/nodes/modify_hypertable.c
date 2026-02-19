@@ -177,6 +177,26 @@ static void
 modify_hypertable_end(CustomScanState *node)
 {
 	ModifyHypertableState *state = (ModifyHypertableState *) node;
+
+	/*
+	 * Restore targetlists that were temporarily nullified during EXPLAIN
+	 * VERBOSE (see modify_hypertable_explain). This prevents corruption of
+	 * cached plans for prepared statements.
+	 */
+	if (state->explain_saved_tlist)
+	{
+		ModifyTableState *mtstate = linitial_node(ModifyTableState, node->custom_ps);
+		Plan *lefttree = mtstate->ps.plan->lefttree;
+		lefttree->targetlist = state->explain_saved_tlist;
+		if (IsA(lefttree, CustomScan) && state->explain_saved_custom_scan_tlist)
+		{
+			castNode(CustomScan, lefttree)->custom_scan_tlist =
+				state->explain_saved_custom_scan_tlist;
+		}
+		state->explain_saved_tlist = NULL;
+		state->explain_saved_custom_scan_tlist = NULL;
+	}
+
 	if (state->compressor)
 	{
 		ts_cm_functions->compressor_flush(state->compressor, state->bulk_writer);
@@ -208,17 +228,23 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 	 * EXPLAIN. So for EXPLAIN VERBOSE we clear the targetlist so that EXPLAIN does not
 	 * complain. PostgreSQL does something equivalent and does not print the targetlist
 	 * for ModifyTable for EXPLAIN VERBOSE.
+	 *
+	 * We save the original pointers and restore them in modify_hypertable_end
+	 * to avoid corrupting cached Plan trees (e.g. for prepared statements).
 	 */
 	if (((ModifyTable *) mtstate->ps.plan)->operation == CMD_DELETE && es->verbose &&
 		ts_is_chunk_append_plan(mtstate->ps.plan->lefttree))
 	{
-		mtstate->ps.plan->lefttree->targetlist = NULL;
-		((CustomScan *) mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
-	}
-	if (((ModifyTable *) mtstate->ps.plan)->operation == CMD_MERGE && es->verbose)
-	{
-		mtstate->ps.plan->lefttree->targetlist = NULL;
-		((CustomScan *) mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
+		Plan *lefttree = mtstate->ps.plan->lefttree;
+		state->explain_saved_tlist = lefttree->targetlist;
+		lefttree->targetlist = NULL;
+
+		if (IsA(lefttree, CustomScan))
+		{
+			state->explain_saved_custom_scan_tlist =
+				castNode(CustomScan, lefttree)->custom_scan_tlist;
+			castNode(CustomScan, lefttree)->custom_scan_tlist = NULL;
+		}
 	}
 	/*
 	 * Since we hijack the ModifyTable node, instrumentation on ModifyTable will

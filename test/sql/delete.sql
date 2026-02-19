@@ -67,3 +67,31 @@ BEGIN;
 DELETE FROM ONLY :CHUNK RETURNING *;
 ROLLBACK;
 
+-- Test that EXPLAIN VERBOSE on prepared statements does not corrupt cached plans.
+SET plan_cache_mode = 'force_generic_plan';
+CREATE TABLE explain_verbose_ht( time timestamptz NOT NULL, device int, value float) WITH (tsdb.hypertable);
+
+INSERT INTO explain_verbose_ht SELECT t, 1, 0.1 FROM generate_series('2026-01-01'::timestamptz, '2026-01-08'::timestamptz, interval '6 hours') t;
+
+-- Verify the DELETE plan uses ChunkAppend
+EXPLAIN (costs off) DELETE FROM explain_verbose_ht WHERE time > '2025-01-01'::text::timestamptz;
+
+PREPARE delete_ht AS DELETE FROM explain_verbose_ht WHERE time > '2025-01-01'::text::timestamptz AND device = 2;
+
+EXECUTE delete_ht;
+EXPLAIN (verbose, costs off) EXECUTE delete_ht;
+EXECUTE delete_ht;
+
+DEALLOCATE delete_ht;
+
+-- repeat test with explain analyze
+PREPARE delete_ht AS DELETE FROM explain_verbose_ht WHERE time > '2025-01-01'::text::timestamptz AND device = 2;
+
+EXECUTE delete_ht;
+EXPLAIN (verbose, analyze, buffers off, costs off, timing off, summary off) EXECUTE delete_ht;
+EXECUTE delete_ht;
+
+DEALLOCATE delete_ht;
+
+RESET plan_cache_mode;
+
