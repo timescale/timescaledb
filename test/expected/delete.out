@@ -206,3 +206,72 @@ DELETE FROM ONLY :CHUNK RETURNING *;
  Wed Jan 01 00:00:00 2020 PST
 
 ROLLBACK;
+-- Test that EXPLAIN VERBOSE on prepared statements does not corrupt cached plans.
+SET plan_cache_mode = 'force_generic_plan';
+CREATE TABLE explain_verbose_ht( time timestamptz NOT NULL, device int, value float) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+INSERT INTO explain_verbose_ht SELECT t, 1, 0.1 FROM generate_series('2026-01-01'::timestamptz, '2026-01-08'::timestamptz, interval '6 hours') t;
+-- Verify the DELETE plan uses ChunkAppend
+EXPLAIN (costs off) DELETE FROM explain_verbose_ht WHERE time > '2025-01-01'::text::timestamptz;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   ->  Delete on explain_verbose_ht
+         Delete on _hyper_3_6_chunk explain_verbose_ht_1
+         Delete on _hyper_3_7_chunk explain_verbose_ht_2
+         ->  Custom Scan (ChunkAppend) on explain_verbose_ht
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_3_6_chunk_explain_verbose_ht_time_idx on _hyper_3_6_chunk explain_verbose_ht_1
+                     Index Cond: ("time" > ('2025-01-01'::cstring)::timestamp with time zone)
+               ->  Index Scan using _hyper_3_7_chunk_explain_verbose_ht_time_idx on _hyper_3_7_chunk explain_verbose_ht_2
+                     Index Cond: ("time" > ('2025-01-01'::cstring)::timestamp with time zone)
+
+PREPARE delete_ht AS DELETE FROM explain_verbose_ht WHERE time > '2025-01-01'::text::timestamptz AND device = 2;
+EXECUTE delete_ht;
+EXPLAIN (verbose, costs off) EXECUTE delete_ht;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   ->  Delete on public.explain_verbose_ht
+         Delete on _timescaledb_internal._hyper_3_6_chunk explain_verbose_ht_1
+         Delete on _timescaledb_internal._hyper_3_7_chunk explain_verbose_ht_2
+         ->  Custom Scan (ChunkAppend) on public.explain_verbose_ht
+               Startup Exclusion: true
+               Runtime Exclusion: false
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_3_6_chunk_explain_verbose_ht_time_idx on _timescaledb_internal._hyper_3_6_chunk explain_verbose_ht_1
+                     Output: explain_verbose_ht_1.tableoid, explain_verbose_ht_1.ctid
+                     Index Cond: (explain_verbose_ht_1."time" > ('2025-01-01'::cstring)::timestamp with time zone)
+                     Filter: (explain_verbose_ht_1.device = 2)
+               ->  Index Scan using _hyper_3_7_chunk_explain_verbose_ht_time_idx on _timescaledb_internal._hyper_3_7_chunk explain_verbose_ht_2
+                     Output: explain_verbose_ht_2.tableoid, explain_verbose_ht_2.ctid
+                     Index Cond: (explain_verbose_ht_2."time" > ('2025-01-01'::cstring)::timestamp with time zone)
+                     Filter: (explain_verbose_ht_2.device = 2)
+
+EXECUTE delete_ht;
+DEALLOCATE delete_ht;
+-- repeat test with explain analyze
+PREPARE delete_ht AS DELETE FROM explain_verbose_ht WHERE time > '2025-01-01'::text::timestamptz AND device = 2;
+EXECUTE delete_ht;
+EXPLAIN (verbose, analyze, buffers off, costs off, timing off, summary off) EXECUTE delete_ht;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Delete on public.explain_verbose_ht (actual rows=0.00 loops=1)
+         Delete on _timescaledb_internal._hyper_3_6_chunk explain_verbose_ht_1
+         Delete on _timescaledb_internal._hyper_3_7_chunk explain_verbose_ht_2
+         ->  Custom Scan (ChunkAppend) on public.explain_verbose_ht (actual rows=0.00 loops=1)
+               Startup Exclusion: true
+               Runtime Exclusion: false
+               Chunks excluded during startup: 0
+               ->  Index Scan using _hyper_3_6_chunk_explain_verbose_ht_time_idx on _timescaledb_internal._hyper_3_6_chunk explain_verbose_ht_1 (actual rows=0.00 loops=1)
+                     Output: explain_verbose_ht_1.tableoid, explain_verbose_ht_1.ctid
+                     Index Cond: (explain_verbose_ht_1."time" > ('2025-01-01'::cstring)::timestamp with time zone)
+                     Filter: (explain_verbose_ht_1.device = 2)
+                     Rows Removed by Filter: 27
+               ->  Index Scan using _hyper_3_7_chunk_explain_verbose_ht_time_idx on _timescaledb_internal._hyper_3_7_chunk explain_verbose_ht_2 (actual rows=0.00 loops=1)
+                     Output: explain_verbose_ht_2.tableoid, explain_verbose_ht_2.ctid
+                     Index Cond: (explain_verbose_ht_2."time" > ('2025-01-01'::cstring)::timestamp with time zone)
+                     Filter: (explain_verbose_ht_2.device = 2)
+                     Rows Removed by Filter: 2
+
+EXECUTE delete_ht;
+DEALLOCATE delete_ht;
+RESET plan_cache_mode;
