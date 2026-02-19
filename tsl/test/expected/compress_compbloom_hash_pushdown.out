@@ -1,0 +1,160 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- all tests here will frst run with hash pushdown disabled and then
+-- enabled for comparison
+create table hash_pushdown_test(a int, b int, c int, d int)
+with (
+    tsdb.hypertable,
+    tsdb.compress,
+    tsdb.partition_column = 'c',
+    tsdb.segmentby = '',
+    tsdb.orderby = 'd',
+    tsdb.compress_index = 'bloom(a), bloom(a,b)'
+);
+insert into hash_pushdown_test select x, x, x, x from generate_series(1, 10000) x;
+select count(compress_chunk(x)) from show_chunks('hash_pushdown_test') x;
+ count 
+-------
+     1
+
+vacuum full analyze hash_pushdown_test;
+-----------------------------------
+-- hash pushdown disabled
+-----------------------------------
+set timescaledb.enable_bloom1_hash_pushdown = false;
+-- single bloom
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from hash_pushdown_test where a = 1;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+   Vectorized Filter: (a = 1)
+   Rows Removed by Filter: 999
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_a, 1)
+         Rows Removed by Filter: 9
+
+-- composite bloom
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from hash_pushdown_test where a = 1 and b = 2;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+   Vectorized Filter: ((a = 1) AND (b = 2))
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
+         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_a, 1))
+         Rows Removed by Filter: 10
+
+-- saop with single bloom
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from hash_pushdown_test where a = any(array[1,2,3]);
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3.00 loops=1)
+   Vectorized Filter: (a = ANY ('{1,2,3}'::integer[]))
+   Rows Removed by Filter: 997
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_a, '{1,2,3}'::integer[])
+         Rows Removed by Filter: 9
+
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from hash_pushdown_test where a IN (1,2,3);
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3.00 loops=1)
+   Vectorized Filter: (a = ANY ('{1,2,3}'::integer[]))
+   Rows Removed by Filter: 997
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_a, '{1,2,3}'::integer[])
+         Rows Removed by Filter: 9
+
+-- saop with composite bloom
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from hash_pushdown_test where a = any(array[1,2,3]) and b = any(array[4,5,6]);
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+   Vectorized Filter: ((a = ANY ('{1,2,3}'::integer[])) AND (b = ANY ('{4,5,6}'::integer[])))
+   Rows Removed by Filter: 1000
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_a, '{1,2,3}'::integer[])
+         Rows Removed by Filter: 9
+
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from hash_pushdown_test where a IN (1,2,3) and b IN (4,5,6);
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+   Vectorized Filter: ((a = ANY ('{1,2,3}'::integer[])) AND (b = ANY ('{4,5,6}'::integer[])))
+   Rows Removed by Filter: 1000
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_a, '{1,2,3}'::integer[])
+         Rows Removed by Filter: 9
+
+-----------------------------------
+-- hash pushdown enabled
+-----------------------------------
+set timescaledb.enable_bloom1_hash_pushdown = true;
+-- single bloom
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from hash_pushdown_test where a = 1;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+   Vectorized Filter: (a = 1)
+   Rows Removed by Filter: 999
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_a, '{4717996019076358352}'::bigint[])
+         Rows Removed by Filter: 9
+
+-- composite bloom
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from hash_pushdown_test where a = 1 and b = 2;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+   Vectorized Filter: ((a = 1) AND (b = 2))
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
+         Filter: (_timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_a_b, '{-3537141470987660334}'::bigint[]) AND _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_a, '{4717996019076358352}'::bigint[]))
+         Rows Removed by Filter: 10
+
+-- saop with single bloom
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from hash_pushdown_test where a = any(array[1,2,3]);
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3.00 loops=1)
+   Vectorized Filter: (a = ANY ('{1,2,3}'::integer[]))
+   Rows Removed by Filter: 997
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_a, '{4717996019076358352,2060787363917578834,8131803788478518982}'::bigint[])
+         Rows Removed by Filter: 9
+
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from hash_pushdown_test where a IN (1,2,3);
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3.00 loops=1)
+   Vectorized Filter: (a = ANY ('{1,2,3}'::integer[]))
+   Rows Removed by Filter: 997
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_a, '{4717996019076358352,2060787363917578834,8131803788478518982}'::bigint[])
+         Rows Removed by Filter: 9
+
+-- saop with composite bloom
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from hash_pushdown_test where a = any(array[1,2,3]) and b = any(array[4,5,6]);
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+   Vectorized Filter: ((a = ANY ('{1,2,3}'::integer[])) AND (b = ANY ('{4,5,6}'::integer[])))
+   Rows Removed by Filter: 1000
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_a, '{4717996019076358352,2060787363917578834,8131803788478518982}'::bigint[])
+         Rows Removed by Filter: 9
+
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from hash_pushdown_test where a IN (1,2,3) and b IN (4,5,6);
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+   Vectorized Filter: ((a = ANY ('{1,2,3}'::integer[])) AND (b = ANY ('{4,5,6}'::integer[])))
+   Rows Removed by Filter: 1000
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains_hashes(regress-test-bloom_a, '{4717996019076358352,2060787363917578834,8131803788478518982}'::bigint[])
+         Rows Removed by Filter: 9
+
+-----------------------------------
+-- cleanup
+-----------------------------------
+reset timescaledb.enable_bloom1_hash_pushdown;
+drop table if exists hash_pushdown_test;

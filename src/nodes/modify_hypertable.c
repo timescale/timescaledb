@@ -286,6 +286,10 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		state->batches_filtered += counters->batches_filtered;
 		state->batches_decompressed += counters->batches_decompressed;
 		state->tuples_decompressed += counters->tuples_decompressed;
+		state->batches_checked_by_bloom += counters->batches_checked_by_bloom;
+		state->batches_pruned_by_bloom += counters->batches_pruned_by_bloom;
+		state->batches_without_bloom += counters->batches_without_bloom;
+		state->batches_bloom_false_positives += counters->batches_bloom_false_positives;
 	}
 	if (state->batches_filtered > 0)
 		ExplainPropertyInteger("Batches filtered", NULL, state->batches_filtered, es);
@@ -295,6 +299,20 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		ExplainPropertyInteger("Tuples decompressed", NULL, state->tuples_decompressed, es);
 	if (state->batches_deleted > 0)
 		ExplainPropertyInteger("Batches deleted", NULL, state->batches_deleted, es);
+	if (state->batches_checked_by_bloom > 0)
+		ExplainPropertyInteger("Batches checked by bloom",
+							   NULL,
+							   state->batches_checked_by_bloom,
+							   es);
+	if (state->batches_pruned_by_bloom > 0)
+		ExplainPropertyInteger("Batches pruned by bloom", NULL, state->batches_pruned_by_bloom, es);
+	if (state->batches_without_bloom > 0)
+		ExplainPropertyInteger("Batches without bloom", NULL, state->batches_without_bloom, es);
+	if (state->batches_bloom_false_positives > 0)
+		ExplainPropertyInteger("Batches bloom false positives",
+							   NULL,
+							   state->batches_bloom_false_positives,
+							   es);
 	if (ts_guc_enable_direct_compress_insert && state->mt->operation == CMD_INSERT)
 		ExplainPropertyBool("Direct Compress", state->columnstore_insert, es);
 }

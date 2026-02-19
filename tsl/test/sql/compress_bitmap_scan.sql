@@ -8,6 +8,10 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+-- disable hash pushdown so we don't include the hash values in the plans
+-- which makes the test stable. the hash pushdown is tested separately
+set timescaledb.enable_bloom1_hash_pushdown = false;
+
 -- helper function: float -> pseudorandom float [-0.5..0.5]
 create or replace function mix(x anyelement) returns float8 as $$
     select hashfloat8(x::float8) / pow(2, 32)

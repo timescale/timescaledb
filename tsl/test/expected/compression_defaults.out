@@ -91,9 +91,9 @@ select count(compress_chunk(x)) from show_chunks('metrics') x;
     27
 
 select * from chunk_settings;
- hypertable | chunks | segmentby |        orderby        |                                                            index                                                            
-------------+--------+-----------+-----------------------+-----------------------------------------------------------------------------------------------------------------------------
- metrics    |     27 |           | device_id,"time" DESC | [{"type": "minmax", "column": "device_id", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ hypertable | chunks | segmentby |        orderby        |                                                                                                index                                                                                                 
+------------+--------+-----------+-----------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ metrics    |     27 |           | device_id,"time" DESC | [{"type": "bloom", "column": ["time", "device_id"], "source": "default"}, {"type": "minmax", "column": "device_id", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
  count 
@@ -646,9 +646,9 @@ SELECT count(compress_chunk(x)) FROM show_chunks('test_table') x;
      1
 
 select * from chunk_settings;
- hypertable | chunks | segmentby |   orderby    |                                                        index                                                         
-------------+--------+-----------+--------------+----------------------------------------------------------------------------------------------------------------------
- test_table |      1 |           | uuid,ts DESC | [{"type": "minmax", "column": "uuid", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+ hypertable | chunks | segmentby |   orderby    |                                                                                         index                                                                                          
+------------+--------+-----------+--------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ test_table |      1 |           | uuid,ts DESC | [{"type": "bloom", "column": ["ts", "uuid"], "source": "default"}, {"type": "minmax", "column": "uuid", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
 
 DROP TABLE test_table;
 -- test that date/time columns (category 'D') are not selected as segmentby
@@ -763,8 +763,8 @@ SELECT count(compress_chunk(x)) FROM show_chunks('test_exclude_datetype') x;
     10
 
 SELECT * FROM timescaledb_information.chunk_compression_settings WHERE hypertable = 'test_exclude_datetype'::regclass ORDER BY chunk LIMIT 1;
-      hypertable       |                   chunk                   | segmentby |      orderby       |                                                           index                                                            
------------------------+-------------------------------------------+-----------+--------------------+----------------------------------------------------------------------------------------------------------------------------
- test_exclude_datetype | _timescaledb_internal._hyper_28_279_chunk | device_id | event_date,ts DESC | [{"type": "minmax", "column": "event_date", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+      hypertable       |                   chunk                   | segmentby |      orderby       |                                                                                               index                                                                                                
+-----------------------+-------------------------------------------+-----------+--------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ test_exclude_datetype | _timescaledb_internal._hyper_28_279_chunk | device_id | event_date,ts DESC | [{"type": "bloom", "column": ["ts", "event_date"], "source": "default"}, {"type": "minmax", "column": "event_date", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
 
 DROP TABLE test_exclude_datetype;

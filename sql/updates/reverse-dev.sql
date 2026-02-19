@@ -79,3 +79,5 @@ DROP TABLE _timescaledb_internal.tmp_chunk_seq_value;
 GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 -- end recreate _timescaledb_catalog.chunk table --
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.bloom1_contains_hashes(_timescaledb_internal.bloom1, bigint[]);
