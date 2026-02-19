@@ -13,7 +13,7 @@ jobs:
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql
-      CODE_PATHS: src/ tsl/src/
+      CODE_PATHS: src/ tsl/src/ test/src tsl/test/src
 
     steps:
     - name: Checkout TimescaleDB
