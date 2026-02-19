@@ -15,6 +15,8 @@ extern TSDLLEXPORT void ts_jsonb_add_null(JsonbParseState *state, const char *ke
 extern TSDLLEXPORT void ts_jsonb_add_bool(JsonbParseState *state, const char *key, bool boolean);
 extern TSDLLEXPORT void ts_jsonb_add_str(JsonbParseState *state, const char *key,
 										 const char *value);
+extern TSDLLEXPORT void ts_jsonb_add_str_array(JsonbParseState *state, const char *key,
+											   const char **values, int num_values);
 extern TSDLLEXPORT void ts_jsonb_add_interval(JsonbParseState *state, const char *key,
 											  Interval *interval);
 extern TSDLLEXPORT void ts_jsonb_add_int32(JsonbParseState *state, const char *key,
@@ -33,9 +35,6 @@ extern TSDLLEXPORT int32 ts_jsonb_get_int32_field(const Jsonb *json, const char 
 												  bool *field_found);
 extern TSDLLEXPORT int64 ts_jsonb_get_int64_field(const Jsonb *json, const char *key,
 												  bool *field_found);
-extern TSDLLEXPORT bool ts_jsonb_equal(Jsonb *left, Jsonb *right);
-extern TSDLLEXPORT Jsonb *ts_jsonb_replace_key_value_str_field(Jsonb *jb, const char *key,
-															   const char *old, const char *new,
-															   bool *replaced);
+extern TSDLLEXPORT bool ts_jsonb_equal(const Jsonb *left, const Jsonb *right);
 extern TSDLLEXPORT bool ts_jsonb_has_key_value_str_field(Jsonb *jb, const char *key,
 														 const char *value);
