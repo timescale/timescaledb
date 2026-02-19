@@ -95,6 +95,8 @@ CROSSMODULE_WRAPPER(continuous_agg_validate_query);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function_info);
 CROSSMODULE_WRAPPER(continuous_agg_get_grouping_columns);
+CROSSMODULE_WRAPPER(continuous_agg_add_column);
+CROSSMODULE_WRAPPER(continuous_agg_drop_column);
 
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
 CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
@@ -344,6 +346,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function_info = error_no_default_fn_pg_community,
 	.continuous_agg_get_grouping_columns = error_no_default_fn_pg_community,
+	.continuous_agg_add_column = error_no_default_fn_pg_community,
+	.continuous_agg_drop_column = error_no_default_fn_pg_community,
 
 	/* compression */
 	.compressed_data_send = error_no_default_fn_pg_community,

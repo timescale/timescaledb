@@ -1,0 +1,1032 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Tests for add_continuous_aggregate_column function (aggregate expressions only)
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+-- Create test hypertable
+CREATE TABLE test_ht (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INTEGER NOT NULL,
+    temperature DOUBLE PRECISION,
+    humidity DOUBLE PRECISION,
+    category TEXT
+) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+-- Insert test data
+INSERT INTO test_ht VALUES
+    ('2020-01-01 00:00:00', 1, 20.0, 50.0, 'indoor'),
+    ('2020-01-01 01:00:00', 1, 22.0, 55.0, 'indoor'),
+    ('2020-01-01 02:00:00', 1, 21.0, 52.0, 'indoor'),
+    ('2020-01-01 00:00:00', 2, 25.0, 60.0, 'outdoor'),
+    ('2020-01-01 01:00:00', 2, 28.0, 65.0, 'outdoor'),
+    ('2020-01-01 02:00:00', 2, 26.0, 62.0, 'outdoor'),
+    ('2020-01-02 00:00:00', 1, 19.0, 48.0, 'indoor'),
+    ('2020-01-02 01:00:00', 2, 30.0, 70.0, 'outdoor');
+-- Create a materialized-only CAgg with basic aggregation
+CREATE MATERIALIZED VIEW test_cagg_mat
+    WITH (timescaledb.continuous)
+AS SELECT
+    time_bucket('1 day', time) AS bucket,
+    device_id,
+    avg(temperature) AS avg_temp
+FROM test_ht
+GROUP BY 1, 2
+WITH NO DATA;
+-- Create a real-time CAgg
+CREATE MATERIALIZED VIEW test_cagg_rt
+    WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS SELECT
+    time_bucket('1 day', time) AS bucket,
+    device_id,
+    avg(temperature) AS avg_temp
+FROM test_ht
+GROUP BY 1, 2
+WITH NO DATA;
+-- Show initial state
+\d+ test_cagg_mat
+                                  View "public.test_cagg_mat"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ device_id | integer                  |           |          |         | plain   | 
+ avg_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_3.bucket,
+    _materialized_hypertable_3.device_id,
+    _materialized_hypertable_3.avg_temp
+   FROM _timescaledb_internal._materialized_hypertable_3;
+
+\d+ test_cagg_rt
+                                  View "public.test_cagg_rt"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ device_id | integer                  |           |          |         | plain   | 
+ avg_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_4.bucket,
+    _materialized_hypertable_4.device_id,
+    _materialized_hypertable_4.avg_temp
+   FROM _timescaledb_internal._materialized_hypertable_4
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, test_ht."time") AS bucket,
+    test_ht.device_id,
+    avg(test_ht.temperature) AS avg_temp
+   FROM test_ht
+  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 day'::interval, test_ht."time")), test_ht.device_id;
+
+-- Add SUM aggregate to materialized-only CAgg
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify column was added
+\d+ test_cagg_mat
+                                  View "public.test_cagg_mat"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ device_id | integer                  |           |          |         | plain   | 
+ avg_temp  | double precision         |           |          |         | plain   | 
+ sum_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_3.bucket,
+    _materialized_hypertable_3.device_id,
+    _materialized_hypertable_3.avg_temp,
+    _materialized_hypertable_3.sum_temp
+   FROM _timescaledb_internal._materialized_hypertable_3;
+
+-- Add MAX aggregate to materialized-only CAgg
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'max(temperature) AS max_temp');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Add MIN aggregate to real-time CAgg
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'min(temperature) AS min_temp');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify columns were added
+\d+ test_cagg_mat
+                                  View "public.test_cagg_mat"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ device_id | integer                  |           |          |         | plain   | 
+ avg_temp  | double precision         |           |          |         | plain   | 
+ sum_temp  | double precision         |           |          |         | plain   | 
+ max_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_3.bucket,
+    _materialized_hypertable_3.device_id,
+    _materialized_hypertable_3.avg_temp,
+    _materialized_hypertable_3.sum_temp,
+    _materialized_hypertable_3.max_temp
+   FROM _timescaledb_internal._materialized_hypertable_3;
+
+\d+ test_cagg_rt
+                                  View "public.test_cagg_rt"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ device_id | integer                  |           |          |         | plain   | 
+ avg_temp  | double precision         |           |          |         | plain   | 
+ min_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_4.bucket,
+    _materialized_hypertable_4.device_id,
+    _materialized_hypertable_4.avg_temp,
+    _materialized_hypertable_4.min_temp
+   FROM _timescaledb_internal._materialized_hypertable_4
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, test_ht."time") AS bucket,
+    test_ht.device_id,
+    avg(test_ht.temperature) AS avg_temp,
+    min(test_ht.temperature) AS min_temp
+   FROM test_ht
+  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 day'::interval, test_ht."time")), test_ht.device_id;
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_mat', NULL, NULL);
+CALL refresh_continuous_aggregate('test_cagg_rt', NULL, NULL);
+-- Verify aggregates are computed correctly
+SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | sum_temp | max_temp 
+------------------------------+-----------+------------------+----------+----------
+ Tue Dec 31 16:00:00 2019 PST |         1 |               21 |       63 |       22
+ Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |       79 |       28
+ Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19 |       19
+ Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30 |       30
+
+SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | min_temp 
+------------------------------+-----------+------------------+----------
+ Tue Dec 31 16:00:00 2019 PST |         1 |               21 |       20
+ Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |       25
+ Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19
+ Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30
+
+-- Add aggregate with different column (humidity)
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'avg(humidity) AS avg_humidity');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Refresh and check
+CALL refresh_continuous_aggregate('test_cagg_mat', NULL, NULL);
+NOTICE:  continuous aggregate "test_cagg_mat" is already up-to-date
+SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | sum_temp | max_temp | avg_humidity 
+------------------------------+-----------+------------------+----------+----------+--------------
+ Tue Dec 31 16:00:00 2019 PST |         1 |               21 |       63 |       22 |             
+ Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |       79 |       28 |             
+ Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19 |       19 |             
+ Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30 |       30 |             
+
+-- Error tests
+\set ON_ERROR_STOP 0
+-- NULL arguments (STRICT function returns NULL for any NULL input)
+SELECT add_continuous_aggregate_column(NULL, 'sum(temperature) AS sum_temp');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+SELECT add_continuous_aggregate_column('test_cagg_mat', NULL);
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp', NULL);
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- function does not exist
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'missing_func(temperature) AS bad');
+ERROR:  function "missing_func" does not exist
+-- function is not an aggregate
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'round(temperature)');
+ERROR:  "round" is not an aggregate function
+-- syntax error in aggregate expression
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature AS bad_syntax');
+ERROR:  unable to parse the aggregate expression "sum(temperature AS bad_syntax"
+-- multiple aggregates in single expression
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature), avg(temperature)');
+ERROR:  only one aggregate expression allowed
+-- multiple SQL statements (SQL injection attempt)
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature); SELECT 1;');
+ERROR:  invalid aggregate expression: "sum(temperature); SELECT 1;"
+-- aggregate already exists (same alias)
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp');
+ERROR:  column "sum_temp" already exists in continuous aggregate
+-- if_not_exists=true should not error
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp', true);
+NOTICE:  column "sum_temp" already exists in continuous aggregate, skipping
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- column referenced in aggregate doesn't exist
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(nonexistent) AS bad');
+ERROR:  column "nonexistent" referenced in aggregate does not exist in source relation
+-- Error - expression must be an aggregate function (simple column)
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'category');
+ERROR:  expression must be an aggregate function
+-- Error - window function is not allowed
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'row_number() OVER () AS rn');
+ERROR:  "row_number" is not an aggregate function
+-- not a continuous aggregate
+CREATE TABLE regular_table (id INT, data TEXT);
+SELECT add_continuous_aggregate_column('regular_table', 'sum(id) AS total');
+ERROR:  relation "regular_table" is not a continuous aggregate
+-- permission denied: non-owner cannot alter the continuous aggregate
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp2');
+ERROR:  must be owner of continuous aggregate "test_cagg_mat"
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 1
+DROP TABLE regular_table;
+-- Add COUNT aggregate (no column argument)
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'count(*) AS row_count');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Refresh and verify
+CALL refresh_continuous_aggregate('test_cagg_mat', NULL, NULL);
+NOTICE:  continuous aggregate "test_cagg_mat" is already up-to-date
+SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | sum_temp | max_temp | avg_humidity | row_count 
+------------------------------+-----------+------------------+----------+----------+--------------+-----------
+ Tue Dec 31 16:00:00 2019 PST |         1 |               21 |       63 |       22 |              |          
+ Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |       79 |       28 |              |          
+ Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19 |       19 |              |          
+ Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30 |       30 |              |          
+
+-- Test adding aggregate without explicit alias (uses function name)
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'sum(humidity)');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Test adding schema-qualified aggregate without explicit alias (should use function name, not schema)
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'pg_catalog.count(*)');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify they were added with auto-generated aliases
+\d+ test_cagg_rt
+                                  View "public.test_cagg_rt"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ device_id | integer                  |           |          |         | plain   | 
+ avg_temp  | double precision         |           |          |         | plain   | 
+ min_temp  | double precision         |           |          |         | plain   | 
+ sum       | double precision         |           |          |         | plain   | 
+ count     | bigint                   |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_4.bucket,
+    _materialized_hypertable_4.device_id,
+    _materialized_hypertable_4.avg_temp,
+    _materialized_hypertable_4.min_temp,
+    _materialized_hypertable_4.sum,
+    _materialized_hypertable_4.count
+   FROM _timescaledb_internal._materialized_hypertable_4
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, test_ht."time") AS bucket,
+    test_ht.device_id,
+    avg(test_ht.temperature) AS avg_temp,
+    min(test_ht.temperature) AS min_temp,
+    sum(test_ht.humidity) AS sum,
+    count(*) AS count
+   FROM test_ht
+  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 day'::interval, test_ht."time")), test_ht.device_id;
+
+-- Test adding aggregate with double-quoted alias containing special characters
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'max(humidity) AS "weird and insane column name, but still valid on Postgres!"');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify it was added with the special alias
+\d+ test_cagg_rt
+                                                           View "public.test_cagg_rt"
+                           Column                           |           Type           | Collation | Nullable | Default | Storage | Description 
+------------------------------------------------------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket                                                     | timestamp with time zone |           |          |         | plain   | 
+ device_id                                                  | integer                  |           |          |         | plain   | 
+ avg_temp                                                   | double precision         |           |          |         | plain   | 
+ min_temp                                                   | double precision         |           |          |         | plain   | 
+ sum                                                        | double precision         |           |          |         | plain   | 
+ count                                                      | bigint                   |           |          |         | plain   | 
+ weird and insane column name, but still valid on Postgres! | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_4.bucket,
+    _materialized_hypertable_4.device_id,
+    _materialized_hypertable_4.avg_temp,
+    _materialized_hypertable_4.min_temp,
+    _materialized_hypertable_4.sum,
+    _materialized_hypertable_4.count,
+    _materialized_hypertable_4."weird and insane column name, but still valid on Postgres!"
+   FROM _timescaledb_internal._materialized_hypertable_4
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, test_ht."time") AS bucket,
+    test_ht.device_id,
+    avg(test_ht.temperature) AS avg_temp,
+    min(test_ht.temperature) AS min_temp,
+    sum(test_ht.humidity) AS sum,
+    count(*) AS count,
+    max(test_ht.humidity) AS "weird and insane column name, but still valid on Postgres!"
+   FROM test_ht
+  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 day'::interval, test_ht."time")), test_ht.device_id;
+
+-- Test adding aggregate with DISTINCT
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'count(DISTINCT device_id) AS distinct_devices');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Test adding aggregate with FILTER clause
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) FILTER (WHERE temperature > 20) AS sum_temp_gt20');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Create and test a custom aggregate
+CREATE AGGREGATE custom_sum (float8) (
+    sfunc = float8pl,
+    stype = float8,
+    initcond = '0'
+);
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'custom_sum(temperature) AS custom_sum_temp');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Refresh and verify all new aggregates
+CALL refresh_continuous_aggregate('test_cagg_mat', NULL, NULL);
+NOTICE:  continuous aggregate "test_cagg_mat" is already up-to-date
+SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | sum_temp | max_temp | avg_humidity | row_count | distinct_devices | sum_temp_gt20 | custom_sum_temp 
+------------------------------+-----------+------------------+----------+----------+--------------+-----------+------------------+---------------+-----------------
+ Tue Dec 31 16:00:00 2019 PST |         1 |               21 |       63 |       22 |              |           |                  |               |                
+ Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |       79 |       28 |              |           |                  |               |                
+ Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19 |       19 |              |           |                  |               |                
+ Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30 |       30 |              |           |                  |               |                
+
+-- Test adding aggregate with ORDER BY (string_agg)
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'string_agg(category, '','' ORDER BY category) AS categories');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Refresh and verify
+CALL refresh_continuous_aggregate('test_cagg_rt', NULL, NULL);
+NOTICE:  continuous aggregate "test_cagg_rt" is already up-to-date
+SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | min_temp | sum | count | weird and insane column name, but still valid on Postgres! | categories 
+------------------------------+-----------+------------------+----------+-----+-------+------------------------------------------------------------+------------
+ Tue Dec 31 16:00:00 2019 PST |         1 |               21 |       20 |     |       |                                                            | 
+ Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |       25 |     |       |                                                            | 
+ Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19 |     |       |                                                            | 
+ Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30 |     |       |                                                            | 
+
+-- Insert new data and check real-time aggregation works
+INSERT INTO test_ht VALUES
+    ('2020-01-03 00:00:00', 1, 23.0, 56.0, 'indoor'),
+    ('2020-01-03 01:00:00', 2, 32.0, 72.0, 'outdoor');
+-- Real-time CAgg should show new data without refresh
+SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | min_temp | sum | count | weird and insane column name, but still valid on Postgres! | categories 
+------------------------------+-----------+------------------+----------+-----+-------+------------------------------------------------------------+------------
+ Tue Dec 31 16:00:00 2019 PST |         1 |               21 |       20 |     |       |                                                            | 
+ Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |       25 |     |       |                                                            | 
+ Wed Jan 01 16:00:00 2020 PST |         1 |               19 |       19 |     |       |                                                            | 
+ Wed Jan 01 16:00:00 2020 PST |         2 |               30 |       30 |     |       |                                                            | 
+ Thu Jan 02 16:00:00 2020 PST |         1 |               23 |       23 |  56 |     1 |                                                         56 | indoor
+ Thu Jan 02 16:00:00 2020 PST |         2 |               32 |       32 |  72 |     1 |                                                         72 | outdoor
+
+-- =====================================================
+-- Hierarchical continuous aggregate tests
+-- =====================================================
+-- Create a second-level materialized-only CAgg on top of test_cagg_mat
+CREATE MATERIALIZED VIEW test_cagg_level2
+    WITH (timescaledb.continuous)
+AS SELECT
+    time_bucket('7 days', bucket) AS bucket,
+    device_id,
+    avg(avg_temp) AS avg_temp
+FROM test_cagg_mat
+GROUP BY 1, 2
+WITH NO DATA;
+-- Refresh level 2
+CALL refresh_continuous_aggregate('test_cagg_level2', NULL, NULL);
+-- Show initial state
+SELECT * FROM test_cagg_level2 ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     
+------------------------------+-----------+------------------
+ Sun Dec 29 16:00:00 2019 PST |         1 |               20
+ Sun Dec 29 16:00:00 2019 PST |         2 | 28.1666666666667
+
+\d+ test_cagg_level2
+                                View "public.test_cagg_level2"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ device_id | integer                  |           |          |         | plain   | 
+ avg_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_5.bucket,
+    _materialized_hypertable_5.device_id,
+    _materialized_hypertable_5.avg_temp
+   FROM _timescaledb_internal._materialized_hypertable_5;
+
+-- Error - aggregate references column that doesn't exist in parent CAgg
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'sum(nonexistent) AS bad');
+ERROR:  column "nonexistent" referenced in aggregate does not exist in source relation
+\set ON_ERROR_STOP 1
+-- Add aggregate using column from parent CAgg
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'sum(sum_temp) AS total_sum_temp');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify the column was added
+\d+ test_cagg_level2
+                                   View "public.test_cagg_level2"
+     Column     |           Type           | Collation | Nullable | Default | Storage | Description 
+----------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket         | timestamp with time zone |           |          |         | plain   | 
+ device_id      | integer                  |           |          |         | plain   | 
+ avg_temp       | double precision         |           |          |         | plain   | 
+ total_sum_temp | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_5.bucket,
+    _materialized_hypertable_5.device_id,
+    _materialized_hypertable_5.avg_temp,
+    _materialized_hypertable_5.total_sum_temp
+   FROM _timescaledb_internal._materialized_hypertable_5;
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_level2', NULL, NULL);
+NOTICE:  continuous aggregate "test_cagg_level2" is already up-to-date
+SELECT * FROM test_cagg_level2 ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | total_sum_temp 
+------------------------------+-----------+------------------+----------------
+ Sun Dec 29 16:00:00 2019 PST |         1 |               20 |               
+ Sun Dec 29 16:00:00 2019 PST |         2 | 28.1666666666667 |               
+
+-- Error - aggregate already exists
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'sum(sum_temp) AS total_sum_temp');
+ERROR:  column "total_sum_temp" already exists in continuous aggregate
+\set ON_ERROR_STOP 1
+-- if_not_exists=true should not error
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'sum(sum_temp) AS total_sum_temp', true);
+NOTICE:  column "total_sum_temp" already exists in continuous aggregate, skipping
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- =====================================================
+-- Hierarchical CAgg with real-time mode
+-- =====================================================
+-- Create a second-level real-time CAgg on top of test_cagg_rt
+CREATE MATERIALIZED VIEW test_cagg_rt_level2
+    WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS SELECT
+    time_bucket('7 days', bucket) AS bucket,
+    device_id,
+    avg(avg_temp) AS avg_temp
+FROM test_cagg_rt
+GROUP BY 1, 2
+WITH NO DATA;
+-- Refresh level 2
+CALL refresh_continuous_aggregate('test_cagg_rt_level2', NULL, NULL);
+-- Show initial state
+SELECT * FROM test_cagg_rt_level2 ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     
+------------------------------+-----------+------------------
+ Sun Dec 29 16:00:00 2019 PST |         1 |               21
+ Sun Dec 29 16:00:00 2019 PST |         2 | 29.4444444444444
+
+\d+ test_cagg_rt_level2
+                               View "public.test_cagg_rt_level2"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ device_id | integer                  |           |          |         | plain   | 
+ avg_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_6.bucket,
+    _materialized_hypertable_6.device_id,
+    _materialized_hypertable_6.avg_temp
+   FROM _timescaledb_internal._materialized_hypertable_6
+  WHERE _materialized_hypertable_6.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(6)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 7 days'::interval, test_cagg_rt.bucket) AS bucket,
+    test_cagg_rt.device_id,
+    avg(test_cagg_rt.avg_temp) AS avg_temp
+   FROM test_cagg_rt
+  WHERE test_cagg_rt.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(6)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 7 days'::interval, test_cagg_rt.bucket)), test_cagg_rt.device_id;
+
+-- Add aggregate using column from parent CAgg
+SELECT add_continuous_aggregate_column('test_cagg_rt_level2', 'max(min_temp) AS max_of_min');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify the column was added
+\d+ test_cagg_rt_level2
+                               View "public.test_cagg_rt_level2"
+   Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket     | timestamp with time zone |           |          |         | plain   | 
+ device_id  | integer                  |           |          |         | plain   | 
+ avg_temp   | double precision         |           |          |         | plain   | 
+ max_of_min | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_6.bucket,
+    _materialized_hypertable_6.device_id,
+    _materialized_hypertable_6.avg_temp,
+    _materialized_hypertable_6.max_of_min
+   FROM _timescaledb_internal._materialized_hypertable_6
+  WHERE _materialized_hypertable_6.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(6)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 7 days'::interval, test_cagg_rt.bucket) AS bucket,
+    test_cagg_rt.device_id,
+    avg(test_cagg_rt.avg_temp) AS avg_temp,
+    max(test_cagg_rt.min_temp) AS max_of_min
+   FROM test_cagg_rt
+  WHERE test_cagg_rt.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(6)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 7 days'::interval, test_cagg_rt.bucket)), test_cagg_rt.device_id;
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_rt_level2', NULL, NULL);
+NOTICE:  continuous aggregate "test_cagg_rt_level2" is already up-to-date
+SELECT * FROM test_cagg_rt_level2 ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | max_of_min 
+------------------------------+-----------+------------------+------------
+ Sun Dec 29 16:00:00 2019 PST |         1 |               21 |           
+ Sun Dec 29 16:00:00 2019 PST |         2 | 29.4444444444444 |           
+
+-- Insert new data to test real-time aggregation in hierarchical CAgg
+INSERT INTO test_ht VALUES
+    ('2020-01-04 00:00:00', 1, 18.0, 45.0, 'indoor'),
+    ('2020-01-04 01:00:00', 2, 35.0, 75.0, 'outdoor');
+-- Real-time hierarchical CAgg should show new data without refresh
+SELECT * FROM test_cagg_rt_level2 ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | max_of_min 
+------------------------------+-----------+------------------+------------
+ Sun Dec 29 16:00:00 2019 PST |         1 |               21 |           
+ Sun Dec 29 16:00:00 2019 PST |         2 | 29.4444444444444 |           
+
+-- =====================================================
+-- Tests for CAgg with compression enabled
+-- =====================================================
+-- Create a new CAgg for compression tests
+CREATE MATERIALIZED VIEW test_cagg_compress
+    WITH (timescaledb.continuous)
+AS SELECT
+    time_bucket('1 day', time) AS bucket,
+    device_id,
+    avg(temperature) AS avg_temp
+FROM test_ht
+GROUP BY 1, 2
+WITH NO DATA;
+-- Refresh to materialize data
+CALL refresh_continuous_aggregate('test_cagg_compress', NULL, NULL);
+-- Enable compression on the CAgg
+ALTER MATERIALIZED VIEW test_cagg_compress SET (timescaledb.compress);
+NOTICE:  defaulting compress_orderby to bucket,device_id
+-- Error - cannot add column to CAgg with compression enabled
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_compress', 'sum(temperature) AS sum_temp');
+ERROR:  cannot add aggregate to continuous aggregate with compression enabled
+\set ON_ERROR_STOP 1
+-- Compress the chunks
+SELECT compress_chunk(chunk) FROM show_chunks('test_cagg_compress') chunk;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_7_7_chunk
+
+-- Error - still cannot add column after chunks are compressed
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_compress', 'sum(temperature) AS sum_temp');
+ERROR:  cannot add aggregate to continuous aggregate with compression enabled
+\set ON_ERROR_STOP 1
+-- Decompress all chunks
+SELECT decompress_chunk(chunk) FROM show_chunks('test_cagg_compress') chunk;
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_7_7_chunk
+
+-- Disable compression
+ALTER MATERIALIZED VIEW test_cagg_compress SET (timescaledb.compress = false);
+-- Now we should be able to add a column
+SELECT add_continuous_aggregate_column('test_cagg_compress', 'sum(temperature) AS sum_temp');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Verify the column was added
+\d+ test_cagg_compress
+                               View "public.test_cagg_compress"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ device_id | integer                  |           |          |         | plain   | 
+ avg_temp  | double precision         |           |          |         | plain   | 
+ sum_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_7.bucket,
+    _materialized_hypertable_7.device_id,
+    _materialized_hypertable_7.avg_temp,
+    _materialized_hypertable_7.sum_temp
+   FROM _timescaledb_internal._materialized_hypertable_7;
+
+SET client_min_messages TO WARNING;
+-- Cleanup compression test CAgg
+DROP MATERIALIZED VIEW test_cagg_compress;
+RESET client_min_messages;
+-- =====================================================
+-- Tests for drop_continuous_aggregate_column
+-- =====================================================
+-- Show current state before drops
+\d+ test_cagg_mat
+                                     View "public.test_cagg_mat"
+      Column      |           Type           | Collation | Nullable | Default | Storage | Description 
+------------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket           | timestamp with time zone |           |          |         | plain   | 
+ device_id        | integer                  |           |          |         | plain   | 
+ avg_temp         | double precision         |           |          |         | plain   | 
+ sum_temp         | double precision         |           |          |         | plain   | 
+ max_temp         | double precision         |           |          |         | plain   | 
+ avg_humidity     | double precision         |           |          |         | plain   | 
+ row_count        | bigint                   |           |          |         | plain   | 
+ distinct_devices | bigint                   |           |          |         | plain   | 
+ sum_temp_gt20    | double precision         |           |          |         | plain   | 
+ custom_sum_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_3.bucket,
+    _materialized_hypertable_3.device_id,
+    _materialized_hypertable_3.avg_temp,
+    _materialized_hypertable_3.sum_temp,
+    _materialized_hypertable_3.max_temp,
+    _materialized_hypertable_3.avg_humidity,
+    _materialized_hypertable_3.row_count,
+    _materialized_hypertable_3.distinct_devices,
+    _materialized_hypertable_3.sum_temp_gt20,
+    _materialized_hypertable_3.custom_sum_temp
+   FROM _timescaledb_internal._materialized_hypertable_3;
+
+\d+ test_cagg_rt
+                                                           View "public.test_cagg_rt"
+                           Column                           |           Type           | Collation | Nullable | Default | Storage  | Description 
+------------------------------------------------------------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket                                                     | timestamp with time zone |           |          |         | plain    | 
+ device_id                                                  | integer                  |           |          |         | plain    | 
+ avg_temp                                                   | double precision         |           |          |         | plain    | 
+ min_temp                                                   | double precision         |           |          |         | plain    | 
+ sum                                                        | double precision         |           |          |         | plain    | 
+ count                                                      | bigint                   |           |          |         | plain    | 
+ weird and insane column name, but still valid on Postgres! | double precision         |           |          |         | plain    | 
+ categories                                                 | text                     |           |          |         | extended | 
+View definition:
+ SELECT _materialized_hypertable_4.bucket,
+    _materialized_hypertable_4.device_id,
+    _materialized_hypertable_4.avg_temp,
+    _materialized_hypertable_4.min_temp,
+    _materialized_hypertable_4.sum,
+    _materialized_hypertable_4.count,
+    _materialized_hypertable_4."weird and insane column name, but still valid on Postgres!",
+    _materialized_hypertable_4.categories
+   FROM _timescaledb_internal._materialized_hypertable_4
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, test_ht."time") AS bucket,
+    test_ht.device_id,
+    avg(test_ht.temperature) AS avg_temp,
+    min(test_ht.temperature) AS min_temp,
+    sum(test_ht.humidity) AS sum,
+    count(*) AS count,
+    max(test_ht.humidity) AS "weird and insane column name, but still valid on Postgres!",
+    string_agg(test_ht.category, ','::text ORDER BY test_ht.category) AS categories
+   FROM test_ht
+  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 day'::interval, test_ht."time")), test_ht.device_id;
+
+-- Basic drop from materialized-only CAgg
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'sum_temp');
+ drop_continuous_aggregate_column 
+----------------------------------
+ 
+
+-- Verify column was removed
+\d+ test_cagg_mat
+                                     View "public.test_cagg_mat"
+      Column      |           Type           | Collation | Nullable | Default | Storage | Description 
+------------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket           | timestamp with time zone |           |          |         | plain   | 
+ device_id        | integer                  |           |          |         | plain   | 
+ avg_temp         | double precision         |           |          |         | plain   | 
+ max_temp         | double precision         |           |          |         | plain   | 
+ avg_humidity     | double precision         |           |          |         | plain   | 
+ row_count        | bigint                   |           |          |         | plain   | 
+ distinct_devices | bigint                   |           |          |         | plain   | 
+ sum_temp_gt20    | double precision         |           |          |         | plain   | 
+ custom_sum_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_3.bucket,
+    _materialized_hypertable_3.device_id,
+    _materialized_hypertable_3.avg_temp,
+    _materialized_hypertable_3.max_temp,
+    _materialized_hypertable_3.avg_humidity,
+    _materialized_hypertable_3.row_count,
+    _materialized_hypertable_3.distinct_devices,
+    _materialized_hypertable_3.sum_temp_gt20,
+    _materialized_hypertable_3.custom_sum_temp
+   FROM _timescaledb_internal._materialized_hypertable_3;
+
+-- Drop another column
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'max_temp');
+ drop_continuous_aggregate_column 
+----------------------------------
+ 
+
+-- Verify
+\d+ test_cagg_mat
+                                     View "public.test_cagg_mat"
+      Column      |           Type           | Collation | Nullable | Default | Storage | Description 
+------------------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket           | timestamp with time zone |           |          |         | plain   | 
+ device_id        | integer                  |           |          |         | plain   | 
+ avg_temp         | double precision         |           |          |         | plain   | 
+ avg_humidity     | double precision         |           |          |         | plain   | 
+ row_count        | bigint                   |           |          |         | plain   | 
+ distinct_devices | bigint                   |           |          |         | plain   | 
+ sum_temp_gt20    | double precision         |           |          |         | plain   | 
+ custom_sum_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_3.bucket,
+    _materialized_hypertable_3.device_id,
+    _materialized_hypertable_3.avg_temp,
+    _materialized_hypertable_3.avg_humidity,
+    _materialized_hypertable_3.row_count,
+    _materialized_hypertable_3.distinct_devices,
+    _materialized_hypertable_3.sum_temp_gt20,
+    _materialized_hypertable_3.custom_sum_temp
+   FROM _timescaledb_internal._materialized_hypertable_3;
+
+-- Drop from real-time CAgg
+SELECT drop_continuous_aggregate_column('test_cagg_rt', 'min_temp');
+ drop_continuous_aggregate_column 
+----------------------------------
+ 
+
+-- Verify column was removed
+\d+ test_cagg_rt
+                                                           View "public.test_cagg_rt"
+                           Column                           |           Type           | Collation | Nullable | Default | Storage  | Description 
+------------------------------------------------------------+--------------------------+-----------+----------+---------+----------+-------------
+ bucket                                                     | timestamp with time zone |           |          |         | plain    | 
+ device_id                                                  | integer                  |           |          |         | plain    | 
+ avg_temp                                                   | double precision         |           |          |         | plain    | 
+ sum                                                        | double precision         |           |          |         | plain    | 
+ count                                                      | bigint                   |           |          |         | plain    | 
+ weird and insane column name, but still valid on Postgres! | double precision         |           |          |         | plain    | 
+ categories                                                 | text                     |           |          |         | extended | 
+View definition:
+ SELECT _materialized_hypertable_4.bucket,
+    _materialized_hypertable_4.device_id,
+    _materialized_hypertable_4.avg_temp,
+    _materialized_hypertable_4.sum,
+    _materialized_hypertable_4.count,
+    _materialized_hypertable_4."weird and insane column name, but still valid on Postgres!",
+    _materialized_hypertable_4.categories
+   FROM _timescaledb_internal._materialized_hypertable_4
+  WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 1 day'::interval, test_ht."time") AS bucket,
+    test_ht.device_id,
+    avg(test_ht.temperature) AS avg_temp,
+    sum(test_ht.humidity) AS sum,
+    count(*) AS count,
+    max(test_ht.humidity) AS "weird and insane column name, but still valid on Postgres!",
+    string_agg(test_ht.category, ','::text ORDER BY test_ht.category) AS categories
+   FROM test_ht
+  WHERE test_ht."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 1 day'::interval, test_ht."time")), test_ht.device_id;
+
+-- Refresh after drop should still work
+CALL refresh_continuous_aggregate('test_cagg_mat', NULL, NULL);
+CALL refresh_continuous_aggregate('test_cagg_rt', NULL, NULL);
+-- Verify data is correct after drop
+SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | avg_humidity | row_count | distinct_devices | sum_temp_gt20 | custom_sum_temp 
+------------------------------+-----------+------------------+--------------+-----------+------------------+---------------+-----------------
+ Tue Dec 31 16:00:00 2019 PST |         1 |               21 |              |           |                  |               |                
+ Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |              |           |                  |               |                
+ Wed Jan 01 16:00:00 2020 PST |         1 |               19 |              |           |                  |               |                
+ Wed Jan 01 16:00:00 2020 PST |         2 |               30 |              |           |                  |               |                
+ Thu Jan 02 16:00:00 2020 PST |         1 |               23 |           56 |         1 |                1 |            23 |              23
+ Thu Jan 02 16:00:00 2020 PST |         2 |               32 |           72 |         1 |                1 |            32 |              32
+ Fri Jan 03 16:00:00 2020 PST |         1 |               18 |           45 |         1 |                1 |               |              18
+ Fri Jan 03 16:00:00 2020 PST |         2 |               35 |           75 |         1 |                1 |            35 |              35
+
+SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     | sum | count | weird and insane column name, but still valid on Postgres! | categories 
+------------------------------+-----------+------------------+-----+-------+------------------------------------------------------------+------------
+ Tue Dec 31 16:00:00 2019 PST |         1 |               21 |     |       |                                                            | 
+ Tue Dec 31 16:00:00 2019 PST |         2 | 26.3333333333333 |     |       |                                                            | 
+ Wed Jan 01 16:00:00 2020 PST |         1 |               19 |     |       |                                                            | 
+ Wed Jan 01 16:00:00 2020 PST |         2 |               30 |     |       |                                                            | 
+ Thu Jan 02 16:00:00 2020 PST |         1 |               23 |  56 |     1 |                                                         56 | indoor
+ Thu Jan 02 16:00:00 2020 PST |         2 |               32 |  72 |     1 |                                                         72 | outdoor
+ Fri Jan 03 16:00:00 2020 PST |         1 |               18 |  45 |     1 |                                                         45 | indoor
+ Fri Jan 03 16:00:00 2020 PST |         2 |               35 |  75 |     1 |                                                         75 | outdoor
+
+-- Drop from hierarchical CAgg
+SELECT drop_continuous_aggregate_column('test_cagg_level2', 'total_sum_temp');
+ drop_continuous_aggregate_column 
+----------------------------------
+ 
+
+-- Verify
+\d+ test_cagg_level2
+                                View "public.test_cagg_level2"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ device_id | integer                  |           |          |         | plain   | 
+ avg_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_5.bucket,
+    _materialized_hypertable_5.device_id,
+    _materialized_hypertable_5.avg_temp
+   FROM _timescaledb_internal._materialized_hypertable_5;
+
+-- Refresh hierarchical CAgg after drop
+CALL refresh_continuous_aggregate('test_cagg_level2', NULL, NULL);
+SELECT * FROM test_cagg_level2 ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     
+------------------------------+-----------+------------------
+ Sun Dec 29 16:00:00 2019 PST |         1 |            20.25
+ Sun Dec 29 16:00:00 2019 PST |         2 | 30.8333333333333
+
+-- Drop from real-time hierarchical CAgg
+SELECT drop_continuous_aggregate_column('test_cagg_rt_level2', 'max_of_min');
+ drop_continuous_aggregate_column 
+----------------------------------
+ 
+
+-- Verify
+\d+ test_cagg_rt_level2
+                               View "public.test_cagg_rt_level2"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ device_id | integer                  |           |          |         | plain   | 
+ avg_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_6.bucket,
+    _materialized_hypertable_6.device_id,
+    _materialized_hypertable_6.avg_temp
+   FROM _timescaledb_internal._materialized_hypertable_6
+  WHERE _materialized_hypertable_6.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(6)), '-infinity'::timestamp with time zone)
+UNION ALL
+ SELECT time_bucket('@ 7 days'::interval, test_cagg_rt.bucket) AS bucket,
+    test_cagg_rt.device_id,
+    avg(test_cagg_rt.avg_temp) AS avg_temp
+   FROM test_cagg_rt
+  WHERE test_cagg_rt.bucket >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(6)), '-infinity'::timestamp with time zone)
+  GROUP BY (time_bucket('@ 7 days'::interval, test_cagg_rt.bucket)), test_cagg_rt.device_id;
+
+-- Refresh and verify
+CALL refresh_continuous_aggregate('test_cagg_rt_level2', NULL, NULL);
+SELECT * FROM test_cagg_rt_level2 ORDER BY bucket, device_id;
+            bucket            | device_id |     avg_temp     
+------------------------------+-----------+------------------
+ Sun Dec 29 16:00:00 2019 PST |         1 |            20.25
+ Sun Dec 29 16:00:00 2019 PST |         2 | 30.8333333333333
+
+-- Error tests for drop
+\set ON_ERROR_STOP 0
+-- Column doesn't exist
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'nonexistent');
+ERROR:  column "nonexistent" does not exist in continuous aggregate
+-- if_exists=true should not error when column doesn't exist
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'nonexistent', true);
+NOTICE:  column "nonexistent" does not exist in continuous aggregate, skipping
+ drop_continuous_aggregate_column 
+----------------------------------
+ 
+
+-- GROUP BY column cannot be dropped
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'device_id');
+ERROR:  cannot drop GROUP BY column "device_id" from continuous aggregate
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'bucket');
+ERROR:  cannot drop GROUP BY column "bucket" from continuous aggregate
+-- NULL arguments (STRICT function returns NULL for any NULL input)
+SELECT drop_continuous_aggregate_column(NULL, 'avg_temp');
+ drop_continuous_aggregate_column 
+----------------------------------
+ 
+
+SELECT drop_continuous_aggregate_column('test_cagg_mat', NULL);
+ drop_continuous_aggregate_column 
+----------------------------------
+ 
+
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'avg_temp', NULL);
+ drop_continuous_aggregate_column 
+----------------------------------
+ 
+
+-- Not a continuous aggregate
+SELECT drop_continuous_aggregate_column('regular_table'::regclass, 'id');
+ERROR:  relation "regular_table" does not exist at character 41
+-- Permission denied: non-owner cannot alter the continuous aggregate
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'avg_humidity');
+ERROR:  must be owner of continuous aggregate "test_cagg_mat"
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 1
+-- Error test for compression
+CREATE MATERIALIZED VIEW test_cagg_compress2
+    WITH (timescaledb.continuous)
+AS SELECT
+    time_bucket('1 day', time) AS bucket,
+    device_id,
+    avg(temperature) AS avg_temp
+FROM test_ht
+GROUP BY 1, 2
+WITH NO DATA;
+-- Add a column to drop later
+SELECT add_continuous_aggregate_column('test_cagg_compress2', 'sum(temperature) AS sum_temp');
+ add_continuous_aggregate_column 
+---------------------------------
+ 
+
+-- Refresh to materialize data
+CALL refresh_continuous_aggregate('test_cagg_compress2', NULL, NULL);
+-- Enable compression on the CAgg
+ALTER MATERIALIZED VIEW test_cagg_compress2 SET (timescaledb.compress);
+NOTICE:  defaulting compress_orderby to bucket,device_id
+-- Error - cannot drop column from CAgg with compression enabled
+\set ON_ERROR_STOP 0
+SELECT drop_continuous_aggregate_column('test_cagg_compress2', 'sum_temp');
+ERROR:  cannot drop aggregate from continuous aggregate with compression enabled
+\set ON_ERROR_STOP 1
+-- Decompress and disable compression
+SELECT decompress_chunk(chunk) FROM show_chunks('test_cagg_compress2') chunk;
+NOTICE:  chunk "_hyper_9_9_chunk" is not converted to columnstore
+ decompress_chunk 
+------------------
+ 
+
+ALTER MATERIALIZED VIEW test_cagg_compress2 SET (timescaledb.compress = false);
+-- Now we should be able to drop the column
+SELECT drop_continuous_aggregate_column('test_cagg_compress2', 'sum_temp');
+ drop_continuous_aggregate_column 
+----------------------------------
+ 
+
+-- Verify
+\d+ test_cagg_compress2
+                               View "public.test_cagg_compress2"
+  Column   |           Type           | Collation | Nullable | Default | Storage | Description 
+-----------+--------------------------+-----------+----------+---------+---------+-------------
+ bucket    | timestamp with time zone |           |          |         | plain   | 
+ device_id | integer                  |           |          |         | plain   | 
+ avg_temp  | double precision         |           |          |         | plain   | 
+View definition:
+ SELECT _materialized_hypertable_9.bucket,
+    _materialized_hypertable_9.device_id,
+    _materialized_hypertable_9.avg_temp
+   FROM _timescaledb_internal._materialized_hypertable_9;
+
+SET client_min_messages TO WARNING;
+-- Cleanup
+DROP MATERIALIZED VIEW test_cagg_compress2;
+DROP MATERIALIZED VIEW test_cagg_rt_level2;
+DROP MATERIALIZED VIEW test_cagg_level2;
+DROP MATERIALIZED VIEW test_cagg_mat;
+DROP MATERIALIZED VIEW test_cagg_rt;
+DROP TABLE test_ht;
+RESET client_min_messages;

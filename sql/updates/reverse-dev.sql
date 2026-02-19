@@ -79,3 +79,6 @@ DROP TABLE _timescaledb_internal.tmp_chunk_seq_value;
 GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 -- end recreate _timescaledb_catalog.chunk table --
+
+DROP FUNCTION IF EXISTS @extschema@.add_continuous_aggregate_column(REGCLASS, TEXT, BOOLEAN);
+DROP FUNCTION IF EXISTS @extschema@.drop_continuous_aggregate_column(REGCLASS, NAME, BOOLEAN);
