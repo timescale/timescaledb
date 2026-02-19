@@ -28,6 +28,7 @@
 #include "compression/create.h"
 #include "compression/recompress.h"
 #include "compression/sparse_index_bloom1.h"
+#include "continuous_aggs/alter.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/invalidation.h"
@@ -138,6 +139,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
 	.continuous_agg_get_grouping_columns = continuous_agg_get_grouping_columns,
+	.continuous_agg_add_column = continuous_agg_add_column,
 
 	/* Compression */
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,

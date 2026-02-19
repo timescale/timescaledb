@@ -189,6 +189,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  ts_now_mock()
  add_columnstore_policy(regclass,"any",boolean,interval,timestamp with time zone,text,interval)
  add_compression_policy(regclass,"any",boolean,interval,timestamp with time zone,text,interval)
+ add_continuous_aggregate_column(regclass,text,boolean)
  add_continuous_aggregate_policy(regclass,"any","any",interval,boolean,timestamp with time zone,text,boolean,integer,integer,boolean)
  add_dimension(regclass,_timescaledb_internal.dimension_info,boolean)
  add_dimension(regclass,name,integer,anyelement,regproc,boolean)
