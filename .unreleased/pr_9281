@@ -1,0 +1,2 @@
+Fixes: #9281 Fix real-time continuous aggregates on UUID hypertables
+Thanks: @Kusumoto for reporting an issue with continuous aggregates on hypertables with uuid columns
