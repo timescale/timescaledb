@@ -56,3 +56,5 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 										 const ContinuousAggBucketFunction *bucket_function);
 extern HeapTuple create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start,
 										 int64 end);
+extern bool invalidation_hypertable_has_invalidations(int32 hyper_id);
+extern bool invalidation_cagg_has_invalidations(ContinuousAgg *cagg);

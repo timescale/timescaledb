@@ -148,3 +148,28 @@ cagg_get_time_min(const ContinuousAgg *cagg)
 }
 
 ContinuousAggBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);
+
+/* Methods checking validity of Caggs and Cagg rewrites */
+extern bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
+								 const bool for_rewrites);
+extern bool cagg_query_rtes_supported(RangeTblEntry *rte, RangeTblEntry **ht_rte, StringInfo detail,
+									  const bool for_rewrites);
+extern const Dimension *cagg_hypertable_dim_supported(RangeTblEntry *ht_rte, Hypertable *ht,
+													  StringInfo msg, StringInfo detail,
+													  StringInfo hint, const bool for_rewrites);
+extern bool function_allowed_in_cagg_definition(Oid funcid);
+extern void caggtimebucketinfo_init(ContinuousAggTimeBucketInfo *src, int32 hypertable_id,
+									Oid hypertable_oid, AttrNumber hypertable_partition_colno,
+									Oid hypertable_partition_coltype,
+									int64 hypertable_partition_col_interval,
+									int32 parent_mat_hypertable_id);
+extern ContinuousAggBucketFunction *cagg_get_bucket_function_info(Oid view_oid);
+extern bool time_bucket_info_has_fixed_width(const ContinuousAggBucketFunction *bf);
+
+extern bool caggtimebucket_equal(ContinuousAggBucketFunction *bf1,
+								 ContinuousAggBucketFunction *bf2);
+
+extern bool caggtimebucket_validate_common(ContinuousAggBucketFunction *bf, List *groupClause,
+										   List *targetList, List *rtable, int ht_partcolno,
+										   StringInfo msg, bool is_cagg_create,
+										   const bool for_rewrites);
