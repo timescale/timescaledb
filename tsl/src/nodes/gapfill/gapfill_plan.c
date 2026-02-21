@@ -488,10 +488,11 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 		group_rel->cheapest_startup_path = NULL;
 		group_rel->cheapest_unique_path = NULL;
 
-		/* Parameterized paths pathlist is currently deleted instead of being processed */
-		list_free(group_rel->ppilist);
-		group_rel->ppilist = NULL;
-
+		/*
+		 * cheapest_parameterized_paths will be rebuilt by set_cheapest()
+		 * after this hook returns. We must not delete ppilist as it contains
+		 * ParamPathInfo entries needed for parameterized paths (e.g. LATERAL).
+		 */
 		list_free(group_rel->cheapest_parameterized_paths);
 		group_rel->cheapest_parameterized_paths = NULL;
 
