@@ -2288,11 +2288,12 @@ process_rename_table(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 	}
 }
 
-static void
+static DDLResult
 process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameStmt *stmt)
 {
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 	Dimension *dim;
+	bool is_cagg = false;
 
 	if (!ht)
 	{
@@ -2317,6 +2318,8 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
 		if (cagg)
 		{
+			is_cagg = true;
+
 			RenameStmt *direct_view_stmt = castNode(RenameStmt, copyObject(stmt));
 			direct_view_stmt->relation = makeRangeVar(NameStr(cagg->data.direct_view_schema),
 													  NameStr(cagg->data.direct_view_name),
@@ -2339,6 +2342,19 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 			mat_hypertable_stmt->relation =
 				makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1);
 			ExecRenameStmt(mat_hypertable_stmt);
+
+			/*
+			 * Also rename the user view column now so that
+			 * cagg_rename_view_columns() can update stored query trees for
+			 * all views (including the user view) in a single pass. We
+			 * return DDL_DONE below to skip PostgreSQL's standard rename
+			 * which would otherwise fail on the already-renamed column.
+			 * We need CommandCounterIncrement here so that
+			 * cagg_rename_view_columns() sees the new column names when it
+			 * opens the relations and reads their TupleDescs.
+			 */
+			ExecRenameStmt(stmt);
+			CommandCounterIncrement();
 		}
 	}
 	else
@@ -2396,6 +2412,13 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 		if (ts_cm_functions->process_rename_cmd)
 			ts_cm_functions->process_rename_cmd(relid, hcache, stmt);
 	}
+
+	/*
+	 * For continuous aggregates we renamed the user view column above via
+	 * ExecRenameStmt, so tell the caller to skip PostgreSQL's standard
+	 * rename which would fail on the already-renamed column.
+	 */
+	return is_cagg ? DDL_DONE : DDL_CONTINUE;
 }
 
 static void
@@ -2565,13 +2588,15 @@ process_rename(ProcessUtilityArgs *args)
 
 	hcache = ts_hypertable_cache_pin();
 
+	DDLResult result = DDL_CONTINUE;
+
 	switch (stmt->renameType)
 	{
 		case OBJECT_TABLE:
 			process_rename_table(args, hcache, relid, stmt);
 			break;
 		case OBJECT_COLUMN:
-			process_rename_column(args, hcache, relid, stmt);
+			result = process_rename_column(args, hcache, relid, stmt);
 			break;
 		case OBJECT_INDEX:
 			process_rename_index(args, hcache, relid, stmt);
@@ -2596,7 +2621,7 @@ process_rename(ProcessUtilityArgs *args)
 	}
 
 	ts_cache_release(&hcache);
-	return DDL_CONTINUE;
+	return result;
 }
 
 static void
