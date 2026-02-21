@@ -914,11 +914,49 @@ gapfill_end(CustomScanState *node)
 static void
 gapfill_rescan(CustomScanState *node)
 {
+	GapFillState *state = (GapFillState *) node;
+
 	if (node->custom_ps != NIL)
 	{
+		if (node->ss.ps.chgParam != NULL)
+			UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
 		ExecReScan(linitial(node->custom_ps));
 	}
-	((GapFillState *) node)->state = FETCHED_NONE;
+
+	state->state = FETCHED_NONE;
+	state->next_timestamp = state->gapfill_start;
+	state->next_offset = state->gapfill_interval;
+
+	if (state->multigroup)
+		state->groups_initialized = false;
+
+	/* Reset column states for locf and interpolate */
+	for (int i = 0; i < state->ncolumns; i++)
+	{
+		GapFillColumnState *column = state->columns[i];
+		switch (column->ctype)
+		{
+			case LOCF_COLUMN:
+				gapfill_locf_group_change((GapFillLocfColumnState *) column);
+				break;
+			case INTERPOLATE_COLUMN:
+			{
+				GapFillInterpolateColumnState *ic = (GapFillInterpolateColumnState *) column;
+				ic->prev.isnull = true;
+				ic->next.isnull = true;
+				break;
+			}
+			case GROUP_COLUMN:
+			case DERIVED_COLUMN:
+			{
+				GapFillGroupColumnState *gc = (GapFillGroupColumnState *) column;
+				gc->isnull = true;
+				break;
+			}
+			default:
+				break;
+		}
+	}
 }
 
 static void
