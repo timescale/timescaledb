@@ -940,12 +940,21 @@ INSERT INTO conditions VALUES ( '2018-11-02 09:20:00-08', 'NYC', 10);
 INSERT INTO conditions VALUES ( '2018-11-02 10:30:00-08', 'NYC', 20);
 
 CREATE MATERIALIZED VIEW conditions_daily
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
 SELECT location,
        time_bucket(INTERVAL '1 day', time) AS bucket,
        AVG(temperature)
   FROM conditions
 GROUP BY location, bucket
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW conditions_weekly
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT location,
+       time_bucket(INTERVAL '7 day', bucket) AS bucket,
+       AVG(avg)
+  FROM conditions_daily
+GROUP BY 1, 2
 WITH NO DATA;
 
 SELECT format('%I.%I', '_timescaledb_internal', h.table_name) AS "MAT_TABLE_NAME",
@@ -980,6 +989,35 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = fa
 \set VERBOSITY verbose
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 \set VERBOSITY terse
+
+-- Rename another column after the flip and verify toggling back and
+-- forth still works. This exercises the rename when the user view
+-- already has a UNION ALL query (materialized_only = false).
+ALTER MATERIALIZED VIEW conditions_daily RENAME COLUMN avg TO average;
+
+SELECT * FROM test.show_columns('conditions_daily');
+SELECT * FROM test.show_columns(:'DIRECT_VIEW_NAME');
+SELECT * FROM test.show_columns(:'MAT_TABLE_NAME');
+
+ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = true);
+ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = false);
+
+-- Verify data is still accessible after multiple renames and toggles.
+SELECT * FROM conditions_daily ORDER BY location COLLATE "C", time;
+
+-- check hierarchical continuous aggregate still works after renames and toggles on the underlying cagg
+ALTER MATERIALIZED VIEW conditions_weekly SET (timescaledb.materialized_only = false);
+ALTER MATERIALIZED VIEW conditions_weekly SET (timescaledb.materialized_only = true);
+
+SELECT * FROM conditions_weekly ORDER BY location COLLATE "C", bucket;
+
+-- Verify that direct rename on the materialization hypertable is blocked.
+\set ON_ERROR_STOP 0
+ALTER TABLE :MAT_TABLE_NAME RENAME COLUMN average TO avg;
+\set ON_ERROR_STOP 1
+
+-- Rename back so subsequent tests that reference "avg" still work.
+ALTER MATERIALIZED VIEW conditions_daily RENAME COLUMN average TO avg;
 
 --
 -- Indexes on continuous aggregate
