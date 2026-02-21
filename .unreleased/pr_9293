@@ -1,0 +1,2 @@
+Fixes: #9293 Fix time_bucket_gapfill inside LATERAL subqueries
+Thanks: @CaptainCuddleCube for reporting an issue with time_bucket_gapfill and LATERAL subqueries
