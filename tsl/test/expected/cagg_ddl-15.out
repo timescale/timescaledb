@@ -1013,6 +1013,13 @@ ERROR:  must be member of role "test_role_1"
 \set ON_ERROR_STOP 1
 -- Superuser can always change owner
 SET ROLE :ROLE_SUPERUSER;
+-- Add a refresh policy before changing owner to verify job owner is propagated
+SELECT add_continuous_aggregate_policy('owner_check', NULL, 1::int8, '1 day'::interval) AS cagg_job_id \gset
+SELECT owner FROM _timescaledb_config.bgw_job WHERE id = :cagg_job_id;
+       owner       
+-------------------
+ default_perm_user
+
 ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 \x on
 SELECT * FROM cagg_info WHERE user_view::text = 'owner_check';
@@ -1028,6 +1035,17 @@ partial_view_owner | test_role_1
 tablespace         | 
 
 \x off
+-- make sure policy job owner is propagated
+SELECT owner FROM _timescaledb_config.bgw_job WHERE id = :cagg_job_id;
+    owner    
+-------------
+ test_role_1
+
+SELECT remove_continuous_aggregate_policy('owner_check');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
 --
 -- Test drop continuous aggregate cases
 --

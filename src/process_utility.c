@@ -109,6 +109,8 @@ static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPL
 static void check_no_timescale_options(AlterTableCmd *cmd, Oid reloid);
 static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
 static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
+static void ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc,
+									Oid newrole_oid);
 
 /* Call the default ProcessUtility and handle PostgreSQL version differences */
 static void
@@ -2607,10 +2609,33 @@ process_altertable_change_owner_chunk(Hypertable *ht, Oid chunk_relid, void *arg
 }
 
 static void
+process_altertable_change_owner_bgw_jobs(int32 hypertable_id, Oid newrole_oid)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(BGW_JOB, RowExclusiveLock, CurrentMemoryContext);
+	ts_scanner_foreach(&iterator)
+	{
+		bool should_free, isnull;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		Datum htid = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
+		if (!isnull && DatumGetInt32(htid) == hypertable_id)
+		{
+			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+			ts_bgw_job_update_owner(ti->scanrel, tuple, ts_scanner_get_tupledesc(ti), newrole_oid);
+			if (should_free)
+				heap_freetuple(tuple);
+		}
+	}
+}
+
+static void
 process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 {
+	Oid newrole_oid = get_rolespec_oid(cmd->newowner, false);
+
 	Assert(IsA(cmd->newowner, RoleSpec));
 
+	process_altertable_change_owner_bgw_jobs(ht->fd.id, newrole_oid);
 	foreach_chunk(ht, process_altertable_change_owner_chunk, cmd);
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))

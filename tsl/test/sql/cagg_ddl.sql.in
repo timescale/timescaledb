@@ -744,11 +744,21 @@ ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 
 -- Superuser can always change owner
 SET ROLE :ROLE_SUPERUSER;
+
+-- Add a refresh policy before changing owner to verify job owner is propagated
+SELECT add_continuous_aggregate_policy('owner_check', NULL, 1::int8, '1 day'::interval) AS cagg_job_id \gset
+SELECT owner FROM _timescaledb_config.bgw_job WHERE id = :cagg_job_id;
+
 ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 
 \x on
 SELECT * FROM cagg_info WHERE user_view::text = 'owner_check';
 \x off
+
+-- make sure policy job owner is propagated
+SELECT owner FROM _timescaledb_config.bgw_job WHERE id = :cagg_job_id;
+
+SELECT remove_continuous_aggregate_policy('owner_check');
 
 --
 -- Test drop continuous aggregate cases
