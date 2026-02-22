@@ -148,6 +148,77 @@ is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type
 	return false;
 }
 
+typedef struct SegmentbyCheckContext
+{
+	Oid relid;
+	CompressionSettings *settings;
+	List *custom_scan_tlist;
+} SegmentbyCheckContext;
+
+/*
+ * Expression tree walker: returns true (abort) if any Var references a
+ * non-segmentby column.  Vars are resolved through the custom_scan_tlist
+ * to obtain the real table attribute number before checking.
+ */
+static bool
+has_non_segmentby_var(Node *node, void *context)
+{
+	if (node == NULL)
+		return false;
+	if (IsA(node, Var))
+	{
+		SegmentbyCheckContext *ctx = (SegmentbyCheckContext *) context;
+		Var *var = castNode(Var, node);
+		if (var->varattno <= 0)
+			return true;
+
+		/* Resolve through custom_scan_tlist to get real column attno */
+		AttrNumber real_attno = var->varattno;
+		if (ctx->custom_scan_tlist != NIL)
+		{
+			TargetEntry *tle = get_tle_by_resno(ctx->custom_scan_tlist, var->varattno);
+			if (tle == NULL || !IsA(tle->expr, Var))
+				return true;
+			real_attno = castNode(Var, tle->expr)->varattno;
+		}
+		if (real_attno <= 0)
+			return true;
+
+		char *col_name = get_attname(ctx->relid, real_attno, true);
+		return col_name == NULL || !ts_array_is_member(ctx->settings->fd.segmentby, col_name);
+	}
+	return expression_tree_walker(node, has_non_segmentby_var, context);
+}
+
+/*
+ * Check if all quals reference only segmentby columns.
+ *
+ * Vars in a ColumnarScan's plan->qual use custom_scan_tlist positions, so we
+ * resolve through the tlist to get the real table column before checking.
+ */
+static bool
+quals_only_reference_segmentby(List *quals, CustomScan *cscan, List *rtable)
+{
+	RangeTblEntry *rte = rt_fetch(cscan->scan.scanrelid, rtable);
+	CompressionSettings *settings = ts_compression_settings_get(rte->relid);
+	if (settings == NULL || settings->fd.segmentby == NULL)
+		return false;
+
+	SegmentbyCheckContext ctx = {
+		.relid = rte->relid,
+		.settings = settings,
+		.custom_scan_tlist = cscan->custom_scan_tlist,
+	};
+
+	ListCell *lc;
+	foreach (lc, quals)
+	{
+		if (has_non_segmentby_var(lfirst(lc), &ctx))
+			return false;
+	}
+	return true;
+}
+
 /*
  * Check if the ColumnarScan's vectorized quals are empty (no filters applied).
  */
@@ -611,9 +682,11 @@ insert_columnar_index_scan(Plan *plan, void *context)
 	CustomScan *cscan = castNode(CustomScan, childplan);
 
 	/*
-	 * No Postgres quals on the ColumnarScan.
+	 * No Postgres quals on the ColumnarScan, or quals only on segmentby
+	 * columns. Segmentby filters are pushed to the compressed scan so
+	 * ColumnarIndexScan can skip them.
 	 */
-	if (childplan->qual != NIL)
+	if (childplan->qual != NIL && !quals_only_reference_segmentby(childplan->qual, cscan, rtable))
 		return plan;
 
 	/*
