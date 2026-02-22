@@ -629,7 +629,8 @@ insert_vector_agg(Plan *plan, void *context)
 	 * the subsequent checks are performed on the aggregated targetlist with
 	 * all variables resolved to uncompressed chunk variables.
 	 */
-	List *resolved_targetlist = ts_resolve_outer_special_vars(agg->plan.targetlist, childplan);
+	List *resolved_targetlist =
+		castNode(List, ts_resolve_outer_special_vars((Node *) agg->plan.targetlist, childplan));
 
 	const VectorAggGroupingType grouping_type =
 		get_vectorized_grouping_type(&vqi, agg, resolved_targetlist);
