@@ -836,8 +836,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Append
                ->  Partial GroupAggregate
                      Group Key: _hyper_1_1_chunk.device
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                           Filter: (device = ANY ('{d1,d2}'::text[]))
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
                            ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
                                  Index Cond: (device = ANY ('{d1,d2}'::text[]))
                ->  Partial GroupAggregate
@@ -856,8 +855,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Append
                ->  Partial GroupAggregate
                      Group Key: _hyper_1_1_chunk.device
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                           Filter: ((device = ANY ('{d1,d2}'::text[])) AND (sensor = 'B'::text))
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
                            ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
                                  Index Cond: ((device = ANY ('{d1,d2}'::text[])) AND (sensor = 'B'::text))
                ->  Partial GroupAggregate
@@ -877,8 +875,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Append
                ->  Partial GroupAggregate
                      Group Key: _hyper_1_1_chunk.device
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                           Filter: (device = ANY ('{d1,d2}'::text[]))
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
                            ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
                                  Index Cond: (device = ANY ('{d1,d2}'::text[]))
                ->  Partial GroupAggregate
@@ -897,8 +894,7 @@ SHOW timescaledb.enable_columnarindexscan;
          ->  Append
                ->  Partial GroupAggregate
                      Group Key: _hyper_1_1_chunk.device
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                           Filter: ((device = ANY ('{d1,d2}'::text[])) AND (sensor = 'B'::text))
+                     ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
                            ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
                                  Index Cond: ((device = ANY ('{d1,d2}'::text[])) AND (sensor = 'B'::text))
                ->  Partial GroupAggregate
@@ -1252,8 +1248,7 @@ ORDER BY device;
          ->  Finalize GroupAggregate
                ->  Append
                      ->  Partial GroupAggregate
-                           ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                                 Filter: (device = 'd1'::text)
+                           ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk
                                  ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
                                        Index Cond: (device = 'd1'::text)
                      ->  Partial GroupAggregate
@@ -1262,8 +1257,7 @@ ORDER BY device;
          ->  Finalize GroupAggregate
                ->  Append
                      ->  Partial GroupAggregate
-                           ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1
-                                 Filter: (device = 'd2'::text)
+                           ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1
                                  ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk compress_hyper_2_2_chunk_1
                                        Index Cond: (device = 'd2'::text)
                      ->  Partial GroupAggregate
