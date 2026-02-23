@@ -65,6 +65,14 @@ static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 	{ NULL, 0, false }
 };
 
+static const struct config_enum_entry realtime_ondemand_cagg_options[] = {
+	{ "realtime_with_backfills", REALTIME_WITH_BACKFILLS, false },
+	{ "realtime_no_backfills", REALTIME_NO_BACKFILLS, false },
+	{ "materialized_only", MATERIALIZED_ONLY, false },
+	{ "cagg_view_settings", CAGG_VIEW_SETTINGS, false },
+	{ NULL, 0, false }
+};
+
 bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
@@ -119,6 +127,7 @@ TSDLLEXPORT bool ts_guc_enable_uuid_compression = true;
 TSDLLEXPORT int ts_guc_compression_batch_size_limit = TARGET_COMPRESSED_BATCH_SIZE;
 TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
+TSDLLEXPORT RealtimeCaggSettings ts_guc_realtime_cagg_settings = CAGG_VIEW_SETTINGS;
 bool ts_guc_enable_event_triggers = false;
 bool ts_guc_enable_chunk_auto_publication = false;
 bool ts_guc_debug_skip_scan_info = false;
@@ -1273,6 +1282,22 @@ _guc_init(void)
 							 (int *) &ts_guc_compress_truncate_behaviour,
 							 COMPRESS_TRUNCATE_ONLY,
 							 compress_truncate_behaviour_options,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomEnumVariable(MAKE_EXTOPTION("realtime_cagg_settings"),
+							 "Define behaviour of combining live data with materialized CAgg data",
+							 "Defines how live data will be combined with materialized CAgg data. "
+							 "'realtime_with_backfills' will add live new and backfilled data to CAgg data."
+							 "'realtime_no_backfills' will add new live data to CAgg data, backfills are ignored. "
+							 "'materialized_only' will provide only materialized CAgg data. "
+							 "'cagg_view_settings' will provide data according to CAgg 'materialized_only' settings.",
+							 (int *) &ts_guc_realtime_cagg_settings,
+							 CAGG_VIEW_SETTINGS,
+							 realtime_ondemand_cagg_options,
 							 PGC_USERSET,
 							 0,
 							 NULL,
