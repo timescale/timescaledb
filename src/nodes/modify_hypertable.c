@@ -217,13 +217,15 @@ modify_hypertable_rescan(CustomScanState *node)
 	ExecReScan(linitial(node->custom_ps));
 }
 
+/*
+ * Check if the plan is a ChunkAppend, possibly wrapped in one or more
+ * Result nodes (for projection and/or pseudoconstant gating quals like EXISTS).
+ */
 static bool
 is_chunk_append_or_projection(Plan *plan)
 {
-	if (IsA(plan, Result) && plan->lefttree != NULL)
-	{
-		return ts_is_chunk_append_plan(plan->lefttree);
-	}
+	while (IsA(plan, Result) && plan->lefttree != NULL)
+		plan = plan->lefttree;
 	return ts_is_chunk_append_plan(plan);
 }
 
@@ -494,10 +496,28 @@ modify_hypertable_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 		cscan->scan.plan.targetlist =
 			ts_replace_rowid_vars(root, cscan->scan.plan.targetlist, mt->nominalRelation);
 
-		if (mt->operation == CMD_UPDATE && is_chunk_append_or_projection(mt->plan.lefttree))
+		/*
+		 * When the ModifyTable's lefttree contains a ChunkAppend (possibly
+		 * wrapped in one or more Result nodes for projection and/or
+		 * pseudoconstant gating quals like EXISTS), ChunkAppend will have
+		 * already replaced ROWID_VAR entries in its own targetlist to avoid
+		 * assertions in set_customscan_references. However, the wrapping
+		 * Result nodes' targetlists still contain the original ROWID_VAR
+		 * entries. When set_plan_references later calls set_upper_references
+		 * on these Result nodes, it tries to resolve the ROWID_VAR entries
+		 * against the child's (already replaced) targetlist so we have to
+		 * replace ROWID_VAR entries in all Result nodes' targetlists between
+		 * ModifyTable and ChunkAppend.
+		 */
+		if (is_chunk_append_or_projection(mt->plan.lefttree))
 		{
-			mt->plan.lefttree->targetlist =
-				ts_replace_rowid_vars(root, mt->plan.lefttree->targetlist, mt->nominalRelation);
+			Plan *plan = mt->plan.lefttree;
+			while (IsA(plan, Result) && plan->lefttree != NULL)
+			{
+				plan->targetlist =
+					ts_replace_rowid_vars(root, plan->targetlist, mt->nominalRelation);
+				plan = plan->lefttree;
+			}
 		}
 	}
 	cscan->custom_scan_tlist = cscan->scan.plan.targetlist;
