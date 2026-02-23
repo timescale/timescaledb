@@ -1,0 +1,620 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SET datestyle TO 'ISO, YMD';
+SET timezone TO 'UTC';
+\set PREFIX 'EXPLAIN (buffers off, costs off, timing off, summary off)'
+CREATE TABLE metrics(time timestamptz NOT NULL, device_id int, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time', chunk_time_interval => INTERVAL '7 days');
+ table_name 
+------------
+ metrics
+
+INSERT INTO metrics(time, value, device_id) VALUES
+  ('2021-06-14', 26,1),
+  ('2021-06-15', 22,2),
+  ('2021-06-15', 21,1),
+  ('2021-06-16', 24,3),
+  ('2021-06-20', 24,4),
+  ('2021-06-18', 27,4),
+  ('2021-06-19', 28,4),
+  ('2021-06-25', 30,1),
+  ('2021-06-21', 31,1),
+  ('2021-06-22', 34,1),
+  ('2021-06-22', 34,2),
+  ('2021-06-24', 34,2),
+  ('2021-06-25', 32,3),
+  ('2021-06-26', 32,3),
+  ('2021-06-15', 23,1),
+  ('2021-06-17', 24,2),
+  ('2021-06-17', 21,3),
+  ('2021-06-27', 31,3);
+-- For stable plans
+SET enable_indexscan = 0;
+SET enable_bitmapscan = 0;
+:PREFIX SELECT * from metrics;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_1_1_chunk
+   ->  Seq Scan on _hyper_1_2_chunk
+   ->  Seq Scan on _hyper_1_3_chunk
+
+-- check default view for new continuous aggregate
+CREATE MATERIALIZED VIEW metrics_realtime
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS
+  SELECT time_bucket('1d',time) as bucket, avg(value) as av FROM metrics GROUP BY 1 WITH NO DATA;
+CREATE MATERIALIZED VIEW metrics_realtime_h
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS
+  SELECT time_bucket('2d', bucket), avg(av) FROM metrics_realtime GROUP BY 1 WITH NO DATA;
+CREATE MATERIALIZED VIEW metrics_matonly
+  WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+  SELECT time_bucket('1d',time) as bucket, avg(value) as av FROM metrics GROUP BY 1 WITH NO DATA;
+-- Check settings for "realtime_cagg_settings"
+-- Caggs with no materialized data
+RESET timescaledb.realtime_cagg_settings;
+:PREFIX SELECT * from metrics_realtime;
+--- QUERY PLAN ---
+ Finalize HashAggregate
+   Group Key: (time_bucket('@ 1 day'::interval, metrics."time"))
+   ->  Append
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")
+               ->  Seq Scan on _hyper_1_1_chunk
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")
+               ->  Seq Scan on _hyper_1_2_chunk
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+               ->  Seq Scan on _hyper_1_3_chunk
+
+:PREFIX SELECT * from metrics_realtime_h;
+--- QUERY PLAN ---
+ HashAggregate
+   Group Key: time_bucket('@ 2 days'::interval, (time_bucket('@ 1 day'::interval, metrics."time")))
+   ->  Result
+         ->  Finalize HashAggregate
+               Group Key: (time_bucket('@ 1 day'::interval, metrics."time"))
+               ->  Append
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")
+                           ->  Seq Scan on _hyper_1_1_chunk
+                                 Filter: (time_bucket('@ 1 day'::interval, "time") >= '4714-11-24 00:00:00+00 BC'::timestamp with time zone)
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")
+                           ->  Seq Scan on _hyper_1_2_chunk
+                                 Filter: (time_bucket('@ 1 day'::interval, "time") >= '4714-11-24 00:00:00+00 BC'::timestamp with time zone)
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+                           ->  Seq Scan on _hyper_1_3_chunk
+                                 Filter: (time_bucket('@ 1 day'::interval, "time") >= '4714-11-24 00:00:00+00 BC'::timestamp with time zone)
+
+:PREFIX SELECT * from metrics_matonly;
+--- QUERY PLAN ---
+ Result
+   One-Time Filter: false
+
+SET timescaledb.realtime_cagg_settings = materialized_only;
+:PREFIX SELECT * from metrics_realtime;
+--- QUERY PLAN ---
+ Result
+   One-Time Filter: false
+
+:PREFIX SELECT * from metrics_realtime_h;
+--- QUERY PLAN ---
+ Result
+   One-Time Filter: false
+
+:PREFIX SELECT * from metrics_matonly;
+--- QUERY PLAN ---
+ Result
+   One-Time Filter: false
+
+SET timescaledb.realtime_cagg_settings = realtime;
+:PREFIX SELECT * from metrics_realtime;
+--- QUERY PLAN ---
+ Finalize HashAggregate
+   Group Key: (time_bucket('@ 1 day'::interval, metrics."time"))
+   ->  Append
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")
+               ->  Seq Scan on _hyper_1_1_chunk
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")
+               ->  Seq Scan on _hyper_1_2_chunk
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+               ->  Seq Scan on _hyper_1_3_chunk
+
+:PREFIX SELECT * from metrics_realtime_h;
+--- QUERY PLAN ---
+ HashAggregate
+   Group Key: time_bucket('@ 2 days'::interval, (time_bucket('@ 1 day'::interval, metrics."time")))
+   ->  Result
+         ->  Finalize HashAggregate
+               Group Key: (time_bucket('@ 1 day'::interval, metrics."time"))
+               ->  Append
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")
+                           ->  Seq Scan on _hyper_1_1_chunk
+                                 Filter: (time_bucket('@ 1 day'::interval, "time") >= '4714-11-24 00:00:00+00 BC'::timestamp with time zone)
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")
+                           ->  Seq Scan on _hyper_1_2_chunk
+                                 Filter: (time_bucket('@ 1 day'::interval, "time") >= '4714-11-24 00:00:00+00 BC'::timestamp with time zone)
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+                           ->  Seq Scan on _hyper_1_3_chunk
+                                 Filter: (time_bucket('@ 1 day'::interval, "time") >= '4714-11-24 00:00:00+00 BC'::timestamp with time zone)
+
+:PREFIX SELECT * from metrics_matonly;
+--- QUERY PLAN ---
+ Finalize HashAggregate
+   Group Key: (time_bucket('@ 1 day'::interval, metrics."time"))
+   ->  Append
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")
+               ->  Seq Scan on _hyper_1_1_chunk
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")
+               ->  Seq Scan on _hyper_1_2_chunk
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+               ->  Seq Scan on _hyper_1_3_chunk
+
+SET timescaledb.realtime_cagg_settings = realtime_with_backfills;
+:PREFIX SELECT * from metrics_realtime;
+--- QUERY PLAN ---
+ Finalize HashAggregate
+   Group Key: (time_bucket('@ 1 day'::interval, metrics."time"))
+   ->  Append
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")
+               ->  Seq Scan on _hyper_1_1_chunk
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")
+               ->  Seq Scan on _hyper_1_2_chunk
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+               ->  Seq Scan on _hyper_1_3_chunk
+
+:PREFIX SELECT * from metrics_realtime_h;
+--- QUERY PLAN ---
+ HashAggregate
+   Group Key: time_bucket('@ 2 days'::interval, metrics_realtime.bucket)
+   ->  Subquery Scan on metrics_realtime
+         ->  Finalize HashAggregate
+               Group Key: (time_bucket('@ 1 day'::interval, metrics."time"))
+               ->  Append
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")
+                           ->  Seq Scan on _hyper_1_1_chunk
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")
+                           ->  Seq Scan on _hyper_1_2_chunk
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+                           ->  Seq Scan on _hyper_1_3_chunk
+
+:PREFIX SELECT * from metrics_matonly;
+--- QUERY PLAN ---
+ Finalize HashAggregate
+   Group Key: (time_bucket('@ 1 day'::interval, metrics."time"))
+   ->  Append
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")
+               ->  Seq Scan on _hyper_1_1_chunk
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")
+               ->  Seq Scan on _hyper_1_2_chunk
+         ->  Partial HashAggregate
+               Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+               ->  Seq Scan on _hyper_1_3_chunk
+
+-- Caggs with entire data materialized
+CALL refresh_continuous_aggregate('metrics_realtime', NULL, NULL);
+CALL refresh_continuous_aggregate('metrics_realtime_h', NULL, NULL);
+CALL refresh_continuous_aggregate('metrics_matonly', NULL, NULL);
+RESET timescaledb.realtime_cagg_settings;
+:PREFIX SELECT * from metrics_realtime;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_2_4_chunk
+         Filter: (bucket < '2021-06-28 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+         ->  Result
+               ->  Seq Scan on _hyper_1_3_chunk
+                     Filter: ("time" >= '2021-06-28 00:00:00+00'::timestamp with time zone)
+
+:PREFIX SELECT * from metrics_realtime_h;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_3_5_chunk
+         Filter: (time_bucket < '2021-06-29 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 2 days'::interval, (time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")))
+         ->  Result
+               ->  HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+                     ->  Result
+                           ->  Seq Scan on _hyper_1_3_chunk
+                                 Filter: (("time" >= '2021-06-28 00:00:00+00'::timestamp with time zone) AND ("time" >= '2021-06-29 00:00:00+00'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, "time") >= '2021-06-29 00:00:00+00'::timestamp with time zone))
+
+:PREFIX SELECT * from metrics_matonly;
+--- QUERY PLAN ---
+ Seq Scan on _hyper_4_6_chunk
+
+SET timescaledb.realtime_cagg_settings = materialized_only;
+:PREFIX SELECT * from metrics_realtime;
+--- QUERY PLAN ---
+ Seq Scan on _hyper_2_4_chunk
+
+:PREFIX SELECT * from metrics_realtime_h;
+--- QUERY PLAN ---
+ Seq Scan on _hyper_3_5_chunk
+
+:PREFIX SELECT * from metrics_matonly;
+--- QUERY PLAN ---
+ Seq Scan on _hyper_4_6_chunk
+
+SET timescaledb.realtime_cagg_settings = realtime;
+:PREFIX SELECT * from metrics_realtime;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_2_4_chunk
+         Filter: (bucket < '2021-06-28 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+         ->  Result
+               ->  Seq Scan on _hyper_1_3_chunk
+                     Filter: ("time" >= '2021-06-28 00:00:00+00'::timestamp with time zone)
+
+:PREFIX SELECT * from metrics_realtime_h;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_3_5_chunk
+         Filter: (time_bucket < '2021-06-29 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 2 days'::interval, (time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")))
+         ->  Result
+               ->  HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+                     ->  Result
+                           ->  Seq Scan on _hyper_1_3_chunk
+                                 Filter: (("time" >= '2021-06-28 00:00:00+00'::timestamp with time zone) AND ("time" >= '2021-06-29 00:00:00+00'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, "time") >= '2021-06-29 00:00:00+00'::timestamp with time zone))
+
+:PREFIX SELECT * from metrics_matonly;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_4_6_chunk
+         Filter: (bucket < '2021-06-28 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+         ->  Result
+               ->  Seq Scan on _hyper_1_3_chunk
+                     Filter: ("time" >= '2021-06-28 00:00:00+00'::timestamp with time zone)
+
+SET timescaledb.realtime_cagg_settings = realtime_with_backfills;
+:PREFIX SELECT * from metrics_realtime;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_2_4_chunk
+         Filter: (bucket < '2021-06-28 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+         ->  Result
+               ->  Seq Scan on _hyper_1_3_chunk
+                     Filter: ("time" >= '2021-06-28 00:00:00+00'::timestamp with time zone)
+
+:PREFIX SELECT * from metrics_realtime_h;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_3_5_chunk
+         Filter: (time_bucket < '2021-06-29 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 2 days'::interval, (time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")))
+         ->  Result
+               ->  HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+                     ->  Result
+                           ->  Seq Scan on _hyper_1_3_chunk
+                                 Filter: (("time" >= '2021-06-28 00:00:00+00'::timestamp with time zone) AND ("time" >= '2021-06-29 00:00:00+00'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, "time") >= '2021-06-29 00:00:00+00'::timestamp with time zone))
+
+:PREFIX SELECT * from metrics_matonly;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_4_6_chunk
+         Filter: (bucket < '2021-06-28 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+         ->  Result
+               ->  Seq Scan on _hyper_1_3_chunk
+                     Filter: ("time" >= '2021-06-28 00:00:00+00'::timestamp with time zone)
+
+-- Add new data above watermark
+INSERT INTO metrics(time, value, device_id) VALUES
+  ('2021-06-30', 23,1),
+  ('2021-06-30', 25,2),
+  ('2021-07-01', 30,1);
+-- Refresh "metrics_realtime", leave "metrics_realtime_h" unrefreshed
+CALL refresh_continuous_aggregate('metrics_realtime', NULL, NULL);
+SET timescaledb.realtime_cagg_settings = realtime;
+:PREFIX SELECT * from metrics_realtime;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_2_4_chunk
+         Filter: (bucket < '2021-07-02 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+         ->  Result
+               ->  Seq Scan on _hyper_1_7_chunk
+                     Filter: ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone)
+
+:PREFIX SELECT * from metrics_realtime_h;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_3_5_chunk
+         Filter: (time_bucket < '2021-06-29 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 2 days'::interval, _hyper_2_4_chunk.bucket)
+         ->  Result
+               ->  Append
+                     ->  Seq Scan on _hyper_2_4_chunk
+                           Filter: ((bucket < '2021-07-02 00:00:00+00'::timestamp with time zone) AND (bucket >= '2021-06-29 00:00:00+00'::timestamp with time zone))
+                     ->  HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+                           ->  Result
+                                 ->  Seq Scan on _hyper_1_7_chunk
+                                       Filter: (("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone) AND ("time" >= '2021-06-29 00:00:00+00'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, "time") >= '2021-06-29 00:00:00+00'::timestamp with time zone))
+
+SET timescaledb.realtime_cagg_settings = realtime_with_backfills;
+:PREFIX SELECT * from metrics_realtime;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_2_4_chunk
+         Filter: (bucket < '2021-07-02 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+         ->  Result
+               ->  Seq Scan on _hyper_1_7_chunk
+                     Filter: ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone)
+
+:PREFIX SELECT * from metrics_realtime_h;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_3_5_chunk
+         Filter: (time_bucket < '2021-06-29 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 2 days'::interval, _hyper_2_4_chunk.bucket)
+         ->  Result
+               ->  Append
+                     ->  Seq Scan on _hyper_2_4_chunk
+                           Filter: ((bucket < '2021-07-02 00:00:00+00'::timestamp with time zone) AND (bucket >= '2021-06-29 00:00:00+00'::timestamp with time zone))
+                     ->  HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+                           ->  Result
+                                 ->  Seq Scan on _hyper_1_7_chunk
+                                       Filter: (("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone) AND ("time" >= '2021-06-29 00:00:00+00'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, "time") >= '2021-06-29 00:00:00+00'::timestamp with time zone))
+
+-- Backfill some data
+INSERT INTO metrics(time, value, device_id) VALUES
+  ('2021-06-15', 22,1),
+  ('2021-06-15', 23,2),
+  ('2021-06-20', 25,3),
+  ('2021-06-20', 30,4);
+SET timescaledb.realtime_cagg_settings = realtime;
+:PREFIX SELECT * from metrics_realtime;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_2_4_chunk
+         Filter: (bucket < '2021-07-02 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+         ->  Result
+               ->  Seq Scan on _hyper_1_7_chunk
+                     Filter: ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone)
+
+:PREFIX SELECT * from metrics_realtime_h;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_3_5_chunk
+         Filter: (time_bucket < '2021-06-29 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 2 days'::interval, _hyper_2_4_chunk.bucket)
+         ->  Result
+               ->  Append
+                     ->  Seq Scan on _hyper_2_4_chunk
+                           Filter: ((bucket < '2021-07-02 00:00:00+00'::timestamp with time zone) AND (bucket >= '2021-06-29 00:00:00+00'::timestamp with time zone))
+                     ->  HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+                           ->  Result
+                                 ->  Seq Scan on _hyper_1_7_chunk
+                                       Filter: (("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone) AND ("time" >= '2021-06-29 00:00:00+00'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, "time") >= '2021-06-29 00:00:00+00'::timestamp with time zone))
+
+:PREFIX SELECT * from metrics_matonly;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_4_6_chunk
+         Filter: (bucket < '2021-06-28 00:00:00+00'::timestamp with time zone)
+   ->  Finalize HashAggregate
+         Group Key: (time_bucket('@ 1 day'::interval, metrics."time"))
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+                     ->  Seq Scan on _hyper_1_3_chunk
+                           Filter: ("time" >= '2021-06-28 00:00:00+00'::timestamp with time zone)
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+                     ->  Seq Scan on _hyper_1_7_chunk
+
+SET timescaledb.realtime_cagg_settings = realtime_with_backfills;
+:PREFIX SELECT * from metrics_realtime;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_2_4_chunk
+         Filter: ((bucket < '2021-06-15 00:00:00+00'::timestamp with time zone) OR ((bucket >= '2021-06-16 00:00:00+00'::timestamp with time zone) AND (bucket < '2021-06-20 00:00:00+00'::timestamp with time zone)) OR ((bucket >= '2021-06-21 00:00:00+00'::timestamp with time zone) AND (bucket < '2021-07-02 00:00:00+00'::timestamp with time zone)))
+   ->  Finalize HashAggregate
+         Group Key: (time_bucket('@ 1 day'::interval, metrics."time"))
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")
+                     ->  Seq Scan on _hyper_1_1_chunk
+                           Filter: ((("time" >= '2021-06-15 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-16 00:00:00+00'::timestamp with time zone)) OR (("time" >= '2021-06-20 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-21 00:00:00+00'::timestamp with time zone)) OR ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone))
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")
+                     ->  Seq Scan on _hyper_1_2_chunk
+                           Filter: ((("time" >= '2021-06-15 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-16 00:00:00+00'::timestamp with time zone)) OR (("time" >= '2021-06-20 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-21 00:00:00+00'::timestamp with time zone)) OR ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone))
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+                     ->  Seq Scan on _hyper_1_7_chunk
+                           Filter: ((("time" >= '2021-06-15 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-16 00:00:00+00'::timestamp with time zone)) OR (("time" >= '2021-06-20 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-21 00:00:00+00'::timestamp with time zone)) OR ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone))
+
+:PREFIX SELECT * from metrics_realtime_h;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_3_5_chunk
+         Filter: (time_bucket < '2021-06-29 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 2 days'::interval, _hyper_2_4_chunk.bucket)
+         ->  Result
+               ->  Append
+                     ->  Seq Scan on _hyper_2_4_chunk
+                           Filter: ((bucket >= '2021-06-29 00:00:00+00'::timestamp with time zone) AND ((bucket < '2021-06-15 00:00:00+00'::timestamp with time zone) OR ((bucket >= '2021-06-16 00:00:00+00'::timestamp with time zone) AND (bucket < '2021-06-20 00:00:00+00'::timestamp with time zone)) OR ((bucket >= '2021-06-21 00:00:00+00'::timestamp with time zone) AND (bucket < '2021-07-02 00:00:00+00'::timestamp with time zone))))
+                     ->  HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+                           ->  Result
+                                 ->  Seq Scan on _hyper_1_7_chunk
+                                       Filter: ((time_bucket('@ 1 day'::interval, "time") >= '2021-06-29 00:00:00+00'::timestamp with time zone) AND ((("time" >= '2021-06-15 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-16 00:00:00+00'::timestamp with time zone)) OR (("time" >= '2021-06-20 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-21 00:00:00+00'::timestamp with time zone)) OR ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone)))
+
+:PREFIX SELECT * from metrics_matonly;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_4_6_chunk
+         Filter: ((bucket < '2021-06-15 00:00:00+00'::timestamp with time zone) OR ((bucket >= '2021-06-16 00:00:00+00'::timestamp with time zone) AND (bucket < '2021-06-20 00:00:00+00'::timestamp with time zone)) OR ((bucket >= '2021-06-21 00:00:00+00'::timestamp with time zone) AND (bucket < '2021-06-28 00:00:00+00'::timestamp with time zone)))
+   ->  Finalize HashAggregate
+         Group Key: (time_bucket('@ 1 day'::interval, metrics."time"))
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")
+                     ->  Seq Scan on _hyper_1_1_chunk
+                           Filter: ((("time" >= '2021-06-15 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-16 00:00:00+00'::timestamp with time zone)) OR (("time" >= '2021-06-20 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-21 00:00:00+00'::timestamp with time zone)) OR ("time" >= '2021-06-28 00:00:00+00'::timestamp with time zone))
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")
+                     ->  Seq Scan on _hyper_1_2_chunk
+                           Filter: ((("time" >= '2021-06-15 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-16 00:00:00+00'::timestamp with time zone)) OR (("time" >= '2021-06-20 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-21 00:00:00+00'::timestamp with time zone)) OR ("time" >= '2021-06-28 00:00:00+00'::timestamp with time zone))
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")
+                     ->  Seq Scan on _hyper_1_3_chunk
+                           Filter: ((("time" >= '2021-06-15 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-16 00:00:00+00'::timestamp with time zone)) OR (("time" >= '2021-06-20 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-21 00:00:00+00'::timestamp with time zone)) OR ("time" >= '2021-06-28 00:00:00+00'::timestamp with time zone))
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+                     ->  Seq Scan on _hyper_1_7_chunk
+                           Filter: ((("time" >= '2021-06-15 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-16 00:00:00+00'::timestamp with time zone)) OR (("time" >= '2021-06-20 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-21 00:00:00+00'::timestamp with time zone)) OR ("time" >= '2021-06-28 00:00:00+00'::timestamp with time zone))
+
+-- Push invalidated ranges into cagg tables
+CALL refresh_continuous_aggregate('metrics_matonly', NULL, NULL);
+SET timescaledb.realtime_cagg_settings = realtime_with_backfills;
+:PREFIX SELECT * from metrics_realtime;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_2_4_chunk
+         Filter: ((bucket < '2021-06-15 00:00:00+00'::timestamp with time zone) OR ((bucket >= '2021-06-16 00:00:00+00'::timestamp with time zone) AND (bucket < '2021-06-20 00:00:00+00'::timestamp with time zone)) OR ((bucket >= '2021-06-21 00:00:00+00'::timestamp with time zone) AND (bucket < '2021-07-02 00:00:00+00'::timestamp with time zone)))
+   ->  Finalize HashAggregate
+         Group Key: (time_bucket('@ 1 day'::interval, metrics."time"))
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")
+                     ->  Seq Scan on _hyper_1_1_chunk
+                           Filter: ((("time" >= '2021-06-15 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-16 00:00:00+00'::timestamp with time zone)) OR (("time" >= '2021-06-20 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-21 00:00:00+00'::timestamp with time zone)) OR ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone))
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")
+                     ->  Seq Scan on _hyper_1_2_chunk
+                           Filter: ((("time" >= '2021-06-15 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-16 00:00:00+00'::timestamp with time zone)) OR (("time" >= '2021-06-20 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-21 00:00:00+00'::timestamp with time zone)) OR ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone))
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+                     ->  Seq Scan on _hyper_1_7_chunk
+                           Filter: ((("time" >= '2021-06-15 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-16 00:00:00+00'::timestamp with time zone)) OR (("time" >= '2021-06-20 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-21 00:00:00+00'::timestamp with time zone)) OR ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone))
+
+:PREFIX SELECT * from metrics_realtime_h;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_3_5_chunk
+         Filter: (time_bucket < '2021-06-29 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 2 days'::interval, _hyper_2_4_chunk.bucket)
+         ->  Result
+               ->  Append
+                     ->  Seq Scan on _hyper_2_4_chunk
+                           Filter: ((bucket >= '2021-06-29 00:00:00+00'::timestamp with time zone) AND ((bucket < '2021-06-15 00:00:00+00'::timestamp with time zone) OR ((bucket >= '2021-06-16 00:00:00+00'::timestamp with time zone) AND (bucket < '2021-06-20 00:00:00+00'::timestamp with time zone)) OR ((bucket >= '2021-06-21 00:00:00+00'::timestamp with time zone) AND (bucket < '2021-07-02 00:00:00+00'::timestamp with time zone))))
+                     ->  HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+                           ->  Result
+                                 ->  Seq Scan on _hyper_1_7_chunk
+                                       Filter: ((time_bucket('@ 1 day'::interval, "time") >= '2021-06-29 00:00:00+00'::timestamp with time zone) AND ((("time" >= '2021-06-15 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-16 00:00:00+00'::timestamp with time zone)) OR (("time" >= '2021-06-20 00:00:00+00'::timestamp with time zone) AND ("time" < '2021-06-21 00:00:00+00'::timestamp with time zone)) OR ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone)))
+
+:PREFIX SELECT * from metrics_matonly;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_4_6_chunk
+         Filter: (bucket < '2021-07-02 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+         ->  Result
+               ->  Seq Scan on _hyper_1_7_chunk
+                     Filter: ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone)
+
+-- Allow only 1 invalidated range to be included: should revert to "realtime" mode from "realtime_with_backfills"
+SET timescaledb.cagg_max_individual_materializations = 1;
+SET timescaledb.realtime_cagg_settings = realtime_with_backfills;
+:PREFIX SELECT * from metrics_realtime;
+NOTICE:  Too many invalidated ranges: not including live backfilled data
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_2_4_chunk
+         Filter: (bucket < '2021-07-02 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+         ->  Result
+               ->  Seq Scan on _hyper_1_7_chunk
+                     Filter: ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone)
+
+:PREFIX SELECT * from metrics_realtime_h;
+NOTICE:  Too many invalidated ranges: not including live backfilled data
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_3_5_chunk
+         Filter: (time_bucket < '2021-06-29 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 2 days'::interval, _hyper_2_4_chunk.bucket)
+         ->  Result
+               ->  Append
+                     ->  Seq Scan on _hyper_2_4_chunk
+                           Filter: ((bucket < '2021-07-02 00:00:00+00'::timestamp with time zone) AND (bucket >= '2021-06-29 00:00:00+00'::timestamp with time zone))
+                     ->  HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+                           ->  Result
+                                 ->  Seq Scan on _hyper_1_7_chunk
+                                       Filter: (("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone) AND ("time" >= '2021-06-29 00:00:00+00'::timestamp with time zone) AND (time_bucket('@ 1 day'::interval, "time") >= '2021-06-29 00:00:00+00'::timestamp with time zone))
+
+:PREFIX SELECT * from metrics_matonly;
+--- QUERY PLAN ---
+ Append
+   ->  Seq Scan on _hyper_4_6_chunk
+         Filter: (bucket < '2021-07-02 00:00:00+00'::timestamp with time zone)
+   ->  HashAggregate
+         Group Key: time_bucket('@ 1 day'::interval, _hyper_1_7_chunk."time")
+         ->  Result
+               ->  Seq Scan on _hyper_1_7_chunk
+                     Filter: ("time" >= '2021-07-02 00:00:00+00'::timestamp with time zone)
+
+RESET timescaledb.realtime_cagg_settings;
+DROP MATERIALIZED VIEW metrics_realtime_h cascade;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_5_chunk
+DROP MATERIALIZED VIEW metrics_realtime cascade;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_4_chunk
+DROP MATERIALIZED VIEW metrics_matonly cascade;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_6_chunk
+DROP TABLE metrics cascade;
