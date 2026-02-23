@@ -43,6 +43,7 @@ echo "Building CHANGELOG"
     echo_changelog '**Backward-Incompatible Changes**' '^Backward-Incompatible Change:'
     echo_changelog '**Features**' '^Implements:'
     echo_changelog '**Bugfixes**' '^Fixes:'
+    echo_changelog '**New Settings**' '^Setting:'
     echo_gucs $RELEASE_PREVIOUS $RELEASE_BRANCH
     echo "" 
     echo_changelog '**Thanks**' '^Thanks:' 
