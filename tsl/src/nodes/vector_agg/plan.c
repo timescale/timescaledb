@@ -264,7 +264,7 @@ can_vectorize_aggref(const VectorQualInfo *vqi, Aggref *aggref)
 		aggref->aggfilter = (Expr *) aggfilter_vectorized;
 	}
 
-	if (get_vector_aggregate(aggref->aggfnoid) == NULL)
+	if (get_vector_aggregate(aggref->aggfnoid, aggref->inputcollid) == NULL)
 	{
 		/*
 		 * We don't have a vectorized implementation for this particular
