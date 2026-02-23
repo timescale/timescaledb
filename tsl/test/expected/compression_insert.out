@@ -1514,3 +1514,67 @@ SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 D
            1000 |     6
             601 |     2
 
+-- Test: unique constraint violation detection with single-value (default)
+-- columns in vectorized batch matching.
+CREATE TABLE sv_default(time timestamptz NOT NULL, device_id int)
+WITH (tsdb.hypertable, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+NOTICE:  using column "time" as partitioning column
+HINT:  Use "timescaledb.partition_column" to specify a different column to use as partitioning column.
+INSERT INTO sv_default SELECT '2025-01-01'::timestamptz + format('%s day',i)::interval, 1 FROM generate_series(1, 2) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('sv_default') c;
+ count 
+-------
+     1
+
+-- Add column with non-null default: creates single-value column in compressed batch
+ALTER TABLE sv_default ADD COLUMN extra int DEFAULT 42;
+CREATE UNIQUE INDEX sv_default_unique ON sv_default(time, extra);
+SELECT * FROM sv_default;
+             time             | device_id | extra 
+------------------------------+-----------+-------
+ Thu Jan 02 00:00:00 2025 PST |         1 |    42
+ Fri Jan 03 00:00:00 2025 PST |         1 |    42
+
+-- Duplicates should fail
+\set ON_ERROR_STOP 0
+INSERT INTO sv_default VALUES('2025-01-02', 1, 42);
+ERROR:  duplicate key value violates unique constraint "_hyper_46_98_chunk_sv_default_unique"
+INSERT INTO sv_default VALUES('2025-01-03', 1, 42);
+ERROR:  duplicate key value violates unique constraint "_hyper_46_98_chunk_sv_default_unique"
+\set ON_ERROR_STOP 1
+-- Non-duplicate should succeed
+INSERT INTO sv_default VALUES('2025-01-02', 1, 23);
+-- should be 3 rows total
+SELECT count(*) FROM sv_default;
+ count 
+-------
+     3
+
+-- Same test with all-NULL column and NULLS NOT DISTINCT
+CREATE TABLE sv_null(time timestamptz NOT NULL, device_id int, tag text, value float)
+WITH (tsdb.hypertable, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+NOTICE:  using column "time" as partitioning column
+HINT:  Use "timescaledb.partition_column" to specify a different column to use as partitioning column.
+-- Insert rows where tag is always NULL
+INSERT INTO sv_null SELECT '2025-01-01'::timestamptz + format('%s day',i)::interval, 1, NULL, i::float FROM generate_series(1, 2) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('sv_null') c;
+ count 
+-------
+     1
+
+CREATE UNIQUE INDEX sv_null_unique ON sv_null(time, tag) NULLS NOT DISTINCT;
+-- Duplicate of first row - should fail
+\set ON_ERROR_STOP 0
+INSERT INTO sv_null VALUES('2025-01-02', 1, NULL, 999);
+ERROR:  duplicate key value violates unique constraint "_hyper_48_100_chunk_sv_null_unique"
+INSERT INTO sv_null VALUES('2025-01-03', 1, NULL, 999);
+ERROR:  duplicate key value violates unique constraint "_hyper_48_100_chunk_sv_null_unique"
+\set ON_ERROR_STOP 1
+-- Non-duplicate should succeed
+INSERT INTO sv_null VALUES('2024-01-05', 1, NULL, 6.0);
+-- should be 3 rows total
+SELECT count(*) FROM sv_null;
+ count 
+-------
+     3
+
