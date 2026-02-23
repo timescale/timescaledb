@@ -1,0 +1,1 @@
+Fixes: #9303 Fix segfault in continuous aggregate creation on PG18
