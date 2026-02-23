@@ -2,36 +2,75 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+SET timescaledb.enable_columnarindexscan = off;
 SET max_parallel_workers_per_gather = 0;
-\set EXPLAIN 'EXPLAIN (costs off, timing off)'
+
+\set TEST_BASE_NAME vector_agg_planning
+SELECT format('include/%s_query.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
+       format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_OPTIMIZED",
+       format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNOPTIMIZED"
+\gset
+SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized results" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
+\gset
 
 CREATE TABLE metrics(time timestamptz not null, device text, value float) WITH (tsdb.hypertable);
 
 -- create initial chunk
-INSERT INTO metrics SELECT '2025-01-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, random() from generate_series(1,1000) g(i);
+INSERT INTO metrics SELECT '2025-01-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, i % 100 from generate_series(1,1000) g(i);
 SELECT compress_chunk(c) FROM show_chunks('metrics') c;
 
+-- get query plans
+\set EXPLAIN 'EXPLAIN (costs off, timing off)'
+\set ECHO all
+\ir :TEST_QUERY_NAME
+
 -- run queries with single chunk
--- SubqueryScan
-:EXPLAIN SELECT mx, mn, device FROM (SELECT device, count(time) mn, max(time) mx FROM metrics GROUP BY device) sub;
+\set EXPLAIN ''
+\set ECHO errors
 
--- CteScan
-:EXPLAIN WITH q1 AS MATERIALIZED (SELECT count(*) FROM metrics) SELECT * FROM q1;
+-- get query results with columnar index scan disabled
+SET timescaledb.enable_vectorized_aggregation = off;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
 
--- InitPlan
-:EXPLAIN SELECT FROM pg_class WHERE EXISTS (SELECT count(*) FROM metrics) LIMIT 1;
+-- get query results with columnar index scan enabled
+SET timescaledb.enable_vectorized_aggregation = on;
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+-- compare optimized vs non-optimized results
+:DIFF_CMD
+
+\set ECHO all
 
 -- create 2nd chunk
-INSERT INTO metrics SELECT '2025-02-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, random() from generate_series(1,1000) g(i);
+INSERT INTO metrics SELECT '2025-02-01'::timestamptz + format('%s0 s',i)::interval, 'dev ' || (i%10)::text, i % 100 from generate_series(1,1000) g(i);
 SELECT compress_chunk(c) FROM show_chunks('metrics') c;
 
 -- run queries with two chunks
--- SubqueryScan
-:EXPLAIN SELECT mx, mn, device FROM (SELECT device, count(time) mn, max(time) mx FROM metrics GROUP BY device) sub;
 
--- CteScan
-:EXPLAIN WITH q1 AS MATERIALIZED (SELECT count(*) FROM metrics) SELECT * FROM q1;
+-- get query plans
+\set EXPLAIN 'EXPLAIN (costs off, timing off)'
+\set ECHO all
+\ir :TEST_QUERY_NAME
 
--- InitPlan
-:EXPLAIN SELECT FROM pg_class WHERE EXISTS (SELECT count(*) FROM metrics) LIMIT 1;
+\set EXPLAIN ''
+\set ECHO errors
+
+-- get query results with columnar index scan disabled
+SET timescaledb.enable_vectorized_aggregation = off;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+-- get query results with columnar index scan enabled
+SET timescaledb.enable_vectorized_aggregation = on;
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+-- compare optimized vs non-optimized results
+:DIFF_CMD
 

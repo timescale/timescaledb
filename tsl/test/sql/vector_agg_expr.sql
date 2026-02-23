@@ -6,6 +6,8 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+set timescaledb.enable_columnarindexscan = off;
+
 \pset null $
 
 create function always_null(x int4) returns int4 as $$ select null::int4 $$

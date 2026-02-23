@@ -1,0 +1,1 @@
+Fixes: #9283 Fix plan-time error when using enum in orderby compression setting

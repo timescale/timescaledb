@@ -1,0 +1,1 @@
+Implements: #9266 Add support for HAVING to vectorized aggregation
