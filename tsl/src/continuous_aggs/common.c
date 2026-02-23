@@ -9,7 +9,9 @@
 #include <utils/acl.h>
 #include <utils/date.h>
 #include <utils/timestamp.h>
+#include <utils/uuid.h>
 
+#include "extension.h"
 #include "guc.h"
 
 static Const *check_time_bucket_argument(Node *arg, char *position, bool process_checks);
@@ -1166,6 +1168,34 @@ build_conversion_call(Oid type, FuncExpr *boundary)
 								InvalidOid,
 								COERCE_EXPLICIT_CALL);
 		}
+		case UUIDOID:
+		{
+			/*
+			 * UUID needs two-step conversion: first convert the internal int8
+			 * representation to timestamptz, then convert timestamptz to a
+			 * boundary UUID via to_uuidv7_boundary().
+			 */
+			Oid tstz_converter_oid = cagg_get_boundary_converter_funcoid(TIMESTAMPTZOID);
+			FuncExpr *tstz_boundary = makeFuncExpr(tstz_converter_oid,
+												   TIMESTAMPTZOID,
+												   list_make1(boundary),
+												   InvalidOid,
+												   InvalidOid,
+												   COERCE_EXPLICIT_CALL);
+
+			Oid uuid_argtyp[] = { TIMESTAMPTZOID };
+			List *uuid_func_name = list_make2(makeString(ts_extension_schema_name()),
+											  makeString("to_uuidv7_boundary"));
+			Oid uuid_converter_oid =
+				LookupFuncName(uuid_func_name, lengthof(uuid_argtyp), uuid_argtyp, false);
+
+			return makeFuncExpr(uuid_converter_oid,
+								UUIDOID,
+								list_make1(tstz_boundary),
+								InvalidOid,
+								InvalidOid,
+								COERCE_EXPLICIT_CALL);
+		}
 
 		default:
 			/*
@@ -1230,6 +1260,17 @@ cagg_boundary_make_lower_bound(Oid type)
 	Datum value;
 	int16 typlen;
 	bool typbyval;
+
+	if (type == UUIDOID)
+	{
+		/*
+		 * For UUID, create an all-zeros UUID as the lower bound. This is
+		 * smaller than any valid UUIDv7 and serves as the "beginning of time"
+		 * fallback when the watermark is NULL.
+		 */
+		pg_uuid_t *uuid = (pg_uuid_t *) palloc0(sizeof(pg_uuid_t));
+		return makeConst(UUIDOID, -1, InvalidOid, UUID_LEN, UUIDPGetDatum(uuid), false, false);
+	}
 
 	get_typlenbyval(type, &typlen, &typbyval);
 	value = ts_time_datum_get_nobegin_or_min(type);
@@ -1320,12 +1361,25 @@ build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *
 	if (q1->sortClause)
 		sortClause = copyObject(q1->sortClause);
 
-	TypeCacheEntry *tce = lookup_type_cache(tbinfo->htpartcoltype, TYPECACHE_LT_OPR);
+	/*
+	 * For UUID-partitioned hypertables, the materialization table's partition
+	 * column is TIMESTAMPTZ (the output of time_bucket on UUID), while the raw
+	 * table's partition column is UUID. We need different types and operators
+	 * for q1 (materialized data) and q2 (raw data).
+	 */
+	Oid q1_partcoltype = tbinfo->htpartcoltype;
+	Oid q2_partcoltype = tbinfo->htpartcoltype;
+
+	if (tbinfo->htpartcoltype == UUIDOID)
+		q1_partcoltype = TIMESTAMPTZOID;
+
+	TypeCacheEntry *tce_q1 = lookup_type_cache(q1_partcoltype, TYPECACHE_LT_OPR);
+	TypeCacheEntry *tce_q2 = lookup_type_cache(q2_partcoltype, TYPECACHE_LT_OPR);
 
 	varno = list_length(q1->rtable);
 	q1->jointree->quals = build_union_query_quals(materialize_htid,
-												  tbinfo->htpartcoltype,
-												  tce->lt_opr,
+												  q1_partcoltype,
+												  tce_q1->lt_opr,
 												  varno,
 												  matpartcolno);
 	/*
@@ -1354,8 +1408,8 @@ build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *
 	}
 
 	q2_quals = build_union_query_quals(materialize_htid,
-									   tbinfo->htpartcoltype,
-									   get_negator(tce->lt_opr),
+									   q2_partcoltype,
+									   get_negator(tce_q2->lt_opr),
 									   varno,
 									   tbinfo->htpartcolno);
 
