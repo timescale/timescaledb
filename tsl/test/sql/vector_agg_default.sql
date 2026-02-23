@@ -4,6 +4,8 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+set timescaledb.enable_columnarindexscan = off;
+
 -- Uncomment these two settings to run this test with hypercore TAM
 --set timescaledb.default_hypercore_use_access_method=true;
 --set enable_indexscan=off;

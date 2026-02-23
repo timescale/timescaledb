@@ -569,12 +569,14 @@ select * from saop, arrays where segmentby = any(a);
                Sort Method: top-N heapsort 
                ->  Finalize HashAggregate (actual rows=23.00 loops=1)
                      Group Key: saop_1.segmentby
-                     ->  Append (actual rows=138.00 loops=1)
-                           ->  Custom Scan (VectorAgg) (actual rows=69.00 loops=1)
-                                 ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=50001.00 loops=1)
+                     ->  Append (actual rows=46.00 loops=1)
+                           ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                 Group Key: segmentby
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk saop (actual rows=69.00 loops=1)
                                        ->  Seq Scan on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=69.00 loops=1)
-                           ->  Custom Scan (VectorAgg) (actual rows=69.00 loops=1)
-                                 ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=50000.00 loops=1)
+                           ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                 Group Key: segmentby
+                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk saop (actual rows=69.00 loops=1)
                                        ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=69.00 loops=1)
    ->  Append (actual rows=4348.00 loops=10)
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=2174.00 loops=10)
@@ -606,12 +608,14 @@ select * from saop, arrays where with_minmax = any(a);
                            Sort Method: top-N heapsort 
                            ->  Finalize HashAggregate (actual rows=23.00 loops=1)
                                  Group Key: saop_1.segmentby
-                                 ->  Append (actual rows=138.00 loops=1)
-                                       ->  Custom Scan (VectorAgg) (actual rows=69.00 loops=1)
-                                             ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=50001.00 loops=1)
+                                 ->  Append (actual rows=46.00 loops=1)
+                                       ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                             Group Key: segmentby
+                                             ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk saop (actual rows=69.00 loops=1)
                                                    ->  Seq Scan on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=69.00 loops=1)
-                                       ->  Custom Scan (VectorAgg) (actual rows=69.00 loops=1)
-                                             ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=50000.00 loops=1)
+                                       ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                             Group Key: segmentby
+                                             ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk saop (actual rows=69.00 loops=1)
                                                    ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=69.00 loops=1)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
@@ -634,12 +638,14 @@ select * from saop, arrays where with_bloom = any(a);
                            Sort Method: top-N heapsort 
                            ->  Finalize HashAggregate (actual rows=23.00 loops=1)
                                  Group Key: saop_1.segmentby
-                                 ->  Append (actual rows=138.00 loops=1)
-                                       ->  Custom Scan (VectorAgg) (actual rows=69.00 loops=1)
-                                             ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=50001.00 loops=1)
+                                 ->  Append (actual rows=46.00 loops=1)
+                                       ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                             Group Key: segmentby
+                                             ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk saop (actual rows=69.00 loops=1)
                                                    ->  Seq Scan on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=69.00 loops=1)
-                                       ->  Custom Scan (VectorAgg) (actual rows=69.00 loops=1)
-                                             ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=50000.00 loops=1)
+                                       ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                             Group Key: segmentby
+                                             ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk saop (actual rows=69.00 loops=1)
                                                    ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=69.00 loops=1)
 
 -- Array parameter of prepared statements.

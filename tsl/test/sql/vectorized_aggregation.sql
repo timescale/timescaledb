@@ -4,6 +4,8 @@
 
 \set EXPLAIN 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 
+SET timescaledb.enable_columnarindexscan TO OFF;
+
 CREATE TABLE testtable (
 time timestamptz NOT NULL,
 segment_by_value integer,

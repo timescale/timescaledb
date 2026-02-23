@@ -910,16 +910,6 @@ apply_validity_bitmap(const ArrowArray *arrow, uint64 *restrict result)
 	}
 }
 
-/* Look for default value match by checking the first result.
- * Default value arrow arrays contain a single member so that the only result that matters.
- * If we fail this check, it means the whole batch passed so we can bail immediately.
- */
-static inline bool
-check_single_value_match(const uint64 *result)
-{
-	return result[0] & 1;
-}
-
 static BatchQualSummary
 batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
 						 tuple_filtering_constraints *constraints, bool check_full_match,
@@ -943,16 +933,43 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 		/* Handle null check */
 		if (scankeys[sk].sk_flags & SK_ISNULL)
 		{
-			vector_nulltest(arrow, IS_NULL, result);
-			if (single_value && !check_single_value_match(result))
+			if (single_value)
+			{
+				uint64 single_value_result = 1;
+				vector_nulltest(arrow, IS_NULL, &single_value_result);
+				if (!(single_value_result & 1))
+				{
+					batch_failed = true;
+					break;
+				}
+			}
+			else
+			{
+				vector_nulltest(arrow, IS_NULL, result);
+			}
+			continue;
+		}
+
+		VectorPredicate *predicate = get_vector_const_predicate(scankeys[sk].sk_func.fn_oid);
+
+		if (single_value)
+		{
+			/*
+			 * For single-value columns (default values), use a separate bitmap
+			 * to avoid corrupting the main result. The predicate and validity
+			 * bitmap operate on a 1-element arrow, which would clear bits 1-63
+			 * of result[0] if applied directly.
+			 */
+			uint64 single_value_result = 1;
+			predicate(arrow, scankeys[sk].sk_argument, &single_value_result);
+			apply_validity_bitmap(arrow, &single_value_result);
+			if (!(single_value_result & 1))
 			{
 				batch_failed = true;
 				break;
 			}
 			continue;
 		}
-
-		VectorPredicate *predicate = get_vector_const_predicate(scankeys[sk].sk_func.fn_oid);
 
 		/* Handle non-dictionary compressed data */
 		if (!arrow->dictionary)
@@ -971,12 +988,6 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 		}
 
 		apply_validity_bitmap(arrow, result);
-
-		if (single_value && !check_single_value_match(result))
-		{
-			batch_failed = true;
-			break;
-		}
 	}
 
 	if (batch_failed)
