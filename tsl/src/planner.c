@@ -482,7 +482,9 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 {
 	if (ts_guc_enable_columnarindexscan)
 	{
-		ts_columnar_index_scan_fix_aggrefs(stmt->planTree);
+		stmt->planTree = try_insert_columnar_index_scan_node(stmt->planTree, stmt->rtable);
+		stmt->subplans =
+			(List *) try_insert_columnar_index_scan_node((Plan *) stmt->subplans, stmt->rtable);
 	}
 
 	if (ts_guc_enable_vectorized_aggregation)

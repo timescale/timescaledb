@@ -537,3 +537,148 @@ WHERE device_id = 1 ORDER BY time;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE hyper;
+-- Test type coercion during metadata EquivalenceClass creation
+CREATE TABLE varchar(
+    time INT NOT NULL,
+    device_id varchar,
+	text varchar,
+    val INT);
+SELECT * FROM create_hypertable('varchar', 'time', chunk_time_interval => 10);
+WARNING:  column type "character varying" used for "device_id" does not follow best practices
+WARNING:  column type "character varying" used for "text" does not follow best practices
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             3 | public      | varchar    | t
+
+-- test case with segmentby
+ALTER TABLE varchar SET (
+    timescaledb.compress,
+	timescaledb.compress_segmentby = 'device_id',
+    timescaledb.compress_orderby = 'text, time');
+INSERT INTO varchar SELECT t, t::text, t::text, 1 FROM generate_series(1, 10, 1) t;
+SELECT compress_chunk(show_chunks('varchar'));
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_3_26_chunk
+ _timescaledb_internal._hyper_3_27_chunk
+
+VACUUM ANALYZE varchar;
+SELECT * FROM varchar WHERE device_id = '1' ORDER BY text, time LIMIT 5;
+ time | device_id | text | val 
+------+-----------+------+-----
+    1 | 1         | 1    |   1
+
+-- index scan
+SET enable_seqscan TO OFF;
+:EXPLAIN SELECT device_id, text FROM varchar
+GROUP BY device_id, text;
+--- QUERY PLAN ---
+ Finalize GroupAggregate
+   Output: "varchar".device_id, "varchar".text
+   Group Key: "varchar".device_id, "varchar".text
+   ->  Sort
+         Output: "varchar".device_id, "varchar".text
+         Sort Key: "varchar".device_id, "varchar".text
+         ->  Append
+               ->  Partial GroupAggregate
+                     Output: _hyper_3_26_chunk.device_id, _hyper_3_26_chunk.text
+                     Group Key: _hyper_3_26_chunk.device_id, _hyper_3_26_chunk.text
+                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_26_chunk
+                           Output: _hyper_3_26_chunk.device_id, _hyper_3_26_chunk.text
+                           ->  Index Scan using compress_hyper_4_28_chunk_device_id__ts_meta_min_1__ts_meta_idx on _timescaledb_internal.compress_hyper_4_28_chunk
+                                 Output: compress_hyper_4_28_chunk._ts_meta_count, compress_hyper_4_28_chunk.device_id, compress_hyper_4_28_chunk._ts_meta_min_2, compress_hyper_4_28_chunk._ts_meta_max_2, compress_hyper_4_28_chunk."time", compress_hyper_4_28_chunk._ts_meta_min_1, compress_hyper_4_28_chunk._ts_meta_max_1, compress_hyper_4_28_chunk.text, compress_hyper_4_28_chunk.val
+               ->  Partial GroupAggregate
+                     Output: _hyper_3_27_chunk.device_id, _hyper_3_27_chunk.text
+                     Group Key: _hyper_3_27_chunk.device_id, _hyper_3_27_chunk.text
+                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_27_chunk
+                           Output: _hyper_3_27_chunk.device_id, _hyper_3_27_chunk.text
+                           ->  Index Scan using compress_hyper_4_29_chunk_device_id__ts_meta_min_1__ts_meta_idx on _timescaledb_internal.compress_hyper_4_29_chunk
+                                 Output: compress_hyper_4_29_chunk._ts_meta_count, compress_hyper_4_29_chunk.device_id, compress_hyper_4_29_chunk._ts_meta_min_2, compress_hyper_4_29_chunk._ts_meta_max_2, compress_hyper_4_29_chunk."time", compress_hyper_4_29_chunk._ts_meta_min_1, compress_hyper_4_29_chunk._ts_meta_max_1, compress_hyper_4_29_chunk.text, compress_hyper_4_29_chunk.val
+
+SELECT device_id, text FROM varchar
+GROUP BY device_id, text;
+ device_id | text 
+-----------+------
+ 1         | 1
+ 10        | 10
+ 2         | 2
+ 3         | 3
+ 4         | 4
+ 5         | 5
+ 6         | 6
+ 7         | 7
+ 8         | 8
+ 9         | 9
+
+-- backwards index scan
+:EXPLAIN SELECT * FROM varchar
+ORDER BY device_id DESC, text DESC;
+--- QUERY PLAN ---
+ Merge Append
+   Sort Key: "varchar".device_id DESC, "varchar".text DESC
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_26_chunk
+         Output: _hyper_3_26_chunk."time", _hyper_3_26_chunk.device_id, _hyper_3_26_chunk.text, _hyper_3_26_chunk.val
+         Reverse: true
+         ->  Index Scan Backward using compress_hyper_4_28_chunk_device_id__ts_meta_min_1__ts_meta_idx on _timescaledb_internal.compress_hyper_4_28_chunk
+               Output: compress_hyper_4_28_chunk._ts_meta_count, compress_hyper_4_28_chunk.device_id, compress_hyper_4_28_chunk._ts_meta_min_2, compress_hyper_4_28_chunk._ts_meta_max_2, compress_hyper_4_28_chunk."time", compress_hyper_4_28_chunk._ts_meta_min_1, compress_hyper_4_28_chunk._ts_meta_max_1, compress_hyper_4_28_chunk.text, compress_hyper_4_28_chunk.val
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_27_chunk
+         Output: _hyper_3_27_chunk."time", _hyper_3_27_chunk.device_id, _hyper_3_27_chunk.text, _hyper_3_27_chunk.val
+         Reverse: true
+         ->  Index Scan Backward using compress_hyper_4_29_chunk_device_id__ts_meta_min_1__ts_meta_idx on _timescaledb_internal.compress_hyper_4_29_chunk
+               Output: compress_hyper_4_29_chunk._ts_meta_count, compress_hyper_4_29_chunk.device_id, compress_hyper_4_29_chunk._ts_meta_min_2, compress_hyper_4_29_chunk._ts_meta_max_2, compress_hyper_4_29_chunk."time", compress_hyper_4_29_chunk._ts_meta_min_1, compress_hyper_4_29_chunk._ts_meta_max_1, compress_hyper_4_29_chunk.text, compress_hyper_4_29_chunk.val
+
+SELECT * FROM varchar
+ORDER BY device_id DESC, text DESC;
+ time | device_id | text | val 
+------+-----------+------+-----
+    9 | 9         | 9    |   1
+    8 | 8         | 8    |   1
+    7 | 7         | 7    |   1
+    6 | 6         | 6    |   1
+    5 | 5         | 5    |   1
+    4 | 4         | 4    |   1
+    3 | 3         | 3    |   1
+    2 | 2         | 2    |   1
+   10 | 10        | 10   |   1
+    1 | 1         | 1    |   1
+
+SET enable_seqscan TO DEFAULT;
+-- seq scan
+:EXPLAIN SELECT * FROM varchar
+ORDER BY device_id DESC, text DESC;
+--- QUERY PLAN ---
+ Merge Append
+   Sort Key: "varchar".device_id DESC, "varchar".text DESC
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_26_chunk
+         Output: _hyper_3_26_chunk."time", _hyper_3_26_chunk.device_id, _hyper_3_26_chunk.text, _hyper_3_26_chunk.val
+         Reverse: true
+         ->  Sort
+               Output: compress_hyper_4_28_chunk._ts_meta_count, compress_hyper_4_28_chunk.device_id, compress_hyper_4_28_chunk._ts_meta_min_2, compress_hyper_4_28_chunk._ts_meta_max_2, compress_hyper_4_28_chunk."time", compress_hyper_4_28_chunk._ts_meta_min_1, compress_hyper_4_28_chunk._ts_meta_max_1, compress_hyper_4_28_chunk.text, compress_hyper_4_28_chunk.val
+               Sort Key: compress_hyper_4_28_chunk.device_id DESC, compress_hyper_4_28_chunk._ts_meta_min_1 DESC, compress_hyper_4_28_chunk._ts_meta_max_1 DESC
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_4_28_chunk
+                     Output: compress_hyper_4_28_chunk._ts_meta_count, compress_hyper_4_28_chunk.device_id, compress_hyper_4_28_chunk._ts_meta_min_2, compress_hyper_4_28_chunk._ts_meta_max_2, compress_hyper_4_28_chunk."time", compress_hyper_4_28_chunk._ts_meta_min_1, compress_hyper_4_28_chunk._ts_meta_max_1, compress_hyper_4_28_chunk.text, compress_hyper_4_28_chunk.val
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_27_chunk
+         Output: _hyper_3_27_chunk."time", _hyper_3_27_chunk.device_id, _hyper_3_27_chunk.text, _hyper_3_27_chunk.val
+         Reverse: true
+         ->  Sort
+               Output: compress_hyper_4_29_chunk._ts_meta_count, compress_hyper_4_29_chunk.device_id, compress_hyper_4_29_chunk._ts_meta_min_2, compress_hyper_4_29_chunk._ts_meta_max_2, compress_hyper_4_29_chunk."time", compress_hyper_4_29_chunk._ts_meta_min_1, compress_hyper_4_29_chunk._ts_meta_max_1, compress_hyper_4_29_chunk.text, compress_hyper_4_29_chunk.val
+               Sort Key: compress_hyper_4_29_chunk.device_id DESC, compress_hyper_4_29_chunk._ts_meta_min_1 DESC, compress_hyper_4_29_chunk._ts_meta_max_1 DESC
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_4_29_chunk
+                     Output: compress_hyper_4_29_chunk._ts_meta_count, compress_hyper_4_29_chunk.device_id, compress_hyper_4_29_chunk._ts_meta_min_2, compress_hyper_4_29_chunk._ts_meta_max_2, compress_hyper_4_29_chunk."time", compress_hyper_4_29_chunk._ts_meta_min_1, compress_hyper_4_29_chunk._ts_meta_max_1, compress_hyper_4_29_chunk.text, compress_hyper_4_29_chunk.val
+
+SELECT * FROM varchar
+ORDER BY device_id DESC, text DESC;
+ time | device_id | text | val 
+------+-----------+------+-----
+    9 | 9         | 9    |   1
+    8 | 8         | 8    |   1
+    7 | 7         | 7    |   1
+    6 | 6         | 6    |   1
+    5 | 5         | 5    |   1
+    4 | 4         | 4    |   1
+    3 | 3         | 3    |   1
+    2 | 2         | 2    |   1
+   10 | 10        | 10   |   1
+    1 | 1         | 1    |   1
+
+DROP TABLE varchar;
