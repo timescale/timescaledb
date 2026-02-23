@@ -6,6 +6,7 @@
 
 #include "common.h"
 
+#include <rewrite/rewriteDefine.h>
 #include <utils/acl.h>
 #include <utils/date.h>
 #include <utils/timestamp.h>
@@ -13,6 +14,7 @@
 
 #include "extension.h"
 #include "guc.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 
 static Const *check_time_bucket_argument(Node *arg, char *position, bool process_checks,
 										 StringInfo msg, bool for_rewrites);
@@ -26,11 +28,11 @@ static void caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *g
 									List *targetList, List *rtable, bool is_cagg_create);
 static Datum get_bucket_width_datum(ContinuousAggTimeBucketInfo bucket_info);
 static int64 get_bucket_width(ContinuousAggTimeBucketInfo bucket_info);
-static FuncExpr *build_conversion_call(Oid type, FuncExpr *boundary);
+static FuncExpr *build_conversion_call(Oid type, Node *boundary);
 static FuncExpr *build_boundary_call(int32 ht_id, Oid type);
 static Const *cagg_boundary_make_lower_bound(Oid type);
 static Node *build_union_query_quals(int32 ht_id, Oid partcoltype, Oid opno, int varno,
-									 AttrNumber attno);
+									 AttrNumber attno, RealTimeDataContext *rtd_context);
 static RangeTblEntry *makeRangeTblEntry(Query *subquery, const char *aliasname);
 
 #define INTERNAL_TO_DATE_FUNCTION "to_date"
@@ -1391,7 +1393,7 @@ cagg_get_boundary_converter_funcoid(Oid typoid)
 }
 
 static FuncExpr *
-build_conversion_call(Oid type, FuncExpr *boundary)
+build_conversion_call(Oid type, Node *boundary)
 {
 	/*
 	 * If the partitioning column type is not integer we need to convert
@@ -1414,7 +1416,7 @@ build_conversion_call(Oid type, FuncExpr *boundary)
 		}
 		case INT8OID:
 			/* Nothing to do for int8. */
-			return boundary;
+			return (FuncExpr *) boundary;
 		case DATEOID:
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
@@ -1510,7 +1512,7 @@ build_boundary_call(int32 ht_id, Oid type)
 							InvalidOid,
 							COERCE_EXPLICIT_CALL);
 
-	return build_conversion_call(type, boundary);
+	return build_conversion_call(type, (Node *) boundary);
 }
 
 /*
@@ -1542,23 +1544,152 @@ cagg_boundary_make_lower_bound(Oid type)
 }
 
 static Node *
-build_union_query_quals(int32 ht_id, Oid partcoltype, Oid opno, int varno, AttrNumber attno)
+build_boundary_const(int64 value, Oid partcoltype)
+{
+	Const *const_boundary = makeConst(INT8OID,
+									  -1,
+									  InvalidOid,
+									  sizeof(int64),
+									  Int64GetDatum(value),
+									  false,
+									  FLOAT8PASSBYVAL);
+	FuncExpr *boundary_cast = build_conversion_call(partcoltype, (Node *) const_boundary);
+	return (Node *) boundary_cast;
+}
+
+static Node *
+build_union_query_quals(int32 ht_id, Oid partcoltype, Oid opno, int varno, AttrNumber attno,
+						RealTimeDataContext *rtd_context)
 {
 	Var *var = makeVar(varno, attno, partcoltype, -1, InvalidOid, InvalidOid);
-	FuncExpr *boundary = build_boundary_call(ht_id, partcoltype);
+	if (!rtd_context)
+	{
+		FuncExpr *boundary = build_boundary_call(ht_id, partcoltype);
 
-	CoalesceExpr *coalesce = makeNode(CoalesceExpr);
-	coalesce->coalescetype = partcoltype;
-	coalesce->coalescecollid = InvalidOid;
-	coalesce->args = list_make2(boundary, cagg_boundary_make_lower_bound(partcoltype));
+		CoalesceExpr *coalesce = makeNode(CoalesceExpr);
+		coalesce->coalescetype = partcoltype;
+		coalesce->coalescecollid = InvalidOid;
+		coalesce->args = list_make2(boundary, cagg_boundary_make_lower_bound(partcoltype));
 
-	return (Node *) make_opclause(opno,
-								  BOOLOID,
-								  false,
-								  (Expr *) var,
-								  (Expr *) coalesce,
-								  InvalidOid,
-								  InvalidOid);
+		return (Node *) make_opclause(opno,
+									  BOOLOID,
+									  false,
+									  (Expr *) var,
+									  (Expr *) coalesce,
+									  InvalidOid,
+									  InvalidOid);
+	}
+	else
+	{
+		/* OR of invalidated ranges plus above watermark */
+		Node *boundary_quals;
+		List *ranges = NULL;
+
+		/* (var <(or >=) watermark) */
+		Node *watermark_qual =
+			(Node *) make_opclause(opno,
+								   BOOLOID,
+								   false,
+								   (Expr *) var,
+								   (Expr *) build_boundary_const(rtd_context->watermark,
+																 partcoltype),
+								   InvalidOid,
+								   InvalidOid);
+
+		/* need to add boundary conditions for invalidated ranges */
+		int32 numbounds = rtd_context->invalidated_ranges.num_bounds;
+		if (ts_guc_realtime_cagg_settings == REALTIME_WITH_BACKFILLS && numbounds)
+		{
+			/* Exclude invalidated ranges i.e. for N ranges
+			 * (var < l1) OR (var >= h1 AND var < l2) ... OR (var >= h_N AND var < watermark) */
+			if (rtd_context->for_materialized_query)
+			{
+				for (int i = 0; i < numbounds; i++)
+				{
+					int64 low_value = rtd_context->invalidated_ranges.low_bounds[i];
+					Node *low_qual =
+						(Node *) make_opclause(opno,
+											   BOOLOID,
+											   false,
+											   (Expr *) var,
+											   (Expr *) build_boundary_const(low_value,
+																			 partcoltype),
+											   InvalidOid,
+											   InvalidOid);
+					if (i > 0)
+					{
+						int64 high_value = rtd_context->invalidated_ranges.high_bounds[i - 1];
+						Node *high_qual =
+							(Node *) make_opclause(get_negator(opno),
+												   BOOLOID,
+												   false,
+												   (Expr *) var,
+												   (Expr *) build_boundary_const(high_value,
+																				 partcoltype),
+												   InvalidOid,
+												   InvalidOid);
+						/* (var >= h1 AND var < l2) ... */
+						Node *range_bound = make_and_qual(high_qual, low_qual);
+						ranges = lappend(ranges, range_bound);
+					}
+					/* (var < l1) */
+					else
+						ranges = lappend(ranges, low_qual);
+				}
+				/* (var >= h_N AND var < watermark) */
+				int64 last_high_value = rtd_context->invalidated_ranges.high_bounds[numbounds - 1];
+				Node *last_high_qual =
+					(Node *) make_opclause(get_negator(opno),
+										   BOOLOID,
+										   false,
+										   (Expr *) var,
+										   (Expr *) build_boundary_const(last_high_value,
+																		 partcoltype),
+										   InvalidOid,
+										   InvalidOid);
+				Node *last_range = make_and_qual(last_high_qual, watermark_qual);
+				ranges = lappend(ranges, last_range);
+			}
+			/* Include data in invalidated ranges + above watermark i.e. for N ranges
+			 * (var >= l1 AND var < h1) OR (var >= l2 AND var < h2) ... OR (var >= l_n AND var <
+			 * h_N) OR (var >= watermark) */
+			else
+			{
+				for (int i = 0; i < numbounds; i++)
+				{
+					int64 low_value = rtd_context->invalidated_ranges.low_bounds[i];
+					Node *low_qual =
+						(Node *) make_opclause(opno,
+											   BOOLOID,
+											   false,
+											   (Expr *) var,
+											   (Expr *) build_boundary_const(low_value,
+																			 partcoltype),
+											   InvalidOid,
+											   InvalidOid);
+					int64 high_value = rtd_context->invalidated_ranges.high_bounds[i];
+					Node *high_qual =
+						(Node *) make_opclause(get_negator(opno),
+											   BOOLOID,
+											   false,
+											   (Expr *) var,
+											   (Expr *) build_boundary_const(high_value,
+																			 partcoltype),
+											   InvalidOid,
+											   InvalidOid);
+					Node *range_bound = make_and_qual(low_qual, high_qual);
+					ranges = lappend(ranges, range_bound);
+				}
+				ranges = lappend(ranges, watermark_qual);
+			}
+			boundary_quals = (Node *) make_orclause(ranges);
+		}
+		/* no backfills */
+		else
+			boundary_quals = watermark_qual;
+
+		return boundary_quals;
+	}
 }
 
 static RangeTblEntry *
@@ -1605,7 +1736,7 @@ makeRangeTblEntry(Query *query, const char *aliasname)
  */
 Query *
 build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *q1, Query *q2,
-				  int materialize_htid)
+				  int materialize_htid, RealTimeDataContext *rtd_context)
 {
 	ListCell *lc1, *lc2;
 	List *col_types = NIL;
@@ -1640,18 +1771,29 @@ build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *
 	TypeCacheEntry *tce_q2 = lookup_type_cache(q2_partcoltype, TYPECACHE_LT_OPR);
 
 	varno = list_length(q1->rtable);
+	if (rtd_context)
+		rtd_context->for_materialized_query = true;
 	q1->jointree->quals = build_union_query_quals(materialize_htid,
 												  q1_partcoltype,
 												  tce_q1->lt_opr,
 												  varno,
-												  matpartcolno);
+												  matpartcolno,
+												  rtd_context);
 	/*
 	 * If there is join in CAgg definition then adjust varno
 	 * to get time column from the hypertable in the join.
 	 */
+	bool ht_only = (list_length(q2->rtable) == 1);
 	varno = list_length(q2->rtable);
-
-	if (list_length(q2->rtable) > 1)
+#if PG18_GE
+	if (rtd_context)
+	{
+		/* hypertable RTE + group RTE */
+		ht_only = (list_length(q2->rtable) == 2);
+		varno = list_length(q2->rtable) - 1;
+	}
+#endif
+	if (!ht_only)
 	{
 		int nvarno = 1;
 		foreach (lc2, q2->rtable)
@@ -1670,11 +1812,14 @@ build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *
 		}
 	}
 
+	if (rtd_context)
+		rtd_context->for_materialized_query = false;
 	q2_quals = build_union_query_quals(materialize_htid,
 									   q2_partcoltype,
 									   get_negator(tce_q2->lt_opr),
 									   varno,
-									   tbinfo->htpartcolno);
+									   tbinfo->htpartcolno,
+									   rtd_context);
 
 	q2->jointree->quals = make_and_qual(q2->jointree->quals, q2_quals);
 
@@ -1908,4 +2053,114 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 			retlist = lappend(retlist, get_attname(mat_relid, cagg_tle->resno, false));
 	}
 	return retlist;
+}
+
+/*
+ * Modify Cagg view at query time to use on-demand realtime settings
+ */
+void
+tsl_modify_realtime_caggs_ondemand(RangeTblEntry *rte, ContinuousAgg *cagg)
+{
+	Assert(rte->subquery != NULL);
+
+	/* Check if we need to provide realtime Caggs on-demand rather than via Cagg "materialized_only"
+	 * setting */
+	switch (ts_guc_realtime_cagg_settings)
+	{
+		case CAGG_VIEW:
+			/* don't want on-demand setting: nothing to do */
+			return;
+		case MATERIALIZED_ONLY:
+			/* on-demand setting matches current Cagg setting, nothing to do */
+			if (cagg->data.materialized_only)
+			{
+				return;
+			}
+			/* return materialized-only part of the query */
+			else
+			{
+				Assert(rte->subquery->setOperations);
+				rte->subquery = destroy_union_query(rte->subquery);
+			}
+			break;
+		case REALTIME:
+		case REALTIME_WITH_BACKFILLS:
+			/* on-demand setting matches current Cagg setting, nothing to do */
+			if (!cagg->data.materialized_only && ts_guc_realtime_cagg_settings == REALTIME)
+			{
+				return;
+			}
+			/* UNION ALL of materialized data + relevant live data.
+			 * Uses live watermark and invalidated ranges boundary values. */
+			else
+			{
+				Query *cagg_query = ts_continuous_agg_get_query(cagg);
+				/* We added a new subquery (Cagg view query) with uninitialized objects to the input
+				 * query, need to set it up and fire view rules if Cagg refers to views  */
+				AcquireRewriteLocks(cagg_query, true, false);
+				List *rewritten = QueryRewrite(cagg_query);
+				Assert(list_length(rewritten) == 1);
+				Query *cagg_view_query = linitial_node(Query, rewritten);
+
+				Query *materialized_query =
+					(cagg->data.materialized_only ? rte->subquery :
+													destroy_union_query(rte->subquery));
+
+				Cache *hcache = ts_hypertable_cache_pin();
+				Hypertable *ht =
+					ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.raw_hypertable_id);
+				Hypertable *mat_ht =
+					ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
+				const Dimension *ht_part_dimension = hyperspace_get_open_dimension(ht->space, 0);
+				const Dimension *mat_part_dimension =
+					hyperspace_get_open_dimension(mat_ht->space, 0);
+
+				ContinuousAggTimeBucketInfo bucket_info = { 0 };
+				caggtimebucketinfo_init(&bucket_info,
+										ht->fd.id,
+										ht->main_table_relid,
+										ht_part_dimension->column_attno,
+										ht_part_dimension->fd.column_type,
+										ht_part_dimension->fd.interval_length,
+										INVALID_HYPERTABLE_ID);
+				ts_cache_release(&hcache);
+
+				RealTimeDataContext rtd_context = { 0 };
+				rtd_context.watermark = ts_cagg_watermark_get(cagg->data.mat_hypertable_id);
+
+				/* No materialized data in Cagg: return real-time data only */
+				if (rtd_context.watermark == ts_time_get_min(cagg->partition_type))
+				{
+					rte->subquery = cagg_view_query;
+				}
+				else
+				{
+					if (ts_guc_realtime_cagg_settings == REALTIME_WITH_BACKFILLS)
+					{
+						rtd_context.invalidated_ranges = invalidation_get_cagg_invalidations(
+							cagg,
+							rtd_context.watermark,
+							ts_guc_cagg_max_individual_materializations);
+						if (!rtd_context.invalidated_ranges.is_valid)
+							ereport(NOTICE,
+									(errmsg("Too many invalidated ranges: not including live "
+											"backfilled "
+											"data")));
+					}
+
+					/* This method will build UNION ALL with quals made according to on-demand
+					 * settings: compare to watermark and for REALTIME_WITH_BACKFILLS also compare
+					 * to invalidated ranges */
+					rte->subquery = build_union_query(&bucket_info,
+													  mat_part_dimension->column_attno,
+													  materialized_query,
+													  cagg_view_query,
+													  mat_ht->fd.id,
+													  &rtd_context);
+				}
+			}
+			break;
+		default:
+			ereport(ERROR, (errmsg("Unknown on-demand realtime CAgg settings")));
+	}
 }
