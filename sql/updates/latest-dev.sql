@@ -80,3 +80,11 @@ GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 -- end rebuild _timescaledb_catalog.chunk table --
 
+-- drop the catalog tables for continuous aggregate migration plans
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step;
+ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq;
+DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step;
+DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;
+

@@ -214,3 +214,47 @@ WHERE device_id = 1 ORDER BY time;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 DROP TABLE hyper;
+
+
+-- Test type coercion during metadata EquivalenceClass creation
+CREATE TABLE varchar(
+    time INT NOT NULL,
+    device_id varchar,
+	text varchar,
+    val INT);
+SELECT * FROM create_hypertable('varchar', 'time', chunk_time_interval => 10);
+
+-- test case with segmentby
+ALTER TABLE varchar SET (
+    timescaledb.compress,
+	timescaledb.compress_segmentby = 'device_id',
+    timescaledb.compress_orderby = 'text, time');
+
+INSERT INTO varchar SELECT t, t::text, t::text, 1 FROM generate_series(1, 10, 1) t;
+
+SELECT compress_chunk(show_chunks('varchar'));
+VACUUM ANALYZE varchar;
+
+SELECT * FROM varchar WHERE device_id = '1' ORDER BY text, time LIMIT 5;
+
+-- index scan
+SET enable_seqscan TO OFF;
+:EXPLAIN SELECT device_id, text FROM varchar
+GROUP BY device_id, text;
+SELECT device_id, text FROM varchar
+GROUP BY device_id, text;
+
+-- backwards index scan
+:EXPLAIN SELECT * FROM varchar
+ORDER BY device_id DESC, text DESC;
+SELECT * FROM varchar
+ORDER BY device_id DESC, text DESC;
+SET enable_seqscan TO DEFAULT;
+
+-- seq scan
+:EXPLAIN SELECT * FROM varchar
+ORDER BY device_id DESC, text DESC;
+SELECT * FROM varchar
+ORDER BY device_id DESC, text DESC;
+
+DROP TABLE varchar;
