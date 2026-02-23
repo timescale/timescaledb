@@ -364,6 +364,8 @@ INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = unco
 WHERE uncomp_hyper.table_name like 'test1' ORDER BY chunk.id LIMIT 1
 \gset
 
+SELECT add_compression_policy('test1', interval '1 day') AS compression_job_id \gset
+
 ALTER TABLE test1 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 
 --make sure new owner is propagated down
@@ -371,9 +373,14 @@ SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) W
 SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) WHERE c.oid = :'COMPRESSED_HYPER_NAME'::regclass;
 SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) WHERE c.oid = :'COMPRESSED_CHUNK_NAME'::regclass;
 
+--make sure compression policy job owner is propagated
+SELECT owner FROM _timescaledb_config.bgw_job WHERE id = :compression_job_id;
+
 --
 -- turn off compression
 --
+
+select remove_compression_policy('test1');
 
 SELECT count(decompress_chunk(ch)) FROM show_chunks('test1') ch;
 
