@@ -91,6 +91,15 @@ typedef enum CompressTruncateBehaviour
 } CompressTruncateBehaviour;
 extern TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour;
 
+typedef enum RealtimeCaggSettings
+{
+	CAGG_VIEW_SETTINGS,
+	MATERIALIZED_ONLY,
+	REALTIME,
+	REALTIME_WITH_BACKFILLS,
+} RealtimeCaggSettings;
+extern TSDLLEXPORT RealtimeCaggSettings ts_guc_realtime_cagg_settings;
+
 #ifdef USE_TELEMETRY
 typedef enum TelemetryLevel
 {
