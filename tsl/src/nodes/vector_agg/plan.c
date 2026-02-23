@@ -12,6 +12,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
+#include <optimizer/planner.h>
 #include <parser/parsetree.h>
 #include <utils/fmgroids.h>
 
@@ -36,68 +37,10 @@ _vector_agg_init(void)
 	TryRegisterCustomScanMethods(&scan_methods);
 }
 
-static Node *
-resolve_outer_special_vars_mutator(Node *node, void *context)
+bool
+ts_is_vector_agg_plan(Plan *plan)
 {
-	if (node == NULL)
-	{
-		return NULL;
-	}
-
-	if (!IsA(node, Var))
-	{
-		return expression_tree_mutator(node, resolve_outer_special_vars_mutator, context);
-	}
-
-	Var *var = castNode(Var, node);
-	CustomScan *custom = castNode(CustomScan, context);
-	if ((Index) var->varno == (Index) custom->scan.scanrelid)
-	{
-		/*
-		 * This is already the uncompressed chunk var. We can see it referenced
-		 * by expressions in the output targetlist of the child scan node.
-		 */
-		return (Node *) copyObject(var);
-	}
-
-	if (var->varno == OUTER_VAR)
-	{
-		/*
-		 * Reference into the output targetlist of the child scan node.
-		 */
-		TargetEntry *columnar_scan_tentry =
-			castNode(TargetEntry, list_nth(custom->scan.plan.targetlist, var->varattno - 1));
-
-		return resolve_outer_special_vars_mutator((Node *) columnar_scan_tentry->expr, context);
-	}
-
-	if (var->varno == INDEX_VAR)
-	{
-		/*
-		 * This is a reference into the custom scan targetlist, we have to resolve
-		 * it as well.
-		 */
-		var = castNode(Var,
-					   castNode(TargetEntry, list_nth(custom->custom_scan_tlist, var->varattno - 1))
-						   ->expr);
-		Assert(var->varno > 0);
-
-		return (Node *) copyObject(var);
-	}
-
-	Ensure(false, "encountered unexpected varno %d as an aggregate argument", var->varno);
-	return node;
-}
-
-/*
- * Resolve the OUTER_VAR special variables, that are used in the output
- * targetlists of aggregation nodes, replacing them with the uncompressed chunk
- * variables.
- */
-static List *
-resolve_outer_special_vars(List *agg_tlist, Plan *childplan)
-{
-	return castNode(List, resolve_outer_special_vars_mutator((Node *) agg_tlist, childplan));
+	return IsA(plan, CustomScan) && castNode(CustomScan, plan)->methods == &scan_methods;
 }
 
 /*
@@ -273,14 +216,13 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 
 			const bool is_vector = vqinfo->vector_attrs && vqinfo->vector_attrs[var->varattno];
 
-			if (is_vector)
-			{
-				Ensure(is_vector_type(var->vartype),
-					   "a variable with non-vectorizable type %s is marked as vectorized",
-					   format_type_be(var->vartype));
-			}
-
-			return is_vector;
+			/*
+			 * The segmentby columns are considered vectorizable, but their type might not actually
+			 * have a columnar representation. Theoretically this can work because they are always
+			 * represented as DT_Scalar, but in practice this is poorly tested and of limited
+			 * utility, so we consider such columns not to be vectorizable at the moment.
+			 */
+			return is_vector && is_vector_type(var->vartype);
 		}
 		default:
 			return false;
@@ -489,6 +431,27 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 #endif
 }
 
+typedef struct HasVectorAggContext
+{
+	bool has_agg;
+	bool has_vector_agg;
+} HasVectorAggContext;
+
+static Plan *
+has_vector_agg(Plan *plan, void *context)
+{
+	HasVectorAggContext *ctx = (HasVectorAggContext *) context;
+	if (IsA(plan, Agg))
+	{
+		ctx->has_agg = true;
+	}
+	else if (ts_is_vector_agg_plan(plan))
+	{
+		ctx->has_vector_agg = true;
+	}
+	return plan;
+}
+
 /*
  * Whether we have a vectorized aggregation node and any aggregate node at all
  * in the plan tree. This is used for testing.
@@ -496,77 +459,10 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 bool
 has_vector_agg_node(Plan *plan, bool *has_some_agg)
 {
-	if (IsA(plan, Agg))
-	{
-		*has_some_agg = true;
-	}
-
-	if (IsA(plan, Agg) && castNode(Agg, plan)->aggsplit == AGGSPLIT_INITIAL_SERIAL)
-	{
-		/*
-		 * Postgres partial aggregation.
-		 */
-		return false;
-	}
-
-	if (plan->lefttree && has_vector_agg_node(plan->lefttree, has_some_agg))
-	{
-		return true;
-	}
-
-	if (plan->righttree && has_vector_agg_node(plan->righttree, has_some_agg))
-	{
-		return true;
-	}
-
-	CustomScan *custom = NULL;
-	List *append_plans = NIL;
-	if (IsA(plan, Append))
-	{
-		append_plans = castNode(Append, plan)->appendplans;
-	}
-	if (IsA(plan, MergeAppend))
-	{
-		append_plans = castNode(MergeAppend, plan)->mergeplans;
-	}
-	else if (IsA(plan, CustomScan))
-	{
-		custom = castNode(CustomScan, plan);
-		if (ts_is_chunk_append_plan(plan) || ts_is_modify_hypertable_plan(plan))
-		{
-			append_plans = custom->custom_plans;
-		}
-	}
-	else if (IsA(plan, SubqueryScan))
-	{
-		SubqueryScan *subquery = castNode(SubqueryScan, plan);
-		append_plans = list_make1(subquery->subplan);
-	}
-
-	if (append_plans)
-	{
-		ListCell *lc;
-		foreach (lc, append_plans)
-		{
-			if (has_vector_agg_node(lfirst(lc), has_some_agg))
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-
-	if (custom == NULL)
-	{
-		return false;
-	}
-
-	if (strcmp(VECTOR_AGG_NODE_NAME, custom->methods->CustomName) == 0)
-	{
-		return true;
-	}
-
-	return false;
+	HasVectorAggContext context = { .has_agg = false, .has_vector_agg = false };
+	ts_plan_tree_walker(plan, has_vector_agg, &context);
+	*has_some_agg = context.has_agg;
+	return context.has_vector_agg;
 }
 
 /*
@@ -578,7 +474,7 @@ has_vector_agg_node(Plan *plan, bool *has_some_agg)
  * Returns true if the scan node is a supported child, otherwise false.
  */
 static bool
-vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi)
+vectoragg_plan_possible(Plan *childplan, VectorQualInfo *vqi)
 {
 	if (!IsA(childplan, CustomScan))
 		return false;
@@ -598,66 +494,95 @@ vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi
 	return false;
 }
 
-/*
- * Where possible, replace the partial aggregation plan nodes with our own
- * vectorized aggregation node. The replacement is done in-place.
- */
-Plan *
-try_insert_vector_agg_node(Plan *plan, List *rtable)
+static Node *
+mark_partial_aggref_mutator(Node *node, void *context)
 {
-	if (plan->lefttree)
+	if (node == NULL)
+		return NULL;
+
+	if (IsA(node, Aggref))
 	{
-		plan->lefttree = try_insert_vector_agg_node(plan->lefttree, rtable);
+		mark_partial_aggref(castNode(Aggref, node), AGGSPLIT_INITIAL_SERIAL);
+		return node;
 	}
 
-	if (plan->righttree)
-	{
-		plan->righttree = try_insert_vector_agg_node(plan->righttree, rtable);
-	}
+	return expression_tree_mutator(node, mark_partial_aggref_mutator, context);
+}
 
-	List *append_plans = NIL;
-	if (IsA(plan, Append))
+typedef struct MakeFinalizeAggContext
+{
+	Agg *agg;
+	List *vector_agg_targetlist;
+} MakeFinalizeAggContext;
+
+static Node *
+make_finalize_agg_mutator(Node *node, void *context)
+{
+	if (node == NULL)
+		return NULL;
+
+	if (IsA(node, TargetEntry))
 	{
-		append_plans = castNode(Append, plan)->appendplans;
-	}
-	else if (IsA(plan, MergeAppend))
-	{
-		append_plans = castNode(MergeAppend, plan)->mergeplans;
-	}
-	else if (IsA(plan, CustomScan))
-	{
-		CustomScan *custom = castNode(CustomScan, plan);
-		if (ts_is_chunk_append_plan(plan) || ts_is_modify_hypertable_plan(plan))
+		TargetEntry *tle = castNode(TargetEntry, node);
+		MakeFinalizeAggContext *ctx = (MakeFinalizeAggContext *) context;
+
+		if (IsA(tle->expr, Var))
 		{
-			append_plans = custom->custom_plans;
+			Var *var = castNode(Var, tle->expr);
+			Assert(var->varno == OUTER_VAR);
+			AttrNumber old_attno = var->varattno;
+			var->varattno = tle->resno;
+			for (int k = 0; k < ctx->agg->numCols; k++)
+			{
+				if (ctx->agg->grpColIdx[k] == old_attno)
+					ctx->agg->grpColIdx[k] = tle->resno;
+			}
+			return node;
+		}
+
+		if (IsA(tle->expr, Aggref))
+		{
+			Aggref *aggref = castNode(Aggref, tle->expr);
+
+			/*
+			 * Look up the VectorAgg output type for this column, which is
+			 * the transition type set by mark_partial_aggref above.
+			 */
+			TargetEntry *vag_tle = list_nth(ctx->vector_agg_targetlist, tle->resno - 1);
+			Oid var_type = exprType((Node *) vag_tle->expr);
+
+			mark_partial_aggref(aggref, AGGSPLIT_FINAL_DESERIAL);
+
+			Var *var = makeVar(OUTER_VAR, tle->resno, var_type, -1, aggref->aggcollid, 0);
+			aggref->args = list_make1(makeTargetEntry((Expr *) var, 1, NULL, false));
+			return node;
 		}
 	}
-	else if (IsA(plan, SubqueryScan))
-	{
-		SubqueryScan *subquery = castNode(SubqueryScan, plan);
-		append_plans = list_make1(subquery->subplan);
-	}
 
-	if (append_plans)
-	{
-		ListCell *lc;
-		foreach (lc, append_plans)
-		{
-			lfirst(lc) = try_insert_vector_agg_node(lfirst(lc), rtable);
-		}
-		return plan;
-	}
+	return expression_tree_mutator(node, make_finalize_agg_mutator, context);
+}
 
-	if (plan->type != T_Agg)
+static Plan *insert_vector_agg(Plan *plan, void *context);
+
+Plan *
+try_insert_vector_agg_node(Plan *plan)
+{
+	return ts_plan_tree_walker(plan, insert_vector_agg, NULL);
+}
+
+static Plan *
+insert_vector_agg(Plan *plan, void *context)
+{
+	if (!IsA(plan, Agg))
 	{
 		return plan;
 	}
 
 	Agg *agg = castNode(Agg, plan);
 
-	if (agg->aggsplit != AGGSPLIT_INITIAL_SERIAL)
+	if (agg->aggsplit != AGGSPLIT_INITIAL_SERIAL && agg->aggsplit != AGGSPLIT_SIMPLE)
 	{
-		/* Can only vectorize partial aggregation node. */
+		/* Can only vectorize partial or non-partial aggregation node. */
 		return plan;
 	}
 
@@ -676,7 +601,6 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 		 */
 		return plan;
 	}
-
 	if (agg->plan.lefttree == NULL)
 	{
 		/*
@@ -694,7 +618,7 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 	 * Build supplementary info to determine whether we can vectorize the
 	 * aggregate FILTER clauses.
 	 */
-	if (!vectoragg_plan_possible(childplan, rtable, &vqi))
+	if (!vectoragg_plan_possible(childplan, &vqi))
 	{
 		/* Not a compatible vectoragg child node */
 		return plan;
@@ -705,7 +629,7 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 	 * the subsequent checks are performed on the aggregated targetlist with
 	 * all variables resolved to uncompressed chunk variables.
 	 */
-	List *resolved_targetlist = resolve_outer_special_vars(agg->plan.targetlist, childplan);
+	List *resolved_targetlist = ts_resolve_outer_special_vars(agg->plan.targetlist, childplan);
 
 	const VectorAggGroupingType grouping_type =
 		get_vectorized_grouping_type(&vqi, agg, resolved_targetlist);
@@ -745,8 +669,52 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 	}
 
 	/*
-	 * Finally, all requirements are satisfied and we can vectorize this partial
+	 * Finally, all requirements are satisfied and we can vectorize this
 	 * aggregation node.
 	 */
-	return vector_agg_plan_create(childplan, agg, resolved_targetlist, grouping_type);
+	Plan *vector_agg_plan =
+		vector_agg_plan_create(childplan, agg, resolved_targetlist, grouping_type);
+
+	if (agg->aggsplit == AGGSPLIT_SIMPLE)
+	{
+		/*
+		 * Convert a non-partial aggregation into a two-phase partial + finalize
+		 * aggregation with VectorAgg performing the partial step.
+		 */
+		CustomScan *vector_agg = castNode(CustomScan, vector_agg_plan);
+		vector_agg->custom_scan_tlist =
+			(List *) expression_tree_mutator((Node *) vector_agg->custom_scan_tlist,
+											 mark_partial_aggref_mutator,
+											 NULL);
+
+		/*
+		 * Rebuild the plan output targetlist to reflect the updated types.
+		 * VectorAgg returns ps_ResultTupleSlot whose TupleDesc is derived from
+		 * plan.targetlist, so it must match the actual partial aggregate output
+		 * types for correct tuple materialization on all platforms.
+		 */
+		vector_agg->scan.plan.targetlist =
+			ts_build_trivial_custom_output_targetlist(vector_agg->custom_scan_tlist);
+
+		/*
+		 * Set up the parent Agg to finalize the partial results from VectorAgg.
+		 */
+		agg->aggsplit = AGGSPLIT_FINAL_DESERIAL;
+		agg->plan.lefttree = vector_agg_plan;
+
+		MakeFinalizeAggContext finalize_ctx = {
+			.agg = agg,
+			.vector_agg_targetlist = vector_agg->scan.plan.targetlist,
+		};
+		agg->plan.targetlist = (List *) expression_tree_mutator((Node *) agg->plan.targetlist,
+																make_finalize_agg_mutator,
+																&finalize_ctx);
+		agg->plan.qual = (List *) expression_tree_mutator((Node *) agg->plan.qual,
+														  make_finalize_agg_mutator,
+														  &finalize_ctx);
+
+		return (Plan *) agg;
+	}
+
+	return vector_agg_plan;
 }

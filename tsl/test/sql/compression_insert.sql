@@ -1131,3 +1131,53 @@ EXPLAIN (costs off,timing off, summary off) INSERT INTO :CHUNK SELECT * FROM com
 INSERT INTO :CHUNK SELECT * FROM compressed_batches;
 
 SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 DESC;
+
+-- Test: unique constraint violation detection with single-value (default)
+-- columns in vectorized batch matching.
+
+CREATE TABLE sv_default(time timestamptz NOT NULL, device_id int)
+WITH (tsdb.hypertable, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+
+INSERT INTO sv_default SELECT '2025-01-01'::timestamptz + format('%s day',i)::interval, 1 FROM generate_series(1, 2) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('sv_default') c;
+
+-- Add column with non-null default: creates single-value column in compressed batch
+ALTER TABLE sv_default ADD COLUMN extra int DEFAULT 42;
+CREATE UNIQUE INDEX sv_default_unique ON sv_default(time, extra);
+
+SELECT * FROM sv_default;
+
+-- Duplicates should fail
+\set ON_ERROR_STOP 0
+INSERT INTO sv_default VALUES('2025-01-02', 1, 42);
+INSERT INTO sv_default VALUES('2025-01-03', 1, 42);
+\set ON_ERROR_STOP 1
+
+-- Non-duplicate should succeed
+INSERT INTO sv_default VALUES('2025-01-02', 1, 23);
+
+-- should be 3 rows total
+SELECT count(*) FROM sv_default;
+
+-- Same test with all-NULL column and NULLS NOT DISTINCT
+CREATE TABLE sv_null(time timestamptz NOT NULL, device_id int, tag text, value float)
+WITH (tsdb.hypertable, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+
+-- Insert rows where tag is always NULL
+INSERT INTO sv_null SELECT '2025-01-01'::timestamptz + format('%s day',i)::interval, 1, NULL, i::float FROM generate_series(1, 2) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('sv_null') c;
+
+CREATE UNIQUE INDEX sv_null_unique ON sv_null(time, tag) NULLS NOT DISTINCT;
+
+-- Duplicate of first row - should fail
+\set ON_ERROR_STOP 0
+INSERT INTO sv_null VALUES('2025-01-02', 1, NULL, 999);
+INSERT INTO sv_null VALUES('2025-01-03', 1, NULL, 999);
+\set ON_ERROR_STOP 1
+
+-- Non-duplicate should succeed
+INSERT INTO sv_null VALUES('2024-01-05', 1, NULL, 6.0);
+
+-- should be 3 rows total
+SELECT count(*) FROM sv_null;
+

@@ -50,6 +50,8 @@ WHERE h.id = ch.hypertable_id AND h.table_name = 'metrics';
 SET max_parallel_workers_per_gather = 0;
 SET enable_bitmapscan=0;
 SET enable_seqscan=0;
+-- disable vectorized aggregation to prevent plan switches when running on 32-bit
+SET timescaledb.enable_vectorized_aggregation = off;
 
 -- Can use SkipScan on unordered chunks if only segmentby columns are distinct
 :PREFIX select distinct device, sensor from metrics order by 1,2;

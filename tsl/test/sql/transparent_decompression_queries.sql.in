@@ -146,3 +146,14 @@ VACUUM ANALYZE options_data;
 SELECT max(date) AS date FROM options_data WHERE contract_code='CONTRACT2023-12-03 04:00:00+01';
 
 RESET random_page_cost;
+
+-- gh issue 8918
+-- test enum in order by
+CREATE TYPE animal AS ENUM ('raccoon', 'hedgehog', 'tiger');
+CREATE TABLE i8918(time timestamptz, sensor_id int, enum_type animal, value float) WITH (tsdb.hypertable, tsdb.compress_segmentby='sensor_id', tsdb.compress_orderby='enum_type, time');
+INSERT INTO i8918 VALUES ('2020-01-01'::timestamptz, 1, 'raccoon', 1);
+INSERT INTO i8918 VALUES ('2020-01-01'::timestamptz, 1, 'hedgehog', 1);
+SELECT compress_chunk(show_chunks('i8918'));
+SET enable_hashagg TO off;
+EXPLAIN (costs off, buffers off, analyze, timing off, summary off) SELECT sensor_id, enum_type, count(*) FROM i8918 GROUP BY sensor_id, enum_type;
+

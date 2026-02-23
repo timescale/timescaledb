@@ -407,7 +407,7 @@ SET enable_seqscan TO off;
 EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT count(*) FROM mytab where a = 2;
 --- QUERY PLAN ---
  Aggregate
-   ->  Custom Scan (ColumnarScan) on _hyper_11_12_chunk
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_11_12_chunk mytab
          ->  Index Scan using compress_hyper_12_13_chunk_a_c__ts_meta_min_1__ts_meta_max__idx on compress_hyper_12_13_chunk
                Index Cond: (a = 2)
 
