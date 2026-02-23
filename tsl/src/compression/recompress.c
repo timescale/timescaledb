@@ -47,22 +47,20 @@ static bool fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortsta
 													Relation uncompressed_chunk_rel,
 													Snapshot snapshot);
 static bool delete_tuple_for_recompression(Relation rel, ItemPointer tid, Snapshot snapshot);
-static void update_current_segment(CompressedSegmentInfo *current_segment, TupleTableSlot *slot,
-								   int nsegmentby_cols);
+static void update_current_segment(CompressedSegmentInfo *current_segment, Datum *values,
+								   bool *isnulls, int nsegmentby_cols);
 static void create_segmentby_scankeys(CompressionSettings *settings, Relation index_rel,
 									  Relation compressed_chunk_rel, ScanKeyData *index_scankeys);
 static void create_orderby_scankeys(CompressionSettings *settings, Relation index_rel,
 									Relation compressed_chunk_rel, ScanKeyData *orderby_scankeys);
-static void update_segmentby_scankeys(TupleTableSlot *uncompressed_slot,
-									  CompressedSegmentInfo *current_segment, int num_segmentby,
+static void update_segmentby_scankeys(Datum *values, bool *isnulls, int num_segmentby,
 									  ScanKey index_scankeys);
-static void update_orderby_scankeys(TupleTableSlot *uncompressed_slot,
-									CompressedSegmentInfo *current_segment, int num_segmentby,
+static void update_orderby_scankeys(Datum *values, bool *isnulls, int num_segmentby,
 									int num_orderby, ScanKey orderby_scankeys);
 static enum Batch_match_result match_tuple_batch(TupleTableSlot *compressed_slot, int num_orderby,
 												 ScanKey orderby_scankeys, bool *nulls_first);
-static bool check_changed_group(CompressedSegmentInfo *current_segment, TupleTableSlot *slot,
-								int nsegmentby_cols);
+static bool check_changed_group(CompressedSegmentInfo *current_segment, Datum *values,
+								bool *isnulls, int nsegmentby_cols);
 static void recompress_segment(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel,
 							   RowCompressor *row_compressor, BulkWriter *writer);
 static void try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk_rel);
@@ -374,6 +372,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 		MakeTupleTableSlot(uncompressed_rel_tupdesc, &TTSOpsMinimalTuple);
 	TupleTableSlot *compressed_slot = table_slot_create(compressed_chunk_rel, NULL);
 
+	Datum *values = palloc(sizeof(Datum) * recompress_ctx->n_keys);
+	bool *isnulls = palloc(sizeof(bool) * recompress_ctx->n_keys);
+
 	HeapTuple compressed_tuple;
 	IndexScanDesc index_scan = index_beginscan_compat(compressed_chunk_rel,
 													  index_rel,
@@ -398,18 +399,27 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	{
 		CHECK_FOR_INTERRUPTS();
 
+		for (int i = 0; i < recompress_ctx->n_keys; i++)
+		{
+			values[i] = slot_getattr(uncompressed_slot,
+									 AttrOffsetGetAttrNumber(
+										 recompress_ctx->current_segment[i].chunk_offset),
+									 &isnulls[i]);
+		}
+
 		update_current_segment(recompress_ctx->current_segment,
-							   uncompressed_slot,
+							   values,
+							   isnulls,
 							   recompress_ctx->num_segmentby);
 
 		/* Build scankeys based on uncompressed tuple values */
-		update_segmentby_scankeys(uncompressed_slot,
-								  recompress_ctx->current_segment,
+		update_segmentby_scankeys(values,
+								  isnulls,
 								  recompress_ctx->num_segmentby,
 								  recompress_ctx->index_scankeys);
 
-		update_orderby_scankeys(uncompressed_slot,
-								recompress_ctx->current_segment,
+		update_orderby_scankeys(values,
+								isnulls,
 								recompress_ctx->num_segmentby,
 								recompress_ctx->num_orderby,
 								recompress_ctx->orderby_scankeys);
@@ -442,26 +452,38 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 			{
 				tuples_for_recompression = true;
 				tuplesort_puttupleslot(recompress_tuplesortstate, uncompressed_slot);
+				/* If we happen to hit the end of uncompressed tuples or tuple changed segment group
+				 * we are done with the segment group
+				 */
 				found_tuple = tuplesort_gettupleslot(input_tuplesortstate,
 													 true /*=forward*/,
 													 false /*=copy*/,
 													 uncompressed_slot,
 													 NULL /*=abbrev*/);
-				/* If we happen to hit the end of uncompressed tuples or tuple changed segment group
-				 * we are done with the segment group
-				 */
-				if (!found_tuple || check_changed_group(recompress_ctx->current_segment,
-														uncompressed_slot,
-														recompress_ctx->num_segmentby))
+
+				if (!found_tuple)
 				{
 					done_with_segment = true;
 					break;
 				}
 
-				slot_getallattrs(uncompressed_slot);
+				for (int i = 0; i < recompress_ctx->n_keys; i++)
+				{
+					values[i] = slot_getattr(uncompressed_slot,
+											 AttrOffsetGetAttrNumber(
+												 recompress_ctx->current_segment[i].chunk_offset),
+											 &isnulls[i]);
+				}
 
-				update_orderby_scankeys(uncompressed_slot,
-										recompress_ctx->current_segment,
+				done_with_segment = check_changed_group(recompress_ctx->current_segment,
+														values,
+														isnulls,
+														recompress_ctx->num_segmentby);
+				if (done_with_segment)
+					break;
+
+				update_orderby_scankeys(values,
+										isnulls,
 										recompress_ctx->num_segmentby,
 										recompress_ctx->num_orderby,
 										recompress_ctx->orderby_scankeys);
@@ -550,7 +572,8 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 		 * until we hit a new segment group or exhaust the uncompressed tuples
 		 */
 		while (!check_changed_group(recompress_ctx->current_segment,
-									uncompressed_slot,
+									values,
+									isnulls,
 									recompress_ctx->num_segmentby))
 		{
 			tuples_for_recompression = true;
@@ -570,7 +593,13 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 				break;
 			}
 
-			slot_getallattrs(uncompressed_slot);
+			for (int i = 0; i < recompress_ctx->num_segmentby; i++)
+			{
+				values[i] = slot_getattr(uncompressed_slot,
+										 AttrOffsetGetAttrNumber(
+											 recompress_ctx->current_segment[i].chunk_offset),
+										 &isnulls[i]);
+			}
 		}
 
 		if (tuples_for_recompression)
@@ -703,6 +732,8 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 
 	writer = bulk_writer_build(new_compressed_chunk_rel, 0);
 	compressed_slot = table_slot_create(compressed_chunk_rel, NULL);
+	Datum *values = palloc(sizeof(Datum) * recompress_ctx->num_segmentby);
+	bool *isnulls = palloc(sizeof(bool) * recompress_ctx->num_segmentby);
 
 	/*
 	 * we use the compressed chunk's index to scan so that we get the compressed tuples sorted
@@ -710,24 +741,36 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 	 */
 	index_scan =
 		index_beginscan_compat(compressed_chunk_rel, index_rel, GetActiveSnapshot(), NULL, 0, 0);
+	index_scan->xs_want_itup = true;
 	index_rescan(index_scan, NULL, 0, NULL, 0);
 
 	while (index_getnext_slot(index_scan, ForwardScanDirection, compressed_slot))
 	{
+		for (int i = 0; i < recompress_ctx->num_segmentby; i++)
+		{
+			values[i] = index_getattr(index_scan->xs_itup,
+									  AttrOffsetGetAttrNumber(i),
+									  index_scan->xs_itupdesc,
+									  &isnulls[i]);
+		}
+
 		if (first_iteration)
 		{
 			update_current_segment(recompress_ctx->current_segment,
-								   compressed_slot,
+								   values,
+								   isnulls,
 								   recompress_ctx->num_segmentby);
 			first_iteration = false;
 		}
 		else if (check_changed_group(recompress_ctx->current_segment,
-									 compressed_slot,
+									 values,
+									 isnulls,
 									 recompress_ctx->num_segmentby))
 		{
 			recompress_segment(tuplesortstate, uncompressed_chunk_rel, &row_compressor, &writer);
 			update_current_segment(recompress_ctx->current_segment,
-								   compressed_slot,
+								   values,
+								   isnulls,
 								   recompress_ctx->num_segmentby);
 		}
 
@@ -864,38 +907,36 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 }
 
 static void
-update_segmentby_scankeys(TupleTableSlot *uncompressed_slot, CompressedSegmentInfo *current_segment,
-						  int num_segmentby, ScanKey index_scankeys)
+update_scankey(ScanKey index_scankey, Datum val, bool is_null)
 {
-	Datum val;
-	bool is_null;
+	index_scankey->sk_flags = is_null ? SK_ISNULL | SK_SEARCHNULL : 0;
+	index_scankey->sk_argument = val;
+}
+
+static void
+update_segmentby_scankeys(Datum *values, bool *isnulls, int num_segmentby, ScanKey index_scankeys)
+{
 	for (int i = 0; i < num_segmentby; i++)
 	{
-		AttrNumber in_attnum = AttrOffsetGetAttrNumber(current_segment[i].chunk_offset);
-		val = slot_getattr(uncompressed_slot, in_attnum, &is_null);
-		index_scankeys[i].sk_flags = is_null ? SK_ISNULL | SK_SEARCHNULL : 0;
-		index_scankeys[i].sk_argument = val;
+		update_scankey(&index_scankeys[i], values[i], isnulls[i]);
 	}
 }
 
 static void
-update_orderby_scankeys(TupleTableSlot *uncompressed_slot, CompressedSegmentInfo *current_segment,
-						int num_segmentby, int num_orderby, ScanKey orderby_scankeys)
+update_orderby_scankeys(Datum *values, bool *isnulls, int num_segmentby, int num_orderby,
+						ScanKey orderby_scankeys)
 {
 	int min_index, max_index;
-	Datum val;
-	bool is_null;
 	for (int i = 0; i < num_orderby; i++)
 	{
-		AttrNumber in_attnum =
-			AttrOffsetGetAttrNumber(current_segment[num_segmentby + i].chunk_offset);
-		val = slot_getattr(uncompressed_slot, in_attnum, &is_null);
 		min_index = i * 2;
 		max_index = min_index + 1;
-		orderby_scankeys[min_index].sk_flags = is_null ? SK_ISNULL : 0;
-		orderby_scankeys[min_index].sk_argument = val;
-		orderby_scankeys[max_index].sk_flags = is_null ? SK_ISNULL : 0;
-		orderby_scankeys[max_index].sk_argument = val;
+		update_scankey(&orderby_scankeys[min_index],
+					   values[num_segmentby + i],
+					   isnulls[num_segmentby + i]);
+		update_scankey(&orderby_scankeys[max_index],
+					   values[num_segmentby + i],
+					   isnulls[num_segmentby + i]);
 	}
 }
 
@@ -966,40 +1007,26 @@ recompress_segment(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel
 }
 
 static void
-update_current_segment(CompressedSegmentInfo *current_segment, TupleTableSlot *slot,
+update_current_segment(CompressedSegmentInfo *current_segment, Datum *values, bool *isnulls,
 					   int nsegmentby_cols)
 {
-	Datum val;
-	bool is_null;
-	CompressedSegmentInfo curr;
 	for (int i = 0; i < nsegmentby_cols; i++)
 	{
-		curr = current_segment[i];
-		val = slot_getattr(slot, AttrOffsetGetAttrNumber(curr.chunk_offset), &is_null);
 		/* new segment, need to do per-segment processing */
-		segment_info_update(curr.segment_info, val, is_null);
+		segment_info_update(current_segment[i].segment_info, values[i], isnulls[i]);
 	}
 }
 
 static bool
-check_changed_group(CompressedSegmentInfo *current_segment, TupleTableSlot *slot,
+check_changed_group(CompressedSegmentInfo *current_segment, Datum *values, bool *isnulls,
 					int nsegmentby_cols)
 {
-	Datum val;
-	bool is_null;
-	bool changed_segment = false;
-	CompressedSegmentInfo curr;
 	for (int i = 0; i < nsegmentby_cols; i++)
 	{
-		curr = current_segment[i];
-		val = slot_getattr(slot, AttrOffsetGetAttrNumber(curr.chunk_offset), &is_null);
-		if (!segment_info_datum_is_in_group(curr.segment_info, val, is_null))
-		{
-			changed_segment = true;
-			break;
-		}
+		if (!segment_info_datum_is_in_group(current_segment[i].segment_info, values[i], isnulls[i]))
+			return true;
 	}
-	return changed_segment;
+	return false;
 }
 
 static void

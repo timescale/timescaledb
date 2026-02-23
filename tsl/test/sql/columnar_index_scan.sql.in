@@ -2,7 +2,17 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set PREFIX 'EXPLAIN (costs off)'
+SET max_parallel_workers_per_gather = 0;
+-- disable vectorized aggregation to prevent plan switches when running on 32-bit
+SET timescaledb.enable_vectorized_aggregation = off;
+
+\set TEST_BASE_NAME columnar_index_scan
+SELECT format('include/%s_query.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
+       format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_OPTIMIZED",
+       format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNOPTIMIZED"
+\gset
+SELECT format('\! diff -u --label "Unoptimized results" --label "Optimized results" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
+\gset
 
 CREATE TABLE metrics(
     time timestamptz NOT NULL,
@@ -29,178 +39,96 @@ INSERT INTO metrics VALUES
 -- Compress all chunks
 SELECT compress_chunk(c) FROM show_chunks('metrics') c;
 
-SET max_parallel_workers_per_gather = 0;
+-- first run with hypertable with 1 fully compressed chunk
+
+-- get query plans
+\set PREFIX 'EXPLAIN (costs off)'
+\set ECHO all
 SET timescaledb.enable_columnarindexscan = on;
--- disable vectorized aggregation to prevent plan switches when running on 32-bit
-SET timescaledb.enable_vectorized_aggregation = off;
+\ir :TEST_QUERY_NAME
 
--- simple query with 1 max aggregate that can use optimization
-:PREFIX SELECT device, max(time) FROM metrics GROUP BY device;
-SELECT device, max(time) FROM metrics GROUP BY device;
+\set PREFIX ''
+\set ECHO errors
 
--- simple query with 1 min aggregate that can use optimization
-:PREFIX SELECT sensor, min(time) FROM metrics GROUP BY sensor ORDER BY sensor;
-SELECT sensor, min(time) FROM metrics GROUP BY sensor ORDER BY sensor;
+-- get query results with columnar index scan disabled
+SET timescaledb.enable_columnarindexscan = off;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
 
--- simple query with 1 first aggregate that can use optimization
-:PREFIX SELECT device, first(time, time) FROM metrics GROUP BY device ORDER BY device;
-SELECT device, first(time, time) FROM metrics GROUP BY device ORDER BY device;
+-- get query results with columnar index scan enabled
+SET timescaledb.enable_columnarindexscan = on;
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
 
--- simple query with 1 last aggregate that can use optimization
-:PREFIX SELECT device, last(time, time) FROM metrics GROUP BY device ORDER BY device;
-SELECT device, last(time, time) FROM metrics GROUP BY device ORDER BY device;
+-- compare optimized vs non-optimized results
+:DIFF_CMD
 
--- explicit index columns dont prevent optimization
-:PREFIX SELECT sensor, min(value) FROM metrics GROUP BY sensor;
-SELECT sensor, min(value) FROM metrics GROUP BY sensor ORDER BY sensor;
+-- make initial chunk partial
+INSERT INTO metrics VALUES
+('2025-01-01 00:00:00 PST', 'd1', 'A', 1.0, 1.1),
+('2025-01-01 00:00:00 PST', 'd3', 'A', 50.0, 50.1),
+('2025-01-01 00:00:00 PST', 'd3', 'B', 52.0, 52.1);
 
-:PREFIX SELECT sensor, min(value), max(value) FROM metrics GROUP BY sensor ORDER BY sensor;
-SELECT sensor, min(value), max(value) FROM metrics GROUP BY sensor ORDER BY sensor;
+-- second run with hypertable with 1 partial chunk
 
--- multiple aggregates on same column
-:PREFIX SELECT sensor, min(time), max(time), first(time,time), last(time,time) FROM metrics GROUP BY sensor ORDER BY sensor;
-SELECT sensor, min(time), max(time), first(time,time), last(time,time) FROM metrics GROUP BY sensor ORDER BY sensor;
+-- get query plans
+\set PREFIX 'EXPLAIN (costs off)'
+\set ECHO all
+SET timescaledb.enable_columnarindexscan = on;
+\ir :TEST_QUERY_NAME
 
--- same aggregate on multiple columns
-:PREFIX SELECT sensor, min(time), min(value)  FROM metrics GROUP BY sensor ORDER BY sensor;
-SELECT sensor, min(time), min(value)  FROM metrics GROUP BY sensor ORDER BY sensor;
+\set PREFIX ''
+\set ECHO errors
 
--- same aggregate on multiple columns but different order
-:PREFIX SELECT min(value), min(time), sensor  FROM metrics GROUP BY sensor ORDER BY sensor;
-SELECT sensor, min(value), min(time), sensor  FROM metrics GROUP BY sensor ORDER BY sensor;
+-- get query results with columnar index scan disabled
+SET timescaledb.enable_columnarindexscan = off;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
 
--- multiple aggregates on multiple columns
-:PREFIX SELECT sensor, first(time,time), last(time,time), first(value, value), last(value, value)  FROM metrics GROUP BY sensor ORDER BY sensor;
-SELECT sensor, first(time,time), last(time,time), first(value, value), last(value, value)  FROM metrics GROUP BY sensor ORDER BY sensor;
+-- get query results with columnar index scan enabled
+SET timescaledb.enable_columnarindexscan = on;
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
 
--- test multiple group by columns
-:PREFIX SELECT device, sensor, max(time) FROM metrics GROUP BY device,sensor ORDER BY device,sensor;
-SELECT device, sensor, max(time) FROM metrics GROUP BY device,sensor ORDER BY device,sensor;
+-- compare optimized vs non-optimized results
+:DIFF_CMD
 
--- order by does currently prevent optimization
-:PREFIX SELECT device, max(time) FROM metrics GROUP BY device ORDER BY device;
-SELECT device, max(time) FROM metrics GROUP BY device ORDER BY device;
-
--- filter on segmentby allows optimization
-:PREFIX SELECT device, min(time) FROM metrics WHERE device IN ('d1','d2') GROUP BY device;
-:PREFIX SELECT device, min(time) FROM metrics WHERE device =ANY(ARRAY['d1','d2']) AND sensor='B' GROUP BY device;
-
--- filter on non-segmentby prevents optimization
-:PREFIX SELECT device, max(time) FROM metrics WHERE time <> '2025-01-01'  GROUP BY device;
-SELECT device, max(time) FROM metrics WHERE time <> '2025-01-01'  GROUP BY device;
-
--- tableoid doesnt prevent optimization
-:PREFIX SELECT tableoid, device, max(time) FROM metrics GROUP BY device, tableoid;
-
--- group by on non-segmentby prevents optimization
-:PREFIX SELECT max(time) FROM metrics GROUP BY value;
-SELECT max(time) FROM metrics GROUP BY value;
-:PREFIX SELECT device, max(time) FROM metrics GROUP BY device,value;
-SELECT device, max(time) FROM metrics GROUP BY device,value;
-
--- no group by prevents optimization
-:PREFIX SELECT max(time) FROM metrics;
-SELECT max(time) FROM metrics;
-
--- multiple aggregates on same column use optimization
-:PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device;
-SELECT device, min(time), max(time) FROM metrics GROUP BY device;
-
--- multiple aggregates on same column with first/last
-:PREFIX SELECT device, min(time), first(time, time), last(time, time), max(time) FROM metrics GROUP BY device;
-SELECT device, min(time), first(time, time), last(time, time), max(time) FROM metrics GROUP BY device;
-
--- segmentby column at end of targetlist
-:PREFIX SELECT first(time, time), last(time, time), device FROM metrics GROUP BY device;
-SELECT first(time, time), last(time, time), device FROM metrics GROUP BY device;
-
--- multiple aggregates on different columns use optimization
-:PREFIX SELECT device, min(time), max(value) FROM metrics GROUP BY device;
-SELECT device, min(time), max(value) FROM metrics GROUP BY device;
-
--- multiple aggregates on same non-time column use optimization
-:PREFIX SELECT device, min(value), max(value) FROM metrics GROUP BY device;
-SELECT device, min(value), max(value) FROM metrics GROUP BY device;
-
--- multiple aggregates on multiple columns
-:PREFIX SELECT device, min(time), max(time), min(value), max(value) FROM metrics GROUP BY device;
-SELECT device, min(time), max(time), min(value), max(value) FROM metrics GROUP BY device;
-
--- expression on aggregates (currently not optimized)
-:PREFIX SELECT device, max(time), min(time), max(time) - min(time)  FROM metrics GROUP BY device;
-SELECT device, max(time), min(time), max(time) - min(time)  FROM metrics GROUP BY device;
-
--- aggregate on segmentby column does not use optimization
-:PREFIX SELECT device, min(sensor) FROM metrics GROUP BY device;
-SELECT device, min(sensor) FROM metrics GROUP BY device;
-
--- aggregate on column without metadata does not use optimization
-:PREFIX SELECT device, min(value2) FROM metrics GROUP BY device;
-SELECT device, min(value2) FROM metrics GROUP BY device;
-
--- test with sort
-:PREFIX SELECT device, sensor, first(time,time), last(time,time) from metrics group by device, sensor order by 1,2;
-SELECT device, sensor, first(time,time), last(time,time) from metrics group by device, sensor order by 1,2;
-
--- test with subquery (SubqueryScan)
-:PREFIX SELECT * FROM (SELECT device, min(time), max(time) FROM metrics GROUP BY device) sub ORDER BY device;
-SELECT * FROM (SELECT device, min(time), max(time) FROM metrics GROUP BY device) sub ORDER BY device;
-
-:PREFIX SELECT mx, mn, device FROM (SELECT device, min(time) mn, max(time) mx FROM metrics GROUP BY device) sub ORDER BY device;
-SELECT mx, mn, device FROM (SELECT device, min(time) mn, max(time) mx FROM metrics GROUP BY device) sub ORDER BY device;
-
--- test with CTE (also uses SubqueryScan)
-:PREFIX WITH agg_data AS (
-    SELECT device, min(time) as min_time, max(time) as max_time FROM metrics GROUP BY device
-)
-SELECT * FROM agg_data ORDER BY device;
-
-WITH agg_data AS (
-    SELECT device, min(time) as min_time, max(time) as max_time FROM metrics GROUP BY device
-)
-SELECT * FROM agg_data ORDER BY device;
-
--- test parallel queries (not supported with ColumnarIndexScan)
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
-:PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device;
-SELECT device, min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
-SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
-
--- test with UNION ALL (Append node)
-:PREFIX SELECT device, min(time) FROM metrics WHERE device = 'd1' GROUP BY device
-UNION ALL
-SELECT device, min(time) FROM metrics WHERE device = 'd2' GROUP BY device;
-
-SELECT device, min(time) FROM metrics WHERE device = 'd1' GROUP BY device
-UNION ALL
-SELECT device, min(time) FROM metrics WHERE device = 'd2' GROUP BY device
-ORDER BY device;
-
-:PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device
-UNION ALL
-SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
-
-SELECT device, min(time), max(time) FROM metrics GROUP BY device
-UNION ALL
-SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
-
--- test with multiple chunks to verify Append/MergeAppend handling
+-- create a second chunk
 INSERT INTO metrics VALUES
 ('2025-02-01 00:00:00 PST', 'd1', 'A', 100.0, 100.1),
 ('2025-02-01 01:00:00 PST', 'd1', 'B', 200.0, 200.1),
 ('2025-02-01 00:00:00 PST', 'd2', 'A', 150.0, 150.1),
 ('2025-02-01 01:00:00 PST', 'd2', 'C', 250.0, 250.1);
 
-SELECT compress_chunk(c) FROM show_chunks('metrics') c WHERE NOT EXISTS (
-    SELECT 1 FROM timescaledb_information.chunks ch
-    WHERE ch.chunk_name = split_part(c::text, '.', 2) AND ch.is_compressed = true
-);
+SELECT compress_chunk(c) FROM show_chunks('metrics') c LIMIT 1 OFFSET 1;
 
--- query across multiple chunks with ColumnarIndexScan
-:PREFIX SELECT device, min(time), max(time) FROM metrics GROUP BY device;
-SELECT device, min(time), max(time) FROM metrics GROUP BY device ORDER BY device;
+-- third run with hypertable with 1 partial and 1 fully compressed chunk
 
--- multiple aggregates across multiple chunks
-:PREFIX SELECT device, min(time), max(time), min(value), max(value) FROM metrics GROUP BY device;
-SELECT device, min(time), max(time), min(value), max(value) FROM metrics GROUP BY device ORDER BY device;
+-- get query plans
+\set PREFIX 'EXPLAIN (costs off)'
+\set ECHO all
+SET timescaledb.enable_columnarindexscan = on;
+\ir :TEST_QUERY_NAME
+
+\set PREFIX ''
+\set ECHO errors
+
+-- get query results with columnar index scan disabled
+SET timescaledb.enable_columnarindexscan = off;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+-- get query results with columnar index scan enabled
+SET timescaledb.enable_columnarindexscan = on;
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+-- compare optimized vs non-optimized results
+:DIFF_CMD
 

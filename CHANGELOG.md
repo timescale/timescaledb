@@ -5,6 +5,20 @@ This page lists all the latest features and updates to TimescaleDB. When
 you use psql to update your database, use the -X flag and prevent any .psqlrc 
 commands from accidentally triggering the load of a previous DB version.**
 
+## 2.25.1 (2026-02-17)
+
+This release contains performance improvements and bug fixes since the 2.25.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#9215](https://github.com/timescale/timescaledb/pull/9215) Add missing handling for em_parent to sort_transform
+* [#9223](https://github.com/timescale/timescaledb/pull/9223) Clean up orphaned entries in continuous aggregate invalidaton logs
+* [#9226](https://github.com/timescale/timescaledb/pull/9226) Fix invalidation and batching issues for variable bucket continuous aggregates.
+* [#9256](https://github.com/timescale/timescaledb/pull/9256) Error "record type has no extended hash function" on some queries using a sparse bloom filter index on a column of composite type.
+* [#9257](https://github.com/timescale/timescaledb/pull/9257) Handle type coercion for metadata column equivalence members
+
+**Thanks**
+* @emapple for reporting a crash in a query with nested joins and subqueries
+
 ## 2.25.0 (2026-01-29)
 
 This release contains performance improvements and bug fixes since the 2.24.0 release. We recommend that you upgrade at the next available opportunity.

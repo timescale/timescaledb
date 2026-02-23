@@ -807,8 +807,8 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
  * This function was moved to postgres main in PG13 but was removed
  * again in PG15. So we use our own implementation for PG15+.
  */
-Expr *
-ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
+EquivalenceMember *
+ts_find_em_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 {
 	EquivalenceMember *em;
 #if PG18_GE
@@ -836,12 +836,19 @@ ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 			 * taken entirely from this relation, we'll be content to choose
 			 * any one of those.
 			 */
-			return em->em_expr;
+			return em;
 		}
 	}
 
-	/* We didn't find any suitable equivalence class expression */
+	/* We didn't find any suitable equivalence class member */
 	return NULL;
+}
+
+Expr *
+ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
+{
+	EquivalenceMember *em = ts_find_em_for_rel(ec, rel);
+	return em ? em->em_expr : NULL;
 }
 
 bool
