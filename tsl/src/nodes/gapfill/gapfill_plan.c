@@ -226,6 +226,8 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *
 	cscan->flags = path->flags;
 	cscan->methods = &gapfill_plan_methods;
 
+	/* See GapFillPrivateIndex enum for custom_private layout */
+	StaticAssertDecl(GFP_Count == 4, "custom_private list size mismatch");
 	cscan->custom_private =
 		list_make4(gfpath->func, root->parse->groupClause, root->parse->jointree, args);
 
