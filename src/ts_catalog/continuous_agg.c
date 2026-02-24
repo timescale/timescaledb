@@ -1310,25 +1310,40 @@ generic_time_bucket(const ContinuousAggBucketFunction *bf, Datum timestamp)
 	FuncInfo *func_info = ts_func_cache_get_bucketing_func(bf->bucket_function);
 	Ensure(func_info != NULL, "unable to get bucket function for Oid %d", bf->bucket_function);
 
+	bool has_offset = (bf->bucket_time_offset != NULL);
+
 	if (bf->bucket_time_timezone != NULL)
 	{
+		/*
+		 * Use LOCAL_FCINFO to call ts_timestamptz_timezone_bucket with all
+		 * 5 arguments, including origin and offset.
+		 */
+		LOCAL_FCINFO(fcinfo, 5);
+		InitFunctionCallInfoData(*fcinfo, NULL, 5, InvalidOid, NULL, NULL);
+		fcinfo->args[0] =
+			(NullableDatum){ .value = IntervalPGetDatum(bf->bucket_time_width), .isnull = false };
+		fcinfo->args[1] = (NullableDatum){ .value = timestamp, .isnull = false };
+		fcinfo->args[2] = (NullableDatum){ .value = CStringGetTextDatum(bf->bucket_time_timezone),
+										   .isnull = false };
 		if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
-		{
-			/* using default origin */
-			return DirectFunctionCall3(ts_timestamptz_timezone_bucket,
-									   IntervalPGetDatum(bf->bucket_time_width),
-									   timestamp,
-									   CStringGetTextDatum(bf->bucket_time_timezone));
-		}
+			fcinfo->args[3] = (NullableDatum){ .value = (Datum) 0, .isnull = true };
 		else
-		{
-			/* custom origin specified */
-			return DirectFunctionCall4(ts_timestamptz_timezone_bucket,
-									   IntervalPGetDatum(bf->bucket_time_width),
-									   timestamp,
-									   CStringGetTextDatum(bf->bucket_time_timezone),
-									   TimestampTzGetDatum(bf->bucket_time_origin));
-		}
+			fcinfo->args[3] = (NullableDatum){ .value = TimestampTzGetDatum(bf->bucket_time_origin),
+											   .isnull = false };
+		if (has_offset)
+			fcinfo->args[4] = (NullableDatum){ .value = IntervalPGetDatum(bf->bucket_time_offset),
+											   .isnull = false };
+		else
+			fcinfo->args[4] = (NullableDatum){ .value = (Datum) 0, .isnull = true };
+		return ts_timestamptz_timezone_bucket(fcinfo);
+	}
+
+	if (has_offset)
+	{
+		return DirectFunctionCall3(ts_timestamp_offset_bucket,
+								   IntervalPGetDatum(bf->bucket_time_width),
+								   timestamp,
+								   IntervalPGetDatum(bf->bucket_time_offset));
 	}
 
 	if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))

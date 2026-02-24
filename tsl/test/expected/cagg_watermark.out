@@ -1715,7 +1715,6 @@ SELECT * FROM metric_cagg_24h;
           to_ts_24h           | id | duration_ms 
 ------------------------------+----+-------------
  Fri Jan 23 17:00:00 2026 UTC |  1 |        3000
- Fri Jan 23 17:00:00 2026 UTC |  1 |        2000
 
 --fix-bucket cagg has correct watermark before and after the fix, should be no duplicates
 SELECT * FROM metric_cagg_24h_no_tz;
@@ -1733,7 +1732,7 @@ WHERE mat_hypertable_id = (
 );
          watermark_ts         
 ------------------------------
- Fri Jan 23 23:00:00 2026 UTC
+ Sat Jan 24 17:00:00 2026 UTC
 
 SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
 FROM _timescaledb_catalog.continuous_aggs_watermark
@@ -1754,8 +1753,8 @@ WHERE materialization_id = (
 );
           lowest_ts           |             greatest_ts             
 ------------------------------+-------------------------------------
- -infinity                    | Tue Jan 20 22:59:59.999999 2026 UTC
- Sun Jan 25 23:00:00 2026 UTC | infinity
+ -infinity                    | Tue Jan 20 16:59:59.999999 2026 UTC
+ Sun Jan 25 17:00:00 2026 UTC | infinity
 
 SELECT
     CASE WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
@@ -1773,8 +1772,8 @@ WHERE materialization_id = (
 );
           lowest_ts           |             greatest_ts             
 ------------------------------+-------------------------------------
- -infinity                    | Tue Jan 20 23:59:59.999999 2026 UTC
- Mon Jan 26 00:00:00 2026 UTC | infinity
+ -infinity                    | Tue Jan 20 17:59:59.999999 2026 UTC
+ Sun Jan 25 18:00:00 2026 UTC | infinity
 
 SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
@@ -1784,7 +1783,7 @@ WHERE hypertable_id = (
 );
          watermark_ts         
 ------------------------------
- Mon Jan 26 00:00:00 2026 UTC
+ Sun Jan 25 18:00:00 2026 UTC
 
 -- Test origin parameter (same bucket boundaries as offset tests)
 -- origin at 17:00 UTC = 18:00 Stockholm, so buckets align at the same boundary
@@ -1875,8 +1874,8 @@ WHERE materialization_id = (
 );
           lowest_ts           |             greatest_ts             
 ------------------------------+-------------------------------------
- -infinity                    | Tue Jan 20 23:59:59.999999 2026 UTC
- Mon Jan 26 00:00:00 2026 UTC | infinity
+ -infinity                    | Tue Jan 20 17:59:59.999999 2026 UTC
+ Sun Jan 25 18:00:00 2026 UTC | infinity
 
 SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
@@ -1886,7 +1885,7 @@ WHERE hypertable_id = (
 );
          watermark_ts         
 ------------------------------
- Mon Jan 26 00:00:00 2026 UTC
+ Sun Jan 25 18:00:00 2026 UTC
 
 -- Test variable-width bucket (monthly) without timezone, with offset
 -- Monthly bucket with 18h offset: boundaries at 18:00 UTC on the 1st of each month
@@ -1930,7 +1929,6 @@ SELECT * FROM metric_cagg_monthly_offset;
          to_ts_month          | id | duration_ms 
 ------------------------------+----+-------------
  Thu Jan 01 18:00:00 2026 UTC |  1 |        3500
- Thu Jan 01 18:00:00 2026 UTC |  1 |         500
 
 SELECT * FROM metric_cagg_monthly_origin;
          to_ts_month          | id | duration_ms 
@@ -1947,7 +1945,7 @@ WHERE mat_hypertable_id = (
 );
          watermark_ts         
 ------------------------------
- Sun Feb 01 00:00:00 2026 UTC
+ Sun Feb 01 18:00:00 2026 UTC
 
 SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
 FROM _timescaledb_catalog.continuous_aggs_watermark

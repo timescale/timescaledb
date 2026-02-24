@@ -2104,9 +2104,9 @@ SELECT * FROM cagg_int_offset;
 -- Check that the refresh is properly aligned
 INSERT INTO table_int VALUES(114, 0);
 SET client_min_messages TO DEBUG1;
-CALL refresh_continuous_aggregate('cagg_int_offset', 110, 130);
-psql:include/cagg_query_common.sql:824: LOG:  statement: CALL refresh_continuous_aggregate('cagg_int_offset', 110, 130);
-psql:include/cagg_query_common.sql:824: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_int_offset" in window [ 105, 135 ]
+CALL refresh_continuous_aggregate('cagg_int_offset', 100, 130);
+psql:include/cagg_query_common.sql:824: LOG:  statement: CALL refresh_continuous_aggregate('cagg_int_offset', 100, 130);
+psql:include/cagg_query_common.sql:824: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_int_offset" in window [ 105, 125 ]
 psql:include/cagg_query_common.sql:824: DEBUG:  building index "_hyper_38_67_chunk__materialized_hypertable_38_time_bucket_idx" on table "_hyper_38_67_chunk" serially
 psql:include/cagg_query_common.sql:824: DEBUG:  index "_hyper_38_67_chunk__materialized_hypertable_38_time_bucket_idx" can safely use deduplication
 psql:include/cagg_query_common.sql:824: LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_38"
