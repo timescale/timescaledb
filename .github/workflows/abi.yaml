@@ -82,6 +82,9 @@ jobs:
           # and if it's not present, it means the unversioned package is 1.1, so
           # we install it.
           apk add openssl1.1-compat-dev || apk add openssl-dev
+          # Postgres is compiled with ICU, so the pg_locale.h depends on the ICU
+          # headers and we have to install them
+          apk add icu-dev
           git config --global --add safe.directory /mnt
           cd /mnt
           BUILD_DIR=build_abi BUILD_FORCE_REMOVE=true ./bootstrap
