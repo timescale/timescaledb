@@ -585,3 +585,294 @@ SELECT COALESCE(_timescaledb_functions.cagg_watermark(-1),12);
 SELECT _timescaledb_functions.cagg_watermark_materialized(-1);
 SELECT COALESCE(_timescaledb_functions.cagg_watermark_materialized(-1),12);
 \set ON_ERROR_STOP 1
+
+
+-- Issue #3805 and related: Offset not handled correctly in calculating watermark
+-- and refresh windows
+
+CREATE TABLE metric_data(
+      to_ts       TIMESTAMPTZ NOT NULL,
+      id          INTEGER     NOT NULL,
+      duration_ms BIGINT      NOT NULL
+  );
+
+SELECT create_hypertable('metric_data', 'to_ts');
+
+--timezone (variable) cagg with offset
+CREATE MATERIALIZED VIEW metric_cagg_24h
+WITH (timescaledb.continuous) AS
+SELECT
+time_bucket(INTERVAL '1 day', to_ts, timezone => 'Europe/Stockholm', "offset" => INTERVAL '18 hours') AS to_ts_24h,
+id,
+SUM(duration_ms) AS duration_ms
+FROM metric_data
+GROUP BY to_ts_24h, id
+WITH NO DATA;
+
+--no timezone, fix-bucket cagg, with offset
+CREATE MATERIALIZED VIEW metric_cagg_24h_no_tz
+WITH (timescaledb.continuous) AS
+SELECT
+time_bucket(INTERVAL '1 day', to_ts, "offset" => INTERVAL '18 hours') AS to_ts_24h,
+id,
+SUM(duration_ms) AS duration_ms
+FROM metric_data
+GROUP BY to_ts_24h, id
+WITH NO DATA;
+
+
+
+SET timezone = 'UTC';
+
+
+INSERT INTO metric_data VALUES
+    ('2026-01-23 18:00+00', 1, 1000),
+    ('2026-01-24 10:00+00', 1, 2000);
+
+--invalidation and watermark before refresh
+SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
+FROM _timescaledb_catalog.continuous_aggs_watermark
+WHERE mat_hypertable_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h'
+);
+
+SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
+FROM _timescaledb_catalog.continuous_aggs_watermark
+WHERE mat_hypertable_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h_no_tz'
+);
+
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest_ts,
+        _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest_ts
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h'
+);
+
+SELECT
+    CASE WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
+        THEN '-infinity'::timestamptz
+        ELSE _timescaledb_functions.to_timestamp(lowest_modified_value)
+    END AS lowest_ts,
+    CASE WHEN greatest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype)
+        THEN 'infinity'::timestamptz
+        ELSE _timescaledb_functions.to_timestamp(greatest_modified_value)
+    END AS greatest_ts
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h_no_tz'
+);
+
+SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h'
+);
+
+CALL refresh_continuous_aggregate('metric_cagg_24h', '2026-01-20 15:00:00+00', '2026-01-26 15:00:00+00');
+CALL refresh_continuous_aggregate('metric_cagg_24h_no_tz', '2026-01-20 15:00:00+00', '2026-01-26 15:00:00+00');
+
+SELECT * FROM metric_data;
+
+SELECT * FROM metric_cagg_24h;
+
+SELECT * from metric_cagg_24h_no_tz;
+
+ALTER MATERIALIZED VIEW metric_cagg_24h SET (timescaledb.materialized_only = false);
+ALTER MATERIALIZED VIEW metric_cagg_24h_no_tz SET (timescaledb.materialized_only = false);
+
+--result should not contain duplicates on the grouping column (bucket and id)
+SELECT * FROM metric_cagg_24h;
+
+--fix-bucket cagg has correct watermark before and after the fix, should be no duplicates
+SELECT * FROM metric_cagg_24h_no_tz;
+
+
+--invalidation log, threshold, and watermark should align
+--at the bucket boundary (i.e, 17th hour UTC (which is 18th hour in Stockholm) of each day)
+
+SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
+FROM _timescaledb_catalog.continuous_aggs_watermark
+WHERE mat_hypertable_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h'
+);
+
+SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
+FROM _timescaledb_catalog.continuous_aggs_watermark
+WHERE mat_hypertable_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h_no_tz'
+);
+
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest_ts,
+        _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest_ts
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h'
+);
+
+SELECT
+    CASE WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
+        THEN '-infinity'::timestamptz
+        ELSE _timescaledb_functions.to_timestamp(lowest_modified_value)
+    END AS lowest_ts,
+    CASE WHEN greatest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype)
+        THEN 'infinity'::timestamptz
+        ELSE _timescaledb_functions.to_timestamp(greatest_modified_value)
+    END AS greatest_ts
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h_no_tz'
+);
+
+SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h'
+);
+
+-- Test origin parameter (same bucket boundaries as offset tests)
+-- origin at 17:00 UTC = 18:00 Stockholm, so buckets align at the same boundary
+
+--timezone (variable) cagg with origin
+CREATE MATERIALIZED VIEW metric_cagg_24h_origin_tz
+WITH (timescaledb.continuous) AS
+SELECT
+time_bucket(INTERVAL '1 day', to_ts, timezone => 'Europe/Stockholm', origin => '2026-01-01 17:00:00+00') AS to_ts_24h,
+id,
+SUM(duration_ms) AS duration_ms
+FROM metric_data
+GROUP BY to_ts_24h, id
+WITH NO DATA;
+
+--no timezone, fix-bucket cagg, with origin
+CREATE MATERIALIZED VIEW metric_cagg_24h_origin_no_tz
+WITH (timescaledb.continuous) AS
+SELECT
+time_bucket(INTERVAL '1 day', to_ts, origin => '2026-01-01 18:00:00+00') AS to_ts_24h,
+id,
+SUM(duration_ms) AS duration_ms
+FROM metric_data
+GROUP BY to_ts_24h, id
+WITH NO DATA;
+
+CALL refresh_continuous_aggregate('metric_cagg_24h_origin_tz', '2026-01-20 15:00:00+00', '2026-01-26 15:00:00+00');
+CALL refresh_continuous_aggregate('metric_cagg_24h_origin_no_tz', '2026-01-20 15:00:00+00', '2026-01-26 15:00:00+00');
+
+SELECT * FROM metric_cagg_24h_origin_tz;
+
+SELECT * FROM metric_cagg_24h_origin_no_tz;
+
+ALTER MATERIALIZED VIEW metric_cagg_24h_origin_tz SET (timescaledb.materialized_only = false);
+ALTER MATERIALIZED VIEW metric_cagg_24h_origin_no_tz SET (timescaledb.materialized_only = false);
+
+--result should not contain duplicates on the grouping column (bucket and id)
+SELECT * FROM metric_cagg_24h_origin_tz;
+
+SELECT * FROM metric_cagg_24h_origin_no_tz;
+
+--watermark should align at the bucket boundary
+SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
+FROM _timescaledb_catalog.continuous_aggs_watermark
+WHERE mat_hypertable_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h_origin_tz'
+);
+
+SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
+FROM _timescaledb_catalog.continuous_aggs_watermark
+WHERE mat_hypertable_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h_origin_no_tz'
+);
+
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest_ts,
+        _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest_ts
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h_origin_tz'
+);
+
+SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest_ts,
+        _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest_ts
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h_origin_no_tz'
+);
+
+SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_24h_origin_tz'
+);
+
+-- Test variable-width bucket (monthly) without timezone, with offset
+-- Monthly bucket with 18h offset: boundaries at 18:00 UTC on the 1st of each month
+-- Data at 2026-02-01 10:00 falls in Jan bucket [2026-01-01 18:00, 2026-02-01 18:00)
+-- This would cause duplicates if watermark doesn't account for offset
+
+INSERT INTO metric_data VALUES ('2026-02-01 10:00+00', 1, 500);
+
+CREATE MATERIALIZED VIEW metric_cagg_monthly_offset
+WITH (timescaledb.continuous) AS
+SELECT
+time_bucket(INTERVAL '1 month', to_ts, "offset" => INTERVAL '18 hours') AS to_ts_month,
+id,
+SUM(duration_ms) AS duration_ms
+FROM metric_data
+GROUP BY to_ts_month, id
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW metric_cagg_monthly_origin
+WITH (timescaledb.continuous) AS
+SELECT
+time_bucket(INTERVAL '1 month', to_ts, origin => '2026-01-01 18:00:00+00') AS to_ts_month,
+id,
+SUM(duration_ms) AS duration_ms
+FROM metric_data
+GROUP BY to_ts_month, id
+WITH NO DATA;
+
+CALL refresh_continuous_aggregate('metric_cagg_monthly_offset', '2025-12-01', '2026-02-05');
+CALL refresh_continuous_aggregate('metric_cagg_monthly_origin', '2025-12-01', '2026-02-05');
+
+SELECT * FROM metric_cagg_monthly_offset;
+
+SELECT * FROM metric_cagg_monthly_origin;
+
+ALTER MATERIALIZED VIEW metric_cagg_monthly_offset SET (timescaledb.materialized_only = false);
+ALTER MATERIALIZED VIEW metric_cagg_monthly_origin SET (timescaledb.materialized_only = false);
+
+--result should not contain duplicates on the grouping column (bucket and id)
+SELECT * FROM metric_cagg_monthly_offset;
+
+SELECT * FROM metric_cagg_monthly_origin;
+
+--watermark should align at 2026-02-01 18:00:00+00 (the next month bucket boundary)
+SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
+FROM _timescaledb_catalog.continuous_aggs_watermark
+WHERE mat_hypertable_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_monthly_offset'
+);
+
+SELECT _timescaledb_functions.to_timestamp(watermark) AS watermark_ts
+FROM _timescaledb_catalog.continuous_aggs_watermark
+WHERE mat_hypertable_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'metric_cagg_monthly_origin'
+);
+
+drop table metric_data cascade;
