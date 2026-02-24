@@ -742,18 +742,55 @@ ts_columnar_estimate_compressed_batch_size(const Oid relid)
  * we put cost of 1 tuple of compressed_scan as startup cost
  */
 static void
-cost_columnar_scan(PlannerInfo *root, const CompressionInfo *compression_info, Path *path,
+cost_columnar_scan(const CompressionInfo *compression_info, ColumnarScanPath *columnar_scan,
 				   Path *compressed_path)
 {
-	/* startup_cost is cost before fetching first tuple */
+	Path *path = &columnar_scan->custom_path.path;
+
 	const double compressed_rows = Max(1, compressed_path->rows);
-	path->startup_cost =
-		compressed_path->startup_cost +
+
+	/*
+	 * Startup cost is cost before fetching the first tuple. For the columnar
+	 * scan, it is composed of:
+	 *
+	 * 1) cost before fetching the first compressed tuple.
+	 */
+	path->startup_cost = compressed_path->startup_cost;
+
+	/*
+	 * 2) cost of actually fetching the first compressed tuple.
+	 */
+	path->startup_cost +=
 		(compressed_path->total_cost - compressed_path->startup_cost) / compressed_rows;
 
-	/* total_cost is cost for fetching all tuples */
+	/*
+	 * 3) in case of bulk decompression, cost of fully decompressing the first
+	 * batch.
+	 */
+	if (columnar_scan->enable_bulk_decompression)
+	{
+		path->startup_cost += compression_info->compressed_batch_size * cpu_tuple_cost;
+	}
+
+	/*
+	 * Estimate the resulting number of rows based on the batch size statistics.
+	 */
 	path->rows = compressed_path->rows * compression_info->compressed_batch_size;
-	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
+
+	/*
+	 * Bulk decompression is about 10x more efficient than row-by-row
+	 * decompression. In the startup cost calculation above, we assume the cost
+	 * of producing one uncompressed row by bulk decompression to be
+	 * cpu_tuple_cost.
+	 */
+	const double decompression_cost_per_uncompressed_row =
+		columnar_scan->enable_bulk_decompression ? cpu_tuple_cost : 10. * cpu_tuple_cost;
+
+	/*
+	 * total_cost is cost for fetching all tuples.
+	 */
+	path->total_cost =
+		compressed_path->total_cost + path->rows * decompression_cost_per_uncompressed_row;
 
 #if PG18_GE
 	/* PG18 changes the way we handle disabled nodes so we
@@ -1003,8 +1040,8 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
  * To save planning time, we therefore refrain from adding them.
  */
 static Path *
-make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Path *compressed_path,
-					   const SortInfo *sort_info)
+make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, ColumnarScanPath *path,
+					   Path *compressed_path, const SortInfo *sort_info)
 {
 	/*
 	 * Don't have a useful sorting after decompression.
@@ -1014,12 +1051,10 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 		return NULL;
 	}
 
-	Assert(ts_is_columnar_scan_path(path));
-
 	/*
 	 * We should be given an unsorted ColumnarScan path.
 	 */
-	Assert(path->pathkeys == NIL);
+	Assert(path->custom_path.path.pathkeys == NIL);
 
 	/*
 	 * Create the sorted path for these useful_pathkeys. Copy the decompress
@@ -1039,7 +1074,7 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 
 	/* Set in "create_sort_path" in PG18GE, have to set separately for PG17LE.
 	 * Need to preserve info for sort over parametrized index paths. */
-	sorted_path->param_info = path->param_info;
+	sorted_path->param_info = path->custom_path.path.param_info;
 
 	/*
 	 * Now, we need another dumb workaround for Postgres problems. When creating
@@ -1286,6 +1321,65 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 }
 
 /*
+ * Apply compressed sort to the given path. Modifies in place if possible,
+ * otherwise creates a copy with sorting.
+ */
+static void
+use_compressed_sort(PlannerInfo *root, CompressionInfo const *compression_info,
+					SortInfo const *sort_info, ColumnarScanPath *base_path, Path *compressed_path,
+					List **inout_decompressed_paths)
+{
+	if (pathkeys_contained_in(sort_info->required_compressed_pathkeys, compressed_path->pathkeys))
+	{
+		/*
+		 * The compressed path already has the required ordering. Modify
+		 * in place the no-sorting path.
+		 */
+		base_path->reverse = sort_info->reverse;
+		base_path->needs_sequence_num = sort_info->needs_sequence_num;
+		base_path->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
+		base_path->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
+		return;
+	}
+
+	/*
+	 * We must sort the underlying compressed path to get the
+	 * required ordering. Make a copy of no-sorting path and modify
+	 * it accordingly.
+	 */
+	ColumnarScanPath *path_copy = copy_columnar_scan_path(base_path);
+	path_copy->reverse = sort_info->reverse;
+	path_copy->needs_sequence_num = sort_info->needs_sequence_num;
+	path_copy->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
+	path_copy->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
+
+	/*
+	 * Add costing for a sort. The standard Postgres pattern is to add the cost during
+	 * path creation, but not add the sort path itself, that's done during plan
+	 * creation. Examples of this in: create_merge_append_path &
+	 * create_merge_append_plan
+	 */
+	Path sort_path; /* dummy for result of cost_sort */
+
+	cost_sort(&sort_path,
+			  root,
+			  sort_info->required_compressed_pathkeys,
+#if PG18_GE
+			  compressed_path->disabled_nodes,
+#endif
+			  compressed_path->total_cost,
+			  compressed_path->rows,
+			  compressed_path->pathtarget->width,
+			  0.0,
+			  work_mem,
+			  -1);
+
+	cost_columnar_scan(compression_info, path_copy, &sort_path);
+
+	*inout_decompressed_paths = lappend(*inout_decompressed_paths, path_copy);
+}
+
+/*
  * Add various decompression paths that are possible based on the given
  * compressed path.
  */
@@ -1335,9 +1429,22 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		}
 	}
 
-	Path *chunk_path_no_sort =
-		(Path *) columnar_scan_path_create(root, compression_info, compressed_path);
+	ColumnarScanPath *chunk_path_no_sort =
+		columnar_scan_path_create(root, compression_info, compressed_path);
 	List *decompressed_paths = list_make1(chunk_path_no_sort);
+
+	/*
+	 * If we care about startup cost, and use bulk decompression, try a path
+	 * without bulk decompression as well. It has cheaper startup.
+	 */
+	ColumnarScanPath *rowbyrow_path = NULL;
+	if (chunk_rel->consider_startup && chunk_path_no_sort->enable_bulk_decompression)
+	{
+		rowbyrow_path = copy_columnar_scan_path(chunk_path_no_sort);
+		rowbyrow_path->enable_bulk_decompression = false;
+		cost_columnar_scan(compression_info, rowbyrow_path, compressed_path);
+		decompressed_paths = lappend(decompressed_paths, rowbyrow_path);
+	}
 
 	/*
 	 * Create a path for the batch sorted merge optimization. This optimization
@@ -1351,11 +1458,11 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	{
 		Assert(!sort_info->use_compressed_sort);
 
-		ColumnarScanPath *path_copy =
-			copy_columnar_scan_path((ColumnarScanPath *) chunk_path_no_sort);
+		ColumnarScanPath *path_copy = copy_columnar_scan_path(chunk_path_no_sort);
 
 		path_copy->reverse = sort_info->reverse;
 		path_copy->batch_sorted_merge = true;
+		path_copy->enable_bulk_decompression = false;
 
 		/*
 		 * The segment by optimization is only enabled if it can deliver the tuples in the
@@ -1390,57 +1497,21 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 */
 	if (sort_info->use_compressed_sort)
 	{
-		if (pathkeys_contained_in(sort_info->required_compressed_pathkeys,
-								  compressed_path->pathkeys))
+		use_compressed_sort(root,
+							compression_info,
+							sort_info,
+							chunk_path_no_sort,
+							compressed_path,
+							&decompressed_paths);
+
+		if (rowbyrow_path != NULL)
 		{
-			/*
-			 * The compressed path already has the required ordering. Modify
-			 * in place the no-sorting path we just created above.
-			 */
-			ColumnarScanPath *path = (ColumnarScanPath *) chunk_path_no_sort;
-			path->reverse = sort_info->reverse;
-			path->needs_sequence_num = sort_info->needs_sequence_num;
-			path->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
-			path->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
-		}
-		else
-		{
-			/*
-			 * We must sort the underlying compressed path to get the
-			 * required ordering. Make a copy of no-sorting path and modify
-			 * it accordingly
-			 */
-			ColumnarScanPath *path_copy =
-				copy_columnar_scan_path((ColumnarScanPath *) chunk_path_no_sort);
-			path_copy->reverse = sort_info->reverse;
-			path_copy->needs_sequence_num = sort_info->needs_sequence_num;
-			path_copy->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
-			path_copy->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
-
-			/*
-			 * Add costing for a sort. The standard Postgres pattern is to add the cost during
-			 * path creation, but not add the sort path itself, that's done during plan
-			 * creation. Examples of this in: create_merge_append_path &
-			 * create_merge_append_plan
-			 */
-			Path sort_path; /* dummy for result of cost_sort */
-
-			cost_sort(&sort_path,
-					  root,
-					  sort_info->required_compressed_pathkeys,
-#if PG18_GE
-					  compressed_path->disabled_nodes,
-#endif
-					  compressed_path->total_cost,
-					  compressed_path->rows,
-					  compressed_path->pathtarget->width,
-					  0.0,
-					  work_mem,
-					  -1);
-
-			cost_columnar_scan(root, compression_info, &path_copy->custom_path.path, &sort_path);
-
-			decompressed_paths = lappend(decompressed_paths, path_copy);
+			use_compressed_sort(root,
+								compression_info,
+								sort_info,
+								rowbyrow_path,
+								compressed_path,
+								&decompressed_paths);
 		}
 	}
 
@@ -1450,8 +1521,12 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 * typically done with Sort under Gather node. This splits the Sort in
 	 * per-worker buckets, so splitting the buckets further per-chunk is less
 	 * important.
+	 *
+	 * The path with row-by-row decompression is irrelevant here, because we
+	 * will have to decompress all rows.
 	 */
-	if (!sort_info->use_compressed_sort && chunk_path_no_sort->parallel_workers == 0)
+	if (!sort_info->use_compressed_sort &&
+		chunk_path_no_sort->custom_path.path.parallel_workers == 0)
 	{
 		Path *sort_above_chunk =
 			make_chunk_sorted_path(root, chunk_rel, chunk_path_no_sort, compressed_path, sort_info);
@@ -1480,7 +1555,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 * we're building on a single compressed path. We only inherit the
 	 * parameterization from it and don't add our own.
 	 */
-	Bitmapset *req_outer = PATH_REQ_OUTER(chunk_path_no_sort);
+	Bitmapset *req_outer = PATH_REQ_OUTER(&chunk_path_no_sort->custom_path.path);
 
 	/*
 	 * Look up the uncompressed chunk paths. We might need an unordered path
@@ -1530,13 +1605,13 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 * unsorted input paths.
 	 */
 	{
-		const int workers = Max(chunk_path_no_sort->parallel_workers,
+		const int workers = Max(chunk_path_no_sort->custom_path.path.parallel_workers,
 								unordered_uncompressed_path->parallel_workers);
 
 		List *parallel_paths = NIL;
 		List *sequential_paths = NIL;
 
-		if (chunk_path_no_sort->parallel_workers > 0)
+		if (chunk_path_no_sort->custom_path.path.parallel_workers > 0)
 		{
 			parallel_paths = lappend(parallel_paths, chunk_path_no_sort);
 		}
@@ -1562,7 +1637,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 														 req_outer,
 														 workers,
 														 workers > 0,
-														 chunk_path_no_sort->rows +
+														 chunk_path_no_sort->custom_path.path.rows +
 															 unordered_uncompressed_path->rows);
 
 		combined_paths = lappend(combined_paths, plain_append);
@@ -1619,7 +1694,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			continue;
 		}
 
-		if (decompression_path == chunk_path_no_sort)
+		if (decompression_path == &chunk_path_no_sort->custom_path.path)
 		{
 			/*
 			 * We can't use the unsorted decompression path directly because it
@@ -2383,6 +2458,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 	path->custom_path.flags = 0;
 	path->custom_path.methods = &columnar_scan_path_methods;
 	path->batch_sorted_merge = false;
+	path->enable_bulk_decompression = ts_guc_enable_bulk_decompression;
 
 	/*
 	 * ColumnarScan doesn't manage any parallelism itself.
@@ -2399,7 +2475,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 	path->reverse = false;
 	path->chunk_status = compression_info->chunk_status;
 	path->required_compressed_pathkeys = NIL;
-	cost_columnar_scan(root, compression_info, &path->custom_path.path, compressed_path);
+	cost_columnar_scan(compression_info, path, compressed_path);
 
 	return path;
 }

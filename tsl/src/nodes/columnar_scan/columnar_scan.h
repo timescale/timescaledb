@@ -60,6 +60,7 @@ typedef struct ColumnarScanPath
 	bool needs_sequence_num;
 	bool reverse;
 	bool batch_sorted_merge;
+	bool enable_bulk_decompression;
 	int32 chunk_status;
 } ColumnarScanPath;
 
