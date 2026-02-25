@@ -21,6 +21,7 @@
 
 #include "gapfill.h"
 #include "gapfill_internal.h"
+#include "import/list.h"
 #include "utils.h"
 
 static CustomScanMethods gapfill_plan_methods = {
@@ -226,8 +227,11 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *
 	cscan->flags = path->flags;
 	cscan->methods = &gapfill_plan_methods;
 
-	cscan->custom_private =
-		list_make4(gfpath->func, root->parse->groupClause, root->parse->jointree, args);
+	cscan->custom_private = ts_new_list(T_List, GFP_Count);
+	lfirst(list_nth_cell(cscan->custom_private, GFP_GapfillFunc)) = gfpath->func;
+	lfirst(list_nth_cell(cscan->custom_private, GFP_GroupClause)) = root->parse->groupClause;
+	lfirst(list_nth_cell(cscan->custom_private, GFP_JoinTree)) = root->parse->jointree;
+	lfirst(list_nth_cell(cscan->custom_private, GFP_Args)) = args;
 
 	return &cscan->scan.plan;
 }
