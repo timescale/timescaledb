@@ -18,10 +18,10 @@
  */
 typedef enum GapfillPrivateIndex
 {
-	GFP_GapfillFunc = 0,  /* FuncExpr: time_bucket_gapfill call */
-	GFP_GroupClause = 1,  /* List: parse->groupClause */
-	GFP_JoinTree = 2,     /* FromExpr: parse->jointree */
-	GFP_Args = 3,         /* List: gapfill function arguments */
+	GFP_GapfillFunc = 0, /* FuncExpr: time_bucket_gapfill call */
+	GFP_GroupClause = 1, /* List: parse->groupClause */
+	GFP_JoinTree = 2,	 /* FromExpr: parse->jointree */
+	GFP_Args = 3,		 /* List: gapfill function arguments */
 	GFP_Count
 } GapfillPrivateIndex;
 
