@@ -231,8 +231,14 @@ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 		PG_RETURN_VOID();
 
 	BgwHandleStatus status = WaitForBackgroundWorkerStartup(worker_handle, &pid);
-	TestAssertTrue(BGWH_STARTED == status);
-	if (status != BGWH_STARTED)
+	/*
+	 * Accept BGWH_STOPPED as well as BGWH_STARTED: the BGW may have started
+	 * and stopped very quickly before we could observe the BGWH_STARTED
+	 * state. This is a known race documented in wait_for_background_worker_startup()
+	 * in bgw_launcher.c.
+	 */
+	TestAssertTrue(BGWH_STARTED == status || BGWH_STOPPED == status);
+	if (status != BGWH_STARTED && status != BGWH_STOPPED)
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not started")));
 
@@ -266,8 +272,14 @@ ts_bgw_db_scheduler_test_run(PG_FUNCTION_ARGS)
 		PG_RETURN_VOID();
 
 	status = WaitForBackgroundWorkerStartup(current_handle, &pid);
-	TestAssertTrue(BGWH_STARTED == status);
-	if (status != BGWH_STARTED)
+	/*
+	 * Accept BGWH_STOPPED as well as BGWH_STARTED: the BGW may have started
+	 * and stopped very quickly before we could observe the BGWH_STARTED
+	 * state. This is a known race documented in wait_for_background_worker_startup()
+	 * in bgw_launcher.c.
+	 */
+	TestAssertTrue(BGWH_STARTED == status || BGWH_STOPPED == status);
+	if (status != BGWH_STARTED && status != BGWH_STOPPED)
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not started")));
 
