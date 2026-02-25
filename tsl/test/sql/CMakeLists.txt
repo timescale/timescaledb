@@ -10,6 +10,7 @@ set(TEST_FILES
     cagg_direct_compress.sql
     cagg_errors.sql
     cagg_invalidation.sql
+    cagg_invalidation_variable_bucket.sql
     cagg_policy.sql
     cagg_policy_move.sql
     cagg_policy_concurrent.sql
