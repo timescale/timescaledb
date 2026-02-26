@@ -13,6 +13,7 @@
 #include <utils/resowner.h>
 
 #include "guc.h"
+#include "job.h"
 #include "job_stat.h"
 #include "job_stat_history.h"
 #include "jsonb_utils.h"
@@ -670,6 +671,13 @@ ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result, Jsonb *edata)
 								  &res,
 								  ShareRowExclusiveLock))
 	{
+		if (!ts_bgw_job_find(job->fd.id, CurrentMemoryContext, false))
+		{
+			elog(WARNING,
+				 "job statistics for job %d not found, job was deleted during execution",
+				 job->fd.id);
+			return;
+		}
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("unable to find job statistics for job %d", job->fd.id)));

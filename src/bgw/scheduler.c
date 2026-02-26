@@ -236,7 +236,7 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 	{
 		BgwJobStat *job_stat;
 
-		if (!ts_bgw_job_get_share_lock(sjob->job.fd.id, CurrentMemoryContext))
+		if (!ts_bgw_job_find(sjob->job.fd.id, CurrentMemoryContext, false))
 		{
 			elog(WARNING,
 				 "scheduler detected that job %d was deleted after job quit",
@@ -308,7 +308,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			StartTransactionCommand();
 			PushActiveSnapshot(GetTransactionSnapshot());
 
-			if (!ts_bgw_job_get_share_lock(sjob->job.fd.id, CurrentMemoryContext))
+			if (!ts_bgw_job_find(sjob->job.fd.id, CurrentMemoryContext, false))
 			{
 				elog(WARNING,
 					 "scheduler detected that job %d was deleted when starting job",
@@ -383,7 +383,7 @@ on_failure_to_start_job(ScheduledBgwJob *sjob)
 	StartTransactionCommand();
 	PushActiveSnapshot(GetTransactionSnapshot());
 
-	if (!ts_bgw_job_get_share_lock(sjob->job.fd.id, CurrentMemoryContext))
+	if (!ts_bgw_job_find(sjob->job.fd.id, CurrentMemoryContext, false))
 	{
 		elog(WARNING,
 			 "scheduler detected that job %d was deleted while failing to start",
@@ -471,8 +471,36 @@ terminate_and_cleanup_job(ScheduledBgwJob *sjob)
 {
 	if (sjob->handle != NULL)
 	{
-		TerminateBackgroundWorker(sjob->handle);
-		WaitForBackgroundWorkerShutdown(sjob->handle);
+		pid_t pid;
+		BgwHandleStatus status;
+
+		status = GetBackgroundWorkerPid(sjob->handle, &pid);
+		if (status == BGWH_STARTED)
+		{
+			/* Try graceful cancellation first (SIGINT → ERROR → PG_CATCH cleanup) */
+			(void) kill(pid, SIGINT);
+
+			/* Poll for up to 3 seconds for the worker to exit */
+			for (int i = 0; i < 30; i++)
+			{
+				pg_usleep(100000); /* 100ms */
+				status = GetBackgroundWorkerPid(sjob->handle, &pid);
+				if (status == BGWH_STOPPED)
+					break;
+			}
+
+			if (status != BGWH_STOPPED)
+			{
+				elog(WARNING, "job %d did not exit after SIGINT, sending SIGTERM", sjob->job.fd.id);
+				TerminateBackgroundWorker(sjob->handle);
+				WaitForBackgroundWorkerShutdown(sjob->handle);
+			}
+		}
+		else if (status != BGWH_STOPPED)
+		{
+			TerminateBackgroundWorker(sjob->handle);
+			WaitForBackgroundWorkerShutdown(sjob->handle);
+		}
 	}
 	sjob->may_need_mark_end = false;
 	worker_state_cleanup(sjob);

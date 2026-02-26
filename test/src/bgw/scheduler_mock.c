@@ -364,7 +364,7 @@ test_job_3_long()
 
 	elog(WARNING, "Before sleep job 3");
 
-	DirectFunctionCall1(pg_sleep, Float8GetDatum(0.5L));
+	DirectFunctionCall1(pg_sleep, Float8GetDatum(2.0L));
 
 	elog(WARNING, "After sleep job 3");
 	return true;
