@@ -4,16 +4,13 @@
  * LICENSE-APACHE for a copy of the license.
  */
 
-#include <string.h>
 #include <postgres.h>
-#include "dimension.h"
-#include "dimension_slice.h"
-#include <c.h>
 #include <fmgr.h>
 
-#include "dimension_vector.h"
 #include "export.h"
 #include "test_utils.h"
+#include "dimension_slice.h"
+#include "dimension_vector.h"
 
 TS_FUNCTION_INFO_V1(ts_test_dimension_vector);
 
