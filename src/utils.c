@@ -285,6 +285,11 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 				}
 			}
 
+			if (ts >= TS_TIMESTAMP_END)
+				return PG_INT64_MAX;
+			if (ts < TS_TIMESTAMP_MIN)
+				return PG_INT64_MIN;
+
 			return ts_time_value_to_internal(time_val, type_oid);
 		}
 		case TIMESTAMPTZOID:
@@ -302,6 +307,11 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 				}
 			}
 
+			if (ts >= TS_TIMESTAMP_END)
+				return PG_INT64_MAX;
+			if (ts < TS_TIMESTAMP_MIN)
+				return PG_INT64_MIN;
+
 			return ts_time_value_to_internal(time_val, type_oid);
 		}
 		case DATEOID:
@@ -318,6 +328,11 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 					return PG_INT64_MAX;
 				}
 			}
+
+			if (d >= TS_DATE_END)
+				return PG_INT64_MAX;
+			if (d < TS_DATE_MIN)
+				return PG_INT64_MIN;
 
 			return ts_time_value_to_internal(time_val, type_oid);
 		}

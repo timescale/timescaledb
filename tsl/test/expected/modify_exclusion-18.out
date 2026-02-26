@@ -1006,7 +1006,7 @@ BEGIN;
          Delete on _timescaledb_internal._hyper_2_18_chunk metrics_int4_3
          Delete on _timescaledb_internal._hyper_2_26_chunk metrics_int4_4
          ->  Hash Join (actual rows=4.00 loops=1)
-               Output: metrics_int2.ctid, metrics_int4.tableoid, metrics_int4.ctid, metrics_int2.tableoid
+               Output: metrics_int2.ctid, metrics_int2.tableoid, metrics_int4.tableoid, metrics_int4.ctid
                Inner Unique: true
                Hash Cond: (metrics_int4."time" = metrics_int2."time")
                ->  Append (actual rows=4.00 loops=1)
@@ -1048,7 +1048,7 @@ BEGIN;
          Delete on _timescaledb_internal._hyper_2_18_chunk metrics_int4_3
          Delete on _timescaledb_internal._hyper_2_26_chunk metrics_int4_4
          ->  Hash Join (actual rows=4.00 loops=1)
-               Output: metrics_int2.ctid, metrics_int4.tableoid, metrics_int4.ctid, metrics_int2.tableoid
+               Output: metrics_int2.ctid, metrics_int2.tableoid, metrics_int4.tableoid, metrics_int4.ctid
                Inner Unique: true
                Hash Cond: (metrics_int4."time" = metrics_int2."time")
                ->  Append (actual rows=4.00 loops=1)
@@ -1090,7 +1090,7 @@ BEGIN;
          Delete on _timescaledb_internal._hyper_2_18_chunk metrics_int4_3
          Delete on _timescaledb_internal._hyper_2_26_chunk metrics_int4_4
          ->  Hash Join (actual rows=4.00 loops=1)
-               Output: metrics_int2.ctid, metrics_int4.tableoid, metrics_int4.ctid, metrics_int2.tableoid
+               Output: metrics_int2.ctid, metrics_int2.tableoid, metrics_int4.tableoid, metrics_int4.ctid
                Inner Unique: true
                Hash Cond: (metrics_int4."time" = metrics_int2."time")
                ->  Append (actual rows=4.00 loops=1)
@@ -1136,7 +1136,7 @@ BEGIN;
          Update on _timescaledb_internal._hyper_2_18_chunk metrics_int4_3
          Update on _timescaledb_internal._hyper_2_26_chunk metrics_int4_4
          ->  Hash Join (actual rows=4.00 loops=1)
-               Output: '0.1'::double precision, metrics_int2.ctid, metrics_int4.tableoid, metrics_int4.ctid, metrics_int2.tableoid
+               Output: '0.1'::double precision, metrics_int2.ctid, metrics_int2.tableoid, metrics_int4.tableoid, metrics_int4.ctid
                Inner Unique: true
                Hash Cond: (metrics_int4."time" = metrics_int2."time")
                ->  Append (actual rows=4.00 loops=1)
@@ -1178,7 +1178,7 @@ BEGIN;
          Update on _timescaledb_internal._hyper_2_18_chunk metrics_int4_3
          Update on _timescaledb_internal._hyper_2_26_chunk metrics_int4_4
          ->  Hash Join (actual rows=4.00 loops=1)
-               Output: '0.1'::double precision, metrics_int2.ctid, metrics_int4.tableoid, metrics_int4.ctid, metrics_int2.tableoid
+               Output: '0.1'::double precision, metrics_int2.ctid, metrics_int2.tableoid, metrics_int4.tableoid, metrics_int4.ctid
                Inner Unique: true
                Hash Cond: (metrics_int4."time" = metrics_int2."time")
                ->  Append (actual rows=4.00 loops=1)
@@ -1220,7 +1220,7 @@ BEGIN;
          Update on _timescaledb_internal._hyper_2_18_chunk metrics_int4_3
          Update on _timescaledb_internal._hyper_2_26_chunk metrics_int4_4
          ->  Hash Join (actual rows=4.00 loops=1)
-               Output: '0.1'::double precision, metrics_int2.ctid, metrics_int4.tableoid, metrics_int4.ctid, metrics_int2.tableoid
+               Output: '0.1'::double precision, metrics_int2.ctid, metrics_int2.tableoid, metrics_int4.tableoid, metrics_int4.ctid
                Inner Unique: true
                Hash Cond: (metrics_int4."time" = metrics_int2."time")
                ->  Append (actual rows=4.00 loops=1)
@@ -1268,7 +1268,7 @@ BEGIN;
          Delete on _timescaledb_internal._hyper_2_18_chunk m4_3
          Delete on _timescaledb_internal._hyper_2_26_chunk m4_4
          ->  Nested Loop (actual rows=16.00 loops=1)
-               Output: m2.ctid, m4.tableoid, m4.ctid, m2.tableoid
+               Output: m2.ctid, m2.tableoid, m4.tableoid, m4.ctid
                ->  Append (actual rows=4.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk m2_1 (actual rows=1.00 loops=1)
                            Output: m2_1.ctid, m2_1.tableoid
@@ -1301,7 +1301,7 @@ BEGIN;
          Delete on _timescaledb_internal._hyper_2_18_chunk m4_3
          Delete on _timescaledb_internal._hyper_2_26_chunk m4_4
          ->  Merge Join (actual rows=4.00 loops=1)
-               Output: m2.ctid, m4.tableoid, m4.ctid, m2.tableoid
+               Output: m2.ctid, m2.tableoid, m4.tableoid, m4.ctid
                Merge Cond: (m4."time" = m2."time")
                ->  Merge Append (actual rows=4.00 loops=1)
                      Sort Key: m4."time"
@@ -1337,7 +1337,7 @@ BEGIN;
          Delete on _timescaledb_internal._hyper_2_18_chunk m4_3
          Delete on _timescaledb_internal._hyper_2_26_chunk m4_4
          ->  Merge Join (actual rows=4.00 loops=1)
-               Output: m2.ctid, m4.tableoid, m4.ctid, m2.tableoid
+               Output: m2.ctid, m2.tableoid, m4.tableoid, m4.ctid
                Merge Cond: (m4."time" = m2."time")
                ->  Merge Append (actual rows=4.00 loops=1)
                      Sort Key: m4."time"
@@ -1377,7 +1377,7 @@ BEGIN;
          Update on _timescaledb_internal._hyper_2_18_chunk m4_3
          Update on _timescaledb_internal._hyper_2_26_chunk m4_4
          ->  Nested Loop (actual rows=16.00 loops=1)
-               Output: '0.15'::double precision, m2.ctid, m4.tableoid, m4.ctid, m2.tableoid
+               Output: '0.15'::double precision, m2.ctid, m2.tableoid, m4.tableoid, m4.ctid
                ->  Append (actual rows=4.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk m2_1 (actual rows=1.00 loops=1)
                            Output: m2_1.ctid, m2_1.tableoid
@@ -1410,7 +1410,7 @@ BEGIN;
          Update on _timescaledb_internal._hyper_2_18_chunk m4_3
          Update on _timescaledb_internal._hyper_2_26_chunk m4_4
          ->  Merge Join (actual rows=4.00 loops=1)
-               Output: '0.15'::double precision, m2.ctid, m4.tableoid, m4.ctid, m2.tableoid
+               Output: '0.15'::double precision, m2.ctid, m2.tableoid, m4.tableoid, m4.ctid
                Merge Cond: (m4."time" = m2."time")
                ->  Merge Append (actual rows=4.00 loops=1)
                      Sort Key: m4."time"
@@ -1446,7 +1446,7 @@ BEGIN;
          Update on _timescaledb_internal._hyper_2_18_chunk m4_3
          Update on _timescaledb_internal._hyper_2_26_chunk m4_4
          ->  Merge Join (actual rows=4.00 loops=1)
-               Output: '0.15'::double precision, m2.ctid, m4.tableoid, m4.ctid, m2.tableoid
+               Output: '0.15'::double precision, m2.ctid, m2.tableoid, m4.tableoid, m4.ctid
                Merge Cond: (m4."time" = m2."time")
                ->  Merge Append (actual rows=4.00 loops=1)
                      Sort Key: m4."time"
