@@ -3031,7 +3031,6 @@ BEGIN
    ->  Delete on test_pushdown (actual rows=0.00 loops=1)
          Delete on _hyper_39_76_chunk test_pushdown_1
          ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
-               Filter: ("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone)
 
 ROLLBACK
 BEGIN; DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
@@ -3044,12 +3043,10 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
 BEGIN
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches decompressed: 3
-   Tuples decompressed: 3
+   Batches deleted: 3
    ->  Delete on test_pushdown (actual rows=0.00 loops=1)
          Delete on _hyper_39_76_chunk test_pushdown_1
-         ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=3.00 loops=1)
-               Filter: ("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone)
+         ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0.00 loops=1)
 
 ROLLBACK
 BEGIN; DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
