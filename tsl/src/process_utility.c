@@ -60,21 +60,19 @@ tsl_process_rename_cmd(Oid relid, Cache *hcache, const RenameStmt *stmt)
 {
 	if (stmt->renameType == OBJECT_COLUMN)
 	{
+		/*
+		 * process_rename_column() always sets relid to the materialization
+		 * hypertable before calling us, so the cache lookup always succeeds.
+		 */
 		Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
-		if (!ht)
+
+		if (ht)
 		{
-			ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
+			ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id, true);
 			if (cagg)
-			{
-				ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
-				Assert(ht);
 				cagg_rename_view_columns(cagg);
-			}
 		}
 
-		/* Continuous aggregates do not have compression right now, but we
-		 * check the status for the materialized hypertable anyway since it is
-		 * harmless. */
 		if (ht &&
 			(TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) || TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht)))
 		{

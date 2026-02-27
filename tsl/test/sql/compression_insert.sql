@@ -1181,3 +1181,63 @@ INSERT INTO sv_null VALUES('2024-01-05', 1, NULL, 6.0);
 -- should be 3 rows total
 SELECT count(*) FROM sv_null;
 
+-- Test: generated stored columns should not be NULL in compressed chunks
+-- GitHub issue #9314
+CREATE TABLE i9314 (
+    time timestamptz NOT NULL,
+    value int,
+    doubled int GENERATED ALWAYS AS (value * 2) STORED
+) WITH (tsdb.hypertable, tsdb.chunk_interval = '180 day');
+
+-- Insert initial data and compress
+INSERT INTO i9314 VALUES ('2024-01-01', 1);
+SELECT compress_chunk(show_chunks('i9314'));
+
+-- Insert multiple rows into the compressed chunk
+-- All rows should have correct generated column values
+INSERT INTO i9314 VALUES
+    ('2024-01-02', 2),
+    ('2024-01-03', 3),
+    ('2024-01-04', 4);
+
+SELECT compress_chunk(show_chunks('i9314'));
+
+-- show explain to ensure its all compressed
+:PREFIX SELECT * FROM i9314 ORDER BY time;
+SELECT * FROM i9314 ORDER BY time;
+
+SET timescaledb.enable_direct_compress_insert = true;
+
+-- Insert >= 10 rows to trigger direct compress path
+INSERT INTO i9314 SELECT '2024-02-01'::timestamptz + format('%s day',i)::interval, i + 10 FROM generate_series(1, 10) i;
+
+:PREFIX SELECT * FROM i9314 ORDER BY time;
+SELECT * FROM i9314 ORDER BY time;
+
+-- test copy
+COPY i9314 FROM STDIN DELIMITER ',' CSV;
+2024-03-13,20
+2024-03-14,21
+2024-03-15,22
+2024-03-16,23
+2024-03-17,24
+\.
+
+SELECT compress_chunk(show_chunks('i9314'));
+
+:PREFIX SELECT * FROM i9314 ORDER BY time;
+SELECT * FROM i9314 ORDER BY time;
+
+SET timescaledb.enable_direct_compress_copy = true;
+COPY i9314 FROM STDIN DELIMITER ',' CSV;
+2024-04-13,30
+2024-04-14,31
+2024-04-15,32
+2024-04-16,33
+2024-04-17,34
+\.
+
+:PREFIX SELECT * FROM i9314 ORDER BY time;
+SELECT * FROM i9314 ORDER BY time;
+
+RESET timescaledb.enable_direct_compress_insert;

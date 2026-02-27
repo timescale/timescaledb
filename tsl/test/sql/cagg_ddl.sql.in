@@ -744,11 +744,21 @@ ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 
 -- Superuser can always change owner
 SET ROLE :ROLE_SUPERUSER;
+
+-- Add a refresh policy before changing owner to verify job owner is propagated
+SELECT add_continuous_aggregate_policy('owner_check', NULL, 1::int8, '1 day'::interval) AS cagg_job_id \gset
+SELECT owner FROM _timescaledb_config.bgw_job WHERE id = :cagg_job_id;
+
 ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 
 \x on
 SELECT * FROM cagg_info WHERE user_view::text = 'owner_check';
 \x off
+
+-- make sure policy job owner is propagated
+SELECT owner FROM _timescaledb_config.bgw_job WHERE id = :cagg_job_id;
+
+SELECT remove_continuous_aggregate_policy('owner_check');
 
 --
 -- Test drop continuous aggregate cases
@@ -928,12 +938,21 @@ INSERT INTO conditions VALUES ( '2018-11-02 09:20:00-08', 'NYC', 10);
 INSERT INTO conditions VALUES ( '2018-11-02 10:30:00-08', 'NYC', 20);
 
 CREATE MATERIALIZED VIEW conditions_daily
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
 SELECT location,
        time_bucket(INTERVAL '1 day', time) AS bucket,
        AVG(temperature)
   FROM conditions
 GROUP BY location, bucket
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW conditions_weekly
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT location,
+       time_bucket(INTERVAL '7 day', bucket) AS bucket,
+       AVG(avg)
+  FROM conditions_daily
+GROUP BY 1, 2
 WITH NO DATA;
 
 SELECT format('%I.%I', '_timescaledb_internal', h.table_name) AS "MAT_TABLE_NAME",
@@ -968,6 +987,35 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = fa
 \set VERBOSITY verbose
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 \set VERBOSITY terse
+
+-- Rename another column after the flip and verify toggling back and
+-- forth still works. This exercises the rename when the user view
+-- already has a UNION ALL query (materialized_only = false).
+ALTER MATERIALIZED VIEW conditions_daily RENAME COLUMN avg TO average;
+
+SELECT * FROM test.show_columns('conditions_daily');
+SELECT * FROM test.show_columns(:'DIRECT_VIEW_NAME');
+SELECT * FROM test.show_columns(:'MAT_TABLE_NAME');
+
+ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = true);
+ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = false);
+
+-- Verify data is still accessible after multiple renames and toggles.
+SELECT * FROM conditions_daily ORDER BY location COLLATE "C", time;
+
+-- check hierarchical continuous aggregate still works after renames and toggles on the underlying cagg
+ALTER MATERIALIZED VIEW conditions_weekly SET (timescaledb.materialized_only = false);
+ALTER MATERIALIZED VIEW conditions_weekly SET (timescaledb.materialized_only = true);
+
+SELECT * FROM conditions_weekly ORDER BY location COLLATE "C", bucket;
+
+-- Verify that direct rename on the materialization hypertable is blocked.
+\set ON_ERROR_STOP 0
+ALTER TABLE :MAT_TABLE_NAME RENAME COLUMN average TO avg;
+\set ON_ERROR_STOP 1
+
+-- Rename back so subsequent tests that reference "avg" still work.
+ALTER MATERIALIZED VIEW conditions_daily RENAME COLUMN average TO avg;
 
 --
 -- Indexes on continuous aggregate
@@ -1480,3 +1528,12 @@ SELECT ddl_function();
 SELECT view_name from timescaledb_information.continuous_aggregates WHERE hypertable_name='hypertab_ddl';
 SELECT ddl_function();
 SELECT view_name from timescaledb_information.continuous_aggregates WHERE hypertable_name='hypertab_ddl';
+
+-- TEST continuous aggregate with functionally dependent columns
+-- name column depends on id which is in GROUP BY so name doesnt have to be
+CREATE table sensor(id int PRIMARY KEY, name text);
+CREATE TABLE sensordata(time timestamptz,id int, value float) WITH	(timescaledb.hypertable);
+CREATE MATERIALIZED VIEW cagg_sensordata WITH (tsdb.continuous) AS
+SELECT s.id, s.name,time_bucket('15 minutes', sd.time) as bucket, avg(sd.value) FROM sensordata sd JOIN sensor s USING(id) GROUP BY s.id, bucket WITH NO DATA;
+
+SELECT * FROM cagg_sensordata;

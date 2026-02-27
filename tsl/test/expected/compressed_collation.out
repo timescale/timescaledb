@@ -62,3 +62,58 @@ select * from compressed_collation_ht order by name;
  Fri Jan 01 01:01:02 2021 | b    |     2
  Fri Jan 01 01:01:03 2021 | ç    |     2
 
+reset enable_seqscan;
+-- Test vectorized aggregation with collations. Need multiple chunks for partial
+-- aggregation, which is where VectorAgg is used.
+create table collation_agg(time int, name text collate :"COLLATION");
+select create_hypertable('collation_agg', 'time', chunk_time_interval => 10);
+     create_hypertable      
+----------------------------
+ (3,public,collation_agg,t)
+
+alter table collation_agg set (timescaledb.compress, timescaledb.compress_orderby = 'time');
+insert into collation_agg select x, case x % 3 when 0 then 'á' when 1 then 'b' else 'ç' end
+from generate_series(1, 30) x;
+select count(compress_chunk(ch)) from show_chunks('collation_agg') ch;
+ count 
+-------
+     4
+
+vacuum analyze collation_agg;
+-- Vectorized aggregation is not used for non-C collations.
+set timescaledb.debug_require_vector_agg = 'forbid';
+set enable_sort = false;
+select min(name), max(name) from collation_agg;
+ min | max 
+-----+-----
+ á   | ç
+
+reset enable_sort;
+reset timescaledb.debug_require_vector_agg;
+-- Vectorized aggregation is used when the column has C collation.
+-- At the moment we don't support the 'min(name collate "C")' form that is
+-- represented by CollateExpr node.
+create table collation_agg_c(time int, name text collate "C");
+select create_hypertable('collation_agg_c', 'time', chunk_time_interval => 10);
+      create_hypertable       
+------------------------------
+ (5,public,collation_agg_c,t)
+
+alter table collation_agg_c set (timescaledb.compress, timescaledb.compress_orderby = 'time');
+insert into collation_agg_c select x, case x % 3 when 0 then 'á' when 1 then 'b' else 'ç' end
+from generate_series(1, 30) x;
+select count(compress_chunk(ch)) from show_chunks('collation_agg_c') ch;
+ count 
+-------
+     4
+
+vacuum analyze collation_agg_c;
+set enable_sort = false;
+set timescaledb.debug_require_vector_agg = 'require';
+select min(name), max(name) from collation_agg_c;
+ min | max 
+-----+-----
+ b   | ç
+
+reset enable_sort;
+reset timescaledb.debug_require_vector_agg;

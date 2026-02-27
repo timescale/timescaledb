@@ -943,20 +943,72 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 											  direct_query,
 											  mat_ht->fd.id);
 	}
+
 	SWITCH_TO_TS_USER(NameStr(agg->data.user_view_schema), uid, saved_uid, sec_ctx);
 	StoreViewQuery(user_view_oid, result_view_query, true);
 	CommandCounterIncrement();
 	RESTORE_USER(uid, saved_uid, sec_ctx);
 }
 
+/*
+ * Sync target list column names with the relation's pg_attribute names.
+ */
+static void
+sync_target_list_names(List *targetList, TupleDesc desc)
+{
+	ListCell *lc;
+	int i = 0;
+	foreach (lc, targetList)
+	{
+		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+		if (tle->resjunk)
+			break;
+		FormData_pg_attribute *attr = TupleDescAttr(desc, i);
+		tle->resname = NameStr(attr->attname);
+		++i;
+	}
+}
+
 void
 cagg_rename_view_columns(ContinuousAgg *agg)
 {
-	ListCell *lc;
 	int sec_ctx;
 	Oid uid, saved_uid;
 
-	/* User view query of the user defined CAGG. */
+	/*
+	 * This function is called from the process_rename start handler after
+	 * ExecRenameStmt has already been called on the user view, direct view,
+	 * partial view, and materialization table. All pg_attribute entries now
+	 * have the new column names.
+	 *
+	 * PostgreSQL's ExecRenameStmt only renames pg_attribute — it does NOT
+	 * update the stored query trees in pg_rewrite. We update the stored
+	 * query trees for the direct view and the user view so that subsequent
+	 * operations (build_union_query, destroy_union_query) see correct names.
+	 */
+
+	/* --- Update direct view's stored query --- */
+	Oid direct_view_oid = ts_get_relation_relid(NameStr(agg->data.direct_view_schema),
+												NameStr(agg->data.direct_view_name),
+												false);
+	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
+	Query *direct_query = copyObject(get_view_query(direct_view_rel));
+	RemoveRangeTableEntries(direct_query);
+
+	sync_target_list_names(direct_query->targetList, RelationGetDescr(direct_view_rel));
+
+	SWITCH_TO_TS_USER(NameStr(agg->data.user_view_schema), uid, saved_uid, sec_ctx);
+	StoreViewQuery(direct_view_oid, direct_query, true);
+	CommandCounterIncrement();
+	RESTORE_USER(uid, saved_uid, sec_ctx);
+
+	/*
+	 * Do not close the relation before StoreViewQuery since it can otherwise
+	 * release the memory for attr->attname, causing a segfault.
+	 */
+	relation_close(direct_view_rel, NoLock);
+
+	/* --- Update user view's stored query --- */
 	Oid user_view_oid = ts_get_relation_relid(NameStr(agg->data.user_view_schema),
 											  NameStr(agg->data.user_view_name),
 											  false);
@@ -964,26 +1016,24 @@ cagg_rename_view_columns(ContinuousAgg *agg)
 	Query *user_query = copyObject(get_view_query(user_view_rel));
 	RemoveRangeTableEntries(user_query);
 
-	/*
-	 * When calling StoreViewQuery the target list names of the query have to
-	 * match the view's tuple descriptor attribute names. But if a column of the
-	 * continuous aggregate has been renamed, the query tree will not have the correct
-	 * names in the target list, which will error out when calling StoreViewQuery.
-	 * For that reason, we fetch the name from the user view relation and update the
-	 * resource name in the query target list to match the name in the user view.
-	 */
-	TupleDesc desc = RelationGetDescr(user_view_rel);
-	int i = 0;
-	foreach (lc, user_query->targetList)
-	{
-		TargetEntry *user_tle;
-		FormData_pg_attribute *attr = TupleDescAttr(desc, i);
-		user_tle = lfirst_node(TargetEntry, lc);
-		if (user_tle->resjunk)
-			break;
+	TupleDesc user_desc = RelationGetDescr(user_view_rel);
+	sync_target_list_names(user_query->targetList, user_desc);
 
-		user_tle->resname = NameStr(attr->attname);
-		++i;
+	/*
+	 * When materialized_only is false the user view query is a UNION ALL
+	 * with subqueries whose target lists also carry column names. Update
+	 * those so that destroy_union_query(), which extracts a subquery,
+	 * produces a query with current names.
+	 */
+	if (user_query->setOperations)
+	{
+		ListCell *lc;
+		foreach (lc, user_query->rtable)
+		{
+			RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
+			if (rte->rtekind == RTE_SUBQUERY && rte->subquery)
+				sync_target_list_names(rte->subquery->targetList, user_desc);
+		}
 	}
 
 	SWITCH_TO_TS_USER(NameStr(agg->data.user_view_schema), uid, saved_uid, sec_ctx);
@@ -991,10 +1041,5 @@ cagg_rename_view_columns(ContinuousAgg *agg)
 	CommandCounterIncrement();
 	RESTORE_USER(uid, saved_uid, sec_ctx);
 
-	/*
-	 * Keep locks until end of transaction and do not close the relation
-	 * before the call to StoreViewQuery since it can otherwise release the
-	 * memory for attr->attname, causing a segfault.
-	 */
 	relation_close(user_view_rel, NoLock);
 }

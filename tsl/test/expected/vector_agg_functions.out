@@ -49,7 +49,7 @@ select count(compress_chunk(x)) from show_chunks('aggfns') x;
 
 alter table aggfns add column ss int default 11;
 alter table aggfns add column cfloat8 float8 default '13';
-alter table aggfns add column x text default '11';
+alter table aggfns add column x text collate "C" default '11';
 insert into aggfns
 select *, ss::text as x from (
     select *
@@ -184,7 +184,8 @@ from
         'cts',
         'ctstz',
         'cdate',
-        '*']) variable,
+        '*',
+        'x']) variable,
     unnest(array[
         'min',
         'max',
@@ -206,6 +207,7 @@ from
 where
     true
     and (explain is null /* or condition is null and grouping = 's' */)
+    and (variable != 'x' or function in ('min'))
     and (variable != '*' or function = 'count')
     and (variable not in ('t', 'cts', 'ctstz', 'cdate') or function in ('min', 'max'))
     -- This is not vectorized yet
@@ -1699,6 +1701,39 @@ select ss, min(t) from aggfns group by ss order by min(t), ss limit 10;
   8 | 80001
   9 | 90001
 
+select min(x) from aggfns;
+ min 
+-----
+ 0
+
+select s, min(x) from aggfns group by s order by min(x), s limit 10;
+ s | min 
+---+-----
+ 0 | 0
+ 1 | 11
+ 4 | 11
+ 3 | 3
+ 5 | 5
+ 6 | 6
+ 7 | 7
+ 8 | 8
+ 9 | 9
+ 2 | 
+
+select ss, min(x) from aggfns group by ss order by min(x), ss limit 10;
+ ss | min 
+----+-----
+  0 | 0
+ 11 | 11
+  3 | 3
+  4 | 4
+  5 | 5
+  6 | 6
+  7 | 7
+  8 | 8
+  9 | 9
+    | 
+
 select count(*) from aggfns where cfloat8 > 0;
  count  
 --------
@@ -3184,6 +3219,39 @@ select ss, min(t) from aggfns where cfloat8 > 0 group by ss order by min(t), ss 
   8 | 80003
   9 | 90002
 
+select min(x) from aggfns where cfloat8 > 0;
+ min 
+-----
+ 0
+
+select s, min(x) from aggfns where cfloat8 > 0 group by s order by min(x), s limit 10;
+ s | min 
+---+-----
+ 0 | 0
+ 1 | 11
+ 4 | 11
+ 3 | 3
+ 5 | 5
+ 6 | 6
+ 7 | 7
+ 8 | 8
+ 9 | 9
+ 2 | 
+
+select ss, min(x) from aggfns where cfloat8 > 0 group by ss order by min(x), ss limit 10;
+ ss | min 
+----+-----
+  0 | 0
+ 11 | 11
+  3 | 3
+  4 | 4
+  5 | 5
+  6 | 6
+  7 | 7
+  8 | 8
+  9 | 9
+    | 
+
 select count(*) from aggfns where cfloat8 <= 0;
  count 
 -------
@@ -4623,6 +4691,38 @@ select ss, min(t) from aggfns where cfloat8 <= 0 group by ss order by min(t), ss
   7 | 70002
   8 | 80001
   9 | 90001
+
+select min(x) from aggfns where cfloat8 <= 0;
+ min 
+-----
+ 0
+
+select s, min(x) from aggfns where cfloat8 <= 0 group by s order by min(x), s limit 10;
+ s | min 
+---+-----
+ 0 | 0
+ 4 | 11
+ 3 | 3
+ 5 | 5
+ 6 | 6
+ 7 | 7
+ 8 | 8
+ 9 | 9
+ 2 | 
+
+select ss, min(x) from aggfns where cfloat8 <= 0 group by ss order by min(x), ss limit 10;
+ ss | min 
+----+-----
+  0 | 0
+ 11 | 11
+  3 | 3
+  4 | 4
+  5 | 5
+  6 | 6
+  7 | 7
+  8 | 8
+  9 | 9
+    | 
 
 select count(*) from aggfns where cfloat8 < 1000;
  count  
@@ -6109,6 +6209,39 @@ select ss, min(t) from aggfns where cfloat8 < 1000 group by ss order by min(t), 
   8 | 80001
   9 | 90001
 
+select min(x) from aggfns where cfloat8 < 1000;
+ min 
+-----
+ 0
+
+select s, min(x) from aggfns where cfloat8 < 1000 group by s order by min(x), s limit 10;
+ s | min 
+---+-----
+ 0 | 0
+ 1 | 11
+ 4 | 11
+ 3 | 3
+ 5 | 5
+ 6 | 6
+ 7 | 7
+ 8 | 8
+ 9 | 9
+ 2 | 
+
+select ss, min(x) from aggfns where cfloat8 < 1000 group by ss order by min(x), ss limit 10;
+ ss | min 
+----+-----
+  0 | 0
+ 11 | 11
+  3 | 3
+  4 | 4
+  5 | 5
+  6 | 6
+  7 | 7
+  8 | 8
+  9 | 9
+    | 
+
 select count(*) from aggfns where cfloat8 > 1000;
  count 
 -------
@@ -6691,6 +6824,19 @@ select s, min(t) from aggfns where cfloat8 > 1000 group by s order by min(t), s 
 ---+-----
 
 select ss, min(t) from aggfns where cfloat8 > 1000 group by ss order by min(t), ss limit 10;
+ ss | min 
+----+-----
+
+select min(x) from aggfns where cfloat8 > 1000;
+ min 
+-----
+ 
+
+select s, min(x) from aggfns where cfloat8 > 1000 group by s order by min(x), s limit 10;
+ s | min 
+---+-----
+
+select ss, min(x) from aggfns where cfloat8 > 1000 group by ss order by min(x), ss limit 10;
  ss | min 
 ----+-----
 

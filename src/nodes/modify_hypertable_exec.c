@@ -600,9 +600,6 @@ ExecInsert(ModifyTableContext *context,
 	TransitionCaptureState *ar_insert_trig_tcs;
 	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
 	OnConflictAction onconflict = node->onConflictAction;
-	bool skip_generated_column_computations = false;
-
-
 	/*
 	 * If the input result relation is a partitioned table, find the leaf
 	 * partition to insert the tuple into.
@@ -615,8 +612,6 @@ ExecInsert(ModifyTableContext *context,
 									   resultRelInfo, slot,
 									   &partRelInfo);
 		resultRelInfo = partRelInfo;
-
-		skip_generated_column_computations = ctr->cis->skip_generated_column_computations;
 	}
 
 	ExecMaterializeSlot(slot);
@@ -671,14 +666,9 @@ ExecInsert(ModifyTableContext *context,
 
 		/*
 		 * Compute stored generated columns
-		 * NOTE: we are skipping generation if we detect that we went through
-		 * compressed chunk uniqueness check which would have already
-		 * triggered generating the columns.
 		 */
 		if (resultRelationDesc->rd_att->constr &&
-			resultRelationDesc->rd_att->constr->has_generated_stored &&
-			!skip_generated_column_computations
-		)
+			resultRelationDesc->rd_att->constr->has_generated_stored)
 			ExecComputeStoredGenerated(resultRelInfo, estate, slot,
 									   CMD_INSERT);
 
@@ -2439,6 +2429,18 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 						if (!ts_chunk_is_unordered(chunk))
 							ts_chunk_set_unordered(chunk);
 					}
+				}
+
+				/*
+				 * Compute generated stored columns before compressing.
+				 * The direct compress path skips ExecInsert, so generated
+				 * columns would otherwise remain NULL.
+				 */
+				Relation rel = ctr->cis->rel;
+				if (rel->rd_att->constr && rel->rd_att->constr->has_generated_stored)
+				{
+					slot->tts_tableOid = RelationGetRelid(rel);
+					ExecComputeStoredGenerated(ctr->root_rri, estate, slot, CMD_INSERT);
 				}
 
 				ts_cm_functions->compressor_add_slot(ht_state->compressor, ht_state->bulk_writer, slot);
