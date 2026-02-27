@@ -1416,7 +1416,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 * Add the newly added Vars to parent's reltarget.  We needn't worry
 		 * about the children's reltargets, they'll be made later.
 		 */
-		add_vars_to_targetlist(root, newvars, bms_make_singleton(0));
+		add_vars_to_targetlist_compat(root, newvars, bms_make_singleton(0));
 	}
 
 	ts_add_append_rel_infos(root, appinfos);
