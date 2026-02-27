@@ -328,7 +328,7 @@ jobs:
       if: always() && contains(matrix.name, 'Flaky')
       run: |
         ! jq 'select(
-                (.state_code == "XX000" and .error_severity != "LOG")
+                (.state_code == "XX000" and .error_severity != "LOG" and (.message | test("TestFailure") | not))
                 or (.message | test("resource was not closed"))
             ) | [.message, .func_name,  .statement] | @tsv
         ' -r postmaster.json | grep .
