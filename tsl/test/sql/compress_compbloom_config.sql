@@ -14,10 +14,7 @@ SELECT create_hypertable('t', 'a');
 
 
 -- Should succeed (8 columns max)
--- TODO: remove later, once composite blooms fully rolled out
-\set ON_ERROR_STOP 0
 ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'b', timescaledb.compress_index = 'bloom("a","b","c","d","e","f","g","h")');
-\set ON_ERROR_STOP 1
 
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings
 where relid = 't'::regclass and index is not null order by 1,2;
@@ -28,10 +25,7 @@ ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'b', tim
 \set ON_ERROR_STOP 1
 
 -- The ordering of bloom columns in the composite bloom index should be determined by the order of the columns in the CREATE TABLE statement
--- TODO: remove later, once composite blooms fully rolled out
-\set ON_ERROR_STOP 0
 ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'b', timescaledb.compress_index = 'bloom("h","g","f","e","d","c","b")');
-\set ON_ERROR_STOP 1
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings
 where relid = 't'::regclass and index is not null order by 1,2;
 
@@ -61,17 +55,11 @@ select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,in
 -- Check the auto generated compressed columns
 select relname,attname from compressedcols order by 1,2;
 
--- TODO: remove later, once composite blooms fully rolled out
-\set ON_ERROR_STOP 0
 ALTER TABLE u SET (timescaledb.compress_index = 'bloom("a","b","c")');
-\set ON_ERROR_STOP 1
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
 
 -- Also in a different order
--- TODO: remove later, once composite blooms fully rolled out
-\set ON_ERROR_STOP 0
 ALTER TABLE u SET (timescaledb.compress_index = 'bloom("c","b","a")');
-\set ON_ERROR_STOP 1
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
 
 DROP TABLE u CASCADE;
