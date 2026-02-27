@@ -31,6 +31,7 @@
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
+#include <optimizer/planner.h>
 #include <optimizer/prep.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
@@ -1238,14 +1239,37 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		return;
 
 	/*
-	 * We need to mark the RowMark for the hypertable as parent
-	 * to trigger inclusion of tableoid to allow for correctly
-	 * identifying tuples from individual chunks.
+	 * Handle PlanRowMark for FOR UPDATE/SHARE and FK constraint enforcement.
+	 *
+	 * This replicates what PostgreSQL does in expand_inherited_rtentry()
+	 * (src/backend/optimizer/util/inherit.c): set isParent = true and add a
+	 * tableoid junk column to processed_tlist. Without this, FOR KEY SHARE
+	 * locks from FK constraint enforcement fail to lock chunk rows.
 	 */
 	PlanRowMark *oldrc = get_plan_rowmark(root->rowMarks, rti);
-	if (oldrc)
+	if (oldrc && !oldrc->isParent)
 	{
+		Var *var;
+		char resname[64];
+		TargetEntry *tle;
+
 		oldrc->isParent = true;
+
+		var = makeVar(oldrc->rti,
+					  TableOidAttributeNumber,
+					  OIDOID,
+					  -1,
+					  InvalidOid,
+					  0);
+		snprintf(resname, sizeof(resname), "tableoid%u", oldrc->rowmarkId);
+		tle = makeTargetEntry((Expr *) var,
+							  list_length(root->processed_tlist) + 1,
+							  pstrdup(resname),
+							  true);
+		root->processed_tlist = lappend(root->processed_tlist, tle);
+
+		/* Also add to parent's reltarget so it propagates to children */
+		rel->reltarget->exprs = lappend(rel->reltarget->exprs, var);
 	}
 
 	for (unsigned int i = 0; i < num_chunks; i++)
@@ -1325,6 +1349,28 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		ts_make_inh_translation_list(oldrelation, newrelation, child_rtindex, appinfo);
 		appinfo->parent_reloid = parent_oid;
 		appinfos = lappend(appinfos, appinfo);
+
+		/*
+		 * Create child PlanRowMark if parent has one. This replicates
+		 * expand_single_inheritance_child() in inherit.c.
+		 */
+		if (oldrc)
+		{
+			PlanRowMark *childrc = makeNode(PlanRowMark);
+
+			childrc->rti = child_rtindex;
+			childrc->prti = oldrc->rti;
+			childrc->rowmarkId = oldrc->rowmarkId;
+			childrc->markType = select_rowmark_type(childrte, oldrc->strength);
+			childrc->allMarkTypes = (1 << childrc->markType);
+			childrc->strength = oldrc->strength;
+			childrc->waitPolicy = oldrc->waitPolicy;
+			childrc->isParent = false; /* chunks are never partitioned */
+
+			oldrc->allMarkTypes |= childrc->allMarkTypes;
+
+			root->rowMarks = lappend(root->rowMarks, childrc);
+		}
 
 		/* Close child relations, but keep locks */
 		if (child_oid != parent_oid)

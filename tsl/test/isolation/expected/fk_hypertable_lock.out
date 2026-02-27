@@ -43,4 +43,4 @@ step s1_commit:
   COMMIT;
 
 step s2_delete_ht: <... completed>
-ERROR:  update or delete on table "_hyper_3_1_chunk" violates foreign key constraint "events_ht_metric_time_metric_device_fkey" on table "events_ht"
+ERROR:  update or delete on table "_hyper_X_X_chunk" violates foreign key constraint "events_ht_time_device_id_fkey" on table "events_ht"
