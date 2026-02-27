@@ -439,6 +439,145 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	return columnar_result_finalize(&columnar_result, batch_state);
 }
 
+static pg_noinline CompressedColumnValues
+vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
+						  uint64 const *top_filter, CaseExpr const *case_expr)
+{
+	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
+	const int nrows = batch_state->total_batch_rows;
+	const int num_validity_words = (nrows + 63) / 64;
+	Ensure(case_expr->arg == NULL,
+		   "The CASE with explicit argument is not supported by vectorized aggregation");
+
+	const int num_explicit_branches = list_length(case_expr->args);
+
+	uint64 const **branch_filters = palloc0(sizeof(*branch_filters) * (num_explicit_branches + 1));
+	CompressedColumnValues *branch_values =
+		palloc0(sizeof(*branch_values) * (num_explicit_branches + 1));
+	Datum *branch_data = palloc0(sizeof(*branch_values) * (num_explicit_branches + 1));
+	bool *branch_isnull = palloc0(sizeof(*branch_isnull) * (num_explicit_branches + 1));
+
+	for (int i = 0; i < num_explicit_branches + 1; i++)
+	{
+		Expr *condition_expression;
+		Expr *value_expression;
+		if (i < num_explicit_branches)
+		{
+			CaseWhen const *when = castNode(CaseWhen, list_nth(case_expr->args, i));
+			condition_expression = when->expr;
+			value_expression = when->result;
+		}
+		else
+		{
+			condition_expression = NULL;
+			value_expression = case_expr->defresult;
+		}
+
+		uint64 const *branch_filter = top_filter;
+		if (condition_expression != NULL)
+		{
+			CompressedBatchVectorQualState vqstate =
+				compressed_batch_init_vector_quals(dcontext,
+												   list_make1(condition_expression),
+												   slot);
+			vector_qual_compute(&vqstate.vqstate);
+			uint64 const *qual_result = vqstate.vqstate.vector_qual_result;
+			if (qual_result != NULL)
+			{
+				arrow_validity_and(num_validity_words, (uint64 *) qual_result, top_filter);
+				branch_filter = qual_result;
+			}
+		}
+
+		branch_filters[i] = branch_filter;
+
+		if (value_expression != NULL)
+		{
+			branch_values[i] =
+				vector_slot_evaluate_expression(dcontext, slot, branch_filter, value_expression);
+		}
+		else
+		{
+			branch_values[i] =
+				(CompressedColumnValues){ .decompression_type = DT_Scalar,
+										  .buffers[0] = DatumGetPointer(BoolGetDatum(true)) };
+		}
+
+		branch_values[i].output_value = &branch_data[i];
+		branch_values[i].output_isnull = &branch_isnull[i];
+
+		Ensure(branch_values[i].decompression_type != DT_Invalid,
+			   "got DT_Invalid for argument %d",
+			   i);
+
+		if (branch_values[i].decompression_type == DT_ArrowText ||
+			branch_values[i].decompression_type == DT_ArrowTextDict)
+		{
+			Ensure(branch_values[i].arrow != NULL, "no arrow for arg %d", i);
+			const int maxbytes = get_max_varlena_bytes(branch_values[i].arrow);
+			*branch_values[i].output_value =
+				PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+		}
+		else if (branch_values[i].decompression_type == DT_Scalar)
+		{
+			*branch_values[i].output_value = PointerGetDatum(branch_values[i].buffers[1]);
+			*branch_values[i].output_isnull =
+				DatumGetBool(PointerGetDatum(branch_values[i].buffers[0]));
+		}
+	}
+
+	ColumnarResult columnar_result = { 0 };
+	columnar_result_init_for_type(&columnar_result, batch_state, case_expr->casetype);
+	for (int row = 0; row < nrows; row++)
+	{
+		/*
+		 * The Arrow format requires the offsets to monotonically increase even
+		 * for the invalid rows.
+		 */
+		if (columnar_result.offset_buffer != NULL)
+		{
+			columnar_result.offset_buffer[row] = columnar_result.current_offset;
+		}
+
+		if (!arrow_row_is_valid(top_filter, row))
+		{
+			continue;
+		}
+
+		int branch_index;
+		for (branch_index = 0; branch_index < num_explicit_branches; branch_index++)
+		{
+			if (arrow_row_is_valid(branch_filters[branch_index], row))
+			{
+				break;
+			}
+		}
+
+		compressed_columns_to_postgres_data(&branch_values[branch_index], 1, row);
+
+		const bool isnull = *branch_values[branch_index].output_isnull;
+		const Datum result = isnull ? 0 : *branch_values[branch_index].output_value;
+
+		columnar_result_set_row(&columnar_result, batch_state, row, result, isnull);
+	}
+
+	if (columnar_result.validity != NULL)
+	{
+		arrow_validity_and(num_validity_words, columnar_result.validity, top_filter);
+	}
+	else
+	{
+		columnar_result.validity = (uint64 *) top_filter;
+	}
+
+	pfree(branch_filters);
+	pfree(branch_values);
+	pfree(branch_data);
+	pfree(branch_isnull);
+
+	return columnar_result_finalize(&columnar_result, batch_state);
+}
+
 /*
  * Return the arrow array or the datum (in case of single scalar value) for a
  * given expression as a CompressedColumnValues struct.
@@ -488,6 +627,11 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 												 f->args,
 												 f->funcid,
 												 f->inputcollid);
+		}
+		case T_CaseExpr:
+		{
+			CaseExpr const *c = (CaseExpr const *) argument;
+			return vector_slot_evaluate_case(dcontext, slot, filter, c);
 		}
 		default:
 			Ensure(false,

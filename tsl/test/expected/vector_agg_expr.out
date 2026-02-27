@@ -1914,3 +1914,56 @@ select v - 501 > 0, sum(abs(v - 500)) from aggexpr where i % 2 = 0 group by v - 
 
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
+-- Not all CASE statements are vectorized yet.
+set timescaledb.debug_require_vector_agg = 'require';
+-- /* Uncomment to generate reference. */ set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
+select sum(case when i > 10 then i else -i end) from aggexpr group by b order by 1;
+  sum  
+-------
+  6669
+ 27222
+     $
+
+select count(case when i > 10 then i end) from aggexpr group by v - 501 > 0 order by 1;
+ count 
+-------
+     0
+  1001
+  1967
+
+select sum(case when i > 10 then (case when i > 12 then length(x) else -length(x) end) end) from aggexpr group by v - 502 > 0;
+ sum 
+-----
+ 198
+   $
+ 716
+
+select avg(case when v > 500 then v - 500 else 500 - v end) from aggexpr group by x order by 1 limit 10;
+ avg 
+-----
+   0
+   2
+   2
+   4
+   4
+   6
+   6
+   8
+   8
+  10
+
+select count(*), case when v > 503 then x else 'something-else' end from aggexpr group by 2 order by 1, 2 limit 10;
+ count |  case  
+-------+--------
+     1 | 141000
+     1 | 141002
+     1 | 141004
+     1 | 141006
+     1 | 141008
+     1 | 141010
+     1 | 141012
+     1 | 141014
+     1 | 141016
+     1 | 141018
+
+reset timescaledb.debug_require_vector_agg;
