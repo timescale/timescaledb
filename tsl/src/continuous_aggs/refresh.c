@@ -158,10 +158,17 @@ compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 	Assert(cagg != NULL);
 	Assert(cagg->bucket_function != NULL);
 
-	NullableDatum NULL_DATUM = INIT_NULL_DATUM;
 	InternalTimeRange result = *refresh_window;
 	InternalTimeRange largest_bucketed_window =
 		get_largest_bucketed_window(refresh_window->type, bucket_width);
+
+	/* Get offset and origin for bucket function */
+	NullableDatum offset = INIT_NULL_DATUM;
+	NullableDatum origin = INIT_NULL_DATUM;
+	fill_bucket_offset_origin(cagg, refresh_window, &offset, &origin);
+
+	/* Defined offset and origin in one function is not supported */
+	Assert(offset.isnull == true || origin.isnull == true);
 
 	if (refresh_window->start <= largest_bucketed_window.start)
 	{
@@ -179,8 +186,8 @@ compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 		result.start = ts_time_bucket_by_type_extended(bucket_width,
 													   included_bucket,
 													   refresh_window->type,
-													   NULL_DATUM,
-													   NULL_DATUM);
+													   offset,
+													   origin);
 	}
 
 	if (refresh_window->end >= largest_bucketed_window.end)
@@ -194,8 +201,8 @@ compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 		result.end = ts_time_bucket_by_type_extended(bucket_width,
 													 refresh_window->end,
 													 refresh_window->type,
-													 NULL_DATUM,
-													 NULL_DATUM);
+													 offset,
+													 origin);
 	}
 	return result;
 }
