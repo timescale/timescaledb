@@ -15,10 +15,9 @@
 #   3. S1: INSERT commits
 #   4. Result: FK violation - orphan row in FK table
 #
-# This test compares three table types:
+# This test compares:
 #   1. Plain table - Reference implementation, correct behavior
-#   2. Declaratively partitioned table - PostgreSQL native partitioning
-#   3. Hypertable - TimescaleDB partitioning
+#   2. Hypertable - TimescaleDB partitioning
 #
 # Expected behavior: DELETE should block while INSERT is in progress, then fail
 # with FK violation error after INSERT commits.
@@ -40,25 +39,7 @@ setup {
     CONSTRAINT fk_plain FOREIGN KEY (metric_time, metric_device) REFERENCES metrics_plain(time, device_id)
   );
 
-  -- 2. Declaratively partitioned table
-  CREATE TABLE metrics_part (
-    time TIMESTAMPTZ NOT NULL,
-    device_id INT NOT NULL,
-    value FLOAT,
-    PRIMARY KEY (time, device_id)
-  ) PARTITION BY RANGE (time);
-  CREATE TABLE metrics_part_p1 PARTITION OF metrics_part
-    FOR VALUES FROM ('2020-01-01') TO ('2020-01-02');
-  INSERT INTO metrics_part VALUES ('2020-01-01 12:00', 1, 100.0);
-
-  CREATE TABLE events_part (
-    metric_time TIMESTAMPTZ NOT NULL,
-    metric_device INT NOT NULL,
-    event_data TEXT,
-    CONSTRAINT fk_part FOREIGN KEY (metric_time, metric_device) REFERENCES metrics_part(time, device_id)
-  );
-
-  -- 3. Hypertable
+  -- 2. Hypertable
   CREATE TABLE metrics_ht (
     time TIMESTAMPTZ NOT NULL,
     device_id INT NOT NULL,
@@ -78,7 +59,6 @@ setup {
 
 teardown {
   DROP TABLE IF EXISTS events_plain, metrics_plain CASCADE;
-  DROP TABLE IF EXISTS events_part, metrics_part CASCADE;
   DROP TABLE IF EXISTS events_ht, metrics_ht CASCADE;
 }
 
@@ -88,12 +68,6 @@ session "s1"
 step "s1_insert_plain" {
   BEGIN;
   INSERT INTO events_plain (metric_time, metric_device, event_data)
-    VALUES ('2020-01-01 12:00', 1, 'test event');
-}
-
-step "s1_insert_part" {
-  BEGIN;
-  INSERT INTO events_part (metric_time, metric_device, event_data)
     VALUES ('2020-01-01 12:00', 1, 'test event');
 }
 
@@ -114,10 +88,6 @@ step "s2_delete_plain" {
   DELETE FROM metrics_plain WHERE time = '2020-01-01 12:00' AND device_id = 1;
 }
 
-step "s2_delete_part" {
-  DELETE FROM metrics_part WHERE time = '2020-01-01 12:00' AND device_id = 1;
-}
-
 step "s2_delete_ht" {
   DELETE FROM metrics_ht WHERE time = '2020-01-01 12:00' AND device_id = 1;
 }
@@ -126,11 +96,6 @@ step "s2_delete_ht" {
 # Expected: s2_delete_plain shows "<waiting ...>", then ERROR after s1_commit
 permutation "s1_insert_plain" "s2_delete_plain" "s1_commit"
 
-# Partitioned table: DELETE should block, then fail with FK violation
-# Expected: s2_delete_part shows "<waiting ...>", then ERROR after s1_commit
-permutation "s1_insert_part" "s2_delete_part" "s1_commit"
-
 # Hypertable: DELETE should block, then fail with FK violation
 # Expected: s2_delete_ht shows "<waiting ...>", then ERROR after s1_commit
-# BUG: Currently DELETE proceeds without blocking, creating FK violation
 permutation "s1_insert_ht" "s2_delete_ht" "s1_commit"

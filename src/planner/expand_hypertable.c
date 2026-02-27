@@ -1373,15 +1373,10 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		List *newvars = NIL;
 
 		/* Add TID junk Var if needed, unless we had it already */
-		if ((new_allMarkTypes & ~(1 << ROW_MARK_COPY)) &&
-			!(old_allMarkTypes & ~(1 << ROW_MARK_COPY)))
+		if (new_allMarkTypes & ~(1 << ROW_MARK_COPY) && !(old_allMarkTypes & ~(1 << ROW_MARK_COPY)))
 		{
-			var = makeVar(oldrc->rti,
-						  SelfItemPointerAttributeNumber,
-						  TIDOID,
-						  -1,
-						  InvalidOid,
-						  0);
+			/* Need to fetch TID */
+			var = makeVar(oldrc->rti, SelfItemPointerAttributeNumber, TIDOID, -1, InvalidOid, 0);
 			snprintf(resname, sizeof(resname), "ctid%u", oldrc->rowmarkId);
 			tle = makeTargetEntry((Expr *) var,
 								  list_length(root->processed_tlist) + 1,
@@ -1392,13 +1387,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		}
 
 		/* Add whole-row junk Var if needed, unless we had it already */
-		if ((new_allMarkTypes & (1 << ROW_MARK_COPY)) &&
-			!(old_allMarkTypes & (1 << ROW_MARK_COPY)))
+		if ((new_allMarkTypes & (1 << ROW_MARK_COPY)) && !(old_allMarkTypes & (1 << ROW_MARK_COPY)))
 		{
-			var = makeWholeRowVar(planner_rt_fetch(oldrc->rti, root),
-								  oldrc->rti,
-								  0,
-								  false);
+			var = makeWholeRowVar(planner_rt_fetch(oldrc->rti, root), oldrc->rti, 0, false);
 			snprintf(resname, sizeof(resname), "wholerow%u", oldrc->rowmarkId);
 			tle = makeTargetEntry((Expr *) var,
 								  list_length(root->processed_tlist) + 1,
@@ -1411,12 +1402,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		/* Add tableoid junk Var, unless we had it already */
 		if (!old_isParent)
 		{
-			var = makeVar(oldrc->rti,
-						  TableOidAttributeNumber,
-						  OIDOID,
-						  -1,
-						  InvalidOid,
-						  0);
+			var = makeVar(oldrc->rti, TableOidAttributeNumber, OIDOID, -1, InvalidOid, 0);
 			snprintf(resname, sizeof(resname), "tableoid%u", oldrc->rowmarkId);
 			tle = makeTargetEntry((Expr *) var,
 								  list_length(root->processed_tlist) + 1,
@@ -1426,7 +1412,10 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 			newvars = lappend(newvars, var);
 		}
 
-		/* Add the newly added Vars to parent's reltarget */
+		/*
+		 * Add the newly added Vars to parent's reltarget.  We needn't worry
+		 * about the children's reltargets, they'll be made later.
+		 */
 		add_vars_to_targetlist(root, newvars, bms_make_singleton(0));
 	}
 
