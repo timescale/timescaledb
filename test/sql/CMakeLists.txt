@@ -128,6 +128,10 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
   list(APPEND TEST_FILES tableam_alter_defaults.sql)
 endif()
 
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
+  list(APPEND TEST_FILES insert_returning_old_new.sql)
+endif()
+
 # pg_dump_unprivileged.sql was fixed by an upstream change to pg_dump in 15.6,
 # and 16.2
 if(((${PG_VERSION_MAJOR} EQUAL "15") AND (${PG_VERSION_MINOR} GREATER_EQUAL "6")
