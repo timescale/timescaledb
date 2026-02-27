@@ -1578,3 +1578,149 @@ SELECT count(*) FROM sv_null;
 -------
      3
 
+-- Test: generated stored columns should not be NULL in compressed chunks
+-- GitHub issue #9314
+CREATE TABLE i9314 (
+    time timestamptz NOT NULL,
+    value int,
+    doubled int GENERATED ALWAYS AS (value * 2) STORED
+) WITH (tsdb.hypertable, tsdb.chunk_interval = '180 day');
+NOTICE:  using column "time" as partitioning column
+HINT:  Use "timescaledb.partition_column" to specify a different column to use as partitioning column.
+-- Insert initial data and compress
+INSERT INTO i9314 VALUES ('2024-01-01', 1);
+SELECT compress_chunk(show_chunks('i9314'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_50_103_chunk
+
+-- Insert multiple rows into the compressed chunk
+-- All rows should have correct generated column values
+INSERT INTO i9314 VALUES
+    ('2024-01-02', 2),
+    ('2024-01-03', 3),
+    ('2024-01-04', 4);
+SELECT compress_chunk(show_chunks('i9314'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_50_103_chunk
+
+-- show explain to ensure its all compressed
+:PREFIX SELECT * FROM i9314 ORDER BY time;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+   ->  Index Scan Backward using compress_hyper_51_104_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_51_104_chunk
+
+SELECT * FROM i9314 ORDER BY time;
+             time             | value | doubled 
+------------------------------+-------+---------
+ Mon Jan 01 00:00:00 2024 PST |     1 |       2
+ Tue Jan 02 00:00:00 2024 PST |     2 |       4
+ Wed Jan 03 00:00:00 2024 PST |     3 |       6
+ Thu Jan 04 00:00:00 2024 PST |     4 |       8
+
+SET timescaledb.enable_direct_compress_insert = true;
+-- Insert >= 10 rows to trigger direct compress path
+INSERT INTO i9314 SELECT '2024-02-01'::timestamptz + format('%s day',i)::interval, i + 10 FROM generate_series(1, 10) i;
+:PREFIX SELECT * FROM i9314 ORDER BY time;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_50_103_chunk."time"
+   ->  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+         ->  Seq Scan on compress_hyper_51_104_chunk
+
+SELECT * FROM i9314 ORDER BY time;
+             time             | value | doubled 
+------------------------------+-------+---------
+ Mon Jan 01 00:00:00 2024 PST |     1 |       2
+ Tue Jan 02 00:00:00 2024 PST |     2 |       4
+ Wed Jan 03 00:00:00 2024 PST |     3 |       6
+ Thu Jan 04 00:00:00 2024 PST |     4 |       8
+ Fri Feb 02 00:00:00 2024 PST |    11 |      22
+ Sat Feb 03 00:00:00 2024 PST |    12 |      24
+ Sun Feb 04 00:00:00 2024 PST |    13 |      26
+ Mon Feb 05 00:00:00 2024 PST |    14 |      28
+ Tue Feb 06 00:00:00 2024 PST |    15 |      30
+ Wed Feb 07 00:00:00 2024 PST |    16 |      32
+ Thu Feb 08 00:00:00 2024 PST |    17 |      34
+ Fri Feb 09 00:00:00 2024 PST |    18 |      36
+ Sat Feb 10 00:00:00 2024 PST |    19 |      38
+ Sun Feb 11 00:00:00 2024 PST |    20 |      40
+
+-- test copy
+COPY i9314 FROM STDIN DELIMITER ',' CSV;
+SELECT compress_chunk(show_chunks('i9314'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_50_103_chunk
+
+:PREFIX SELECT * FROM i9314 ORDER BY time;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+   ->  Index Scan Backward using compress_hyper_51_104_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_51_104_chunk
+
+SELECT * FROM i9314 ORDER BY time;
+             time             | value | doubled 
+------------------------------+-------+---------
+ Mon Jan 01 00:00:00 2024 PST |     1 |       2
+ Tue Jan 02 00:00:00 2024 PST |     2 |       4
+ Wed Jan 03 00:00:00 2024 PST |     3 |       6
+ Thu Jan 04 00:00:00 2024 PST |     4 |       8
+ Fri Feb 02 00:00:00 2024 PST |    11 |      22
+ Sat Feb 03 00:00:00 2024 PST |    12 |      24
+ Sun Feb 04 00:00:00 2024 PST |    13 |      26
+ Mon Feb 05 00:00:00 2024 PST |    14 |      28
+ Tue Feb 06 00:00:00 2024 PST |    15 |      30
+ Wed Feb 07 00:00:00 2024 PST |    16 |      32
+ Thu Feb 08 00:00:00 2024 PST |    17 |      34
+ Fri Feb 09 00:00:00 2024 PST |    18 |      36
+ Sat Feb 10 00:00:00 2024 PST |    19 |      38
+ Sun Feb 11 00:00:00 2024 PST |    20 |      40
+ Wed Mar 13 00:00:00 2024 PDT |    20 |      40
+ Thu Mar 14 00:00:00 2024 PDT |    21 |      42
+ Fri Mar 15 00:00:00 2024 PDT |    22 |      44
+ Sat Mar 16 00:00:00 2024 PDT |    23 |      46
+ Sun Mar 17 00:00:00 2024 PDT |    24 |      48
+
+SET timescaledb.enable_direct_compress_copy = true;
+COPY i9314 FROM STDIN DELIMITER ',' CSV;
+:PREFIX SELECT * FROM i9314 ORDER BY time;
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on i9314
+   Order: i9314."time"
+   ->  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+         ->  Index Scan Backward using compress_hyper_51_104_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_51_104_chunk
+   ->  Sort
+         Sort Key: _hyper_50_105_chunk."time"
+         ->  Custom Scan (ColumnarScan) on _hyper_50_105_chunk
+               ->  Seq Scan on compress_hyper_51_106_chunk
+
+SELECT * FROM i9314 ORDER BY time;
+             time             | value | doubled 
+------------------------------+-------+---------
+ Mon Jan 01 00:00:00 2024 PST |     1 |       2
+ Tue Jan 02 00:00:00 2024 PST |     2 |       4
+ Wed Jan 03 00:00:00 2024 PST |     3 |       6
+ Thu Jan 04 00:00:00 2024 PST |     4 |       8
+ Fri Feb 02 00:00:00 2024 PST |    11 |      22
+ Sat Feb 03 00:00:00 2024 PST |    12 |      24
+ Sun Feb 04 00:00:00 2024 PST |    13 |      26
+ Mon Feb 05 00:00:00 2024 PST |    14 |      28
+ Tue Feb 06 00:00:00 2024 PST |    15 |      30
+ Wed Feb 07 00:00:00 2024 PST |    16 |      32
+ Thu Feb 08 00:00:00 2024 PST |    17 |      34
+ Fri Feb 09 00:00:00 2024 PST |    18 |      36
+ Sat Feb 10 00:00:00 2024 PST |    19 |      38
+ Sun Feb 11 00:00:00 2024 PST |    20 |      40
+ Wed Mar 13 00:00:00 2024 PDT |    20 |      40
+ Thu Mar 14 00:00:00 2024 PDT |    21 |      42
+ Fri Mar 15 00:00:00 2024 PDT |    22 |      44
+ Sat Mar 16 00:00:00 2024 PDT |    23 |      46
+ Sun Mar 17 00:00:00 2024 PDT |    24 |      48
+ Sat Apr 13 00:00:00 2024 PDT |    30 |      60
+ Sun Apr 14 00:00:00 2024 PDT |    31 |      62
+ Mon Apr 15 00:00:00 2024 PDT |    32 |      64
+ Tue Apr 16 00:00:00 2024 PDT |    33 |      66
+ Wed Apr 17 00:00:00 2024 PDT |    34 |      68
+
+RESET timescaledb.enable_direct_compress_insert;
