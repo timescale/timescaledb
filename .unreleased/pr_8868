@@ -1,0 +1,2 @@
+Implements: #8868 Use PG_MODULE_MAGIC_EXT for PG18
+Thanks: @tureba for reviewing the PR
