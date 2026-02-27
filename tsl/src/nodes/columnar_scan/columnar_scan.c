@@ -2441,8 +2441,18 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	 */
 	if (compressed_rel->consider_parallel && required_outer == NULL)
 	{
+		const float compression_ratio_guess = 5.;
+		int effective_pages = compressed_rel->pages
+			/ (float) compressed_rel->reltarget->width
+			* compression_info->chunk_rel->reltarget->width
+			* compression_info->compressed_batch_size
+			/ compression_ratio_guess;
+		effective_pages = Max(effective_pages, 1);
+//		fprintf(stderr, "compressed width %d uncompressed %d\n",
+//			compressed_rel->reltarget->width, compression_info->chunk_rel->reltarget->width);
+//		fprintf(stderr, "compressed pages %d effective %d\n", compressed_rel->pages, effective_pages);
 		int parallel_workers = compute_parallel_worker(compressed_rel,
-													   compressed_rel->pages,
+													   effective_pages,
 													   -1,
 													   max_parallel_workers_per_gather);
 
