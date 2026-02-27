@@ -64,21 +64,22 @@ gapfill_aggref_mutator(Node *node, void *context)
  * - Var (column references)
  * - SubLink (subqueries before planning)
  * - Param (subquery results and join parameters, except PARAM_EXTERN)
+ * - PlaceHolderVar (expressions from outer joins)
  *
  * These make the expression non-constant as they depend on row data or
- * require separate evaluation. This is used for the timezone parameter
+ * require special join-level evaluation. This is used for the timezone
  * which must be constant for gap generation.
  *
  * We accept PARAM_EXTERN because those are external query parameters
  * (like $1 in prepared statements) that are constant for the query duration.
  */
 static bool
-is_not_runtime_constant_walker(Node *node, void *context)
+contains_nonconstant_walker(Node *node, void *context)
 {
 	if (node == NULL)
 		return false;
 
-	if (IsA(node, Var) || IsA(node, SubLink))
+	if (IsA(node, Var) || IsA(node, SubLink) || IsA(node, PlaceHolderVar))
 		return true;
 
 	if (IsA(node, Param))
@@ -88,13 +89,13 @@ is_not_runtime_constant_walker(Node *node, void *context)
 		return param->paramkind != PARAM_EXTERN;
 	}
 
-	return expression_tree_walker(node, is_not_runtime_constant_walker, context);
+	return expression_tree_walker(node, contains_nonconstant_walker, context);
 }
 
 static bool
-is_not_runtime_constant(Node *node)
+contains_nonconstant_expr(Node *node)
 {
-	return is_not_runtime_constant_walker(node, NULL);
+	return contains_nonconstant_walker(node, NULL);
 }
 
 /*
@@ -540,7 +541,7 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 		if (nargs == 3 || nargs == 5)
 		{
 			Expr *tz_arg = lthird(func->args);
-			if (is_not_runtime_constant((Node *) tz_arg))
+			if (contains_nonconstant_expr((Node *) tz_arg))
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("time_bucket_gapfill does not support non-constant timezone"),

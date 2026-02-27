@@ -46,6 +46,7 @@ select count(*) from vectorqual where metric4 >= 0 /* nulls shouldn't pass the q
 
 set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where device = 1 /* can't apply vector ops to the segmentby column */;
+select count(*) from vectorqual where metric2 = (select 22) /* subquery becomes InitPlan with PARAM_EXEC */;
 
 
 -- Test various combinations of arithmetic types.
