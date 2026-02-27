@@ -40,6 +40,7 @@ set(TEST_FILES
     merge.sql
     partition.sql
     partitioning.sql
+    pg_dump_unprivileged.sql
     pg_join.sql
     plain.sql
     plan_hypertable_inline.sql
@@ -130,14 +131,6 @@ endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
   list(APPEND TEST_FILES insert_returning_old_new.sql)
-endif()
-
-# pg_dump_unprivileged.sql was fixed by an upstream change to pg_dump in 15.6,
-# and 16.2
-if(((${PG_VERSION_MAJOR} EQUAL "15") AND (${PG_VERSION_MINOR} GREATER_EQUAL "6")
-   ) OR ((${PG_VERSION_MAJOR} EQUAL "16") AND (${PG_VERSION_MINOR} GREATER_EQUAL
-                                               "2")))
-  list(APPEND TEST_FILES pg_dump_unprivileged.sql)
 endif()
 
 # only test custom type if we are in 64-bit architecture
