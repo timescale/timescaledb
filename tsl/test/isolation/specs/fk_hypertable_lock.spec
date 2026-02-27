@@ -37,7 +37,7 @@ setup {
     metric_time TIMESTAMPTZ NOT NULL,
     metric_device INT NOT NULL,
     event_data TEXT,
-    FOREIGN KEY (metric_time, metric_device) REFERENCES metrics_plain(time, device_id)
+    CONSTRAINT fk_plain FOREIGN KEY (metric_time, metric_device) REFERENCES metrics_plain(time, device_id)
   );
 
   -- 2. Declaratively partitioned table
@@ -55,7 +55,7 @@ setup {
     metric_time TIMESTAMPTZ NOT NULL,
     metric_device INT NOT NULL,
     event_data TEXT,
-    FOREIGN KEY (metric_time, metric_device) REFERENCES metrics_part(time, device_id)
+    CONSTRAINT fk_part FOREIGN KEY (metric_time, metric_device) REFERENCES metrics_part(time, device_id)
   );
 
   -- 3. Hypertable
@@ -72,7 +72,7 @@ setup {
     metric_time TIMESTAMPTZ NOT NULL,
     metric_device INT NOT NULL,
     event_data TEXT,
-    FOREIGN KEY (metric_time, metric_device) REFERENCES metrics_ht(time, device_id)
+    CONSTRAINT fk_ht FOREIGN KEY (metric_time, metric_device) REFERENCES metrics_ht(time, device_id)
   );
 }
 

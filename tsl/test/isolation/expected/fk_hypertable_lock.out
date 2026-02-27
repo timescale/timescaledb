@@ -13,7 +13,7 @@ step s1_commit:
   COMMIT;
 
 step s2_delete_plain: <... completed>
-ERROR:  update or delete on table "metrics_plain" violates foreign key constraint "events_plain_metric_time_metric_device_fkey" on table "events_plain"
+ERROR:  update or delete on table "metrics_plain" violates foreign key constraint "fk_plain" on table "events_plain"
 
 starting permutation: s1_insert_part s2_delete_part s1_commit
 step s1_insert_part: 
@@ -28,7 +28,7 @@ step s1_commit:
   COMMIT;
 
 step s2_delete_part: <... completed>
-ERROR:  update or delete on table "metrics_part_p1" violates foreign key constraint "events_part_metric_time_metric_device_fkey_1" on table "events_part"
+ERROR:  update or delete on table "metrics_part_p1" violates foreign key constraint "fk_part_1" on table "events_part"
 
 starting permutation: s1_insert_ht s2_delete_ht s1_commit
 step s1_insert_ht: 
