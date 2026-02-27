@@ -51,5 +51,6 @@ echo "remove .unreleased files"
 
 # Set new previous version
 echo "Set new previous version version.config to ${PUBLISHED_VERSION}"
-sed -i '' -e "s/^previous_version = .*/previous_version = $PUBLISHED_VERSION/" version.config
+sed -i.bak "s/^previous_version = .*/previous_version = $PUBLISHED_VERSION/" version.config
+rm -f version.config.bak
 tail -n 1 version.config
