@@ -369,8 +369,9 @@ SHOW timescaledb.shutdown_bgw_scheduler;
 SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 
 -- The number of scheduler restarts is not deterministic during [..]_wait_for_scheduler_finish().
--- Therefore, we filter these messages to get a deterministic test output.
-SELECT * FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
+-- Therefore, we filter these messages and exclude msg_no (which depends on how many messages were
+-- filtered) to get a deterministic test output.
+SELECT application_name, msg FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
 
 ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler;
 SELECT pg_reload_conf();
