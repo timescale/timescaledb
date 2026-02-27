@@ -1255,12 +1255,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 		oldrc->isParent = true;
 
-		var = makeVar(oldrc->rti,
-					  TableOidAttributeNumber,
-					  OIDOID,
-					  -1,
-					  InvalidOid,
-					  0);
+		var = makeVar(oldrc->rti, TableOidAttributeNumber, OIDOID, -1, InvalidOid, 0);
 		snprintf(resname, sizeof(resname), "tableoid%u", oldrc->rowmarkId);
 		tle = makeTargetEntry((Expr *) var,
 							  list_length(root->processed_tlist) + 1,
