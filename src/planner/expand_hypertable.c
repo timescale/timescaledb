@@ -31,6 +31,7 @@
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
+#include <optimizer/planmain.h>
 #include <optimizer/planner.h>
 #include <optimizer/prep.h>
 #include <optimizer/restrictinfo.h>
@@ -1240,31 +1241,16 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 	/*
 	 * Handle PlanRowMark for FOR UPDATE/SHARE and FK constraint enforcement.
-	 *
-	 * This replicates what PostgreSQL does in expand_inherited_rtentry()
-	 * (src/backend/optimizer/util/inherit.c): set isParent = true and add a
-	 * tableoid junk column to processed_tlist. Without this, FOR KEY SHARE
-	 * locks from FK constraint enforcement fail to lock chunk rows.
+	 * This replicates expand_inherited_rtentry() in inherit.c.
 	 */
 	PlanRowMark *oldrc = get_plan_rowmark(root->rowMarks, rti);
-	if (oldrc && !oldrc->isParent)
+	bool old_isParent = false;
+	int old_allMarkTypes = 0;
+	if (oldrc)
 	{
-		Var *var;
-		char resname[64];
-		TargetEntry *tle;
-
+		old_isParent = oldrc->isParent;
 		oldrc->isParent = true;
-
-		var = makeVar(oldrc->rti, TableOidAttributeNumber, OIDOID, -1, InvalidOid, 0);
-		snprintf(resname, sizeof(resname), "tableoid%u", oldrc->rowmarkId);
-		tle = makeTargetEntry((Expr *) var,
-							  list_length(root->processed_tlist) + 1,
-							  pstrdup(resname),
-							  true);
-		root->processed_tlist = lappend(root->processed_tlist, tle);
-
-		/* Also add to parent's reltarget so it propagates to children */
-		rel->reltarget->exprs = lappend(rel->reltarget->exprs, var);
+		old_allMarkTypes = oldrc->allMarkTypes;
 	}
 
 	for (unsigned int i = 0; i < num_chunks; i++)
@@ -1373,6 +1359,76 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	}
 
 	table_close(oldrelation, NoLock);
+
+	/*
+	 * Add required junk columns for row marks. This replicates the logic
+	 * after the expansion loop in expand_inherited_rtentry() in inherit.c.
+	 */
+	if (oldrc)
+	{
+		int new_allMarkTypes = oldrc->allMarkTypes;
+		Var *var;
+		TargetEntry *tle;
+		char resname[32];
+		List *newvars = NIL;
+
+		/* Add TID junk Var if needed, unless we had it already */
+		if ((new_allMarkTypes & ~(1 << ROW_MARK_COPY)) &&
+			!(old_allMarkTypes & ~(1 << ROW_MARK_COPY)))
+		{
+			var = makeVar(oldrc->rti,
+						  SelfItemPointerAttributeNumber,
+						  TIDOID,
+						  -1,
+						  InvalidOid,
+						  0);
+			snprintf(resname, sizeof(resname), "ctid%u", oldrc->rowmarkId);
+			tle = makeTargetEntry((Expr *) var,
+								  list_length(root->processed_tlist) + 1,
+								  pstrdup(resname),
+								  true);
+			root->processed_tlist = lappend(root->processed_tlist, tle);
+			newvars = lappend(newvars, var);
+		}
+
+		/* Add whole-row junk Var if needed, unless we had it already */
+		if ((new_allMarkTypes & (1 << ROW_MARK_COPY)) &&
+			!(old_allMarkTypes & (1 << ROW_MARK_COPY)))
+		{
+			var = makeWholeRowVar(planner_rt_fetch(oldrc->rti, root),
+								  oldrc->rti,
+								  0,
+								  false);
+			snprintf(resname, sizeof(resname), "wholerow%u", oldrc->rowmarkId);
+			tle = makeTargetEntry((Expr *) var,
+								  list_length(root->processed_tlist) + 1,
+								  pstrdup(resname),
+								  true);
+			root->processed_tlist = lappend(root->processed_tlist, tle);
+			newvars = lappend(newvars, var);
+		}
+
+		/* Add tableoid junk Var, unless we had it already */
+		if (!old_isParent)
+		{
+			var = makeVar(oldrc->rti,
+						  TableOidAttributeNumber,
+						  OIDOID,
+						  -1,
+						  InvalidOid,
+						  0);
+			snprintf(resname, sizeof(resname), "tableoid%u", oldrc->rowmarkId);
+			tle = makeTargetEntry((Expr *) var,
+								  list_length(root->processed_tlist) + 1,
+								  pstrdup(resname),
+								  true);
+			root->processed_tlist = lappend(root->processed_tlist, tle);
+			newvars = lappend(newvars, var);
+		}
+
+		/* Add the newly added Vars to parent's reltarget */
+		add_vars_to_targetlist(root, newvars, bms_make_singleton(0));
+	}
 
 	ts_add_append_rel_infos(root, appinfos);
 
