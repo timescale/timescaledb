@@ -247,7 +247,6 @@ ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis, ResultRelInf
 	{
 		slot->tts_tableOid = RelationGetRelid(resultRelationDesc);
 		ExecComputeStoredGenerated(root_rri, estate, slot, CMD_INSERT);
-		cis->skip_generated_column_computations = true;
 	}
 	ts_cm_functions->decompress_batches_for_insert(cis, slot);
 
