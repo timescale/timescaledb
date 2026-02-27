@@ -187,6 +187,8 @@ extern TSDLLEXPORT int64 ts_compute_beginning_of_the_next_bucket_variable(
 
 extern TSDLLEXPORT Query *ts_continuous_agg_get_query(ContinuousAgg *cagg);
 
+extern TSDLLEXPORT Query *ts_continuous_agg_get_finalized_query(ContinuousAgg *cagg);
+
 extern TSDLLEXPORT int64
 ts_continuous_agg_fixed_bucket_width(const ContinuousAggBucketFunction *bucket_function);
 extern TSDLLEXPORT int64

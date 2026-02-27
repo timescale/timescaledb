@@ -191,7 +191,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES cagg_planning.sql skip_scan_dagg.sql)
+  list(APPEND TEST_FILES cagg_planning.sql cagg_rewrites.sql skip_scan_dagg.sql)
   list(APPEND TEST_TEMPLATES plan_skip_scan_dagg.sql.in)
 endif()
 

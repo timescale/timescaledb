@@ -38,6 +38,7 @@
 #include "refresh.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 
 /*
  * Invalidation processing for continuous aggregates.
@@ -1212,4 +1213,56 @@ invalidation_store_free(InvalidationStore *store)
 	FreeTupleDesc(store->tupdesc);
 	tuplestore_end(store->tupstore);
 	pfree(store);
+}
+
+bool
+invalidation_hypertable_has_invalidations(int32 hyper_id)
+{
+	bool found = false;
+	ScanIterator iterator;
+	hypertable_invalidation_scan_init(&iterator, hyper_id, AccessShareLock);
+	iterator.ctx.limit = 1; /* we only need to know if there is at least one */
+
+	ts_scan_iterator_start_scan(&iterator);
+	if (ts_scan_iterator_next(&iterator))
+		found = true;
+	ts_scan_iterator_close(&iterator);
+
+	return found;
+}
+
+bool
+invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
+{
+	bool found = false;
+	int32 cagg_hyper_id = cagg->data.mat_hypertable_id;
+
+	ScanIterator iterator;
+	cagg_invalidations_scan_by_hypertable_init(&iterator, cagg_hyper_id, AccessShareLock);
+
+	int64 watermark = ts_cagg_watermark_get(cagg_hyper_id);
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti;
+		Invalidation logentry;
+
+		ti = ts_scan_iterator_tuple_info(&iterator);
+
+		invalidation_entry_set_from_cagg_invalidation(&logentry,
+													  ti,
+													  cagg->partition_type,
+													  cagg->bucket_function);
+		/* Entries which cannot be invalidations */
+		if (logentry.greatest_modified_value == INVAL_NEG_INFINITY ||
+			logentry.lowest_modified_value >= watermark)
+			continue;
+		else
+		{
+			found = true;
+			break;
+		}
+	}
+	ts_scan_iterator_close(&iterator);
+
+	return found;
 }

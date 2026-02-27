@@ -132,6 +132,6 @@ add_subdirectory(with_clause)
 # file properties if the target was added in the same directory, so just move it
 # all here.
 set(IMPORTED_SOURCES import/allpaths.c import/heapswap.c import/list.c
-                     import/planner.c import/ts_explain.c)
+                     import/planner.c import/setrefs.c import/ts_explain.c)
 set_source_files_properties(${IMPORTED_SOURCES} PROPERTIES SKIP_LINTING ON)
 target_sources(${PROJECT_NAME} PRIVATE ${IMPORTED_SOURCES})

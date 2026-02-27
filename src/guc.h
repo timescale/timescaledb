@@ -78,6 +78,10 @@ extern TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan;
 extern TSDLLEXPORT bool ts_guc_enable_multikey_skip_scan;
 extern TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier;
 extern TSDLLEXPORT bool ts_guc_debug_skip_scan_info;
+#if PG16_GE
+extern TSDLLEXPORT bool ts_guc_enable_cagg_rewrites;
+extern TSDLLEXPORT bool ts_guc_cagg_rewrites_debug_info;
+#endif
 
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;
