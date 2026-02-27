@@ -3341,3 +3341,60 @@ FROM (SELECT NULL::timestamptz AS time LIMIT 0) s GROUP BY 1;
  Sun Oct 27 02:00:00 2024 CET
 
 RESET timezone;
+-- Test: non-constant timezone parameter (GitHub #7629)
+-- Column references for timezone are not supported
+CREATE TABLE gf_tz_test(time timestamptz, tz_col text);
+INSERT INTO gf_tz_test VALUES ('2024-01-01 12:00:00+00', 'Europe/London');
+\set ON_ERROR_STOP 0
+-- 3-arg variant with column reference should error
+SELECT time_bucket_gapfill('1 day', time, tz_col) AS bucket
+  FROM gf_tz_test
+ WHERE time >= '2024-01-01' AND time < '2024-01-03'
+ GROUP BY 1;
+ERROR:  time_bucket_gapfill does not support non-constant timezone
+HINT:  Use a constant timezone value.
+-- 5-arg variant with column reference should error
+SELECT time_bucket_gapfill('1 day', time, tz_col, '2024-01-01', '2024-01-03') AS bucket
+  FROM gf_tz_test
+ GROUP BY 1;
+ERROR:  time_bucket_gapfill does not support non-constant timezone
+HINT:  Use a constant timezone value.
+-- Subquery for timezone should error (used to crash, GitHub #8015)
+SELECT time_bucket_gapfill('1 day', time, (SELECT min(tz_col) FROM gf_tz_test), '2024-01-01', '2024-01-03') AS bucket
+  FROM gf_tz_test
+ GROUP BY 1;
+ERROR:  time_bucket_gapfill does not support non-constant timezone
+HINT:  Use a constant timezone value.
+select time_bucket_gapfill('1 day', t1.time, t2.tz_col,
+    '2024-01-01', '2024-01-03') from gf_tz_test t1
+    join gf_tz_test t2 on true
+group by 1;
+ERROR:  time_bucket_gapfill does not support non-constant timezone
+HINT:  Use a constant timezone value.
+\set ON_ERROR_STOP 1
+-- Constant timezone should work
+SELECT time_bucket_gapfill('1 day', time, 'UTC') AS bucket
+  FROM gf_tz_test
+ WHERE time >= '2024-01-01' AND time < '2024-01-03'
+ GROUP BY 1;
+            bucket            
+------------------------------
+ Sun Dec 31 16:00:00 2023 PST
+ Mon Jan 01 16:00:00 2024 PST
+ Tue Jan 02 16:00:00 2024 PST
+
+prepare param_test(text) as
+SELECT time_bucket_gapfill('1 day', time, $1) AS bucket
+  FROM gf_tz_test
+ WHERE time >= '2024-01-01' AND time < '2024-01-03'
+ GROUP BY 1
+;
+execute param_test('UTC');
+            bucket            
+------------------------------
+ Sun Dec 31 16:00:00 2023 PST
+ Mon Jan 01 16:00:00 2024 PST
+ Tue Jan 02 16:00:00 2024 PST
+
+deallocate param_test;
+DROP TABLE gf_tz_test;
