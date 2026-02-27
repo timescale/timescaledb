@@ -273,26 +273,68 @@ ExecCheckPlanOutput(Relation resultRel, List *targetList)
  * ExecProcessReturning --- evaluate a RETURNING list
  *
  * resultRelInfo: current result rel
- * tupleSlot: slot holding tuple actually inserted/updated/deleted
+ * cmdType: operation performed (INSERT, UPDATE, or DELETE)
+ * oldSlot: slot holding old tuple deleted or updated
+ * newSlot: slot holding new tuple inserted or updated
  * planSlot: slot holding tuple returned by top subplan node
  *
- * Note: If tupleSlot is NULL, the FDW should have already provided econtext's
- * scan tuple.
+ * Note: If oldSlot and newSlot are NULL, the FDW should have already provided
+ * econtext's scan tuple and its old & new tuples are not needed (FDW direct-
+ * modify is disabled if the RETURNING list refers to any OLD/NEW values).
  *
  * Returns a slot holding the result tuple
  */
 static TupleTableSlot *
 ExecProcessReturning(ResultRelInfo *resultRelInfo,
-					 TupleTableSlot *tupleSlot,
+					 CmdType cmdType,
+					 TupleTableSlot *oldSlot,
+					 TupleTableSlot *newSlot,
 					 TupleTableSlot *planSlot)
 {
 	ProjectionInfo *projectReturning = resultRelInfo->ri_projectReturning;
 	ExprContext *econtext = projectReturning->pi_exprContext;
+	TupleTableSlot *tupleSlot = (cmdType == CMD_DELETE) ? oldSlot : newSlot;
 
 	/* Make tuple and any needed join variables available to ExecProject */
 	if (tupleSlot)
 		econtext->ecxt_scantuple = tupleSlot;
 	econtext->ecxt_outertuple = planSlot;
+
+#if PG18_GE
+	{
+		EState	   *estate = econtext->ecxt_estate;
+
+		/* Make old/new tuples available to ExecProject, if required */
+		if (oldSlot)
+			econtext->ecxt_oldtuple = oldSlot;
+		else if (projectReturning->pi_state.flags & EEO_FLAG_HAS_OLD)
+			econtext->ecxt_oldtuple = ExecGetAllNullSlot(estate, resultRelInfo);
+		else
+			econtext->ecxt_oldtuple = NULL;
+
+		if (newSlot)
+			econtext->ecxt_newtuple = newSlot;
+		else if (projectReturning->pi_state.flags & EEO_FLAG_HAS_NEW)
+			econtext->ecxt_newtuple = ExecGetAllNullSlot(estate, resultRelInfo);
+		else
+			econtext->ecxt_newtuple = NULL;
+
+		/*
+		 * Tell ExecProject whether or not the OLD/NEW rows actually exist.
+		 * This is required to evaluate ReturningExpr nodes and also in
+		 * ExecEvalSysVar() and ExecEvalWholeRowVar().
+		 */
+		if (oldSlot == NULL)
+			projectReturning->pi_state.flags |= EEO_FLAG_OLD_IS_NULL;
+		else
+			projectReturning->pi_state.flags &= ~EEO_FLAG_OLD_IS_NULL;
+
+		if (newSlot == NULL)
+			projectReturning->pi_state.flags |= EEO_FLAG_NEW_IS_NULL;
+		else
+			projectReturning->pi_state.flags &= ~EEO_FLAG_NEW_IS_NULL;
+	}
+#else
 
 	/*
 	 * RETURNING expressions might reference the tableoid column, so
@@ -300,6 +342,7 @@ ExecProcessReturning(ResultRelInfo *resultRelInfo,
 	 */
 	econtext->ecxt_scantuple->tts_tableOid =
 		RelationGetRelid(resultRelInfo->ri_RelationDesc);
+#endif
 
 	/* Compute the RETURNING expressions */
 	return ExecProject(projectReturning);
@@ -944,7 +987,7 @@ ExecInsert(ModifyTableContext *context,
 
 	/* Process RETURNING if present */
 	if (resultRelInfo->ri_projectReturning)
-		result = ExecProcessReturning(resultRelInfo, slot, planSlot);
+		result = ExecProcessReturning(resultRelInfo, CMD_INSERT, NULL, slot, planSlot);
 
 	return result;
 }
@@ -1432,7 +1475,7 @@ ldelete:
 			}
 		}
 
-		rslot = ExecProcessReturning(resultRelInfo, slot, context->planSlot);
+		rslot = ExecProcessReturning(resultRelInfo, CMD_DELETE, slot, NULL, context->planSlot);
 
 		/*
 		 * Before releasing the target tuple again, make sure rslot has a
@@ -1702,8 +1745,8 @@ ExecUpdateEpilogue(ModifyTableContext *context, UpdateContext *updateCxt,
  */
 static TupleTableSlot *
 ExecUpdate(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
-		   ItemPointer tupleid, HeapTuple oldtuple, TupleTableSlot *slot,
-		   bool canSetTag)
+		   ItemPointer tupleid, HeapTuple oldtuple, TupleTableSlot *oldSlot,
+		   TupleTableSlot *slot, bool canSetTag)
 {
 	EState	   *estate = context->estate;
 	Relation	resultRelationDesc = resultRelInfo->ri_RelationDesc;
@@ -1944,7 +1987,7 @@ redo_act:
 
 	/* Process RETURNING if present */
 	if (resultRelInfo->ri_projectReturning)
-		return ExecProcessReturning(resultRelInfo, slot, context->planSlot);
+		return ExecProcessReturning(resultRelInfo, CMD_UPDATE, oldSlot, slot, context->planSlot);
 
 	return NULL;
 }
@@ -2166,15 +2209,18 @@ ExecOnConflictUpdate(ModifyTableContext *context,
 
 	/* Execute UPDATE with projection */
 	*returning = ExecUpdate(context, resultRelInfo,
-							conflictTid, NULL,
+							conflictTid, NULL, existing,
 							resultRelInfo->ri_onConflict->oc_ProjSlot,
 							canSetTag);
 
 	/*
 	 * Clear out existing tuple, as there might not be another conflict among
 	 * the next input rows. Don't want to hold resources till the end of the
-	 * query.
+	 * query.  First though, make sure that the returning slot has a local
+	 * copy of any pass-by-reference values.
 	 */
+	if (*returning != NULL)
+		ExecMaterializeSlot(*returning);
 	ExecClearTuple(existing);
 	return true;
 }
@@ -2510,7 +2556,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 			 * ExecProcessReturning by IterateDirectModify, so no need to
 			 * provide it here.
 			 */
-			slot = ExecProcessReturning(resultRelInfo, NULL, context.planSlot);
+			slot = ExecProcessReturning(resultRelInfo, operation, NULL, NULL, context.planSlot);
 
 			return slot;
 		}
@@ -2676,7 +2722,8 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				context.relaction = NULL;
 				/* Now apply the update. */
 				slot =
-					ExecUpdate(&context, resultRelInfo, tupleid, oldtuple, slot, node->canSetTag);
+					ExecUpdate(&context, resultRelInfo, tupleid, oldtuple,
+							   oldSlot, slot, node->canSetTag);
 				break;
 			case CMD_DELETE:
 				slot = ExecDelete(&context, resultRelInfo, tupleid, oldtuple,
@@ -3264,13 +3311,15 @@ lmerge_matched:;
 				case CMD_UPDATE:
 					/* Variable newslot should be set for CMD_UPDATE above */
 					Assert(newslot != NULL);
-					rslot = ExecProcessReturning(resultRelInfo, newslot, context->planSlot);
+					rslot = ExecProcessReturning(resultRelInfo, CMD_UPDATE,
+												 resultRelInfo->ri_oldTupleSlot,
+												 newslot, context->planSlot);
 					break;
 
 				case CMD_DELETE:
-					rslot = ExecProcessReturning(resultRelInfo,
+					rslot = ExecProcessReturning(resultRelInfo, CMD_DELETE,
 												 resultRelInfo->ri_oldTupleSlot,
-												 context->planSlot);
+												 NULL, context->planSlot);
 					break;
 
 				case CMD_NOTHING:
