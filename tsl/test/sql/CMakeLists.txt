@@ -24,7 +24,9 @@ set(TEST_FILES
     compress_batch_size.sql
     compress_bitmap_scan.sql
     compress_bloom_hash.sql
+    compress_compbloom_basics.sql
     compress_compbloom_config.sql
+    compress_compbloom_manual_config.sql
     compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
@@ -126,6 +128,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_utils_compression.sql
     chunk_utils_internal.sql
     compress_bloom_sparse_debug.sql
+    compress_composite_bloom_debug.sql
     compression_algos.sql
     compression_bgw.sql
     compression_bools.sql
