@@ -20,6 +20,7 @@ list(
   cagg_multi_iso.spec
   deadlock_drop_chunks_compress.spec
   deadlock_drop_index_vacuum.spec
+  fk_hypertable_lock.spec
   parallel_compression.spec
   osm_range_updates_iso.spec
   concurrent_decompress_update.spec
