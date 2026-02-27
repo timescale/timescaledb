@@ -1291,10 +1291,13 @@ _guc_init(void)
 	DefineCustomEnumVariable(MAKE_EXTOPTION("realtime_cagg_settings"),
 							 "Define behaviour of combining live data with materialized CAgg data",
 							 "Defines how live data will be combined with materialized CAgg data. "
-							 "'realtime_with_backfills' will add live new and backfilled data to CAgg data."
-							 "'realtime_no_backfills' will add new live data to CAgg data, backfills are ignored. "
+							 "'realtime_with_backfills' will add live new and backfilled data to "
+							 "CAgg data."
+							 "'realtime_no_backfills' will add new live data to CAgg data, "
+							 "backfills are ignored. "
 							 "'materialized_only' will provide only materialized CAgg data. "
-							 "'cagg_view_settings' will provide data according to CAgg 'materialized_only' settings.",
+							 "'cagg_view_settings' will provide data according to CAgg "
+							 "'materialized_only' settings.",
 							 (int *) &ts_guc_realtime_cagg_settings,
 							 CAGG_VIEW_SETTINGS,
 							 realtime_ondemand_cagg_options,

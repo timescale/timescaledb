@@ -1213,3 +1213,169 @@ invalidation_store_free(InvalidationStore *store)
 	tuplestore_end(store->tupstore);
 	pfree(store);
 }
+
+static bool
+save_cagg_invalidation_into_store(const ContinuousAggInvalidationState *state,
+								  const Invalidation *invalidation)
+{
+	if (!IsValidInvalidation(invalidation))
+		return false;
+
+	InternalTimeRange refresh_window = {
+		.type = state->cagg->partition_type,
+		.start = invalidation->lowest_modified_value,
+		/* Invalidations are inclusive at the end, while refresh windows aren't, so add one to the
+		   end of the invalidated region */
+		.end = ts_time_saturating_add(invalidation->greatest_modified_value,
+									  1,
+									  state->cagg->partition_type),
+	};
+
+	InternalTimeRange bucketed_refresh_window =
+		compute_circumscribed_bucketed_refresh_window(state->cagg,
+													  &refresh_window,
+													  state->cagg->bucket_function);
+
+	int32 cagg_hyper_id = state->cagg->data.mat_hypertable_id;
+	TupleDesc tupdesc = RelationGetDescr(state->cagg_log_rel);
+	HeapTuple tup = create_invalidation_tup(tupdesc,
+											cagg_hyper_id,
+											bucketed_refresh_window.start,
+											bucketed_refresh_window.end);
+	tuplestore_puttuple(state->invalidations, tup);
+	heap_freetuple(tup);
+
+	return true;
+}
+
+static void
+get_hyper_and_cagg_invalidations(const ContinuousAggInvalidationState *state)
+{
+	Invalidation mergedentry;
+	invalidation_entry_reset(&mergedentry);
+
+	int32 hyper_id = state->cagg->data.raw_hypertable_id;
+	int32 cagg_hyper_id = state->cagg->data.mat_hypertable_id;
+	const ContinuousAggBucketFunction *bucket_function = state->cagg->bucket_function;
+
+	ScanIterator hyper_iterator;
+	hypertable_invalidation_scan_init(&hyper_iterator, hyper_id, AccessShareLock);
+	hyper_iterator.ctx.snapshot = RegisterSnapshot(GetTransactionSnapshot());
+	Assert(hyper_iterator.ctx.snapshot != NULL);
+
+	ScanIterator iterator;
+	cagg_invalidations_scan_by_hypertable_init(&iterator, cagg_hyper_id, AccessShareLock);
+	iterator.ctx.snapshot = RegisterSnapshot(GetTransactionSnapshot());
+	Assert(iterator.ctx.snapshot != NULL);
+
+	MemoryContextReset(state->per_tuple_mctx);
+	/* Process all invalidations for the hypertable */
+	ts_scanner_foreach(&hyper_iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&hyper_iterator);
+		MemoryContext oldmctx;
+		Invalidation logentry;
+
+		oldmctx = MemoryContextSwitchTo(state->per_tuple_mctx);
+		invalidation_entry_set_from_hyper_invalidation(&logentry,
+													   ti,
+													   cagg_hyper_id,
+													   state->cagg->partition_type,
+													   bucket_function);
+		if (!IsValidInvalidation(&mergedentry))
+			mergedentry = logentry;
+		else if (!invalidation_entry_try_merge(&mergedentry, &logentry))
+		{
+			save_cagg_invalidation_into_store(state, &mergedentry);
+			mergedentry = logentry;
+		}
+
+		MemoryContextSwitchTo(oldmctx);
+		MemoryContextReset(state->per_tuple_mctx);
+	}
+	UnregisterSnapshot(hyper_iterator.ctx.snapshot);
+	ts_scan_iterator_close(&hyper_iterator);
+
+	/* Process all invalidations for the continuous aggregate */
+	MemoryContextReset(state->per_tuple_mctx);
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		MemoryContext oldmctx;
+		Invalidation logentry;
+
+		oldmctx = MemoryContextSwitchTo(state->per_tuple_mctx);
+		invalidation_entry_set_from_cagg_invalidation(&logentry,
+													  ti,
+													  state->cagg->partition_type,
+													  state->cagg->bucket_function);
+
+		if (!IsValidInvalidation(&mergedentry))
+			mergedentry = logentry;
+		else if (!invalidation_entry_try_merge(&mergedentry, &logentry))
+		{
+			save_cagg_invalidation_into_store(state, &mergedentry);
+			mergedentry = logentry;
+		}
+
+		MemoryContextSwitchTo(oldmctx);
+		MemoryContextReset(state->per_tuple_mctx);
+	}
+	UnregisterSnapshot(iterator.ctx.snapshot);
+	ts_scan_iterator_close(&iterator);
+
+	/* Handle the last (merged) remainder */
+	save_cagg_invalidation_into_store(state, &mergedentry);
+}
+
+InvalidatedRanges
+invalidation_get_cagg_invalidations(const ContinuousAgg *cagg, long max_materializations)
+{
+	ContinuousAggInvalidationState state;
+	long count;
+	InvalidatedRanges invalidated_ranges = { 0 };
+
+	cagg_invalidation_state_init(&state, cagg);
+	state.invalidations = tuplestore_begin_heap(false, false, work_mem);
+
+	get_hyper_and_cagg_invalidations(&state);
+
+	TupleDesc tupdesc = CreateTupleDescCopy(RelationGetDescr(state.cagg_log_rel));
+	count = tuplestore_tuple_count(state.invalidations);
+
+	if (count == 0 || count > max_materializations)
+	{
+		if (count == 0)
+			invalidated_ranges.is_valid = true;
+		tuplestore_end(state.invalidations);
+	}
+	else
+	{
+		invalidated_ranges.is_valid = true;
+		invalidated_ranges.num_bounds = count;
+		invalidated_ranges.low_bounds = palloc(sizeof(int64) * count);
+		invalidated_ranges.high_bounds = palloc(sizeof(int64) * count);
+		TupleTableSlot *slot = MakeSingleTupleTableSlot(tupdesc, &TTSOpsMinimalTuple);
+		int i = 0;
+		while (tuplestore_gettupleslot(state.invalidations,
+									   true /* forward */,
+									   false /* copy */,
+									   slot))
+		{
+			bool isnull;
+			Datum start = slot_getattr(
+				slot,
+				Anum_continuous_aggs_materialization_invalidation_log_lowest_modified_value,
+				&isnull);
+			Datum end = slot_getattr(
+				slot,
+				Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value,
+				&isnull);
+			invalidated_ranges.low_bounds[i] = DatumGetInt64(start);
+			invalidated_ranges.high_bounds[i] = DatumGetInt64(end);
+			i++;
+		}
+	}
+	cagg_invalidation_state_cleanup(&state);
+	return invalidated_ranges;
+}

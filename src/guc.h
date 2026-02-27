@@ -54,7 +54,6 @@ extern TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge;
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
 extern TSDLLEXPORT bool ts_guc_enable_chunkwise_aggregation;
 extern TSDLLEXPORT bool ts_guc_enable_vectorized_aggregation;
-extern TSDLLEXPORT bool ts_guc_enable_vectorized_aggregation;
 extern bool ts_guc_restoring;
 extern int ts_guc_max_open_chunks_per_insert;
 extern int ts_guc_max_cached_chunks_per_hypertable;
@@ -94,10 +93,10 @@ extern TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour;
 
 typedef enum RealtimeCaggSettings
 {
-	 REALTIME_WITH_BACKFILLS,
-	 REALTIME_NO_BACKFILLS,
-	 MATERIALIZED_ONLY,
-	 CAGG_VIEW_SETTINGS,
+	REALTIME_WITH_BACKFILLS,
+	REALTIME_NO_BACKFILLS,
+	MATERIALIZED_ONLY,
+	CAGG_VIEW_SETTINGS,
 } RealtimeCaggSettings;
 extern TSDLLEXPORT RealtimeCaggSettings ts_guc_realtime_cagg_settings;
 
