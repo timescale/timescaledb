@@ -155,9 +155,8 @@ SELECT show_chunks('ht_metrics_compressed') AS "CHUNK" LIMIT 1 \gset
          ->  Sort (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")) DESC, _hyper_1_1_chunk.device
                Sort Method: top-N heapsort 
-               ->  Result (actual rows=84.00 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84.00 loops=1)
-                           ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84.00 loops=1)
+                     ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")) DESC, _hyper_1_1_chunk.device
                Sort Method: top-N heapsort 
@@ -165,9 +164,8 @@ SELECT show_chunks('ht_metrics_compressed') AS "CHUNK" LIMIT 1 \gset
          ->  Sort (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")) DESC, _hyper_1_2_chunk.device
                Sort Method: top-N heapsort 
-               ->  Result (actual rows=84.00 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=84.00 loops=1)
-                           ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=84.00 loops=1)
+                     ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")) DESC, _hyper_1_2_chunk.device
                Sort Method: top-N heapsort 
@@ -175,9 +173,8 @@ SELECT show_chunks('ht_metrics_compressed') AS "CHUNK" LIMIT 1 \gset
          ->  Sort (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")) DESC, _hyper_1_3_chunk.device
                Sort Method: top-N heapsort 
-               ->  Result (actual rows=27.00 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27.00 loops=1)
-                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27.00 loops=1)
+                     ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")) DESC, _hyper_1_3_chunk.device
                Sort Method: top-N heapsort 
@@ -221,25 +218,22 @@ SELECT show_chunks('ht_metrics_compressed') AS "CHUNK" LIMIT 1 \gset
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_3_chunk."time")) DESC
                      Sort Method: top-N heapsort 
-                     ->  Result (actual rows=27.00 loops=1)
-                           ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27.00 loops=1)
-                                 ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27.00 loops=1)
+                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
                ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
          ->  Merge Append (never executed)
                Sort Key: (time_bucket('@ 2 days'::interval, ht_metrics_compressed."time")) DESC
                ->  Sort (never executed)
                      Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_2_chunk."time")) DESC
-                     ->  Result (never executed)
-                           ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (never executed)
-                                 ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
                ->  Index Scan using _hyper_1_2_chunk_ht_metrics_compressed_time_idx on _hyper_1_2_chunk (never executed)
          ->  Merge Append (never executed)
                Sort Key: (time_bucket('@ 2 days'::interval, ht_metrics_compressed."time")) DESC
                ->  Sort (never executed)
                      Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_1_chunk."time")) DESC
-                     ->  Result (never executed)
-                           ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (never executed)
-                                 ->  Seq Scan on compress_hyper_2_4_chunk (never executed)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_2_4_chunk (never executed)
                ->  Index Scan using _hyper_1_1_chunk_ht_metrics_compressed_time_idx on _hyper_1_1_chunk (never executed)
 
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY time DESC LIMIT 1;
