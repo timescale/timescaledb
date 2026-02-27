@@ -105,9 +105,6 @@ typedef struct ChunkInsertState
 	/* Should this INSERT be skipped due to ON CONFLICT DO NOTHING */
 	bool skip_current_tuple;
 	SharedCounters *counters;
-
-	/* for tracking generated column computations */
-	bool skip_generated_column_computations;
 } ChunkInsertState;
 
 extern ChunkInsertState *ts_chunk_insert_state_create(Oid chunk_relid,
