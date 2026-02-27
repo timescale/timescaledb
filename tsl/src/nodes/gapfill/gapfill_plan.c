@@ -60,18 +60,6 @@ gapfill_aggref_mutator(Node *node, void *context)
 /*
  * Check if an expression is NOT a runtime constant.
  *
- * Returns true if the expression contains:
- * - Var (column references)
- * - SubLink (subqueries before planning)
- * - Param (subquery results and join parameters, except PARAM_EXTERN)
- * - PlaceHolderVar (expressions from outer joins)
- *
- * These make the expression non-constant as they depend on row data or
- * require special join-level evaluation. This is used for the timezone
- * which must be constant for gap generation.
- *
- * We accept PARAM_EXTERN because those are external query parameters
- * (like $1 in prepared statements) that are constant for the query duration.
  */
 static bool
 contains_nonconstant_walker(Node *node, void *context)
@@ -79,8 +67,20 @@ contains_nonconstant_walker(Node *node, void *context)
 	if (node == NULL)
 		return false;
 
-	if (IsA(node, Var) || IsA(node, SubLink) || IsA(node, PlaceHolderVar))
+	if (IsA(node, Var))
+	{
 		return true;
+	}
+
+	if (IsA(node, SubLink))
+	{
+		return true;
+	}
+
+	if (IsA(node, PlaceHolderVar))
+	{
+		return true;
+	}
 
 	if (IsA(node, Param))
 	{

@@ -3368,6 +3368,18 @@ SELECT time_bucket_gapfill('1 day', t1.time, t2.tz_col,
 GROUP BY 1 ORDER BY 1;
 ERROR:  time_bucket_gapfill does not support non-constant timezone
 HINT:  Use a constant timezone value.
+-- Outer join timezone via LATERAL (creates PARAM_EXEC)
+CREATE TABLE tz_source(tz text);
+INSERT INTO tz_source VALUES ('UTC');
+SELECT sub.bucket FROM tz_source s
+  LEFT JOIN LATERAL (
+    SELECT time_bucket_gapfill('1 day', time, s.tz) AS bucket
+      FROM gf_tz_test
+     WHERE time >= '2024-01-01' AND time < '2024-01-03'
+     GROUP BY 1) sub ON true;
+ERROR:  time_bucket_gapfill does not support non-constant timezone
+HINT:  Use a constant timezone value.
+DROP TABLE tz_source;
 \set ON_ERROR_STOP 1
 -- Constant timezone should work
 SELECT time_bucket_gapfill('1 day', time, 'UTC') AS bucket
@@ -3394,4 +3406,27 @@ EXECUTE param_test('UTC');
  Tue Jan 02 16:00:00 2024 PST
 
 DEALLOCATE param_test;
+-- COALESCE with parameter (force generic plan to prevent optimization)
+SET plan_cache_mode TO 'force_generic_plan';
+PREPARE coalesce_tz_test(text) AS
+SELECT time_bucket_gapfill('1 day', time, COALESCE($1, 'UTC')) AS bucket
+  FROM gf_tz_test
+ WHERE time >= '2024-01-01' AND time < '2024-01-03'
+ GROUP BY 1 ORDER BY 1;
+EXECUTE coalesce_tz_test('America/New_York');
+            bucket            
+------------------------------
+ Sun Dec 31 21:00:00 2023 PST
+ Mon Jan 01 21:00:00 2024 PST
+ Tue Jan 02 21:00:00 2024 PST
+
+EXECUTE coalesce_tz_test(NULL);
+            bucket            
+------------------------------
+ Sun Dec 31 16:00:00 2023 PST
+ Mon Jan 01 16:00:00 2024 PST
+ Tue Jan 02 16:00:00 2024 PST
+
+DEALLOCATE coalesce_tz_test;
+RESET plan_cache_mode;
 DROP TABLE gf_tz_test;

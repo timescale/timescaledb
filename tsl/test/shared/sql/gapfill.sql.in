@@ -1613,6 +1613,18 @@ SELECT time_bucket_gapfill('1 day', t1.time, t2.tz_col,
     '2024-01-01', '2024-01-03') FROM gf_tz_test t1
     JOIN gf_tz_test t2 ON true
 GROUP BY 1 ORDER BY 1;
+
+-- Outer join timezone via LATERAL (creates PARAM_EXEC)
+CREATE TABLE tz_source(tz text);
+INSERT INTO tz_source VALUES ('UTC');
+SELECT sub.bucket FROM tz_source s
+  LEFT JOIN LATERAL (
+    SELECT time_bucket_gapfill('1 day', time, s.tz) AS bucket
+      FROM gf_tz_test
+     WHERE time >= '2024-01-01' AND time < '2024-01-03'
+     GROUP BY 1) sub ON true;
+DROP TABLE tz_source;
+
 \set ON_ERROR_STOP 1
 
 -- Constant timezone should work
@@ -1631,6 +1643,20 @@ SELECT time_bucket_gapfill('1 day', time, $1) AS bucket
 EXECUTE param_test('UTC');
 
 DEALLOCATE param_test;
+
+-- COALESCE with parameter (force generic plan to prevent optimization)
+SET plan_cache_mode TO 'force_generic_plan';
+PREPARE coalesce_tz_test(text) AS
+SELECT time_bucket_gapfill('1 day', time, COALESCE($1, 'UTC')) AS bucket
+  FROM gf_tz_test
+ WHERE time >= '2024-01-01' AND time < '2024-01-03'
+ GROUP BY 1 ORDER BY 1;
+
+EXECUTE coalesce_tz_test('America/New_York');
+EXECUTE coalesce_tz_test(NULL);
+
+DEALLOCATE coalesce_tz_test;
+RESET plan_cache_mode;
 
 DROP TABLE gf_tz_test;
 
