@@ -5,4 +5,6 @@ ALTER TABLE _timescaledb_catalog.chunk ADD CONSTRAINT chunk_compressed_chunk_id_
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.bloom1_contains_any_hashes(_timescaledb_internal.bloom1, bigint[]);
 DROP FUNCTION IF EXISTS _timescaledb_functions.bloom1_hash(anyelement);
+-- Drop continuous_aggs_jobs_refresh_ranges table
+DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
 
