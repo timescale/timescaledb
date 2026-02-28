@@ -168,14 +168,6 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 	AtEOXact_GUC(false, save_nestlevel);
 }
 
-/* API to check for pending materialization ranges */
-bool
-continuous_agg_has_pending_materializations(const ContinuousAgg *cagg,
-											InternalTimeRange materialization_range)
-{
-	return false;
-}
-
 static Datum
 time_range_internal_to_min_time_value(Oid type)
 {
