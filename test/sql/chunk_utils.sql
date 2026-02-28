@@ -346,8 +346,8 @@ ROLLBACK;
 
 BEGIN;
 -- show_chunks and drop_chunks output should be the same
-    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_ts\', newer_than => interval \'6 minute\')::NAME'
-    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_ts\', newer_than => interval \'6 minute\')::NAME'
+    \set QUERY1 'SELECT show_chunks(\'drop_chunk_test_ts\', newer_than => interval \'10 minute\')::NAME'
+    \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test_ts\', newer_than => interval \'10 minute\')::NAME'
     \set ECHO errors
     \ir  :QUERY_RESULT_TEST_EQUAL_RELPATH
     \set ECHO all
