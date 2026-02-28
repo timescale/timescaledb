@@ -98,4 +98,19 @@ CREATE INDEX IF NOT EXISTS bgw_job_stat_history_job_id_execution_start_idx
     ON _timescaledb_internal.bgw_job_stat_history(job_id, execution_start DESC);
 
 DROP INDEX IF EXISTS _timescaledb_internal.bgw_job_stat_history_job_id_idx;
+-- Add continuous_aggs_jobs_refresh_ranges table
+CREATE TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (
+  materialization_id integer NOT NULL,
+  start_range bigint NOT NULL,
+  end_range bigint NOT NULL,
+  job_id integer NOT NULL,
+  pid integer NOT NULL,
+  CONSTRAINT continuous_aggs_jobs_refresh_ranges_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_jobs_refresh_ranges', '');
+
+CREATE INDEX continuous_aggs_jobs_refresh_ranges_idx ON _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (materialization_id);
+
+GRANT SELECT ON _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges TO PUBLIC;
 
