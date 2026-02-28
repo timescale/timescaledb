@@ -1,0 +1,1 @@
+Fixes: #9327 Fix handling of generated columns with NOT NULL domain type
