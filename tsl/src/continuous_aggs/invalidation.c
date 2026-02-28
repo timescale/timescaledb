@@ -144,7 +144,7 @@ static void insert_new_cagg_invalidation(const HypertableInvalidationState *stat
 										 const Invalidation *entry, int32 cagg_hyper_id);
 static void move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *state);
 static void cagg_invalidations_scan_by_hypertable_init(ScanIterator *iterator, int32 cagg_hyper_id,
-													   LOCKMODE lockmode);
+													   LOCKMODE lockmode, int64 window_end);
 static Invalidation cut_cagg_invalidation(const ContinuousAggInvalidationState *state,
 										  const InternalTimeRange *refresh_window,
 										  const Invalidation *entry);
@@ -810,7 +810,7 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 
 static void
 cagg_invalidations_scan_by_hypertable_init(ScanIterator *iterator, int32 cagg_hyper_id,
-										   LOCKMODE lockmode)
+										   LOCKMODE lockmode, int64 window_end)
 {
 	*iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 										lockmode,
@@ -824,6 +824,12 @@ cagg_invalidations_scan_by_hypertable_init(ScanIterator *iterator, int32 cagg_hy
 		BTEqualStrategyNumber,
 		F_INT4EQ,
 		Int32GetDatum(cagg_hyper_id));
+	ts_scan_iterator_scan_key_init(
+		iterator,
+		Anum_continuous_aggs_materialization_invalidation_log_idx_lowest_modified_value,
+		BTLessStrategyNumber,
+		F_INT8LT,
+		Int64GetDatum(window_end));
 }
 
 /*
@@ -925,7 +931,8 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 	invalidation_entry_reset(&remainder);
 	cagg_invalidations_scan_by_hypertable_init(&iterator,
 											   state->cagg->data.mat_hypertable_id,
-											   RowExclusiveLock);
+											   RowExclusiveLock,
+											   refresh_window->end);
 	iterator.ctx.data = (void *) &state;
 	iterator.ctx.snapshot = state->snapshot;
 	ScanTupLock scantuplock = {
@@ -935,6 +942,12 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 	};
 	iterator.ctx.tuplock = &scantuplock;
 	iterator.ctx.flags = SCANNER_F_KEEPLOCK;
+
+	/*
+	 * Concurrent refreshes on the same cagg are safe from deadlock because all
+	 * sessions scan the same index in ascending lowest_modified_value order,
+	 * ensuring exclusive tuple locks are always acquired in a consistent order.
+	 */
 
 	MemoryContextReset(state->per_tuple_mctx);
 
