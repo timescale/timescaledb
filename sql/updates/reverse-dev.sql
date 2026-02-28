@@ -118,4 +118,6 @@ GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_catalog TO PUBLIC;
 CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_stat_history (job_id);
 DROP INDEX _timescaledb_internal.bgw_job_stat_history_execution_start_idx;
 DROP INDEX _timescaledb_internal.bgw_job_stat_history_job_id_execution_start_idx;
+-- Drop continuous_aggs_jobs_refresh_ranges table
+DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
 
