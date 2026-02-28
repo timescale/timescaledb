@@ -99,7 +99,6 @@ typedef struct ContinuousAggInvalidationState
 	const ContinuousAgg *cagg;
 	MemoryContext per_tuple_mctx;
 	Relation cagg_log_rel;
-	Relation cagg_queue_rel;
 	Snapshot snapshot;
 	Tuplestorestate *invalidations;
 } ContinuousAggInvalidationState;
@@ -122,19 +121,11 @@ typedef enum ContinuousAggTableType
 {
 	HYPER_INVALIDATION_LOG,
 	CAGG_INVALIDATION_LOG,
-	CAGG_MATERIALIZATION_RANGES,
 } ContinuousAggTableType;
 
 static Relation open_cagg_table(ContinuousAggTableType type, LOCKMODE lockmode);
 static void hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id,
 											  LOCKMODE lockmode);
-static HeapTuple create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
-												   const InternalTimeRange range);
-static void check_materialization_ranges_overlap(const ContinuousAgg *cagg,
-												 const InternalTimeRange refresh_window);
-static void insert_new_cagg_materialization_ranges(const ContinuousAggInvalidationState *state,
-												   const InternalTimeRange refresh_window,
-												   int32 cagg_hyper_id);
 static bool save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 										  const Invalidation *invalidation);
 static void set_remainder_after_cut(Invalidation *remainder, int32 hyper_id,
@@ -173,7 +164,6 @@ open_cagg_table(ContinuousAggTableType type, LOCKMODE lockmode)
 	static const CatalogTable logmappings[] = {
 		[HYPER_INVALIDATION_LOG] = CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
 		[CAGG_INVALIDATION_LOG] = CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
-		[CAGG_MATERIALIZATION_RANGES] = CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
 	};
 	Catalog *catalog = ts_catalog_get();
 	Oid relid = catalog_get_table_id(catalog, logmappings[type]);
@@ -295,106 +285,6 @@ continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat
 	invalidation_cagg_log_add_entry(mat_ht->fd.id, start, end);
 }
 
-static HeapTuple
-create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
-								  const InternalTimeRange range)
-{
-	Datum values[Natts_continuous_aggs_materialization_ranges] = { 0 };
-	bool isnull[Natts_continuous_aggs_materialization_ranges] = { false };
-
-	values[AttrNumberGetAttrOffset(
-		Anum_continuous_aggs_materialization_ranges_materialization_id)] =
-		Int32GetDatum(cagg_hyper_id);
-	values[AttrNumberGetAttrOffset(
-		Anum_continuous_aggs_materialization_ranges_lowest_modified_value)] =
-		Int64GetDatum(range.start);
-	values[AttrNumberGetAttrOffset(
-		Anum_continuous_aggs_materialization_ranges_greatest_modified_value)] =
-		Int64GetDatum(range.end);
-
-	return heap_form_tuple(tupdesc, values, isnull);
-}
-
-/*
- * Check if a new materialization range overlaps with any existing range for the
- * same materialization_id. two ranges [s1, e1) and [s2, e2) overlap iff
- * s1 < e2 AND e1 > s2.
- */
-static void
-check_materialization_ranges_overlap(const ContinuousAgg *cagg,
-									 const InternalTimeRange refresh_window)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
-													AccessShareLock,
-													CurrentMemoryContext);
-
-	iterator.ctx.index = catalog_get_index(ts_catalog_get(),
-										   CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
-										   CONTINUOUS_AGGS_MATERIALIZATION_RANGES_IDX);
-
-	ts_scan_iterator_scan_key_init(
-		&iterator,
-		Anum_continuous_aggs_materialization_ranges_idx_materialization_id,
-		BTEqualStrategyNumber,
-		F_INT4EQ,
-		Int32GetDatum(cagg->data.mat_hypertable_id));
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool isnull;
-		int64 existing_start = DatumGetInt64(
-			slot_getattr(ti->slot,
-						 Anum_continuous_aggs_materialization_ranges_lowest_modified_value,
-						 &isnull));
-		Assert(!isnull);
-		int64 existing_end = DatumGetInt64(
-			slot_getattr(ti->slot,
-						 Anum_continuous_aggs_materialization_ranges_greatest_modified_value,
-						 &isnull));
-		Assert(!isnull);
-
-		if (refresh_window.start < existing_end && refresh_window.end > existing_start)
-		{
-			ts_scan_iterator_close(&iterator);
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("materialization range [%s, %s) overlaps with existing range [%s, %s)"
-							" in materialization_ranges table for continuous aggregate "
-							"\"%s\".\"%s\"",
-							ts_internal_to_time_string(refresh_window.start, cagg->partition_type),
-							ts_internal_to_time_string(refresh_window.end, cagg->partition_type),
-							ts_internal_to_time_string(existing_start, cagg->partition_type),
-							ts_internal_to_time_string(existing_end, cagg->partition_type),
-							NameStr(cagg->data.user_view_schema),
-							NameStr(cagg->data.user_view_name)),
-					 errdetail("A concurrent refresh is working on this range or a previously"
-							   " failed refresh left an overlapping range in the"
-							   " materialization_ranges table.")));
-		}
-	}
-
-	ts_scan_iterator_close(&iterator);
-}
-
-static void
-insert_new_cagg_materialization_ranges(const ContinuousAggInvalidationState *state,
-									   const InternalTimeRange refresh_window, int32 cagg_hyper_id)
-{
-	CatalogSecurityContext sec_ctx;
-	TupleDesc tupdesc = RelationGetDescr(state->cagg_queue_rel);
-	HeapTuple tuple;
-
-	check_materialization_ranges_overlap(state->cagg, refresh_window);
-
-	tuple = create_materialization_ranges_tup(tupdesc, cagg_hyper_id, refresh_window);
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_insert_only(state->cagg_queue_rel, tuple);
-	ts_catalog_restore_user(&sec_ctx);
-	heap_freetuple(tuple);
-}
-
 typedef enum InvalidationResult
 {
 	INVAL_NOMATCH,
@@ -425,23 +315,6 @@ save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 													invalidation->greatest_modified_value);
 	tuplestore_puttuple(state->invalidations, refresh_tup);
 	heap_freetuple(refresh_tup);
-
-	InternalTimeRange refresh_window = {
-		.type = state->cagg->partition_type,
-		.start = invalidation->lowest_modified_value,
-		/* Invalidations are inclusive at the end, while refresh windows aren't, so add one to the
-		   end of the invalidated region */
-		.end = ts_time_saturating_add(invalidation->greatest_modified_value,
-									  1,
-									  state->cagg->partition_type),
-	};
-
-	InternalTimeRange bucketed_refresh_window =
-		compute_circumscribed_bucketed_refresh_window(state->cagg,
-													  &refresh_window,
-													  state->cagg->bucket_function);
-
-	insert_new_cagg_materialization_ranges(state, bucketed_refresh_window, cagg_hyper_id);
 
 	return true;
 }
@@ -1122,7 +995,6 @@ cagg_invalidation_state_init(ContinuousAggInvalidationState *state, const Contin
 {
 	state->cagg = cagg;
 	state->cagg_log_rel = open_cagg_table(CAGG_INVALIDATION_LOG, RowExclusiveLock);
-	state->cagg_queue_rel = open_cagg_table(CAGG_MATERIALIZATION_RANGES, RowExclusiveLock);
 	state->per_tuple_mctx = AllocSetContextCreate(CurrentMemoryContext,
 												  "Materialization invalidations",
 												  ALLOCSET_DEFAULT_SIZES);
@@ -1133,7 +1005,6 @@ static void
 cagg_invalidation_state_cleanup(const ContinuousAggInvalidationState *state)
 {
 	table_close(state->cagg_log_rel, NoLock);
-	table_close(state->cagg_queue_rel, NoLock);
 	UnregisterSnapshot(state->snapshot);
 	MemoryContextDelete(state->per_tuple_mctx);
 }

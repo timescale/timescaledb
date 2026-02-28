@@ -653,10 +653,6 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	/* Lock the continuous aggregate's materialized hypertable to protect against
 	 * concurrent invalidation log processing.
 	 *
-	 * It will produce rows in the `continuous_aggs_materialization_ranges` table
-	 * to be materialized later either serially or in parallel for non-overlap
-	 * refresh ranges.
-	 *
 	 * This is supposed to be a short transaction and in the future we can consider
 	 * relaxing this lock.
 	 */
@@ -891,53 +887,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 															bucketing_refresh_window,
 															force);
 
-	/* check if we have any pending materializations in our refresh window range,
-	 * if so, we need to process them
-	 * Note that we use the original refresh window range here, not the one that has been processed
-	 * by the refresh function*/
-	refresh_window = *refresh_window_arg;
-	bool has_pending_materializations =
-		continuous_agg_has_pending_materializations(cagg, refresh_window);
-
-	if (has_pending_materializations)
-	{
-		ContinuousAggRefreshState refresh;
-		continuous_agg_refresh_init(&refresh, cagg, &refresh_window, bucketing_refresh_window);
-
-#ifdef TS_DEBUG
-		elog(NOTICE,
-			 "continuous aggregate \"%s\" has pending materializations in window [ %s, %s ]",
-			 NameStr(cagg->data.user_view_name),
-			 ts_internal_to_time_string(refresh_window.start, refresh_window.type),
-			 ts_internal_to_time_string(refresh_window.end, refresh_window.type));
-#endif
-
-		InternalTimeRange invalidation = {
-			.type = refresh_window.type,
-			.start = refresh_window.start,
-			/* Invalidations are inclusive at the end, while refresh windows
-			 * aren't, so add one to the end of the invalidated region */
-			.end = ts_time_saturating_add(refresh_window.end, 1, refresh_window.type),
-		};
-
-		InternalTimeRange bucketed_refresh_window = {
-			.type = invalidation.type,
-			.start = invalidation.start,
-			.end = invalidation.end,
-		};
-
-		if (bucketing_refresh_window)
-		{
-			bucketed_refresh_window =
-				compute_circumscribed_bucketed_refresh_window(cagg,
-															  &invalidation,
-															  cagg->bucket_function);
-		}
-
-		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window);
-	}
-
-	if (!refreshed && !has_pending_materializations)
+	if (!refreshed)
 		emit_up_to_date_notice(cagg, context);
 
 	DEBUG_WAITPOINT("after_process_cagg_materializations");
