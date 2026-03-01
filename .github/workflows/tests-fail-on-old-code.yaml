@@ -54,10 +54,9 @@ jobs:
         # Test changes: changed .out files under test/expected directories.
         # For versioned test outputs, we should only check the version that
         # matches the Postgers version we build.
-        git diff --name-only base HEAD -- test/expected tsl/test/expected
-
         readarray -t CHANGED_TESTS < <( \
-            git diff --name-only base HEAD -- test/expected tsl/test/expected tsl/test/shared/expected \
+            git diff --name-only base HEAD -- test/expected test/isolation/expected \
+                tsl/test/expected tsl/test/isolation/expected tsl/test/shared/expected \
             | sed -n 's!^.*expected/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out$!\1!gp')
 
         if ! ((${#CHANGED_TESTS[@]}))
