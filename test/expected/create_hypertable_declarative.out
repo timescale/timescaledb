@@ -1,0 +1,960 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+create schema test_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
+create schema chunk_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER_2;
+alter database :TEST_DBNAME set timescaledb.enable_partitioned_hypertables to on;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+create table test_schema.test_table(time BIGINT, temp float8, device_id text, device_type text, location text, id int, id2 int);
+\set ON_ERROR_STOP 0
+-- get_create_command should fail since hypertable isn't made yet
+SELECT * FROM _timescaledb_functions.get_create_command('test_table');
+ERROR:  hypertable "test_table" not found
+\set ON_ERROR_STOP 1
+SELECT * FROM test.relation WHERE schema = 'test_schema';
+   schema    |    name    | type  |       owner       
+-------------+------------+-------+-------------------
+ test_schema | test_table | table | default_perm_user
+
+\d _timescaledb_catalog.chunk
+                                               Table "_timescaledb_catalog.chunk"
+       Column        |           Type           | Collation | Nullable |                        Default                         
+---------------------+--------------------------+-----------+----------+--------------------------------------------------------
+ id                  | integer                  |           | not null | nextval('_timescaledb_catalog.chunk_id_seq'::regclass)
+ hypertable_id       | integer                  |           | not null | 
+ schema_name         | name                     |           | not null | 
+ table_name          | name                     |           | not null | 
+ compressed_chunk_id | integer                  |           |          | 
+ dropped             | boolean                  |           | not null | false
+ status              | integer                  |           | not null | 0
+ osm_chunk           | boolean                  |           | not null | false
+ creation_time       | timestamp with time zone |           | not null | 
+Indexes:
+    "chunk_pkey" PRIMARY KEY, btree (id)
+    "chunk_compressed_chunk_id_idx" btree (compressed_chunk_id)
+    "chunk_hypertable_id_creation_time_idx" btree (hypertable_id, creation_time)
+    "chunk_hypertable_id_idx" btree (hypertable_id)
+    "chunk_osm_chunk_idx" btree (osm_chunk, hypertable_id)
+    "chunk_schema_name_table_name_key" UNIQUE CONSTRAINT, btree (schema_name, table_name)
+Foreign-key constraints:
+    "chunk_compressed_chunk_id_fkey" FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk(id)
+    "chunk_hypertable_id_fkey" FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id)
+Referenced by:
+    TABLE "_timescaledb_internal.bgw_policy_chunk_stats" CONSTRAINT "bgw_policy_chunk_stats_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
+    TABLE "_timescaledb_catalog.chunk_column_stats" CONSTRAINT "chunk_column_stats_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id)
+    TABLE "_timescaledb_catalog.chunk" CONSTRAINT "chunk_compressed_chunk_id_fkey" FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk(id)
+    TABLE "_timescaledb_catalog.chunk_constraint" CONSTRAINT "chunk_constraint_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id)
+    TABLE "_timescaledb_catalog.compression_chunk_size" CONSTRAINT "compression_chunk_size_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
+    TABLE "_timescaledb_catalog.compression_chunk_size" CONSTRAINT "compression_chunk_size_compressed_chunk_id_fkey" FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
+
+create table test_schema.test_table_no_not_null(time BIGINT, device_id text);
+\set ON_ERROR_STOP 0
+-- Permission denied with unprivileged role
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
+ERROR:  permission denied for schema test_schema at character 33
+-- CREATE on schema is not enough
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+GRANT ALL ON SCHEMA test_schema TO :ROLE_DEFAULT_PERM_USER_2;
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
+ERROR:  must be owner of hypertable "test_table_no_not_null"
+\set ON_ERROR_STOP 1
+-- Should work with when granted table owner role
+RESET ROLE;
+GRANT :ROLE_DEFAULT_PERM_USER TO :ROLE_DEFAULT_PERM_USER_2;
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
+ hypertable_id | schema_name |       table_name       | created 
+---------------+-------------+------------------------+---------
+             1 | test_schema | test_table_no_not_null | t
+
+\set ON_ERROR_STOP 0
+insert into test_schema.test_table_no_not_null (device_id) VALUES('foo');
+ERROR:  NULL value in column "time" violates not-null constraint
+\set ON_ERROR_STOP 1
+insert into test_schema.test_table_no_not_null (time, device_id) VALUES(1, 'foo');
+RESET ROLE;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+-- No permissions on associated schema should fail
+select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'), associated_schema_name => 'chunk_schema');
+ERROR:  permissions denied: cannot create chunks in schema "chunk_schema"
+\set ON_ERROR_STOP 1
+-- Granting permissions on chunk_schema should make things work
+RESET ROLE;
+GRANT CREATE ON SCHEMA chunk_schema TO :ROLE_DEFAULT_PERM_USER;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'), associated_schema_name => 'chunk_schema');
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             2 | test_schema | test_table | t
+
+-- Check that the insert block trigger exists
+SELECT * FROM test.show_triggers('test_schema.test_table');
+ Trigger | Type | Function 
+---------+------+----------
+
+SELECT * FROM _timescaledb_functions.get_create_command('test_table');
+                                                                get_create_command                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ SELECT create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval => 2592000000000, create_default_indexes=>FALSE);
+
+--test adding one more closed dimension
+select add_dimension('test_schema.test_table', 'location', 4);
+             add_dimension             
+---------------------------------------
+ (5,test_schema,test_table,location,t)
+
+select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
+  2 | test_schema | test_table | chunk_schema           | _hyper_2                |              3 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
+
+select * from _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         | 
+  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
+  3 |             2 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         | 
+  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
+  5 |             2 | location    | text        | f       |          4 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
+
+--test that we can change the number of partitions and that 1 is allowed
+SELECT set_number_partitions('test_schema.test_table', 1, 'location');
+ set_number_partitions 
+-----------------------
+ 
+
+select * from _timescaledb_catalog.dimension WHERE column_name = 'location';
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+  5 |             2 | location    | text        | f       |          1 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
+
+SELECT set_number_partitions('test_schema.test_table', 2, 'location');
+ set_number_partitions 
+-----------------------
+ 
+
+select * from _timescaledb_catalog.dimension WHERE column_name = 'location';
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+  5 |             2 | location    | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
+
+\set ON_ERROR_STOP 0
+--must give an explicit dimension when there are multiple space dimensions
+SELECT set_number_partitions('test_schema.test_table', 3);
+ERROR:  hypertable "test_table" has multiple space dimensions
+--too few
+SELECT set_number_partitions('test_schema.test_table', 0, 'location');
+ERROR:  invalid number of partitions: must be between 1 and 32767
+-- Too many
+SELECT set_number_partitions('test_schema.test_table', 32768, 'location');
+ERROR:  invalid number of partitions: must be between 1 and 32767
+-- get_create_command only works on tables w/ 1 or 2 dimensions
+SELECT * FROM _timescaledb_functions.get_create_command('test_table');
+ERROR:  get_create_command only supports hypertables with up to 2 dimensions
+\set ON_ERROR_STOP 1
+--test adding one more open dimension
+select add_dimension('test_schema.test_table', 'id', chunk_time_interval => 1000);
+          add_dimension          
+---------------------------------
+ (6,test_schema,test_table,id,t)
+
+select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
+  2 | test_schema | test_table | chunk_schema           | _hyper_2                |              4 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
+
+select * from _timescaledb_catalog.dimension;
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
+  1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         | 
+  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
+  3 |             2 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         | 
+  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
+  5 |             2 | location    | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
+  6 |             2 | id          | integer     | t       |            |                          |                    |            1000 |                          |                         | 
+
+-- Test add_dimension: can use interval types for TIMESTAMPTZ columns
+CREATE TABLE dim_test_time(time TIMESTAMPTZ, time2 TIMESTAMPTZ, time3 BIGINT, temp float8, device int, location int);
+SELECT create_hypertable('dim_test_time', 'time');
+     create_hypertable      
+----------------------------
+ (3,public,dim_test_time,t)
+
+SELECT add_dimension('dim_test_time', 'time2', chunk_time_interval => INTERVAL '1 day');
+          add_dimension           
+----------------------------------
+ (8,public,dim_test_time,time2,t)
+
+-- Test add_dimension: only integral should work on BIGINT columns
+\set ON_ERROR_STOP 0
+SELECT add_dimension('dim_test_time', 'time3', chunk_time_interval => INTERVAL '1 day');
+ERROR:  invalid interval type for bigint dimension
+-- string is not a valid type
+SELECT add_dimension('dim_test_time', 'time3', chunk_time_interval => 'foo'::TEXT);
+ERROR:  invalid interval type for bigint dimension
+\set ON_ERROR_STOP 1
+SELECT add_dimension('dim_test_time', 'time3', chunk_time_interval => 500);
+          add_dimension           
+----------------------------------
+ (9,public,dim_test_time,time3,t)
+
+-- Test add_dimension: integrals should work on TIMESTAMPTZ columns
+CREATE TABLE dim_test_time2(time TIMESTAMPTZ, time2 TIMESTAMPTZ, temp float8, device int, location int);
+SELECT create_hypertable('dim_test_time2', 'time');
+      create_hypertable      
+-----------------------------
+ (4,public,dim_test_time2,t)
+
+SELECT add_dimension('dim_test_time2', 'time2', chunk_time_interval => 500);
+WARNING:  unexpected interval: smaller than one second
+           add_dimension            
+------------------------------------
+ (11,public,dim_test_time2,time2,t)
+
+--adding a dimension twice should not fail with 'if_not_exists'
+SELECT add_dimension('dim_test_time2', 'time2', chunk_time_interval => 500, if_not_exists => true);
+NOTICE:  column "time2" is already a dimension, skipping
+           add_dimension            
+------------------------------------
+ (11,public,dim_test_time2,time2,f)
+
+\set ON_ERROR_STOP 0
+--adding on a non-hypertable
+CREATE TABLE not_hypertable(time TIMESTAMPTZ, temp float8, device int, location int);
+SELECT add_dimension('not_hypertable', 'time', chunk_time_interval => 500);
+ERROR:  table "not_hypertable" is not a hypertable
+--adding a non-exist column
+SELECT add_dimension('test_schema.test_table', 'nope', 2);
+ERROR:  column "nope" does not exist
+--adding the same dimension twice should fail
+select add_dimension('test_schema.test_table', 'location', 2);
+ERROR:  column "location" is already a dimension
+--adding dimension with both number_partitions and chunk_time_interval should fail
+select add_dimension('test_schema.test_table', 'id2', number_partitions => 2, chunk_time_interval => 1000);
+ERROR:  cannot specify both the number of partitions and an interval
+\set ON_ERROR_STOP 1
+-- test adding a new dimension on a non-empty table
+CREATE TABLE dim_test(time TIMESTAMPTZ, device int);
+SELECT create_hypertable('dim_test', 'time', chunk_time_interval => INTERVAL '1 day');
+   create_hypertable   
+-----------------------
+ (5,public,dim_test,t)
+
+CREATE VIEW dim_test_slices AS
+SELECT c.id AS chunk_id, c.hypertable_id, ds.dimension_id, cc.dimension_slice_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
+INNER JOIN _timescaledb_catalog.dimension td ON (h.id = td.hypertable_id)
+INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = td.id)
+INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
+WHERE h.table_name = 'dim_test'
+ORDER BY c.id, ds.dimension_id;
+INSERT INTO dim_test VALUES ('2004-10-10 00:00:00+00', 1);
+INSERT INTO dim_test VALUES ('2004-10-20 00:00:00+00', 2);
+SELECT * FROM dim_test_slices;
+ chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |   chunk_table    |   range_start    |    range_end     
+----------+---------------+--------------+--------------------+-----------------------+------------------+------------------+------------------
+        2 |             5 |           12 |                  3 | _timescaledb_internal | _hyper_5_2_chunk | 1097366400000000 | 1097452800000000
+        3 |             5 |           12 |                  4 | _timescaledb_internal | _hyper_5_3_chunk | 1098230400000000 | 1098316800000000
+
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_5_2_chunk');
+  Constraint  | Type | Columns | Index |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
+--------------+------+---------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
+ constraint_3 | c    | {time}  | -     | (("time" >= 'Sat Oct 09 17:00:00 2004 PDT'::timestamp with time zone) AND ("time" < 'Sun Oct 10 17:00:00 2004 PDT'::timestamp with time zone)) | f          | f        | t
+
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_5_3_chunk');
+  Constraint  | Type | Columns | Index |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
+--------------+------+---------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
+ constraint_4 | c    | {time}  | -     | (("time" >= 'Tue Oct 19 17:00:00 2004 PDT'::timestamp with time zone) AND ("time" < 'Wed Oct 20 17:00:00 2004 PDT'::timestamp with time zone)) | f          | f        | t
+
+-- add dimension to the existing chunks by adding -inf/inf dimension slices
+SELECT add_dimension('dim_test', 'device', 2);
+         add_dimension         
+-------------------------------
+ (13,public,dim_test,device,t)
+
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_5_2_chunk');
+  Constraint  | Type | Columns | Index |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
+--------------+------+---------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
+ constraint_3 | c    | {time}  | -     | (("time" >= 'Sat Oct 09 17:00:00 2004 PDT'::timestamp with time zone) AND ("time" < 'Sun Oct 10 17:00:00 2004 PDT'::timestamp with time zone)) | f          | f        | t
+
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_5_3_chunk');
+  Constraint  | Type | Columns | Index |                                                                      Expr                                                                      | Deferrable | Deferred | Validated 
+--------------+------+---------+-------+------------------------------------------------------------------------------------------------------------------------------------------------+------------+----------+-----------
+ constraint_4 | c    | {time}  | -     | (("time" >= 'Tue Oct 19 17:00:00 2004 PDT'::timestamp with time zone) AND ("time" < 'Wed Oct 20 17:00:00 2004 PDT'::timestamp with time zone)) | f          | f        | t
+
+SELECT * FROM dim_test_slices;
+ chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |   chunk_table    |     range_start      |      range_end      
+----------+---------------+--------------+--------------------+-----------------------+------------------+----------------------+---------------------
+        2 |             5 |           12 |                  3 | _timescaledb_internal | _hyper_5_2_chunk |     1097366400000000 |    1097452800000000
+        2 |             5 |           13 |                  5 | _timescaledb_internal | _hyper_5_2_chunk | -9223372036854775808 | 9223372036854775807
+        3 |             5 |           12 |                  4 | _timescaledb_internal | _hyper_5_3_chunk |     1098230400000000 |    1098316800000000
+        3 |             5 |           13 |                  5 | _timescaledb_internal | _hyper_5_3_chunk | -9223372036854775808 | 9223372036854775807
+
+-- newer chunks have proper dimension slices range
+INSERT INTO dim_test VALUES ('2004-10-30 00:00:00+00', 3);
+SELECT * FROM dim_test_slices;
+ chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |   chunk_table    |     range_start      |      range_end      
+----------+---------------+--------------+--------------------+-----------------------+------------------+----------------------+---------------------
+        2 |             5 |           12 |                  3 | _timescaledb_internal | _hyper_5_2_chunk |     1097366400000000 |    1097452800000000
+        2 |             5 |           13 |                  5 | _timescaledb_internal | _hyper_5_2_chunk | -9223372036854775808 | 9223372036854775807
+        3 |             5 |           12 |                  4 | _timescaledb_internal | _hyper_5_3_chunk |     1098230400000000 |    1098316800000000
+        3 |             5 |           13 |                  5 | _timescaledb_internal | _hyper_5_3_chunk | -9223372036854775808 | 9223372036854775807
+        4 |             5 |           12 |                  6 | _timescaledb_internal | _hyper_5_4_chunk |     1099094400000000 |    1099180800000000
+        4 |             5 |           13 |                  7 | _timescaledb_internal | _hyper_5_4_chunk |           1073741823 | 9223372036854775807
+
+SELECT * FROM dim_test ORDER BY time;
+             time             | device 
+------------------------------+--------
+ Sat Oct 09 17:00:00 2004 PDT |      1
+ Tue Oct 19 17:00:00 2004 PDT |      2
+ Fri Oct 29 17:00:00 2004 PDT |      3
+
+DROP VIEW dim_test_slices;
+DROP TABLE dim_test;
+-- test add_dimension() with existing data on table with space partitioning
+CREATE TABLE dim_test(time TIMESTAMPTZ, device int, data int);
+SELECT create_hypertable('dim_test', 'time', 'device', 2, chunk_time_interval => INTERVAL '1 day');
+   create_hypertable   
+-----------------------
+ (6,public,dim_test,t)
+
+CREATE VIEW dim_test_slices AS
+SELECT c.id AS chunk_id, c.hypertable_id, ds.dimension_id, cc.dimension_slice_id, c.schema_name AS chunk_schema, c.table_name AS chunk_table, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h ON (c.hypertable_id = h.id)
+INNER JOIN _timescaledb_catalog.dimension td ON (h.id = td.hypertable_id)
+INNER JOIN _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = td.id)
+INNER JOIN _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
+WHERE h.table_name = 'dim_test'
+ORDER BY c.id, ds.dimension_id;
+INSERT INTO dim_test VALUES ('2004-10-10 00:00:00+00', 1, 3);
+INSERT INTO dim_test VALUES ('2004-10-20 00:00:00+00', 2, 2);
+SELECT * FROM dim_test_slices;
+ chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |   chunk_table    |     range_start      |      range_end      
+----------+---------------+--------------+--------------------+-----------------------+------------------+----------------------+---------------------
+        5 |             6 |           14 |                  8 | _timescaledb_internal | _hyper_6_5_chunk |     1097366400000000 |    1097452800000000
+        5 |             6 |           15 |                  9 | _timescaledb_internal | _hyper_6_5_chunk | -9223372036854775808 |          1073741823
+        6 |             6 |           14 |                 10 | _timescaledb_internal | _hyper_6_6_chunk |     1098230400000000 |    1098316800000000
+        6 |             6 |           15 |                 11 | _timescaledb_internal | _hyper_6_6_chunk |           1073741823 | 9223372036854775807
+
+-- new dimension slice will cover full range on existing chunks
+SELECT add_dimension('dim_test', 'data', 1);
+        add_dimension        
+-----------------------------
+ (16,public,dim_test,data,t)
+
+SELECT * FROM dim_test_slices;
+ chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |   chunk_table    |     range_start      |      range_end      
+----------+---------------+--------------+--------------------+-----------------------+------------------+----------------------+---------------------
+        5 |             6 |           14 |                  8 | _timescaledb_internal | _hyper_6_5_chunk |     1097366400000000 |    1097452800000000
+        5 |             6 |           15 |                  9 | _timescaledb_internal | _hyper_6_5_chunk | -9223372036854775808 |          1073741823
+        5 |             6 |           16 |                 12 | _timescaledb_internal | _hyper_6_5_chunk | -9223372036854775808 | 9223372036854775807
+        6 |             6 |           14 |                 10 | _timescaledb_internal | _hyper_6_6_chunk |     1098230400000000 |    1098316800000000
+        6 |             6 |           15 |                 11 | _timescaledb_internal | _hyper_6_6_chunk |           1073741823 | 9223372036854775807
+        6 |             6 |           16 |                 12 | _timescaledb_internal | _hyper_6_6_chunk | -9223372036854775808 | 9223372036854775807
+
+INSERT INTO dim_test VALUES ('2004-10-30 00:00:00+00', 3, 1);
+SELECT * FROM dim_test_slices;
+ chunk_id | hypertable_id | dimension_id | dimension_slice_id |     chunk_schema      |   chunk_table    |     range_start      |      range_end      
+----------+---------------+--------------+--------------------+-----------------------+------------------+----------------------+---------------------
+        5 |             6 |           14 |                  8 | _timescaledb_internal | _hyper_6_5_chunk |     1097366400000000 |    1097452800000000
+        5 |             6 |           15 |                  9 | _timescaledb_internal | _hyper_6_5_chunk | -9223372036854775808 |          1073741823
+        5 |             6 |           16 |                 12 | _timescaledb_internal | _hyper_6_5_chunk | -9223372036854775808 | 9223372036854775807
+        6 |             6 |           14 |                 10 | _timescaledb_internal | _hyper_6_6_chunk |     1098230400000000 |    1098316800000000
+        6 |             6 |           15 |                 11 | _timescaledb_internal | _hyper_6_6_chunk |           1073741823 | 9223372036854775807
+        6 |             6 |           16 |                 12 | _timescaledb_internal | _hyper_6_6_chunk | -9223372036854775808 | 9223372036854775807
+        7 |             6 |           14 |                 13 | _timescaledb_internal | _hyper_6_7_chunk |     1099094400000000 |    1099180800000000
+        7 |             6 |           15 |                 11 | _timescaledb_internal | _hyper_6_7_chunk |           1073741823 | 9223372036854775807
+        7 |             6 |           16 |                 12 | _timescaledb_internal | _hyper_6_7_chunk | -9223372036854775808 | 9223372036854775807
+
+SELECT * FROM dim_test ORDER BY time;
+             time             | device | data 
+------------------------------+--------+------
+ Sat Oct 09 17:00:00 2004 PDT |      1 |    3
+ Tue Oct 19 17:00:00 2004 PDT |      2 |    2
+ Fri Oct 29 17:00:00 2004 PDT |      3 |    1
+
+DROP VIEW dim_test_slices;
+DROP TABLE dim_test;
+-- should not fail on non-empty table with 'if_not_exists' in case the dimension exists
+select add_dimension('test_schema.test_table', 'location', 2, if_not_exists => true);
+NOTICE:  column "location" is already a dimension, skipping
+             add_dimension             
+---------------------------------------
+ (5,test_schema,test_table,location,f)
+
+--test partitioning in only time dimension
+create table test_schema.test_1dim(time timestamp, temp float);
+select create_hypertable('test_schema.test_1dim', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+      create_hypertable      
+-----------------------------
+ (7,test_schema,test_1dim,t)
+
+SELECT * FROM _timescaledb_functions.get_create_command('test_1dim');
+                                                       get_create_command                                                       
+--------------------------------------------------------------------------------------------------------------------------------
+ SELECT create_hypertable('test_schema.test_1dim', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
+
+SELECT * FROM test.relation WHERE schema = 'test_schema';
+   schema    |          name          | type  |       owner       
+-------------+------------------------+-------+-------------------
+ test_schema | test_1dim              | table | default_perm_user
+ test_schema | test_table             | table | default_perm_user
+ test_schema | test_table_no_not_null | table | default_perm_user
+
+select create_hypertable('test_schema.test_1dim', 'time', if_not_exists => true);
+NOTICE:  table "test_1dim" is already a hypertable, skipping
+      create_hypertable      
+-----------------------------
+ (7,test_schema,test_1dim,f)
+
+-- Should error when creating again without if_not_exists set to true
+\set ON_ERROR_STOP 0
+select create_hypertable('test_schema.test_1dim', 'time');
+ERROR:  table "test_1dim" is already a hypertable
+\set ON_ERROR_STOP 1
+-- if_not_exist should also work with data in the hypertable
+insert into test_schema.test_1dim VALUES ('2004-10-19 10:23:54+02', 1.0);
+select create_hypertable('test_schema.test_1dim', 'time', if_not_exists => true);
+NOTICE:  table "test_1dim" is already a hypertable, skipping
+      create_hypertable      
+-----------------------------
+ (7,test_schema,test_1dim,f)
+
+-- Should error when creating again without if_not_exists set to true
+\set ON_ERROR_STOP 0
+select create_hypertable('test_schema.test_1dim', 'time');
+ERROR:  table "test_1dim" is already a hypertable
+\set ON_ERROR_STOP 1
+-- Test partitioning functions
+CREATE OR REPLACE FUNCTION invalid_partfunc(source integer)
+    RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN NULL;
+END
+$BODY$;
+CREATE OR REPLACE FUNCTION time_partfunc(source text)
+    RETURNS TIMESTAMPTZ LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN timezone('UTC', to_timestamp(source));
+END
+$BODY$;
+CREATE TABLE test_schema.test_invalid_func(time timestamptz, temp float8, device text);
+\set ON_ERROR_STOP 0
+-- should fail due to invalid signature
+SELECT create_hypertable('test_schema.test_invalid_func', 'time', 'device', 2, partitioning_func => 'invalid_partfunc');
+ERROR:  invalid partitioning function
+SELECT create_hypertable('test_schema.test_invalid_func', 'time');
+          create_hypertable          
+-------------------------------------
+ (8,test_schema,test_invalid_func,t)
+
+-- should also fail due to invalid signature
+SELECT add_dimension('test_schema.test_invalid_func', 'device', 2, partitioning_func => 'invalid_partfunc');
+ERROR:  invalid partitioning function
+\set ON_ERROR_STOP 1
+-- Test open-dimension function
+CREATE TABLE test_schema.open_dim_part_func(time text, temp float8, device text, event_time text);
+\set ON_ERROR_STOP 0
+-- should fail due to invalid signature
+SELECT create_hypertable('test_schema.open_dim_part_func', 'time', time_partitioning_func => 'invalid_partfunc');
+ERROR:  invalid partitioning function
+\set ON_ERROR_STOP 1
+SELECT create_hypertable('test_schema.open_dim_part_func', 'time', time_partitioning_func => 'time_partfunc');
+          create_hypertable           
+--------------------------------------
+ (9,test_schema,open_dim_part_func,t)
+
+\set ON_ERROR_STOP 0
+-- should fail due to invalid signature
+SELECT add_dimension('test_schema.open_dim_part_func', 'event_time', chunk_time_interval => interval '1 day', partitioning_func => 'invalid_partfunc');
+ERROR:  invalid partitioning function
+\set ON_ERROR_STOP 1
+SELECT add_dimension('test_schema.open_dim_part_func', 'event_time', chunk_time_interval => interval '1 day', partitioning_func => 'time_partfunc');
+                  add_dimension                   
+--------------------------------------------------
+ (20,test_schema,open_dim_part_func,event_time,t)
+
+CREATE TYPE test_type AS (time timestamp, temp float);
+CREATE TABLE test_table_of_type OF test_type;
+SELECT create_hypertable('test_table_of_type', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+        create_hypertable         
+----------------------------------
+ (10,public,test_table_of_type,t)
+
+INSERT INTO test_table_of_type VALUES ('2004-10-19 10:23:54+02', 1.0), ('2004-12-19 10:23:54+02', 2.0);
+\set ON_ERROR_STOP 0
+DROP TYPE test_type;
+ERROR:  cannot drop type test_type because other objects depend on it
+\set ON_ERROR_STOP 1
+DROP TYPE test_type CASCADE;
+NOTICE:  drop cascades to 3 other objects
+CREATE TABLE test_table_of_type (time timestamp, temp float);
+SELECT create_hypertable('test_table_of_type', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+        create_hypertable         
+----------------------------------
+ (11,public,test_table_of_type,t)
+
+INSERT INTO test_table_of_type VALUES ('2004-10-19 10:23:54+02', 1.0), ('2004-12-19 10:23:54+02', 2.0);
+CREATE TYPE test_type AS (time timestamp, temp float);
+ALTER TABLE test_table_of_type OF test_type;
+\set ON_ERROR_STOP 0
+DROP TYPE test_type;
+ERROR:  cannot drop type test_type because other objects depend on it
+\set ON_ERROR_STOP 1
+BEGIN;
+DROP TYPE test_type CASCADE;
+NOTICE:  drop cascades to 3 other objects
+ROLLBACK;
+ALTER TABLE test_table_of_type NOT OF;
+DROP TYPE test_type;
+-- Reset GRANTS
+\c :TEST_DBNAME :ROLE_SUPERUSER
+REVOKE :ROLE_DEFAULT_PERM_USER FROM :ROLE_DEFAULT_PERM_USER_2;
+-- Test custom partitioning functions
+CREATE OR REPLACE FUNCTION partfunc_not_immutable(source anyelement)
+    RETURNS INTEGER LANGUAGE PLPGSQL AS
+$BODY$
+BEGIN
+    RETURN _timescaledb_functions.get_partition_hash(source);
+END
+$BODY$;
+CREATE OR REPLACE FUNCTION partfunc_bad_return_type(source anyelement)
+    RETURNS BIGINT LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN _timescaledb_functions.get_partition_hash(source);
+END
+$BODY$;
+CREATE OR REPLACE FUNCTION partfunc_bad_arg_type(source text)
+    RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN _timescaledb_functions.get_partition_hash(source);
+END
+$BODY$;
+CREATE OR REPLACE FUNCTION partfunc_bad_multi_arg(source anyelement, extra_arg integer)
+    RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN _timescaledb_functions.get_partition_hash(source);
+END
+$BODY$;
+CREATE OR REPLACE FUNCTION partfunc_valid(source anyelement)
+    RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
+$BODY$
+BEGIN
+    RETURN _timescaledb_functions.get_partition_hash(source);
+END
+$BODY$;
+create table test_schema.test_partfunc(time timestamptz, temp float, device int);
+-- Test that create_hypertable fails due to invalid partitioning function
+\set ON_ERROR_STOP 0
+select create_hypertable('test_schema.test_partfunc', 'time', 'device', 2, partitioning_func => 'partfunc_not_immutable');
+ERROR:  invalid partitioning function
+select create_hypertable('test_schema.test_partfunc', 'time', 'device', 2, partitioning_func => 'partfunc_bad_return_type');
+ERROR:  invalid partitioning function
+select create_hypertable('test_schema.test_partfunc', 'time', 'device', 2, partitioning_func => 'partfunc_bad_arg_type');
+ERROR:  invalid partitioning function
+select create_hypertable('test_schema.test_partfunc', 'time', 'device', 2, partitioning_func => 'partfunc_bad_multi_arg');
+ERROR:  invalid partitioning function
+\set ON_ERROR_STOP 1
+-- Test that add_dimension fails due to invalid partitioning function
+select create_hypertable('test_schema.test_partfunc', 'time');
+        create_hypertable         
+----------------------------------
+ (12,test_schema,test_partfunc,t)
+
+\set ON_ERROR_STOP 0
+select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func => 'partfunc_valid');
+ERROR:  cannot add dimension to partitioned table
+\set ON_ERROR_STOP 1
+-- check get_create_command produces valid command
+CREATE TABLE test_schema.test_sql_cmd(time TIMESTAMPTZ, temp FLOAT8, device_id TEXT, device_type TEXT, location TEXT, id INT, id2 INT);
+SELECT create_hypertable('test_schema.test_sql_cmd','time');
+        create_hypertable        
+---------------------------------
+ (13,test_schema,test_sql_cmd,t)
+
+SELECT * FROM _timescaledb_functions.get_create_command('test_sql_cmd');
+                                                        get_create_command                                                         
+-----------------------------------------------------------------------------------------------------------------------------------
+ SELECT create_hypertable('test_schema.test_sql_cmd', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
+
+SELECT _timescaledb_functions.get_create_command('test_sql_cmd') AS create_cmd; \gset
+                                                            create_cmd                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ SELECT create_hypertable('test_schema.test_sql_cmd', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
+
+DROP TABLE test_schema.test_sql_cmd CASCADE;
+CREATE TABLE test_schema.test_sql_cmd(time TIMESTAMPTZ, temp FLOAT8, device_id TEXT, device_type TEXT, location TEXT, id INT, id2 INT);
+SELECT test.execute_sql(:'create_cmd');
+                                                            execute_sql                                                            
+-----------------------------------------------------------------------------------------------------------------------------------
+ SELECT create_hypertable('test_schema.test_sql_cmd', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE test_table_int(time bigint, junk int);
+SELECT hypertable_id AS "TEST_TABLE_INT_HYPERTABLE_ID" FROM create_hypertable('test_table_int', 'time', chunk_time_interval => 1) \gset
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE SCHEMA IF NOT EXISTS my_schema;
+create or replace function my_schema.dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+grant execute on ALL FUNCTIONS IN SCHEMA my_schema to public;
+create or replace function dummy_now3() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+grant execute on ALL FUNCTIONS IN SCHEMA my_schema to public;
+REVOKE execute ON function dummy_now3() FROM PUBLIC;
+CREATE SCHEMA IF NOT EXISTS my_user_schema;
+GRANT ALL ON SCHEMA my_user_schema to PUBLIC;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+create or replace function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+create or replace function my_user_schema.dummy_now4() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+select set_integer_now_func('test_table_int', 'dummy_now');
+ set_integer_now_func 
+----------------------
+ 
+
+select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
+ 26 |            15 | time        | bigint      | t       |            |                          |                   |               1 |                          | public                  | dummy_now
+
+-- show chunks works with "created_before" and errors out with time used in "older_than"
+SELECT SHOW_CHUNKS('test_table_int', older_than => 10);
+ show_chunks 
+-------------
+
+SELECT SHOW_CHUNKS('test_table_int', created_before => now());
+ show_chunks 
+-------------
+
+\set ON_ERROR_STOP 0
+SELECT SHOW_CHUNKS('test_table_int', older_than => now());
+ERROR:  invalid time argument type "timestamp with time zone"
+select set_integer_now_func('test_table_int', 'dummy_now');
+ERROR:  custom time function already set for hypertable "test_table_int"
+select set_integer_now_func('test_table_int', 'my_schema.dummy_now2', replace_if_exists => TRUE);
+ERROR:  permission denied for schema my_schema at character 47
+select set_integer_now_func('test_table_int', 'dummy_now3', replace_if_exists => TRUE);
+ERROR:  permission denied for function dummy_now3
+-- test invalid oid as the integer_now_func
+select set_integer_now_func('test_table_int', 1, replace_if_exists => TRUE);
+ERROR:  cache lookup failed for function 1
+\set ON_ERROR_STOP
+select set_integer_now_func('test_table_int', 'my_user_schema.dummy_now4', replace_if_exists => TRUE);
+ set_integer_now_func 
+----------------------
+ 
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER SCHEMA my_user_schema RENAME TO my_new_schema;
+select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
+ id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
+ 26 |            15 | time        | bigint      | t       |            |                          |                   |               1 |                          | my_new_schema           | dummy_now4
+
+-- github issue #4650
+CREATE TABLE sample_table (
+       cpu double precision null,
+       time TIMESTAMP WITH TIME ZONE NOT NULL,
+       sensor_id INTEGER NOT NULL,
+       name varchar(100) default 'this is a default string value',
+       UNIQUE(sensor_id, time)
+);
+ALTER TABLE sample_table DROP COLUMN name;
+-- below creation should not report any warnings.
+SELECT * FROM create_hypertable('sample_table', 'time');
+ hypertable_id | schema_name |  table_name  | created 
+---------------+-------------+--------------+---------
+            16 | public      | sample_table | t
+
+-- cleanup
+DROP TABLE sample_table CASCADE;
+-- github issue 4684
+-- test PARTITION BY HASH
+CREATE TABLE regular(
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   value INT,
+   CONSTRAINT cstr_regular_pky PRIMARY KEY (id)
+) PARTITION BY HASH (id);
+DO $$
+BEGIN
+   FOR i IN 1..2
+   LOOP
+      EXECUTE format('
+         CREATE TABLE %I
+         PARTITION OF regular
+         FOR VALUES WITH (MODULUS 2, REMAINDER %s)',
+         'regular_' || i, i - 1
+      );
+   END LOOP;
+END;
+$$;
+INSERT INTO regular SELECT generate_series(1,1000), 44,55;
+CREATE TABLE timescale (
+   ts TIMESTAMP WITH TIME ZONE NOT NULL,
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   FOREIGN KEY (id)  REFERENCES regular(id) ON DELETE CASCADE
+);
+SELECT create_hypertable(
+   relation => 'timescale',
+   time_column_name => 'ts'
+);
+    create_hypertable    
+-------------------------
+ (17,public,timescale,t)
+
+-- creates chunk1
+INSERT INTO timescale SELECT now(), generate_series(1,200), 43;
+-- creates chunk2
+INSERT INTO timescale SELECT now() + interval '20' day, generate_series(1,200), 43;
+-- creates chunk3
+INSERT INTO timescale SELECT now() + interval '40' day, generate_series(1,200), 43;
+-- show chunks
+SELECT SHOW_CHUNKS('timescale');
+               show_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_17_13_chunk
+ _timescaledb_internal._hyper_17_14_chunk
+ _timescaledb_internal._hyper_17_15_chunk
+
+\set ON_ERROR_STOP 0
+-- record goes into chunk1 violating FK constraint as value 1001 is not present in regular table
+INSERT INTO timescale SELECT now(), 1001, 43;
+ERROR:  insert or update on table "_hyper_17_13_chunk" violates foreign key constraint "timescale_id_fkey"
+-- record goes into chunk2 violating FK constraint as value 1002 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '20' day, 1002, 43;
+ERROR:  insert or update on table "_hyper_17_14_chunk" violates foreign key constraint "timescale_id_fkey"
+-- record goes into chunk3 violating FK constraint as value 1003 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '40' day, 1003, 43;
+ERROR:  insert or update on table "_hyper_17_15_chunk" violates foreign key constraint "timescale_id_fkey"
+\set ON_ERROR_STOP 1
+-- cleanup
+DROP TABLE regular cascade;
+NOTICE:  drop cascades to constraint timescale_id_fkey on table timescale
+DROP TABLE timescale cascade;
+-- test PARTITION BY RANGE
+CREATE TABLE regular(
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   value INT,
+   CONSTRAINT cstr_regular_pky PRIMARY KEY (id)
+) PARTITION BY RANGE (id);
+CREATE TABLE regular_1_500 PARTITION OF regular
+    FOR VALUES FROM (1) TO (500);
+CREATE TABLE regular_500_1000 PARTITION OF regular
+    FOR VALUES FROM (500) TO (801);
+INSERT INTO regular SELECT generate_series(1,800), 44,55;
+CREATE TABLE timescale (
+   ts TIMESTAMP WITH TIME ZONE NOT NULL,
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   FOREIGN KEY (id)  REFERENCES regular(id) ON DELETE CASCADE
+);
+SELECT create_hypertable(
+   relation => 'timescale',
+   time_column_name => 'ts'
+);
+    create_hypertable    
+-------------------------
+ (18,public,timescale,t)
+
+-- creates chunk1
+INSERT INTO timescale SELECT now(), generate_series(1,200), 43;
+-- creates chunk2
+INSERT INTO timescale SELECT now() + interval '20' day, generate_series(200,400), 43;
+-- creates chunk3
+INSERT INTO timescale SELECT now() + interval '40' day, generate_series(400,600), 43;
+-- show chunks
+SELECT SHOW_CHUNKS('timescale');
+               show_chunks                
+------------------------------------------
+ _timescaledb_internal._hyper_18_16_chunk
+ _timescaledb_internal._hyper_18_17_chunk
+ _timescaledb_internal._hyper_18_18_chunk
+
+\set ON_ERROR_STOP 0
+-- FK constraint violation as value 801 is not present in regular table
+INSERT INTO timescale SELECT now(), 801, 43;
+ERROR:  insert or update on table "_hyper_18_16_chunk" violates foreign key constraint "timescale_id_fkey"
+-- FK constraint violation as value 902 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '20' day, 902, 43;
+ERROR:  insert or update on table "_hyper_18_17_chunk" violates foreign key constraint "timescale_id_fkey"
+-- FK constraint violation as value 1003 is not present in regular table
+INSERT INTO timescale SELECT now() + interval '40' day, 1003, 43;
+ERROR:  insert or update on table "_hyper_18_18_chunk" violates foreign key constraint "timescale_id_fkey"
+\set ON_ERROR_STOP 1
+-- cleanup
+DROP TABLE regular cascade;
+NOTICE:  drop cascades to constraint timescale_id_fkey on table timescale
+DROP TABLE timescale cascade;
+-- test PARTITION BY LIST
+CREATE TABLE regular(
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   value INT,
+   CONSTRAINT cstr_regular_pky PRIMARY KEY (id)
+) PARTITION BY LIST (id);
+CREATE TABLE regular_1_2_3_4 PARTITION OF regular FOR VALUES IN (1,2,3,4);
+CREATE TABLE regular_5_6_7_8 PARTITION OF regular FOR VALUES IN (5,6,7,8);
+INSERT INTO regular SELECT generate_series(1,8), 44,55;
+CREATE TABLE timescale (
+   ts TIMESTAMP WITH TIME ZONE NOT NULL,
+   id INT NOT NULL,
+   dev INT NOT NULL,
+   FOREIGN KEY (id)  REFERENCES regular(id) ON DELETE CASCADE
+);
+SELECT create_hypertable(
+   relation => 'timescale',
+   time_column_name => 'ts'
+);
+    create_hypertable    
+-------------------------
+ (19,public,timescale,t)
+
+insert into timescale values (now(), 1,2);
+insert into timescale values (now(), 2,2);
+insert into timescale values (now(), 3,2);
+insert into timescale values (now(), 4,2);
+insert into timescale values (now(), 5,2);
+insert into timescale values (now(), 6,2);
+insert into timescale values (now(), 7,2);
+insert into timescale values (now(), 8,2);
+\set ON_ERROR_STOP 0
+-- FK constraint violation as value 9 is not present in regular table
+insert into timescale values (now(), 9,2);
+ERROR:  insert or update on table "_hyper_19_19_chunk" violates foreign key constraint "timescale_id_fkey"
+-- FK constraint violation as value 10 is not present in regular table
+insert into timescale values (now(), 10,2);
+ERROR:  insert or update on table "_hyper_19_19_chunk" violates foreign key constraint "timescale_id_fkey"
+-- FK constraint violation as value 111 is not present in regular table
+insert into timescale values (now(), 111,2);
+ERROR:  insert or update on table "_hyper_19_19_chunk" violates foreign key constraint "timescale_id_fkey"
+\set ON_ERROR_STOP 1
+-- cleanup
+DROP TABLE regular cascade;
+NOTICE:  drop cascades to constraint timescale_id_fkey on table timescale
+DROP TABLE timescale cascade;
+-- github issue 4872
+-- If subplan of ChunkAppend is TidRangeScan, then SELECT on
+-- hypertable fails with error "invalid child of chunk append: Node (26)"
+create table tidrangescan_test (
+  time timestamp with time zone,
+  some_column bigint
+);
+select create_hypertable('tidrangescan_test', 'time');
+        create_hypertable        
+---------------------------------
+ (20,public,tidrangescan_test,t)
+
+insert into tidrangescan_test (time, some_column) values ('2023-02-12 00:00:00+02:40', 1);
+insert into tidrangescan_test (time, some_column) values ('2023-02-12 00:00:10+02:40', 2);
+insert into tidrangescan_test (time, some_column) values ('2023-02-12 00:00:20+02:40', 3);
+-- Below query will generate plan as
+-- Custom Scan (ChunkAppend)
+--   ->  Tid Range Scan
+-- However when traversing ChunkAppend node, Tid Range Scan node is not
+-- recognised as a valid child node of ChunkAppend which causes error
+-- "invalid child of chunk append: Node (26)" when below query is executed
+select * from tidrangescan_test where time > '2023-02-12 00:00:00+02:40'::timestamp with time zone - interval '5 years' and ctid < '(1,1)'::tid ORDER BY time;
+             time             | some_column 
+------------------------------+-------------
+ Sat Feb 11 13:20:00 2023 PST |           1
+ Sat Feb 11 13:20:10 2023 PST |           2
+ Sat Feb 11 13:20:20 2023 PST |           3
+
+drop table tidrangescan_test;
+\set VERBOSITY default
+set client_min_messages = WARNING;
+-- test creating a hypertable from table referenced by a foreign key fails with
+-- error "cannot have FOREIGN KEY constraints to hypertable".
+create table test_schema.fk_parent(time timestamptz, id int, unique(time, id));
+create table test_schema.fk_child(
+  time timestamptz,
+  id int,
+  foreign key (time, id) references test_schema.fk_parent(time, id)
+);
+select create_hypertable ('test_schema.fk_child', 'time');
+      create_hypertable      
+-----------------------------
+ (21,test_schema,fk_child,t)
+
+\set ON_ERROR_STOP 0
+select create_hypertable ('test_schema.fk_parent', 'time');
+ERROR:  cannot have FOREIGN KEY constraints to hypertable "fk_parent"
+HINT:  Remove all FOREIGN KEY constraints to table "fk_parent" before making it a hypertable.
+\set ON_ERROR_STOP 1
+-- test creating a hypertable with a primary key where the partitioning column is not part of the primary key
+CREATE TABLE test_schema.partition_not_pk (id INT NOT NULL, device_id INT NOT NULL, time TIMESTAMPTZ NOT NULL, a TEXT NOT NULL, PRIMARY KEY (id));
+\set ON_ERROR_STOP 0
+select create_hypertable ('test_schema.partition_not_pk', 'time');
+ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+HINT:  If you're creating a hypertable on a table with a primary key, ensure the partitioning column is part of the primary or composite key.
+\set ON_ERROR_STOP 1
+DROP TABLE test_schema.partition_not_pk;
+-- test creating a hypertable with a composite key where the partitioning column is not part of the composite key
+CREATE TABLE test_schema.partition_not_pk (id INT NOT NULL, device_id INT NOT NULL, time TIMESTAMPTZ NOT NULL, a TEXT NOT NULL, PRIMARY KEY (id, device_id));
+\set ON_ERROR_STOP 0
+select create_hypertable ('test_schema.partition_not_pk', 'time');
+ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+HINT:  If you're creating a hypertable on a table with a primary key, ensure the partitioning column is part of the primary or composite key.
+\set ON_ERROR_STOP 1
+DROP TABLE test_schema.partition_not_pk;
+-- test hypertable is not created for a table that is a part of a publication explicitly
+SET client_min_messages = ERROR;
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+CREATE PUBLICATION publication_test;
+ALTER PUBLICATION publication_test ADD TABLE test;
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+ERROR:  cannot create hypertable for table "test" because it is part of a publication
+\set ON_ERROR_STOP 1
+INSERT INTO test (timestamp) values (now());
+ALTER PUBLICATION publication_test DROP TABLE test;
+DROP PUBLICATION publication_test;
+DROP TABLE test;
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+CREATE PUBLICATION publication_test1;
+CREATE PUBLICATION publication_test2;
+ALTER PUBLICATION publication_test1 ADD TABLE test;
+ALTER PUBLICATION publication_test2 ADD TABLE test;
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+ERROR:  cannot create hypertable for table "test" because it is part of a publication
+\set ON_ERROR_STOP 1
+INSERT INTO test (timestamp) values (now());
+ALTER PUBLICATION publication_test1 DROP TABLE test;
+ALTER PUBLICATION publication_test2 DROP TABLE test;
+DROP PUBLICATION publication_test1;
+DROP PUBLICATION publication_test2;
+DROP TABLE test;
+-- test hypertable is not created for a table that is a part of a publication implicitly
+CREATE PUBLICATION publication_test FOR ALL tables;
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+ERROR:  cannot create hypertable for table "test" because it is part of a publication
+\set ON_ERROR_STOP 1
+DROP PUBLICATION publication_test;
+DROP TABLE test;
+CREATE TABLE test (timestamp TIMESTAMPTZ NOT NULL);
+CREATE PUBLICATION publication_test FOR ALL tables;
+\set ON_ERROR_STOP 0
+SELECT create_hypertable('test', 'timestamp');
+ERROR:  cannot create hypertable for table "test" because it is part of a publication
+\set ON_ERROR_STOP 1
+DROP PUBLICATION publication_test;
+DROP TABLE test;
+RESET client_min_messages;
+ALTER DATABASE :TEST_DBNAME SET timescaledb.enable_partitioned_hypertables TO off;

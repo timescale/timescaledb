@@ -7,6 +7,7 @@
 
 #include <access/heapam.h>
 #include <access/htup_details.h>
+#include <access/multixact.h>
 #include <access/relscan.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
@@ -17,6 +18,9 @@
 #include <catalog/pg_namespace_d.h>
 #include <catalog/pg_proc.h>
 #include <catalog/pg_type.h>
+#include <catalog/pg_am_d.h>
+#include <catalog/pg_opclass.h>
+#include <catalog/pg_partitioned_table.h>
 #include <commands/dbcommands.h>
 #include <commands/schemacmds.h>
 #include <commands/tablecmds.h>
@@ -32,9 +36,11 @@
 #include <nodes/value.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_func.h>
+#include <parser/parse_utilcmd.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
+#include <utils/inval.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/snapmgr.h>
@@ -1696,6 +1702,103 @@ ts_validate_basetable_columns(Relation *rel)
 	}
 }
 
+/*
+ * Convert the given table to a partitioned table on the given time dimension.
+ */
+static void
+hypertable_convert_to_partitioned(Oid table_relid, DimensionInfo *time_dim_info)
+{
+	Relation rel;
+	Relation pg_class_rel;
+	Relation pg_partitioned_rel;
+	List *indexlist;
+	HeapTuple tuple;
+	Form_pg_class classform;
+	Datum values[Natts_pg_partitioned_table];
+	bool nulls[Natts_pg_partitioned_table] = {0};
+	AttrNumber partattrs[1];
+	Oid partopclass[1];
+	Oid partcollation[1];
+	int2vector *partattrs_vec;
+	oidvector *partopclass_vec;
+	oidvector *partcollation_vec;
+	AttrNumber attno;
+	Oid atttype;
+	ListCell *lc;
+
+	/* Get the attribute number for the time column */
+	attno = get_attnum(table_relid, NameStr(time_dim_info->colname));
+	if (attno == InvalidAttrNumber)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("column \"%s\" does not exist", NameStr(time_dim_info->colname))));
+
+	pg_class_rel = table_open(RelationRelationId, RowExclusiveLock);
+	tuple = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(table_relid));
+	if (!HeapTupleIsValid(tuple))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_TABLE),
+				 errmsg("relation with OID %u does not exist", table_relid)));
+
+	/* Change relkind to partitioned table */
+	classform = (Form_pg_class) GETSTRUCT(tuple);
+	classform->relkind = RELKIND_PARTITIONED_TABLE;
+	classform->relfrozenxid = InvalidTransactionId;
+	classform->relminmxid = InvalidMultiXactId;
+	CatalogTupleUpdate(pg_class_rel, &tuple->t_self, tuple);
+
+	/* Convert indexes to partitioned indexes as well */
+	rel = table_open(table_relid, AccessShareLock);
+    indexlist = RelationGetIndexList(rel);
+	foreach (lc, indexlist)
+	{
+		Oid idxoid = lfirst_oid(lc);
+		LockRelationOid(idxoid, ShareUpdateExclusiveLock);
+		tuple = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(idxoid));
+		if (!HeapTupleIsValid(tuple))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_TABLE),
+					errmsg("relation with OID %u does not exist", table_relid)));
+
+		classform = (Form_pg_class) GETSTRUCT(tuple);
+		classform->relkind = RELKIND_PARTITIONED_INDEX;
+		CatalogTupleUpdate(pg_class_rel, &tuple->t_self, tuple);
+		UnlockRelationOid(idxoid, ShareUpdateExclusiveLock);
+	}
+
+	table_close(rel, NoLock);
+	heap_freetuple(tuple);
+	table_close(pg_class_rel, RowExclusiveLock);
+
+	partattrs[0] = attno;
+	atttype = get_atttype(table_relid, attno);
+	partopclass[0] = GetDefaultOpClass(atttype, BTREE_AM_OID);
+	partcollation[0] = get_typcollation(atttype);
+
+	partattrs_vec = buildint2vector(partattrs, 1);
+	partopclass_vec = buildoidvector(partopclass, 1);
+	partcollation_vec = buildoidvector(partcollation, 1);
+
+	pg_partitioned_rel = table_open(PartitionedRelationId, RowExclusiveLock);
+	values[Anum_pg_partitioned_table_partrelid - 1] = ObjectIdGetDatum(table_relid);
+	values[Anum_pg_partitioned_table_partstrat - 1] = CharGetDatum(PARTITION_STRATEGY_RANGE);
+	values[Anum_pg_partitioned_table_partnatts - 1] = Int16GetDatum(1);
+	values[Anum_pg_partitioned_table_partdefid - 1] = ObjectIdGetDatum(InvalidOid);
+	values[Anum_pg_partitioned_table_partattrs - 1] = PointerGetDatum(partattrs_vec);
+	values[Anum_pg_partitioned_table_partclass - 1] = PointerGetDatum(partopclass_vec);
+	values[Anum_pg_partitioned_table_partcollation - 1] = PointerGetDatum(partcollation_vec);
+
+	/* No partition expressions, so this is NULL */
+	nulls[Anum_pg_partitioned_table_partexprs - 1] = true;
+
+	tuple = heap_form_tuple(RelationGetDescr(pg_partitioned_rel), values, nulls);
+	CatalogTupleInsert(pg_partitioned_rel, tuple);
+	heap_freetuple(tuple);
+	table_close(pg_partitioned_rel, RowExclusiveLock);
+
+	CacheInvalidateRelcacheByRelid(table_relid);
+}
+
 /* Creates a new hypertable.
  *
  * Flags are one of HypertableCreateFlags.
@@ -1790,7 +1893,17 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 							 "It is not possible to turn partitioned tables into hypertables.")));
 			break;
 		case RELKIND_MATVIEW:
+			break;
 		case RELKIND_RELATION:
+			if (ts_guc_enable_partitioned_hypertables)
+			{
+				if (ts_relation_has_tuples(rel))
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("cannot convert non-empty table \"%s\" to a partitioned hypertable",
+									get_rel_name(table_relid))));
+				hypertable_convert_to_partitioned(table_relid, time_dim_info);
+			}
 			break;
 
 		default:
