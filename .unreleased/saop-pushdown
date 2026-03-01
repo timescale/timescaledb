@@ -1,0 +1,2 @@
+Implements: #9192 Push down scalar array operations into the columnar metadata scan by transforming them into an OR/AND clause.
+Setting: `enable_columnar_scan_filter_pushdown`: enables pushing the filters on columnar scan down to the compressed scan level. On by default.
