@@ -116,6 +116,11 @@ select count(*) from vectorqual where device = 1 /* can't apply vector ops to th
 -------
      1
 
+select count(*) from vectorqual where metric2 = (select 22) /* subquery becomes InitPlan with PARAM_EXEC */;
+ count 
+-------
+     1
+
 -- Test various combinations of arithmetic types.
 create table arithmetic(ts int, a int2, b int4, c int8, d float4, e float8,
     ax int2, bx int4, cx int8, dx float4, ex float8);

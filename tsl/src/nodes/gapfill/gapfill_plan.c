@@ -58,6 +58,47 @@ gapfill_aggref_mutator(Node *node, void *context)
 }
 
 /*
+ * Check if an expression is NOT a runtime constant.
+ *
+ */
+static bool
+contains_nonconstant_walker(Node *node, void *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, Var))
+	{
+		return true;
+	}
+
+	if (IsA(node, SubLink))
+	{
+		return true;
+	}
+
+	if (IsA(node, PlaceHolderVar))
+	{
+		return true;
+	}
+
+	if (IsA(node, Param))
+	{
+		Param *param = castNode(Param, node);
+		/* PARAM_EXTERN are external query parameters, constant for query duration */
+		return param->paramkind != PARAM_EXTERN;
+	}
+
+	return expression_tree_walker(node, contains_nonconstant_walker, context);
+}
+
+static bool
+contains_nonconstant_expr(Node *node)
+{
+	return contains_nonconstant_walker(node, NULL);
+}
+
+/*
  * FuncExpr is time_bucket_gapfill function call
  */
 static inline bool
@@ -486,6 +527,26 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 
 	if (context.count == 1)
 	{
+		/*
+		 * Check for non-constant timezone parameter. Gapfill needs a consistent
+		 * timezone to generate gap timestamps, so column references and
+		 * subqueries are not supported.
+		 *
+		 * The timezone parameter is present in two variants:
+		 * - 3-arg: time_bucket_gapfill(bucket_width, ts, timezone)
+		 * - 5-arg: time_bucket_gapfill(bucket_width, ts, timezone, start, finish)
+		 */
+		FuncExpr *func = context.call.func;
+		int nargs = list_length(func->args);
+		if (nargs == 3 || nargs == 5)
+		{
+			Expr *tz_arg = lthird(func->args);
+			if (contains_nonconstant_expr((Node *) tz_arg))
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("time_bucket_gapfill does not support non-constant timezone"),
+						 errhint("Use a constant timezone value.")));
+		}
 		List *copy = group_rel->pathlist;
 		group_rel->pathlist = NIL;
 		group_rel->cheapest_total_path = NULL;
