@@ -494,17 +494,11 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 		if (num_columns > 1 && config.type == _SparseIndexTypeEnumBloom)
 		{
 			/* This will be enabled once all composite bloom index functionality is rolled out */
-#if 0
 			if (!ts_guc_enable_composite_bloom_indexes)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("composite bloom indexes are disabled"),
 						 errhint("Set timescaledb.enable_composite_bloom_indexes = true")));
-#else
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("composite bloom indexes are not supported")));
-#endif
 
 			if (num_columns > MAX_BLOOM_FILTER_COLUMNS)
 				ereport(ERROR,

@@ -97,6 +97,9 @@ static void compression_settings_set_manually_for_create(Hypertable *ht,
 static void compression_settings_set_manually_for_alter(Hypertable *ht,
 														CompressionSettings *settings,
 														WithClauseResult *with_clause_options);
+static void create_composite_bloom(IndexInfo *index_info, Hypertable *ht,
+								   CompressionSettings *settings, JsonbParseState *parse_state,
+								   TsBmsList *sparse_index_columns, bool *has_object);
 
 static char *
 compression_column_segment_metadata_name(const char *type, int16 column_index)
@@ -1561,6 +1564,111 @@ can_set_default_sparse_index(CompressionSettings *settings)
 												 [_SparseIndexSourceEnumConfig]);
 }
 
+static void
+create_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSettings *settings,
+					   JsonbParseState *parse_state, TsBmsList *sparse_index_columns,
+					   bool *has_object)
+{
+	int num_cols = index_info->ii_NumIndexKeyAttrs;
+
+	/* Allocate bloom config for the number of columns in the index */
+	BloomFilterConfig bloom_config;
+	bloom_config.base.type = _SparseIndexTypeEnumBloom;
+	bloom_config.base.source = _SparseIndexSourceEnumDefault;
+	bloom_config.columns = palloc0(num_cols * sizeof(SparseIndexColumn));
+
+	/* Extract columns, filtering out segmentby columns.
+	 * Note: orderby columns are not filtered out here because they can
+	 * be in composite bloom filters.
+	 */
+	int valid_columns = 0;
+
+	/*
+	 * The index must be enabled by the GUC.
+	 */
+	if (!ts_guc_enable_sparse_index_bloom)
+	{
+		return;
+	}
+
+	/* Bitmapset of column attnums */
+	Bitmapset *attnums_bitmap = NULL;
+
+	/* Check the total width of the hashable columns */
+	int total_width = 0;
+
+	for (int i = 0; i < num_cols; i++)
+	{
+		AttrNumber attno = index_info->ii_IndexAttrNumbers[i];
+
+		/* Skip expression indexes */
+		if (attno == InvalidAttrNumber)
+			continue;
+
+		char *attname = get_attname(ht->main_table_relid, attno, false);
+
+		/* Skip segmentby columns but continue processing other columns */
+		if (ts_array_is_member(settings->fd.segmentby, attname))
+			continue;
+
+		Oid atttypid = get_atttype(ht->main_table_relid, attno);
+
+		/* Check if hashable */
+		FmgrInfo *finfo = NULL;
+		if (bloom1_get_hash_function(atttypid, &finfo) == NULL)
+			continue;
+
+		TypeCacheEntry *type = lookup_type_cache(atttypid, TYPECACHE_HASH_EXTENDED_PROC);
+		total_width += (type->typlen > 0 ? type->typlen : 4);
+
+		/* Equality queries are unlikely for floating-point types, so we skip them. */
+		if (atttypid == FLOAT4OID || atttypid == FLOAT8OID)
+			continue;
+
+		/* Add to bloom config */
+		bloom_config.columns[valid_columns].attnum = attno;
+		bloom_config.columns[valid_columns].name = attname;
+		bloom_config.columns[valid_columns].type = atttypid;
+		valid_columns++;
+
+		attnums_bitmap = bms_add_member(attnums_bitmap, attno);
+	}
+
+	/* Need at least 2 valid columns for composite bloom and the total width must be at least 4
+	 * bytes. */
+	if (valid_columns < 2 || total_width < 4)
+	{
+		pfree(bloom_config.columns);
+		bms_free(attnums_bitmap);
+		return;
+	}
+
+	/* Check if this exact bloom already exists */
+	if (ts_bmslist_contains_set(*sparse_index_columns, attnums_bitmap))
+	{
+		pfree(bloom_config.columns);
+		bms_free(attnums_bitmap);
+		return;
+	}
+
+	bloom_config.num_columns = valid_columns;
+
+	/* Column names must be in attnum order for metadata column naming */
+	qsort(bloom_config.columns,
+		  bloom_config.num_columns,
+		  sizeof(SparseIndexColumn),
+		  ts_qsort_attrnumber_cmp);
+
+	/* Add the bloom's column set to the list */
+	*sparse_index_columns = ts_bmslist_add_set(*sparse_index_columns, attnums_bitmap);
+
+	/* Convert to JSONB and add to array */
+	ts_convert_sparse_index_config_to_jsonb(parse_state, &bloom_config.base);
+	*has_object = true;
+
+	pfree(bloom_config.columns);
+}
+
 static Jsonb *
 compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings *settings)
 {
@@ -1608,7 +1716,19 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 			continue;
 		}
 
-		for (int i = 0; i < index_info->ii_NumIndexKeyAttrs; i++)
+		int num_cols = index_info->ii_NumIndexKeyAttrs;
+		if (ts_guc_enable_sparse_index_bloom && num_cols >= 2 &&
+			num_cols <= MAX_BLOOM_FILTER_COLUMNS)
+		{
+			create_composite_bloom(index_info,
+								   ht,
+								   settings,
+								   parse_state,
+								   &sparse_index_columns,
+								   &has_object);
+		}
+
+		for (int i = 0; i < num_cols; i++)
 		{
 			char *attname;
 			Oid atttypid;

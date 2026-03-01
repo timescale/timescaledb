@@ -13,43 +13,37 @@ SELECT create_hypertable('t', 'a');
  (1,public,t,t)
 
 -- Should succeed (8 columns max)
--- TODO: remove later, once composite blooms fully rolled out
-\set ON_ERROR_STOP 0
 ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'b', timescaledb.compress_index = 'bloom("a","b","c","d","e","f","g","h")');
-ERROR:  composite bloom indexes are not supported
-\set ON_ERROR_STOP 1
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings
 where relid = 't'::regclass and index is not null order by 1,2;
- relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
--------+----------------+-----------+---------+--------------+--------------------+-------
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                    index                                                                                                    
+-------+----------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ t     |                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c", "d", "e", "f", "g", "h"], "source": "config"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
 
 -- Should fail (9 columns)
 \set ON_ERROR_STOP 0
 ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'b', timescaledb.compress_index = 'bloom("a","b","c","d","e","f","g","h","i")');
-ERROR:  composite bloom indexes are not supported
+ERROR:  bloom index has too many columns: 9 > max 8
 \set ON_ERROR_STOP 1
 -- The ordering of bloom columns in the composite bloom index should be determined by the order of the columns in the CREATE TABLE statement
--- TODO: remove later, once composite blooms fully rolled out
-\set ON_ERROR_STOP 0
 ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'b', timescaledb.compress_index = 'bloom("h","g","f","e","d","c","b")');
-ERROR:  composite bloom indexes are not supported
-\set ON_ERROR_STOP 1
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings
 where relid = 't'::regclass and index is not null order by 1,2;
- relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
--------+----------------+-----------+---------+--------------+--------------------+-------
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                 index                                                                                                  
+-------+----------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ t     |                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["b", "c", "d", "e", "f", "g", "h"], "source": "config"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
 
 -- Creating two composite bloom indexes with the same columns in different orders should fail
 \set ON_ERROR_STOP 0
 ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'b', timescaledb.compress_index = 'bloom("h","g","f"),bloom("f","g","h")');
-ERROR:  composite bloom indexes are not supported
+ERROR:  duplicate sparse index configuration ('f','g','h')
 \set ON_ERROR_STOP 1
 -- Creating a composite bloom index with the same columns should fail
 \set ON_ERROR_STOP 0
 ALTER TABLE t SET (timescaledb.compress_index = 'bloom("a","b","a")');
-ERROR:  cannot set sparse index option without orderby option
+ERROR:  duplicate column name ('a') in composite bloom index configuration: ('a','b','a')
 ALTER TABLE t SET (timescaledb.compress_index = 'bloom("g","g")');
-ERROR:  cannot set sparse index option without orderby option
+ERROR:  duplicate column name ('g') in composite bloom index configuration: ('g','g')
 \set ON_ERROR_STOP 1
 DROP TABLE t CASCADE;
 -- Creating a composite bloom index based on a primary key, and create the same manually again
@@ -57,7 +51,7 @@ CREATE TABLE u(a int, b int, c int, d int, PRIMARY KEY (a, b, c));
 SELECT create_hypertable('u', 'a');
  create_hypertable 
 -------------------
- (2,public,u,t)
+ (3,public,u,t)
 
 ALTER TABLE u SET (timescaledb.compress, timescaledb.compress_orderby = 'b');
 select index from settings where relid = 'u'::regclass and index is not null order by 1;
@@ -71,51 +65,46 @@ select count(compress_chunk(x)) from show_chunks('u') x;
      1
 
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                  index                                                                                  
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _timescaledb_internal._hyper_2_1_chunk | _timescaledb_internal.compress_hyper_3_2_chunk |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": "c", "source": "default"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                    
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal.compress_hyper_4_2_chunk |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "default"}, {"type": "bloom", "column": "c", "source": "default"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
 
 -- Check the auto generated compressed columns
 select relname,attname from compressedcols order by 1,2;
-         relname          |       attname        
---------------------------+----------------------
- compress_hyper_3_2_chunk | _ts_meta_count
- compress_hyper_3_2_chunk | _ts_meta_max_1
- compress_hyper_3_2_chunk | _ts_meta_max_2
- compress_hyper_3_2_chunk | _ts_meta_min_1
- compress_hyper_3_2_chunk | _ts_meta_min_2
- compress_hyper_3_2_chunk | regress-test-bloom_c
- compress_hyper_3_2_chunk | a
- compress_hyper_3_2_chunk | b
- compress_hyper_3_2_chunk | c
- compress_hyper_3_2_chunk | cmax
- compress_hyper_3_2_chunk | cmin
- compress_hyper_3_2_chunk | ctid
- compress_hyper_3_2_chunk | d
- compress_hyper_3_2_chunk | tableoid
- compress_hyper_3_2_chunk | xmax
- compress_hyper_3_2_chunk | xmin
+         relname          |         attname          
+--------------------------+--------------------------
+ compress_hyper_4_2_chunk | _ts_meta_count
+ compress_hyper_4_2_chunk | _ts_meta_max_1
+ compress_hyper_4_2_chunk | _ts_meta_max_2
+ compress_hyper_4_2_chunk | _ts_meta_min_1
+ compress_hyper_4_2_chunk | _ts_meta_min_2
+ compress_hyper_4_2_chunk | regress-test-bloom_a_b_c
+ compress_hyper_4_2_chunk | regress-test-bloom_c
+ compress_hyper_4_2_chunk | a
+ compress_hyper_4_2_chunk | b
+ compress_hyper_4_2_chunk | c
+ compress_hyper_4_2_chunk | cmax
+ compress_hyper_4_2_chunk | cmin
+ compress_hyper_4_2_chunk | ctid
+ compress_hyper_4_2_chunk | d
+ compress_hyper_4_2_chunk | tableoid
+ compress_hyper_4_2_chunk | xmax
+ compress_hyper_4_2_chunk | xmin
 
--- TODO: remove later, once composite blooms fully rolled out
-\set ON_ERROR_STOP 0
 ALTER TABLE u SET (timescaledb.compress_index = 'bloom("a","b","c")');
-ERROR:  composite bloom indexes are not supported
-\set ON_ERROR_STOP 1
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                  index                                                                                  
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _timescaledb_internal._hyper_2_1_chunk | _timescaledb_internal.compress_hyper_3_2_chunk |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": "c", "source": "default"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                    
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ u                                      |                                                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "config"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal.compress_hyper_4_2_chunk |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "default"}, {"type": "bloom", "column": "c", "source": "default"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
 
 -- Also in a different order
--- TODO: remove later, once composite blooms fully rolled out
-\set ON_ERROR_STOP 0
 ALTER TABLE u SET (timescaledb.compress_index = 'bloom("c","b","a")');
-ERROR:  composite bloom indexes are not supported
-\set ON_ERROR_STOP 1
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                  index                                                                                  
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _timescaledb_internal._hyper_2_1_chunk | _timescaledb_internal.compress_hyper_3_2_chunk |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": "c", "source": "default"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                    
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ u                                      |                                                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "config"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal.compress_hyper_4_2_chunk |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "default"}, {"type": "bloom", "column": "c", "source": "default"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
 
 DROP TABLE u CASCADE;
 -------------------------------------------------------------------
@@ -125,7 +114,7 @@ CREATE TABLE v(a_01234567890123456789 int, b_01234567890123456789 int, c_0123456
 SELECT create_hypertable('v', 'a_01234567890123456789');
  create_hypertable 
 -------------------
- (4,public,v,t)
+ (5,public,v,t)
 
 ALTER TABLE v SET (timescaledb.compress, timescaledb.compress_orderby = 'b_01234567890123456789');
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
@@ -140,40 +129,41 @@ select count(compress_chunk(x)) from show_chunks('v') x;
 
 -- Check the auto generated composite bloom index configuration and column names
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
-                 relid                  |                 compress_relid                 | segmentby |                     orderby                     | orderby_desc | orderby_nullsfirst |                                                                                                                                                                                             index                                                                                                                                                                                              
-----------------------------------------+------------------------------------------------+-----------+-------------------------------------------------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _timescaledb_internal._hyper_4_3_chunk | _timescaledb_internal.compress_hyper_5_4_chunk |           | {b_01234567890123456789,a_01234567890123456789} | {f,t}        | {f,t}              | [{"type": "bloom", "column": "c_01234567890123456789", "source": "default"}, {"type": "bloom", "column": "d_01234567890123456789", "source": "default"}, {"type": "bloom", "column": "e_01234567890123456789", "source": "default"}, {"type": "minmax", "column": "b_01234567890123456789", "source": "orderby"}, {"type": "minmax", "column": "a_01234567890123456789", "source": "orderby"}]
+                 relid                  |                 compress_relid                 | segmentby |                     orderby                     | orderby_desc | orderby_nullsfirst |                                                                                                                                                                                                                                                                                        index                                                                                                                                                                                                                                                                                         
+----------------------------------------+------------------------------------------------+-----------+-------------------------------------------------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_5_3_chunk | _timescaledb_internal.compress_hyper_6_4_chunk |           | {b_01234567890123456789,a_01234567890123456789} | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a_01234567890123456789", "b_01234567890123456789", "c_01234567890123456789", "d_01234567890123456789", "e_01234567890123456789"], "source": "default"}, {"type": "bloom", "column": "c_01234567890123456789", "source": "default"}, {"type": "bloom", "column": "d_01234567890123456789", "source": "default"}, {"type": "bloom", "column": "e_01234567890123456789", "source": "default"}, {"type": "minmax", "column": "b_01234567890123456789", "source": "orderby"}, {"type": "minmax", "column": "a_01234567890123456789", "source": "orderby"}]
 
 select relname,attname from compressedcols order by 1,2;
-         relname          |                  attname                  
---------------------------+-------------------------------------------
- compress_hyper_5_4_chunk | _ts_meta_count
- compress_hyper_5_4_chunk | _ts_meta_max_1
- compress_hyper_5_4_chunk | _ts_meta_max_2
- compress_hyper_5_4_chunk | _ts_meta_min_1
- compress_hyper_5_4_chunk | _ts_meta_min_2
- compress_hyper_5_4_chunk | regress-test-bloom_c_01234567890123456789
- compress_hyper_5_4_chunk | regress-test-bloom_d_01234567890123456789
- compress_hyper_5_4_chunk | regress-test-bloom_e_01234567890123456789
- compress_hyper_5_4_chunk | a_01234567890123456789
- compress_hyper_5_4_chunk | b_01234567890123456789
- compress_hyper_5_4_chunk | c_01234567890123456789
- compress_hyper_5_4_chunk | cmax
- compress_hyper_5_4_chunk | cmin
- compress_hyper_5_4_chunk | ctid
- compress_hyper_5_4_chunk | d_01234567890123456789
- compress_hyper_5_4_chunk | e_01234567890123456789
- compress_hyper_5_4_chunk | f_01234567890123456789
- compress_hyper_5_4_chunk | g_01234567890123456789
- compress_hyper_5_4_chunk | h_01234567890123456789
- compress_hyper_5_4_chunk | i_01234567890123456789
- compress_hyper_5_4_chunk | tableoid
- compress_hyper_5_4_chunk | xmax
- compress_hyper_5_4_chunk | xmin
+         relname          |                             attname                             
+--------------------------+-----------------------------------------------------------------
+ compress_hyper_6_4_chunk | _ts_meta_count
+ compress_hyper_6_4_chunk | _ts_meta_max_1
+ compress_hyper_6_4_chunk | _ts_meta_max_2
+ compress_hyper_6_4_chunk | _ts_meta_min_1
+ compress_hyper_6_4_chunk | _ts_meta_min_2
+ compress_hyper_6_4_chunk | regress-test-bloom_c_01234567890123456789
+ compress_hyper_6_4_chunk | regress-test-bloom_d_01234567890123456789
+ compress_hyper_6_4_chunk | regress-test-bloom_ddd4_a_01234567890123456789_b_01234567890123
+ compress_hyper_6_4_chunk | regress-test-bloom_e_01234567890123456789
+ compress_hyper_6_4_chunk | a_01234567890123456789
+ compress_hyper_6_4_chunk | b_01234567890123456789
+ compress_hyper_6_4_chunk | c_01234567890123456789
+ compress_hyper_6_4_chunk | cmax
+ compress_hyper_6_4_chunk | cmin
+ compress_hyper_6_4_chunk | ctid
+ compress_hyper_6_4_chunk | d_01234567890123456789
+ compress_hyper_6_4_chunk | e_01234567890123456789
+ compress_hyper_6_4_chunk | f_01234567890123456789
+ compress_hyper_6_4_chunk | g_01234567890123456789
+ compress_hyper_6_4_chunk | h_01234567890123456789
+ compress_hyper_6_4_chunk | i_01234567890123456789
+ compress_hyper_6_4_chunk | tableoid
+ compress_hyper_6_4_chunk | xmax
+ compress_hyper_6_4_chunk | xmin
 
 -- Make sure the duplicate column detection works for long column names
 \set ON_ERROR_STOP 0
 ALTER TABLE v SET (timescaledb.compress_index = 'bloom("a_01234567890123456789","b_01234567890123456789","c_01234567890123456789","a_01234567890123456789")');
-ERROR:  composite bloom indexes are not supported
+ERROR:  duplicate column name ('a_01234567890123456789') in composite bloom index configuration: ('a_01234567890123456789','b_01234567890123456789','c_01234567890123456789','a_01234567890123456789')
 \set ON_ERROR_STOP 1
 DROP TABLE v CASCADE;
