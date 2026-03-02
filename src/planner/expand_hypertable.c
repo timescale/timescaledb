@@ -1381,7 +1381,8 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 */
 		Ensure(!(new_allMarkTypes & ~(1 << ROW_MARK_COPY) &&
 				 !(old_allMarkTypes & ~(1 << ROW_MARK_COPY))),
-			   "unexpected: TID junk var needed for hypertable (parent should always be regular table)");
+			   "unexpected: TID junk var needed for hypertable (parent should always be regular "
+			   "table)");
 
 		/* Add whole-row junk Var if needed, unless we had it already */
 		if ((new_allMarkTypes & (1 << ROW_MARK_COPY)) && !(old_allMarkTypes & (1 << ROW_MARK_COPY)))
