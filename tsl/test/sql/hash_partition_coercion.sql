@@ -52,15 +52,54 @@ INSERT INTO hash_text_varchar VALUES ('2000-01-01', 'abc');
 SELECT count(*) FROM hash_text_varchar WHERE device = 'abc'::varchar;
 DROP TABLE hash_text_varchar;
 
+-- Array coercion: text column + name[] array (ScalarArrayOpExpr)
+-- Test both ANY (OR) and ALL (AND) semantics
+CREATE TABLE hash_text_array(time timestamptz NOT NULL, device text);
+SELECT create_hypertable('hash_text_array', 'time');
+SELECT add_dimension('hash_text_array', 'device', number_partitions => 3);
+INSERT INTO hash_text_array VALUES ('2000-01-01', 'abc'), ('2000-01-01', 'def'), ('2000-01-01', 'ghi');
+-- OR: match any element
+SELECT count(*) FROM hash_text_array WHERE device = ANY(ARRAY['abc', 'def']::name[]);
+-- AND: match all elements (logically empty for different values, but exercises code path)
+SELECT count(*) FROM hash_text_array WHERE device = ALL(ARRAY['abc', 'def']::name[]);
+-- AND: single element (equivalent to =)
+SELECT count(*) FROM hash_text_array WHERE device = ALL(ARRAY['abc']::name[]);
+DROP TABLE hash_text_array;
+
+-- Time dimension with SAOP + type coercion (int4 column, int8 array)
+-- Note: open (time/range) dimensions can't use SAOP with multiple OR values
+-- for chunk exclusion, but AND with single effective bound works.
+-- These tests verify correct results and that AND cases use chunk exclusion.
+CREATE FUNCTION time_part_int4_saop(val int4) RETURNS int4 AS $$ SELECT val $$ LANGUAGE SQL IMMUTABLE;
+CREATE TABLE time_int4_saop(time int4 NOT NULL, v int);
+SELECT create_hypertable('time_int4_saop', 'time', chunk_time_interval => 100, time_partitioning_func => 'time_part_int4_saop');
+INSERT INTO time_int4_saop VALUES (50, 1), (150, 2), (250, 3);
+-- AND: time < ALL(array) means time < min(array) = 100
+-- Single effective bound, chunk exclusion should work
+SELECT count(*) FROM time_int4_saop WHERE time < ALL(ARRAY[100, 200]::int8[]);
+-- AND: time > ALL(array) means time > max(array) = 200
+SELECT count(*) FROM time_int4_saop WHERE time > ALL(ARRAY[100, 200]::int8[]);
+-- OR cases: chunk exclusion not used (multiple OR values rejected),
+-- but results must still be correct
+SELECT count(*) FROM time_int4_saop WHERE time < ANY(ARRAY[100, 200]::int8[]);
+SELECT count(*) FROM time_int4_saop WHERE time > ANY(ARRAY[100, 200]::int8[]);
+DROP TABLE time_int4_saop;
+DROP FUNCTION time_part_int4_saop;
+
 -- Prepared statement with varchar parameter, text column
--- Tests that coercion works correctly in custom plans
+-- Custom plan: coercion at plan time, chunk exclusion works
+-- Generic plan: no chunk exclusion (param unknown), but correct result
 CREATE TABLE hash_prep(time timestamptz NOT NULL, device text);
 SELECT create_hypertable('hash_prep', 'time');
 SELECT add_dimension('hash_prep', 'device', number_partitions => 3);
-INSERT INTO hash_prep VALUES ('2000-01-01', 'abc');
+INSERT INTO hash_prep VALUES ('2000-01-01', 'abc'), ('2000-01-01', 'def');
 PREPARE hash_q(varchar) AS SELECT count(*) FROM hash_prep WHERE device = $1;
 SET plan_cache_mode = force_custom_plan;
 EXECUTE hash_q('abc');
+EXECUTE hash_q('def');
+SET plan_cache_mode = force_generic_plan;
+EXECUTE hash_q('abc');
+EXECUTE hash_q('def');
 RESET plan_cache_mode;
 DEALLOCATE hash_q;
 DROP TABLE hash_prep;

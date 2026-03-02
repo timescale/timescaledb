@@ -552,7 +552,9 @@ reset enable_material;
    ->  Index Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk (actual rows=1152.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk (actual rows=2016.00 loops=1)
+         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk (actual rows=1441.00 loops=1)
+         Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
 
 :PREFIX SELECT * FROM metrics_date WHERE '2000-01-15'::timestamptz < time ORDER BY time;
 --- QUERY PLAN ---

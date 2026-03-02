@@ -386,18 +386,53 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	 * We only use implicit coercions because narrowing casts (int8 -> int4) can
 	 * fail at runtime with "integer out of range". When no implicit coercion
 	 * exists, we skip chunk exclusion for this clause - correct but slower.
+	 *
+	 * For arrays (ScalarArrayOpExpr), check the element type and coerce each
+	 * element if needed. Non-constant arrays were already filtered out above
+	 * by the IsA(expr, Const) check after eval_const_expressions.
 	 */
-	if (c->consttype != columntype)
+	Oid consttype = c->consttype;
+	Oid const_element_type = get_element_type(consttype);
+	const bool is_array = OidIsValid(const_element_type);
+	if (is_array)
+	{
+		consttype = const_element_type;
+    }
+
+	if (consttype != columntype)
 	{
 		Oid funcid;
 		CoercionPathType pathtype =
-			find_coercion_pathway(columntype, c->consttype, COERCION_IMPLICIT, &funcid);
+			find_coercion_pathway(columntype, consttype, COERCION_IMPLICIT, &funcid);
 
 		if (pathtype == COERCION_PATH_FUNC && OidIsValid(funcid))
 		{
-			Datum coerced = OidFunctionCall1Coll(funcid, c->constcollid, c->constvalue);
-			dimvalues =
-				dimension_values_create(list_make1(DatumGetPointer(coerced)), columntype, use_or);
+			if (is_array)
+			{
+				ArrayIterator iterator =
+					array_create_iterator(DatumGetArrayTypeP(c->constvalue), 0, NULL);
+				Datum elem = (Datum) NULL;
+				bool isnull;
+				List *values = NIL;
+
+				while (array_iterate(iterator, &elem, &isnull))
+				{
+					if (!isnull)
+					{
+						Datum coerced = OidFunctionCall1Coll(funcid, c->constcollid, elem);
+						values = lappend(values, DatumGetPointer(coerced));
+					}
+				}
+				array_free_iterator(iterator);
+				dimvalues = dimension_values_create(values, columntype, use_or);
+			}
+			else
+			{
+				Datum coerced = OidFunctionCall1Coll(funcid, c->constcollid, c->constvalue);
+				dimvalues = dimension_values_create(list_make1(DatumGetPointer(coerced)),
+													columntype,
+													use_or);
+			}
 		}
 		else
 		{
