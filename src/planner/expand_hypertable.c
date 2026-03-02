@@ -1372,19 +1372,16 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		char resname[32];
 		List *newvars = NIL;
 
-		/* Add TID junk Var if needed, unless we had it already */
-		if (new_allMarkTypes & ~(1 << ROW_MARK_COPY) && !(old_allMarkTypes & ~(1 << ROW_MARK_COPY)))
-		{
-			/* Need to fetch TID */
-			var = makeVar(oldrc->rti, SelfItemPointerAttributeNumber, TIDOID, -1, InvalidOid, 0);
-			snprintf(resname, sizeof(resname), "ctid%u", oldrc->rowmarkId);
-			tle = makeTargetEntry((Expr *) var,
-								  list_length(root->processed_tlist) + 1,
-								  pstrdup(resname),
-								  true);
-			root->processed_tlist = lappend(root->processed_tlist, tle);
-			newvars = lappend(newvars, var);
-		}
+		/*
+		 * TID junk var: only needed if parent had only ROW_MARK_COPY but children
+		 * added non-COPY marks. This can only happen if the parent is a foreign
+		 * table with regular table children. Since hypertable parents are always
+		 * regular tables, preprocess_targetlist() (preptlist.c) already adds TID
+		 * for the parent before expansion, so this path is unreachable.
+		 */
+		Ensure(!(new_allMarkTypes & ~(1 << ROW_MARK_COPY) &&
+				 !(old_allMarkTypes & ~(1 << ROW_MARK_COPY))),
+			   "unexpected: TID junk var needed for hypertable (parent should always be regular table)");
 
 		/* Add whole-row junk Var if needed, unless we had it already */
 		if ((new_allMarkTypes & (1 << ROW_MARK_COPY)) && !(old_allMarkTypes & (1 << ROW_MARK_COPY)))
