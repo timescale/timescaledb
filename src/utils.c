@@ -285,10 +285,15 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 				}
 			}
 
+			/*
+			 * Timestamp is valid in PostgreSQL but exceeds TimescaleDB's
+			 * supported range (TS_TIMESTAMP_END < END_TIMESTAMP due to the
+			 * Unix epoch shift). Treat as +infinity to avoid errors during
+			 * chunk exclusion. No equivalent check is needed on the lower
+			 * bound since TS_TIMESTAMP_MIN == MIN_TIMESTAMP.
+			 */
 			if (ts >= TS_TIMESTAMP_END)
 				return PG_INT64_MAX;
-			if (ts < TS_TIMESTAMP_MIN)
-				return PG_INT64_MIN;
 
 			return ts_time_value_to_internal(time_val, type_oid);
 		}
@@ -307,10 +312,9 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 				}
 			}
 
+			/* See comment in TIMESTAMPOID case above. */
 			if (ts >= TS_TIMESTAMP_END)
 				return PG_INT64_MAX;
-			if (ts < TS_TIMESTAMP_MIN)
-				return PG_INT64_MIN;
 
 			return ts_time_value_to_internal(time_val, type_oid);
 		}
@@ -329,10 +333,9 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 				}
 			}
 
+			/* See comment in TIMESTAMPOID case above. */
 			if (d >= TS_DATE_END)
 				return PG_INT64_MAX;
-			if (d < TS_DATE_MIN)
-				return PG_INT64_MIN;
 
 			return ts_time_value_to_internal(time_val, type_oid);
 		}
