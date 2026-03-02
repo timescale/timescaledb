@@ -7,10 +7,10 @@
 #include <postgres.h>
 #include <fmgr.h>
 
-#include "export.h"
-#include "test_utils.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
+#include "export.h"
+#include "test_utils.h"
 
 TS_FUNCTION_INFO_V1(ts_test_dimension_vector);
 
