@@ -518,6 +518,9 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 {
 	int parentRTindex = rti;
 	bool has_live_children;
+#if PG18_GE
+	double parent_tuples;
+#endif
 	double parent_rows;
 	double parent_size;
 	double *parent_attrsizes;
@@ -536,7 +539,11 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 	 */
 	if (enable_partitionwise_join && rel->reloptkind == RELOPT_BASEREL &&
 		rte->relkind == RELKIND_PARTITIONED_TABLE &&
+#if PG16_GE
+		bms_is_empty(rel->attr_needed[InvalidAttrNumber - rel->min_attr]))
+#else
 		rel->attr_needed[InvalidAttrNumber - rel->min_attr] == NULL)
+#endif
 		rel->consider_partitionwise_join = true;
 
 	/*
@@ -554,6 +561,9 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 	 * have zero rows and/or width, if they were excluded by constraints.
 	 */
 	has_live_children = false;
+#if PG18_GE
+	parent_tuples = 0;
+#endif
 	parent_rows = 0;
 	parent_size = 0;
 	nattrs = rel->max_attr - rel->min_attr + 1;
@@ -565,6 +575,10 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		int childRTindex;
 		RangeTblEntry *childRTE;
 		RelOptInfo *childrel;
+#if PG16_GE
+		List *childrinfos;
+		ListCell *lc;
+#endif
 		ListCell *parentvars;
 		ListCell *childvars;
 
@@ -606,6 +620,25 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		/*
 		 * Constraint exclusion failed, so copy the parent's join quals and
 		 * targetlist to the child, with appropriate variable substitutions.
+		 */
+#if PG16_GE
+		childrinfos = NIL;
+		foreach (lc, rel->joininfo)
+		{
+			RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
+
+			if (!bms_overlap(rinfo->clause_relids, rel->nulling_relids))
+				childrinfos =
+					lappend(childrinfos, adjust_appendrel_attrs(root, (Node *) rinfo, 1, &appinfo));
+		}
+		childrel->joininfo = childrinfos;
+#else
+		childrel->joininfo =
+			(List *) adjust_appendrel_attrs(root, (Node *) rel->joininfo, 1, &appinfo);
+#endif
+
+		/*
+		 * Now for the child's targetlist.
 		 *
 		 * NB: the resulting childrel->reltarget->exprs may contain arbitrary
 		 * expressions, which otherwise would not occur in a rel's targetlist.
@@ -614,8 +647,6 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		 * PlaceHolderVars.)  XXX we do not bother to update the cost or width
 		 * fields of childrel->reltarget; not clear if that would be useful.
 		 */
-		childrel->joininfo =
-			(List *) adjust_appendrel_attrs(root, (Node *) rel->joininfo, 1, &appinfo);
 		childrel->reltarget->exprs =
 			(List *) adjust_appendrel_attrs(root, (Node *) rel->reltarget->exprs, 1, &appinfo);
 
@@ -696,6 +727,9 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		 */
 		Assert(childrel->rows > 0);
 
+#if PG18_GE
+		parent_tuples += childrel->tuples;
+#endif
 		parent_rows += childrel->rows;
 		parent_size += childrel->reltarget->width * childrel->rows;
 
@@ -740,16 +774,15 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		int i;
 
 		Assert(parent_rows > 0);
+#if PG18_GE
+		rel->tuples = parent_tuples;
+#else
+		rel->tuples = parent_rows;
+#endif
 		rel->rows = parent_rows;
 		rel->reltarget->width = rint(parent_size / parent_rows);
 		for (i = 0; i < nattrs; i++)
 			rel->attr_widths[i] = rint(parent_attrsizes[i] / parent_rows);
-
-		/*
-		 * Set "raw tuples" count equal to "rows" for the appendrel; needed
-		 * because some places assume rel->tuples is valid for any baserel.
-		 */
-		rel->tuples = parent_rows;
 
 		/*
 		 * Note that we leave rel->pages as zero; this is important to avoid

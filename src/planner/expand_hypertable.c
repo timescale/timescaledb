@@ -1307,7 +1307,8 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		}
 
 		/* Close child relations, but keep locks */
-		table_close(newrelation, NoLock);
+		if (child_oid != parent_oid)
+			table_close(newrelation, NoLock);
 	}
 
 	table_close(oldrelation, NoLock);
