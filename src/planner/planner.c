@@ -436,7 +436,7 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 						/* Mark hypertable RTEs we'd like to expand ourselves */
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
 							!IS_UPDL_CMD(context->rootquery) && query->resultRelation == 0 &&
-							query->rowMarks == NIL && rte->inh)
+							rte->inh)
 							rte_mark_for_expansion(rte);
 
 						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
@@ -1452,7 +1452,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
 				rte->ctename == NULL && !IS_UPDL_CMD(query) && query->resultRelation == 0 &&
-				query->rowMarks == NIL && (requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
+				(requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
 			{
 				rte_mark_for_expansion(rte);
 			}
