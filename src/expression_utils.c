@@ -254,8 +254,8 @@ ts_plan_tree_walker(Plan *plan, ts_plan_tree_walkerfunc func, void *context)
  * targetlists of aggregation nodes, replacing them with the uncompressed chunk
  * variables.
  */
-List *
-ts_resolve_outer_special_vars(List *agg_tlist, Plan *childplan)
+Node *
+ts_resolve_outer_special_vars(Node *node, Plan *childplan)
 {
-	return castNode(List, resolve_outer_special_vars_mutator((Node *) agg_tlist, childplan));
+	return resolve_outer_special_vars_mutator(node, childplan);
 }

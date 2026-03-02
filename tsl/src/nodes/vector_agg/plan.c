@@ -313,7 +313,7 @@ can_vectorize_aggref(const VectorQualInfo *vqi, Aggref *aggref)
 		aggref->aggfilter = (Expr *) aggfilter_vectorized;
 	}
 
-	if (get_vector_aggregate(aggref->aggfnoid) == NULL)
+	if (get_vector_aggregate(aggref->aggfnoid, aggref->inputcollid) == NULL)
 	{
 		/*
 		 * We don't have a vectorized implementation for this particular
@@ -678,7 +678,8 @@ insert_vector_agg(Plan *plan, void *context)
 	 * the subsequent checks are performed on the aggregated targetlist with
 	 * all variables resolved to uncompressed chunk variables.
 	 */
-	List *resolved_targetlist = ts_resolve_outer_special_vars(agg->plan.targetlist, childplan);
+	List *resolved_targetlist =
+		castNode(List, ts_resolve_outer_special_vars((Node *) agg->plan.targetlist, childplan));
 
 	const VectorAggGroupingType grouping_type =
 		get_vectorized_grouping_type(&vqi, agg, resolved_targetlist);

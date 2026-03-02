@@ -236,7 +236,7 @@ foreach(transition_mod_file ${MOD_FILES_LIST})
   endif()
 
   version_check_file("updates/version_check.sql" VERSION_CHECK_VERSIONED)
-  list(PREPEND PRE_FILES ${VERSION_CHECK_VERSIONED})
+  list(PREPEND PRE_FILES "header.sql;${VERSION_CHECK_VERSIONED}")
 
   # There might not have been any changes in the modfile, in which case the
   # modfile need not be present

@@ -1,0 +1,2 @@
+Fixes: #9294 Fix DELETE/UPDATE with WHERE EXISTS on hypertables
+Thanks: @desertmark for reporting an issue with DELETE/UPDATE and subqueries

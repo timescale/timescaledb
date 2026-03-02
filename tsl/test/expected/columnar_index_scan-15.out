@@ -216,26 +216,26 @@ SHOW timescaledb.enable_columnarindexscan;
 :PREFIX SELECT device, min(value) FROM metrics GROUP BY device HAVING min(value) > 20;
 --- QUERY PLAN ---
  GroupAggregate
-   Group Key: _hyper_1_1_chunk.device
-   Filter: (min(_hyper_1_1_chunk.value) > '20'::double precision)
-   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+   Group Key: device
+   Filter: (min(value) > '20'::double precision)
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk metrics
          ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
 
 :PREFIX SELECT device, max(value) FROM metrics GROUP BY device HAVING min(value) < 25;
 --- QUERY PLAN ---
  GroupAggregate
-   Group Key: _hyper_1_1_chunk.device
-   Filter: (min(_hyper_1_1_chunk.value) < '25'::double precision)
-   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+   Group Key: device
+   Filter: (min(value) < '25'::double precision)
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk metrics
          ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
 
 -- HAVING
 :PREFIX SELECT device, min(time) FROM metrics GROUP BY device HAVING min(time) > '2025-01-01 00:30:00 PST';
 --- QUERY PLAN ---
  GroupAggregate
-   Group Key: _hyper_1_1_chunk.device
-   Filter: (min(_hyper_1_1_chunk."time") > 'Wed Jan 01 00:30:00 2025 PST'::timestamp with time zone)
-   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+   Group Key: device
+   Filter: (min("time") > 'Wed Jan 01 00:30:00 2025 PST'::timestamp with time zone)
+   ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk metrics
          ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
 
 -- tableoid doesnt prevent optimization

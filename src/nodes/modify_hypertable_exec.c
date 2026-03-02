@@ -234,19 +234,10 @@ ExecCheckPlanOutput(Relation resultRel, List *targetList)
 		attr = TupleDescAttr(resultDesc, attno);
 		attno++;
 
-		if (!attr->attisdropped)
-		{
-			/* Normal case: demand type match */
-			if (exprType((Node *) tle->expr) != attr->atttypid)
-				ereport(ERROR,
-						(errcode(ERRCODE_DATATYPE_MISMATCH),
-						 errmsg("table row type and query-specified row type do not match"),
-						 errdetail("Table has type %s at ordinal position %d, but query expects %s.",
-								   format_type_be(attr->atttypid),
-								   attno,
-								   format_type_be(exprType((Node *) tle->expr)))));
-		}
-		else
+		/*
+		 * Special cases here should match planner's expand_insert_targetlist.
+		 */
+		if (attr->attisdropped)
 		{
 			/*
 			 * For a dropped column, we can't check atttypid (it's likely 0).
@@ -260,6 +251,35 @@ ExecCheckPlanOutput(Relation resultRel, List *targetList)
 						 errmsg("table row type and query-specified row type do not match"),
 						 errdetail("Query provides a value for a dropped column at ordinal position %d.",
 								   attno)));
+		}
+		else if (attr->attgenerated)
+		{
+			/*
+			 * For a generated column, the planner will have inserted a null
+			 * of the column's base type (to avoid possibly failing on domain
+			 * not-null constraints).  It doesn't seem worth insisting on that
+			 * exact type though, since a null value is type-independent.  As
+			 * above, just insist on *some* NULL constant.
+			 */
+			if (!IsA(tle->expr, Const) ||
+				!((Const *) tle->expr)->constisnull)
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("table row type and query-specified row type do not match"),
+						 errdetail("Query provides a value for a generated column at ordinal position %d.",
+								   attno)));
+		}
+		else
+		{
+			/* Normal case: demand type match */
+			if (exprType((Node *) tle->expr) != attr->atttypid)
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("table row type and query-specified row type do not match"),
+						 errdetail("Table has type %s at ordinal position %d, but query expects %s.",
+								   format_type_be(attr->atttypid),
+								   attno,
+								   format_type_be(exprType((Node *) tle->expr)))));
 		}
 	}
 	if (attno != resultDesc->natts)
@@ -600,9 +620,6 @@ ExecInsert(ModifyTableContext *context,
 	TransitionCaptureState *ar_insert_trig_tcs;
 	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
 	OnConflictAction onconflict = node->onConflictAction;
-	bool skip_generated_column_computations = false;
-
-
 	/*
 	 * If the input result relation is a partitioned table, find the leaf
 	 * partition to insert the tuple into.
@@ -615,8 +632,6 @@ ExecInsert(ModifyTableContext *context,
 									   resultRelInfo, slot,
 									   &partRelInfo);
 		resultRelInfo = partRelInfo;
-
-		skip_generated_column_computations = ctr->cis->skip_generated_column_computations;
 	}
 
 	ExecMaterializeSlot(slot);
@@ -671,14 +686,9 @@ ExecInsert(ModifyTableContext *context,
 
 		/*
 		 * Compute stored generated columns
-		 * NOTE: we are skipping generation if we detect that we went through
-		 * compressed chunk uniqueness check which would have already
-		 * triggered generating the columns.
 		 */
 		if (resultRelationDesc->rd_att->constr &&
-			resultRelationDesc->rd_att->constr->has_generated_stored &&
-			!skip_generated_column_computations
-		)
+			resultRelationDesc->rd_att->constr->has_generated_stored)
 			ExecComputeStoredGenerated(resultRelInfo, estate, slot,
 									   CMD_INSERT);
 
@@ -2439,6 +2449,18 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 						if (!ts_chunk_is_unordered(chunk))
 							ts_chunk_set_unordered(chunk);
 					}
+				}
+
+				/*
+				 * Compute generated stored columns before compressing.
+				 * The direct compress path skips ExecInsert, so generated
+				 * columns would otherwise remain NULL.
+				 */
+				Relation rel = ctr->cis->rel;
+				if (rel->rd_att->constr && rel->rd_att->constr->has_generated_stored)
+				{
+					slot->tts_tableOid = RelationGetRelid(rel);
+					ExecComputeStoredGenerated(ctr->root_rri, estate, slot, CMD_INSERT);
 				}
 
 				ts_cm_functions->compressor_add_slot(ht_state->compressor, ht_state->bulk_writer, slot);
