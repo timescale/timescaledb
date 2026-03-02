@@ -7,6 +7,7 @@
 
 #include <catalog/pg_inherits.h>
 #include <optimizer/optimizer.h>
+#include <parser/parse_coerce.h>
 #include <parser/parsetree.h>
 #include <tcop/tcopprot.h>
 #include <utils/array.h>
@@ -35,6 +36,8 @@ typedef struct DimensionValues
 	bool use_or; /* ORed or ANDed values */
 	Oid type;	 /* Oid type for values */
 } DimensionValues;
+
+static DimensionValues *dimension_values_create(List *values, Oid type, bool use_or);
 
 static DimensionRestrictInfoOpen *
 dimension_restrict_info_open_create(const Dimension *d)
@@ -368,7 +371,50 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 		return;
 
 	get_op_opfamily_properties(op_oid, tce->btree_opf, false, &strategy, &lefttype, &righttype);
-	dimvalues = func_get_dim_values(c, use_or);
+
+	/*
+	 * Coerce the constant to the column type so the partition function receives
+	 * a datum in the expected format. Without this, type mismatches (e.g., name
+	 * literal for text column) cause wrong hash values and incorrect results.
+	 *
+	 * Cross-type integer equality and inequality (int4 column vs int8 literal)
+	 * would work without coercion - PostgreSQL provides compatible hash functions
+	 * and cross-type operators (int48lt, etc.). However, our partition function
+	 * interface uses resolve_function_argtype() which returns the column type,
+	 * not the literal type, so we can't easily use these directly.
+	 *
+	 * We only use implicit coercions because narrowing casts (int8 -> int4) can
+	 * fail at runtime with "integer out of range". When no implicit coercion
+	 * exists, we skip chunk exclusion for this clause - correct but slower.
+	 */
+	if (c->consttype != columntype)
+	{
+		Oid funcid;
+		CoercionPathType pathtype =
+			find_coercion_pathway(columntype, c->consttype, COERCION_IMPLICIT, &funcid);
+
+		if (pathtype == COERCION_PATH_FUNC && OidIsValid(funcid))
+		{
+			Datum coerced = OidFunctionCall1Coll(funcid, c->constcollid, c->constvalue);
+			dimvalues =
+				dimension_values_create(list_make1(DatumGetPointer(coerced)), columntype, use_or);
+		}
+		else if (pathtype == COERCION_PATH_RELABELTYPE)
+		{
+			/* Binary compatible, no conversion needed */
+			dimvalues = func_get_dim_values(c, use_or);
+		}
+		else
+		{
+			/* No implicit coercion, skip chunk exclusion for this clause */
+			return;
+		}
+	}
+	else
+	{
+		dimvalues = func_get_dim_values(c, use_or);
+	}
+
 	if (dimension_restrict_info_add(dri, strategy, c->constcollid, dimvalues))
 	{
 		hri->num_base_restrictions++;

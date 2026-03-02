@@ -12,7 +12,6 @@
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <storage/lmgr.h>
-#include <parser/parse_coerce.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
@@ -919,49 +918,13 @@ ts_dimension_set_compress_interval(Dimension *dim, int64 compress_interval)
  * Apply any dimension-specific transformations on a value, i.e., apply
  * partitioning function. Optionally get the type of the resulting value via
  * the restype parameter.
- *
- * If const_datum_type differs from the column type, coerce the value to
- * the column type before applying the partitioning function. This ensures
- * the partition function receives a datum with the proper type, which determines
- * the hashing.
- *
- * Postgres typically uses the hash functions that are compatible between types
- * that have cross-type equality operators. E.g. the hash(1::int8) is the same
- * as the hash(1::int2). But the implementation of the hash function must still
- * match the argument type. The calculations might differ, and even the type
- * storage. In our example, int8 is by-reference in 32-bit platforms.
- *
- * The partitioning function in TimescaleDB can be set by the user. It can take
- * an "anyvalue" argument like the default one, but it doesn't have to. Changes
- * to this interface would be backwards-incompatible. This means we have to
- * coerce the constant to the correct column type.
- *
- * FIXME how does this apply to integer time dimensions? We can have a comparison
- * against numeric there too.
  */
 Datum
 ts_dimension_transform_value(const Dimension *dim, Oid collation, Datum value, Oid const_datum_type,
 							 Oid *restype)
 {
 	if (NULL != dim->partitioning)
-	{
-		Oid column_type = dim->fd.column_type;
-
-		/* Coerce value to column type if needed */
-		if (OidIsValid(const_datum_type) && const_datum_type != column_type)
-		{
-			Oid funcid;
-			CoercionPathType pathtype =
-				find_coercion_pathway(column_type, const_datum_type, COERCION_IMPLICIT, &funcid);
-
-			if (pathtype == COERCION_PATH_FUNC && OidIsValid(funcid))
-			{
-				value = OidFunctionCall1Coll(funcid, collation, value);
-		    }
-		}
-
 		value = ts_partitioning_func_apply(dim->partitioning, collation, value);
-	}
 
 	if (NULL != restype)
 	{
