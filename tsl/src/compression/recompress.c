@@ -1163,9 +1163,13 @@ try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk
 
 	if (!has_tuples)
 	{
-		if (ts_chunk_clear_status(uncompressed_chunk,
-								  CHUNK_STATUS_COMPRESSED_UNORDERED |
-									  CHUNK_STATUS_COMPRESSED_PARTIAL))
+		/*
+		 * Only clear PARTIAL. Segmentwise recompression only processes
+		 * segments that have new uncompressed data, so segments without new
+		 * data are left as-is. Any overlapping batches in those segments
+		 * remain as is, so the UNORDERED flag must be preserved.
+		 */
+		if (ts_chunk_clear_status(uncompressed_chunk, CHUNK_STATUS_COMPRESSED_PARTIAL))
 			ereport(DEBUG1,
 					(errmsg("cleared chunk status for recompression: \"%s.%s\"",
 							NameStr(uncompressed_chunk->fd.schema_name),
