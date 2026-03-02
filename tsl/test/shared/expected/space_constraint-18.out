@@ -83,39 +83,33 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 --- QUERY PLAN ---
  LockRows
    ->  Append
-         ->  Seq Scan on metrics_space metrics_space_1
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,1}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,1}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: (device_id = ANY ('{1,1}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,1}'::integer[]))
 
 :PREFIX SELECT FROM metrics_space WHERE device_id IN (int '1', int '1') FOR UPDATE;
 --- QUERY PLAN ---
  LockRows
    ->  Append
-         ->  Seq Scan on metrics_space metrics_space_1
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,1}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,1}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: (device_id = ANY ('{1,1}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,1}'::integer[]))
 
 :PREFIX SELECT FROM metrics_space WHERE device_id IN (bigint '1', bigint '1') FOR UPDATE;
 --- QUERY PLAN ---
  LockRows
    ->  Append
-         ->  Seq Scan on metrics_space metrics_space_1
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,1}'::bigint[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,1}'::bigint[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: (device_id = ANY ('{1,1}'::bigint[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,1}'::bigint[]))
 
 -- test valid variants we are optimizing
