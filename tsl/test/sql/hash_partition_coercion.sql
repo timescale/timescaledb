@@ -34,3 +34,33 @@ INSERT INTO time_int8 VALUES (1, 1), (11, 2), (21, 3);
 SELECT count(*) FROM time_int8 WHERE time = 1::int4;
 DROP TABLE time_int8;
 DROP FUNCTION time_part_int8;
+
+-- Exact type match: text column + text literal (no coercion needed)
+CREATE TABLE hash_text_exact(time timestamptz NOT NULL, device text);
+SELECT create_hypertable('hash_text_exact', 'time');
+SELECT add_dimension('hash_text_exact', 'device', number_partitions => 3);
+INSERT INTO hash_text_exact VALUES ('2000-01-01', 'abc');
+SELECT count(*) FROM hash_text_exact WHERE device = 'abc'::text;
+DROP TABLE hash_text_exact;
+
+-- Binary compatible types: text column + varchar literal
+-- PostgreSQL coerces varchar to text at parse time
+CREATE TABLE hash_text_varchar(time timestamptz NOT NULL, device text);
+SELECT create_hypertable('hash_text_varchar', 'time');
+SELECT add_dimension('hash_text_varchar', 'device', number_partitions => 3);
+INSERT INTO hash_text_varchar VALUES ('2000-01-01', 'abc');
+SELECT count(*) FROM hash_text_varchar WHERE device = 'abc'::varchar;
+DROP TABLE hash_text_varchar;
+
+-- Prepared statement with varchar parameter, text column
+-- Tests that coercion works correctly in custom plans
+CREATE TABLE hash_prep(time timestamptz NOT NULL, device text);
+SELECT create_hypertable('hash_prep', 'time');
+SELECT add_dimension('hash_prep', 'device', number_partitions => 3);
+INSERT INTO hash_prep VALUES ('2000-01-01', 'abc');
+PREPARE hash_q(varchar) AS SELECT count(*) FROM hash_prep WHERE device = $1;
+SET plan_cache_mode = force_custom_plan;
+EXECUTE hash_q('abc');
+RESET plan_cache_mode;
+DEALLOCATE hash_q;
+DROP TABLE hash_prep;

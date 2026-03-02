@@ -399,14 +399,16 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 			dimvalues =
 				dimension_values_create(list_make1(DatumGetPointer(coerced)), columntype, use_or);
 		}
-		else if (pathtype == COERCION_PATH_RELABELTYPE)
-		{
-			/* Binary compatible, no conversion needed */
-			dimvalues = func_get_dim_values(c, use_or);
-		}
 		else
 		{
-			/* No implicit coercion, skip chunk exclusion for this clause */
+			/*
+			 * No usable implicit coercion. Skip chunk exclusion for this
+			 * clause - correct but slower.
+			 *
+			 * Note: COERCION_PATH_RELABELTYPE (binary compatible) won't occur
+			 * here because PostgreSQL coerces such literals at parse time and
+			 * eval_const_expressions() folds any remaining RelabelType(Const).
+			 */
 			return;
 		}
 	}
