@@ -1,0 +1,39 @@
+Parsed test spec with 2 sessions
+
+starting permutation: s1_insert_plain s2_delete_plain s1_commit
+step s1_insert_plain: 
+  BEGIN;
+  INSERT INTO events_plain (metric_time, metric_device, event_data)
+    VALUES ('2020-01-01 12:00', 1, 'test event');
+
+step s2_delete_plain: 
+  DELETE FROM metrics_plain WHERE time = '2020-01-01 12:00' AND device_id = 1;
+ <waiting ...>
+step s1_commit: 
+  COMMIT;
+
+step s2_delete_plain: <... completed>
+ERROR:  update or delete on table "metrics_plain" violates foreign key constraint "fk_plain" on table "events_plain"
+
+starting permutation: s1_insert_ht s2_delete_ht s1_commit s2_check_orphans_ht
+step s1_insert_ht: 
+  BEGIN;
+  INSERT INTO events_ht (metric_time, metric_device, event_data)
+    VALUES ('2020-01-01 12:00', 1, 'test event');
+
+step s2_delete_ht: 
+  DELETE FROM metrics_ht WHERE time = '2020-01-01 12:00' AND device_id = 1;
+ <waiting ...>
+step s1_commit: 
+  COMMIT;
+
+step s2_delete_ht: <... completed>
+ERROR:  update or delete on table "_hyper_X_X_chunk" violates foreign key constraint "events_ht_time_device_id_fkey" on table "events_ht"
+step s2_check_orphans_ht: 
+  SELECT count(*) AS orphans FROM events_ht
+  WHERE (metric_time, metric_device) NOT IN (SELECT time, device_id FROM metrics_ht);
+
+orphans
+-------
+      0
+
