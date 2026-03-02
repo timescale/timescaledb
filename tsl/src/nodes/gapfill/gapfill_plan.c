@@ -89,6 +89,12 @@ contains_nonconstant_walker(Node *node, void *context)
 		return param->paramkind != PARAM_EXTERN;
 	}
 
+	if (check_functions_in_node(node, contains_volatile_functions_checker,
+		/* context = */ NULL))
+	{
+		return true;
+	}
+
 	return expression_tree_walker(node, contains_nonconstant_walker, context);
 }
 

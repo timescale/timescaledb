@@ -3362,6 +3362,13 @@ SELECT time_bucket_gapfill('1 day', time, (SELECT min(tz_col) FROM gf_tz_test), 
  GROUP BY 1 ORDER BY 1;
 ERROR:  time_bucket_gapfill does not support non-constant timezone
 HINT:  Use a constant timezone value.
+SELECT time_bucket_gapfill('1 day', time,
+    case when random() > 0 then 'UTC' else 'Europe/Berlin' end,
+    '2024-01-01', '2024-01-03') AS bucket
+  FROM gf_tz_test
+GROUP BY 1 ORDER BY 1;
+ERROR:  time_bucket_gapfill does not support non-constant timezone
+HINT:  Use a constant timezone value.
 SELECT time_bucket_gapfill('1 day', t1.time, t2.tz_col,
     '2024-01-01', '2024-01-03') FROM gf_tz_test t1
     JOIN gf_tz_test t2 ON true
@@ -3386,6 +3393,17 @@ SELECT time_bucket_gapfill('1 day', time, 'UTC') AS bucket
   FROM gf_tz_test
  WHERE time >= '2024-01-01' AND time < '2024-01-03'
  GROUP BY 1 ORDER BY 1;
+            bucket            
+------------------------------
+ Sun Dec 31 16:00:00 2023 PST
+ Mon Jan 01 16:00:00 2024 PST
+ Tue Jan 02 16:00:00 2024 PST
+
+SELECT time_bucket_gapfill('1 day', time,
+    case when now() > '1900-01-01 00:00:00' then 'UTC' else 'Europe/Berlin' end,
+    '2024-01-01', '2024-01-03') AS bucket
+FROM gf_tz_test
+GROUP BY 1 ORDER BY 1;
             bucket            
 ------------------------------
  Sun Dec 31 16:00:00 2023 PST
