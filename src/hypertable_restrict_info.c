@@ -177,7 +177,7 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 
 static List *
 dimension_restrict_info_get_partitions(DimensionRestrictInfoClosed *dri, Oid collation,
-									   List *values)
+									   List *values, Oid value_type)
 {
 	List *partitions = NIL;
 	ListCell *item;
@@ -187,7 +187,7 @@ dimension_restrict_info_get_partitions(DimensionRestrictInfoClosed *dri, Oid col
 		Datum value = ts_dimension_transform_value(dri->base.dimension,
 												   collation,
 												   PointerGetDatum(lfirst(item)),
-												   InvalidOid,
+												   value_type,
 												   NULL);
 
 		partitions = list_append_unique_int(partitions, DatumGetInt32(value));
@@ -208,7 +208,8 @@ dimension_restrict_info_closed_add(DimensionRestrictInfoClosed *dri, StrategyNum
 		return false;
 	}
 
-	partitions = dimension_restrict_info_get_partitions(dri, collation, dimvalues->values);
+	partitions =
+		dimension_restrict_info_get_partitions(dri, collation, dimvalues->values, dimvalues->type);
 
 	/* the intersection is empty when using ALL operator (ANDing values)  */
 	if (list_length(partitions) > 1 && !dimvalues->use_or)
