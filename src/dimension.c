@@ -922,7 +922,8 @@ ts_dimension_set_compress_interval(Dimension *dim, int64 compress_interval)
  *
  * If const_datum_type differs from the column type, coerce the value to
  * the column type before applying the partitioning function. This ensures
- * the partition function receives a datum in the expected binary format.
+ * the partition function receives a datum with the proper type, which determines
+ * the hashing.
  */
 Datum
 ts_dimension_transform_value(const Dimension *dim, Oid collation, Datum value, Oid const_datum_type,
@@ -940,8 +941,9 @@ ts_dimension_transform_value(const Dimension *dim, Oid collation, Datum value, O
 				find_coercion_pathway(column_type, const_datum_type, COERCION_IMPLICIT, &funcid);
 
 			if (pathtype == COERCION_PATH_FUNC && OidIsValid(funcid))
+			{
 				value = OidFunctionCall1Coll(funcid, collation, value);
-			/* COERCION_PATH_RELABELTYPE means binary compatible, no conversion needed */
+		    }
 		}
 
 		value = ts_partitioning_func_apply(dim->partitioning, collation, value);
