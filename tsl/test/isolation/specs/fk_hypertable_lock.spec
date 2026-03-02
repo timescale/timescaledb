@@ -92,10 +92,15 @@ step "s2_delete_ht" {
   DELETE FROM metrics_ht WHERE time = '2020-01-01 12:00' AND device_id = 1;
 }
 
+step "s2_check_orphans_ht" {
+  SELECT count(*) AS orphans FROM events_ht
+  WHERE (metric_time, metric_device) NOT IN (SELECT time, device_id FROM metrics_ht);
+}
+
 # Plain table: DELETE should block, then fail with FK violation
 # Expected: s2_delete_plain shows "<waiting ...>", then ERROR after s1_commit
 permutation "s1_insert_plain" "s2_delete_plain" "s1_commit"
 
 # Hypertable: DELETE should block, then fail with FK violation
 # Expected: s2_delete_ht shows "<waiting ...>", then ERROR after s1_commit
-permutation "s1_insert_ht" "s2_delete_ht" "s1_commit"
+permutation "s1_insert_ht" "s2_delete_ht" "s1_commit" "s2_check_orphans_ht"
