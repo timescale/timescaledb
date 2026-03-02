@@ -18,6 +18,7 @@
 
 #include "grouping_policy.h"
 
+#include "guc.h"
 #include "nodes/vector_agg/exec.h"
 #include "nodes/vector_agg/filter_word_iterator.h"
 #include "nodes/vector_agg/vector_slot.h"
@@ -56,7 +57,13 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 
 	policy->agg_extra_mctx =
 		AllocSetContextCreate(CurrentMemoryContext, "agg extra", ALLOCSET_DEFAULT_SIZES);
-	policy->num_allocated_per_key_agg_states = TARGET_COMPRESSED_BATCH_SIZE;
+
+	/*
+	 * This should match the expected grouping cardinality. Here we use a value
+	 * noticeably lower than the batch size, so that the reallocation logic is
+	 * triggered in more cases and better tested.
+	 */
+	policy->num_allocated_per_key_agg_states = 300;
 
 	policy->num_agg_defs = num_agg_defs;
 	policy->agg_defs = agg_defs;
@@ -307,7 +314,8 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlo
 	 * Process the aggregate function states. We are processing single aggregate
 	 * function for the entire batch to improve the memory locality.
 	 */
-	const uint64 new_aggstate_rows = policy->num_allocated_per_key_agg_states * 2 + 1;
+	const uint64 new_aggstate_rows = Max(policy->hashing.last_used_key_index + 1,
+										 policy->num_allocated_per_key_agg_states * 2 + 1);
 	const int num_fns = policy->num_agg_defs;
 	for (int agg_index = 0; agg_index < num_fns; agg_index++)
 	{

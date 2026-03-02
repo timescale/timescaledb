@@ -201,3 +201,22 @@ SELECT * FROM data_records;
 
 \set QUIET on
 ROLLBACK;
+
+-- Test INSERT into hypertable with a generated column whose type is a
+-- domain with a NOT NULL constraint
+CREATE DOMAIN nn_int AS int CHECK (VALUE IS NOT NULL);
+
+CREATE TABLE generated_col_ht(
+    time timestamptz NOT NULL,
+    val int NOT NULL,
+    doubled nn_int GENERATED ALWAYS AS (val * 2) STORED
+);
+SELECT create_hypertable('generated_col_ht', 'time');
+
+INSERT INTO generated_col_ht(time, val) VALUES ('2024-01-01', 5);
+INSERT INTO generated_col_ht(time, val) VALUES ('2024-01-02', 10) RETURNING *;
+
+SELECT * FROM generated_col_ht ORDER BY time;
+
+DROP TABLE generated_col_ht;
+DROP DOMAIN nn_int;

@@ -485,8 +485,7 @@ rewrite_agg_tlist_mutator(Node *node, void *context)
  * supported — the walker/mutator handles Var and Aggref nodes at any depth.
  */
 static Plan *
-columnar_index_scan_plan_create(Agg *agg, CustomScan *cscan, List *resolved_targetlist,
-								List *rtable)
+columnar_index_scan_plan_create(Agg *agg, CustomScan *cscan, List *rtable)
 {
 	Plan *compressed_scan_subtree = linitial(cscan->custom_plans);
 
@@ -518,8 +517,18 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *cscan, List *resolved_targ
 		.next_resno = 1,
 	};
 
-	if (validate_entries_walker((Node *) resolved_targetlist, &validate_ctx))
+	Plan *childplan = agg->plan.lefttree;
+	Node *resolved_targetlist =
+		ts_resolve_outer_special_vars((Node *) agg->plan.targetlist, childplan);
+	if (validate_entries_walker(resolved_targetlist, &validate_ctx))
 		return NULL;
+
+	if (agg->plan.qual)
+	{
+		Node *resolved_qual = ts_resolve_outer_special_vars((Node *) agg->plan.qual, childplan);
+		if (validate_entries_walker(resolved_qual, &validate_ctx))
+			return NULL;
+	}
 
 	List *custom_scan_tlist = validate_ctx.custom_scan_tlist;
 	List *output_map = validate_ctx.output_map;
@@ -538,7 +547,11 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *cscan, List *resolved_targ
 	};
 
 	agg->plan.targetlist =
-		(List *) rewrite_agg_tlist_mutator((Node *) agg->plan.targetlist, &rewrite_ctx);
+		castNode(List, rewrite_agg_tlist_mutator((Node *) agg->plan.targetlist, &rewrite_ctx));
+
+	if (agg->plan.qual)
+		agg->plan.qual =
+			castNode(List, rewrite_agg_tlist_mutator((Node *) agg->plan.qual, &rewrite_ctx));
 
 	/* Build ColumnarIndexScan CustomScan */
 	CustomScan *columnar_index_scan = (CustomScan *) makeNode(CustomScan);
@@ -596,10 +609,6 @@ insert_columnar_index_scan(Plan *plan, void *context)
 	if (agg->aggsplit != AGGSPLIT_INITIAL_SERIAL && agg->aggsplit != AGGSPLIT_SIMPLE)
 		return plan;
 
-	/* bail out on HAVING */
-	if (agg->plan.qual != NIL)
-		return plan;
-
 	Plan *childplan = agg->plan.lefttree;
 
 	/*
@@ -622,12 +631,7 @@ insert_columnar_index_scan(Plan *plan, void *context)
 	if (!columnar_scan_has_no_vector_quals(cscan))
 		return plan;
 
-	/*
-	 * Resolve OUTER_VAR references in the Agg targetlist.
-	 */
-	List *resolved_targetlist = ts_resolve_outer_special_vars(agg->plan.targetlist, childplan);
-
-	Plan *result = columnar_index_scan_plan_create(agg, cscan, resolved_targetlist, rtable);
+	Plan *result = columnar_index_scan_plan_create(agg, cscan, rtable);
 	if (result == NULL)
 		return plan;
 

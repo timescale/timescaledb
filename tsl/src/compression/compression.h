@@ -33,8 +33,6 @@ typedef struct BulkInsertStateData *BulkInsertState;
 	char vl_len_[4];                                                                               \
 	uint8 compression_algorithm
 
-#define TARGET_COMPRESSED_BATCH_SIZE 1000
-
 typedef struct CompressedDataHeader
 {
 	CompressedDataHeaderFields;
@@ -150,6 +148,7 @@ typedef struct RowDecompressor
 	int64 tuples_decompressed;
 
 	TupleTableSlot **decompressed_slots;
+	int decompressed_slots_capacity;
 	int unprocessed_tuples;
 	AttrMap *attrmap;
 
@@ -446,11 +445,6 @@ consumeCompressedData(StringInfo si, int bytes)
 	si->cursor += bytes;
 	return result;
 }
-
-/*
- * We use this limit for sanity checks in case the compressed data is corrupt.
- */
-#define GLOBAL_MAX_ROWS_PER_COMPRESSION INT16_MAX
 
 const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm algo);
 

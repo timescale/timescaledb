@@ -10,7 +10,8 @@
 
 # Source files that define the schemas and tables for our metadata
 set(PRE_INSTALL_SOURCE_FILES
-    pre_install/schemas.sql # Must be first
+    header.sql # Must be first since it sets up the search path
+    pre_install/schemas.sql
     pre_install/types.pre.sql
     pre_install/types.functions.sql
     pre_install/types.post.sql # Must be before tables.sql
