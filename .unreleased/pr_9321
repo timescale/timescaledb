@@ -1,0 +1,2 @@
+Fixes: #9321 Fix segfault when using OLD/NEW refs in RETURNING clause on PG18
+Thanks: @flaviofernandes004 for reporting an issue with RETURNING clause and references to OLD/NEW
