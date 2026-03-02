@@ -924,6 +924,20 @@ ts_dimension_set_compress_interval(Dimension *dim, int64 compress_interval)
  * the column type before applying the partitioning function. This ensures
  * the partition function receives a datum with the proper type, which determines
  * the hashing.
+ *
+ * Postgres typically uses the hash functions that are compatible between types
+ * that have cross-type equality operators. E.g. the hash(1::int8) is the same
+ * as the hash(1::int2). But the implementation of the hash function must still
+ * match the argument type. The calculations might differ, and even the type
+ * storage. In our example, int8 is by-reference in 32-bit platforms.
+ *
+ * The partitioning function in TimescaleDB can be set by the user. It can take
+ * an "anyvalue" argument like the default one, but it doesn't have to. Changes
+ * to this interface would be backwards-incompatible. This means we have to
+ * coerce the constant to the correct column type.
+ *
+ * FIXME how does this apply to integer time dimensions? We can have a comparison
+ * against numeric there too.
  */
 Datum
 ts_dimension_transform_value(const Dimension *dim, Oid collation, Datum value, Oid const_datum_type,
