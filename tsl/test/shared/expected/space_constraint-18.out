@@ -50,39 +50,33 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 --- QUERY PLAN ---
  LockRows
    ->  Append
-         ->  Seq Scan on metrics_space metrics_space_1
-               Filter: (device_id = '2'::smallint)
-         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk
                Index Cond: (device_id = '2'::smallint)
-         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk
                Index Cond: (device_id = '2'::smallint)
-         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk
                Index Cond: (device_id = '2'::smallint)
 
 :PREFIX SELECT FROM metrics_space WHERE device_id = int '2' FOR UPDATE;
 --- QUERY PLAN ---
  LockRows
    ->  Append
-         ->  Seq Scan on metrics_space metrics_space_1
-               Filter: (device_id = 2)
-         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk
                Index Cond: (device_id = 2)
-         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk
                Index Cond: (device_id = 2)
-         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk
                Index Cond: (device_id = 2)
 
 :PREFIX SELECT FROM metrics_space WHERE device_id = bigint '3' FOR UPDATE;
 --- QUERY PLAN ---
  LockRows
    ->  Append
-         ->  Seq Scan on metrics_space metrics_space_1
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = '3'::bigint)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = '3'::bigint)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: (device_id = '3'::bigint)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = '3'::bigint)
 
 :PREFIX SELECT FROM metrics_space WHERE device_id IN (smallint '1', smallint '1') FOR UPDATE;
