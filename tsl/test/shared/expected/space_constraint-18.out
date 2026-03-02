@@ -10,45 +10,39 @@ SET timescaledb.current_timestamp_mock TO '1990-01-01';
 --- QUERY PLAN ---
  LockRows
    ->  Append
-         ->  Seq Scan on metrics_space metrics_space_1
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = 1)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = 1)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: (device_id = 1)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = 1)
 
 :PREFIX SELECT FROM metrics_space WHERE device_id IN (1) FOR UPDATE;
 --- QUERY PLAN ---
  LockRows
    ->  Append
-         ->  Seq Scan on metrics_space metrics_space_1
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = 1)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = 1)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: (device_id = 1)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = 1)
 
 :PREFIX SELECT FROM metrics_space WHERE device_id IN (1,3) FOR UPDATE;
 --- QUERY PLAN ---
  LockRows
    ->  Append
-         ->  Seq Scan on metrics_space metrics_space_1
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,3}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,3}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,3}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,3}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_5
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,3}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_6
-               Filter: (device_id = ANY ('{1,3}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_7
+         ->  Seq Scan on _hyper_X_X_chunk
                Filter: (device_id = ANY ('{1,3}'::integer[]))
 
 -- check mismatching datatypes
