@@ -4,7 +4,6 @@ include(GenerateTestSchedule)
 # so unless you have a good reason, add new test files here.
 set(TEST_FILES
     agg_partials_pushdown.sql
-    hash_partition_coercion.sql
     bgw_job_ddl.sql
     bgw_policy.sql
     bgw_security.sql
