@@ -64,6 +64,12 @@ class SQLVisitor(Visitor):
     def visit_CreateEventTrigStmt(self, _ancestors, _node):
         return Skip
 
+    def visit_VariableSetStmt(self, _ancestors, node):
+        if not node.is_local:
+            self.error(node, "Consider using SET LOCAL instead of SET")
+
+        return Skip
+
     def visit_CreateTrigStmt(self, _ancestors, node):
         if not node.replace:
             self.error(node, "Consider using CREATE OR REPLACE TRIGGER")
