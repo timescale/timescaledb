@@ -218,5 +218,18 @@ pg_get_constraintdef | CHECK (("time" < '4714-11-27 00:00:00 BC'::timestamp with
 -[ RECORD 2 ]--------+-------------------------------------------------------------------------
 pg_get_constraintdef | CHECK (("time" >= '294246-12-31 00:00:00'::timestamp without time zone))
 
+-- Test that out-of-range timestamps in WHERE clauses don't error (treated as infinity)
+SELECT FROM timestamptz_table WHERE time < '294247-01-02';
+
+SELECT FROM timestamp_table WHERE time < '294247-01-02';
+
+SELECT FROM date_table WHERE time < '294247-01-02';
+
 RESET datestyle;
 RESET timezone;
+DROP TABLE smallint_table;
+DROP TABLE int_table;
+DROP TABLE bigint_table;
+DROP TABLE date_table;
+DROP TABLE timestamp_table;
+DROP TABLE timestamptz_table;
