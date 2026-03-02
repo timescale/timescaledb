@@ -178,5 +178,17 @@ FROM show_chunks('timestamptz_table') chunk, pg_constraint c
 WHERE c.conrelid = chunk
 AND c.contype = 'c' ORDER BY chunk;
 
+-- Test that out-of-range timestamps in WHERE clauses don't error (treated as infinity)
+SELECT FROM timestamptz_table WHERE time < '294247-01-02';
+SELECT FROM timestamp_table WHERE time < '294247-01-02';
+SELECT FROM date_table WHERE time < '294247-01-02';
+
 RESET datestyle;
 RESET timezone;
+
+DROP TABLE smallint_table;
+DROP TABLE int_table;
+DROP TABLE bigint_table;
+DROP TABLE date_table;
+DROP TABLE timestamp_table;
+DROP TABLE timestamptz_table;
