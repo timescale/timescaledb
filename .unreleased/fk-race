@@ -1,0 +1,1 @@
+Fixes: #9324 Potential violation of a foreign key constraint referencing a hypertable caused by concurrent DELETE of the key record.
