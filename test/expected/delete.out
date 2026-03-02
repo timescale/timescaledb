@@ -275,3 +275,25 @@ EXPLAIN (verbose, analyze, buffers off, costs off, timing off, summary off) EXEC
 EXECUTE delete_ht;
 DEALLOCATE delete_ht;
 RESET plan_cache_mode;
+-- github issue #6790
+-- test DELETE with WHERE EXISTS on hypertable
+CREATE TABLE i6790(time timestamptz NOT NULL, device int, value float) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+INSERT INTO i6790 SELECT t, 1, 0.1 FROM generate_series('2026-01-01'::timestamptz, '2026-01-03'::timestamptz, interval '12 hours') t;
+-- DELETE with simple EXISTS - creates gating Result node wrapping ChunkAppend
+DELETE FROM i6790 WHERE EXISTS (SELECT 1);
+-- all rows should be gone
+SELECT count(*) FROM i6790;
+ count 
+-------
+     0
+
+-- repopulate for next test
+INSERT INTO i6790 SELECT t, 1, 0.1 FROM generate_series('2026-01-01'::timestamptz, '2026-01-03'::timestamptz, interval '12 hours') t;
+-- DELETE with correlated EXISTS
+DELETE FROM i6790 WHERE EXISTS (SELECT 1 FROM i6790 g WHERE g.device = i6790.device);
+SELECT count(*) FROM i6790;
+ count 
+-------
+     0
+

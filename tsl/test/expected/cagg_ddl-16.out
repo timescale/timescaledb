@@ -1013,6 +1013,13 @@ ERROR:  must be able to SET ROLE "test_role_1"
 \set ON_ERROR_STOP 1
 -- Superuser can always change owner
 SET ROLE :ROLE_SUPERUSER;
+-- Add a refresh policy before changing owner to verify job owner is propagated
+SELECT add_continuous_aggregate_policy('owner_check', NULL, 1::int8, '1 day'::interval) AS cagg_job_id \gset
+SELECT owner FROM _timescaledb_config.bgw_job WHERE id = :cagg_job_id;
+       owner       
+-------------------
+ default_perm_user
+
 ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 \x on
 SELECT * FROM cagg_info WHERE user_view::text = 'owner_check';
@@ -1028,6 +1035,17 @@ partial_view_owner | test_role_1
 tablespace         | 
 
 \x off
+-- make sure policy job owner is propagated
+SELECT owner FROM _timescaledb_config.bgw_job WHERE id = :cagg_job_id;
+    owner    
+-------------
+ test_role_1
+
+SELECT remove_continuous_aggregate_policy('owner_check');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
 --
 -- Test drop continuous aggregate cases
 --
@@ -1259,12 +1277,20 @@ INSERT INTO conditions VALUES ( '2018-11-01 13:10:00-08', 'NYC', 85);
 INSERT INTO conditions VALUES ( '2018-11-02 09:20:00-08', 'NYC', 10);
 INSERT INTO conditions VALUES ( '2018-11-02 10:30:00-08', 'NYC', 20);
 CREATE MATERIALIZED VIEW conditions_daily
-WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
 SELECT location,
        time_bucket(INTERVAL '1 day', time) AS bucket,
        AVG(temperature)
   FROM conditions
 GROUP BY location, bucket
+WITH NO DATA;
+CREATE MATERIALIZED VIEW conditions_weekly
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT location,
+       time_bucket(INTERVAL '7 day', bucket) AS bucket,
+       AVG(avg)
+  FROM conditions_daily
+GROUP BY 1, 2
 WITH NO DATA;
 SELECT format('%I.%I', '_timescaledb_internal', h.table_name) AS "MAT_TABLE_NAME",
        format('%I.%I', '_timescaledb_internal', partial_view_name) AS "PART_VIEW_NAME",
@@ -1341,6 +1367,58 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = fa
 \set VERBOSITY verbose
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 \set VERBOSITY terse
+-- Rename another column after the flip and verify toggling back and
+-- forth still works. This exercises the rename when the user view
+-- already has a UNION ALL query (materialized_only = false).
+ALTER MATERIALIZED VIEW conditions_daily RENAME COLUMN avg TO average;
+SELECT * FROM test.show_columns('conditions_daily');
+  Column  |           Type           | NotNull 
+----------+--------------------------+---------
+ location | text                     | f
+ time     | timestamp with time zone | f
+ average  | double precision         | f
+
+SELECT * FROM test.show_columns(:'DIRECT_VIEW_NAME');
+  Column  |           Type           | NotNull 
+----------+--------------------------+---------
+ location | text                     | f
+ time     | timestamp with time zone | f
+ average  | double precision         | f
+
+SELECT * FROM test.show_columns(:'MAT_TABLE_NAME');
+  Column  |           Type           | NotNull 
+----------+--------------------------+---------
+ location | text                     | f
+ time     | timestamp with time zone | t
+ average  | double precision         | f
+
+ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = true);
+ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only = false);
+-- Verify data is still accessible after multiple renames and toggles.
+SELECT * FROM conditions_daily ORDER BY location COLLATE "C", time;
+ location |             time             | average 
+----------+------------------------------+---------
+ NYC      | Mon Jan 01 16:00:00 2018 UTC |      65
+ NYC      | Wed Oct 31 16:00:00 2018 UTC |      65
+ NYC      | Thu Nov 01 16:00:00 2018 UTC |      15
+ SFO      | Sun Dec 31 16:00:00 2017 UTC |      55
+ SFO      | Mon Jan 01 16:00:00 2018 UTC |      65
+ por      | Mon Jan 01 16:00:00 2018 UTC |     100
+
+-- check hierarchical continuous aggregate still works after renames and toggles on the underlying cagg
+ALTER MATERIALIZED VIEW conditions_weekly SET (timescaledb.materialized_only = false);
+ALTER MATERIALIZED VIEW conditions_weekly SET (timescaledb.materialized_only = true);
+SELECT * FROM conditions_weekly ORDER BY location COLLATE "C", bucket;
+ location | bucket | avg 
+----------+--------+-----
+
+-- Verify that direct rename on the materialization hypertable is blocked.
+\set ON_ERROR_STOP 0
+ALTER TABLE :MAT_TABLE_NAME RENAME COLUMN average TO avg;
+ERROR:  renaming columns on materialization tables is not supported
+\set ON_ERROR_STOP 1
+-- Rename back so subsequent tests that reference "avg" still work.
+ALTER MATERIALIZED VIEW conditions_daily RENAME COLUMN average TO avg;
 --
 -- Indexes on continuous aggregate
 --
@@ -1396,7 +1474,7 @@ CREATE TABLE test_setting(time timestamptz not null, val numeric);
 SELECT create_hypertable('test_setting', 'time');
      create_hypertable      
 ----------------------------
- (39,public,test_setting,t)
+ (40,public,test_setting,t)
 
 CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
@@ -1475,7 +1553,7 @@ DELETE FROM test_setting WHERE val = 20;
 --TEST test with multiple settings on continuous aggregates with real time aggregates turned off initially --
 -- test for materialized_only + compress combinations (real time aggs enabled initially)
 DROP MATERIALIZED VIEW test_setting_cagg;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_40_50_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_41_50_chunk
 CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous, timescaledb.materialized_only = true)
 AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
 NOTICE:  refreshing continuous aggregate "test_setting_cagg"
@@ -1563,7 +1641,7 @@ CREATE TABLE transactions
 SELECT create_hypertable('transactions', 'time');
      create_hypertable      
 ----------------------------
- (44,public,transactions,t)
+ (45,public,transactions,t)
 
 INSERT INTO transactions VALUES ( '2018-01-01 09:20:00-08', 0, 0, 0, 0, 0, 1, 10);
 INSERT INTO transactions VALUES ( '2018-01-02 09:30:00-08', 0, 0, 0, 0, 0, -1, 10);
@@ -1605,7 +1683,7 @@ WHERE user_view_name = 'cashflows'
 -- Show both the columns and the view definitions to see that
 -- references are correct in the view as well.
 \d+ "_timescaledb_internal".:"DIRECT_VIEW_NAME"
-                         View "_timescaledb_internal._direct_view_45"
+                         View "_timescaledb_internal._direct_view_46"
   Column   |           Type           | Collation | Nullable | Default | Storage | Description 
 -----------+--------------------------+-----------+----------+---------+---------+-------------
  bucket    | timestamp with time zone |           |          |         | plain   | 
@@ -1624,7 +1702,7 @@ View definition:
   GROUP BY (time_bucket('@ 1 day'::interval, "time")), amount;
 
 \d+ "_timescaledb_internal".:"PART_VIEW_NAME"
-                         View "_timescaledb_internal._partial_view_45"
+                         View "_timescaledb_internal._partial_view_46"
   Column   |           Type           | Collation | Nullable | Default | Storage | Description 
 -----------+--------------------------+-----------+----------+---------+---------+-------------
  bucket    | timestamp with time zone |           |          |         | plain   | 
@@ -1643,7 +1721,7 @@ View definition:
   GROUP BY (time_bucket('@ 1 day'::interval, "time")), amount;
 
 \d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
-                          Table "_timescaledb_internal._materialized_hypertable_45"
+                          Table "_timescaledb_internal._materialized_hypertable_46"
   Column   |           Type           | Collation | Nullable | Default | Storage | Stats target | Description 
 -----------+--------------------------+-----------+----------+---------+---------+--------------+-------------
  bucket    | timestamp with time zone |           | not null |         | plain   |              | 
@@ -1651,10 +1729,10 @@ View definition:
  cashflow  | bigint                   |           |          |         | plain   |              | 
  cashflow2 | bigint                   |           |          |         | plain   |              | 
 Indexes:
-    "_materialized_hypertable_45_amount_bucket_idx" btree (amount, bucket DESC)
-    "_materialized_hypertable_45_bucket_idx" btree (bucket DESC)
-Child tables: _timescaledb_internal._hyper_45_55_chunk,
-              _timescaledb_internal._hyper_45_56_chunk
+    "_materialized_hypertable_46_amount_bucket_idx" btree (amount, bucket DESC)
+    "_materialized_hypertable_46_bucket_idx" btree (bucket DESC)
+Child tables: _timescaledb_internal._hyper_46_55_chunk,
+              _timescaledb_internal._hyper_46_56_chunk
 
 \d+ 'cashflows'
                                     View "public.cashflows"
@@ -1669,7 +1747,7 @@ View definition:
     amount,
     cashflow,
     cashflow2
-   FROM _timescaledb_internal._materialized_hypertable_45;
+   FROM _timescaledb_internal._materialized_hypertable_46;
 
 SELECT * FROM cashflows ORDER BY cashflows;
             bucket            | amount | cashflow | cashflow2 
@@ -1777,7 +1855,7 @@ WHERE d.hypertable_id = ca.mat_hypertable_id;
 
 -- Since #6077 CAggs are materialized only by default
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 5 other objects
 NOTICE:  drop cascades to 2 other objects
 CREATE TABLE conditions (
        time TIMESTAMPTZ NOT NULL,
@@ -1787,7 +1865,7 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', 'time');
     create_hypertable     
 --------------------------
- (52,public,conditions,t)
+ (53,public,conditions,t)
 
 INSERT INTO conditions VALUES ( '2018-01-01 09:20:00-08', 'SFO', 55);
 INSERT INTO conditions VALUES ( '2018-01-02 09:30:00-08', 'POR', 100);
@@ -1819,7 +1897,7 @@ View definition:
  SELECT location,
     bucket,
     avg
-   FROM _timescaledb_internal._materialized_hypertable_53;
+   FROM _timescaledb_internal._materialized_hypertable_54;
 
 -- Should return NO ROWS
 SELECT * FROM conditions_daily ORDER BY bucket, location;
@@ -1835,17 +1913,17 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only=fals
  bucket   | timestamp with time zone |           |          |         | plain    | 
  avg      | double precision         |           |          |         | plain    | 
 View definition:
- SELECT _materialized_hypertable_53.location,
-    _materialized_hypertable_53.bucket,
-    _materialized_hypertable_53.avg
-   FROM _timescaledb_internal._materialized_hypertable_53
-  WHERE _materialized_hypertable_53.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(53)), '-infinity'::timestamp with time zone)
+ SELECT _materialized_hypertable_54.location,
+    _materialized_hypertable_54.bucket,
+    _materialized_hypertable_54.avg
+   FROM _timescaledb_internal._materialized_hypertable_54
+  WHERE _materialized_hypertable_54.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(54)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT conditions.location,
     time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     avg(conditions.temperature) AS avg
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(53)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(54)), '-infinity'::timestamp with time zone)
   GROUP BY conditions.location, (time_bucket('@ 1 day'::interval, conditions."time"));
 
 -- Should return ROWS because now it is realtime
@@ -1872,7 +1950,7 @@ View definition:
  SELECT location,
     bucket,
     avg
-   FROM _timescaledb_internal._materialized_hypertable_53;
+   FROM _timescaledb_internal._materialized_hypertable_54;
 
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 SELECT * FROM conditions_daily ORDER BY bucket, location;
@@ -1960,7 +2038,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('cagg1') ch;
      1
 
 DROP MATERIALIZED VIEW cagg1;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_56_70_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_57_70_chunk
 SELECT * FROM _timescaledb_catalog.compression_settings;
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
 -------+----------------+-----------+---------+--------------+--------------------+-------
@@ -2162,4 +2240,15 @@ SELECT view_name from timescaledb_information.continuous_aggregates WHERE hypert
      view_name     
 -------------------
  cagg_hypertab_ddl
+
+-- TEST continuous aggregate with functionally dependent columns
+-- name column depends on id which is in GROUP BY so name doesnt have to be
+CREATE table sensor(id int PRIMARY KEY, name text);
+CREATE TABLE sensordata(time timestamptz,id int, value float) WITH	(timescaledb.hypertable);
+NOTICE:  using column "time" as partitioning column
+CREATE MATERIALIZED VIEW cagg_sensordata WITH (tsdb.continuous) AS
+SELECT s.id, s.name,time_bucket('15 minutes', sd.time) as bucket, avg(sd.value) FROM sensordata sd JOIN sensor s USING(id) GROUP BY s.id, bucket WITH NO DATA;
+SELECT * FROM cagg_sensordata;
+ id | name | bucket | avg 
+----+------+--------+-----
 

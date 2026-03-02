@@ -1,0 +1,2 @@
+Fixes: #9314 Fix generated columns always NULL in compressed chunks
+Thanks: @JacobBrejnbjerg for reporting an issue with generated columns in compressed chunks

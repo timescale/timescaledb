@@ -70,6 +70,7 @@ def is_valid_line(line):
         r"^Implements:\s*.*$",
         r"^Thanks:\s*.*$",
         r"^Backward-Incompatible Change:\s*.*$",
+        r"^Setting:\s*.*$",
     ]
     for pattern in patterns:
         if re.match(pattern, line):

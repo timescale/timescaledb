@@ -1,0 +1,2 @@
+Fixes: #9292 Fix continuous aggregate column rename
+Thanks: @arfathyahiya for reporting an issue with renaming columns in continuous aggregates

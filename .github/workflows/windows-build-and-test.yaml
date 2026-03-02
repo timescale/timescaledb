@@ -99,6 +99,7 @@ jobs:
         vector_agg_filter
         vector_agg_groupagg
         vector_agg_grouping
+        vector_agg_planning-*
         vector_agg_text
         vector_agg_uuid
         vectorized_aggregation
