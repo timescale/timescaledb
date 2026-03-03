@@ -583,10 +583,10 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		RelOptInfo *childrel;
 #if PG16_GE
 		List *childrinfos;
+		ListCell   *lc;
 #endif
 		ListCell   *parentvars;
 		ListCell   *childvars;
-		ListCell   *lc;
 
 		/* append_rel_list contains all append rels; ignore others */
 		if (appinfo->parent_relid != (Index) parentRTindex)
