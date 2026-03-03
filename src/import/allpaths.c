@@ -583,7 +583,6 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		RelOptInfo *childrel;
 #if PG16_GE
 		List *childrinfos;
-		ListCell *lc;
 #endif
 		ListCell   *parentvars;
 		ListCell   *childvars;
@@ -768,11 +767,7 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 				int32		child_width = 0;
 
 				if (IsA(childvar, Var) &&
-#if PG16_GE
-					((Var *) childvar)->varno == childrel->relid)
-#else
 					(Index) ((Var *) childvar)->varno == childrel->relid)
-#endif
 				{
 					int			cndx = ((Var *) childvar)->varattno - childrel->min_attr;
 
