@@ -1267,7 +1267,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 										   rte,
 										   rti,
 										   oldrelation,
-										   NULL,
+										   oldrc,
 										   newrelation,
 										   &childrte,
 										   &child_rtindex);
@@ -1283,28 +1283,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 		if (first_chunk_index == 0)
 			first_chunk_index = child_rtindex;
-
-		/*
-		 * Create child PlanRowMark if parent has one. This replicates
-		 * expand_single_inheritance_child() in inherit.c.
-		 */
-		if (oldrc)
-		{
-			PlanRowMark *childrc = makeNode(PlanRowMark);
-
-			childrc->rti = child_rtindex;
-			childrc->prti = oldrc->rti;
-			childrc->rowmarkId = oldrc->rowmarkId;
-			childrc->markType = select_rowmark_type(childrte, oldrc->strength);
-			childrc->allMarkTypes = (1 << childrc->markType);
-			childrc->strength = oldrc->strength;
-			childrc->waitPolicy = oldrc->waitPolicy;
-			childrc->isParent = false; /* chunks are never partitioned */
-
-			oldrc->allMarkTypes |= childrc->allMarkTypes;
-
-			root->rowMarks = lappend(root->rowMarks, childrc);
-		}
 
 		/* Close child relations, but keep locks */
 		if (child_oid != parent_oid)
@@ -1374,18 +1352,24 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * For UPDATE/DELETE result relations, fix up processed_tlist and
 	 * reltarget.
 	 *
-	 * Since rte_mark_for_expansion cleared rte->inh, preprocess_targetlist
-	 * added a direct ctid Var for the parent. We must remove it since
-	 * per-child ctids are now ROWID_VAR entries added by
-	 * ts_expand_single_inheritance_child.
+	 * In standard PG, expand_inherited_rtentry() runs before
+	 * preprocess_targetlist(), so PG knows about children when building
+	 * the target list and uses per-child ROWID_VAR entries from the start.
 	 *
-	 * The per-child result relation handling (all_result_relids,
-	 * leaf_result_relids, add_row_identity_var, add_row_identity_columns) is
-	 * already done by ts_expand_single_inheritance_child.
+	 * TimescaleDB expands hypertable chunks later (in set_rel_pathlist
+	 * hook, which fires during query_planner), after preprocess_targetlist
+	 * has already run. Since rte_mark_for_expansion cleared rte->inh,
+	 * preprocess_targetlist saw no inheritance and added a direct ctid Var
+	 * for the parent. We must remove it since per-child ctids are now
+	 * ROWID_VAR entries added by ts_expand_single_inheritance_child.
 	 *
-	 * We must manually distribute ROWID_VAR entries to the parent
-	 * reltarget because PG's distribute_row_identity_vars() runs in
-	 * query_planner before our set_rel_pathlist hook fires.
+	 * Similarly, PG's distribute_row_identity_vars() already ran in
+	 * query_planner before our hook, so we must manually distribute
+	 * ROWID_VAR entries to the parent reltarget.
+	 *
+	 * None of this is needed for SELECT because preprocess_targetlist only
+	 * adds row identity junk columns (ctid, tableoid) for UPDATE/DELETE
+	 * result relations.
 	 */
 	if (bms_is_member(rti, root->all_result_relids))
 	{

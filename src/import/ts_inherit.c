@@ -19,6 +19,7 @@
 #include <catalog/pg_type.h>
 #include <nodes/makefuncs.h>
 #include <optimizer/appendinfo.h>
+#include <optimizer/planner.h>
 #include <parser/parsetree.h>
 #include <utils/rel.h>
 
@@ -29,7 +30,6 @@
  * Copied from expand_single_inheritance_child (optimizer/util/inherit.c)
  * with the following adaptations:
  * - Uses copyObject() instead of memcpy for deep copy of RTE
- * - Drops PlanRowMark handling (caller passes NULL for top_parentrc)
  * - Adds PG16 compat for requiredPerms vs perminfoindex
  */
 void
@@ -123,9 +123,25 @@ ts_expand_single_inheritance_child(PlannerInfo *root, RangeTblEntry *parentrte, 
 	root->append_rel_array[childRTindex] = appinfo;
 
 	/*
-	 * PlanRowMark handling is skipped -- our caller always passes NULL
-	 * for top_parentrc since rowMarks are handled separately.
+	 * Build a PlanRowMark if parent is marked FOR UPDATE/SHARE.
 	 */
+	if (top_parentrc)
+	{
+		PlanRowMark *childrc = makeNode(PlanRowMark);
+
+		childrc->rti = childRTindex;
+		childrc->prti = top_parentrc->rti;
+		childrc->rowmarkId = top_parentrc->rowmarkId;
+		childrc->markType = select_rowmark_type(childrte, top_parentrc->strength);
+		childrc->allMarkTypes = (1 << childrc->markType);
+		childrc->strength = top_parentrc->strength;
+		childrc->waitPolicy = top_parentrc->waitPolicy;
+		childrc->isParent = (childrte->relkind == RELKIND_PARTITIONED_TABLE);
+
+		top_parentrc->allMarkTypes |= childrc->allMarkTypes;
+
+		root->rowMarks = lappend(root->rowMarks, childrc);
+	}
 
 	/*
 	 * If we are creating a child of the query target relation (only possible
