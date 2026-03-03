@@ -7,7 +7,7 @@ commands from accidentally triggering the load of a previous DB version.**
 
 ## 2.25.2 (2026-03-03)
 
-This release contains performance improvements and bug fixes since the 2.25.1 release. We recommend that you upgrade at the next available opportunity.
+This release contains performance improvements and bug fixes since the 2.25.1 release and a fix for a security vulnerability (#9331). We recommend that you upgrade at the next available opportunity.
 
 **Highlighted features in TimescaleDB v2.25.2**
 * 
