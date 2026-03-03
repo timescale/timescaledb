@@ -1,0 +1,1 @@
+Fixes: #9308 Fix continuous aggregate offset/origin not applied in watermark and refresh window calculations
