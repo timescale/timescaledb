@@ -918,8 +918,21 @@ FROM test_data
 GROUP BY bucket
 WITH NO DATA;
 
+--create continuous aggregate with fixed bucket with offset
+CREATE MATERIALIZED VIEW test_cagg_1d_offset
+WITH (timescaledb.continuous) AS
+SELECT
+    time_bucket('1 day'::interval, time, "offset" => INTERVAL '18 hours') AS bucket,
+    count(*) as count
+FROM test_data
+GROUP BY bucket
+WITH NO DATA;
+
+SET timezone = 'UTC';
+
 --Do the first refresh and check materialization invalidation log
 call refresh_continuous_aggregate ('test_cagg','2023-12-29 15:00:00', '2026-01-28 15:00:00');
+call refresh_continuous_aggregate ('test_cagg_1d_offset','2023-12-29 18:00:00', '2024-01-01 18:00:00');
 
 SELECT materialization_id,
        _timescaledb_functions.to_timestamp(lowest_modified_value) as low,
@@ -930,8 +943,28 @@ WHERE materialization_id IN
        WHERE user_view_name = 'test_cagg')
 ORDER BY low;
 
+
+SELECT
+    CASE WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
+        THEN '-infinity'::timestamptz
+        ELSE _timescaledb_functions.to_timestamp(lowest_modified_value)
+    END AS low,
+    CASE WHEN greatest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype)
+        THEN 'infinity'::timestamptz
+        ELSE _timescaledb_functions.to_timestamp(greatest_modified_value)
+    END AS high
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'test_cagg_1d_offset'
+)
+ORDER BY lowest_modified_value, greatest_modified_value;
+
+
 --now do the same refresh again, it should say the cagg is already up to date
 CALL refresh_continuous_aggregate ('test_cagg','2023-12-29 15:00:00', '2026-01-28 15:00:00');
+CALL refresh_continuous_aggregate ('test_cagg','2023-12-29 15:00:00', '2026-01-28 15:00:00');
+
 
 --Insert data to test that invalidation is moved correctly from hypertable invalidation log
 -- to materialization invalidation log
@@ -954,5 +987,39 @@ WHERE materialization_id IN
        WHERE user_view_name = 'test_cagg')
 ORDER BY low;
 
+--should see the invalidation ranges with offset (i.e,boundary at the 18hour)
+SELECT
+    CASE WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
+        THEN '-infinity'::timestamptz
+        ELSE _timescaledb_functions.to_timestamp(lowest_modified_value)
+    END AS low,
+    CASE WHEN greatest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype)
+        THEN 'infinity'::timestamptz
+        ELSE _timescaledb_functions.to_timestamp(greatest_modified_value)
+    END AS high
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'test_cagg_1d_offset'
+)
+ORDER BY lowest_modified_value, greatest_modified_value;
+
+--test that offset was accounted for in invalidation threshold when refresh the offset cagg to NULL
+
+SELECT  _timescaledb_functions.to_timestamp(watermark) as invalidation_threshold
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id IN (
+  SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'test_cagg_1d_offset');
+
+INSERT INTO test_data values ('2026-01-05 00:00:00', 1);
+CALL refresh_continuous_aggregate ('test_cagg_1d_offset','2023-12-29 15:00:00', NULL);
+
+--should be at the 18th hour
+SELECT  _timescaledb_functions.to_timestamp(watermark) as invalidation_threshold
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id IN (
+  SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'test_cagg_1d_offset');
+
 --clean up
 DROP TABLE test_data CASCADE;
+RESET timezone;
