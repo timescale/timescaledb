@@ -9,14 +9,6 @@ commands from accidentally triggering the load of a previous DB version.**
 
 This release contains performance improvements and bug fixes since the 2.25.1 release and a fix for a security vulnerability (#9331). We recommend that you upgrade at the next available opportunity.
 
-**Highlighted features in TimescaleDB v2.25.2**
-* 
-
-**Backward-Incompatible Changes**
-
-**Features**
-* Overlap check for concurrent continuous aggregate refresh
-
 **Bugfixes**
 * [#9276](https://github.com/timescale/timescaledb/pull/9276) Fix NULL and DEFAULT handling in uniqueness check on compressed chunks
 * [#9277](https://github.com/timescale/timescaledb/pull/9277) Fix SSL-related build errors
