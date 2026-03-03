@@ -1,8 +1,8 @@
--- This file and its contents are licensed under the Timescale License.
+-- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
+-- LICENSE-APACHE for a copy of the license.
 
--- Test hash partition chunk exclusion with cross-type comparisons
+-- Test partition chunk exclusion with cross-type comparisons
 
 -- wrong result: text column + name literal
 CREATE TABLE hash_text(time timestamptz NOT NULL, device text);
