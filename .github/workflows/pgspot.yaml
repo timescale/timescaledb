@@ -27,35 +27,12 @@ jobs:
     if: needs.check_paths.outputs.run_ci == 'true'
     runs-on: ubuntu-latest
     env:
-      # time_bucket with offset is intentional without explicit search_path to allow for inlining
-      # policy_compression, policy_compression_execute, cagg_migrate_execute_plan and cagg_migrate
-      # do not have explicit search_path because this would prevent them doing transaction control
-      PGSPOT_OPTS: --ignore PS002 --proc-without-search-path
-          'extschema.time_bucket(bucket_width interval,ts timestamp,"offset" interval)'
-        --proc-without-search-path 'extschema.time_bucket(bucket_width interval,ts timestamptz,"offset" interval)'
-        --proc-without-search-path 'extschema.time_bucket(bucket_width interval,ts date,"offset" interval)'
-        --proc-without-search-path 'extschema.recompress_chunk(chunk regclass,if_not_compressed boolean)'
+      # policy_compression and policy_compression_execute do not have explicit search_path
+      # because postgres does not allow it for procedures doing transaction control
+      PGSPOT_OPTS: --ignore PS002
         --proc-without-search-path '_timescaledb_internal.policy_compression(job_id integer,config jsonb)'
         --proc-without-search-path '_timescaledb_functions.policy_compression(job_id integer,config jsonb)'
-        --proc-without-search-path
-          '_timescaledb_internal.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean,use_creation_time boolean)'
-        --proc-without-search-path
-          '_timescaledb_functions.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean,use_creation_time boolean)'
-        --proc-without-search-path
-          '_timescaledb_functions.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean,use_creation_time boolean,useam boolean)'
-        --proc-without-search-path
-          '_timescaledb_internal.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean)'
-        --proc-without-search-path
-          '_timescaledb_functions.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean)'
-        --proc-without-search-path
-          '_timescaledb_internal.cagg_migrate_execute_plan(_cagg_data _timescaledb_catalog.continuous_agg)'
-        --proc-without-search-path
-          '_timescaledb_functions.cagg_migrate_execute_plan(_cagg_data _timescaledb_catalog.continuous_agg)'
-        --proc-without-search-path 'extschema.cagg_migrate(cagg regclass,override boolean,drop_old boolean)'
-        --proc-without-search-path
-          '_timescaledb_functions.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean,reindex_enabled boolean,use_creation_time boolean,useam boolean)'
-        --proc-without-search-path
-          '_timescaledb_functions.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean,reindex_enabled boolean,use_creation_time boolean)'
+        --proc-without-search-path '_timescaledb_functions.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean,reindex_enabled boolean,use_creation_time boolean)'
 
     steps:
 
@@ -69,7 +46,7 @@ jobs:
 
     - name: Install pgspot
       run: |
-        python -m pip install pgspot==0.9.1
+        python -m pip install pgspot==0.9.2
 
     - name: Build timescaledb sqlfiles
       run: |
