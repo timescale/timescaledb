@@ -28,8 +28,6 @@ This release contains performance improvements and bug fixes since the 2.25.1 re
 * [#9331](https://github.com/timescale/timescaledb/pull/9331) Ensure search_path is set before anything else in SQL scripts
 * [#9339](https://github.com/timescale/timescaledb/pull/9339) Fix segmentwise recompression clearing unordered flag
 
-**GUCs**
-
 **Thanks**
 * @CaptainCuddleCube for reporting an issue with time_bucket_gapfill and LATERAL subqueries
 * @JacobBrejnbjerg for reporting an issue with generated columns in compressed chunks
