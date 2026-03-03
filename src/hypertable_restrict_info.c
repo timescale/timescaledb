@@ -394,6 +394,8 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 			return;
 		}
 
+		Assert(OidIsValid(funcid));
+
 		if (is_array)
 		{
 			ArrayIterator iterator =
