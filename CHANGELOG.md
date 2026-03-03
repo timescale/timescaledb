@@ -5,6 +5,48 @@ This page lists all the latest features and updates to TimescaleDB. When
 you use psql to update your database, use the -X flag and prevent any .psqlrc 
 commands from accidentally triggering the load of a previous DB version.**
 
+## 2.25.2 (2026-03-03)
+
+This release contains performance improvements and bug fixes since the 2.25.1 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.25.2**
+* 
+
+**Backward-Incompatible Changes**
+
+**Features**
+* Overlap check for concurrent continuous aggregate refresh
+
+**Bugfixes**
+* [#9276](https://github.com/timescale/timescaledb/pull/9276) Fix NULL and DEFAULT handling in uniqueness check on compressed chunks
+* [#9277](https://github.com/timescale/timescaledb/pull/9277) Fix SSL-related build errors
+* [#9279](https://github.com/timescale/timescaledb/pull/9279) Fix EXPLAIN VERBOSE corrupting targetlist of cached ModifyHypertable plans
+* [#9281](https://github.com/timescale/timescaledb/pull/9281) Fix real-time continuous aggregates on UUID hypertables
+* [#9283](https://github.com/timescale/timescaledb/pull/9283) Fix plan-time error when using enum in orderby compression setting
+* [#9290](https://github.com/timescale/timescaledb/pull/9290) Propagate ALTER <object> OWNER TO to policy jobs
+* [#9292](https://github.com/timescale/timescaledb/pull/9292) Fix continuous aggregate column rename
+* [#9293](https://github.com/timescale/timescaledb/pull/9293) Fix time_bucket_gapfill inside LATERAL subqueries
+* [#9294](https://github.com/timescale/timescaledb/pull/9294) Fix DELETE/UPDATE with WHERE EXISTS on hypertables
+* [#9303](https://github.com/timescale/timescaledb/pull/9303) Fix segfault in continuous aggregate creation on PG18
+* [#9308](https://github.com/timescale/timescaledb/pull/9308) Fix continuous aggregate offset/origin not applied in watermark and refresh window calculations
+* [#9314](https://github.com/timescale/timescaledb/pull/9314) Fix generated columns always NULL in compressed chunks
+* [#9321](https://github.com/timescale/timescaledb/pull/9321) Fix segfault when using OLD/NEW refs in RETURNING clause on PG18
+* [#9324](https://github.com/timescale/timescaledb/pull/9324) Potential violation of a foreign key constraint referencing a hypertable caused by concurrent DELETE of the key record.
+* [#9327](https://github.com/timescale/timescaledb/pull/9327) Fix handling of generated columns with NOT NULL domain type
+* [#9331](https://github.com/timescale/timescaledb/pull/9331) Ensure search_path is set before anything else in SQL scripts
+* [#9339](https://github.com/timescale/timescaledb/pull/9339) Fix segmentwise recompression clearing unordered flag
+
+**GUCs**
+
+**Thanks**
+* @CaptainCuddleCube for reporting an issue with time_bucket_gapfill and LATERAL subqueries
+* @JacobBrejnbjerg for reporting an issue with generated columns in compressed chunks
+* @Kusumoto for reporting an issue with continuous aggregates on hypertables with uuid columns
+* @arfathyahiya for reporting an issue with renaming columns in continuous aggregates
+* @desertmark for reporting an issue with DELETE/UPDATE and subqueries
+* @flaviofernandes004 for reporting an issue with RETURNING clause and references to OLD/NEW
+* @tureba for fixing SSL-related build errors
+
 ## 2.25.1 (2026-02-17)
 
 This release contains performance improvements and bug fixes since the 2.25.0 release. We recommend that you upgrade at the next available opportunity.
