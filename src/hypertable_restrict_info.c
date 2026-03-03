@@ -122,9 +122,13 @@ dimension_restrict_info_is_trivial(const DimensionRestrictInfo *dri)
 	}
 }
 
+/*
+ * Add restriction for open (time) dimension.
+ * Values are expected to be int64 (already converted by caller).
+ */
 static bool
 dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber strategy,
-								 Oid collation, DimensionValues *dimvalues)
+								 DimensionValues *dimvalues)
 {
 	ListCell *item;
 	bool restriction_added = false;
@@ -135,13 +139,7 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 
 	foreach (item, dimvalues->values)
 	{
-		Oid restype;
-		Datum datum = ts_dimension_transform_value(dri->base.dimension,
-												   collation,
-												   PointerGetDatum(lfirst(item)),
-												   dimvalues->type,
-												   &restype);
-		int64 value = ts_time_value_to_internal_or_infinite(datum, restype);
+		int64 value = DatumGetInt64(PointerGetDatum(lfirst(item)));
 
 		switch (strategy)
 		{
@@ -246,35 +244,6 @@ dimension_restrict_info_closed_add(DimensionRestrictInfoClosed *dri, StrategyNum
 	return restriction_added;
 }
 
-static bool
-dimension_restrict_info_add(DimensionRestrictInfo *dri, int strategy, Oid collation,
-							DimensionValues *values)
-{
-	switch (dri->dimension->type)
-	{
-		case DIMENSION_TYPE_OPEN:
-			return dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
-													strategy,
-													collation,
-													values);
-		case DIMENSION_TYPE_STATS:
-			/* we reuse the DimensionRestrictInfoOpen structure for these */
-			return dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
-													strategy,
-													collation,
-													values);
-		case DIMENSION_TYPE_CLOSED:
-			return dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,
-													  strategy,
-													  collation,
-													  values);
-		default:
-			elog(ERROR, "unknown dimension type: %d", dri->dimension->type);
-			/* suppress compiler warning on MSVC */
-			return false;
-	}
-}
-
 HypertableRestrictInfo *
 ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
 {
@@ -373,78 +342,81 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	get_op_opfamily_properties(op_oid, tce->btree_opf, false, &strategy, &lefttype, &righttype);
 
 	/*
-	 * Coerce the constant to the column type so the partition function receives
-	 * a datum in the expected format. Without this, type mismatches (e.g., name
-	 * literal for text column) cause wrong hash values and incorrect results.
+	 * For arrays (ScalarArrayOpExpr), we work with the element type.
+	 * Non-constant arrays were already filtered out above by the IsA(expr, Const)
+	 * check after eval_const_expressions.
+	 */
+	Oid consttype = c->consttype;
+	Oid const_element_type = get_element_type(consttype);
+	bool is_array = OidIsValid(const_element_type);
+	if (is_array)
+		consttype = const_element_type;
+
+	/*
+	 * Coerce values to column type if needed. Coercion is required when types
+	 * differ and either:
+	 * - Closed (hash) dimension: partition function expects column type
+	 * - Open dimension with partitioning function: function expects column type
 	 *
-	 * Cross-type integer equality and inequality (int4 column vs int8 literal)
-	 * would work without coercion - PostgreSQL provides compatible hash functions
-	 * and cross-type operators (int48lt, etc.). However, our partition function
-	 * interface uses resolve_function_argtype() which returns the column type,
-	 * not the literal type, so we can't easily use these directly.
+	 * Open dimensions without partitioning don't need coercion because
+	 * ts_time_value_to_internal_or_infinite handles cross-type comparisons
+	 * (e.g., date vs timestamp) and integer types directly.
+	 *
+	 * Cross-type integer comparisons (int4 column vs int8 literal) would work
+	 * without coercion - PostgreSQL provides cross-type operators. However, our
+	 * partition function interface uses the column type, not the literal type.
 	 *
 	 * We only use implicit coercions because narrowing casts (int8 -> int4) can
 	 * fail at runtime with "integer out of range". When no implicit coercion
 	 * exists, we skip chunk exclusion for this clause - correct but slower.
-	 *
-	 * For arrays (ScalarArrayOpExpr), check the element type and coerce each
-	 * element if needed. Non-constant arrays were already filtered out above
-	 * by the IsA(expr, Const) check after eval_const_expressions.
 	 */
-	Oid consttype = c->consttype;
-	Oid const_element_type = get_element_type(consttype);
-	const bool is_array = OidIsValid(const_element_type);
-	if (is_array)
-	{
-		consttype = const_element_type;
-    }
+	bool needs_coercion = (consttype != columntype) && (IS_CLOSED_DIMENSION(dri->dimension) ||
+														dri->dimension->partitioning != NULL);
 
-	if (consttype != columntype)
+	if (needs_coercion)
 	{
 		Oid funcid;
 		CoercionPathType pathtype =
 			find_coercion_pathway(columntype, consttype, COERCION_IMPLICIT, &funcid);
 
-		if (pathtype == COERCION_PATH_FUNC && OidIsValid(funcid))
-		{
-			if (is_array)
-			{
-				ArrayIterator iterator =
-					array_create_iterator(DatumGetArrayTypeP(c->constvalue), 0, NULL);
-				Datum elem = (Datum) NULL;
-				bool isnull;
-				List *values = NIL;
-
-				while (array_iterate(iterator, &elem, &isnull))
-				{
-					if (!isnull)
-					{
-						Datum coerced = OidFunctionCall1Coll(funcid, c->constcollid, elem);
-						values = lappend(values, DatumGetPointer(coerced));
-					}
-				}
-				array_free_iterator(iterator);
-				dimvalues = dimension_values_create(values, columntype, use_or);
-			}
-			else
-			{
-				Datum coerced = OidFunctionCall1Coll(funcid, c->constcollid, c->constvalue);
-				dimvalues = dimension_values_create(list_make1(DatumGetPointer(coerced)),
-													columntype,
-													use_or);
-			}
-		}
-		else
+		if (pathtype != COERCION_PATH_FUNC || !OidIsValid(funcid))
 		{
 			/*
-			 * No usable implicit coercion. Skip chunk exclusion for this
-			 * clause - correct but slower.
+			 * No usable implicit coercion, skip this clause for TimescaleDB
+			 * chunk exclusion. It might be still handled by Postgres constraint
+			 * exclusion.
 			 *
-			 * Note: COERCION_PATH_RELABELTYPE (binary compatible) won't occur
+			 * COERCION_PATH_RELABELTYPE (binary compatible) won't occur
 			 * here because PostgreSQL coerces such literals at parse time and
 			 * eval_const_expressions() folds any remaining RelabelType(Const).
 			 */
 			return;
+		}
+
+		if (is_array)
+		{
+			ArrayIterator iterator =
+				array_create_iterator(DatumGetArrayTypeP(c->constvalue), 0, NULL);
+			Datum elem = (Datum) NULL;
+			bool isnull;
+			List *values = NIL;
+
+			while (array_iterate(iterator, &elem, &isnull))
+			{
+				if (!isnull)
+				{
+					Datum coerced = OidFunctionCall1Coll(funcid, c->constcollid, elem);
+					values = lappend(values, DatumGetPointer(coerced));
+				}
+			}
+			array_free_iterator(iterator);
+			dimvalues = dimension_values_create(values, columntype, use_or);
+		}
+		else
+		{
+			Datum coerced = OidFunctionCall1Coll(funcid, c->constcollid, c->constvalue);
+			dimvalues =
+				dimension_values_create(list_make1(DatumGetPointer(coerced)), columntype, use_or);
 		}
 	}
 	else
@@ -452,9 +424,53 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 		dimvalues = func_get_dim_values(c, use_or);
 	}
 
-	if (dimension_restrict_info_add(dri, strategy, c->constcollid, dimvalues))
+	/*
+	 * Add restriction based on dimension type.
+	 */
+	if (IS_CLOSED_DIMENSION(dri->dimension))
 	{
-		hri->num_base_restrictions++;
+		if (dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,
+											   strategy,
+											   c->constcollid,
+											   dimvalues))
+			hri->num_base_restrictions++;
+	}
+	else
+	{
+		/* Open and stats dimensions: convert values to int64 */
+		List *int64_values = NIL;
+		ListCell *lc;
+		Oid valuetype = dimvalues->type;
+
+		foreach (lc, dimvalues->values)
+		{
+			Datum value = PointerGetDatum(lfirst(lc));
+			int64 internal;
+
+			if (dri->dimension->partitioning != NULL)
+			{
+				/* Apply partitioning function first, then convert result to int64 */
+				Oid restype;
+				value = ts_dimension_transform_value(dri->dimension,
+													 c->constcollid,
+													 value,
+													 valuetype,
+													 &restype);
+				internal = ts_time_value_to_internal_or_infinite(value, restype);
+			}
+			else
+			{
+				internal = ts_time_value_to_internal_or_infinite(value, valuetype);
+			}
+			int64_values = lappend(int64_values, DatumGetPointer(Int64GetDatum(internal)));
+		}
+		dimvalues->values = int64_values;
+		dimvalues->type = INT8OID;
+
+		if (dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
+											 strategy,
+											 dimvalues))
+			hri->num_base_restrictions++;
 	}
 }
 
@@ -523,23 +539,16 @@ hypertable_restrict_info_add_restrict_info(HypertableRestrictInfo *hri, PlannerI
 		get_dimension_values value_func;
 		bool use_or;
 
-		switch (nodeTag(e))
+		if (IsA(e, OpExpr))
 		{
-			case T_OpExpr:
-			{
-				value_func = dimension_values_create_from_single_element;
-				use_or = false;
-				break;
-			}
-			case T_ScalarArrayOpExpr:
-			{
-				value_func = dimension_values_create_from_array;
-				use_or = castNode(ScalarArrayOpExpr, e)->useOr;
-				break;
-			}
-			default:
-				/* we don't support other node types */
-				return;
+			value_func = dimension_values_create_from_single_element;
+			use_or = false;
+		}
+		else
+		{
+			Assert(IsA(e, ScalarArrayOpExpr));
+			value_func = dimension_values_create_from_array;
+			use_or = castNode(ScalarArrayOpExpr, e)->useOr;
 		}
 		hypertable_restrict_info_add_expr(hri, root, var, arg_value, opno, value_func, use_or);
 	}

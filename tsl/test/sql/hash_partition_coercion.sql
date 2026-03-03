@@ -103,3 +103,25 @@ EXECUTE hash_q('def');
 RESET plan_cache_mode;
 DEALLOCATE hash_q;
 DROP TABLE hash_prep;
+
+-- Multiple ANDed restrictions on closed dimension
+-- Use IN + = to exercise intersection: IN creates list, = intersects with it
+CREATE TABLE hash_multi(time timestamptz NOT NULL, device text);
+SELECT create_hypertable('hash_multi', 'time');
+SELECT add_dimension('hash_multi', 'device', number_partitions => 3);
+INSERT INTO hash_multi VALUES ('2000-01-01', 'abc'), ('2000-01-01', 'def');
+-- IN creates partition list [abc,def], then = intersects with [abc] => [abc]
+SELECT count(*) FROM hash_multi WHERE device IN ('abc', 'def') AND device = 'abc';
+DROP TABLE hash_multi;
+
+-- NULL array elements: exercises branch when iterating arrays with NULLs
+-- The NULL elements should be skipped, non-NULL elements should work
+CREATE TABLE hash_null_array(time timestamptz NOT NULL, device text);
+SELECT create_hypertable('hash_null_array', 'time');
+SELECT add_dimension('hash_null_array', 'device', number_partitions => 3);
+INSERT INTO hash_null_array VALUES ('2000-01-01', 'abc'), ('2000-01-01', 'def');
+-- Array with NULL elements (type coercion path)
+SELECT count(*) FROM hash_null_array WHERE device = ANY(ARRAY['abc', NULL, 'def']::name[]);
+-- Array with NULL elements (no type coercion path)
+SELECT count(*) FROM hash_null_array WHERE device = ANY(ARRAY['abc', NULL, 'def']::text[]);
+DROP TABLE hash_null_array;
