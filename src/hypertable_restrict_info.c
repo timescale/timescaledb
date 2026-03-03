@@ -380,7 +380,7 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 		CoercionPathType pathtype =
 			find_coercion_pathway(columntype, consttype, COERCION_IMPLICIT, &funcid);
 
-		if (pathtype != COERCION_PATH_FUNC || !OidIsValid(funcid))
+		if (pathtype != COERCION_PATH_FUNC)
 		{
 			/*
 			 * No usable implicit coercion, skip this clause for TimescaleDB
