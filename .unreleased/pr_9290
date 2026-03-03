@@ -1,1 +1,0 @@
-Fixes: #9290 Propagate ALTER <object> OWNER TO to policy jobs
