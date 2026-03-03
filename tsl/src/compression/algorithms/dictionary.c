@@ -397,6 +397,7 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 {
 	StringInfoData si = { .data = (char *) _data, .len = VARSIZE(_data) };
 	const DictionaryCompressed *bitmap = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+	CheckCompressedData(element_type == bitmap->element_type);
 
 	Simple8bRleSerialized *s8_bitmap;
 	DecompressionIterator *dictionary_iterator;
@@ -763,6 +764,7 @@ tsl_dictionary_decompression_iterator_from_datum_forward(Datum dictionary_compre
 										   (void *) PG_DETOAST_DATUM(dictionary_compressed),
 										   true,
 										   element_type);
+	CheckCompressedData(element_type == iterator->compressed->element_type);
 	return &iterator->base;
 }
 
@@ -775,6 +777,7 @@ tsl_dictionary_decompression_iterator_from_datum_reverse(Datum dictionary_compre
 										   (void *) PG_DETOAST_DATUM(dictionary_compressed),
 										   false,
 										   element_type);
+	CheckCompressedData(element_type == iterator->compressed->element_type);
 	return &iterator->base;
 }
 
