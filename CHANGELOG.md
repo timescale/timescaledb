@@ -7,9 +7,8 @@ commands from accidentally triggering the load of a previous DB version.**
 
 ## 2.25.2 (2026-03-03)
 
-This release contains performance improvements and bug fixes since the 2.25.1 release and a fix for a security vulnerability (#9331). You can check the security advisory(https://github.com/timescale/timescaledb/security/advisories/) 
-for more information on the vulnerability and the platforms that are affected.
-We recommend that you upgrade as soon as possible.
+This release contains performance improvements and bug fixes since the 2.25.1 release and a fix for a security vulnerability (#9331). You can check the security advisory(https://github.com/timescale/timescaledb/security/advisories/GHSA-vgp2-jj5c-828m) 
+for more information on the vulnerability and the platforms that are affected. We recommend that you upgrade as soon as possible.
 
 **Bugfixes**
 * [#9276](https://github.com/timescale/timescaledb/pull/9276) Fix NULL and DEFAULT handling in uniqueness check on compressed chunks
