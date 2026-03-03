@@ -353,18 +353,19 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 		consttype = const_element_type;
 
 	/*
-	 * Coerce values to column type if needed. Coercion is required when types
-	 * differ and either:
-	 * - Closed (hash) dimension: partition function expects column type
-	 * - Open dimension with partitioning function: function expects column type
+	 * Coerce literal values to column type if needed. Coercion is required when
+	 * types differ and we use a partitioning function. The partitioning functions
+	 * always expect the column type. It is always used for closed dimensions
+	 * (space partitioning), and can be set for open dimensions too.
 	 *
-	 * Open dimensions without partitioning don't need coercion because
-	 * ts_time_value_to_internal_or_infinite handles cross-type comparisons
-	 * (e.g., date vs timestamp) and integer types directly.
+	 * Open dimensions without custom partitioning function don't need coercion
+	 * because the ts_time_value_to_internal_or_infinite() handles the cross-type
+	 * comparisons (e.g., date vs timestamp) and integer types directly.
 	 *
-	 * Cross-type integer comparisons (int4 column vs int8 literal) would work
-	 * without coercion - PostgreSQL provides cross-type operators. However, our
-	 * partition function interface uses the column type, not the literal type.
+	 * In Postgres, the cross-type integer inequalities (e.g. int4 column <= int8
+	 * literal) work without coercion using cross-type functions like int48le().
+	 * However, our partition function interface uses the column type, not the
+	 * literal type.
 	 *
 	 * We only use implicit coercions because narrowing casts (int8 -> int4) can
 	 * fail at runtime with "integer out of range". When no implicit coercion
@@ -539,16 +540,23 @@ hypertable_restrict_info_add_restrict_info(HypertableRestrictInfo *hri, PlannerI
 		get_dimension_values value_func;
 		bool use_or;
 
-		if (IsA(e, OpExpr))
+		switch (nodeTag(e))
 		{
-			value_func = dimension_values_create_from_single_element;
-			use_or = false;
-		}
-		else
-		{
-			Assert(IsA(e, ScalarArrayOpExpr));
-			value_func = dimension_values_create_from_array;
-			use_or = castNode(ScalarArrayOpExpr, e)->useOr;
+			case T_OpExpr:
+			{
+				value_func = dimension_values_create_from_single_element;
+				use_or = false;
+				break;
+			}
+			case T_ScalarArrayOpExpr:
+			{
+				value_func = dimension_values_create_from_array;
+				use_or = castNode(ScalarArrayOpExpr, e)->useOr;
+				break;
+			}
+			default:
+				/* we don't support other node types */
+				return;
 		}
 		hypertable_restrict_info_add_expr(hri, root, var, arg_value, opno, value_func, use_or);
 	}
