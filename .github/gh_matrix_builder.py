@@ -274,7 +274,12 @@ if not pull_request:
     # add debug test for first supported PG17 version
     if PG17_EARLIEST != PG17_LATEST:
         m["include"].append(
-            build_debug_config({"pg": PG17_EARLIEST | {"insert_single"}})
+            build_debug_config(
+                {
+                    "pg": PG17_EARLIEST,
+                    "ignored_tests": {"insert_single"},
+                }
+            )
         )
 
     # add debug test for first supported PG18 version
