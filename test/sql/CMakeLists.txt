@@ -5,18 +5,18 @@ set(TEST_FILES
     alternate_users.sql
     baserel_cache.sql
     catalog_corruption.sql
-    chunks.sql
     chunk_adaptive.sql
     chunk_publication.sql
     chunk_utils.sql
+    chunks.sql
     cluster.sql
+    constraint.sql
+    copy.sql
+    copy_where.sql
     create_chunks.sql
     create_hypertable.sql
     create_table.sql
     create_table_with.sql
-    constraint.sql
-    copy.sql
-    copy_where.sql
     cursor.sql
     ddl.sql
     ddl_errors.sql
@@ -34,11 +34,12 @@ set(TEST_FILES
     index.sql
     information_views.sql
     insert_many.sql
-    insert_single.sql
     insert_returning.sql
+    insert_single.sql
     lateral.sql
     merge.sql
     partition.sql
+    partition_coercion.sql
     partitioning.sql
     pg_join.sql
     plain.sql
