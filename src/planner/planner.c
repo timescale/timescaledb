@@ -948,6 +948,18 @@ static inline bool
 should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
 					int order_attno)
 {
+	if (path->param_info != NULL && ordered)
+	{
+		/*
+		 * Ordered ChunkAppend might create MergeAppend path for individual
+		 * chunks when we have space partitioning or partial chunks. MergeAppend
+		 * paths cannot be parameterized. Refuse to use parameterized ordered
+		 * ChunkAppend altogether, because the more precise conditions are
+		 * difficult to check.
+		 */
+		return false;
+	}
+
 	if (
 		/*
 		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved on PG14+.
