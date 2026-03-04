@@ -1862,6 +1862,10 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
+	Ensure(settings != NULL,
+		   "compression settings not found for hypertable \"%s\"",
+		   get_rel_name(ht->main_table_relid));
+
 	Jsonb *jb = settings->fd.index;
 
 	/* check if the column is a segmentby or orderby column */
