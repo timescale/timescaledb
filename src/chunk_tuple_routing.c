@@ -87,6 +87,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 	{
 		bool chunk_created = false;
 		bool needs_partial = false;
+		bool needs_analyze_segmentby = false;
 		const LOCKMODE lockmode = RowExclusiveLock;
 
 		/*
@@ -141,7 +142,10 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 
 		if (!chunk)
 		{
-			chunk = ts_hypertable_create_chunk_for_point(ctr->hypertable, point, lockmode);
+			chunk = ts_hypertable_create_chunk_for_point(ctr->hypertable,
+														 point,
+														 lockmode); // Poro, could be created by
+																	// someone else
 			chunk_created = true;
 		}
 
@@ -194,7 +198,9 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 				Hypertable *compressed_ht =
 					ts_hypertable_get_by_id(ctr->hypertable->fd.compressed_hypertable_id);
 				Chunk *compressed_chunk =
-					ts_cm_functions->compression_chunk_create(compressed_ht, chunk);
+					ts_cm_functions->compression_chunk_create(compressed_ht,
+															  chunk,
+															  &needs_analyze_segmentby);
 				ts_chunk_set_compressed_chunk(chunk, compressed_chunk->fd.id);
 				chunk->fd.compressed_chunk_id = compressed_chunk->fd.id;
 
@@ -206,6 +212,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 
 		cis = ts_chunk_insert_state_create(chunk->table_id, ctr);
 		cis->needs_partial = needs_partial;
+		cis->needs_analyze_segmentby = needs_analyze_segmentby;
 		ts_subspace_store_add(ctr->subspace,
 							  chunk->cube,
 							  cis,
