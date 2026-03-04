@@ -984,6 +984,11 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 		{
 			tuplesort_performsort(compressor->sort_state);
 
+			if (compressor->needs_analyze_segmentby)
+			{
+				/* TODO: analyze segmentby and reinit compressor */
+				compressor->needs_analyze_segmentby = false;
+			}
 			TupleTableSlot *slot = MakeTupleTableSlot(compressor->in_desc, &TTSOpsMinimalTuple);
 
 			while (tuplesort_gettupleslot(compressor->sort_state,
@@ -1004,8 +1009,14 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 	else
 	{
 		if (compressor->rows_compressed_into_current_value > 0)
+		{
+			Ensure(!compressor->needs_analyze_segmentby,
+				   "trying to analyze segmentby with no sort state");
 			row_compressor_flush(compressor, bulk_writer, false);
+		}
 	}
+
+	Assert(!compressor->needs_analyze_segmentby);
 }
 
 void
@@ -1028,7 +1039,8 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
  * Tuplesortstate and sort them before flushing to the output relation.
  */
 RowCompressor *
-tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int sort_limit)
+tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int sort_limit,
+					bool created_compressed_chunk)
 {
 	RowCompressor *compressor = palloc0(sizeof(RowCompressor));
 	CompressionSettings *settings = ts_compression_settings_get(in_rel->rd_id);
@@ -1038,6 +1050,13 @@ tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int so
 
 	if (sort)
 	{
+		/*
+		 * Schedule segmentby analysis on the first flush if no segmentby is
+		 * configured. When the client is responsible for ordering
+		 * (sort=false), we skip analysis entirely.
+		 */
+		compressor->needs_analyze_segmentby =
+			(settings->fd.segmentby == NULL) && created_compressed_chunk;
 		compressor->sort_state = compression_create_tuplesort_state(settings, in_rel);
 		compressor->tuple_sort_limit = sort_limit;
 	}

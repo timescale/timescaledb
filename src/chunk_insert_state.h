@@ -118,6 +118,7 @@ typedef struct ChunkInsertState
 	bool chunk_partial;
 	bool columnstore_insert;
 	bool needs_partial;
+	bool created_compressed_chunk;
 
 	/* To speedup repeated calls of `decompress_batches_for_insert` */
 	CachedDecompressionState *cached_decompression_state;
