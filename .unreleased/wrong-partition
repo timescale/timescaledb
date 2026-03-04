@@ -1,0 +1,1 @@
+Fixes: #9344 Wrong result or crash on cross-type comparison of partitioning column
