@@ -1,0 +1,69 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Reproducer for crash with parameterized ordered append on partially
+-- compressed hypertables. When ChunkAppend creates internal MergeAppend
+-- paths for partially compressed chunks with ordered=true and the input
+-- path is parameterized, it passes non-empty required_outer to
+-- create_merge_append_path(). PostgreSQL asserts MergeAppend paths must
+-- never be parameterized.
+--
+-- Assertion (PG17 createplan.c:1555):
+--   Assert(best_path->path.param_info == NULL)
+-- Setup: hypertable with partially compressed chunks
+CREATE TABLE ht_crash(time timestamptz NOT NULL, device int NOT NULL, value float);
+SELECT table_name FROM create_hypertable('ht_crash','time');
+ table_name
+------------
+ ht_crash
+(1 row)
+
+ALTER TABLE ht_crash SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby='device',
+  timescaledb.compress_orderby='time'
+);
+-- Index to enable parameterized paths on device
+CREATE INDEX ht_crash_device_time_idx ON ht_crash (device, time);
+-- Populate and compress
+INSERT INTO ht_crash
+SELECT time, device, device * 0.1
+FROM generate_series('2020-01-02 00:00:00+00'::timestamptz,
+                     '2020-01-18 00:00:00+00'::timestamptz,
+                     '6 hour') time,
+     generate_series(1,3) device;
+SELECT count(compress_chunk(c)) FROM show_chunks('ht_crash') c;
+ count
+-------
+     3
+(1 row)
+
+-- Insert more data to create partially compressed chunks
+INSERT INTO ht_crash
+SELECT time, device, device * 0.1
+FROM generate_series('2020-01-02 00:00:00+00'::timestamptz,
+                     '2020-01-18 00:00:00+00'::timestamptz,
+                     '9 hour') time,
+     generate_series(1,3) device;
+-- Driver table without index (forces parameterized inner path)
+CREATE TABLE devices_crash(device int);
+INSERT INTO devices_crash SELECT generate_series(1,3);
+ANALYZE ht_crash, devices_crash;
+-- Force parameterized ChunkAppend as inner side of nested loop
+SET enable_material = off;
+SET enable_seqscan = off;
+-- This query crashes on PG17+ with assertions enabled:
+-- - Nested loop join forces parameterized path on ht_crash
+-- - ORDER BY time triggers ordered ChunkAppend
+-- - Partially compressed chunks cause internal MergeAppend creation
+-- - MergeAppend gets param_info from parent path -> assertion failure
+EXPLAIN (costs off)
+SELECT m.time, m.device, m.value
+FROM devices_crash d
+JOIN ht_crash m ON m.device = d.device
+WHERE m.time < now()
+ORDER BY m.time;
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+connection to server was lost

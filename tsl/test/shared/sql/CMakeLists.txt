@@ -12,6 +12,7 @@ set(TEST_FILES_SHARED
     gapfill_bug.sql
     generated_columns.sql
     memoize.sql
+    ordered_append_merge_childs.sql
     security_barrier.sql
     subtract_integer_from_now.sql)
 
