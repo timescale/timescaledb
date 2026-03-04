@@ -253,17 +253,29 @@ m["include"].append(
 if not pull_request:
     # add debug test for first supported PG15 version
     m["include"].append(
-        build_debug_config({"pg": PG15_EARLIEST, "ignored_tests": ignored_before_pg16})
+        build_debug_config(
+            {
+                "pg": PG15_EARLIEST,
+                "ignored_tests": ignored_before_pg16 | {"insert_single"},
+            }
+        )
     )
 
     # add debug test for first supported PG16 version
     m["include"].append(
-        build_debug_config({"pg": PG16_EARLIEST, "ignored_tests": ignored_before_pg17})
+        build_debug_config(
+            {
+                "pg": PG16_EARLIEST,
+                "ignored_tests": ignored_before_pg17 | {"insert_single"},
+            }
+        )
     )
 
     # add debug test for first supported PG17 version
     if PG17_EARLIEST != PG17_LATEST:
-        m["include"].append(build_debug_config({"pg": PG17_EARLIEST}))
+        m["include"].append(
+            build_debug_config({"pg": PG17_EARLIEST | {"insert_single"}})
+        )
 
     # add debug test for first supported PG18 version
     if PG18_EARLIEST != PG18_LATEST:

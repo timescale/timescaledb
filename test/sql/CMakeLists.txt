@@ -5,18 +5,18 @@ set(TEST_FILES
     alternate_users.sql
     baserel_cache.sql
     catalog_corruption.sql
-    chunks.sql
     chunk_adaptive.sql
     chunk_publication.sql
     chunk_utils.sql
+    chunks.sql
     cluster.sql
+    constraint.sql
+    copy.sql
+    copy_where.sql
     create_chunks.sql
     create_hypertable.sql
     create_table.sql
     create_table_with.sql
-    constraint.sql
-    copy.sql
-    copy_where.sql
     cursor.sql
     ddl.sql
     ddl_errors.sql
@@ -34,12 +34,14 @@ set(TEST_FILES
     index.sql
     information_views.sql
     insert_many.sql
-    insert_single.sql
     insert_returning.sql
+    insert_single.sql
     lateral.sql
     merge.sql
     partition.sql
+    partition_coercion.sql
     partitioning.sql
+    pg_dump_unprivileged.sql
     pg_join.sql
     plain.sql
     plan_hypertable_inline.sql
@@ -130,14 +132,6 @@ endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
   list(APPEND TEST_FILES insert_returning_old_new.sql)
-endif()
-
-# pg_dump_unprivileged.sql was fixed by an upstream change to pg_dump in 15.6,
-# and 16.2
-if(((${PG_VERSION_MAJOR} EQUAL "15") AND (${PG_VERSION_MINOR} GREATER_EQUAL "6")
-   ) OR ((${PG_VERSION_MAJOR} EQUAL "16") AND (${PG_VERSION_MINOR} GREATER_EQUAL
-                                               "2")))
-  list(APPEND TEST_FILES pg_dump_unprivileged.sql)
 endif()
 
 # only test custom type if we are in 64-bit architecture
