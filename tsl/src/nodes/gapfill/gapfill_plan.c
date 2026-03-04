@@ -539,13 +539,13 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 		 * timezone to generate gap timestamps, so column references and
 		 * subqueries are not supported.
 		 *
-		 * The timezone parameter is present in two variants:
-		 * - 3-arg: time_bucket_gapfill(bucket_width, ts, timezone)
-		 * - 5-arg: time_bucket_gapfill(bucket_width, ts, timezone, start, finish)
+		 * The timezone variant has 5 arguments after PostgreSQL fills in
+		 * defaults: (bucket_width, ts, timezone, start, finish). The
+		 * non-timezone variant has 4: (bucket_width, ts, start, finish).
 		 */
 		FuncExpr *func = context.call.func;
 		int nargs = list_length(func->args);
-		if (nargs == 3 || nargs == 5)
+		if (nargs == 5)
 		{
 			Expr *tz_arg = lthird(func->args);
 			if (contains_nonconstant_expr((Node *) tz_arg))
