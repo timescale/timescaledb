@@ -10,6 +10,7 @@
 
 #include "invalidation.h"
 #include "materialize.h"
+#include "ts_catalog/continuous_agg.h"
 
 extern Datum continuous_agg_refresh(PG_FUNCTION_ARGS);
 extern void
@@ -25,3 +26,6 @@ InternalTimeRange
 compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 											  const InternalTimeRange *const refresh_window,
 											  const ContinuousAggBucketFunction *bucket_function);
+
+extern void fill_bucket_offset_origin(const ContinuousAggBucketFunction *bucket_function, Oid type,
+									  NullableDatum *offset, NullableDatum *origin);

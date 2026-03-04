@@ -389,3 +389,59 @@ ORDER BY 1;
 ROLLBACK;
 
 RESET timescaledb.enable_exclusive_locking_recompression;
+
+-- Test: recompress_chunk_segmentwise should not clear the UNORDERED flag
+--
+-- The UNORDERED flag means that some compressed batches do not follow the
+-- configured compress_orderby. Segmentwise recompression only processes
+-- segments that have new uncompressed data. Segments that were UNORDERED
+-- but have no new uncompressed rows are left untouched, so the chunk-level
+-- UNORDERED flag must be preserved after segmentwise recompression.
+CREATE TABLE segwise_unordered(time timestamptz NOT NULL, a int, b int);
+SELECT create_hypertable('segwise_unordered', by_range('time', INTERVAL '1 day'));
+ALTER TABLE segwise_unordered SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'a',
+    timescaledb.compress_orderby = 'time'
+);
+
+SET timescaledb.enable_direct_compress_insert TO ON;
+INSERT INTO segwise_unordered
+SELECT t, a, 0
+FROM generate_series('2025-01-01 00:00:00+00'::timestamptz,
+                     '2025-01-01 00:10:00+00'::timestamptz,
+                     '1 minute'::interval) t
+CROSS JOIN (VALUES (1), (2)) AS seg(a);
+INSERT INTO segwise_unordered
+SELECT t, 2, 0
+FROM generate_series('2025-01-01 00:00:00+00'::timestamptz,
+                     '2025-01-01 00:10:00+00'::timestamptz,
+                     '1 minute'::interval) t;
+RESET timescaledb.enable_direct_compress_insert;
+
+SELECT show_chunks AS chunk_to_compress FROM show_chunks('segwise_unordered') LIMIT 1 \gset
+
+-- Chunk should now be COMPRESSED|UNORDERED (status=3)
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('segwise_unordered') chunk;
+
+-- Insert new data for only segment a=1 via normal INSERT so the chunk becomes PARTIAL
+INSERT INTO segwise_unordered VALUES ('2025-01-01 03:00:00+00', 1, 30);
+
+-- Chunk should now be COMPRESSED|UNORDERED|PARTIAL (status=11)
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('segwise_unordered') chunk;
+
+
+-- Segmentwise recompression processes only segment a=1 (which has new data).
+-- Segment a=2 is never touched, so its unordered batches remain unordered.
+SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress');
+
+-- PARTIAL should be cleared (no more uncompressed rows).
+-- UNORDERED must be preserved (segment a=2 still has unordered compressed data).
+-- Expected status: 3 (COMPRESSED|UNORDERED), NOT 1 (COMPRESSED).
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('segwise_unordered') chunk;
+
+-- Output would be incorrectly ordered if the flag was cleared
+-- We have to see a sort on top of the ColumnarScan node due to UNORDERED flag
+EXPLAIN SELECT a, time FROM segwise_unordered WHERE a = 2 ORDER BY a, time;
+
+DROP TABLE segwise_unordered;

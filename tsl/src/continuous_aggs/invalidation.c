@@ -643,6 +643,10 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 	int64 bucket_width = ts_continuous_agg_fixed_bucket_width(bucket_function);
 	Assert(bucket_width > 0);
 
+	NullableDatum offset = INIT_NULL_DATUM;
+	NullableDatum origin = INIT_NULL_DATUM;
+	fill_bucket_offset_origin(bucket_function, time_type_oid, &offset, &origin);
+
 	/* Compute the start of the "first" bucket for the type. The min value
 	 * must be at the start of the "first" bucket or somewhere in the
 	 * bucket. If the min value falls on the exact start of the bucket we are
@@ -677,8 +681,11 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 		/* Above the max bucket, so treat as invalid to +infinity. */
 		inv->lowest_modified_value = INVAL_POS_INFINITY;
 	else
-		inv->lowest_modified_value =
-			ts_time_bucket_by_type(bucket_width, inv->lowest_modified_value, time_type_oid);
+		inv->lowest_modified_value = ts_time_bucket_by_type_extended(bucket_width,
+																	 inv->lowest_modified_value,
+																	 time_type_oid,
+																	 offset,
+																	 origin);
 
 	if (inv->greatest_modified_value < min_bucket_start)
 		/* Below the min bucket, so treat as invalid to -infinity. */
@@ -688,8 +695,11 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 		inv->greatest_modified_value = INVAL_POS_INFINITY;
 	else
 	{
-		inv->greatest_modified_value =
-			ts_time_bucket_by_type(bucket_width, inv->greatest_modified_value, time_type_oid);
+		inv->greatest_modified_value = ts_time_bucket_by_type_extended(bucket_width,
+																	   inv->greatest_modified_value,
+																	   time_type_oid,
+																	   offset,
+																	   origin);
 		inv->greatest_modified_value =
 			ts_time_saturating_add(inv->greatest_modified_value, bucket_width - 1, time_type_oid);
 	}
