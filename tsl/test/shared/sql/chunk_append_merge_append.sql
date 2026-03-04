@@ -2,21 +2,23 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- Test coverage for all MergeAppend creation paths in ChunkAppend
--- There are three distinct code paths that create MergeAppend nodes:
+-- Test coverage for all MergeAppend creation paths in ChunkAppend.
 --
--- 1. Single-dimension hypertable, partial compression, ordered append
---    (chunk_append.c: create_group_subpath via lines 282-288, 300-306)
+-- ChunkAppend creates internal MergeAppend nodes in two places:
 --
--- 2. Space-partitioned hypertable, multiple space partitions per time slice
---    (chunk_append.c: direct create_merge_append_path at line 388)
+-- 1. create_group_subpath() - groups paths for the same partially compressed
+--    chunk (compressed + uncompressed portions) in single-dimension hypertables
 --
--- 3. Space-partitioned hypertable, partial compression per chunk
---    (same code path as #2, but triggered by partial compression)
+-- 2. Direct create_merge_append_path() - groups space partitions for the same
+--    time slice in multi-dimension hypertables, or partially compressed chunks
+--
+-- Bug: When the ChunkAppend path is parameterized (e.g., inner side of nested
+-- loop join), these MergeAppend creations pass non-NULL required_outer to
+-- create_merge_append_path(). PostgreSQL asserts MergeAppend paths must never
+-- be parameterized (createplan.c:1555).
 
 \set PREFIX 'EXPLAIN (costs off)'
 
--- Disable parallel to get consistent plans
 SET max_parallel_workers_per_gather = 0;
 
 ----------------------------------------------------------------------
@@ -31,9 +33,6 @@ ALTER TABLE ht_single SET (
   timescaledb.compress_orderby='time'
 );
 
--- Note: TimescaleDB creates time index automatically
-
--- Insert and compress
 INSERT INTO ht_single
 SELECT time, device, device * 0.1
 FROM generate_series('2020-01-01'::timestamptz, '2020-01-14'::timestamptz, '4 hour') time,
@@ -49,10 +48,9 @@ FROM generate_series('2020-01-01'::timestamptz, '2020-01-14'::timestamptz, '6 ho
 
 ANALYZE ht_single;
 
--- This should show ChunkAppend with nested MergeAppend for each chunk
+-- ChunkAppend with nested MergeAppend for each partially compressed chunk
 :PREFIX SELECT * FROM ht_single ORDER BY time LIMIT 10;
 
--- Verify data correctness
 SELECT count(*) FROM ht_single;
 
 ----------------------------------------------------------------------
@@ -68,7 +66,6 @@ ALTER TABLE ht_space SET (
   timescaledb.compress_orderby='time'
 );
 
--- Insert data that spans multiple space partitions
 INSERT INTO ht_space
 SELECT time, device, device * 0.1
 FROM generate_series('2020-01-01'::timestamptz, '2020-01-14'::timestamptz, '4 hour') time,
@@ -78,10 +75,9 @@ SELECT compress_chunk(c) FROM show_chunks('ht_space') c;
 
 ANALYZE ht_space;
 
--- This should show ChunkAppend with MergeAppend grouping space partitions
+-- ChunkAppend with MergeAppend grouping space partitions per time slice
 :PREFIX SELECT * FROM ht_space ORDER BY time LIMIT 10;
 
--- Verify data correctness
 SELECT count(*) FROM ht_space;
 
 ----------------------------------------------------------------------
@@ -97,7 +93,6 @@ ALTER TABLE ht_space_partial SET (
   timescaledb.compress_orderby='time'
 );
 
--- Insert and compress
 INSERT INTO ht_space_partial
 SELECT time, device, device * 0.1
 FROM generate_series('2020-01-01'::timestamptz, '2020-01-14'::timestamptz, '4 hour') time,
@@ -105,7 +100,7 @@ FROM generate_series('2020-01-01'::timestamptz, '2020-01-14'::timestamptz, '4 ho
 
 SELECT count(compress_chunk(c)) FROM show_chunks('ht_space_partial') c;
 
--- Make partially compressed by inserting more data
+-- Make partially compressed
 INSERT INTO ht_space_partial
 SELECT time, device, device * 0.1
 FROM generate_series('2020-01-01'::timestamptz, '2020-01-14'::timestamptz, '6 hour') time,
@@ -113,16 +108,62 @@ FROM generate_series('2020-01-01'::timestamptz, '2020-01-14'::timestamptz, '6 ho
 
 ANALYZE ht_space_partial;
 
--- This exercises both space partitioning AND partial compression
--- Each time slice may have multiple space partitions AND each chunk may have
--- both compressed and uncompressed portions
+-- Both space partitions AND partial compression per time slice
 :PREFIX SELECT * FROM ht_space_partial ORDER BY time LIMIT 10;
 
--- Verify data correctness
 SELECT count(*) FROM ht_space_partial;
 
-----------------------------------------------------------------------
--- Cleanup
-----------------------------------------------------------------------
-RESET max_parallel_workers_per_gather;
 DROP TABLE ht_single, ht_space, ht_space_partial;
+
+----------------------------------------------------------------------
+-- Case 4: Parameterized ordered append (crashes on PG17+ with assertions)
+--
+-- When ChunkAppend is parameterized and creates internal MergeAppend for
+-- partially compressed chunks, the MergeAppend inherits param_info from
+-- the parent path, violating PostgreSQL's assertion.
+----------------------------------------------------------------------
+CREATE TABLE ht_param(time timestamptz NOT NULL, device int NOT NULL, value float);
+SELECT table_name FROM create_hypertable('ht_param','time');
+ALTER TABLE ht_param SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby='device',
+  timescaledb.compress_orderby='time'
+);
+
+CREATE INDEX ht_param_device_time_idx ON ht_param (device, time);
+
+INSERT INTO ht_param
+SELECT time, device, device * 0.1
+FROM generate_series('2020-01-02'::timestamptz, '2020-01-18'::timestamptz, '6 hour') time,
+     generate_series(1,3) device;
+
+SELECT count(compress_chunk(c)) FROM show_chunks('ht_param') c;
+
+-- Make partially compressed
+INSERT INTO ht_param
+SELECT time, device, device * 0.1
+FROM generate_series('2020-01-02'::timestamptz, '2020-01-18'::timestamptz, '9 hour') time,
+     generate_series(1,3) device;
+
+-- Driver table without index forces parameterized inner path
+CREATE TABLE devices_param(device int);
+INSERT INTO devices_param SELECT generate_series(1,3);
+ANALYZE ht_param, devices_param;
+
+SET enable_material = off;
+SET enable_seqscan = off;
+
+-- Nested loop forces parameterized ChunkAppend on ht_param
+-- ORDER BY time triggers ordered append with internal MergeAppend
+-- Result: Assert(best_path->path.param_info == NULL) failure
+:PREFIX
+SELECT m.time, m.device, m.value
+FROM devices_param d
+JOIN ht_param m ON m.device = d.device
+WHERE m.time < now()
+ORDER BY m.time;
+
+RESET enable_material;
+RESET enable_seqscan;
+RESET max_parallel_workers_per_gather;
+DROP TABLE ht_param, devices_param;
