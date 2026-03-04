@@ -2,25 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
--- Test: Parameterized ordered append crashes for all MergeAppend creation paths
---
--- ChunkAppend creates internal MergeAppend nodes in two code paths:
---
--- 1. create_group_subpath() - groups partially compressed chunk paths
---    (single-dimension hypertables)
---
--- 2. Direct create_merge_append_path() - groups space partitions or
---    partially compressed chunks (multi-dimension hypertables)
---
--- Bug: Both paths pass PATH_REQ_OUTER(subpath) to create_merge_append_path().
--- When ChunkAppend is parameterized (inner side of nested loop), this creates
--- a parameterized MergeAppend, violating PostgreSQL's assertion at
--- createplan.c:1555: Assert(best_path->path.param_info == NULL)
---
--- This test verifies the crash occurs for all three scenarios:
--- 1. Single-dimension + partial compression
--- 2. Space-partitioned (fully compressed)
--- 3. Space-partitioned + partial compression
+-- Tests for parameterized ChunkAppend in ordered mode crashing when creating
+-- a MergeAppend because the latter doesn't support parameterization in
+-- Postgres. We cover several code paths where this can happen (space
+-- partitioning and partially compressed chunks).
 
 \set PREFIX 'EXPLAIN (costs off)'
 
@@ -61,7 +46,6 @@ CREATE TABLE devices1(device int);
 INSERT INTO devices1 SELECT generate_series(1,3);
 ANALYZE ht_single, devices1;
 
--- Crashes in create_group_subpath -> create_merge_append_path
 :PREFIX
 SELECT m.time, m.device, m.value
 FROM devices1 d
@@ -69,7 +53,6 @@ JOIN ht_single m ON m.device = d.device
 WHERE m.time < now()
 ORDER BY m.time;
 
--- Won't reach here due to crash
 DROP TABLE ht_single, devices1;
 
 ----------------------------------------------------------------------
@@ -98,7 +81,6 @@ CREATE TABLE devices2(device int);
 INSERT INTO devices2 SELECT generate_series(1,4);
 ANALYZE ht_space, devices2;
 
--- Crashes in direct create_merge_append_path call
 :PREFIX
 SELECT m.time, m.device, m.value
 FROM devices2 d
@@ -106,7 +88,6 @@ JOIN ht_space m ON m.device = d.device
 WHERE m.time < now()
 ORDER BY m.time;
 
--- Won't reach here due to crash
 DROP TABLE ht_space, devices2;
 
 ----------------------------------------------------------------------
@@ -141,7 +122,6 @@ CREATE TABLE devices3(device int);
 INSERT INTO devices3 SELECT generate_series(1,4);
 ANALYZE ht_space_partial, devices3;
 
--- Crashes in direct create_merge_append_path call
 :PREFIX
 SELECT m.time, m.device, m.value
 FROM devices3 d
@@ -149,7 +129,6 @@ JOIN ht_space_partial m ON m.device = d.device
 WHERE m.time < now()
 ORDER BY m.time;
 
--- Won't reach here due to crash
 RESET enable_material;
 RESET enable_seqscan;
 RESET enable_hashjoin;

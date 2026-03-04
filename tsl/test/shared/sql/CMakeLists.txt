@@ -1,4 +1,5 @@
 set(TEST_FILES_SHARED
+    chunk_append_merge_append.sql
     chunkwise_agg_gather_sort.sql
     classify_relation.sql
     compat.sql
@@ -24,7 +25,7 @@ set(TEST_TEMPLATES_SHARED
     space_constraint.sql.in
     transparent_decompress_chunk.sql.in)
 
-set(SOLO_TESTS cagg_compression.sql chunk_append_merge_append.sql compression_dml.sql merge_dml.sql)
+set(SOLO_TESTS cagg_compression.sql compression_dml.sql merge_dml.sql)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES_SHARED extension.sql timestamp_limits.sql
