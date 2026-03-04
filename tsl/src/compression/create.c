@@ -685,7 +685,8 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
  *
  */
 Chunk *
-create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
+create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
+					  bool skip_segmentby_default)
 {
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
@@ -761,7 +762,11 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	}
 
 	Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
-	compression_settings_set_defaults(ht, settings, ts_alter_table_with_clause_parse(NIL));
+
+	compression_settings_set_defaults(ht,
+									  settings,
+									  ts_alter_table_with_clause_parse(NIL),
+									  skip_segmentby_default);
 
 	if (OidIsValid(table_id))
 		compress_chunk->table_id = table_id;
@@ -1789,7 +1794,8 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 
 void
 compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
-								  WithClauseResult *with_clause_options)
+								  WithClauseResult *with_clause_options,
+								  bool skip_segmentby_default)
 {
 	/* orderby arrays should always be in sync either all NULL or none */
 	Assert(
@@ -1800,7 +1806,8 @@ compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 	/* get default settings which will be stored at chunk level */
 	if (!(settings->fd.orderby) && with_clause_options[AlterTableFlagOrderBy].is_default)
 	{
-		if (!settings->fd.segmentby && with_clause_options[AlterTableFlagSegmentBy].is_default)
+		if (!skip_segmentby_default && !settings->fd.segmentby &&
+			with_clause_options[AlterTableFlagSegmentBy].is_default)
 		{
 			settings->fd.segmentby = compression_setting_segmentby_get_default(ht);
 		}

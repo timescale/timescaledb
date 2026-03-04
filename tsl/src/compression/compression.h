@@ -274,6 +274,8 @@ typedef struct RowCompressor
 	int64 tuples_to_sort;	/* number of tuples to sort with tuplesort */
 	int64 tuple_sort_limit; /* number of tuples to flush the compressor on */
 
+	bool needs_analyze_segmentby;
+
 	List *metadata_builders; /* List of BatchMetadataBuilder */
 } RowCompressor;
 
