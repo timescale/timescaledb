@@ -83,9 +83,7 @@
  *
  */
 
-#ifdef PG_MODULE_MAGIC
-PG_MODULE_MAGIC;
-#endif
+TS_MODULE_MAGIC("timescaledb-loader");
 
 #define POST_LOAD_INIT_FN "ts_post_load_init"
 #define GUC_LAUNCHER_POLL_TIME_MS MAKE_EXTOPTION("bgw_launcher_poll_time")
