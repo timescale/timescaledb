@@ -115,3 +115,6 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_catalog TO PUBLIC;
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_catalog TO PUBLIC;
 
+-- Drop continuous_aggs_jobs_refresh_ranges table
+DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+

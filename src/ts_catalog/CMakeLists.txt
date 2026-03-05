@@ -6,6 +6,7 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/compression_chunk_size.c
     ${CMAKE_CURRENT_SOURCE_DIR}/compression_settings.c
     ${CMAKE_CURRENT_SOURCE_DIR}/continuous_agg.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/continuous_aggs_jobs_refresh_ranges.c
     ${CMAKE_CURRENT_SOURCE_DIR}/continuous_aggs_watermark.c
     ${CMAKE_CURRENT_SOURCE_DIR}/metadata.c
     ${CMAKE_CURRENT_SOURCE_DIR}/tablespace.c)
