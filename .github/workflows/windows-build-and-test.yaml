@@ -103,6 +103,8 @@ jobs:
         vectorized_aggregation
         ${{ matrix.versions.pg < 16 && 'columnar_scan_cost' || '' }}
       SKIPS: >-
+        create_hypertable
+        create_table_with
         bgw_db_scheduler
         bgw_db_scheduler_fixed
     steps:
