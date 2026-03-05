@@ -317,28 +317,10 @@ jobs:
         $SymbolCache = Join-Path $DumpDir "symbols"
         New-Item -ItemType Directory -Force -Path $SymbolCache | Out-Null
 
-        $Debugger = (Get-Command cdb.exe -ErrorAction SilentlyContinue).Source
-        if (!$Debugger) { $Debugger = (Get-Command windbg.exe -ErrorAction SilentlyContinue).Source }
-
-        if (!$Debugger) {
-          $Candidates = @(
-            "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\cdb.exe",
-            "${env:ProgramFiles}\Windows Kits\10\Debuggers\x64\cdb.exe",
-            "${env:ProgramFiles(x86)}\Windows Kits\10\Debuggers\x64\windbg.exe",
-            "${env:ProgramFiles}\Windows Kits\10\Debuggers\x64\windbg.exe"
-          ) | Where-Object { Test-Path $_ }
-          $Debugger = $Candidates | Select-Object -First 1
-        }
-
-        if (!$Debugger) {
-          Write-Host "No cdb.exe or windbg.exe found; leaving dumps in $DumpDir for offline analysis."
-          exit 0
-        }
-
         $Out = Join-Path $DumpDir "stacktraces.txt"
         foreach ($Dump in $Dumps) {
           Add-Content -Path $Out -Value ("==== " + $Dump.FullName + " ====")
-          & $Debugger -z $Dump.FullName -c ".symfix $SymbolCache; .reload; !analyze -v; kv; q" | Out-File -FilePath $Out -Append -Encoding utf8
+          & cdb.exe -z $Dump.FullName -c ".symfix $SymbolCache; .reload; !analyze -v; kv; q" | Out-File -FilePath $Out -Append -Encoding utf8
         }
 
     - name: Upload crash dumps and stack traces
@@ -426,4 +408,3 @@ jobs:
             exit 1
           fi
           echo "All checks passed or were safely skipped."
-
