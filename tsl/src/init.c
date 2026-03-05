@@ -189,6 +189,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
 	.get_compressed_chunk_index_for_recompression =
 		tsl_get_compressed_chunk_index_for_recompression,
+	.modify_realtime_caggs_ondemand_tsl = tsl_modify_realtime_caggs_ondemand,
 	.preprocess_query_tsl = tsl_preprocess_query,
 	.merge_chunks = chunk_merge_chunks,
 	.split_chunk = chunk_split_chunk,
