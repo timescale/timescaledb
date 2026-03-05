@@ -1,0 +1,76 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Tests for parameterized ChunkAppend.
+\set PREFIX 'EXPLAIN (COSTS OFF, ANALYZE, TIMING OFF, BUFFERS OFF, SUMMARY OFF)'
+SET enable_hashjoin = off;
+SET enable_mergejoin = off;
+SET enable_material = off;
+:PREFIX
+WITH win(id, win_start, win_end) AS (VALUES
+    (1, '2000-01-03 00:00'::timestamptz, '2000-01-03 12:00'::timestamptz),
+    (2, '2000-01-08 00:00', '2000-01-08 12:00'),
+    (3, '2000-01-15 00:00', '2000-01-15 12:00'))
+SELECT win.id, count(*)
+FROM win
+INNER JOIN metrics m ON m.time >= win.win_start
+                    AND m.time < win.win_end
+                    AND m.time > now() - interval '100 years'
+GROUP BY win.id
+ORDER BY win.id;
+--- QUERY PLAN ---
+ Sort (actual rows=3.00 loops=1)
+   Sort Key: "*VALUES*".column1
+   Sort Method: quicksort 
+   ->  HashAggregate (actual rows=3.00 loops=1)
+         Group Key: "*VALUES*".column1
+         ->  Nested Loop (actual rows=5400.00 loops=1)
+               ->  Values Scan on "*VALUES*" (actual rows=3.00 loops=1)
+               ->  Custom Scan (ChunkAppend) on metrics m (actual rows=1800.00 loops=3)
+                     Chunks excluded during startup: 0
+                     ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m_1 (actual rows=600.00 loops=3)
+                           Index Cond: (("time" >= "*VALUES*".column2) AND ("time" < "*VALUES*".column3) AND ("time" > (now() - '@ 100 years'::interval)))
+                     ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m_2 (actual rows=600.00 loops=3)
+                           Index Cond: (("time" >= "*VALUES*".column2) AND ("time" < "*VALUES*".column3) AND ("time" > (now() - '@ 100 years'::interval)))
+                     ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m_3 (actual rows=600.00 loops=3)
+                           Index Cond: (("time" >= "*VALUES*".column2) AND ("time" < "*VALUES*".column3) AND ("time" > (now() - '@ 100 years'::interval)))
+
+:PREFIX
+WITH win(id, win_start, win_end) AS (VALUES
+    (1, '2000-01-03 00:00'::timestamptz, '2000-01-03 12:00'::timestamptz),
+    (2, '2000-01-08 00:00', '2000-01-08 12:00'),
+    (3, '2000-01-15 00:00', '2000-01-15 12:00'))
+SELECT devices.device_id, win.id, count(*)
+FROM devices, win,
+LATERAL (
+    SELECT * FROM metrics
+    WHERE metrics.device_id = devices.device_id
+      AND metrics.time >= win.win_start
+      AND metrics.time < win.win_end
+      AND metrics.time > now() - interval '100 years'
+) sub
+GROUP BY devices.device_id, win.id
+ORDER BY devices.device_id, win.id
+;
+--- QUERY PLAN ---
+ Sort (actual rows=9.00 loops=1)
+   Sort Key: devices.device_id, "*VALUES*".column1
+   Sort Method: quicksort 
+   ->  HashAggregate (actual rows=9.00 loops=1)
+         Group Key: devices.device_id, "*VALUES*".column1
+         ->  Nested Loop (actual rows=3240.00 loops=1)
+               ->  Values Scan on "*VALUES*" (actual rows=3.00 loops=1)
+               ->  Nested Loop (actual rows=1080.00 loops=3)
+                     ->  Seq Scan on devices (actual rows=3.00 loops=3)
+                     ->  Custom Scan (ChunkAppend) on metrics (actual rows=360.00 loops=9)
+                           Chunks excluded during startup: 0
+                           ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=120.00 loops=9)
+                                 Index Cond: ((device_id = devices.device_id) AND ("time" >= "*VALUES*".column2) AND ("time" < "*VALUES*".column3) AND ("time" > (now() - '@ 100 years'::interval)))
+                           ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=120.00 loops=9)
+                                 Index Cond: ((device_id = devices.device_id) AND ("time" >= "*VALUES*".column2) AND ("time" < "*VALUES*".column3) AND ("time" > (now() - '@ 100 years'::interval)))
+                           ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (actual rows=120.00 loops=9)
+                                 Index Cond: ((device_id = devices.device_id) AND ("time" >= "*VALUES*".column2) AND ("time" < "*VALUES*".column3) AND ("time" > (now() - '@ 100 years'::interval)))
+
+RESET enable_hashjoin;
+RESET enable_mergejoin;
+RESET enable_material;
