@@ -41,14 +41,11 @@ jobs:
   check_paths:
     runs-on: ubuntu-latest
     outputs:
-      #run_ci: >-
-      #  ${{ github.event_name == 'push'
-      #    || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
-      #   }}
-      # run_installcheck: ${{ github.event_name == 'push' || steps.filters.outputs.windows-workflow == 'true' }}
-      run_ci: true
-      run_installcheck: true
-
+      run_ci: >-
+        ${{ github.event_name == 'push'
+          || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
+         }}
+      run_installcheck: ${{ github.event_name == 'push' || steps.filters.outputs.windows-workflow == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -73,6 +70,11 @@ jobs:
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         event_name: ["${{ github.event_name }}"]
+        exclude:
+          - versions: { pg: 15, pg_version: "${{ needs.config.outputs.pg15_latest }}" }
+            event_name: "pull_request"
+          - versions: { pg: 16, pg_version: "${{ needs.config.outputs.pg16_latest }}" }
+            event_name: "pull_request"
     env:
       # PostgreSQL configuration
       PGPORT: 55432
@@ -331,7 +333,6 @@ jobs:
         path: |
           crashdumps\**
         if-no-files-found: ignore
-
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
