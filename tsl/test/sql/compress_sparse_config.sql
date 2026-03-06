@@ -4,10 +4,6 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
--- disable hash pushdown so we don't include the hash values in the plans
--- which makes the test stable. the hash pushdown is tested separately
-set timescaledb.enable_bloom1_hash_pushdown = false;
-
 CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY upper(relid::text) COLLATE "C";
 
 -- Test configurable sparse indexes settings
@@ -115,8 +111,6 @@ reset timescaledb.enable_sparse_index_bloom;
 
 -- valid composite bloom filter cases:
 -- two columns
--- TODO : remove after composite blooms rolled out
-\set ON_ERROR_STOP 0
 alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = 'bloom(u,ts)');
@@ -167,7 +161,6 @@ alter table test_settings set (timescaledb.compress,
 alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = 'bloom(u,value),bloom(u,ts,value)');
-\set ON_ERROR_STOP 1
 
 -- invalid composite bloom filter cases:
 \set ON_ERROR_STOP 0

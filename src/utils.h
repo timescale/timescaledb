@@ -77,10 +77,6 @@ contains_volatile_functions_checker(Oid func_id, void *context)
 	return (func_volatile(func_id) == PROVOLATILE_VOLATILE);
 }
 
-/* Use a special pseudo-random field 4 value to avoid conflicting with user-advisory-locks */
-#define TS_SET_LOCKTAG_ADVISORY(tag, id1, id2, id3)                                                \
-	SET_LOCKTAG_ADVISORY((tag), (id1), (id2), (id3), 29749)
-
 /* find the length of a statically sized array */
 #define TS_ARRAY_LEN(array) (sizeof(array) / sizeof(*array))
 

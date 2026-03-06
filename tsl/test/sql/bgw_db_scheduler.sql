@@ -179,10 +179,8 @@ SELECT datname, usename, application_name, state, query, wait_event_type, wait_e
   FROM pg_stat_activity WHERE application_name LIKE 'User-Defined Action%';
 \x off
 
--- have to suppress notices here as delete_job will print pid of the running background worker processes
-SET client_min_messages TO WARNING;
 SELECT delete_job(:job_id);
-RESET client_min_messages;
+SELECT wait_application_pid('User-Defined Action [' || :job_id || ']', false);
 SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'User-Defined Action%';
 
 -- wait for scheduler finish

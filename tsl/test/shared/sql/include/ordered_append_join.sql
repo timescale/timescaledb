@@ -291,15 +291,16 @@ LIMIT 100;
 
 -- test JOIN on time column with 3 hypertables
 -- should use 3 ChunkAppend
+SET join_collapse_limit = 1;
 :PREFIX
 SELECT o1.time
-FROM :TEST_TABLE o1
-  INNER JOIN :TEST_TABLE o2 ON o1.time = o2.time
-  INNER JOIN :TEST_TABLE o3 ON o1.time = o3.time
+FROM :TEST_TABLE o3
+  INNER JOIN (:TEST_TABLE o1 INNER JOIN :TEST_TABLE o2 ON o1.time = o2.time)
+  ON o3.time = o1.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
   AND o3.device_id = 3
 ORDER BY o1.time
 LIMIT 100;
-
+RESET join_collapse_limit;
 RESET enable_seqscan;

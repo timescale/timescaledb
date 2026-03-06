@@ -424,7 +424,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_CONTROL_FILE}
 
 find_program(
   CLANG_FORMAT
-  NAMES clang-format-14 clang-format
+  NAMES clang-format-17 clang-format
   PATHS /usr/bin /usr/local/bin /usr/local/opt/ /usr/local/opt/llvm/bin /opt/bin
   DOC "The path to clang-format")
 
@@ -441,8 +441,8 @@ if(CLANG_FORMAT)
         "Could not parse clang-format version ${CLANG_FORMAT_VERSION_OUTPUT}")
   endif()
 
-  if((${CMAKE_MATCH_1} LESS "14"))
-    message(WARNING "clang-format version 14 or greater required")
+  if((${CMAKE_MATCH_1} LESS "17"))
+    message(WARNING "clang-format version 17 or greater required")
     set(CLANG_FORMAT False)
   endif()
 endif()
