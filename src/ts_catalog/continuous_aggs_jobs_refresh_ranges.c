@@ -28,7 +28,7 @@ init_scan_by_materialization_id(ScanIterator *iterator, const int32 materializat
 
 TSDLLEXPORT void
 ts_cagg_jobs_refresh_ranges_insert(int32 materialization_id, int64 start_range, int64 end_range,
-								   int32 job_id, int32 pid)
+								   int32 pid)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_JOBS_REFRESH_RANGES),
@@ -44,8 +44,6 @@ ts_cagg_jobs_refresh_ranges_insert(int32 materialization_id, int64 start_range, 
 		Int64GetDatum(start_range);
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_jobs_refresh_ranges_end_range)] =
 		Int64GetDatum(end_range);
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_jobs_refresh_ranges_job_id)] =
-		Int32GetDatum(job_id);
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_jobs_refresh_ranges_pid)] =
 		Int32GetDatum(pid);
 
