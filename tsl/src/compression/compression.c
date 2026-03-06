@@ -771,104 +771,164 @@ get_compressed_chunk_index(ResultRelInfo *resultRelInfo, const CompressionSettin
 
 static void
 build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
-				 const TupleDesc out_desc, PerColumn **pcolumns, int16 **pmap)
+				 const TupleDesc out_desc, PerColumn **pcolumns, int16 **pmap,
+				 List **pmetadata_builders)
 {
 	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 
 	PerColumn *columns = palloc0(sizeof(PerColumn) * in_desc->natts);
 	int16 *map = palloc0(sizeof(int16) * in_desc->natts);
+	List *metadata_builders = NIL;
 
-	for (int i = 0; i < in_desc->natts; i++)
+	SparseIndexSettings *parsed_settings = NULL;
+	if (settings && settings->fd.index)
+		parsed_settings = ts_convert_to_sparse_index_settings(settings->fd.index);
+
+	if (parsed_settings != NULL && ts_guc_enable_composite_bloom_indexes)
 	{
-		Form_pg_attribute attr = TupleDescAttr(in_desc, i);
-
-		if (attr->attisdropped)
-			continue;
-
-		PerColumn *column = &columns[AttrNumberGetAttrOffset(attr->attnum)];
-		AttrNumber compressed_colnum =
-			get_attnum(settings->fd.compress_relid, NameStr(attr->attname));
-		Form_pg_attribute compressed_column_attr =
-			TupleDescAttr(out_desc, AttrNumberGetAttrOffset(compressed_colnum));
-		map[AttrNumberGetAttrOffset(attr->attnum)] = AttrNumberGetAttrOffset(compressed_colnum);
-
-		bool is_segmentby = ts_array_is_member(settings->fd.segmentby, NameStr(attr->attname));
-		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
-
-		if (!is_segmentby)
+		ListCell *lc;
+		foreach (lc, parsed_settings->objects)
 		{
-			if (compressed_column_attr->atttypid != compressed_data_type_oid)
-				elog(ERROR,
-					 "expected column '%s' to be a compressed data type",
-					 NameStr(attr->attname));
+			SparseIndexSettingsObject *obj = lfirst(lc);
+			List *column_names = ts_get_column_names_from_parsed_object(obj);
+			int num_columns = list_length(column_names);
+			if (num_columns < 2)
+				continue;
 
-			AttrNumber segment_min_attr_number =
-				compressed_column_metadata_attno(settings,
-												 settings->fd.relid,
-												 attr->attnum,
-												 settings->fd.compress_relid,
-												 "min");
-			AttrNumber segment_max_attr_number =
-				compressed_column_metadata_attno(settings,
-												 settings->fd.relid,
-												 attr->attnum,
-												 settings->fd.compress_relid,
-												 "max");
-			int16 segment_min_attr_offset = segment_min_attr_number - 1;
-			int16 segment_max_attr_offset = segment_max_attr_number - 1;
-
-			BatchMetadataBuilder *batch_minmax_builder = NULL;
-			if (segment_min_attr_number != InvalidAttrNumber ||
-				segment_max_attr_number != InvalidAttrNumber)
+			Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+			AttrNumber attnums[MAX_BLOOM_FILTER_COLUMNS];
+			int col_idx = 0;
+			ListCell *name_cell;
+			foreach (name_cell, column_names)
 			{
-				Ensure(segment_min_attr_number != InvalidAttrNumber,
-					   "could not find the min metadata column");
-				Ensure(segment_max_attr_number != InvalidAttrNumber,
-					   "could not find the min metadata column");
-				batch_minmax_builder =
-					batch_metadata_builder_minmax_create(attr->atttypid,
-														 attr->attcollation,
-														 segment_min_attr_offset,
-														 segment_max_attr_offset);
+				const char *col_name = (const char *) lfirst(name_cell);
+				AttrNumber attnum = get_attnum(settings->fd.relid, col_name);
+				Ensure(AttributeNumberIsValid(attnum), "could not find column '%s'", col_name);
+				attnums[col_idx] = attnum;
+				type_oids[col_idx] = get_atttype(settings->fd.relid, attnum);
+				col_idx++;
 			}
 
-			Ensure(!is_orderby || batch_minmax_builder != NULL,
-				   "orderby columns must have minmax metadata");
+			const char *bloom_col_name =
+				compressed_column_metadata_name_list_v2(bloom1_column_prefix, column_names);
+			AttrNumber bloom_attr_number = get_attnum(settings->fd.compress_relid, bloom_col_name);
+			if (!AttributeNumberIsValid(bloom_attr_number))
+				continue;
 
-			const AttrNumber bloom_attr_number =
-				compressed_column_metadata_attno(settings,
-												 settings->fd.relid,
-												 attr->attnum,
-												 settings->fd.compress_relid,
-												 bloom1_column_prefix);
-			if (AttributeNumberIsValid(bloom_attr_number))
-			{
-				const int bloom_attr_offset = AttrNumberGetAttrOffset(bloom_attr_number);
-				batch_minmax_builder =
-					batch_metadata_builder_bloom1_create(attr->atttypid, bloom_attr_offset);
-			}
-
-			*column = (PerColumn){
-				.compressor = compressor_for_type(attr->atttypid),
-				.metadata_builder = batch_minmax_builder,
-				.segmentby_column_index = -1,
-			};
-		}
-		else
-		{
-			if (attr->atttypid != compressed_column_attr->atttypid)
-				elog(ERROR,
-					 "expected segment by column \"%s\" to be same type as uncompressed column",
-					 NameStr(attr->attname));
-			int16 index = ts_array_position(settings->fd.segmentby, NameStr(attr->attname));
-			*column = (PerColumn){
-				.segment_info = segment_info_new(attr),
-				.segmentby_column_index = index,
-			};
+			int bloom_attr_offset = AttrNumberGetAttrOffset(bloom_attr_number);
+			metadata_builders = lappend(metadata_builders,
+										batch_metadata_builder_bloom1_create(num_columns,
+																			 type_oids,
+																			 attnums,
+																			 bloom_attr_offset));
 		}
 	}
+	ts_free_sparse_index_settings(parsed_settings);
+
+	if (settings != NULL && OidIsValid(settings->fd.compress_relid))
+	{
+		for (int i = 0; i < in_desc->natts; i++)
+		{
+			Form_pg_attribute attr = TupleDescAttr(in_desc, i);
+
+			if (attr->attisdropped)
+				continue;
+
+			PerColumn *column = &columns[AttrNumberGetAttrOffset(attr->attnum)];
+			AttrNumber compressed_colnum =
+				get_attnum(settings->fd.compress_relid, NameStr(attr->attname));
+			Form_pg_attribute compressed_column_attr =
+				TupleDescAttr(out_desc, AttrNumberGetAttrOffset(compressed_colnum));
+			map[AttrNumberGetAttrOffset(attr->attnum)] = AttrNumberGetAttrOffset(compressed_colnum);
+
+			bool is_segmentby = ts_array_is_member(settings->fd.segmentby, NameStr(attr->attname));
+			bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
+
+			if (!is_segmentby)
+			{
+				if (compressed_column_attr->atttypid != compressed_data_type_oid)
+					elog(ERROR,
+						 "expected column '%s' to be a compressed data type",
+						 NameStr(attr->attname));
+
+				AttrNumber segment_min_attr_number =
+					compressed_column_metadata_attno(settings,
+													 settings->fd.relid,
+													 attr->attnum,
+													 settings->fd.compress_relid,
+													 "min");
+				AttrNumber segment_max_attr_number =
+					compressed_column_metadata_attno(settings,
+													 settings->fd.relid,
+													 attr->attnum,
+													 settings->fd.compress_relid,
+													 "max");
+				int16 segment_min_attr_offset = segment_min_attr_number - 1;
+				int16 segment_max_attr_offset = segment_max_attr_number - 1;
+
+				bool has_minmax_metadata = false;
+				if (segment_min_attr_number != InvalidAttrNumber ||
+					segment_max_attr_number != InvalidAttrNumber)
+				{
+					has_minmax_metadata = true;
+					Ensure(segment_min_attr_number != InvalidAttrNumber,
+						   "could not find the min metadata column");
+					Ensure(segment_max_attr_number != InvalidAttrNumber,
+						   "could not find the min metadata column");
+					metadata_builders =
+						lappend(metadata_builders,
+								batch_metadata_builder_minmax_create(attr->atttypid,
+																	 attr->attcollation,
+																	 attr->attnum,
+																	 segment_min_attr_offset,
+																	 segment_max_attr_offset));
+				}
+
+				Ensure(!is_orderby || has_minmax_metadata,
+					   "orderby columns must have minmax metadata");
+
+				const AttrNumber bloom_attr_number =
+					compressed_column_metadata_attno(settings,
+													 settings->fd.relid,
+													 attr->attnum,
+													 settings->fd.compress_relid,
+													 bloom1_column_prefix);
+				if (AttributeNumberIsValid(bloom_attr_number))
+				{
+					Oid type_oid = attr->atttypid;
+					AttrNumber attnum = attr->attnum;
+					const int bloom_attr_offset = AttrNumberGetAttrOffset(bloom_attr_number);
+					metadata_builders =
+						lappend(metadata_builders,
+								batch_metadata_builder_bloom1_create(1,
+																	 &type_oid,
+																	 &attnum,
+																	 bloom_attr_offset));
+				}
+
+				*column = (PerColumn){
+					.compressor = compressor_for_type(attr->atttypid),
+					.segmentby_column_index = -1,
+				};
+			}
+			else
+			{
+				if (attr->atttypid != compressed_column_attr->atttypid)
+					elog(ERROR,
+						 "expected segment by column \"%s\" to be same type as uncompressed column",
+						 NameStr(attr->attname));
+				int16 index = ts_array_position(settings->fd.segmentby, NameStr(attr->attname));
+				*column = (PerColumn){
+					.segment_info = segment_info_new(attr),
+					.segmentby_column_index = index,
+				};
+			}
+		}
+	}
+
 	*pcolumns = columns;
 	*pmap = map;
+	*pmetadata_builders = metadata_builders;
 }
 
 /* Check if we contain any compressors which need allocation limit checking */
@@ -1025,7 +1085,8 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 					 noncompressed_tupdesc,
 					 compressed_tupdesc,
 					 &row_compressor->per_column,
-					 &row_compressor->uncompressed_col_to_compressed_col);
+					 &row_compressor->uncompressed_col_to_compressed_col,
+					 &row_compressor->metadata_builders);
 
 	/* If we have dictionary or array compressors, we have to check compressor size so we don't end
 	 * up going over allocation limit */
@@ -1224,24 +1285,18 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 		/* Performance Improvement: Since we call getallatts at the beginning, slot_getattr is
 		 * useless overhead here, and we should just access the array directly.
 		 */
-		BatchMetadataBuilder *builder = row_compressor->per_column[col].metadata_builder;
 		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
 		if (is_null)
-		{
 			compressor->append_null(compressor);
-			if (builder != NULL)
-			{
-				builder->update_null(builder);
-			}
-		}
 		else
-		{
 			compressor->append_val(compressor, val);
-			if (builder != NULL)
-			{
-				builder->update_val(builder, val);
-			}
-		}
+	}
+
+	ListCell *lc;
+	foreach (lc, row_compressor->metadata_builders)
+	{
+		BatchMetadataBuilder *builder = lfirst(lc);
+		builder->update_row(builder, row);
 	}
 
 	row_compressor->rows_compressed_into_current_value += 1;
@@ -1282,18 +1337,19 @@ row_compressor_build_tuple(RowCompressor *row_compressor)
 			if (compressed_data != NULL)
 				row_compressor->compressed_values[compressed_col] =
 					PointerGetDatum(compressed_data);
-
-			if (column->metadata_builder != NULL)
-			{
-				column->metadata_builder->insert_to_compressed_row(column->metadata_builder,
-																   row_compressor);
-			}
 		}
 		else if (column->segment_info != NULL)
 		{
 			row_compressor->compressed_values[compressed_col] = column->segment_info->val;
 			row_compressor->compressed_is_null[compressed_col] = column->segment_info->is_null;
 		}
+	}
+
+	ListCell *lc;
+	foreach (lc, row_compressor->metadata_builders)
+	{
+		BatchMetadataBuilder *builder = (BatchMetadataBuilder *) lfirst(lc);
+		builder->insert_to_compressed_row(builder, row_compressor);
 	}
 
 	row_compressor->compressed_values[row_compressor->count_metadata_column_offset] =
@@ -1334,13 +1390,15 @@ row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups)
 		if (column->compressor != NULL || !column->segment_info->typ_by_val)
 			pfree(DatumGetPointer(row_compressor->compressed_values[compressed_col]));
 
-		if (column->metadata_builder != NULL)
-		{
-			column->metadata_builder->reset(column->metadata_builder, row_compressor);
-		}
-
 		row_compressor->compressed_values[compressed_col] = 0;
 		row_compressor->compressed_is_null[compressed_col] = true;
+	}
+
+	ListCell *lc;
+	foreach (lc, row_compressor->metadata_builders)
+	{
+		BatchMetadataBuilder *builder = (BatchMetadataBuilder *) lfirst(lc);
+		builder->reset(builder, row_compressor);
 	}
 
 	row_compressor->rowcnt_pre_compression += row_compressor->rows_compressed_into_current_value;
@@ -1361,13 +1419,29 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 	if (row_compressor->invalidation)
 	{
 		InvalidationSettings *settings = row_compressor->invalidation;
-		PerColumn *dim_col = &row_compressor->per_column[settings->invalidation_column_offset];
-		BatchMetadataBuilderMinMax *builder =
-			(BatchMetadataBuilderMinMax *) dim_col->metadata_builder;
-		Datum min = row_compressor->compressed_values[builder->min_metadata_attr_offset];
-		Datum max = row_compressor->compressed_values[builder->max_metadata_attr_offset];
-		int64 start = ts_time_value_to_internal(min, builder->type_oid);
-		int64 end = ts_time_value_to_internal(max, builder->type_oid);
+		AttrNumber dim_attnum = AttrOffsetGetAttrNumber(settings->invalidation_column_offset);
+
+		BatchMetadataBuilderMinMax *minmax_builder = NULL;
+		ListCell *lc;
+		foreach (lc, row_compressor->metadata_builders)
+		{
+			BatchMetadataBuilder *builder = (BatchMetadataBuilder *) lfirst(lc);
+			if (builder->builder_type == METADATA_BUILDER_MINMAX)
+			{
+				BatchMetadataBuilderMinMax *mm = (BatchMetadataBuilderMinMax *) builder;
+				if (mm->attnum == dim_attnum)
+				{
+					minmax_builder = mm;
+					break;
+				}
+			}
+		}
+
+		Assert(minmax_builder != NULL);
+		Datum min = row_compressor->compressed_values[minmax_builder->min_metadata_attr_offset];
+		Datum max = row_compressor->compressed_values[minmax_builder->max_metadata_attr_offset];
+		int64 start = ts_time_value_to_internal(min, minmax_builder->type_oid);
+		int64 end = ts_time_value_to_internal(max, minmax_builder->type_oid);
 		continuous_agg_invalidate_range(settings->hypertable_id, settings->chunk_relid, start, end);
 	}
 
