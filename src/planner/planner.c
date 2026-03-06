@@ -443,11 +443,9 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 							 * recurses into subqueries before PG inlines them —
 							 * a subquery has resultRelation == 0, so the SELECT
 							 * branch below would incorrectly mark it.
-							 * MERGE is not marked: our custom expansion in
-							 * expand_hypertable.c only handles UPDATE/DELETE
-							 * DML fixups. MERGE is left to PG's standard
-							 * inheritance expansion (IS_UPDL_CMD excludes it,
-							 * and resultRelation > 0 blocks the else branch).
+							 * MERGE: not implemented because it can contain
+							 * INSERT actions requiring chunk routing, which
+							 * uses a separate planner path (ModifyHypertable).
 							 */
 							if (IS_UPDL_CMD(context->rootquery))
 							{
@@ -1480,9 +1478,9 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			{
 				/*
 				 * UPDATE/DELETE: only mark the DML target.
-				 * MERGE is not marked: our custom expansion only handles
-				 * UPDATE/DELETE fixups (IS_UPDL_CMD excludes MERGE, and
-				 * resultRelation > 0 blocks the else branch).
+				 * MERGE: not implemented because it can contain INSERT
+				 * actions requiring chunk routing, which uses a separate
+				 * planner path (ModifyHypertable).
 				 */
 				if (IS_UPDL_CMD(query))
 				{
