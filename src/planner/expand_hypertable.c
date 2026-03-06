@@ -59,8 +59,8 @@
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
-#include "import/ts_inherit.h"
 #include "import/planner.h"
+#include "import/ts_inherit.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner.h"
 #include "time_utils.h"
@@ -1267,13 +1267,13 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		Assert(!RELATION_IS_OTHER_TEMP(newrelation));
 
 		ts_expand_single_inheritance_child(root,
-									 rte,
-									 rti,
-									 oldrelation,
-									 oldrc,
-									 newrelation,
-									 &childrte,
-									 &child_rtindex);
+										   rte,
+										   rti,
+										   oldrelation,
+										   oldrc,
+										   newrelation,
+										   &childrte,
+										   &child_rtindex);
 		childrte->alias = copyObject(rte->alias);
 		childrte->eref = copyObject(rte->eref);
 		childrte->ctename = NULL;
