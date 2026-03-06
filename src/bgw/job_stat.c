@@ -810,9 +810,17 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 		if (!ts_flags_are_set_32(jobstat->fd.flags, LAST_CRASH_REPORTED))
 		{
 			ts_bgw_job_stat_mark_crash_reported(job, JOB_FAILURE_IN_EXECUTION);
+			jobstat->fd.flags = ts_set_flags_32(jobstat->fd.flags, LAST_CRASH_REPORTED);
 		}
 
-		return calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
+		if (!bgw_job_stat_next_start_was_set(&jobstat->fd))
+		{
+			TimestampTz next_start =
+				calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
+
+			ts_bgw_job_stat_update_next_start(jobstat->fd.id, next_start, false);
+			jobstat->fd.next_start = next_start;
+		}
 	}
 
 	return jobstat->fd.next_start;

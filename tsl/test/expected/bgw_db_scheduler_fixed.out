@@ -865,9 +865,9 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(500);
 
 SELECT job_id, last_finish, next_start, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
- job_id | last_finish | next_start | last_run_success | total_runs | total_successes | total_failures | total_crashes | consecutive_crashes 
---------+-------------+------------+------------------+------------+-----------------+----------------+---------------+---------------------
-   1005 | -infinity   | -infinity  | f                |          1 |               0 |              0 |             1 |                   1
+ job_id | last_finish |          next_start          | last_run_success | total_runs | total_successes | total_failures | total_crashes | consecutive_crashes 
+--------+-------------+------------------------------+------------------+------------+-----------------+----------------+---------------+---------------------
+   1005 | -infinity   | Fri Dec 31 16:05:00 1999 PST | f                |          1 |               0 |              0 |             1 |                   1
 
 --But after the 5 min period the job is again run
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(400000);
@@ -877,9 +877,9 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(400000);
 
 SELECT job_id, last_finish, next_start, last_run_success, total_runs, total_successes, total_failures, total_crashes, consecutive_crashes
 FROM _timescaledb_internal.bgw_job_stat;
- job_id |          last_finish           |          next_start          | last_run_success | total_runs | total_successes | total_failures | total_crashes | consecutive_crashes 
---------+--------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------+---------------------
-   1005 | Fri Dec 31 16:05:00.5 1999 PST | Fri Dec 31 16:05:05 1999 PST | t                |          2 |               1 |              0 |             1 |                   0
+ job_id |         last_finish          |          next_start          | last_run_success | total_runs | total_successes | total_failures | total_crashes | consecutive_crashes 
+--------+------------------------------+------------------------------+------------------+------------+-----------------+----------------+---------------+---------------------
+   1005 | Fri Dec 31 16:05:00 1999 PST | Fri Dec 31 16:05:05 1999 PST | t                |          2 |               1 |              0 |             1 |                   0
 
 SELECT * FROM sorted_bgw_log;
  msg_no | application_name |                         msg                         
@@ -1703,4 +1703,3 @@ SELECT alter_job(:jobid_fixed_2, fixed_schedule => false);
                                                                 alter_job                                                                 
 ------------------------------------------------------------------------------------------------------------------------------------------
  (1035,"@ 30 secs","@ 0",-1,"@ 5 mins",t,,"Sat Jan 01 00:01:03 2000 PST",,f,"Sat Jan 01 00:00:23 2000 PST",,"User-Defined Action [1035]")
-
