@@ -79,10 +79,13 @@ jobs:
     steps:
     - name: Install dependencies
       run: |
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          gpg --batch --keyserver hkp://keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
+          gpg --batch --export 15CF4D18AF4F7421 | sudo tee /etc/apt/keyrings/llvm.gpg
+
           . /etc/os-release
           sudo echo "deb https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-${LLVM_VER} main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
           sudo apt-get update
+
           sudo apt-get install clang-format-${LLVM_VER}
     - name: Checkout source
       uses: actions/checkout@v4
