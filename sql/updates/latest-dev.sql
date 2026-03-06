@@ -3,7 +3,6 @@ CREATE TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (
   materialization_id integer NOT NULL,
   start_range bigint NOT NULL,
   end_range bigint NOT NULL,
-  job_id integer NOT NULL,
   pid integer NOT NULL,
   CONSTRAINT continuous_aggs_jobs_refresh_ranges_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
 );
