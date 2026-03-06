@@ -1117,7 +1117,6 @@ typedef enum Anum_continuous_aggs_jobs_refresh_ranges
 	Anum_continuous_aggs_jobs_refresh_ranges_materialization_id = 1,
 	Anum_continuous_aggs_jobs_refresh_ranges_start_range,
 	Anum_continuous_aggs_jobs_refresh_ranges_end_range,
-	Anum_continuous_aggs_jobs_refresh_ranges_job_id,
 	Anum_continuous_aggs_jobs_refresh_ranges_pid,
 	_Anum_continuous_aggs_jobs_refresh_ranges_max,
 } Anum_continuous_aggs_jobs_refresh_ranges;
@@ -1130,7 +1129,6 @@ typedef struct FormData_continuous_aggs_jobs_refresh_ranges
 	int32 materialization_id;
 	int64 start_range;
 	int64 end_range;
-	int32 job_id;
 	int32 pid;
 } FormData_continuous_aggs_jobs_refresh_ranges;
 
