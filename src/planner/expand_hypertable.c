@@ -1180,10 +1180,10 @@ void
 ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel,
 								 bool include_osm)
 {
-	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
+	Query *parse = root->parse;
+	RangeTblEntry *rte = rt_fetch(rel->relid, parse->rtable);
 	Oid parent_oid = rte->relid;
 	Relation oldrelation;
-	Query *parse = root->parse;
 	Index rti = rel->relid;
 	CollectQualCtx ctx = {
 		.root = root,
