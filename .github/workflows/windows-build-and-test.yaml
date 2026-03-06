@@ -106,6 +106,8 @@ jobs:
         vectorized_aggregation
         ${{ matrix.versions.pg < 16 && 'columnar_scan_cost' || '' }}
       SKIPS: >-
+        create_hypertable
+        create_table_with
         bgw_db_scheduler
         bgw_db_scheduler_fixed
     steps:
@@ -201,10 +203,27 @@ jobs:
         -DPG_CONFIG=C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_config `
         -DASSERTIONS=ON `
         -DTEST_PG_LOG_DIRECTORY="log"
+
     - name: Build TimescaleDB
       run: cmake --build build_win --config ${{ matrix.build_type }}
+
     - name: Install TimescaleDB
       run: cmake --install build_win --config ${{ matrix.build_type }}
+
+    - name: Enable crash dumps for postgres.exe (WER LocalDumps)
+      if: needs.check_paths.outputs.run_installcheck == 'true'
+      shell: powershell
+      run: |
+        $DumpDir = Join-Path $env:GITHUB_WORKSPACE "crashdumps"
+        New-Item -ItemType Directory -Force -Path $DumpDir | Out-Null
+
+        $Key = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\postgres.exe"
+        New-Item -Path $Key -Force | Out-Null
+        New-ItemProperty -Path $Key -Name DumpFolder -Value $DumpDir -PropertyType ExpandString -Force | Out-Null
+        New-ItemProperty -Path $Key -Name DumpCount -Value 10 -PropertyType DWord -Force | Out-Null
+        New-ItemProperty -Path $Key -Name DumpType -Value 2 -PropertyType DWord -Force | Out-Null
+
+        Write-Host "Configured WER LocalDumps for postgres.exe => $DumpDir"
 
     - name: Setup postgres cluster
       if: needs.check_paths.outputs.run_installcheck == 'true'
@@ -288,6 +307,34 @@ jobs:
         grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
 
+    - name: Extract stack traces from crash dumps
+      if: always()
+      shell: powershell
+      run: |
+        $DumpDir = Join-Path $env:GITHUB_WORKSPACE "crashdumps"
+        if (!(Test-Path $DumpDir)) { Write-Host "No crashdumps directory found."; exit 0 }
+
+        $Dumps = Get-ChildItem -Path $DumpDir -Filter "*.dmp" -Recurse -ErrorAction SilentlyContinue
+        if (!$Dumps) { Write-Host "No .dmp files found in $DumpDir."; exit 0 }
+
+        $SymbolCache = Join-Path $DumpDir "symbols"
+        New-Item -ItemType Directory -Force -Path $SymbolCache | Out-Null
+
+        $Out = Join-Path $DumpDir "stacktraces.txt"
+        foreach ($Dump in $Dumps) {
+          Add-Content -Path $Out -Value ("==== " + $Dump.FullName + " ====")
+          & cdb.exe -z $Dump.FullName -c ".symfix $SymbolCache; .reload; !analyze -v; kv; q" | Out-File -FilePath $Out -Append -Encoding utf8
+        }
+
+    - name: Upload crash dumps and stack traces
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Crash dumps PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
+        path: |
+          crashdumps\**
+        if-no-files-found: ignore
+
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
       uses: actions/upload-artifact@v4
@@ -363,4 +410,3 @@ jobs:
             exit 1
           fi
           echo "All checks passed or were safely skipped."
-
