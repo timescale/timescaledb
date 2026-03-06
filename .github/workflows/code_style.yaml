@@ -87,9 +87,7 @@ jobs:
     - name: Check code formatting
       if: always()
       run: |
-        sudo apt install clang-format-14
-        sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-14 100
-        sudo update-alternatives --set clang-format /usr/bin/clang-format-14
+        sudo apt install clang-format-17
         git reset --hard
         ./scripts/clang_format_all.sh
         git diff --exit-code
