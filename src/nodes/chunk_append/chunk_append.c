@@ -208,6 +208,38 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			}
 		}
 	}
+
+	/*
+	 * For parameterized paths (e.g., inner side of LATERAL joins), also check
+	 * ppi_clauses for runtime exclusion. Any clause in ppi_clauses references
+	 * outer relations by definition.
+	 */
+	if (ts_guc_enable_runtime_exclusion && subpath->param_info != NULL &&
+		subpath->param_info->ppi_clauses != NIL)
+	{
+		path->runtime_exclusion_parent = true;
+
+		/* Check if any clause involves a partitioning column for child exclusion */
+		foreach (lc, subpath->param_info->ppi_clauses)
+		{
+			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+			ListCell *lc_var;
+
+			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, 0))
+			{
+				Var *var = lfirst(lc_var);
+				if ((Index) var->varno == rel->relid && var->varattno > 0 &&
+					ts_is_partitioning_column(ht, var->varattno))
+				{
+					path->runtime_exclusion_children = true;
+					break;
+				}
+			}
+			if (path->runtime_exclusion_children)
+				break;
+		}
+	}
+
 	/*
 	 * Our strategy is to use child exclusion if possible (if a partitioning
 	 * column is used) and fall back to parent exclusion if we can't use child
