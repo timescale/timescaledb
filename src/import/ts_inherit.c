@@ -25,6 +25,7 @@
 #include <utils/rel.h>
 
 #include "ts_inherit.h"
+#include "compat/compat.h"
 
 /* copied verbatim from optimizer/util/inherit.c at REL_18_3 */
 static void
@@ -74,7 +75,11 @@ expand_single_inheritance_child(PlannerInfo *root, RangeTblEntry *parentrte,
 	childrte->securityQuals = NIL;
 
 	/* No permission checking for child RTEs. */
+	#if PG16_LT
+	childrte->requiredPerms = 0;
+	#else
 	childrte->perminfoindex = 0;
+	#endif
 
 	/* Link not-yet-fully-filled child RTE into data structures */
 	parse->rtable = lappend(parse->rtable, childrte);
