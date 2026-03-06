@@ -28,8 +28,8 @@
 #include "compat/compat.h"
 
 /* copied verbatim from optimizer/util/inherit.c at REL_18_3 */
-static void
-expand_single_inheritance_child(PlannerInfo *root, RangeTblEntry *parentrte,
+void
+ts_expand_single_inheritance_child(PlannerInfo *root, RangeTblEntry *parentrte,
 								Index parentRTindex, Relation parentrel,
 								PlanRowMark *top_parentrc, Relation childrel,
 								RangeTblEntry **childrte_p,
@@ -220,21 +220,4 @@ expand_single_inheritance_child(PlannerInfo *root, RangeTblEntry *parentrte,
 									 childrte, childrel);
 		}
 	}
-}
-
-void
-ts_expand_single_inheritance_child(PlannerInfo *root, RangeTblEntry *parentrte,
-													Index parentRTindex, Relation parentrel,
-													PlanRowMark *top_parentrc, Relation childrel,
-													RangeTblEntry **childrte_p,
-													Index *childRTindex_p)
-{
-	expand_single_inheritance_child(root,
-								 parentrte,
-								 parentRTindex,
-								 parentrel,
-								 top_parentrc,
-								 childrel,
-								 childrte_p,
-								 childRTindex_p);
 }

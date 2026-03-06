@@ -1274,8 +1274,15 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 										   newrelation,
 										   &childrte,
 										   &child_rtindex);
+		/*
+		 * For compatibility with the old planner code that didn't create
+		 * per-chunk aliases, use the parent aliases. These aliases have only a
+		 * cosmetic function, and changing them would lead to EXPLAIN changes in
+		 * basically every test.
+		 */
 		childrte->alias = copyObject(rte->alias);
 		childrte->eref = copyObject(rte->eref);
+
 		childrte->ctename = NULL;
 		if (first_chunk_index == 0)
 			first_chunk_index = child_rtindex;
