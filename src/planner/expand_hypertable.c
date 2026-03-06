@@ -59,7 +59,7 @@
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
-#include "import/inherit.h"
+#include "import/ts_inherit.h"
 #include "import/planner.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner.h"
