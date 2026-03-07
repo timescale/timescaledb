@@ -989,6 +989,10 @@ chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 
 		chunk_set_replica_identity(chunk);
 	}
+
+	/* Copy FK constraints after indexes are created, since FK validation
+	 * requires the supporting unique index to exist on the chunk. */
+	ts_chunk_copy_referencing_fk(ht, chunk);
 }
 
 static Oid
@@ -4995,6 +4999,7 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 	chunk->constraints = ccs;
 	ts_process_utility_set_expect_chunk_modification(true);
 	ts_chunk_constraints_create(ht, chunk);
+	ts_chunk_copy_referencing_fk(ht, chunk);
 	ts_process_utility_set_expect_chunk_modification(false);
 	chunk->constraints = oldccs;
 
