@@ -169,10 +169,15 @@ BEGIN
   END LOOP;
 
   IF chunks_failure > 0 THEN
-    RAISE EXCEPTION 'columnstore policy failure'
-      USING
-        DETAIL = format('Failed to convert %L chunks to columnstore. Successfully converted %L chunks.', chunks_failure, numchunks_compressed),
-        ERRCODE = 'data_exception';
+    IF numchunks_compressed > 0 THEN
+      RAISE WARNING 'columnstore policy completed with some failures'
+        USING DETAIL = format('Failed to convert %L chunks to columnstore. Successfully converted %L chunks.', chunks_failure, numchunks_compressed);
+    ELSE
+      RAISE EXCEPTION 'columnstore policy failure'
+        USING
+          DETAIL = format('Failed to convert %L chunks to columnstore. Successfully converted %L chunks.', chunks_failure, numchunks_compressed),
+          ERRCODE = 'data_exception';
+    END IF;
   END IF;
 END;
 $$ LANGUAGE PLPGSQL;
