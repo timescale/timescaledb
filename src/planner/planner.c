@@ -1375,28 +1375,11 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 		case TS_REL_CHUNK_STANDALONE:
 		case TS_REL_CHUNK_CHILD:
 			/* Check for UPDATE/DELETE/MERGE (DML) on compressed chunks */
-			if (IS_UPDL_CMD(root->parse) && dml_involves_hypertable(root, ht, rti))
+			if ((IS_UPDL_CMD(root->parse) || root->parse->commandType == CMD_MERGE) &&
+				dml_involves_hypertable(root, ht, rti))
 			{
 				if (ts_cm_functions->set_rel_pathlist_dml != NULL)
 					ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
-				break;
-			}
-			/*
-			 * For MERGE command if there is an UPDATE or DELETE action, then
-			 * do not allow this to succeed on compressed chunks
-			 */
-			if (root->parse->commandType == CMD_MERGE && dml_involves_hypertable(root, ht, rti))
-			{
-				ListCell *ml;
-				foreach (ml, root->parse->mergeActionList)
-				{
-					MergeAction *action = (MergeAction *) lfirst(ml);
-					if (action->commandType == CMD_UPDATE || action->commandType == CMD_DELETE)
-					{
-						if (ts_cm_functions->set_rel_pathlist_dml != NULL)
-							ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
-					}
-				}
 				break;
 			}
 			TS_FALLTHROUGH;
@@ -1660,21 +1643,29 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 				}
 				case CMD_MERGE:
 				{
-					List *firstMergeActionList = linitial(mt->mergeActionLists);
-					ListCell *l;
 					/*
-					 * Iterate over merge action to check if there is an INSERT sql.
-					 * If so, then add ModifyHypertable node.
+					 * Create ModifyHypertable node for MERGE when:
+					 * - INSERT actions need chunk tuple routing
+					 * - Compressed chunks need decompression for correct
+					 *   join evaluation of matched vs not-matched rows
 					 */
-					foreach (l, firstMergeActionList)
+					bool need_modify = (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht));
+					if (!need_modify)
 					{
-						MergeAction *action = (MergeAction *) lfirst(l);
-						if (action->commandType == CMD_INSERT)
+						List *firstMergeActionList = linitial(mt->mergeActionLists);
+						ListCell *l;
+						foreach (l, firstMergeActionList)
 						{
-							path = ts_modify_hypertable_path_create(root, mt, input_rel);
-							break;
+							MergeAction *action = (MergeAction *) lfirst(l);
+							if (action->commandType == CMD_INSERT)
+							{
+								need_modify = true;
+								break;
+							}
 						}
 					}
+					if (need_modify)
+						path = ts_modify_hypertable_path_create(root, mt, input_rel);
 					break;
 				}
 				default:

@@ -66,7 +66,6 @@ set(TEST_FILES
     compression_trigger.sql
     create_table_with.sql
     decompress_index.sql
-    merge_compress.sql
     move.sql
     plan_skip_scan_notnull.sql
     policy_generalization.sql
@@ -168,6 +167,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     uuid_policies.sql
     license_tsl.sql
     merge_chunks.sql
+    merge_compress.sql
     fixed_schedules.sql
     recompress_chunk_segmentwise.sql
     feature_flags.sql
