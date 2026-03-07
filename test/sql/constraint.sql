@@ -393,6 +393,52 @@ ALTER TABLE referrer2 ADD CONSTRAINT hyper_fk_device_id_fkey
 FOREIGN KEY (time) REFERENCES  hyper_for_ref(time);
 \set ON_ERROR_STOP 1
 
+-- github issue 8082: FK referencing hypertable with composite unique index
+-- fails on first insert because chunk indexes are created after FK propagation
+CREATE TABLE messages_ref (
+    time_received TIMESTAMPTZ NOT NULL,
+    message_id BIGSERIAL,
+    message_type SMALLINT NOT NULL
+);
+
+SELECT create_hypertable('messages_ref', by_range('time_received'));
+CREATE UNIQUE INDEX ON messages_ref(time_received, message_id);
+
+-- Create FK referencing the hypertable BEFORE any data exists
+CREATE TABLE contents_ref (
+    content_id BIGSERIAL,
+    time_received TIMESTAMPTZ NOT NULL,
+    message_id BIGINT NOT NULL,
+    content CHAR(10),
+    FOREIGN KEY (time_received, message_id) REFERENCES messages_ref(time_received, message_id) ON DELETE CASCADE
+);
+
+-- This insert creates a new chunk. Previously it would fail with
+-- "index for constraint not found on chunk" because FK propagation
+-- happened before chunk indexes were created.
+INSERT INTO messages_ref (time_received, message_type) VALUES ('2025-05-05 14:56:58.000 UTC', 2);
+INSERT INTO contents_ref (message_id, time_received, content) VALUES (CURRVAL('messages_ref_message_id_seq'), '2025-05-05 14:56:58.000 UTC', 'HEJ');
+
+-- Insert into a second chunk
+INSERT INTO messages_ref (time_received, message_type) VALUES ('2025-06-05 14:57:58.000 UTC', 3);
+INSERT INTO contents_ref (message_id, time_received, content) VALUES (CURRVAL('messages_ref_message_id_seq'), '2025-06-05 14:57:58.000 UTC', 'HEJ2');
+
+-- Verify data
+SELECT message_type FROM messages_ref ORDER BY time_received;
+SELECT content FROM contents_ref ORDER BY time_received;
+
+-- Verify FK enforcement
+\set ON_ERROR_STOP 0
+INSERT INTO contents_ref (message_id, time_received, content) VALUES (9999, '2025-05-05 14:56:58.000 UTC', 'FAIL');
+\set ON_ERROR_STOP 1
+
+-- Verify cascade delete
+DELETE FROM messages_ref WHERE message_type = 2;
+SELECT content FROM contents_ref ORDER BY time_received;
+
+DROP TABLE contents_ref;
+DROP TABLE messages_ref;
+
 ----------------------- EXCLUSION CONSTRAINT  ------------------
 
 CREATE TABLE hyper_ex (

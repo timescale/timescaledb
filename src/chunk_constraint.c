@@ -504,8 +504,6 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 		CommandCounterIncrement();
 	}
 
-	/* Copy FK triggers to this chunk */
-	ts_chunk_copy_referencing_fk(ht, chunk);
 }
 
 ScanIterator
@@ -1019,6 +1017,7 @@ ts_chunk_constraints_recreate(const Hypertable *ht, const Chunk *chunk)
 	}
 
 	ts_chunk_constraints_create(ht, chunk);
+	ts_chunk_copy_referencing_fk(ht, chunk);
 }
 
 static void
