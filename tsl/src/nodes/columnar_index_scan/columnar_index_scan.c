@@ -10,6 +10,7 @@
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/optimizer.h>
 #include <nodes/plannodes.h>
 #include <parser/parsetree.h>
 #include <utils/fmgroids.h>
@@ -146,6 +147,47 @@ is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type
 	}
 
 	return false;
+}
+
+/*
+ * Check if all quals reference only segmentby columns.
+ *
+ * Vars in a ColumnarScan's plan->qual use custom_scan_tlist positions, so we
+ * resolve through the tlist to get the real table column before checking.
+ */
+static bool
+quals_only_reference_segmentby(List *quals, CustomScan *cscan, List *rtable)
+{
+	RangeTblEntry *rte = rt_fetch(cscan->scan.scanrelid, rtable);
+	CompressionSettings *settings = ts_compression_settings_get(rte->relid);
+	if (settings == NULL || settings->fd.segmentby == NULL)
+		return false;
+
+	List *vars = pull_var_clause((Node *) quals, 0);
+	ListCell *lc;
+	foreach (lc, vars)
+	{
+		Var *var = lfirst_node(Var, lc);
+		if (var->varattno <= 0)
+			return false;
+
+		/* Resolve through custom_scan_tlist to get real column attno */
+		AttrNumber real_attno = var->varattno;
+		if (cscan->custom_scan_tlist != NIL)
+		{
+			TargetEntry *tle = get_tle_by_resno(cscan->custom_scan_tlist, var->varattno);
+			if (tle == NULL || !IsA(tle->expr, Var))
+				return false;
+			real_attno = castNode(Var, tle->expr)->varattno;
+		}
+		if (real_attno <= 0)
+			return false;
+
+		char *col_name = get_attname(rte->relid, real_attno, true);
+		if (col_name == NULL || !ts_array_is_member(settings->fd.segmentby, col_name))
+			return false;
+	}
+	return true;
 }
 
 /*
@@ -620,9 +662,11 @@ insert_columnar_index_scan(Plan *plan, void *context)
 	CustomScan *cscan = castNode(CustomScan, childplan);
 
 	/*
-	 * No Postgres quals on the ColumnarScan.
+	 * No Postgres quals on the ColumnarScan, or quals only on segmentby
+	 * columns. Segmentby filters are pushed to the compressed scan so
+	 * ColumnarIndexScan can skip them.
 	 */
-	if (childplan->qual != NIL)
+	if (childplan->qual != NIL && !quals_only_reference_segmentby(childplan->qual, cscan, rtable))
 		return plan;
 
 	/*
