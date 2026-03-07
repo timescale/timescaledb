@@ -510,6 +510,62 @@ CREATE TABLE referrer2 (
 ALTER TABLE referrer2 ADD CONSTRAINT hyper_fk_device_id_fkey
 FOREIGN KEY (time) REFERENCES  hyper_for_ref(time);
 \set ON_ERROR_STOP 1
+-- github issue 8082: FK referencing hypertable with composite unique index
+-- fails on first insert because chunk indexes are created after FK propagation
+CREATE TABLE messages_ref (
+    time_received TIMESTAMPTZ NOT NULL,
+    message_id BIGSERIAL,
+    message_type SMALLINT NOT NULL
+);
+SELECT create_hypertable('messages_ref', by_range('time_received'));
+ create_hypertable 
+-------------------
+ (6,t)
+
+CREATE UNIQUE INDEX ON messages_ref(time_received, message_id);
+-- Create FK referencing the hypertable BEFORE any data exists
+CREATE TABLE contents_ref (
+    content_id BIGSERIAL,
+    time_received TIMESTAMPTZ NOT NULL,
+    message_id BIGINT NOT NULL,
+    content CHAR(10),
+    FOREIGN KEY (time_received, message_id) REFERENCES messages_ref(time_received, message_id) ON DELETE CASCADE
+);
+-- This insert creates a new chunk. Previously it would fail with
+-- "index for constraint not found on chunk" because FK propagation
+-- happened before chunk indexes were created.
+INSERT INTO messages_ref (time_received, message_type) VALUES ('2025-05-05 14:56:58.000 UTC', 2);
+INSERT INTO contents_ref (message_id, time_received, content) VALUES (CURRVAL('messages_ref_message_id_seq'), '2025-05-05 14:56:58.000 UTC', 'HEJ');
+-- Insert into a second chunk
+INSERT INTO messages_ref (time_received, message_type) VALUES ('2025-06-05 14:57:58.000 UTC', 3);
+INSERT INTO contents_ref (message_id, time_received, content) VALUES (CURRVAL('messages_ref_message_id_seq'), '2025-06-05 14:57:58.000 UTC', 'HEJ2');
+-- Verify data
+SELECT message_type FROM messages_ref ORDER BY time_received;
+ message_type 
+--------------
+            2
+            3
+
+SELECT content FROM contents_ref ORDER BY time_received;
+  content   
+------------
+ HEJ       
+ HEJ2      
+
+-- Verify FK enforcement
+\set ON_ERROR_STOP 0
+INSERT INTO contents_ref (message_id, time_received, content) VALUES (9999, '2025-05-05 14:56:58.000 UTC', 'FAIL');
+ERROR:  insert or update on table "contents_ref" violates foreign key constraint "contents_ref_time_received_message_id_fkey"
+\set ON_ERROR_STOP 1
+-- Verify cascade delete
+DELETE FROM messages_ref WHERE message_type = 2;
+SELECT content FROM contents_ref ORDER BY time_received;
+  content   
+------------
+ HEJ2      
+
+DROP TABLE contents_ref;
+DROP TABLE messages_ref;
 ----------------------- EXCLUSION CONSTRAINT  ------------------
 CREATE TABLE hyper_ex (
     time BIGINT,
@@ -523,14 +579,14 @@ CREATE TABLE hyper_ex (
 SELECT * FROM create_hypertable('hyper_ex', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-             6 | public      | hyper_ex   | t
+             7 | public      | hyper_ex   | t
 
 INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 12);
-ERROR:  conflicting key value violates exclusion constraint "9_25_hyper_ex_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "11_25_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 ALTER TABLE hyper_ex DROP CONSTRAINT hyper_ex_time_device_id_excl;
 --can now add
@@ -543,7 +599,7 @@ ALTER TABLE hyper_ex ADD CONSTRAINT hyper_ex_time_device_id_excl
         time WITH =, device_id WITH =
     ) WHERE (not canceled)
 ;
-ERROR:  could not create exclusion constraint "9_26_hyper_ex_time_device_id_excl"
+ERROR:  could not create exclusion constraint "11_26_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 DELETE FROM hyper_ex WHERE sensor_1 = 12;
 ALTER TABLE hyper_ex ADD CONSTRAINT hyper_ex_time_device_id_excl
@@ -562,7 +618,7 @@ BEGIN;
         1
 
 COMMIT;
-ERROR:  conflicting key value violates exclusion constraint "9_27_hyper_ex_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "11_27_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 --cannot add exclusion constraint without partition key.
 CREATE TABLE hyper_ex_invalid (
@@ -599,7 +655,7 @@ CREATE TABLE hyper_noinherit_alter (
 SELECT * FROM create_hypertable('hyper_noinherit_alter', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
  hypertable_id | schema_name |      table_name       | created 
 ---------------+-------------+-----------------------+---------
-             8 | public      | hyper_noinherit_alter | t
+             9 | public      | hyper_noinherit_alter | t
 
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_noinherit_alter ADD CONSTRAINT check_noinherit CHECK (sensor_1 > 0) NO INHERIT;
@@ -613,7 +669,7 @@ CREATE TABLE hyper_unique_deferred (
 SELECT * FROM create_hypertable('hyper_unique_deferred', 'time', chunk_time_interval => 10);
  hypertable_id | schema_name |      table_name       | created 
 ---------------+-------------+-----------------------+---------
-             9 | public      | hyper_unique_deferred | t
+            10 | public      | hyper_unique_deferred | t
 
 INSERT INTO hyper_unique_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);
 \set ON_ERROR_STOP 0
@@ -626,7 +682,7 @@ BEGIN;
         1
 
 COMMIT;
-ERROR:  duplicate key value violates unique constraint "10_28_hyper_unique_deferred_time_key"
+ERROR:  duplicate key value violates unique constraint "12_28_hyper_unique_deferred_time_key"
 \set ON_ERROR_STOP 1
 --test deferred on create table
 CREATE TABLE hyper_pk_deferred (
@@ -637,7 +693,7 @@ CREATE TABLE hyper_pk_deferred (
 SELECT * FROM create_hypertable('hyper_pk_deferred', 'time', chunk_time_interval => 10);
  hypertable_id | schema_name |    table_name     | created 
 ---------------+-------------+-------------------+---------
-            10 | public      | hyper_pk_deferred | t
+            11 | public      | hyper_pk_deferred | t
 
 INSERT INTO hyper_pk_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);
 \set ON_ERROR_STOP 0
@@ -650,7 +706,7 @@ BEGIN;
         1
 
 COMMIT;
-ERROR:  duplicate key value violates unique constraint "11_29_hyper_pk_deferred_pkey"
+ERROR:  duplicate key value violates unique constraint "13_29_hyper_pk_deferred_pkey"
 \set ON_ERROR_STOP 1
 --test that deferred works on create table too
 CREATE TABLE hyper_fk_deferred (
@@ -661,7 +717,7 @@ CREATE TABLE hyper_fk_deferred (
 SELECT * FROM create_hypertable('hyper_fk_deferred', 'time', chunk_time_interval => 10);
  hypertable_id | schema_name |    table_name     | created 
 ---------------+-------------+-------------------+---------
-            11 | public      | hyper_fk_deferred | t
+            12 | public      | hyper_fk_deferred | t
 
 \set ON_ERROR_STOP 0
 BEGIN;
@@ -673,7 +729,7 @@ BEGIN;
         1
 
 COMMIT;
-ERROR:  insert or update on table "_hyper_11_12_chunk" violates foreign key constraint "12_30_hyper_fk_deferred_device_id_fkey"
+ERROR:  insert or update on table "_hyper_12_14_chunk" violates foreign key constraint "14_30_hyper_fk_deferred_device_id_fkey"
 \set ON_ERROR_STOP 1
 CREATE TABLE hyper_ex_deferred (
     time BIGINT,
@@ -687,7 +743,7 @@ CREATE TABLE hyper_ex_deferred (
 SELECT * FROM create_hypertable('hyper_ex_deferred', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
  hypertable_id | schema_name |    table_name     | created 
 ---------------+-------------+-------------------+---------
-            12 | public      | hyper_ex_deferred | t
+            13 | public      | hyper_ex_deferred | t
 
 INSERT INTO hyper_ex_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 12);
 \set ON_ERROR_STOP 0
@@ -700,7 +756,7 @@ BEGIN;
         1
 
 COMMIT;
-ERROR:  conflicting key value violates exclusion constraint "13_33_hyper_ex_deferred_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "15_33_hyper_ex_deferred_time_device_id_excl"
 \set ON_ERROR_STOP 1
 -- Make sure renaming schemas won't break dropping constraints
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -712,7 +768,7 @@ CREATE TABLE hyper_unique (
 SELECT * FROM create_hypertable('hyper_unique', 'time', chunk_time_interval => 10, associated_schema_name => 'my_associated_schema');
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
-            13 | public      | hyper_unique | t
+            14 | public      | hyper_unique | t
 
 INSERT INTO hyper_unique(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);
 ALTER SCHEMA my_associated_schema RENAME TO new_associated_schema;
@@ -723,7 +779,7 @@ SELECT * FROM create_hypertable('test_validate', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  hypertable_id | schema_name |  table_name   | created 
 ---------------+-------------+---------------+---------
-            14 | public      | test_validate | t
+            15 | public      | test_validate | t
 
 INSERT INTO test_validate values(now(), 'a', 'b');
 ALTER TABLE test_validate
@@ -750,7 +806,7 @@ SELECT create_hypertable('tbl', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_hypertable 
 -------------------
- (15,public,tbl,t)
+ (16,public,tbl,t)
 
 ALTER TABLE tbl
 ADD CONSTRAINT fk_con
