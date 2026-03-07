@@ -395,7 +395,6 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 			}
 		}
 	}
-
 	else if (IsA(node, Query))
 	{
 		Query *query = castNode(Query, node);
@@ -662,21 +661,26 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 #ifdef USE_TELEMETRY
 			ts_telemetry_function_info_gather(parse);
 #endif
+#if PG16_GE
+			if (ts_guc_enable_optimizations &&
+				ts_cm_functions->continuous_agg_apply_rewrites_tsl != NULL)
+				context.rootquery = ts_cm_functions->continuous_agg_apply_rewrites_tsl(parse);
+#endif
 			/*
 			 * Preprocess the hypertables in the query and warm up the caches.
 			 */
-			preprocess_query((Node *) parse, &context);
+			preprocess_query((Node *) context.rootquery, &context);
 
 			if (ts_guc_enable_optimizations)
-				ts_cm_functions->preprocess_query_tsl(parse, &cursor_opts);
+				ts_cm_functions->preprocess_query_tsl(context.rootquery, &cursor_opts);
 		}
 
 		if (prev_planner_hook != NULL)
 			/* Call any earlier hooks */
-			stmt = (prev_planner_hook) (parse, query_string, cursor_opts, bound_params);
+			stmt = (prev_planner_hook) (context.rootquery, query_string, cursor_opts, bound_params);
 		else
 			/* Call the standard planner */
-			stmt = standard_planner(parse, query_string, cursor_opts, bound_params);
+			stmt = standard_planner(context.rootquery, query_string, cursor_opts, bound_params);
 
 		if (ts_extension_is_loaded_and_not_upgrading())
 		{
