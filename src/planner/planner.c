@@ -1378,8 +1378,8 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 				break;
 			}
 			/*
-			 * For MERGE command if there is an UPDATE or DELETE action, then
-			 * do not allow this to succeed on compressed chunks
+			 * For MERGE command with UPDATE or DELETE actions on compressed
+			 * chunks, set up the DML decompression path.
 			 */
 			if (root->parse->commandType == CMD_MERGE && dml_involves_hypertable(root, ht, rti))
 			{
@@ -1391,6 +1391,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 					{
 						if (ts_cm_functions->set_rel_pathlist_dml != NULL)
 							ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
+						break;
 					}
 				}
 				break;
@@ -1658,19 +1659,26 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 				{
 					List *firstMergeActionList = linitial(mt->mergeActionLists);
 					ListCell *l;
-					/*
-					 * Iterate over merge action to check if there is an INSERT sql.
-					 * If so, then add ModifyHypertable node.
-					 */
+					bool has_insert = false;
+					bool has_update_delete = false;
 					foreach (l, firstMergeActionList)
 					{
 						MergeAction *action = (MergeAction *) lfirst(l);
 						if (action->commandType == CMD_INSERT)
-						{
-							path = ts_modify_hypertable_path_create(root, mt, input_rel);
-							break;
-						}
+							has_insert = true;
+						else if (action->commandType == CMD_UPDATE ||
+								 action->commandType == CMD_DELETE)
+							has_update_delete = true;
 					}
+					/*
+					 * Create ModifyHypertable node for MERGE when:
+					 * - INSERT actions need chunk tuple routing
+					 * - UPDATE/DELETE on compressed chunks need decompression
+					 */
+					if (has_insert ||
+						(has_update_delete && ht != NULL &&
+						 TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht)))
+						path = ts_modify_hypertable_path_create(root, mt, input_rel);
 					break;
 				}
 				default:

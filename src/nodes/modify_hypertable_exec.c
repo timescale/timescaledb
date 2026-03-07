@@ -2319,10 +2319,13 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	context.estate = estate;
 
 	/*
-	 * For UPDATE/DELETE on compressed hypertable, decompress chunks and
+	 * For UPDATE/DELETE/MERGE on compressed hypertable, decompress chunks and
 	 * move rows to uncompressed chunks.
 	 */
-	if ((operation == CMD_DELETE || operation == CMD_UPDATE) && !ht_state->comp_chunks_processed)
+	if ((operation == CMD_DELETE || operation == CMD_UPDATE ||
+		 (operation == CMD_MERGE &&
+		  (node->mt_merge_subcommands & (MERGE_UPDATE | MERGE_DELETE)))) &&
+		!ht_state->comp_chunks_processed)
 	{
 		/* Modify snapshot only if something got decompressed */
 		if (ts_cm_functions->decompress_target_segments &&
@@ -2417,7 +2420,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		if (TupIsNull(context.planSlot))
 			break;
 
-		if (operation == CMD_INSERT || operation == CMD_MERGE)
+		if (operation == CMD_INSERT || (operation == CMD_MERGE && (node->mt_merge_subcommands & MERGE_INSERT)))
 		{
 			TupleTableSlot *slot = context.planSlot;
 			if (operation == CMD_MERGE)
@@ -3393,9 +3396,9 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
 	 */
 #if PG17_GE
-	actionStates = ctr->cis->result_relation_info->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+	actionStates = resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
 #else
-	actionStates = ctr->cis->result_relation_info->ri_notMatchedMergeAction;
+	actionStates = resultRelInfo->ri_notMatchedMergeAction;
 #endif
 	/*
 	 * Make source tuple available to ExecQual and ExecProject. We don't
