@@ -97,6 +97,7 @@ TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
+TSDLLEXPORT bool ts_guc_enable_compressed_merge = false;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
 TSDLLEXPORT bool ts_guc_enable_dml_bloom_filter = true;
@@ -741,6 +742,20 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+#ifdef TS_DEBUG
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_merge"),
+							 "Enable MERGE support for compressed hypertables",
+							 "Enable MERGE support for compressed hypertables. This is only "
+							 "available in debug builds and will currently do full decompression",
+							 &ts_guc_enable_compressed_merge,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_dml_decompression"),
 							 "Enable DML decompression",

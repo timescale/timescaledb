@@ -37,6 +37,7 @@ extern TSDLLEXPORT bool ts_guc_enable_osm_reads;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
 #endif
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
+extern TSDLLEXPORT bool ts_guc_enable_compressed_merge;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
 extern TSDLLEXPORT bool ts_guc_enable_dml_bloom_filter;
