@@ -1183,7 +1183,6 @@ row_compressor_append_ordered_slot(RowCompressor *row_compressor, TupleTableSlot
 	Ensure(!compressed_row_is_full, "batch is full");
 	row_compressor_append_row(row_compressor, slot);
 	MemoryContextSwitchTo(old_ctx);
-	ExecClearTuple(slot);
 }
 
 static void
@@ -1210,7 +1209,6 @@ row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlo
 
 	row_compressor_append_row(row_compressor, slot);
 	MemoryContextSwitchTo(old_ctx);
-	ExecClearTuple(slot);
 }
 
 static void
