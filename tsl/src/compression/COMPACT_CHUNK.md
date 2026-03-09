@@ -1,0 +1,126 @@
+# compact_chunk
+
+Merges overlapping compressed batches within a chunk. Only touches batches
+that need fixing — correctly ordered batches are left as-is.
+
+## How It Works
+
+```
+ Phase 1: FIND          Phase 2: RECOMPRESS       Phase 3: VERIFY
+ ┌──────────────┐       ┌──────────────────┐      ┌────────────────┐
+ │ Index scan   │──────▶│ Decompress+merge │─────▶│ Re-scan with   │
+ │ Stop at      │       │ overlapping      │      │ fresh snapshot │
+ │ first issue  │       │ batches, continue│      │ Clear UNORDERED│
+ └──────────────┘       │ scanning for more│      │ if clean       │
+                        └──────────────────┘      └────────────────┘
+```
+
+## Handling specific compression and batch configurations
+
+### 1. No overlaps (no-op)
+
+```
+ ┌────────┐  ┌────────┐  ┌────────┐       ┌────────┐  ┌────────┐  ┌────────┐
+ │ 1..100 │  │101..200│  │201..300│ ───▶  │ 1..100 │  │101..200│  │201..300│
+ └────────┘  └────────┘  └────────┘       └────────┘  └────────┘  └────────┘
+                                           (unchanged, UNORDERED cleared)
+```
+
+### 2. Overlapping batches
+
+```
+ ┌──────────┐                              ┌───────┐┌───────┐┌───────┐┌──┐┌────────┐
+ │  1..100  │                              │ 1..50 ││51..100││101    ││  ││201..300│
+ └──────────┘                              │       ││       ││ ..150 ││… │└────────┘
+    ┌──────────┐               ───▶        └───────┘└───────┘└───────┘└──┘
+    │ 50..150  │                           ◄────── merged + re-sorted ──►  ◄ kept ►
+    └──────────┘
+       ┌────────┐
+       │201..300│
+       └────────┘
+```
+
+### 3. Segmentby — independent per segment
+
+```
+ d1: ┌──────┐ ┌───────┐       d1: ┌──────────────┐
+     │1..100│ │50..200│  ──▶      │ 1..200 merged│
+     └──────┘ └───────┘           └──────────────┘
+ d2: ┌──────┐ ┌───────┐       d2: ┌──────────────┐
+     │1..100│ │50..200│  ──▶      │ 1..200 merged│
+     └──────┘ └───────┘           └──────────────┘
+```
+
+### 4. DESC orderby
+
+```
+ orderby='time DESC'       max◄────────────────────►min
+
+ ┌──────────┐                   ┌──────────────────┐
+ │ 200..100 │                   │ 200..........100 │
+ └──────────┘              ──▶  │     merged       │
+    ┌──────────┐                └──────────────────┘
+    │ 150..50  │
+    └──────────┘
+```
+
+### 5. Multi-column orderby — boundary tie resolution
+
+When col1 min/max ranges touch, decompress actual boundary rows to check secondary columns.
+
+```
+ orderby='device,time'     Both batches have device min=d2, max=d2 (col1 tie)
+
+ Batch 1: (d1..d2, 00:01..08:20)    last row:  (d2, 08:20)  ◄─ decompress
+ Batch 2: (d2..d3, 08:00..16:40)    first row: (d2, 08:21)  ◄─ decompress
+                                     08:20 < 08:21 → no overlap ✓
+
+ Batch 1: (d1..d2, 00:01..08:20)    last row:  (d2, 08:20)
+ Batch 2: (d2..d3, 04:11..12:30)    first row: (d2, 08:11)
+                                     08:20 > 08:11 → OVERLAP → merge
+```
+
+### 6. Mixed-null batch splitting
+
+A batch with both NULL and non-NULL values in the first orderby column is split — NULLs are invisible to the index and would be unordered.
+
+```
+ orderby='value NULLS LAST'
+
+ ┌─────────────────────┐  ┌──────────┐      ┌──────────┐  ┌──────────┐  ┌──────┐
+ │ 1001..1800, NULL×200│  │1801..2800│ ──▶  │1001..1800│  │1801..2800│  │NULL  │
+ └─────────────────────┘  └──────────┘      └──────────┘  └──────────┘  │ ×200 │
+  ▲ index says min=1001                     split out ─────────────────▶└──────┘
+    NULLs invisible                         non-null kept   untouched   end (NULLS LAST)
+```
+
+### 7. Overlap merge preserving NULLs
+
+When overlapping batches with nullable first orderby are merged, NULL rows are flushed as pure-null batches.
+
+```
+ orderby='value NULLS LAST'
+
+ ┌──────────────────┐                    ┌───────────────────┐  ┌──────┐
+ │ 1..400, NULL×100 │               ──▶  │  1..699 re-sorted │  │NULL  │
+ └──────────────────┘                    └───────────────────┘  │ ×100 │
+    ┌──────────┐        overlap                                 └──────┘
+    │ 200..699 │        on 200..400      NULLs split out during merge
+    └──────────┘
+```
+
+### 8. Secondary column NULLs at boundary tie
+
+Boundary row comparison respects NULLS FIRST/LAST semantics instead of skipping NULLs — skipping would leave the batches unordered.
+
+```
+ orderby='time, value NULLS LAST'
+
+ Batch 1 last row:  (08:20, NULL)         CORRECT: NULL with NULLS LAST
+ Batch 2 first row: (08:20, 1001)         means NULL > 1001 → OVERLAP → merge
+                                          
+
+ ┌──────────────────┐  ┌──────────────────┐       ┌──────────────────────────┐
+ │ ..., (08:20,NULL)│  │(08:20,1001), ... │  ──▶  │ merged + correctly sorted│
+ └──────────────────┘  └──────────────────┘       └──────────────────────────┘
+```

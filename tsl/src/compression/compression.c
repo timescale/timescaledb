@@ -2671,10 +2671,10 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 	return HeapTupleGetDatum(tuple);
 }
 
-extern Datum
-tsl_compressed_data_has_nulls(PG_FUNCTION_ARGS)
+bool
+compressed_data_has_nulls(Datum compressed_data)
 {
-	const CompressedDataHeader *header = get_compressed_data_header(PG_GETARG_DATUM(0));
+	const CompressedDataHeader *header = get_compressed_data_header(compressed_data);
 	bool has_nulls = false;
 
 	switch (header->compression_algorithm)
@@ -2705,7 +2705,13 @@ tsl_compressed_data_has_nulls(PG_FUNCTION_ARGS)
 			break;
 	}
 
-	return BoolGetDatum(has_nulls);
+	return has_nulls;
+}
+
+extern Datum
+tsl_compressed_data_has_nulls(PG_FUNCTION_ARGS)
+{
+	return BoolGetDatum(compressed_data_has_nulls(PG_GETARG_DATUM(0)));
 }
 
 extern CompressionStorage

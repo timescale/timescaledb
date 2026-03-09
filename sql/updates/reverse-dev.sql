@@ -119,3 +119,6 @@ CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_st
 DROP INDEX _timescaledb_internal.bgw_job_stat_history_execution_start_idx;
 DROP INDEX _timescaledb_internal.bgw_job_stat_history_job_id_execution_start_idx;
 
+-- drop new function
+DROP FUNCTION IF EXISTS _timescaledb_functions.compact_chunk(REGCLASS);
+
