@@ -913,7 +913,7 @@ caggtimebucket_equal(ContinuousAggBucketFunction *bf1, ContinuousAggBucketFuncti
 			(!bf1->bucket_time_timezone && bf2->bucket_time_timezone))
 			return false;
 		if (bf1->bucket_time_timezone && bf2->bucket_time_timezone &&
-			!strcmp(bf1->bucket_time_timezone, bf2->bucket_time_timezone))
+			strcmp(bf1->bucket_time_timezone, bf2->bucket_time_timezone) != 0)
 			return false;
 	}
 

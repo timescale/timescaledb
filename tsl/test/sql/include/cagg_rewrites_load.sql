@@ -55,6 +55,15 @@ FROM conditions
 GROUP BY device_id, bucket
 ORDER BY bucket;
 
+CREATE MATERIALIZED VIEW cagg1_tz
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day, 'Australia/Sydney') AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY bucket;
+
 CREATE MATERIALIZED VIEW cagg2
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '2 days', day) AS bucket,
