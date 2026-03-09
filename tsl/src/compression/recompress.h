@@ -27,7 +27,9 @@ typedef struct RecompressContext
 } RecompressContext;
 
 extern Datum tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS);
+extern Datum tsl_compact_chunk(PG_FUNCTION_ARGS);
 
+Oid compact_chunk_impl(Chunk *chunk);
 Oid recompress_chunk_segmentwise_impl(Chunk *chunk);
 bool recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk);
 
