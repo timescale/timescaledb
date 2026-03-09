@@ -191,6 +191,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.chunk_freeze_chunk = chunk_freeze_chunk,
 	.chunk_unfreeze_chunk = chunk_unfreeze_chunk,
 	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
+	.compact_chunk = tsl_compact_chunk,
 	.get_compressed_chunk_index_for_recompression =
 		tsl_get_compressed_chunk_index_for_recompression,
 	.preprocess_query_tsl = tsl_preprocess_query,

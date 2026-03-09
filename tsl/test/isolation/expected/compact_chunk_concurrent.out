@@ -1,0 +1,246 @@
+Parsed test spec with 2 sessions
+
+starting permutation: s2_begin s2_select s1_compact s2_commit s1_show_status s1_count
+step s2_begin: 
+    BEGIN;
+
+step s2_select: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 4000
+
+step s1_compact: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics') chunk;
+
+compact
+-------
+      1
+
+step s2_commit: 
+    COMMIT;
+
+step s1_show_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status      
+------------
+{COMPRESSED}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 4000
+
+
+starting permutation: s2_begin s2_insert s1_compact s2_commit s1_show_status s1_count
+step s2_begin: 
+    BEGIN;
+
+step s2_insert: 
+    INSERT INTO metrics VALUES ('2025-01-02 12:00', 'd1', -1.0);
+
+s1: WARNING:  delaying compaction on chunk _timescaledb_internal._hyper_X_X_chunk due to concurrent DML
+step s1_compact: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics') chunk;
+
+compact
+-------
+      1
+
+step s2_commit: 
+    COMMIT;
+
+step s1_show_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 4001
+
+
+starting permutation: s2_begin s2_update s1_compact s2_commit s1_show_status s1_count
+step s2_begin: 
+    BEGIN;
+
+step s2_update: 
+    UPDATE metrics SET value = -1.0 WHERE value = 1.0;
+
+s1: WARNING:  delaying compaction on chunk _timescaledb_internal._hyper_X_X_chunk due to concurrent DML
+step s1_compact: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics') chunk;
+
+compact
+-------
+      1
+
+step s2_commit: 
+    COMMIT;
+
+step s1_show_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 4000
+
+
+starting permutation: s2_begin s2_delete s1_compact s2_commit s1_show_status s1_count
+step s2_begin: 
+    BEGIN;
+
+step s2_delete: 
+    DELETE FROM metrics WHERE value = 1.0;
+
+s1: WARNING:  delaying compaction on chunk _timescaledb_internal._hyper_X_X_chunk due to concurrent DML
+step s1_compact: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics') chunk;
+
+compact
+-------
+      1
+
+step s2_commit: 
+    COMMIT;
+
+step s1_show_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 3999
+
+
+starting permutation: s2_begin s2_insert s2_commit s1_compact s1_show_status s1_count
+step s2_begin: 
+    BEGIN;
+
+step s2_insert: 
+    INSERT INTO metrics VALUES ('2025-01-02 12:00', 'd1', -1.0);
+
+step s2_commit: 
+    COMMIT;
+
+step s1_compact: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics') chunk;
+
+ERROR:  trying to compact a partially compressed chunk _timescaledb_internal._hyper_X_X_chunk
+step s1_show_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status                        
+------------------------------
+{COMPRESSED,UNORDERED,PARTIAL}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 4001
+
+
+starting permutation: s2_begin s2_insert s2_rollback s1_compact s1_show_status s1_count
+step s2_begin: 
+    BEGIN;
+
+step s2_insert: 
+    INSERT INTO metrics VALUES ('2025-01-02 12:00', 'd1', -1.0);
+
+step s2_rollback: 
+    ROLLBACK;
+
+step s1_compact: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics') chunk;
+
+compact
+-------
+      1
+
+step s1_show_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status      
+------------
+{COMPRESSED}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 4000
+
+
+starting permutation: s2_begin s2_direct_insert s2_commit s1_compact s1_show_status s1_count
+step s2_begin: 
+    BEGIN;
+
+step s2_direct_insert: 
+    SET timescaledb.enable_direct_compress_insert = true;
+    INSERT INTO metrics
+    SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd1', (i + 0.1)::float
+    FROM generate_series(1,100) i;
+
+step s2_commit: 
+    COMMIT;
+
+step s1_compact: 
+    SELECT count(_timescaledb_functions.compact_chunk(chunk)) AS compact
+    FROM show_chunks('metrics') chunk;
+
+compact
+-------
+      1
+
+step s1_show_status: 
+    SELECT _timescaledb_functions.chunk_status_text(chunk) AS status
+    FROM show_chunks('metrics') chunk;
+
+status      
+------------
+{COMPRESSED}
+
+step s1_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+ 4100
+
