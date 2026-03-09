@@ -1242,6 +1242,33 @@ invalidation_hypertable_has_invalidations(int32 hyper_id)
 }
 
 bool
+invalidation_cagg_has_pending_mat_ranges(ContinuousAgg *cagg)
+{
+	bool found = false;
+	int32 cagg_hyper_id = cagg->data.mat_hypertable_id;
+
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
+													AccessShareLock,
+													CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(),
+										   CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
+										   CONTINUOUS_AGGS_MATERIALIZATION_RANGES_IDX);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_aggs_materialization_ranges_materialization_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(cagg_hyper_id));
+	iterator.ctx.limit = 1; /* we only need to know if there is at least one */
+
+	ts_scan_iterator_start_scan(&iterator);
+	if (ts_scan_iterator_next(&iterator))
+		found = true;
+	ts_scan_iterator_close(&iterator);
+
+	return found;
+}
+
+bool
 invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
 {
 	bool found = false;

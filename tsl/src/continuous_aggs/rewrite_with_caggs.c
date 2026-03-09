@@ -105,8 +105,7 @@ map_varnos_mutator(Node *node, map_varnos_context *context)
 			var->varno <= context->varno_map->maplen)
 		{
 			/* Found a variable, make the substitution */
-			Var *newvar = (Var *) palloc(sizeof(Var));
-			*newvar = *var; /* initially copy all fields of the Var */
+			Var *newvar = (Var *) copyObject(var);
 
 			int new_varno = context->varno_map->attnums[var->varno - 1] + 1;
 			newvar->varno = new_varno;
@@ -319,6 +318,7 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 	/* Diagnostics on matching steps  */
 	StringInfo not_realtime = NULL;
 	StringInfo invalidated = NULL;
+	StringInfo pending_ranges = NULL;
 	StringInfo nonmatching_buckets = NULL;
 	StringInfo nonmatching_joins = NULL;
 	StringInfo nonmatching_groupby = NULL;
@@ -348,6 +348,14 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 		if (invalidation_cagg_has_invalidations(cagg))
 		{
 			add_optional_debug_info(cagg, &invalidated, "Invalidated caggs:");
+			continue;
+		}
+		/* TEMP: only consider Caggs with no pending materialization ranges */
+		if (invalidation_cagg_has_pending_mat_ranges(cagg))
+		{
+			add_optional_debug_info(cagg,
+									&pending_ranges,
+									"Caggs with pending materialization ranges:");
 			continue;
 		}
 
@@ -651,6 +659,11 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 			{
 				appendStringInfo(&(cagg_rewrite_ctx->msg), "%s\n", invalidated->data);
 				pfree(invalidated);
+			}
+			if (pending_ranges)
+			{
+				appendStringInfo(&(cagg_rewrite_ctx->msg), "%s\n", pending_ranges->data);
+				pfree(pending_ranges);
 			}
 			if (nonmatching_buckets)
 			{

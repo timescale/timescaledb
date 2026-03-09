@@ -97,6 +97,14 @@ LATERAL (SELECT * FROM devices WHERE devices.device_id = conditions.device_id) q
 GROUP BY bucket, q.name
 ORDER BY 1, 2, 3;
 
+-- (cagg1_tz)
+SELECT time_bucket(INTERVAL '1 day', day, 'Australia/Sydney') AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY 1, 2, 3;
+
 -- Cagg rewrites in subqueries/SET ops
 
 -- (cagg1) CTE
