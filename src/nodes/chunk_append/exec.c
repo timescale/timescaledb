@@ -170,22 +170,25 @@ Node *
 ts_chunk_append_state_create(CustomScan *cscan)
 {
 	ChunkAppendState *state;
-	List *settings = linitial(cscan->custom_private);
+
+	Assert(list_length(cscan->custom_private) == CAP_Count);
+	List *settings = list_nth(cscan->custom_private, CAP_Settings);
+	Assert(list_length(settings) == CAS_Count);
 
 	state = (ChunkAppendState *) newNode(sizeof(ChunkAppendState), T_CustomScanState);
 
 	state->csstate.methods = &chunk_append_state_methods;
 
 	state->initial_subplans = cscan->custom_plans;
-	state->initial_ri_clauses = lsecond(cscan->custom_private);
-	state->sort_options = lfourth(cscan->custom_private);
-	state->initial_parent_clauses = lfirst(list_nth_cell(cscan->custom_private, 4));
+	state->initial_ri_clauses = list_nth(cscan->custom_private, CAP_ChunkRIClauses);
+	state->sort_options = list_nth(cscan->custom_private, CAP_SortOptions);
+	state->initial_parent_clauses = list_nth(cscan->custom_private, CAP_ParentClauses);
 
-	state->startup_exclusion = (bool) linitial_int(settings);
-	state->runtime_exclusion_parent = (bool) lsecond_int(settings);
-	state->runtime_exclusion_children = (bool) lthird_int(settings);
-	state->limit = lfourth_int(settings);
-	state->first_partial_plan = lfirst_int(list_nth_cell(settings, 4));
+	state->startup_exclusion = list_nth_int(settings, CAS_StartupExclusion);
+	state->runtime_exclusion_parent = list_nth_int(settings, CAS_RuntimeExclusionParent);
+	state->runtime_exclusion_children = list_nth_int(settings, CAS_RuntimeExclusionChildren);
+	state->limit = list_nth_int(settings, CAS_Limit);
+	state->first_partial_plan = list_nth_int(settings, CAS_FirstPartialPath);
 
 	state->filtered_subplans = state->initial_subplans;
 	state->filtered_ri_clauses = state->initial_ri_clauses;
@@ -331,7 +334,7 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	node->ss.ps.resultopsfixed = false;
 	ExecAssignScanProjectionInfoWithVarno(&node->ss, INDEX_VAR);
 
-	initialize_constraints(state, lthird(cscan->custom_private));
+	initialize_constraints(state, list_nth(cscan->custom_private, CAP_RTIndexes));
 
 	/* In parallel mode with a parallel_aware plan, the parallel leader performs the startup
 	 * exclusion and stores the result in shared memory (the flag SUBPLAN_STATE_INCLUDED of

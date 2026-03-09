@@ -7,6 +7,7 @@
 
 #include <catalog/pg_inherits.h>
 #include <optimizer/optimizer.h>
+#include <parser/parse_coerce.h>
 #include <parser/parsetree.h>
 #include <tcop/tcopprot.h>
 #include <utils/array.h>
@@ -35,6 +36,8 @@ typedef struct DimensionValues
 	bool use_or; /* ORed or ANDed values */
 	Oid type;	 /* Oid type for values */
 } DimensionValues;
+
+static DimensionValues *dimension_values_create(List *values, Oid type, bool use_or);
 
 static DimensionRestrictInfoOpen *
 dimension_restrict_info_open_create(const Dimension *d)
@@ -119,9 +122,13 @@ dimension_restrict_info_is_trivial(const DimensionRestrictInfo *dri)
 	}
 }
 
+/*
+ * Add restriction for open (time) dimension.
+ * Values are expected to be int64 (already converted by caller).
+ */
 static bool
 dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber strategy,
-								 Oid collation, DimensionValues *dimvalues)
+								 DimensionValues *dimvalues)
 {
 	ListCell *item;
 	bool restriction_added = false;
@@ -132,13 +139,7 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 
 	foreach (item, dimvalues->values)
 	{
-		Oid restype;
-		Datum datum = ts_dimension_transform_value(dri->base.dimension,
-												   collation,
-												   PointerGetDatum(lfirst(item)),
-												   dimvalues->type,
-												   &restype);
-		int64 value = ts_time_value_to_internal_or_infinite(datum, restype);
+		int64 value = DatumGetInt64(PointerGetDatum(lfirst(item)));
 
 		switch (strategy)
 		{
@@ -177,7 +178,7 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 
 static List *
 dimension_restrict_info_get_partitions(DimensionRestrictInfoClosed *dri, Oid collation,
-									   List *values)
+									   List *values, Oid value_type)
 {
 	List *partitions = NIL;
 	ListCell *item;
@@ -187,7 +188,7 @@ dimension_restrict_info_get_partitions(DimensionRestrictInfoClosed *dri, Oid col
 		Datum value = ts_dimension_transform_value(dri->base.dimension,
 												   collation,
 												   PointerGetDatum(lfirst(item)),
-												   InvalidOid,
+												   value_type,
 												   NULL);
 
 		partitions = list_append_unique_int(partitions, DatumGetInt32(value));
@@ -208,7 +209,8 @@ dimension_restrict_info_closed_add(DimensionRestrictInfoClosed *dri, StrategyNum
 		return false;
 	}
 
-	partitions = dimension_restrict_info_get_partitions(dri, collation, dimvalues->values);
+	partitions =
+		dimension_restrict_info_get_partitions(dri, collation, dimvalues->values, dimvalues->type);
 
 	/* the intersection is empty when using ALL operator (ANDing values)  */
 	if (list_length(partitions) > 1 && !dimvalues->use_or)
@@ -240,35 +242,6 @@ dimension_restrict_info_closed_add(DimensionRestrictInfoClosed *dri, StrategyNum
 		restriction_added = true;
 	}
 	return restriction_added;
-}
-
-static bool
-dimension_restrict_info_add(DimensionRestrictInfo *dri, int strategy, Oid collation,
-							DimensionValues *values)
-{
-	switch (dri->dimension->type)
-	{
-		case DIMENSION_TYPE_OPEN:
-			return dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
-													strategy,
-													collation,
-													values);
-		case DIMENSION_TYPE_STATS:
-			/* we reuse the DimensionRestrictInfoOpen structure for these */
-			return dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
-													strategy,
-													collation,
-													values);
-		case DIMENSION_TYPE_CLOSED:
-			return dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,
-													  strategy,
-													  collation,
-													  values);
-		default:
-			elog(ERROR, "unknown dimension type: %d", dri->dimension->type);
-			/* suppress compiler warning on MSVC */
-			return false;
-	}
 }
 
 HypertableRestrictInfo *
@@ -367,10 +340,140 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 		return;
 
 	get_op_opfamily_properties(op_oid, tce->btree_opf, false, &strategy, &lefttype, &righttype);
-	dimvalues = func_get_dim_values(c, use_or);
-	if (dimension_restrict_info_add(dri, strategy, c->constcollid, dimvalues))
+
+	/*
+	 * For arrays (ScalarArrayOpExpr), we work with the element type.
+	 * Non-constant arrays were already filtered out above by the IsA(expr, Const)
+	 * check after eval_const_expressions.
+	 */
+	Oid consttype = c->consttype;
+	Oid const_element_type = get_element_type(consttype);
+	bool is_array = OidIsValid(const_element_type);
+	if (is_array)
+		consttype = const_element_type;
+
+	/*
+	 * Coerce literal values to column type if needed. Coercion is required when
+	 * types differ and we use a partitioning function. The partitioning functions
+	 * always expect the column type. It is always used for closed dimensions
+	 * (space partitioning), and can be set for open dimensions too.
+	 *
+	 * Open dimensions without custom partitioning function don't need coercion
+	 * because the ts_time_value_to_internal_or_infinite() handles the cross-type
+	 * comparisons (e.g., date vs timestamp) and integer types directly.
+	 *
+	 * In Postgres, the cross-type integer inequalities (e.g. int4 column <= int8
+	 * literal) work without coercion using cross-type functions like int48le().
+	 * However, our partition function interface uses the column type, not the
+	 * literal type.
+	 *
+	 * We only use implicit coercions because narrowing casts (int8 -> int4) can
+	 * fail at runtime with "integer out of range". When no implicit coercion
+	 * exists, we skip chunk exclusion for this clause - correct but slower.
+	 */
+	bool needs_coercion = (consttype != columntype) && (IS_CLOSED_DIMENSION(dri->dimension) ||
+														dri->dimension->partitioning != NULL);
+
+	if (needs_coercion)
 	{
-		hri->num_base_restrictions++;
+		Oid funcid;
+		CoercionPathType pathtype =
+			find_coercion_pathway(columntype, consttype, COERCION_IMPLICIT, &funcid);
+
+		if (pathtype != COERCION_PATH_FUNC)
+		{
+			/*
+			 * No usable implicit coercion, skip this clause for TimescaleDB
+			 * chunk exclusion. It might be still handled by Postgres constraint
+			 * exclusion.
+			 *
+			 * COERCION_PATH_RELABELTYPE (binary compatible) won't occur
+			 * here because PostgreSQL coerces such literals at parse time and
+			 * eval_const_expressions() folds any remaining RelabelType(Const).
+			 */
+			return;
+		}
+
+		Assert(OidIsValid(funcid));
+
+		if (is_array)
+		{
+			ArrayIterator iterator =
+				array_create_iterator(DatumGetArrayTypeP(c->constvalue), 0, NULL);
+			Datum elem = (Datum) NULL;
+			bool isnull;
+			List *values = NIL;
+
+			while (array_iterate(iterator, &elem, &isnull))
+			{
+				if (!isnull)
+				{
+					Datum coerced = OidFunctionCall1Coll(funcid, c->constcollid, elem);
+					values = lappend(values, DatumGetPointer(coerced));
+				}
+			}
+			array_free_iterator(iterator);
+			dimvalues = dimension_values_create(values, columntype, use_or);
+		}
+		else
+		{
+			Datum coerced = OidFunctionCall1Coll(funcid, c->constcollid, c->constvalue);
+			dimvalues =
+				dimension_values_create(list_make1(DatumGetPointer(coerced)), columntype, use_or);
+		}
+	}
+	else
+	{
+		dimvalues = func_get_dim_values(c, use_or);
+	}
+
+	/*
+	 * Add restriction based on dimension type.
+	 */
+	if (IS_CLOSED_DIMENSION(dri->dimension))
+	{
+		if (dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,
+											   strategy,
+											   c->constcollid,
+											   dimvalues))
+			hri->num_base_restrictions++;
+	}
+	else
+	{
+		/* Open and stats dimensions: convert values to int64 */
+		List *int64_values = NIL;
+		ListCell *lc;
+		Oid valuetype = dimvalues->type;
+
+		foreach (lc, dimvalues->values)
+		{
+			Datum value = PointerGetDatum(lfirst(lc));
+			int64 internal;
+
+			if (dri->dimension->partitioning != NULL)
+			{
+				/* Apply partitioning function first, then convert result to int64 */
+				Oid restype;
+				value = ts_dimension_transform_value(dri->dimension,
+													 c->constcollid,
+													 value,
+													 valuetype,
+													 &restype);
+				internal = ts_time_value_to_internal_or_infinite(value, restype);
+			}
+			else
+			{
+				internal = ts_time_value_to_internal_or_infinite(value, valuetype);
+			}
+			int64_values = lappend(int64_values, DatumGetPointer(Int64GetDatum(internal)));
+		}
+		dimvalues->values = int64_values;
+		dimvalues->type = INT8OID;
+
+		if (dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
+											 strategy,
+											 dimvalues))
+			hri->num_base_restrictions++;
 	}
 }
 

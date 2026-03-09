@@ -862,6 +862,9 @@ ts_convert_to_sparse_index_settings(Jsonb *jsonb)
 						   "INIT",
 						   JsonbTypeName(&jsonb_value));
 
+					Ensure(list_length(parsed_settings->objects) > 0,
+						   "Jsonb value has a key, but no object has been started, in state INIT");
+
 					SparseIndexSettingsObject *current_object = llast(parsed_settings->objects);
 					Assert(current_object != NULL);
 					tmp_context = MemoryContextSwitchTo(parsed_settings->context);

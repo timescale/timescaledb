@@ -26,8 +26,8 @@ SCHEDULE=
 TESTS=${TESTS:-}
 IGNORES=${IGNORES:-}
 SKIPS=${SKIPS:-}
-PSQL=${PSQL:-psql}
-PSQL="${PSQL} -X" # Prevent any .psqlrc files from being executed during the tests
+# PG_BINDIR is passed from CMake via environment
+PSQL="${PSQL:-${PG_BINDIR}/psql} -X" # Prevent any .psqlrc files from being executed during the tests
 PG_VERSION_MAJOR=$(${PSQL} --version | awk '{split($3,v,"[.a-z]"); print v[1]}')
 
 # check if test matches any of the patterns in a list

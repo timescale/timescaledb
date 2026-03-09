@@ -1,0 +1,2 @@
+Implements: #9312 Remove advisory locks from bgw jobs and add graceful cancellation
+Thanks: @leppaott for reporting a deadlock when deleting jobs

@@ -39,14 +39,8 @@ FROM
     JOIN pg_namespace n ON n.oid = cl.relnamespace
     AND n.nspname = c.schema_name
     JOIN LATERAL _timescaledb_functions.relation_size(cl.oid) AS relsize ON TRUE
-    LEFT JOIN _timescaledb_catalog.chunk comp ON comp.id = c.compressed_chunk_id
-    LEFT JOIN LATERAL _timescaledb_functions.relation_size(
-        CASE WHEN comp.schema_name IS NOT NULL AND comp.table_name IS NOT NULL THEN
-            format('%I.%I', comp.schema_name, comp.table_name)::regclass
-        ELSE
-            NULL::regclass
-        END
-        ) AS relcompsize ON TRUE;
+    LEFT JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = cl.oid
+    LEFT JOIN LATERAL _timescaledb_functions.relation_size(cs.compress_relid) AS relcompsize ON TRUE;
 
 GRANT SELECT ON  _timescaledb_internal.hypertable_chunk_local_size TO PUBLIC;
 
@@ -381,10 +375,9 @@ BEGIN
   SELECT nspname, relname INTO v_schema, v_name FROM pg_class c JOIN pg_namespace n ON (n.OID = c.relnamespace) WHERE c.OID = relation;
 
   -- we only need to check if the relation has a compressed chunk if it is a chunk
-  SELECT compressed_chunk_id FROM _timescaledb_catalog.chunk INTO v_chunk_id WHERE table_name = v_name AND schema_name = v_schema;
+  SELECT compress_relid FROM _timescaledb_catalog.compression_settings INTO v_oid WHERE relid = relation;
 
-  IF v_chunk_id IS NOT NULL THEN
-    SELECT format('%I.%I', schema_name, table_name)::regclass INTO v_oid FROM _timescaledb_catalog.chunk WHERE id = v_chunk_id;
+  IF v_oid IS NOT NULL THEN
     row_count := (SELECT CASE WHEN reltuples IS NULL THEN 0 WHEN reltuples < 0 THEN 0 ELSE reltuples * _timescaledb_functions.estimate_compressed_batch_size(oid) END FROM pg_class WHERE oid = v_oid);
   END IF;
 
@@ -401,10 +394,10 @@ SELECT
     srcht.table_name AS hypertable_name,
     srcch.schema_name AS chunk_schema,
     srcch.table_name AS chunk_name,
-    CASE WHEN srcch.compressed_chunk_id IS NULL THEN
-        'Uncompressed'::text
-    ELSE
+    CASE WHEN srcch.status & 1 = 1 THEN
         'Compressed'::text
+    ELSE
+        'Uncompressed'::text
     END AS compression_status,
     map.uncompressed_heap_size,
     map.uncompressed_index_size,
