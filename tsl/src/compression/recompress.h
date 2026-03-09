@@ -26,11 +26,17 @@ typedef struct RecompressContext
 	ScanKeyData orderby_scankeys[INDEX_MAX_KEYS * 2]; /* for min and max */
 	bool key_byval[INDEX_MAX_KEYS];
 	int16 key_typlen[INDEX_MAX_KEYS];
+
+	/* Cached sort operator functions per orderby column, used to compare batch
+	 * boundary values during compaction. */
+	FmgrInfo *orderby_sort_fmgrs;
 } RecompressContext;
 
 extern Datum tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS);
+extern Datum tsl_compact_chunk(PG_FUNCTION_ARGS);
 
 Oid recompress_chunk_segmentwise_impl(Chunk *chunk, bool fullrecompress);
+Oid compact_chunk_impl(Chunk *chunk);
 bool recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk);
 
 /* Result of matching an uncompressed tuple against a compressed batch */
