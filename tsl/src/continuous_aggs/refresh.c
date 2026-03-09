@@ -34,6 +34,7 @@
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_jobs_refresh_ranges.h"
 
 #define CAGG_REFRESH_LOG_LEVEL                                                                     \
 	(context.callctx == CAGG_REFRESH_POLICY || context.callctx == CAGG_REFRESH_POLICY_BATCHED ?    \
@@ -802,20 +803,46 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	}
 
 	/*
-	 * Perform the refresh across two transactions.
+	 * Perform the refresh across three transactions.
 	 *
-	 * The first transaction moves the invalidation threshold (if needed) and
-	 * copies over invalidations from the hypertable log to the cagg
-	 * invalidation log. Doing the threshold and copying as part of the first
-	 * transaction ensures that the threshold and new invalidations will be
-	 * visible as soon as possible to concurrent refreshes and that we keep
-	 * locks for only a short period.
+	 * The first transaction registers the refresh window in the concurrent-
+	 * refresh tracking table to detect overlapping concurrent refreshes, then
+	 * moves the invalidation threshold (if needed) and copies invalidations
+	 * from the hypertable log to the cagg invalidation log.
 	 *
-	 * The second transaction processes the cagg invalidation log and then
-	 * performs the actual refresh (materialization of data). This transaction
-	 * serializes around a lock on the materialized hypertable for the
-	 * continuous aggregate that gets refreshed.
+	 * The second transaction cuts the cagg invalidation log entries so that
+	 * they either fit entirely within the refresh window or are disjoint from
+	 * it. It serializes around a lock on the materialized hypertable to prevent
+	 * concurrent refreshes of the same cagg from cutting the log simultaneously.
+	 *
+	 * The third transaction performs the actual materialization, then removes
+	 * the processed invalidation log entries and the refresh window registration.
+	 * No additional range locking is needed here because the refresh window was
+	 * already registered in the tracking table in the first transaction, which
+	 * prevents any concurrent refresh with an overlapping window from running.
 	 */
+
+	/*
+	 * Register this refresh's window in the concurrent-refresh tracking table
+	 * (continuous_aggs_jobs_refresh_ranges).  The function acquires
+	 * ShareUpdateExclusiveLock on that table, which conflicts with itself,
+	 * serializing the overlap check and insert so no two sessions can race past
+	 * it.  During the scan it also removes entries whose backend is dead.
+	 *
+	 * If a live entry with an overlapping window already exists, we raise an
+	 * error.
+	 */
+	if (!ts_cagg_jobs_refresh_ranges_lock_and_register(mat_id,
+													   refresh_window.start,
+													   refresh_window.end,
+													   MyProcPid))
+		ereport(ERROR,
+				(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
+				 errmsg("could not refresh continuous aggregate \"%s\"",
+						NameStr(cagg->data.user_view_name)),
+				 errdetail("A concurrent refresh on window [%s, %s) is already in progress.",
+						   ts_internal_to_time_string(refresh_window.start, refresh_window.type),
+						   ts_internal_to_time_string(refresh_window.end, refresh_window.type))));
 
 	/* Set the new invalidation threshold. Note that this only updates the
 	 * threshold if the new value is greater than the old one. Otherwise, the
