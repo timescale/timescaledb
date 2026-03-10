@@ -665,3 +665,34 @@ ALTER TABLE :CHUNK2 RESET (parallel_workers);
          ->  Seq Scan on _hyper_1_2_chunk
                Filter: (ts < now())
 
+
+-- test parallel ChunkAppend with InitPlan params (runtime exclusion)
+-- When a filter uses a subquery (InitPlan) on a non-partitioning column,
+-- runtime_exclusion_parent is set but startup_exclusion is not. The parallel
+-- workers must still receive the correct subplan list via shared memory.
+SET max_parallel_workers_per_gather = 2;
+SET parallel_tuple_cost = 0;
+SET parallel_setup_cost = 0;
+SET min_parallel_table_scan_size = 0;
+-- get the sequential result for comparison
+SET max_parallel_workers_per_gather = 0;
+SELECT count(*) AS expected FROM "test" WHERE i = (SELECT max(i) FROM "test") \gset
+-- parallel with leader participation
+SET max_parallel_workers_per_gather = 2;
+SELECT count(*) = :expected AS leader_ok FROM "test" WHERE i = (SELECT max(i) FROM "test");
+ leader_ok 
+-----------
+ t
+
+-- parallel with only workers (leader does not participate)
+SET parallel_leader_participation = off;
+SELECT count(*) = :expected AS workers_ok FROM "test" WHERE i = (SELECT max(i) FROM "test");
+ workers_ok 
+------------
+ t
+
+RESET parallel_leader_participation;
+RESET max_parallel_workers_per_gather;
+RESET parallel_tuple_cost;
+RESET parallel_setup_cost;
+RESET min_parallel_table_scan_size;
