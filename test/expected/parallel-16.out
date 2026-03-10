@@ -605,6 +605,11 @@ ALTER TABLE :CHUNK2 SET (parallel_workers=2);
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_2_chunk
 
+SELECT count(*) FROM "test" WHERE i > 400000 AND length(version()) > 0;
+ count 
+-------
+ 59999
+
 ALTER TABLE :CHUNK1 SET (parallel_workers=2);
 ALTER TABLE :CHUNK2 SET (parallel_workers=0);
 :PREFIX SELECT count(*) FROM "test" WHERE i < 600000 AND length(version()) > 0;
@@ -624,6 +629,11 @@ ALTER TABLE :CHUNK2 SET (parallel_workers=0);
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_1_chunk
+
+SELECT count(*) FROM "test" WHERE i < 600000 AND length(version()) > 0;
+ count 
+-------
+ 60000
 
 ALTER TABLE :CHUNK1 RESET (parallel_workers);
 ALTER TABLE :CHUNK2 RESET (parallel_workers);
