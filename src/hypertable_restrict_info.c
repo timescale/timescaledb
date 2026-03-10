@@ -301,7 +301,10 @@ hypertable_restrict_info_get(HypertableRestrictInfo *hri, AttrNumber attno)
 
 typedef DimensionValues *(*get_dimension_values)(Const *c, bool use_or);
 
-static void
+/*
+ * Returns true if the restriction was accepted and contributed to HRI bounds.
+ */
+static bool
 hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root, Var *v,
 								  Expr *expr, Oid op_oid, get_dimension_values func_get_dim_values,
 								  bool use_or)
@@ -318,18 +321,18 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	dri = hypertable_restrict_info_get(hri, v->varattno);
 	/* the attribute is not a dimension */
 	if (dri == NULL)
-		return;
+		return false;
 
 	expr = (Expr *) eval_const_expressions(root, (Node *) expr);
 
 	if (!IsA(expr, Const) || !OidIsValid(op_oid) || !op_strict(op_oid))
-		return;
+		return false;
 
 	c = (Const *) expr;
 
 	/* quick check for a NULL constant */
 	if (c->constisnull)
-		return;
+		return false;
 
 	rte = rt_fetch(v->varno, root->parse->rtable);
 
@@ -337,7 +340,7 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	tce = lookup_type_cache(columntype, TYPECACHE_BTREE_OPFAMILY);
 
 	if (!op_in_opfamily(op_oid, tce->btree_opf))
-		return;
+		return false;
 
 	get_op_opfamily_properties(op_oid, tce->btree_opf, false, &strategy, &lefttype, &righttype);
 
@@ -391,7 +394,7 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 			 * here because PostgreSQL coerces such literals at parse time and
 			 * eval_const_expressions() folds any remaining RelabelType(Const).
 			 */
-			return;
+			return false;
 		}
 
 		Assert(OidIsValid(funcid));
@@ -430,13 +433,13 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	/*
 	 * Add restriction based on dimension type.
 	 */
+	bool accepted = false;
 	if (IS_CLOSED_DIMENSION(dri->dimension))
 	{
-		if (dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,
-											   strategy,
-											   c->constcollid,
-											   dimvalues))
-			hri->num_base_restrictions++;
+		accepted = dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,
+													  strategy,
+													  c->constcollid,
+													  dimvalues);
 	}
 	else
 	{
@@ -470,11 +473,15 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 		dimvalues->values = int64_values;
 		dimvalues->type = INT8OID;
 
-		if (dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
-											 strategy,
-											 dimvalues))
-			hri->num_base_restrictions++;
+		accepted = dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
+													strategy,
+													dimvalues);
 	}
+
+	if (accepted)
+		hri->num_base_restrictions++;
+
+	return accepted;
 }
 
 static DimensionValues *
@@ -523,7 +530,10 @@ dimension_values_create_from_single_element(Const *c, bool user_or)
 								   user_or);
 }
 
-static void
+/*
+ * Returns true if the restriction was accepted as a dimension restriction.
+ */
+static bool
 hypertable_restrict_info_add_restrict_info(HypertableRestrictInfo *hri, PlannerInfo *root,
 										   RestrictInfo *ri)
 {
@@ -535,7 +545,7 @@ hypertable_restrict_info_add_restrict_info(HypertableRestrictInfo *hri, PlannerI
 
 	/* Same as constraint_exclusion */
 	if (contain_mutable_functions((Node *) e))
-		return;
+		return false;
 
 	if (ts_extract_expr_args(e, &var, &arg_value, &opno, NULL))
 	{
@@ -558,10 +568,17 @@ hypertable_restrict_info_add_restrict_info(HypertableRestrictInfo *hri, PlannerI
 			}
 			default:
 				/* we don't support other node types */
-				return;
+				return false;
 		}
-		hypertable_restrict_info_add_expr(hri, root, var, arg_value, opno, value_func, use_or);
+		return hypertable_restrict_info_add_expr(hri,
+												 root,
+												 var,
+												 arg_value,
+												 opno,
+												 value_func,
+												 use_or);
 	}
+	return false;
 }
 
 void
@@ -576,6 +593,53 @@ ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri, PlannerInfo *root,
 
 		hypertable_restrict_info_add_restrict_info(hri, root, ri);
 	}
+}
+
+/*
+ * Add a single expression (not necessarily from a RestrictInfo) and return
+ * whether it was accepted as a dimension restriction.
+ */
+bool
+ts_hypertable_restrict_info_add_one(HypertableRestrictInfo *hri, PlannerInfo *root, Expr *clause)
+{
+	Oid opno;
+	Var *var;
+	Expr *arg_value;
+
+	if (contain_mutable_functions((Node *) clause))
+		return false;
+
+	if (ts_extract_expr_args(clause, &var, &arg_value, &opno, NULL))
+	{
+		get_dimension_values value_func;
+		bool use_or;
+
+		switch (nodeTag(clause))
+		{
+			case T_OpExpr:
+			{
+				value_func = dimension_values_create_from_single_element;
+				use_or = false;
+				break;
+			}
+			case T_ScalarArrayOpExpr:
+			{
+				value_func = dimension_values_create_from_array;
+				use_or = castNode(ScalarArrayOpExpr, clause)->useOr;
+				break;
+			}
+			default:
+				return false;
+		}
+		return hypertable_restrict_info_add_expr(hri,
+												 root,
+												 var,
+												 arg_value,
+												 opno,
+												 value_func,
+												 use_or);
+	}
+	return false;
 }
 
 /*

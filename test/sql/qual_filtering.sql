@@ -76,3 +76,71 @@ RESET timescaledb.enable_qual_filtering;
 RESET timezone;
 DROP TABLE qual_filter_tz;
 DROP TABLE qual_filter_date;
+
+-- Additional qual filtering divergence tests.
+-- filter_baserestrictions must not strip quals that HRI would reject.
+-- Each test below targets a specific HRI rejection path.
+
+CREATE TABLE qual_filter_ops(ts timestamptz NOT NULL, val int);
+SELECT create_hypertable('qual_filter_ops', 'ts',
+    chunk_time_interval => INTERVAL '7 days');
+INSERT INTO qual_filter_ops
+SELECT t, extract(day from t)::int
+FROM generate_series(
+    '2000-01-01'::timestamptz,
+    '2000-01-28'::timestamptz,
+    '1 day') t;
+
+-- Baseline: 14 rows in [Jan 8, Jan 22)
+SELECT count(*) FROM qual_filter_ops
+WHERE ts >= '2000-01-08' AND ts < '2000-01-22';
+
+-- 1) Operator not in btree opfamily.
+-- HRI rejects at op_in_opfamily. Use plpgsql to prevent inlining.
+CREATE FUNCTION qf_tstz_lt(timestamptz, timestamptz) RETURNS bool
+    AS $$ BEGIN RETURN $1 < $2; END $$ LANGUAGE plpgsql IMMUTABLE STRICT;
+CREATE OPERATOR <<< (LEFTARG = timestamptz, RIGHTARG = timestamptz,
+    FUNCTION = qf_tstz_lt);
+
+SELECT count(*) FROM qual_filter_ops
+WHERE ts >= '2000-01-08' AND ts <<< '2000-01-22'::timestamptz;
+
+SET timescaledb.enable_qual_filtering = off;
+SELECT count(*) FROM qual_filter_ops
+WHERE ts >= '2000-01-08' AND ts <<< '2000-01-22'::timestamptz;
+RESET timescaledb.enable_qual_filtering;
+
+-- 2) Non-strict operator.
+-- HRI rejects at op_strict. Use plpgsql to prevent inlining.
+CREATE FUNCTION qf_tstz_lt_nonstrict(timestamptz, timestamptz) RETURNS bool
+    AS $$ BEGIN RETURN $1 < $2; END $$ LANGUAGE plpgsql IMMUTABLE;
+CREATE OPERATOR <<!>> (LEFTARG = timestamptz, RIGHTARG = timestamptz,
+    FUNCTION = qf_tstz_lt_nonstrict);
+
+SELECT count(*) FROM qual_filter_ops
+WHERE ts >= '2000-01-08' AND ts <<!>> '2000-01-22'::timestamptz;
+
+SET timescaledb.enable_qual_filtering = off;
+SELECT count(*) FROM qual_filter_ops
+WHERE ts >= '2000-01-08' AND ts <<!>> '2000-01-22'::timestamptz;
+RESET timescaledb.enable_qual_filtering;
+
+-- 3) Parameterized query (generic plan).
+-- HRI rejects because eval_const_expressions cannot fold a Param to Const.
+SET plan_cache_mode = force_generic_plan;
+PREPARE qf_param(timestamptz) AS
+    SELECT count(*) FROM qual_filter_ops
+    WHERE ts >= '2000-01-08' AND ts < $1;
+EXECUTE qf_param('2000-01-22');
+DEALLOCATE qf_param;
+
+SET timescaledb.enable_qual_filtering = off;
+PREPARE qf_param(timestamptz) AS
+    SELECT count(*) FROM qual_filter_ops
+    WHERE ts >= '2000-01-08' AND ts < $1;
+EXECUTE qf_param('2000-01-22');
+DEALLOCATE qf_param;
+RESET timescaledb.enable_qual_filtering;
+RESET plan_cache_mode;
+
+DROP TABLE qual_filter_ops;
