@@ -39,7 +39,6 @@
 #include "compat/compat.h"
 #include "planner.h"
 
-static Node *replace_nestloop_params(PlannerInfo *root, Node *expr);
 static Node *replace_nestloop_params_mutator(Node *node, PlannerInfo *root);
 static Plan *inject_projection_plan(Plan *subplan, List *tlist, bool parallel_safe);
 
@@ -556,7 +555,7 @@ ts_build_path_tlist(PlannerInfo *root, Path *path)
 		 * separately.
 		 */
 		if (path->param_info)
-			node = replace_nestloop_params(root, node);
+			node = ts_replace_nestloop_params(root, node);
 
 		tle = makeTargetEntry((Expr *) node, resno, NULL, false);
 		if (sortgrouprefs)
@@ -569,7 +568,7 @@ ts_build_path_tlist(PlannerInfo *root, Path *path)
 }
 
 /*
- * replace_nestloop_params
+ * ts_replace_nestloop_params
  *    Replace outer-relation Vars and PlaceHolderVars in the given expression
  *    with nestloop Params
  *
@@ -577,8 +576,8 @@ ts_build_path_tlist(PlannerInfo *root, Path *path)
  * root->curOuterRels are replaced by Params, and entries are added to
  * root->curOuterParams if not already present.
  */
-static Node *
-replace_nestloop_params(PlannerInfo *root, Node *expr)
+Node *
+ts_replace_nestloop_params(PlannerInfo *root, Node *expr)
 {
 	/* No setup needed for tree walk, so away we go */
 	return replace_nestloop_params_mutator(expr, root);
