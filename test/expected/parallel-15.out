@@ -667,26 +667,29 @@ ALTER TABLE :CHUNK2 RESET (parallel_workers);
 
 
 -- test parallel ChunkAppend with InitPlan params (runtime exclusion)
--- When a filter uses a subquery (InitPlan) on a non-partitioning column,
--- runtime_exclusion_parent is set but startup_exclusion is not. The parallel
--- workers must still receive the correct subplan list via shared memory.
+-- Filter on j (non-partitioning column) so that the planner produces a
+-- parallel-aware ChunkAppend with runtime_exclusion_parent but without
+-- startup_exclusion. Filtering on the partitioning column i would enable
+-- runtime_exclusion_children, making the planner pick Single Copy mode
+-- (non-parallel ChunkAppend) which does not exercise the shared-memory
+-- subplan coordination path.
 SET max_parallel_workers_per_gather = 2;
 SET parallel_tuple_cost = 0;
 SET parallel_setup_cost = 0;
 SET min_parallel_table_scan_size = 0;
 -- get the sequential result for comparison
 SET max_parallel_workers_per_gather = 0;
-SELECT count(*) AS expected FROM "test" WHERE i = (SELECT max(i) FROM "test") \gset
+SELECT count(*) AS expected FROM "test" WHERE j = (SELECT max(j) FROM "test") \gset
 -- parallel with leader participation
 SET max_parallel_workers_per_gather = 2;
-SELECT count(*) = :expected AS leader_ok FROM "test" WHERE i = (SELECT max(i) FROM "test");
+SELECT count(*) = :expected AS leader_ok FROM "test" WHERE j = (SELECT max(j) FROM "test");
  leader_ok 
 -----------
  t
 
 -- parallel with only workers (leader does not participate)
 SET parallel_leader_participation = off;
-SELECT count(*) = :expected AS workers_ok FROM "test" WHERE i = (SELECT max(i) FROM "test");
+SELECT count(*) = :expected AS workers_ok FROM "test" WHERE j = (SELECT max(j) FROM "test");
  workers_ok 
 ------------
  t
