@@ -1,0 +1,2 @@
+Fixes: #9387 Wrong result when performing chunk exclusion by a mutable expression
+Thanks: @PiotrCiechomski for reporting the wrong result with chunk exclusion by a mutable expression

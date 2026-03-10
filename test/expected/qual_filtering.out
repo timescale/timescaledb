@@ -1,0 +1,95 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- Test qual filtering optimization (timescaledb.enable_qual_filtering).
+-- When a chunk is fully covered by the query's dimension restrictions,
+-- the planner can remove redundant quals from that chunk's scan.
+-- This must agree with HypertableRestrictInfo about which quals
+-- are dimension restrictions -- otherwise quals get stripped that
+-- HRI never accounted for, producing wrong results.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- Regression test for github issue #9387: ::date cast on timestamptz
+-- column uses a STABLE cross-type operator (timestamptz_lt_date).
+-- HRI skips STABLE quals, but filter_baserestrictions was removing them
+-- anyway, causing extra rows to be returned.
+SET timezone = 'Europe/Berlin';
+CREATE TABLE qual_filter_tz(
+    id serial,
+    ts timestamptz NOT NULL
+);
+SELECT create_hypertable('qual_filter_tz', 'ts',
+    chunk_time_interval => INTERVAL '7 days');
+      create_hypertable      
+-----------------------------
+ (1,public,qual_filter_tz,t)
+
+INSERT INTO qual_filter_tz(ts)
+SELECT generate_series(
+    '2026-01-01 00:00:00+00'::timestamptz,
+    '2026-03-10 00:00:00+00'::timestamptz,
+    '1 day'::interval
+);
+-- Without ::date cast (same-type comparison, immutable).
+SELECT count(*) FROM qual_filter_tz
+WHERE ts >= '2026-02-01' AND ts < '2026-03-01';
+ count 
+-------
+    28
+
+-- With ::date cast (cross-type STABLE operator).
+-- Must return the same count.
+SELECT count(*) FROM qual_filter_tz
+WHERE ts >= '2026-02-01' AND ts < '2026-03-01'::date;
+ count 
+-------
+    28
+
+-- Verify with qual filtering off for comparison.
+SET timescaledb.enable_qual_filtering = off;
+SELECT count(*) FROM qual_filter_tz
+WHERE ts >= '2026-02-01' AND ts < '2026-03-01'::date;
+ count 
+-------
+    28
+
+RESET timescaledb.enable_qual_filtering;
+-- Also test with ::timestamp cast (another cross-type, but immutable
+-- for timestamp vs timestamptz since both store UTC microseconds).
+SELECT count(*) FROM qual_filter_tz
+WHERE ts >= '2026-02-01' AND ts < '2026-03-01'::timestamp;
+ count 
+-------
+    28
+
+-- Test with date column and ::timestamp cast on the constant.
+CREATE TABLE qual_filter_date(
+    id serial,
+    d date NOT NULL
+);
+SELECT create_hypertable('qual_filter_date', 'd',
+    chunk_time_interval => INTERVAL '7 days');
+       create_hypertable       
+-------------------------------
+ (2,public,qual_filter_date,t)
+
+INSERT INTO qual_filter_date(d)
+SELECT generate_series('2026-01-01'::date, '2026-03-10'::date, '1 day');
+-- date column with ::timestamp constant -- same-type after implicit cast.
+SELECT count(*) FROM qual_filter_date
+WHERE d >= '2026-02-01' AND d < '2026-03-01'::timestamp;
+ count 
+-------
+    28
+
+SET timescaledb.enable_qual_filtering = off;
+SELECT count(*) FROM qual_filter_date
+WHERE d >= '2026-02-01' AND d < '2026-03-01'::timestamp;
+ count 
+-------
+    28
+
+RESET timescaledb.enable_qual_filtering;
+-- Cleanup
+RESET timezone;
+DROP TABLE qual_filter_tz;
+DROP TABLE qual_filter_date;

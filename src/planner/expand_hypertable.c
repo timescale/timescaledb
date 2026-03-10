@@ -55,6 +55,7 @@
 #include "annotations.h"
 #include "chunk.h"
 #include "cross_module_fn.h"
+#include "expression_utils.h"
 #include "guc.h"
 #include "hypercube.h"
 #include "hypertable.h"
@@ -1099,8 +1100,11 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 }
 
 /*
- * Build a list of baserestrictinfo with any Var OP Const constraints on the primary
- * dimension removed.
+ * Build a list of baserestrictinfo with any Var OP Const constraints on
+ * the primary dimension removed.
+ *
+ * This must agree with hypertable_restrict_info_add_restrict_info() in
+ * hypertable_restrict_info.c about which quals are dimension restrictions.
  */
 static List *
 filter_baserestrictions(Hypertable *ht, List *base_restrictions)
@@ -1112,19 +1116,13 @@ filter_baserestrictions(Hypertable *ht, List *base_restrictions)
 	{
 		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc));
 		Expr *qual = ri->clause;
-		if (IsA(qual, OpExpr))
+		Var *var;
+		Expr *arg_value;
+		Oid opno;
+		if (!contain_mutable_functions((Node *) qual) &&
+			ts_extract_expr_args(qual, &var, &arg_value, &opno, NULL) && var->varattno == dim_attno)
 		{
-			OpExpr *op = castNode(OpExpr, qual);
-			Node *left = strip_implicit_coercions(linitial(op->args));
-			Node *right = strip_implicit_coercions(lsecond(op->args));
-			if ((IsA(left, Var) && IsA(right, Const) &&
-				 castNode(Var, left)->varattno == dim_attno) ||
-				(IsA(right, Var) && IsA(left, Const) &&
-				 castNode(Var, right)->varattno == dim_attno))
-			{
-				/* only consider simple column to constant comparisons */
-				continue;
-			}
+			continue;
 		}
 
 		filtered_restrictions = lappend(filtered_restrictions, ri);
