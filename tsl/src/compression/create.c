@@ -766,17 +766,17 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
 	 * Only analyze if there is no user configured segementby.
 	 * Skip default segmentby if we are going to analyze and choose a segementby later
 	 */
-	bool skip_segmentby = false;
+	bool skip_segmentby_default = false;
 	if (needs_analyze_segmentby)
 	{
-		*needs_analyze_segmentby = settings->fd.segmentby == NULL;
-		skip_segmentby = true;
+		*needs_analyze_segmentby = (settings->fd.segmentby == NULL);
+		skip_segmentby_default = true;
 	}
 
 	compression_settings_set_defaults(ht,
 									  settings,
 									  ts_alter_table_with_clause_parse(NIL),
-									  skip_segmentby);
+									  skip_segmentby_default);
 
 	if (OidIsValid(table_id))
 		compress_chunk->table_id = table_id;

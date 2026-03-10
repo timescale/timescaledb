@@ -273,6 +273,8 @@ TSCopyMultiInsertBufferInit(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis
 		{
 			bool sort = ts_guc_enable_direct_compress_copy_sort_batches &&
 						!ts_guc_enable_direct_compress_copy_client_sorted;
+			/* if client is responsible for inserting sorted data, skip analyze segmentby */
+			cis->needs_analyze_segmentby = cis->needs_analyze_segmentby && sort;
 			buffer->compressor =
 				ts_cm_functions->compressor_init(cis->rel,
 												 &buffer->bulk_writer,
@@ -401,7 +403,7 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 
 	if (buffer->method == TS_CIM_COMPRESSION)
 	{
-		ts_cm_functions->compressor_flush(buffer->compressor, buffer->bulk_writer);
+		ts_cm_functions->compressor_flush(buffer->compressor, buffer->bulk_writer, NULL);
 	}
 
 	/*
@@ -421,7 +423,7 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 	 * freed in TSCopyMultiInsertBufferCleanup().
 	 */
 	ChunkInsertState *cis = ts_chunk_tuple_routing_find_chunk(miinfo->ccstate->ctr, buffer->point);
-
+	Assert(!cis->needs_analyze_segmentby);
 	ResultRelInfo *resultRelInfo = cis->result_relation_info;
 
 	/*
@@ -1205,7 +1207,8 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 			{
 				ts_cm_functions->compressor_add_slot(buffer->compressor,
 													 buffer->bulk_writer,
-													 myslot);
+													 myslot,
+													 cis);
 			}
 			else
 			{

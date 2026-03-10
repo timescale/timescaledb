@@ -958,7 +958,8 @@ tsl_compressor_set_invalidation(RowCompressor *compressor, Hypertable *ht, Oid c
 }
 
 void
-tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer, TupleTableSlot *slot)
+tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer, TupleTableSlot *slot,
+						ChunkInsertState *cis)
 {
 	if (compressor->sort_state)
 	{
@@ -967,7 +968,9 @@ tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer, Tupl
 
 		if (compressor->tuple_sort_limit &&
 			compressor->tuples_to_sort >= compressor->tuple_sort_limit)
-			tsl_compressor_flush(compressor, bulk_writer);
+		{
+			tsl_compressor_flush(compressor, bulk_writer, cis);
+		}
 	}
 	else
 	{
@@ -976,7 +979,7 @@ tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer, Tupl
 }
 
 void
-tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
+tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer, ChunkInsertState *cis)
 {
 	if (compressor->sort_state)
 	{
@@ -984,6 +987,11 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 		{
 			tuplesort_performsort(compressor->sort_state);
 
+			if (cis && cis->needs_analyze_segmentby)
+			{
+				/* TODO: analyze segmentby */
+				cis->needs_analyze_segmentby = false;
+			}
 			TupleTableSlot *slot = MakeTupleTableSlot(compressor->in_desc, &TTSOpsMinimalTuple);
 
 			while (tuplesort_gettupleslot(compressor->sort_state,
@@ -1004,7 +1012,14 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 	else
 	{
 		if (compressor->rows_compressed_into_current_value > 0)
+		{
+			if (cis && cis->needs_analyze_segmentby)
+			{
+				elog(ERROR, "trying to analyze sgementby with no sort state");
+				cis->needs_analyze_segmentby = false;
+			}
 			row_compressor_flush(compressor, bulk_writer, false);
+		}
 	}
 }
 
@@ -1015,7 +1030,7 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
 		tuplesort_end(compressor->sort_state);
 	if (compressor->invalidation)
 		pfree(compressor->invalidation);
-	tsl_compressor_flush(compressor, bulk_writer);
+	tsl_compressor_flush(compressor, bulk_writer, NULL);
 	row_compressor_close(compressor);
 	bulk_writer_close(bulk_writer);
 	table_close(bulk_writer->out_rel, NoLock);
@@ -1028,7 +1043,7 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
  * Tuplesortstate and sort them before flushing to the output relation.
  */
 RowCompressor *
-tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int sort_limit)
+tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int sort_limit) // Poro
 {
 	RowCompressor *compressor = palloc0(sizeof(RowCompressor));
 	CompressionSettings *settings = ts_compression_settings_get(in_rel->rd_id);

@@ -21,6 +21,8 @@
 #include "ts_catalog/continuous_agg.h"
 #include "with_clause/with_clause_parser.h"
 
+typedef struct ChunkInsertState ChunkInsertState;
+
 /*
  * To define a cross-module function add it to this struct, add a default
  * version in to ts_cm_functions_default cross_module_fn.c, and the overridden
@@ -138,8 +140,9 @@ typedef struct CrossModuleFunctions
 									  int tuple_sort_limit);
 	void (*compressor_set_invalidation)(RowCompressor *compressor, Hypertable *ht, Oid chunk_relid);
 	void (*compressor_add_slot)(RowCompressor *compressor, BulkWriter *bulk_writer,
-								TupleTableSlot *slot);
-	void (*compressor_flush)(RowCompressor *compressor, BulkWriter *bulk_writer);
+								TupleTableSlot *slot, ChunkInsertState *cis);
+	void (*compressor_flush)(RowCompressor *compressor, BulkWriter *bulk_writer,
+							 ChunkInsertState *cis);
 	void (*compressor_free)(RowCompressor *compressor, BulkWriter *bulk_writer);
 	Chunk *(*compression_chunk_create)(Hypertable *ht, Chunk *src_chunk,
 									   bool *needs_analyze_segmentby);

@@ -385,8 +385,9 @@ extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_wri
 extern void tsl_compressor_set_invalidation(RowCompressor *compressor, Hypertable *ht,
 											Oid chunk_relid);
 extern void tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer,
-									TupleTableSlot *slot);
-extern void tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer);
+									TupleTableSlot *slot, ChunkInsertState *cis);
+extern void tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer,
+								 ChunkInsertState *cis);
 extern void tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer);
 
 extern void row_compressor_reset(RowCompressor *row_compressor);
