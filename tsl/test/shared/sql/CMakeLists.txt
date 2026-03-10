@@ -1,6 +1,5 @@
 set(TEST_FILES_SHARED
     chunk_append_merge_append.sql
-    chunk_append_space_runtime_exclusion.sql
     chunkwise_agg_gather_sort.sql
     classify_relation.sql
     compat.sql

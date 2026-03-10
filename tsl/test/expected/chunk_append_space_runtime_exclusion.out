@@ -17,9 +17,9 @@ CREATE TABLE space_mixed(time timestamptz NOT NULL, device_id int NOT NULL, valu
 SELECT create_hypertable('space_mixed', 'time', 'device_id',
     number_partitions => 2,
     chunk_time_interval => '5 days'::interval);
-     create_hypertable     
----------------------------
- (11,public,space_mixed,t)
+    create_hypertable     
+--------------------------
+ (1,public,space_mixed,t)
 
 -- Time slice 1: both space partitions have data (produces MergeAppend)
 INSERT INTO space_mixed VALUES
@@ -47,11 +47,11 @@ LATERAL (SELECT * FROM space_mixed m WHERE m.time >= d.t ORDER BY m.time LIMIT 3
                Order: m."time"
                ->  Merge Append
                      Sort Key: m."time"
-                     ->  Index Scan using _hyper_X_X_chunk_space_mixed_time_idx1 on _hyper_X_X_chunk m_1
+                     ->  Index Scan using _hyper_1_1_chunk_space_mixed_time_idx1 on _hyper_1_1_chunk m_1
                            Index Cond: ("time" >= d.t)
-                     ->  Index Scan using _hyper_X_X_chunk_space_mixed_time_idx1 on _hyper_X_X_chunk m_2
+                     ->  Index Scan using _hyper_1_2_chunk_space_mixed_time_idx1 on _hyper_1_2_chunk m_2
                            Index Cond: ("time" >= d.t)
-               ->  Index Scan using _hyper_X_X_chunk_space_mixed_time_idx1 on _hyper_X_X_chunk m_3
+               ->  Index Scan using _hyper_1_3_chunk_space_mixed_time_idx1 on _hyper_1_3_chunk m_3
                      Index Cond: ("time" >= d.t)
 
 -- Execute to trigger runtime exclusion. The MergeAppend child is
@@ -70,11 +70,11 @@ LATERAL (SELECT * FROM space_mixed m WHERE m.time >= d.t ORDER BY m.time LIMIT 3
                Chunks excluded during runtime: 0
                ->  Merge Append (actual rows=2.00 loops=2)
                      Sort Key: m."time"
-                     ->  Index Scan using _hyper_X_X_chunk_space_mixed_time_idx1 on _hyper_X_X_chunk m_1 (actual rows=1.00 loops=2)
+                     ->  Index Scan using _hyper_1_1_chunk_space_mixed_time_idx1 on _hyper_1_1_chunk m_1 (actual rows=1.00 loops=2)
                            Index Cond: ("time" >= d.t)
-                     ->  Index Scan using _hyper_X_X_chunk_space_mixed_time_idx1 on _hyper_X_X_chunk m_2 (actual rows=1.00 loops=2)
+                     ->  Index Scan using _hyper_1_2_chunk_space_mixed_time_idx1 on _hyper_1_2_chunk m_2 (actual rows=1.00 loops=2)
                            Index Cond: ("time" >= d.t)
-               ->  Index Scan using _hyper_X_X_chunk_space_mixed_time_idx1 on _hyper_X_X_chunk m_3 (actual rows=2.00 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_space_mixed_time_idx1 on _hyper_1_3_chunk m_3 (actual rows=2.00 loops=1)
                      Index Cond: ("time" >= d.t)
 
 SELECT d.t, m.*
