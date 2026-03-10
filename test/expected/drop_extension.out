@@ -85,3 +85,38 @@ NOTICE:  drop cascades to 3 other objects
 ------+------------
  test | super_user
 
+-- Recreate the public schema and extension in the same session.
+-- This should work without requiring a reconnect (issue #5884).
+CREATE SCHEMA public;
+SET client_min_messages=error;
+CREATE EXTENSION timescaledb SCHEMA public;
+RESET client_min_messages;
+SELECT extname FROM pg_extension WHERE extname = 'timescaledb';
+   extname   
+-------------
+ timescaledb
+
+-- Verify the extension is functional after re-creation
+CREATE TABLE drop_test2(time timestamptz, temp float8);
+SELECT create_hypertable('drop_test2', 'time');
+    create_hypertable    
+-------------------------
+ (1,public,drop_test2,t)
+
+INSERT INTO drop_test2 VALUES('2024-01-01', 23.4);
+SELECT * FROM drop_test2;
+             time             | temp 
+------------------------------+------
+ Mon Jan 01 00:00:00 2024 PST | 23.4
+
+DROP TABLE drop_test2;
+-- Test that dropping and recreating extension directly also works in the same session
+DROP EXTENSION timescaledb CASCADE;
+SET client_min_messages=error;
+CREATE EXTENSION timescaledb;
+RESET client_min_messages;
+SELECT extname FROM pg_extension WHERE extname = 'timescaledb';
+   extname   
+-------------
+ timescaledb
+
