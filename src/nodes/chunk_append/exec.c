@@ -237,8 +237,7 @@ do_startup_exclusion(ChunkAppendState *state)
 			}
 			restrictinfos = ts_constify_restrictinfos(&root, restrictinfos);
 
-			if (can_exclude_chunk(list_nth(state->initial_constraints, i),
-								  restrictinfos))
+			if (can_exclude_chunk(list_nth(state->initial_constraints, i), restrictinfos))
 			{
 				continue;
 			}
@@ -327,8 +326,8 @@ init_subplanstates(ChunkAppendState *state, EState *estate, int eflags)
 		return;
 	}
 
-	state->subplanstates = (PlanState **) palloc0(list_length(state->initial_subplans) *
-												  sizeof(PlanState *));
+	state->subplanstates =
+		(PlanState **) palloc0(list_length(state->initial_subplans) * sizeof(PlanState *));
 
 	for (int i = bms_next_member(state->subplans_after_startup, -1); i >= 0;
 		 i = bms_next_member(state->subplans_after_startup, i))
@@ -340,8 +339,7 @@ init_subplanstates(ChunkAppendState *state, EState *estate, int eflags)
 		 * so explain and planstate_tree_walker can find it
 		 */
 		state->subplanstates[i] = ExecInitNode(subplan, estate, eflags);
-		state->csstate.custom_ps =
-			lappend(state->csstate.custom_ps, state->subplanstates[i]);
+		state->csstate.custom_ps = lappend(state->csstate.custom_ps, state->subplanstates[i]);
 
 		if (state->limit)
 		{
@@ -359,8 +357,7 @@ init_subplanstates(ChunkAppendState *state, EState *estate, int eflags)
 		/*
 		 * make sure all params are initialized for runtime exclusion
 		 */
-		state->csstate.ss.ps.chgParam =
-			bms_copy(state->subplanstates[first]->plan->allParam);
+		state->csstate.ss.ps.chgParam = bms_copy(state->subplanstates[first]->plan->allParam);
 	}
 }
 
@@ -457,11 +454,9 @@ do_runtime_exclusion(ChunkAppendState *state)
 		List *ri_clauses = list_nth(state->initial_ri_clauses, i);
 		List *constraints = list_nth(state->initial_constraints, i);
 
-		if (can_exclude_constraints_using_clauses(state, constraints,
-												  ri_clauses, &root, ps))
+		if (can_exclude_constraints_using_clauses(state, constraints, ri_clauses, &root, ps))
 		{
-			state->subplans_after_runtime =
-				bms_del_member(state->subplans_after_runtime, i);
+			state->subplans_after_runtime = bms_del_member(state->subplans_after_runtime, i);
 			state->runtime_number_exclusions_children++;
 		}
 	}
@@ -567,16 +562,16 @@ choose_next_subplan_in_worker(ChunkAppendState *worker_state)
 	{
 		parallel_state->subplan_state[worker_state->current] =
 			ts_set_flags_32(parallel_state->subplan_state[worker_state->current], CASS_Finished);
-    }
-	
+	}
+
 	if (parallel_state->next_plan == INVALID_SUBPLAN_INDEX)
 	{
 		next_plan = get_next_subplan(worker_state, INVALID_SUBPLAN_INDEX);
-    }
+	}
 	else
 	{
 		next_plan = parallel_state->next_plan;
-    }
+	}
 
 	if (next_plan == NO_MATCHING_SUBPLANS)
 	{
@@ -808,7 +803,8 @@ chunk_append_initialize_worker(CustomScanState *node, shm_toc *toc, void *coordi
 	for (int plan = 0; plan < list_length(worker_state->initial_subplans); plan++)
 	{
 		if (ts_flags_are_set_32(parallel_state->subplan_state[plan], CASS_Included))
-			worker_state->subplans_after_startup = bms_add_member(worker_state->subplans_after_startup, plan);
+			worker_state->subplans_after_startup =
+				bms_add_member(worker_state->subplans_after_startup, plan);
 	}
 
 	worker_state->lock = chunk_append_get_lock_pointer();
@@ -1131,8 +1127,7 @@ initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes)
 		{
 			Index rt_index = scan->scanrelid;
 			RangeTblEntry *rte = rt_fetch(rt_index, estate->es_range_table);
-			relation_constraints =
-				ca_get_relation_constraints(rte->relid, rt_index, true);
+			relation_constraints = ca_get_relation_constraints(rte->relid, rt_index, true);
 
 			/*
 			 * Adjust the RangeTableEntry indexes in the restrictinfo
@@ -1141,7 +1136,9 @@ initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes)
 			 */
 			if (rt_index != initial_index)
 				ChangeVarNodes(list_nth(state->initial_ri_clauses, i),
-							   initial_index, scan->scanrelid, 0);
+							   initial_index,
+							   scan->scanrelid,
+							   0);
 		}
 		constraints = lappend(constraints, relation_constraints);
 	}
