@@ -662,6 +662,13 @@ if(CODECOVERAGE)
   # -fprofile-arcs -ftest-coverage when compiling and -lgcov when linking
   add_compile_options(--coverage -O0)
   add_link_options(--coverage)
+  # When a source file is recompiled, the compiler regenerates the .gcno file
+  # but any .gcda file from a previous test run remains with a stale checksum.
+  # lcov then silently produces incorrect coverage data.  Delete the .gcda
+  # alongside the .o to prevent this.  The $$ escaping produces a literal $
+  # for the shell in both Ninja and Make generators.
+  set(CMAKE_C_COMPILE_OBJECT
+      "${CMAKE_C_COMPILE_OBJECT} && o=<OBJECT> && rm -f \$\${o%.o}.gcda")
 endif(CODECOVERAGE)
 
 # TAP test support
