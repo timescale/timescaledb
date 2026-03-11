@@ -21,12 +21,12 @@ contributions.
 
 ## Getting and building TimescaleDB
 
-Please follow our README for [instructions on installing from source](https://github.com/timescale/timescaledb/blob/main/README.md#option-3---from-source).
+Please follow our README for [instructions on installing from source](https://github.com/timescale/timescaledb/blob/main/docs/BuildSource.md).
 
 ## Style guide
 
 Before submitting any contributions, please ensure that it adheres to
-our [Style Guide](docs/StyleGuide.md).
+our [Style Guide](https://github.com/timescale/timescaledb/blob/main/docs/StyleGuide.md).
 
 ## Code review workflow
 
@@ -124,3 +124,57 @@ All submitted pull requests are also automatically
 run against our test suite via [Github Actions](https://github.com/timescale/timescaledb/actions)
 (that link shows the latest build status of the repository).
 
+## Reviewing and accepting your contribution
+
+We appreciate everyone who is investing time in contributing to TimescaleDB and regret that we sometimes have to reject contributions even when they might appear to add value. 
+If the contribution is accepted, we will merge the changes, acknowledge your contribution in the release, and take care of the backporting to the relevant branches, if necessary.
+Before you start, please discuss your change in a GitHub issue before spending much time on its implementation. We sometimes have to reject contributions that duplicate other efforts, take the wrong approach to solving a problem, or solve a problem which does not need solving. An up-front discussion often saves your time.
+
+A contribution is expected to address one specific change. Pull requests are expected to be small, if a PR is deemed too large or touches too many disparate parts of the system, you will be required to break it down into a series of smaller, digestible PRs before reviewing continues. Avoid adding unnecessary stylistic changes.
+
+TimescaleDB is complex system, requiring a deep understanding of Postgres internals, the system architecture and the potential secondary effects of changes.
+While we highly value community input, the core development team's primary responsibility is maintaining the health of the project. 
+We reserve the right to respectfully close the PR. This is not a reflection of your skills as an engineer, but rather a necessity of resource allocation to keep the project stable and performant.
+
+We reserved the right to reject contributions, if the time required on reviews would outweigh the benefits of a change by preventing us from working on other beneficial changes instead.
+
+We sometimes reject contributions due to the low quality of the submission since low-quality submissions tend to take unreasonable effort to review properly. 
+Quality is rather subjective so it is hard to describe exactly how to avoid this, but there are some basic steps you can take to reduce the chances of rejection:
+
+* Unit Tests: Every new function or modified logic path must have accompanying unit tests.
+* Integration Tests: Features that touch the storage engine, query planner, or sub system must include integration tests.
+* Edge Cases: You are expected to proactively test for edge cases, concurrency hazards, and out-of-memory (OOM) scenarios.
+* No regressions: Your code must pass all existing CI/CD pipelines, including e.g. fuzzing, without degrading current metrics.
+* Style Guide: Your code must be formatted according to the projects [style guide](#style-guide).
+
+We welcome the use of AI coding assistants (Copilot, Gemini, etc.) to enhance your productivity. However, AI-generated contributions adhere to the exact same rigorous standards as human-written code. You are fully responsible for the accuracy, safety, and performance of any AI-generated code you submit.
+If a PR appears to be low quality AI outputs without reflecting a proficient understanding of the change, we will close the PR immediately.
+
+We expect you to follow up on review comments, but recognise that everyone has many priorities for their time and may not be able to respond for several days. We will understand if you find yourself without the time to complete your contribution, but please let us know that you have stopped working on it and we can conclude how to handle the contribution.
+After two weeks of inactivity, we will reject the contribution, unless we complete it. 
+
+If your contribution is rejected, we will close the pull request with a comment explaining why.
+
+## License headers
+
+We require license headers on all C and SQL files, unless explicitly instructed otherwise.
+
+All C and SQL files in the [tsl](https://github.com/timescale/timescaledb/tree/main/tsl) directory require the following short license header of the [Timescale License Agreement](https://github.com/timescale/timescaledb/blob/main/tsl/LICENSE-TIMESCALE):
+
+```
+/*
+ * This file and its contents are licensed under the Timescale License.
+ * Please see the included NOTICE for copyright information and
+ * LICENSE-TIMESCALE for a copy of the license.
+ */
+```
+
+All C and SQL files in the [src](https://github.com/timescale/timescaledb/tree/main/src) directory require the following short license header of the [Apache License](https://github.com/timescale/timescaledb/blob/main/LICENSE-APACHE):
+
+```
+/*
+ * This file and its contents are licensed under the Apache License 2.0.
+ * Please see the included NOTICE for copyright information and
+ * LICENSE-APACHE for a copy of the license.
+ */
+```
