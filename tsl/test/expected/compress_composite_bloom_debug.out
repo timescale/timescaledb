@@ -209,8 +209,10 @@ SELECT * FROM composite_filter_test WHERE device_id = 1 AND sensor_type = 'temp'
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1300.00 loops=1)
    Vectorized Filter: ((device_id = 1) AND (sensor_type = 'temp'::text))
-   Rows Removed by Filter: 2600
-   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=4.00 loops=1)
+   Rows Removed by Filter: 600
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=2.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_device_id_sensor_type, ROW(1, 'temp'::text))
+         Rows Removed by Filter: 2
 
 -- Expected behavior:
 -- - Filter should show: bloom1_contains(composite_bloom, ROW(1, 'temp'::text))
@@ -223,8 +225,10 @@ SELECT * FROM composite_filter_test WHERE device_id = 2 AND sensor_type = 'humid
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1300.00 loops=1)
    Vectorized Filter: ((device_id = 2) AND (sensor_type = 'humidity'::text))
-   Rows Removed by Filter: 2600
-   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=4.00 loops=1)
+   Rows Removed by Filter: 600
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=2.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_device_id_sensor_type, ROW(2, 'humidity'::text))
+         Rows Removed by Filter: 2
 
 -- Expected: Similar pruning as Test 5.1
 -- Query for non-existent combination
@@ -233,8 +237,9 @@ SELECT * FROM composite_filter_test WHERE device_id = 5 AND sensor_type = 'temp'
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
    Vectorized Filter: ((device_id = 5) AND (sensor_type = 'temp'::text))
-   Rows Removed by Filter: 3900
-   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=4.00 loops=1)
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_device_id_sensor_type, ROW(5, 'temp'::text))
+         Rows Removed by Filter: 4
 
 -- Expected:
 -- - Should scan 0 or very few rows (bloom filter prunes all segments)
@@ -245,8 +250,9 @@ SELECT * FROM composite_filter_test WHERE device_id = 1 AND sensor_type = 'humid
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
    Vectorized Filter: ((device_id = 1) AND (sensor_type = 'humidity'::text))
-   Rows Removed by Filter: 3900
-   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=4.00 loops=1)
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
+         Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_device_id_sensor_type, ROW(1, 'humidity'::text))
+         Rows Removed by Filter: 4
 
 -- Expected:
 -- Segment 4 data: (i%3)+1 paired with sensor via CASE
