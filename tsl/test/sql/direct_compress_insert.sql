@@ -374,6 +374,7 @@ RESET timescaledb.enable_direct_compress_insert_client_sorted;
 
 DROP TABLE compress_src;
 DROP TABLE compress_tgt;
+
 -- simple test to check default segementby does not get set for direct compress
 BEGIN;
 RESET timescaledb.enable_direct_compress_insert;
