@@ -746,7 +746,7 @@ create_compress_chunk_with_settings(Hypertable *compress_ht, Chunk *src_chunk,
  */
 Chunk *
 create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
-					  bool *needs_analyze_segmentby)
+					  bool skip_segmentby_default)
 {
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
@@ -826,13 +826,6 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
 	 * Only analyze if there is no user configured segementby.
 	 * Skip default segmentby if we are going to analyze and choose a segementby later
 	 */
-	bool skip_segmentby_default = false;
-	if (needs_analyze_segmentby)
-	{
-		*needs_analyze_segmentby = (settings->fd.segmentby == NULL);
-		skip_segmentby_default = true;
-	}
-
 	compression_settings_set_defaults(ht,
 									  settings,
 									  ts_alter_table_with_clause_parse(NIL),

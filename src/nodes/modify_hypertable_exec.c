@@ -2471,8 +2471,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				/* Flush on chunk change */
 				if (ht_state->compressor && ht_state->compressor_relid != RelationGetRelid(ctr->cis->rel))
 				{
-				  //Poro, problematic
-				  ts_cm_functions->compressor_flush(ht_state->compressor, ht_state->bulk_writer, NULL);
+				  ts_cm_functions->compressor_flush(ht_state->compressor, ht_state->bulk_writer);
 				  ts_cm_functions->compressor_free(ht_state->compressor, ht_state->bulk_writer);
 				  ht_state->compressor = NULL;
 				  ht_state->compressor_relid = InvalidOid;
@@ -2481,8 +2480,6 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				if (!ht_state->compressor)
 				{
 					bool sort = ts_guc_enable_direct_compress_insert_sort_batches && !ts_guc_enable_direct_compress_insert_client_sorted;
-					/* if client is responsible for inserting sorted data, skip analyze segmentby */
-					ctr->cis->needs_analyze_segmentby = ctr->cis->needs_analyze_segmentby && sort;
 					ht_state->compressor = ts_cm_functions->compressor_init(ctr->cis->rel, &ht_state->bulk_writer, sort, ts_guc_direct_compress_insert_tuple_sort_limit);
 					ht_state->compressor_relid = RelationGetRelid(ctr->cis->rel);
 
@@ -2512,7 +2509,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					ExecComputeStoredGenerated(ctr->root_rri, estate, slot, CMD_INSERT);
 				}
 
-				ts_cm_functions->compressor_add_slot(ht_state->compressor, ht_state->bulk_writer, slot, ctr->cis);
+				ts_cm_functions->compressor_add_slot(ht_state->compressor, ht_state->bulk_writer, slot);
 				estate->es_processed++;
 				continue;
 			}

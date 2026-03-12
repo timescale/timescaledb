@@ -199,8 +199,7 @@ modify_hypertable_end(CustomScanState *node)
 
 	if (state->compressor)
 	{
-		ts_cm_functions->compressor_flush(state->compressor, state->bulk_writer, state->ctr->cis);
-		Assert(!state->ctr->cis->needs_analyze_segmentby);
+		ts_cm_functions->compressor_flush(state->compressor, state->bulk_writer);
 		ts_cm_functions->compressor_free(state->compressor, state->bulk_writer);
 		state->compressor = NULL;
 		state->bulk_writer = NULL;

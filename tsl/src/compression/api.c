@@ -442,7 +442,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		EventTriggerAlterTableStart(create_dummy_query());
 		/* create compressed chunk and a new table */
 		compress_ht_chunk =
-			create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid, NULL);
+			create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid, false);
 		/* Associate compressed chunk with main chunk. */
 		ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
 		new_compressed_chunk = true;
@@ -775,7 +775,7 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	 */
 	EventTriggerAlterTableStart(create_dummy_query());
 	/* Create compressed chunk using existing table */
-	compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table, NULL);
+	compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table, false);
 	EventTriggerAlterTableEnd();
 
 	/* Insert empty stats to compression_chunk_size */
@@ -1006,10 +1006,10 @@ get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 
 Chunk *
 tsl_compression_chunk_create(Hypertable *compressed_ht, Chunk *src_chunk,
-							 bool *needs_analyze_segmentby)
+							 bool skip_segmentby_default)
 {
 	/* Create a new compressed chunk */
-	return create_compress_chunk(compressed_ht, src_chunk, InvalidOid, needs_analyze_segmentby);
+	return create_compress_chunk(compressed_ht, src_chunk, InvalidOid, skip_segmentby_default);
 }
 
 Datum
