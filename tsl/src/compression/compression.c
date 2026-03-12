@@ -48,6 +48,7 @@
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
+#include "with_clause/alter_table_with_clause.h"
 #include <nodes/columnar_scan/vector_quals.h>
 
 /*
@@ -1034,6 +1035,87 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
 	row_compressor_close(compressor);
 	bulk_writer_close(bulk_writer);
 	table_close(bulk_writer->out_rel, NoLock);
+}
+
+void
+tsl_compressor_reinit(RowCompressor *compressor, BulkWriter **bulk_writer)
+{
+	if (compressor->sort_state == NULL || compressor->tuple_sort_limit == 0)
+	{
+		return;
+	}
+
+	Oid old_compressed_relid = RelationGetRelid((*bulk_writer)->out_rel);
+	CompressionSettings *settings =
+		ts_compression_settings_get_by_compress_relid(old_compressed_relid);
+	Chunk *src_chunk = ts_chunk_get_by_relid(settings->fd.relid, true);
+	Chunk *old_compressed_chunk = ts_chunk_get_by_relid(old_compressed_relid, true);
+	Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
+	Hypertable *compress_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+
+	if (!CheckRelationOidLockedByMe(src_chunk->table_id, AccessExclusiveLock, false))
+	{
+		elog(NOTICE, "Poro AccessExclusiveLock not held on src_chunk");
+		LockRelationOid(src_chunk->table_id, AccessExclusiveLock);
+	}
+
+	if (!CheckRelationOidLockedByMe(old_compressed_relid, AccessExclusiveLock, false))
+	{
+		elog(NOTICE, "Poro AccessExclusiveLock not held on old_compressed_chunk");
+		LockRelationOid(old_compressed_relid, AccessExclusiveLock);
+	}
+
+	Relation in_rel = table_open(src_chunk->table_id, NoLock);
+
+	/* Tear down old compressor internals, bulk writer and output relation */
+	Tuplesortstate *old_sort_state = compressor->sort_state;
+	int64 tuples_to_transfer = compressor->tuples_to_sort;
+	TupleDesc old_in_desc = compressor->in_desc; // Poro can remove later if equal
+	Assert(equalTupleDescs(RelationGetDescr(in_rel), old_in_desc));
+	compressor->sort_state = NULL;
+	row_compressor_close(compressor);
+	bulk_writer_close(*bulk_writer);
+	table_close((*bulk_writer)->out_rel, RowExclusiveLock);
+
+	/* Apply new compression defaults and create replacement compressed chunk */
+	compression_settings_set_defaults(ht, settings, ts_alter_table_with_clause_parse(NIL), false);
+	Chunk *new_compressed_chunk =
+		create_compress_chunk_with_settings(compress_ht, src_chunk, settings);
+
+	ts_chunk_drop(old_compressed_chunk, DROP_RESTRICT, -1);
+	ts_chunk_set_compressed_chunk(src_chunk, new_compressed_chunk->fd.id);
+
+	/* Re-init compressor and bulk writer against the new compressed relation */
+	Relation out_rel = table_open(new_compressed_chunk->table_id, RowExclusiveLock);
+	*bulk_writer = bulk_writer_alloc(out_rel, 0);
+	row_compressor_init(compressor, settings, RelationGetDescr(in_rel), RelationGetDescr(out_rel));
+	compressor->sort_state = compression_create_tuplesort_state(settings, in_rel);
+
+	/* Transfer buffered tuples from old sort state into the new one */
+	if (old_sort_state != NULL && tuples_to_transfer > 0 && compressor->sort_state != NULL)
+	{
+		TupleTableSlot *slot = MakeTupleTableSlot(old_in_desc, &TTSOpsMinimalTuple);
+
+		tuplesort_performsort(old_sort_state);
+
+		while (tuplesort_gettupleslot(old_sort_state,
+									  true /*=forward*/,
+									  false /*=copy*/,
+									  slot,
+									  NULL /*=abbrev*/))
+		{
+			tuplesort_puttupleslot(compressor->sort_state, slot);
+			compressor->tuples_to_sort++;
+		}
+
+		ExecDropSingleTupleTableSlot(slot);
+	}
+
+	if (old_sort_state)
+		tuplesort_end(old_sort_state);
+
+	FreeTupleDesc(old_in_desc);
+	table_close(in_rel, NoLock);
 }
 
 /*
