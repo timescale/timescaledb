@@ -1511,6 +1511,12 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 	return column_res;
 }
 
+ArrayType *
+tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
+{
+	return compression_setting_segmentby_get_default(ht);
+}
+
 /*
  * Get the default segment by value for a hypertable
  */

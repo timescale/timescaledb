@@ -43,3 +43,4 @@ void tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options
 void compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 									   WithClauseResult *with_clause_options,
 									   bool skip_segmentby_default);
+ArrayType *tsl_compression_setting_segmentby_get_default(const Hypertable *ht);
