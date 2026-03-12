@@ -32,6 +32,8 @@ char *compressed_column_metadata_name_v2(const char *metadata_type, const char *
 char *compressed_column_metadata_name_list_v2(const char *metadata_type, List *column_names_list);
 
 typedef struct CompressionSettings CompressionSettings;
+Chunk *create_compress_chunk_with_settings(Hypertable *compress_ht, Chunk *src_chunk,
+										   CompressionSettings *settings);
 int compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_reloid,
 									 AttrNumber chunk_attno, Oid compressed_reloid,
 									 char const *metadata_type);
@@ -41,3 +43,4 @@ void tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options
 void compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 									   WithClauseResult *with_clause_options,
 									   bool skip_segmentby_default);
+ArrayType *tsl_compression_setting_segmentby_get_default(const Hypertable *ht);
