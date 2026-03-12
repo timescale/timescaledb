@@ -678,6 +678,66 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
 	return makeColumnDef(colname, compresseddata_oid, -1 /*typmod*/, 0 /*collation*/);
 }
 
+Chunk *
+create_compress_chunk_with_settings(Hypertable *compress_ht, Chunk *src_chunk,
+									CompressionSettings *settings)
+{
+	Catalog *catalog = ts_catalog_get();
+	CatalogSecurityContext sec_ctx;
+	Chunk *compress_chunk;
+	int namelen;
+	Oid tablespace_oid;
+
+	Assert(compress_ht->space->num_dimensions == 0);
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	compress_chunk =
+		ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK), 0, RELKIND_RELATION);
+	ts_catalog_restore_user(&sec_ctx);
+
+	compress_chunk->fd.hypertable_id = compress_ht->fd.id;
+	compress_chunk->hypertable_relid = compress_ht->main_table_relid;
+	namestrcpy(&compress_chunk->fd.schema_name, INTERNAL_SCHEMA_NAME);
+
+	namelen = snprintf(NameStr(compress_chunk->fd.table_name),
+					   NAMEDATALEN,
+					   "compress%s_%d_chunk",
+					   NameStr(compress_ht->fd.associated_table_prefix),
+					   compress_chunk->fd.id);
+
+	if (namelen >= NAMEDATALEN)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("invalid name \"%s\" for compressed chunk",
+						NameStr(compress_chunk->fd.table_name)),
+				 errdetail("The associated table prefix is too long.")));
+	}
+
+	ts_chunk_insert_lock(compress_chunk, RowExclusiveLock);
+
+	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
+
+	List *column_defs = build_columndefs(settings, src_chunk->table_id);
+	compress_chunk->table_id =
+		compression_chunk_create(src_chunk, compress_chunk, column_defs, tablespace_oid, settings);
+
+	if (!OidIsValid(compress_chunk->table_id))
+	{
+		elog(ERROR, "could not create columnstore chunk table");
+	}
+	settings->fd.compress_relid = compress_chunk->table_id;
+	ts_compression_settings_update(settings);
+
+	ts_chunk_index_create_all(compress_chunk->fd.hypertable_id,
+							  compress_chunk->hypertable_relid,
+							  compress_chunk->fd.id,
+							  compress_chunk->table_id,
+							  tablespace_oid);
+
+	return compress_chunk;
+}
+
 /*
  * Create compress chunk for specific table.
  *
@@ -685,7 +745,8 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
  *
  */
 Chunk *
-create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
+create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
+					  bool skip_segmentby_default)
 {
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
@@ -761,7 +822,14 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	}
 
 	Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
-	compression_settings_set_defaults(ht, settings, ts_alter_table_with_clause_parse(NIL));
+	/*
+	 * Only analyze if there is no user configured segementby.
+	 * Skip default segmentby if we are going to analyze and choose a segementby later
+	 */
+	compression_settings_set_defaults(ht,
+									  settings,
+									  ts_alter_table_with_clause_parse(NIL),
+									  skip_segmentby_default);
 
 	if (OidIsValid(table_id))
 		compress_chunk->table_id = table_id;
@@ -1436,6 +1504,12 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 	return column_res;
 }
 
+ArrayType *
+tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
+{
+	return compression_setting_segmentby_get_default(ht);
+}
+
 /*
  * Get the default segment by value for a hypertable
  */
@@ -1789,7 +1863,8 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 
 void
 compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
-								  WithClauseResult *with_clause_options)
+								  WithClauseResult *with_clause_options,
+								  bool skip_segmentby_default)
 {
 	/* orderby arrays should always be in sync either all NULL or none */
 	Assert(
@@ -1800,7 +1875,8 @@ compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 	/* get default settings which will be stored at chunk level */
 	if (!(settings->fd.orderby) && with_clause_options[AlterTableFlagOrderBy].is_default)
 	{
-		if (!settings->fd.segmentby && with_clause_options[AlterTableFlagSegmentBy].is_default)
+		if (!skip_segmentby_default && !settings->fd.segmentby &&
+			with_clause_options[AlterTableFlagSegmentBy].is_default)
 		{
 			settings->fd.segmentby = compression_setting_segmentby_get_default(ht);
 		}

@@ -421,7 +421,6 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 	 * freed in TSCopyMultiInsertBufferCleanup().
 	 */
 	ChunkInsertState *cis = ts_chunk_tuple_routing_find_chunk(miinfo->ccstate->ctr, buffer->point);
-
 	ResultRelInfo *resultRelInfo = cis->result_relation_info;
 
 	/*

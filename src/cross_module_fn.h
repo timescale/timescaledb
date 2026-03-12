@@ -21,6 +21,8 @@
 #include "ts_catalog/continuous_agg.h"
 #include "with_clause/with_clause_parser.h"
 
+typedef struct ChunkInsertState ChunkInsertState;
+
 /*
  * To define a cross-module function add it to this struct, add a default
  * version in to ts_cm_functions_default cross_module_fn.c, and the overridden
@@ -141,7 +143,8 @@ typedef struct CrossModuleFunctions
 								TupleTableSlot *slot);
 	void (*compressor_flush)(RowCompressor *compressor, BulkWriter *bulk_writer);
 	void (*compressor_free)(RowCompressor *compressor, BulkWriter *bulk_writer);
-	Chunk *(*compression_chunk_create)(Hypertable *ht, Chunk *src_chunk);
+	Chunk *(*compression_chunk_create)(Hypertable *ht, Chunk *src_chunk,
+									   bool skip_segmentby_default);
 
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module
