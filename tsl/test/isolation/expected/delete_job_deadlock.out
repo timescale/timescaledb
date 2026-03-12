@@ -1,0 +1,21 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s1_lock s2_run_job s3_delete_job s1_unlock
+step s1_lock: 
+    BEGIN;
+    LOCK TABLE delete_job_gate IN ACCESS EXCLUSIVE MODE;
+
+step s2_run_job: 
+    CALL run_job(get_delete_test_job_id());
+ <waiting ...>
+step s3_delete_job: 
+    SELECT delete_job(get_delete_test_job_id());
+
+delete_job
+----------
+          
+
+step s1_unlock: 
+    COMMIT;
+
+step s2_run_job: <... completed>

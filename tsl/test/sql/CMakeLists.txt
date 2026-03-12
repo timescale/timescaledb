@@ -27,7 +27,10 @@ set(TEST_FILES
     compress_bloom_hash.sql
     compress_compbloom_basics.sql
     compress_compbloom_config.sql
+    compress_compbloom_index_add.sql
+    compress_compbloom_index_drop.sql
     compress_compbloom_manual_config.sql
+    compress_compbloom_upsert.sql
     compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
@@ -35,6 +38,7 @@ set(TEST_FILES
     compress_float8_corrupt.sql
     compress_unordered_sort.sql
     compress_qualpushdown_saop.sql
+    compress_qualpushdown_complex.sql
     compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql

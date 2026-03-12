@@ -1,0 +1,1 @@
+Fixes: #9381 Data loss with direct compress with client-ordered data in an INSERT SELECT from a compressed hypertable.
