@@ -401,7 +401,7 @@ SELECT t, (i % 5), random()
 FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 minute') t,
      generate_series(1, 5) i;
 ANALYZE test_segmentby_stats;
--- will have no segment by as default segmentby for direct compressed chunk;
+-- will have default segmentby set for a newly created direct compressed chunk (should observe a skipped chunk id);
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ROLLBACK;
 
@@ -419,6 +419,6 @@ SELECT t, (i % 5), random()
 FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 minute') t,
      generate_series(1, 5) i;
 ANALYZE test_segmentby_stats;
--- will have device_id by as configured segmentby for direct compressed chunk;
+-- will have device_id by as configured segmentby for direct compressed chunk (should not observe skipped chunk id);
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ROLLBACK;
