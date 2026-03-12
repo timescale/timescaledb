@@ -1005,11 +1005,15 @@ get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 }
 
 Chunk *
-tsl_compression_chunk_create(Hypertable *compressed_ht, Chunk *src_chunk,
-							 bool skip_segmentby_default)
+tsl_compression_chunk_create(Hypertable *compressed_ht, Chunk *src_chunk)
 {
 	/* Create a new compressed chunk */
-	return create_compress_chunk(compressed_ht, src_chunk, InvalidOid, skip_segmentby_default);
+	return create_compress_chunk(
+		compressed_ht,
+		src_chunk,
+		InvalidOid,
+		ts_guc_enable_direct_compress_auto_segmentby); /* skip_segmentby_default
+														*/
 }
 
 Datum

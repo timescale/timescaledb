@@ -142,8 +142,7 @@ typedef struct CrossModuleFunctions
 								TupleTableSlot *slot);
 	void (*compressor_flush)(RowCompressor *compressor, BulkWriter *bulk_writer);
 	void (*compressor_free)(RowCompressor *compressor, BulkWriter *bulk_writer);
-	Chunk *(*compression_chunk_create)(Hypertable *ht, Chunk *src_chunk,
-									   bool skip_segmentby_default);
+	Chunk *(*compression_chunk_create)(Hypertable *ht, Chunk *src_chunk);
 
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module
