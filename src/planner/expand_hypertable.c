@@ -1003,7 +1003,7 @@ get_simplified_restrictions(PlannerInfo *root, List *restrictions)
  */
 static Chunk **
 get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
-		   unsigned int *num_chunks, HypertableRestrictInfo **hri_out)
+		   unsigned int *num_chunks, HypertableRestrictInfo **hri_out, List **accepted_quals_out)
 {
 	bool reverse;
 	int order_attno;
@@ -1013,9 +1013,18 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 	/*
 	 * This is where the magic happens: use our HypertableRestrictInfo
 	 * infrastructure to deduce the appropriate chunks using our range
-	 * exclusion.
+	 * exclusion. We feed each base restriction individually and track
+	 * which ones HRI accepted, so that filter_baserestrictions can
+	 * strip exactly those quals without reimplementing acceptance logic.
 	 */
-	ts_hypertable_restrict_info_add(hri, root, rel->baserestrictinfo);
+	List *accepted_quals = NIL;
+	ListCell *lc_ri;
+	foreach (lc_ri, rel->baserestrictinfo)
+	{
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc_ri));
+		if (ts_hypertable_restrict_info_add_one(hri, root, ri->clause))
+			accepted_quals = lappend(accepted_quals, ri);
+	}
 
 	List *simplified_restrictions = get_simplified_restrictions(root, rel->baserestrictinfo);
 	ts_hypertable_restrict_info_add(hri, root, simplified_restrictions);
@@ -1025,6 +1034,7 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 		ht->space->num_dimensions == 1)
 	{
 		*hri_out = hri;
+		*accepted_quals_out = accepted_quals;
 	}
 
 	/*
@@ -1099,35 +1109,22 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 }
 
 /*
- * Build a list of baserestrictinfo with any Var OP Const constraints on the primary
- * dimension removed.
+ * Build a list of baserestrictinfo with the accepted dimension
+ * restrictions removed. The caller provides the list of accepted
+ * RestrictInfos built via ts_hypertable_restrict_info_add_one(), so
+ * there is no separate logic deciding which quals are dimension
+ * restrictions.
  */
 static List *
-filter_baserestrictions(Hypertable *ht, List *base_restrictions)
+filter_baserestrictions(List *accepted_quals, List *base_restrictions)
 {
-	AttrNumber dim_attno = ht->space->dimensions[0].column_attno;
 	List *filtered_restrictions = NIL;
 	ListCell *lc;
 	foreach (lc, base_restrictions)
 	{
 		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc));
-		Expr *qual = ri->clause;
-		if (IsA(qual, OpExpr))
-		{
-			OpExpr *op = castNode(OpExpr, qual);
-			Node *left = strip_implicit_coercions(linitial(op->args));
-			Node *right = strip_implicit_coercions(lsecond(op->args));
-			if ((IsA(left, Var) && IsA(right, Const) &&
-				 castNode(Var, left)->varattno == dim_attno) ||
-				(IsA(right, Var) && IsA(left, Const) &&
-				 castNode(Var, right)->varattno == dim_attno))
-			{
-				/* only consider simple column to constant comparisons */
-				continue;
-			}
-		}
-
-		filtered_restrictions = lappend(filtered_restrictions, ri);
+		if (!list_member_ptr(accepted_quals, ri))
+			filtered_restrictions = lappend(filtered_restrictions, ri);
 	}
 	return filtered_restrictions;
 }
@@ -1231,7 +1228,8 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	unsigned int num_chunks = 0;
 
 	HypertableRestrictInfo *hri = NULL;
-	chunks = get_chunks(root, rel, ht, include_osm, &num_chunks, &hri);
+	List *accepted_quals = NIL;
+	chunks = get_chunks(root, rel, ht, include_osm, &num_chunks, &hri, &accepted_quals);
 	/* Can have zero chunks. */
 	Assert(num_chunks == 0 || chunks != NULL);
 
@@ -1431,7 +1429,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 	if (try_restriction_filtering)
 	{
-		filtered_restrictions = filter_baserestrictions(ht, base_restrictions);
+		filtered_restrictions = filter_baserestrictions(accepted_quals, base_restrictions);
 		/* Dont try filtering if all restrictions remain after filtering */
 		if (list_length(base_restrictions) == list_length(filtered_restrictions))
 			try_restriction_filtering = false;
