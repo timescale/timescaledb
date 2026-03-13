@@ -254,7 +254,7 @@ INSERT INTO explain_partial VALUES ('2024-01-01 00:05:30', 5, 'temp', 100)
 ON CONFLICT (device_id, metric, ts) DO NOTHING;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 1
+   Batches filtered after decompression: 1
    Batches checked by bloom: 1
    Batches bloom false positives: 1
    ->  Insert on explain_partial (actual rows=0.00 loops=1)
