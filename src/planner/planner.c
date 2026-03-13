@@ -362,7 +362,10 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 		FromExpr *from = castNode(FromExpr, node);
 		if (from->quals)
 		{
-			if (ts_guc_enable_now_constify)
+			if (ts_guc_enable_now_constify
+				/* When using on-demand Cagg settings we will either obtain live watermark value,
+				 * or will only query materialized Cagg data, no need to constify */
+				&& ts_guc_realtime_cagg_settings == CAGG_VIEW_SETTINGS)
 			{
 				from->quals =
 					ts_constify_now(context->root, context->current_query->rtable, from->quals);
@@ -418,6 +421,16 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 			switch (rte->rtekind)
 			{
 				case RTE_SUBQUERY:
+					/* Apply on-demand realtime settings to Caggs in the query */
+					if (ts_guc_enable_optimizations &&
+						ts_guc_realtime_cagg_settings != CAGG_VIEW_SETTINGS &&
+						rte->relkind == RELKIND_VIEW && rte->relid)
+					{
+						ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(rte->relid);
+						if (cagg)
+							ts_cm_functions->modify_realtime_caggs_ondemand_tsl(rte, cagg);
+					}
+
 					if (ts_guc_enable_optimizations && ts_guc_enable_cagg_reorder_groupby &&
 						query->commandType == CMD_SELECT)
 					{
