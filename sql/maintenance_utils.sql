@@ -84,6 +84,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.recompress_chunk_segmentwise(
     if_compressed BOOLEAN = true
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_recompress_chunk_segmentwise' LANGUAGE C STRICT VOLATILE;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.compact_chunk(
+    uncompressed_chunk REGCLASS
+) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compact_chunk' LANGUAGE C STRICT VOLATILE;
+
 -- find the index on the compressed chunk that can be used to recompress efficiently
 -- this index must contain all the segmentby columns and the meta_sequence_number column last
 CREATE OR REPLACE FUNCTION _timescaledb_functions.get_compressed_chunk_index_for_recompression(

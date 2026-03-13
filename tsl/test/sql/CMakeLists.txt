@@ -21,6 +21,7 @@ set(TEST_FILES
     chunk_publication_compression.sql
     columnar_scan_cost.sql
     columnstore_aliases.sql
+    compact_chunk.sql
     compress_auto_sparse_index.sql
     compress_batch_size.sql
     compress_bitmap_scan.sql
