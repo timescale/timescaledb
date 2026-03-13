@@ -456,4 +456,5 @@ struct decompress_batches_stats
 	int64 batches_bloom_false_positives;
 	int64 tuples_decompressed;
 	int64 tuples_deleted;
+	int64 batches_skipped;
 };

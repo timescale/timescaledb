@@ -34,6 +34,7 @@
 #include <nodes/columnar_scan/vector_predicates.h>
 #include <nodes/modify_hypertable.h>
 #include <ts_catalog/array_utils.h>
+#include "foreach_ptr.h"
 
 /*
  * Context for tracking continuous aggregate invalidation during direct batch delete.
@@ -69,7 +70,8 @@ static BatchQualSummary batch_matches_vectorized(RowDecompressor *decompressor,
 												 bool check_full_match, bool *skip_current_tuple);
 static void process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 							   ScanKeyData **mem_scankeys, int *num_mem_scankeys,
-							   List **heap_filters, List **index_filters, List **is_null);
+							   List **heap_filters, List **index_filters, List **is_null,
+							   List **bloom_filters);
 static Relation find_matching_index(Relation comp_chunk_rel, List **index_filters,
 									List **heap_filters);
 static tuple_filtering_constraints *get_batch_keys_for_unique_constraints(Relation relation);
@@ -109,6 +111,42 @@ typedef struct MatchedBloom
 	AttrNumber compressed_attnum;
 	int num_cols;
 } MatchedBloom;
+
+/*
+ * Pre-computed bloom filter check for UPDATE/DELETE batch pruning.
+ * The hash is computed once in process_predicates() and checked
+ * per batch in decompress_batches_scan() via bloom1_contains_hash().
+ */
+typedef struct BloomFilterCheck
+{
+	AttrNumber bloom_attno; /* attnum of bloom metadata column in compressed chunk */
+	uint64 hash;			/* pre-computed hash of the search value(s) */
+	int num_columns;		/* number of columns in the bloom filter (for sort order) */
+} BloomFilterCheck;
+
+/*
+ * Comparator for list_sort(): order BloomFilterCheck by column count
+ * in descending order, assuming this reflects the selectivity order.
+ */
+static int
+bloom_filter_check_cmp(const ListCell *a, const ListCell *b)
+{
+	BloomFilterCheck *ca = lfirst(a);
+	BloomFilterCheck *cb = lfirst(b);
+	/* Descending order: more columns first */
+	return cb->num_columns - ca->num_columns;
+}
+
+/*
+ * Collects equality predicates during process_predicates() for the
+ * post-loop bloom matching pass. Type OIDs are resolved via
+ * get_atttype() at hash computation time.
+ */
+typedef struct EqualityPredicate
+{
+	AttrNumber attno; /* column attno in uncompressed chunk */
+	Datum constvalue; /* the constant value from WHERE col = <value> */
+} EqualityPredicate;
 
 /*
  * Get arbiter index column attnums from the arbiter index list.
@@ -475,6 +513,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 	cis->counters->batches_pruned_by_bloom += stats.batches_pruned_by_bloom;
 	cis->counters->batches_without_bloom += stats.batches_without_bloom;
 	cis->counters->batches_bloom_false_positives += stats.batches_bloom_false_positives;
+	cis->counters->batches_skipped += stats.batches_skipped;
 
 	CommandCounterIncrement();
 	table_close(in_rel, NoLock);
@@ -513,6 +552,7 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	struct decompress_batches_stats stats = { 0 };
 	int num_mem_scankeys = 0;
 	ScanKeyData *mem_scankeys = NULL;
+	List *bloom_filters = NIL;
 
 	CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
 	bool delete_only = ht_state->mt->operation == CMD_DELETE && !has_joins &&
@@ -553,7 +593,8 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 					   &num_mem_scankeys,
 					   &heap_filters,
 					   &index_filters,
-					   &is_null);
+					   &is_null,
+					   &bloom_filters);
 
 	chunk_rel = table_open(chunk->table_id, RowExclusiveLock);
 	comp_chunk_rel = table_open(settings->fd.compress_relid, RowExclusiveLock);
@@ -587,6 +628,7 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	temp_cdst.mem_scankeys.num_scankeys = num_mem_scankeys;
 	temp_cdst.constraints = NULL;
 	temp_cdst.columns_with_null_check = null_columns;
+	temp_cdst.bloom_filters = bloom_filters;
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 	stats = decompress_batches_scan(comp_chunk_rel,
@@ -626,11 +668,19 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 		filter = lfirst(lc);
 		pfree(filter);
 	}
+
+	list_free_deep(bloom_filters);
+
 	ht_state->batches_deleted += stats.batches_deleted;
 	ht_state->batches_filtered += stats.batches_filtered;
 	ht_state->batches_decompressed += stats.batches_decompressed;
 	ht_state->tuples_decompressed += stats.tuples_decompressed;
 	ht_state->tuples_deleted += stats.tuples_deleted;
+	ht_state->batches_checked_by_bloom += stats.batches_checked_by_bloom;
+	ht_state->batches_pruned_by_bloom += stats.batches_pruned_by_bloom;
+	ht_state->batches_without_bloom += stats.batches_without_bloom;
+	ht_state->batches_bloom_false_positives += stats.batches_bloom_false_positives;
+	ht_state->batches_skipped += stats.batches_skipped;
 
 	return stats.batches_decompressed > 0;
 }
@@ -729,7 +779,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	bool decompressor_initialized = false;
 	bool valid = false;
 	int num_scanned_rows = 0;
-	int num_filtered_rows = 0;
 	TM_Result result;
 	DecompressBatchScanDesc scan = NULL;
 	ScanKeyData *index_scankeys = cdst->index_scankeys.scankeys;
@@ -789,7 +838,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 #endif
 			if (!valid)
 			{
-				num_filtered_rows++;
+				stats.batches_skipped++;
 				continue;
 			}
 		}
@@ -822,8 +871,40 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 
 		if (!valid)
 		{
-			num_filtered_rows++;
+			stats.batches_skipped++;
 			continue;
+		}
+
+		/* To track false positives */
+		bool bloom_passed = false;
+
+		/*
+		 * Bloom filter pruning for UPDATE/DELETE. Pre-computed hashes
+		 * are checked against bloom metadata via slot_getattr().
+		 */
+		if (cdst->bloom_filters != NIL)
+		{
+			bool bloom_pruned = false;
+			foreach_ptr(BloomFilterCheck, check, cdst->bloom_filters)
+			{
+				bool isnull;
+				Datum bloom_datum = slot_getattr(slot, check->bloom_attno, &isnull);
+				stats.batches_checked_by_bloom++;
+				if (!isnull && !bloom1_contains_hash(bloom_datum, check->hash))
+				{
+					bloom_pruned = true;
+					break;
+				}
+				if (isnull)
+					stats.batches_without_bloom++;
+			}
+			if (bloom_pruned)
+			{
+				stats.batches_pruned_by_bloom++;
+				stats.batches_skipped++;
+				continue;
+			}
+			bloom_passed = true;
 		}
 
 		if (!decompressor_initialized)
@@ -840,9 +921,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 						  decompressor.in_desc,
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
-
-		/* To track false positives */
-		bool bloom_passed = false;
 
 		/* Bloom pre-filtering for UPSERT conflict detection */
 		if (insert_slot != NULL && cdst->bloom_hasher != NULL)
@@ -989,11 +1067,11 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	{
 		elog(INFO,
 			 "Number of compressed rows fetched from %s: %d. "
-			 "Number of compressed rows filtered%s: %d.",
+			 "Number of compressed rows filtered%s: " INT64_FORMAT ".",
 			 index_rel ? "index" : "table scan",
 			 num_scanned_rows,
 			 index_rel ? " by heap filters" : "",
-			 num_filtered_rows);
+			 stats.batches_skipped);
 	}
 
 	return stats;
@@ -1470,7 +1548,7 @@ get_batch_keys_for_unique_constraints(Relation relation)
 static void
 process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 				   ScanKeyData **mem_scankeys, int *num_mem_scankeys, List **heap_filters,
-				   List **index_filters, List **is_null)
+				   List **index_filters, List **is_null, List **bloom_filters)
 {
 	ListCell *lc;
 	if (ts_guc_enable_dml_decompression_tuple_filtering)
@@ -1478,6 +1556,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 		*mem_scankeys = palloc0(sizeof(ScanKeyData) * list_length(predicates));
 	}
 	*num_mem_scankeys = 0;
+	List *eq_preds = NIL;
 
 	/*
 	 * We dont want to forward boundParams from the execution state here
@@ -1575,6 +1654,20 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 										   arg_value->constcollid,
 										   opcode,
 										   arg_value->constisnull ? 0 : arg_value->constvalue);
+				}
+
+				/*
+				 * Collect equality predicates for the post-loop
+				 * bloom filter matching pass.
+				 */
+				if (op_strategy == BTEqualStrategyNumber &&
+					!arg_value->constisnull &&
+					ts_guc_enable_dml_bloom_filter)
+				{
+					EqualityPredicate *ep = palloc(sizeof(EqualityPredicate));
+					ep->attno = var->varattno;
+					ep->constvalue = arg_value->constvalue;
+					eq_preds = lappend(eq_preds, ep);
 				}
 
 				int min_attno = compressed_column_metadata_attno(settings,
@@ -1773,6 +1866,110 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 				break;
 		}
 	}
+
+	/*
+	 * Bloom filter matching pass: iterate all bloom configs from
+	 * SparseIndexSettings, check which ones are fully covered by
+	 * equality predicates, compute hashes, and collect matches.
+	 * Results are sorted by selectivity (most columns first).
+	 */
+	if (eq_preds != NIL && settings->fd.index != NULL &&
+		ts_guc_enable_dml_bloom_filter)
+	{
+		SparseIndexSettings *parsed =
+			ts_convert_to_sparse_index_settings(settings->fd.index);
+		TsBmsList per_column_attnos =
+			ts_resolve_columns_to_attnos_from_parsed_settings(parsed, ch->table_id);
+
+		/* Build a Bitmapset of equality predicate attnums for bms_is_subset() */
+		Bitmapset *eq_pred_attnos = NULL;
+		foreach_ptr(EqualityPredicate, ep, eq_preds)
+			eq_pred_attnos = bms_add_member(eq_pred_attnos, ep->attno);
+
+		ListCell *obj_cell;
+		ListCell *attno_cell;
+		forboth (obj_cell, parsed->objects, attno_cell, per_column_attnos)
+		{
+			SparseIndexSettingsObject *obj = lfirst(obj_cell);
+			Bitmapset *bloom_attnos = lfirst(attno_cell);
+
+			/* Check if bloom type */
+			List *type_values = ts_get_values_by_key_from_parsed_object(obj, "type");
+			if (type_values == NIL || strcmp((char *) linitial(type_values), "bloom") != 0)
+				continue;
+
+			int num_columns = bms_num_members(bloom_attnos);
+
+			/* Skip composite blooms if the GUC is off */
+			if (num_columns > 1 && !ts_guc_enable_composite_bloom_indexes)
+				continue;
+
+			/* Check if ALL bloom columns have equality predicates */
+			if (!bms_is_subset(bloom_attnos, eq_pred_attnos))
+				continue;
+
+			/*
+			 * All columns covered. Collect type OIDs and values in
+			 * ascending attnum order (via bms_next_member) to match
+			 * the order used during compression.
+			 */
+			Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+			NullableDatum values[MAX_BLOOM_FILTER_COLUMNS];
+			int col_idx = 0;
+			int attnum = -1;
+			while ((attnum = bms_next_member(bloom_attnos, attnum)) >= 0)
+			{
+				type_oids[col_idx] = get_atttype(ch->table_id, attnum);
+
+				/* Find the matching equality predicate for this attnum */
+				foreach_ptr(EqualityPredicate, ep, eq_preds)
+				{
+					if (ep->attno == attnum)
+					{
+						values[col_idx].value = ep->constvalue;
+						values[col_idx].isnull = false;
+						break;
+					}
+				}
+				col_idx++;
+			}
+
+			Bloom1Hasher *hasher = bloom1_hasher_create(type_oids, num_columns);
+			uint64 hash = hasher->hash_values(hasher, values);
+
+			/* Resolve bloom metadata column attno in compressed chunk */
+			List *column_names = ts_get_column_names_from_parsed_object(obj);
+			char *bloom_col_name =
+				compressed_column_metadata_name_list_v2(bloom1_column_prefix,
+													   column_names);
+			AttrNumber bloom_attno =
+				get_attnum(settings->fd.compress_relid, bloom_col_name);
+
+			if (AttributeNumberIsValid(bloom_attno))
+			{
+				BloomFilterCheck *check = palloc(sizeof(BloomFilterCheck));
+				check->bloom_attno = bloom_attno;
+				check->hash = hash;
+				check->num_columns = num_columns;
+				*bloom_filters = lappend(*bloom_filters, check);
+			}
+
+			pfree(hasher);
+		}
+
+		bms_free(eq_pred_attnos);
+		ts_bmslist_free(per_column_attnos);
+		ts_free_sparse_index_settings(parsed);
+		list_free_deep(eq_preds);
+	}
+
+	/*
+	 * Sort bloom filters by selectivity: most columns first, so composite
+	 * bloom filters (which are more selective due to city_hash_combine)
+	 * are checked before single-column filters.
+	 */
+	if (list_length(*bloom_filters) > 1)
+		list_sort(*bloom_filters, bloom_filter_check_cmp);
 }
 
 static BatchFilter *

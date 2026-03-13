@@ -293,6 +293,8 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		state->batches_without_bloom += counters->batches_without_bloom;
 		state->batches_bloom_false_positives += counters->batches_bloom_false_positives;
 	}
+	if (state->batches_skipped > 0)
+		ExplainPropertyInteger("Batches skipped", NULL, state->batches_skipped, es);
 	if (state->batches_filtered > 0)
 		ExplainPropertyInteger("Batches filtered", NULL, state->batches_filtered, es);
 	if (state->batches_decompressed > 0)

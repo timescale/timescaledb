@@ -55,6 +55,7 @@ typedef struct ModifyHypertableState
 	int64 batches_pruned_by_bloom;
 	int64 batches_without_bloom;
 	int64 batches_bloom_false_positives;
+	int64 batches_skipped;
 
 	/*
 	 * When EXPLAIN VERBOSE is used, we temporarily nullify the targetlist of the
