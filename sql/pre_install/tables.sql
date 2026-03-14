@@ -470,6 +470,19 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 
 CREATE INDEX continuous_aggs_jobs_refresh_ranges_idx ON _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (materialization_id);
 
+CREATE TABLE _timescaledb_catalog.continuous_aggs_backfill_tracker (
+  hypertable_id integer NOT NULL,
+  device_value text NOT NULL,
+  lowest_modified_value bigint NOT NULL,
+  greatest_modified_value bigint NOT NULL,
+  -- table constraints
+  CONSTRAINT continuous_aggs_backfill_tracker_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_backfill_tracker', '');
+
+CREATE INDEX continuous_aggs_backfill_tracker_idx ON _timescaledb_catalog.continuous_aggs_backfill_tracker (hypertable_id, lowest_modified_value ASC);
+
 /* the source of this data is the enum from the source code that lists
  *  the algorithms. This table is NOT dumped.
  */

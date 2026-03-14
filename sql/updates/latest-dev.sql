@@ -188,3 +188,17 @@ SET index = COALESCE(index, '[]'::jsonb) ||
             )
 WHERE cs.orderby IS NOT NULL;
 
+-- Add continuous_aggs_backfill_tracker table
+CREATE TABLE _timescaledb_catalog.continuous_aggs_backfill_tracker (
+  hypertable_id integer NOT NULL,
+  device_value text NOT NULL,
+  lowest_modified_value bigint NOT NULL,
+  greatest_modified_value bigint NOT NULL,
+  CONSTRAINT continuous_aggs_backfill_tracker_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_backfill_tracker', '');
+
+CREATE INDEX continuous_aggs_backfill_tracker_idx ON _timescaledb_catalog.continuous_aggs_backfill_tracker (hypertable_id, lowest_modified_value ASC);
+
+GRANT SELECT ON _timescaledb_catalog.continuous_aggs_backfill_tracker TO PUBLIC;

@@ -56,6 +56,7 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_WATERMARK,
 	TELEMETRY_EVENT,
 	CHUNK_COLUMN_STATS,
+	CONTINUOUS_AGGS_BACKFILL_TRACKER,
 	/* Don't forget updating catalog.c when adding new tables! */
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
@@ -1185,6 +1186,46 @@ typedef enum Anum_continuous_aggs_watermark_pkey
 } Anum_continuous_aggs_watermark_pkey;
 
 #define Natts_continuous_aggs_watermark_pkey (_Anum_continuous_aggs_watermark_pkey_max - 1)
+
+/****** CONTINUOUS_AGGS_BACKFILL_TRACKER definitions */
+#define CONTINUOUS_AGGS_BACKFILL_TRACKER_TABLE_NAME "continuous_aggs_backfill_tracker"
+
+typedef enum Anum_continuous_aggs_backfill_tracker
+{
+	Anum_continuous_aggs_backfill_tracker_hypertable_id = 1,
+	Anum_continuous_aggs_backfill_tracker_device_value,
+	Anum_continuous_aggs_backfill_tracker_lowest_modified_value,
+	Anum_continuous_aggs_backfill_tracker_greatest_modified_value,
+	_Anum_continuous_aggs_backfill_tracker_max,
+} Anum_continuous_aggs_backfill_tracker;
+
+#define Natts_continuous_aggs_backfill_tracker (_Anum_continuous_aggs_backfill_tracker_max - 1)
+
+typedef struct FormData_continuous_aggs_backfill_tracker
+{
+	int32 hypertable_id;
+	NameData device_value;
+	int64 lowest_modified_value;
+	int64 greatest_modified_value;
+} FormData_continuous_aggs_backfill_tracker;
+
+typedef FormData_continuous_aggs_backfill_tracker *Form_continuous_aggs_backfill_tracker;
+
+enum
+{
+	CONTINUOUS_AGGS_BACKFILL_TRACKER_IDX = 0,
+	_MAX_CONTINUOUS_AGGS_BACKFILL_TRACKER_INDEX,
+};
+
+typedef enum Anum_continuous_aggs_backfill_tracker_idx
+{
+	Anum_continuous_aggs_backfill_tracker_idx_hypertable_id = 1,
+	Anum_continuous_aggs_backfill_tracker_idx_lowest_modified_value,
+	_Anum_continuous_aggs_backfill_tracker_idx_max,
+} Anum_continuous_aggs_backfill_tracker_idx;
+
+#define Natts_continuous_aggs_backfill_tracker_idx                                                  \
+	(_Anum_continuous_aggs_backfill_tracker_idx_max - 1)
 
 #define COMPRESSION_SETTINGS_TABLE_NAME "compression_settings"
 
