@@ -5,16 +5,25 @@
  */
 
 #include <postgres.h>
+#include <access/hash.h>
+#include <access/xact.h>
+#include <utils/builtins.h>
 #include <utils/hsearch.h>
+#include <utils/lsyscache.h>
 #include <utils/snapmgr.h>
+#include <utils/timestamp.h>
 
 #include "compat/compat.h"
 
 #include "continuous_aggs/insert.h"
 #include "debug_point.h"
+#include "dimension.h"
 #include "guc.h"
+#include "hypertable.h"
 #include "invalidation.h"
 #include "partitioning.h"
+#include "time_utils.h"
+#include "ts_catalog/catalog.h"
 
 /*
  * When tuples in a hypertable that has a continuous aggregate are modified, the
@@ -62,6 +71,11 @@ static HTAB *continuous_aggs_cache_hyper_inval_threshold_htab = NULL;
 
 static MemoryContext continuous_aggs_invalidation_mctx = NULL;
 
+/* Backfill tracker state — initialized lazily on first backfill insert */
+static HTAB *backfill_tracker_htab = NULL;
+static MemoryContext backfill_tracker_mctx = NULL;
+static int64 backfill_now_internal = 0; /* cached current time, computed once per transaction */
+
 static inline void cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry,
 										  int32 hypertable_id, Oid chunk_relid);
 static inline ContinuousAggsCacheInvalEntry *get_cache_inval_entry(int32 hypertable_id,
@@ -70,6 +84,10 @@ static void cache_inval_cleanup(void);
 static void cache_inval_htab_write(void);
 static void continuous_agg_xact_invalidation_callback(XactEvent event, void *arg);
 static ScanTupleResult invalidation_tuple_found(TupleInfo *ti, void *min);
+
+/* Backfill tracker forward declarations */
+static void backfill_tracker_flush(void);
+static void backfill_tracker_cleanup(void);
 
 static void
 cache_inval_init()
@@ -330,9 +348,8 @@ cache_inval_htab_write(void)
 static void
 continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 {
-	/* Return quickly if we never initialize the hashtable */
-	if (!continuous_aggs_cache_inval_htab)
-	{
+	/* Return quickly if we never initialized either hashtable */
+	if (!continuous_aggs_cache_inval_htab && !backfill_tracker_htab)
 		return;
 	}
 
@@ -341,14 +358,18 @@ continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 		case XACT_EVENT_PRE_PREPARE:
 		case XACT_EVENT_PRE_COMMIT:
 		case XACT_EVENT_PARALLEL_PRE_COMMIT:
-			cache_inval_htab_write();
+			if (continuous_aggs_cache_inval_htab)
+				cache_inval_htab_write();
+			backfill_tracker_flush();
 			break;
 		case XACT_EVENT_PREPARE:
 		case XACT_EVENT_COMMIT:
 		case XACT_EVENT_PARALLEL_COMMIT:
 		case XACT_EVENT_ABORT:
 		case XACT_EVENT_PARALLEL_ABORT:
-			cache_inval_cleanup();
+			if (continuous_aggs_cache_inval_htab)
+				cache_inval_cleanup();
+			backfill_tracker_cleanup();
 			break;
 		default:
 			break;
@@ -458,4 +479,256 @@ cache_get_lowest_invalidated_time_for_hypertable(int32 hypertable_id)
 	}
 
 	return hyper_inval_cache_entry->watermark;
+}
+
+/*
+ * Backfill Tracker
+ *
+ * Tracks which devices have inserted data into old chunks (below the low
+ * watermark). During a transaction, device values and their modified time
+ * ranges are accumulated in a hash table. At commit time, the entries are
+ * flushed to the continuous_aggs_backfill_tracker catalog table.
+ *
+ * The refresh code then uses this information to only re-materialize data
+ * for devices that actually backfilled, rather than refreshing the entire
+ * time range.
+ */
+
+/*
+ * Hash key for the backfill tracker: (hypertable_id, device_value_hash).
+ * We use a uint32 hash of the device value as part of the key because device
+ * values can be variable-length (text). The actual device value string is
+ * stored separately in the entry for flushing to the catalog.
+ */
+typedef struct BackfillTrackerKey
+{
+	int32 hypertable_id;
+	uint32 device_hash;
+} BackfillTrackerKey;
+
+typedef struct BackfillTrackerEntry
+{
+	BackfillTrackerKey key;
+	char *device_value_str;		   /* text representation, palloc'd in backfill mctx */
+	int64 lowest_modified_value;   /* min timestamp of backfill data for this device */
+	int64 greatest_modified_value; /* max timestamp of backfill data for this device */
+} BackfillTrackerEntry;
+
+#define BACKFILL_TRACKER_INIT_HTAB_SIZE 64
+
+static void
+backfill_tracker_init(void)
+{
+	HASHCTL ctl;
+
+	Assert(backfill_tracker_mctx == NULL);
+
+	backfill_tracker_mctx =
+		AllocSetContextCreate(TopTransactionContext, "BackfillTrackerCtx", ALLOCSET_DEFAULT_SIZES);
+
+	/* Hash table for device entries keyed on (hypertable_id, device_hash) */
+	memset(&ctl, 0, sizeof(ctl));
+	ctl.keysize = sizeof(BackfillTrackerKey);
+	ctl.entrysize = sizeof(BackfillTrackerEntry);
+	ctl.hcxt = backfill_tracker_mctx;
+
+	backfill_tracker_htab = hash_create("TS Backfill Tracker",
+										BACKFILL_TRACKER_INIT_HTAB_SIZE,
+										&ctl,
+										HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+
+	/*
+	 * Cache current timestamp once per transaction for consistent watermark
+	 * checks. Use ts_get_mock_time_or_current_time() so that tests can
+	 * control the "current" time via timescaledb.current_timestamp_mock GUC.
+	 */
+#ifdef TS_DEBUG
+	backfill_now_internal =
+		ts_time_value_to_internal(ts_get_mock_time_or_current_time(), TIMESTAMPTZOID);
+#else
+	backfill_now_internal =
+		ts_time_value_to_internal(TimestampTzGetDatum(GetCurrentTimestamp()), TIMESTAMPTZOID);
+#endif
+}
+
+/*
+ * Determine if a chunk is a "backfill" chunk by comparing its time range end
+ * against a watermark derived from the chunk interval.
+ *
+ * Watermark = now - max(chunk_interval, 1 day)
+ * If the chunk's range_end <= watermark, it's a backfill chunk.
+ *
+ * chunk_range_end is passed in from ChunkInsertState (set during chunk routing),
+ * so no catalog lookup is needed here.
+ *
+ * TODO: The 1-day minimum threshold is a placeholder. Needs a more robust
+ * solution — e.g., user-configurable, derived from cagg bucket width, or
+ * based on N recent chunks. Also needs validation with all time dimension
+ * datatypes (not just timestamptz).
+ */
+static bool
+is_backfill_chunk(int64 chunk_range_end, const Hypertable *ht)
+{
+	if (!backfill_tracker_htab)
+		backfill_tracker_init();
+
+	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
+	if (!open_dim)
+		return false;
+
+	int64 chunk_interval = open_dim->fd.interval_length;
+	int64 one_day_usec = 86400LL * 1000000LL; /* USECS_PER_DAY */
+	int64 threshold = Max(chunk_interval, one_day_usec);
+
+	return (chunk_range_end <= (backfill_now_internal - threshold));
+}
+
+/*
+ * Check if an insert is going into an old chunk (backfill) and record the
+ * device value if so. Called from the insert path for each row.
+ *
+ * The tenant_column_name is looked up at executor init time (when a snapshot
+ * is active) and passed in here. This avoids catalog scans in the per-row
+ * hot path and avoids snapshot Push/Pop which would interfere with the
+ * executor's snapshot lifecycle.
+ *
+ * TODO: Cache attno/type info per hypertable to avoid repeated syscache access.
+ */
+void
+continuous_agg_backfill_check(int32 hypertable_id, int64 chunk_range_end, TupleTableSlot *slot,
+							  const Hypertable *ht, const char *tenant_column_name)
+{
+	if (!is_backfill_chunk(chunk_range_end, ht))
+		return;
+
+	/* Get the tenant column attribute number from the hypertable relation.
+	 * We use the hypertable's tuple descriptor since slot is in hypertable format. */
+	AttrNumber device_attno = get_attnum(ht->main_table_relid, tenant_column_name);
+	if (device_attno == InvalidAttrNumber)
+		return; /* device column not found — skip tracking */
+
+	/* Extract the device value from the tuple */
+	bool isnull;
+	Datum device_datum = slot_getattr(slot, device_attno, &isnull);
+	if (isnull)
+		return;
+
+	/* Get the time dimension value for this row */
+	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
+	if (!open_dim)
+		return;
+
+	AttrNumber time_attno = get_attnum(ht->main_table_relid, NameStr(open_dim->fd.column_name));
+	bool time_isnull;
+	Datum time_datum = slot_getattr(slot, time_attno, &time_isnull);
+	if (time_isnull)
+		return;
+
+	Oid time_type = ts_dimension_get_partition_type(open_dim);
+	int64 timeval = ts_time_value_to_internal(time_datum, time_type);
+
+	/* Convert device value to text for hashing and storage */
+	Oid device_type = get_atttype(ht->main_table_relid, device_attno);
+	Oid typoutput;
+	bool typIsVarlena;
+	getTypeOutputInfo(device_type, &typoutput, &typIsVarlena);
+	char *device_str = OidOutputFunctionCall(typoutput, device_datum);
+
+	/* Hash the device string for the hash table key */
+	uint32 device_hash = DatumGetUInt32(hash_any((unsigned char *) device_str, strlen(device_str)));
+
+	BackfillTrackerKey key = {
+		.hypertable_id = hypertable_id,
+		.device_hash = device_hash,
+	};
+
+	bool found;
+	BackfillTrackerEntry *entry =
+		(BackfillTrackerEntry *) hash_search(backfill_tracker_htab, &key, HASH_ENTER, &found);
+
+	if (!found)
+	{
+		/* New entry — store the device string in our memory context */
+		MemoryContext oldctx = MemoryContextSwitchTo(backfill_tracker_mctx);
+		entry->device_value_str = pstrdup(device_str);
+		MemoryContextSwitchTo(oldctx);
+		entry->lowest_modified_value = timeval;
+		entry->greatest_modified_value = timeval;
+	}
+	else
+	{
+		/* Update min/max */
+		if (timeval < entry->lowest_modified_value)
+			entry->lowest_modified_value = timeval;
+		if (timeval > entry->greatest_modified_value)
+			entry->greatest_modified_value = timeval;
+	}
+
+	pfree(device_str);
+}
+
+/*
+ * Flush all backfill tracker entries to the catalog table.
+ * Called at PRE_COMMIT time.
+ */
+static void
+backfill_tracker_flush(void)
+{
+	HASH_SEQ_STATUS hash_seq;
+	BackfillTrackerEntry *entry;
+
+	if (!backfill_tracker_htab || hash_get_num_entries(backfill_tracker_htab) == 0)
+		return;
+
+	Catalog *catalog = ts_catalog_get();
+	Relation rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_BACKFILL_TRACKER),
+							  RowExclusiveLock);
+	TupleDesc tupdesc = RelationGetDescr(rel);
+	CatalogSecurityContext sec_ctx;
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+
+	hash_seq_init(&hash_seq, backfill_tracker_htab);
+	while ((entry = hash_seq_search(&hash_seq)) != NULL)
+	{
+		Datum values[Natts_continuous_aggs_backfill_tracker];
+		bool nulls[Natts_continuous_aggs_backfill_tracker] = { false };
+
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_backfill_tracker_hypertable_id)] =
+			Int32GetDatum(entry->key.hypertable_id);
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_backfill_tracker_device_value)] =
+			CStringGetTextDatum(entry->device_value_str);
+		values[AttrNumberGetAttrOffset(
+			Anum_continuous_aggs_backfill_tracker_lowest_modified_value)] =
+			Int64GetDatum(entry->lowest_modified_value);
+		values[AttrNumberGetAttrOffset(
+			Anum_continuous_aggs_backfill_tracker_greatest_modified_value)] =
+			Int64GetDatum(entry->greatest_modified_value);
+
+		ts_catalog_insert_values(rel, tupdesc, values, nulls);
+	}
+
+	ts_catalog_restore_user(&sec_ctx);
+	table_close(rel, NoLock);
+
+	elog(DEBUG1,
+		 "backfill tracker: flushed %ld entries",
+		 hash_get_num_entries(backfill_tracker_htab));
+}
+
+/*
+ * Clean up backfill tracker state at end of transaction.
+ */
+static void
+backfill_tracker_cleanup(void)
+{
+	if (!backfill_tracker_htab)
+		return;
+
+	hash_destroy(backfill_tracker_htab);
+	MemoryContextDelete(backfill_tracker_mctx);
+
+	backfill_tracker_htab = NULL;
+	backfill_tracker_mctx = NULL;
+	backfill_now_internal = 0;
 }
