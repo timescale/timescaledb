@@ -181,82 +181,78 @@ SELECT CASE WHEN EXISTS (TABLE metrics_space EXCEPT TABLE metrics_space_pg)
             ELSE 'same'
        END AS result;
 
-\set ON_ERROR_STOP 0
-
--- MERGE UDPATE matched rows for compressed hypertable
--- should report error as UPDATE is not allowed on compressed hypertable
+-- MERGE UPDATE matched rows for compressed hypertable
 MERGE INTO metrics_compressed t
 USING source s
 ON t.time = s.time AND t.device_id = s.device_id
 WHEN MATCHED THEN
-UPDATE SET v1 = s.filler_1 * 1.23, v2 = (SELECT DISTINCT count(time) from metrics);
+UPDATE SET v1 = s.filler_1 * 1.23, v2 = (SELECT DISTINCT count(time) from metrics_compressed_pg);
+
+MERGE INTO metrics_compressed_pg t
+USING source s
+ON t.time = s.time AND t.device_id = s.device_id
+WHEN MATCHED THEN
+UPDATE SET v1 = s.filler_1 * 1.23, v2 = (SELECT DISTINCT count(time) from metrics_compressed_pg);
+
+SELECT CASE WHEN EXISTS (TABLE metrics_compressed EXCEPT TABLE metrics_compressed_pg)
+              OR EXISTS (TABLE metrics_compressed_pg EXCEPT TABLE metrics_compressed)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
 
 -- MERGE DELETE matched rows for compressed hypertable
--- should report error as DELETE is not allowed on compressed hypertable
 MERGE INTO metrics_compressed t
        USING source s
        ON t.time = s.time AND t.device_id = s.device_id
        WHEN MATCHED THEN
        DELETE;
 
--- MERGE UDPATE/INSERT matched rows for compressed hypertable
--- should report error as UPDATE is not allowed on compressed hypertable
-MERGE INTO metrics_compressed t
-USING source s
-ON t.time = s.time AND t.device_id = s.device_id
-WHEN MATCHED THEN
-UPDATE SET v1 = s.filler_1 * 1.23, v2 = (SELECT DISTINCT count(time) from metrics)
-WHEN NOT MATCHED THEN
-INSERT (time, device_id, v0, v1, v2, v3) VALUES
-                     ('2021-11-01 00:00:05', 2, 1,2,3,4);
-
--- MERGE DELETE/INSERT matched rows for compressed hypertable
--- should report error as DELETE is not allowed on compressed hypertable
-MERGE INTO metrics_compressed t
+MERGE INTO metrics_compressed_pg t
        USING source s
        ON t.time = s.time AND t.device_id = s.device_id
        WHEN MATCHED THEN
-       DELETE
-WHEN NOT MATCHED THEN
-INSERT (time, device_id, v0, v1, v2, v3) VALUES
-                     ('2021-11-01 00:00:05', 2, 1,2,3,4);
+       DELETE;
 
--- MERGE UDPATE matched rows for space partitioned compressed hypertable
--- should report error as UPDATE is not allowed on compressed hypertable
+SELECT CASE WHEN EXISTS (TABLE metrics_compressed EXCEPT TABLE metrics_compressed_pg)
+              OR EXISTS (TABLE metrics_compressed_pg EXCEPT TABLE metrics_compressed)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
+
+-- MERGE UPDATE matched rows for space partitioned compressed hypertable
 MERGE INTO metrics_space_compressed t
 USING source s
 ON t.time = s.time AND t.device_id = s.device_id
 WHEN MATCHED THEN
-UPDATE SET v1 = s.filler_1 * 1.23, v2 = (SELECT DISTINCT count(time) from metrics);
+UPDATE SET v1 = s.filler_1 * 1.23, v2 = (SELECT DISTINCT count(time) from metrics_space_compressed_pg);
+
+MERGE INTO metrics_space_compressed_pg t
+USING source s
+ON t.time = s.time AND t.device_id = s.device_id
+WHEN MATCHED THEN
+UPDATE SET v1 = s.filler_1 * 1.23, v2 = (SELECT DISTINCT count(time) from metrics_space_compressed_pg);
+
+SELECT CASE WHEN EXISTS (TABLE metrics_space_compressed EXCEPT TABLE metrics_space_compressed_pg)
+              OR EXISTS (TABLE metrics_space_compressed_pg EXCEPT TABLE metrics_space_compressed)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;
 
 -- MERGE DELETE matched rows for space partitioned compressed hypertable
--- should report error as DELETE is not allowed on compressed hypertable
 MERGE INTO metrics_space_compressed t
        USING source s
        ON t.time = s.time AND t.device_id = s.device_id
        WHEN MATCHED THEN
        DELETE;
 
--- MERGE UDPATE/INSERT matched rows for space partitioned compressed hypertable
--- should report error as UPDATE is not allowed on compressed hypertable
-MERGE INTO metrics_space_compressed t
-USING source s
-ON t.time = s.time AND t.device_id = s.device_id
-WHEN MATCHED THEN
-UPDATE SET v1 = s.filler_1 * 1.23, v2 = (SELECT DISTINCT count(time) from metrics)
-WHEN NOT MATCHED THEN
-INSERT (time, device_id, v0, v1, v2, v3) VALUES
-                     ('2021-11-01 00:00:05', 2, 1,2,3,4);
-
--- MERGE DELETE/INSERT matched rows for space partitioned compressed hypertable
--- should report error as DELETE is not allowed on compressed hypertable
-MERGE INTO metrics_space_compressed t
+MERGE INTO metrics_space_compressed_pg t
        USING source s
        ON t.time = s.time AND t.device_id = s.device_id
        WHEN MATCHED THEN
-       DELETE
-WHEN NOT MATCHED THEN
-INSERT (time, device_id, v0, v1, v2, v3) VALUES
-                     ('2021-11-01 00:00:05', 2, 1,2,3,4);
+       DELETE;
 
-\set ON_ERROR_STOP 1
+SELECT CASE WHEN EXISTS (TABLE metrics_space_compressed EXCEPT TABLE metrics_space_compressed_pg)
+              OR EXISTS (TABLE metrics_space_compressed_pg EXCEPT TABLE metrics_space_compressed)
+            THEN 'different'
+            ELSE 'same'
+       END AS result;

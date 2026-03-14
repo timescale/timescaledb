@@ -140,19 +140,8 @@ void
 tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
 						 Hypertable *ht)
 {
-	/*
-	 * We do not support MERGE command with UPDATE/DELETE merge actions on
-	 * compressed hypertables, because Custom Scan (ModifyHypertable) node is
-	 * not generated in the plan for MERGE command on compressed hypertables
-	 */
 	if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
-		if (root->parse->commandType == CMD_MERGE)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("The MERGE command with UPDATE/DELETE merge actions is not support on "
-							"compressed hypertables")));
-
 #if !PG17_GE
 		/*
 		 * PG16 and earlier: Remove BitmapHeapScan paths for DML on partial chunks.
