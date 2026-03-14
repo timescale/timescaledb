@@ -5,8 +5,18 @@
  */
 
 /*
- * Decompress the entire batch of gorilla-compressed rows into an Arrow array.
- * Specialized for each supported data type.
+ * gx4 variant of gorilla_impl.c — gx3 + bitarray null scatter (from dd6).
+ *
+ * Same as gx3 (O4 hybrid: gx1 Pass 1 + gx2 Pass 2) but replaces the
+ * Pass 3 null scatter:
+ *
+ *   Pass 3 (null scatter) — from dd6:
+ *     Use simple8brle_bitarray_decompress(nulls, inverted=true) to produce
+ *     the ArrowArray validity bitmap directly as a uint64[] bitarray.
+ *     Eliminates: MemoryContextAlloc for validity_bitmap, memset(0xFF),
+ *     tail masking, simple8brle_bitmap_decompress, per-element
+ *     simple8brle_bitmap_get_at, and arrow_set_row_validity calls.
+ *     The bitarray IS the validity bitmap — use it directly.
  */
 
 #define FUNCTION_NAME_HELPER(X, Y) X##_##Y
@@ -14,86 +24,71 @@
 
 static ArrowArray *
 FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *gorilla_data,
-													MemoryContext dest_mctx)
+												    MemoryContext dest_mctx)
 {
 	const bool has_nulls = gorilla_data->nulls != NULL;
 	const uint32 n_total =
 		has_nulls ? gorilla_data->nulls->num_elements : gorilla_data->tag0s->num_elements;
 	CheckCompressedData(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
-	/*
-	 * Pad the number of elements to multiple of 64 bytes if needed, so that we
-	 * can work in 64-byte blocks.
-	 */
 	const uint32 n_total_padded =
 		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	Assert(n_total_padded >= n_total);
 
-	/*
-	 * We need additional padding at the end of buffer, because the code that
-	 * converts the elements to postres Datum always reads in 8 bytes.
-	 */
 	const int buffer_bytes = n_total_padded * sizeof(ELEMENT_TYPE) + 8;
 	ELEMENT_TYPE *restrict decompressed_values = MemoryContextAlloc(dest_mctx, buffer_bytes);
 
 	const uint32 n_notnull = gorilla_data->tag0s->num_elements;
 	CheckCompressedData(n_total >= n_notnull);
 
-	/* Unpack the basic compressed data parts. */
-	const Simple8bRleBitmap tag0s = simple8brle_bitmap_prefixsums(gorilla_data->tag0s);
-	const Simple8bRleBitmap tag1s = simple8brle_bitmap_prefixsums(gorilla_data->tag1s);
+	/* ================================================================
+	 * Pass 1 — Pre-materialized forward XOR decode (from gx1).
+	 *
+	 * Pre-materialize tag1 bools, leading_zeros, and bit_widths into
+	 * flat arrays, then run a tight loop with incremental rank.
+	 * ================================================================ */
 
-	BitArray leading_zeros_bitarray = gorilla_data->leading_zeros;
-	BitArrayIterator leading_zeros_iterator;
-	bit_array_iterator_init(&leading_zeros_iterator, &leading_zeros_bitarray);
+	/* Decompress tag1 bitmap into bool array (1 byte/element). */
+	const Simple8bRleBitmap tag1_bools = simple8brle_bitmap_decompress(gorilla_data->tag1s);
+	const bool *restrict tag1_data = (const bool *) tag1_bools.data;
 
+	/* Pre-materialize leading_zeros (6-bit packed → uint8[]). */
 	uint32 num_leading_zeros_padded;
 	const uint8 *all_leading_zeros =
 		unpack_leading_zeros_array(&gorilla_data->leading_zeros, &num_leading_zeros_padded);
 
+	/* Pre-materialize num_bits_used (Simple8b → uint8[]). */
 	uint32 num_bit_widths;
 	const uint8 *bit_widths =
 		simple8brle_decompress_all_uint8(gorilla_data->num_bits_used_per_xor, &num_bit_widths);
 
+	/* xors: variable-width values from BitArray, read every element. */
 	BitArray xors_bitarray = gorilla_data->xors;
 	BitArrayIterator xors_iterator;
 	bit_array_iterator_init(&xors_iterator, &xors_bitarray);
 
-	/*
-	 * Now decompress the non-null data.
-	 *
-	 * 1) unpack only the different elements (tag0 = 1) based on the tag1 array.
-	 *
-	 * 1a) Sanity check: the number of bit widths we have matches the
-	 * number of 1s in the tag1s array.
-	 */
-	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1s) == num_bit_widths);
-	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1s) <= num_leading_zeros_padded);
+	/* Sanity checks. */
+	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1_bools) == num_bit_widths);
+	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1_bools) <= num_leading_zeros_padded);
+	CheckCompressedData(tag1_data[0] == true);
 
-	/*
-	 * 1b) Sanity check: the first tag1 must be 1, so that we initialize the bit
-	 * widths.
-	 */
-	CheckCompressedData(simple8brle_bitmap_prefix_sum(&tag1s, 0) == 1);
-
-	/*
-	 * 1c) Sanity check: can't have more different elements than notnull elements.
-	 */
-	const uint16 n_different = tag1s.num_elements;
+	const uint16 n_different = tag1_bools.num_elements;
 	CheckCompressedData(n_different <= n_notnull);
 
 	/*
-	 * 1d) Unpack.
-	 *
-	 * Note that the bit widths change often, so there's no sense in
-	 * having a fast path for stretches of tag1 == 0.
+	 * Tight flat loop with incremental rank over tag1 bool array.
+	 * On tag1=1: advance rank, look up new bit-widths from arrays.
+	 * On tag1=0: rank unchanged, reuse previous bit-widths.
+	 * Either way: read XOR bits from BitArray, apply to prev.
 	 */
 	ELEMENT_TYPE prev = 0;
+	uint16 tag1_rank = 0;
 	for (uint16 i = 0; i < n_different; i++)
 	{
-		const uint8 current_xor_bits = bit_widths[simple8brle_bitmap_prefix_sum(&tag1s, i) - 1];
-		const uint8 current_leading_zeros =
-			all_leading_zeros[simple8brle_bitmap_prefix_sum(&tag1s, i) - 1];
+		tag1_rank += tag1_data[i];
+
+		const uint8 current_xor_bits = bit_widths[tag1_rank - 1];
+		const uint8 current_leading_zeros = all_leading_zeros[tag1_rank - 1];
 
 		/*
 		 * Truncate the shift here not to cause UB on the corrupt data.
@@ -105,68 +100,152 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 		decompressed_values[i] = prev;
 	}
 
-	/*
-	 * 2) Fill out the stretches of repeated elements, encoded with tag0 = 0.
+	/* Free tag1 bool array (no longer needed after Pass 1). */
+	pfree((void *) tag1_bools.data);
+
+	/* ================================================================
+	 * Pass 2 — Fused backward repeat fill (from gx2).
 	 *
-	 * 2a) Sanity check: number of different elements according to tag0s must be
-	 * the same as number of different elements according to tag1s, so that the
-	 * current_element doesn't underrun.
-	 */
-	CheckCompressedData(simple8brle_bitmap_num_ones(&tag0s) == n_different);
+	 * Walk tag0s blocks in reverse.  On RLE(0) blocks, bulk-fill with
+	 * the current distinct value (the main win for high-compression
+	 * data where most elements are repeats).
+	 * ================================================================ */
+
+	Simple8bRleSerialized *tag0s = gorilla_data->tag0s;
+	const uint32 tag0_num_sel_slots =
+		simple8brle_num_selector_slots_for_num_blocks(tag0s->num_blocks);
+	const uint64 *tag0_sel_slots = tag0s->slots;
+	const uint64 *tag0_data_blocks = tag0s->slots + tag0_num_sel_slots;
 
 	/*
-	 * 2b) Sanity check: tag0s[0] == 1 -- the first element of the sequence is
-	 * always "different from the previous one".
+	 * Pre-scan to find total stored elements (needed to compute how many
+	 * elements in the last block are padding).
 	 */
-	CheckCompressedData(simple8brle_bitmap_prefix_sum(&tag0s, 0) == 1);
-
-	/*
-	 * 2b) Fill the repeated elements.
-	 */
-	for (int i = n_notnull - 1; i >= 0; i--)
+	uint32 total_stored = 0;
+	for (uint32 b = 0; b < tag0s->num_blocks; b++)
 	{
-		decompressed_values[i] = decompressed_values[simple8brle_bitmap_prefix_sum(&tag0s, i) - 1];
+		const uint8 sel =
+			(tag0_sel_slots[b / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT] >>
+			 ((b % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT) * SIMPLE8B_BITS_PER_SELECTOR)) &
+			0xF;
+		if (simple8brle_selector_is_rle(sel))
+			total_stored += simple8brle_rledata_repeatcount(tag0_data_blocks[b]);
+		else
+			total_stored += SIMPLE8B_NUM_ELEMENTS[sel];
 	}
+	const uint32 skipped_in_last = total_stored - tag0s->num_elements;
+
+	int distinct_idx = n_different;
+	int epos = (int)n_notnull - 1;
+
+	for (int b = (int)tag0s->num_blocks - 1; b >= 0 && epos >= 0; b--)
+	{
+		const uint8 sel =
+			(tag0_sel_slots[b / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT] >>
+			 ((b % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT) * SIMPLE8B_BITS_PER_SELECTOR)) &
+			0xF;
+		const uint64 block_data = tag0_data_blocks[b];
+
+		uint32 block_elems;
+		if (simple8brle_selector_is_rle(sel))
+			block_elems = simple8brle_rledata_repeatcount(block_data);
+		else
+			block_elems = SIMPLE8B_NUM_ELEMENTS[sel];
+
+		/* Last block may have padding from the Simple8b encoder. */
+		if (b == (int)tag0s->num_blocks - 1)
+			block_elems -= skipped_in_last;
+
+		if (simple8brle_selector_is_rle(sel))
+		{
+			const bool value = simple8brle_rledata_value(block_data) & 1;
+
+			if (!value)
+			{
+				/*
+				 * ★ RLE(0): bulk fill — all elements in this block are
+				 * repeats of the current distinct value.  Load once, fill.
+				 *
+				 * Forward fill (O2 from doc 114) enables auto-vectorization:
+				 * the compiler can emit vmovdqu stores (4 uint64s per AVX2
+				 * store) instead of scalar backward stores.
+				 */
+				const uint32 n = (block_elems <= (uint32)(epos + 1))
+								? block_elems : (uint32)(epos + 1);
+				const ELEMENT_TYPE fill_val = decompressed_values[distinct_idx - 1];
+				ELEMENT_TYPE *restrict dst = decompressed_values + epos - (int)n + 1;
+				for (uint32 j = 0; j < n; j++)
+					dst[j] = fill_val;
+				epos -= (int)n;
+			}
+			else
+			{
+				/* RLE(1): each element is a new distinct value. */
+				const uint32 n = (block_elems <= (uint32)(epos + 1))
+								? block_elems : (uint32)(epos + 1);
+				for (uint32 j = 0; j < n; j++)
+				{
+					decompressed_values[epos - j] = decompressed_values[distinct_idx - 1];
+					distinct_idx--;
+				}
+				epos -= (int)n;
+			}
+		}
+		else
+		{
+			/* Packed block: process bits in reverse order. */
+			CheckCompressedData(sel == 1);
+			const uint32 n = (block_elems <= (uint32)(epos + 1))
+							? block_elems : (uint32)(epos + 1);
+			int j = (int)block_elems - 1;
+
+			for (uint32 k = 0; k < n; k++, j--, epos--)
+			{
+				decompressed_values[epos] = decompressed_values[distinct_idx - 1];
+				distinct_idx -= (int)((block_data >> j) & 1);
+			}
+		}
+	}
+
+	/* Sanity: consumed exactly n_different distinct values. */
+	CheckCompressedData(distinct_idx == 0);
+
+	/* ================================================================
+	 * Pass 3 — Null scatter via bitarray (from dd6).
+	 *
+	 * Use simple8brle_bitarray_decompress with inverted=true to produce
+	 * the validity bitmap directly.  No separate alloc/memset/tail-mask.
+	 * ================================================================ */
 
 	uint64 *restrict validity_bitmap = NULL;
 	if (has_nulls)
 	{
 		/*
-		 * We have unpacked the non-null data. Now reshuffle it to account for nulls,
-		 * and fill the validity bitmap.
+		 * Decompress nulls directly into a validity bitmap (1=valid, 0=null).
+		 * The bitarray IS the ArrowArray validity bitmap — use it directly.
 		 */
-		const int validity_bitmap_bytes = sizeof(uint64) * ((n_total + 64 - 1) / 64);
-		validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+		Simple8bRleBitArray validity_bits =
+			simple8brle_bitarray_decompress(gorilla_data->nulls, /* inverted */ true);
+		validity_bitmap = validity_bits.data;
 
 		/*
-		 * First, mark all data as valid, we will fill the nulls later if needed.
-		 * Note that the validity bitmap size is a multiple of 64 bits. We have to
-		 * fill the tail bits with zeros, because the corresponding elements are not
-		 * valid.
-		 *
+		 * With inverted=true, num_ones counts valid (non-null) elements.
 		 */
-		memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
-		if (n_total % 64)
-		{
-			const uint64 tail_mask = ~0ULL >> (64 - n_total % 64);
-			validity_bitmap[n_total / 64] &= tail_mask;
-		}
+		CheckCompressedData(n_notnull == validity_bits.num_ones);
 
 		/*
-		 * We have decompressed the data with nulls skipped, reshuffle it
-		 * according to the nulls bitmap.
+		 * Backward scatter: move non-null values from their compact
+		 * positions to their final positions, leaving gaps for nulls.
+		 * The validity bitmap is already correct — no bit manipulation.
 		 */
-		const Simple8bRleBitmap nulls = simple8brle_bitmap_decompress(gorilla_data->nulls);
-		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
-
 		int current_notnull_element = n_notnull - 1;
 		for (int i = n_total - 1; i >= 0; i--)
 		{
 			Assert(i >= current_notnull_element);
 
-			if (simple8brle_bitmap_get_at(&nulls, i))
+			if (!((validity_bitmap[i / 64] >> (i % 64)) & 1))
 			{
-				arrow_set_row_validity(validity_bitmap, i, false);
+				/* Position i is null — nothing to do (bitmap already 0). */
 			}
 			else
 			{
