@@ -505,6 +505,12 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 														   false);
 			if (should_free)
 				heap_freetuple(tuple);
+
+			/* Check for backfill and track device if inserting into an old chunk */
+			ts_cm_functions->continuous_agg_backfill_check(miinfo->ht->fd.id,
+														   cis->chunk_range_end,
+														   slots[i],
+														   miinfo->ht);
 		}
 
 		ExecClearTuple(slots[i]);

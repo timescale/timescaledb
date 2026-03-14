@@ -952,6 +952,13 @@ ExecInsert(ModifyTableContext *context,
 		ts_cm_functions->continuous_agg_dml_invalidate(context->ht_state->ht->fd.id, resultRelationDesc, tuple, NULL, false);
 		if (should_free)
 			heap_freetuple(tuple);
+
+		/* Check for backfill and track device if inserting into an old chunk */
+		if (ctr && ctr->cis)
+			ts_cm_functions->continuous_agg_backfill_check(context->ht_state->ht->fd.id,
+														   ctr->cis->chunk_range_end,
+														   slot,
+														   context->ht_state->ht);
 	}
 
 	if (canSetTag)

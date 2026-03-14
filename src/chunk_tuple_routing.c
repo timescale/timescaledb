@@ -209,6 +209,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 		cis = ts_chunk_insert_state_create(chunk->table_id, ctr);
 		cis->needs_partial = needs_partial;
 		cis->created_compressed_chunk = created_compressed_chunk;
+		cis->chunk_range_end = chunk->cube->slices[0]->fd.range_end;
 		ts_subspace_store_add(ctr->subspace,
 							  chunk->cube,
 							  cis,
