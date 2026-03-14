@@ -59,6 +59,9 @@ typedef struct CachedDecompressionState
 	Bitmapset *bloom_insert_attnums;
 	AttrNumber upsert_bloom_attnum;
 	Bloom1Hasher *bloom_hasher;
+
+	/* Pre-computed bloom filter checks for UPDATE/DELETE (List of BloomFilterCheck) */
+	List *bloom_filters;
 } CachedDecompressionState;
 
 typedef struct SharedCounters
@@ -79,6 +82,8 @@ typedef struct SharedCounters
 	int64 batches_without_bloom;
 	/* Number of batches bloom false positives */
 	int64 batches_bloom_false_positives;
+	/* Number of batches skipped by pre-decompression filters */
+	int64 batches_skipped;
 } SharedCounters;
 
 typedef struct ChunkInsertState

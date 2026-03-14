@@ -2668,6 +2668,7 @@ SELECT compress_chunk(show_chunks('test_meta_filters'));
 EXPLAIN (analyze, timing off, buffers off, costs off, summary off) DELETE FROM test_meta_filters WHERE device = 'd1' AND metric = 'm1' AND v1 < 100;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches skipped: 29
    Batches decompressed: 1
    Tuples decompressed: 1000
    ->  Delete on test_meta_filters (actual rows=0.00 loops=1)
