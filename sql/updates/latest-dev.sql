@@ -87,3 +87,63 @@ DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_process_hypertable_invali
 DROP PROCEDURE IF EXISTS @extschema@.add_process_hypertable_invalidations_policy(REGCLASS, INTERVAL, BOOL, TIMESTAMPTZ, TEXT);
 DROP PROCEDURE IF EXISTS @extschema@.remove_process_hypertable_invalidations_policy(REGCLASS, BOOL);
 
+INSERT INTO _timescaledb_catalog.chunk( id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk, creation_time)
+SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk, creation_time
+FROM _timescaledb_internal.tmp_chunk;
+
+--add indexes to the chunk table
+CREATE INDEX chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
+CREATE INDEX chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compressed_chunk_id);
+CREATE INDEX chunk_osm_chunk_idx ON _timescaledb_catalog.chunk (osm_chunk, hypertable_id);
+CREATE INDEX chunk_hypertable_id_creation_time_idx ON _timescaledb_catalog.chunk(hypertable_id, creation_time);
+
+ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;
+SELECT setval('_timescaledb_catalog.chunk_id_seq', last_value, is_called) FROM _timescaledb_internal.tmp_chunk_seq_value;
+
+-- add self referential foreign key
+ALTER TABLE _timescaledb_catalog.chunk ADD CONSTRAINT chunk_compressed_chunk_id_fkey FOREIGN KEY ( compressed_chunk_id ) REFERENCES _timescaledb_catalog.chunk( id );
+
+--add foreign key constraint
+ALTER TABLE _timescaledb_catalog.chunk ADD CONSTRAINT chunk_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', '');
+
+--add the foreign key constraints
+ALTER TABLE _timescaledb_catalog.chunk_constraint ADD CONSTRAINT chunk_constraint_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id);
+ALTER TABLE _timescaledb_catalog.chunk_column_stats ADD CONSTRAINT chunk_column_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id);
+ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats ADD CONSTRAINT bgw_policy_chunk_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.compression_chunk_size ADD CONSTRAINT compression_chunk_size_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.compression_chunk_size ADD CONSTRAINT compression_chunk_size_compressed_chunk_id_fkey FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE;
+
+--cleanup
+DROP TABLE _timescaledb_internal.tmp_chunk;
+DROP TABLE _timescaledb_internal.tmp_chunk_seq_value;
+
+GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
+GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
+-- end rebuild _timescaledb_catalog.chunk table --
+
+-- Add continuous_aggs_backfill_tracker table
+CREATE TABLE _timescaledb_catalog.continuous_aggs_backfill_tracker (
+  hypertable_id integer NOT NULL,
+  device_value text NOT NULL,
+  lowest_modified_value bigint NOT NULL,
+  greatest_modified_value bigint NOT NULL,
+  CONSTRAINT continuous_aggs_backfill_tracker_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_backfill_tracker', '');
+
+CREATE INDEX continuous_aggs_backfill_tracker_idx ON _timescaledb_catalog.continuous_aggs_backfill_tracker (hypertable_id, lowest_modified_value ASC);
+
+GRANT SELECT ON _timescaledb_catalog.continuous_aggs_backfill_tracker TO PUBLIC;
+
+-- drop the catalog tables for continuous aggregate migration plans
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step;
+ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq;
+DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step;
+DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;
+
