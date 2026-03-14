@@ -58,7 +58,8 @@ set(MOD_FILES
     updates/2.23.0--2.23.1.sql
     updates/2.23.1--2.24.0.sql
     updates/2.24.0--2.25.0.sql
-    updates/2.25.0--2.25.1.sql)
+    updates/2.25.0--2.25.1.sql
+    updates/2.25.1--2.25.2.sql)
 
 # The downgrade file to generate a downgrade script for the current version, as
 # specified in version.config
@@ -236,7 +237,7 @@ foreach(transition_mod_file ${MOD_FILES_LIST})
   endif()
 
   version_check_file("updates/version_check.sql" VERSION_CHECK_VERSIONED)
-  list(PREPEND PRE_FILES ${VERSION_CHECK_VERSIONED})
+  list(PREPEND PRE_FILES "header.sql;${VERSION_CHECK_VERSIONED}")
 
   # There might not have been any changes in the modfile, in which case the
   # modfile need not be present

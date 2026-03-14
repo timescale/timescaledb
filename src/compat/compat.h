@@ -854,6 +854,16 @@ initReadOnlyStringInfo(StringInfo str, char *data, int len)
 						 is_merge_delete)
 #endif
 
+/* PG16 removes create_new_ph parameter from add_vars_to_targetlist
+ * https://github.com/postgres/postgres/commit/2489d76c4906 */
+#if PG16_LT
+#define add_vars_to_targetlist_compat(root, vars, where_needed)                                    \
+	add_vars_to_targetlist(root, vars, where_needed, false)
+#else
+#define add_vars_to_targetlist_compat(root, vars, where_needed)                                    \
+	add_vars_to_targetlist(root, vars, where_needed)
+#endif
+
 /* PG16 consolidates ItemPointer to datum functions so backported it to PG15
  * https://github.com/postgres/postgres/commit/bd944884e92a */
 #if PG16_LT

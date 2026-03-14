@@ -88,3 +88,14 @@ ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.continuous_agg_mi
 DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step;
 DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;
 
+--
+-- Add this index to speed up queries for recent job history
+-- This statement is idempotent to allow the index to have been precreated.
+--
+CREATE INDEX IF NOT EXISTS bgw_job_stat_history_execution_start_idx
+    ON _timescaledb_internal.bgw_job_stat_history(execution_start);
+CREATE INDEX IF NOT EXISTS bgw_job_stat_history_job_id_execution_start_idx
+    ON _timescaledb_internal.bgw_job_stat_history(job_id, execution_start DESC);
+
+DROP INDEX IF EXISTS _timescaledb_internal.bgw_job_stat_history_job_id_idx;
+

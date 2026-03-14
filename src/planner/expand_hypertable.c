@@ -31,6 +31,8 @@
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
+#include <optimizer/planmain.h>
+#include <optimizer/planner.h>
 #include <optimizer/prep.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
@@ -1238,14 +1240,17 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		return;
 
 	/*
-	 * We need to mark the RowMark for the hypertable as parent
-	 * to trigger inclusion of tableoid to allow for correctly
-	 * identifying tuples from individual chunks.
+	 * Handle PlanRowMark for FOR UPDATE/SHARE and FK constraint enforcement.
+	 * This replicates expand_inherited_rtentry() in inherit.c.
 	 */
 	PlanRowMark *oldrc = get_plan_rowmark(root->rowMarks, rti);
+	bool old_isParent = false;
+	int old_allMarkTypes = 0;
 	if (oldrc)
 	{
+		old_isParent = oldrc->isParent;
 		oldrc->isParent = true;
+		old_allMarkTypes = oldrc->allMarkTypes;
 	}
 
 	for (unsigned int i = 0; i < num_chunks; i++)
@@ -1326,12 +1331,91 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		appinfo->parent_reloid = parent_oid;
 		appinfos = lappend(appinfos, appinfo);
 
+		/*
+		 * Create child PlanRowMark if parent has one. This replicates
+		 * expand_single_inheritance_child() in inherit.c.
+		 */
+		if (oldrc)
+		{
+			PlanRowMark *childrc = makeNode(PlanRowMark);
+
+			childrc->rti = child_rtindex;
+			childrc->prti = oldrc->rti;
+			childrc->rowmarkId = oldrc->rowmarkId;
+			childrc->markType = select_rowmark_type(childrte, oldrc->strength);
+			childrc->allMarkTypes = (1 << childrc->markType);
+			childrc->strength = oldrc->strength;
+			childrc->waitPolicy = oldrc->waitPolicy;
+			childrc->isParent = false; /* chunks are never partitioned */
+
+			oldrc->allMarkTypes |= childrc->allMarkTypes;
+
+			root->rowMarks = lappend(root->rowMarks, childrc);
+		}
+
 		/* Close child relations, but keep locks */
 		if (child_oid != parent_oid)
 			table_close(newrelation, NoLock);
 	}
 
 	table_close(oldrelation, NoLock);
+
+	/*
+	 * Add required junk columns for row marks. This replicates the logic
+	 * after the expansion loop in expand_inherited_rtentry() in inherit.c.
+	 */
+	if (oldrc)
+	{
+		int new_allMarkTypes = oldrc->allMarkTypes;
+		Var *var;
+		TargetEntry *tle;
+		char resname[32];
+		List *newvars = NIL;
+
+		/*
+		 * TID junk var: only needed if parent had only ROW_MARK_COPY but children
+		 * added non-COPY marks. This can only happen if the parent is a foreign
+		 * table with regular table children. Since hypertable parents are always
+		 * regular tables, preprocess_targetlist() (preptlist.c) already adds TID
+		 * for the parent before expansion, so this path is unreachable.
+		 */
+		Ensure(!(new_allMarkTypes & ~(1 << ROW_MARK_COPY) &&
+				 !(old_allMarkTypes & ~(1 << ROW_MARK_COPY))),
+			   "unexpected: TID junk var needed for hypertable (parent should always be regular "
+			   "table)");
+
+		/* Add whole-row junk Var if needed, unless we had it already */
+		if ((new_allMarkTypes & (1 << ROW_MARK_COPY)) && !(old_allMarkTypes & (1 << ROW_MARK_COPY)))
+		{
+			var = makeWholeRowVar(planner_rt_fetch(oldrc->rti, root), oldrc->rti, 0, false);
+			snprintf(resname, sizeof(resname), "wholerow%u", oldrc->rowmarkId);
+			tle = makeTargetEntry((Expr *) var,
+								  list_length(root->processed_tlist) + 1,
+								  pstrdup(resname),
+								  true);
+			root->processed_tlist = lappend(root->processed_tlist, tle);
+			newvars = lappend(newvars, var);
+		}
+
+		/* Add tableoid junk Var, unless we had it already */
+		if (!old_isParent)
+		{
+			var = makeVar(oldrc->rti, TableOidAttributeNumber, OIDOID, -1, InvalidOid, 0);
+			snprintf(resname, sizeof(resname), "tableoid%u", oldrc->rowmarkId);
+			tle = makeTargetEntry((Expr *) var,
+								  list_length(root->processed_tlist) + 1,
+								  pstrdup(resname),
+								  true);
+			root->processed_tlist = lappend(root->processed_tlist, tle);
+			newvars = lappend(newvars, var);
+		}
+
+		/*
+		 * Add the newly added Vars to parent's reltarget.  We needn't worry
+		 * about the children's reltargets, they'll be made later.
+		 */
+		add_vars_to_targetlist_compat(root, newvars, bms_make_singleton(0));
+	}
 
 	ts_add_append_rel_infos(root, appinfos);
 

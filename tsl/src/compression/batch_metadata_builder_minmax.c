@@ -14,14 +14,13 @@
 
 #include "compression.h"
 
-static void minmax_update_val(void *builder_, Datum val);
-static void minmax_update_null(void *builder_);
+static void minmax_update_row(void *builder_, TupleTableSlot *slot);
 static void minmax_insert_to_compressed_row(void *builder_, RowCompressor *compressor);
 static void minmax_reset(void *builder_, RowCompressor *compressor);
 
 BatchMetadataBuilder *
-batch_metadata_builder_minmax_create(Oid type_oid, Oid collation, int min_attr_offset,
-									 int max_attr_offset)
+batch_metadata_builder_minmax_create(Oid type_oid, Oid collation, AttrNumber attnum,
+									 int min_attr_offset, int max_attr_offset)
 {
 	BatchMetadataBuilderMinMax *builder = palloc(sizeof(*builder));
 	TypeCacheEntry *type = lookup_type_cache(type_oid, TYPECACHE_LT_OPR);
@@ -35,12 +34,13 @@ batch_metadata_builder_minmax_create(Oid type_oid, Oid collation, int min_attr_o
 	*builder = (BatchMetadataBuilderMinMax){
 		.functions =
 			(BatchMetadataBuilder){
-				.update_val = minmax_update_val,
-				.update_null = minmax_update_null,
+				.update_row = minmax_update_row,
 				.insert_to_compressed_row = minmax_insert_to_compressed_row,
 				.reset = minmax_reset,
+				.builder_type = METADATA_BUILDER_MINMAX,
 			},
 		.type_oid = type_oid,
+		.attnum = attnum,
 		.empty = true,
 		.has_null = false,
 		.type_by_val = type->typbyval,
@@ -59,10 +59,17 @@ batch_metadata_builder_minmax_create(Oid type_oid, Oid collation, int min_attr_o
 }
 
 void
-minmax_update_val(void *builder_, Datum val)
+minmax_update_row(void *builder_, TupleTableSlot *slot)
 {
 	BatchMetadataBuilderMinMax *builder = (BatchMetadataBuilderMinMax *) builder_;
-
+	Assert(builder->functions.builder_type == METADATA_BUILDER_MINMAX);
+	bool is_null;
+	Datum val = slot_getattr(slot, builder->attnum, &is_null);
+	if (is_null)
+	{
+		builder->has_null = true;
+		return;
+	}
 	int cmp;
 
 	if (builder->empty)
@@ -88,13 +95,6 @@ minmax_update_val(void *builder_, Datum val)
 			pfree(DatumGetPointer(builder->max));
 		builder->max = datumCopy(val, builder->type_by_val, builder->type_len);
 	}
-}
-
-void
-minmax_update_null(void *builder_)
-{
-	BatchMetadataBuilderMinMax *builder = (BatchMetadataBuilderMinMax *) builder_;
-	builder->has_null = true;
 }
 
 static void

@@ -146,7 +146,7 @@ function(generate_downgrade_script)
   include(
     ${CMAKE_BINARY_DIR}/v${_downgrade_TARGET_VERSION}/cmake/ScriptFiles.cmake)
 
-  set(_downgrade_PRE_FILES ${PRE_DOWNGRADE_FILES})
+  set(_downgrade_PRE_FILES "header.sql;${PRE_DOWNGRADE_FILES}")
   set(_downgrade_POST_FILES "${PRE_INSTALL_FUNCTION_FILES};${SOURCE_FILES}" ${SET_POST_UPDATE_STAGE}
                             ${POST_UPDATE_FILES} ${UNSET_UPDATE_STAGE})
 
@@ -159,10 +159,6 @@ function(generate_downgrade_script)
     RESULT_FILES
     _epilog_files
     IGNORE_ERRORS)
-
-  if(_downgrade_TARGET_VERSION VERSION_EQUAL 2.18.0)
-    list(TRANSFORM _epilog_files REPLACE "^.*/hypercore.sql" "${CMAKE_CURRENT_SOURCE_DIR}/pre_install/tam.functions.sql")
-  endif()
 
   foreach(_downgrade_file ${_downgrade_PRE_FILES})
     get_filename_component(_downgrade_filename ${_downgrade_file} NAME)

@@ -353,6 +353,37 @@ should_load_on_create_extension(Node const *const utility_stmt, TsExtension cons
 	if (extension_exists(ext->name) && stmt->if_not_exists)
 		return false;
 
+	/*
+	 * If the extension does not exist (e.g., was dropped via DROP SCHEMA
+	 * CASCADE) but the same version of the shared library is already loaded
+	 * in this session, allow the CREATE EXTENSION to proceed without
+	 * reloading. The .so is already in memory with all hooks in place, so
+	 * CREATE EXTENSION just needs to install the SQL objects.
+	 *
+	 * We only allow this when no explicit VERSION is specified (meaning the
+	 * default version from the control file will be used, which matches the
+	 * loaded .so) or when the specified VERSION matches the loaded version.
+	 */
+	if (!extension_exists(ext->name))
+	{
+		char *requested_version = NULL;
+		ListCell *lc;
+
+		foreach (lc, stmt->options)
+		{
+			DefElem *d = (DefElem *) lfirst(lc);
+
+			if (strcmp(d->defname, "new_version") == 0)
+			{
+				requested_version = defGetString(d);
+				break;
+			}
+		}
+
+		if (requested_version == NULL || strcmp(requested_version, ext->soversion) == 0)
+			return false;
+	}
+
 	/* disallow loading two .so from different versions */
 	ereport(ERROR,
 			(errcode(ERRCODE_DUPLICATE_OBJECT),

@@ -86,6 +86,10 @@ typedef struct ContinuousAggBucketFunction
 	 * If not specified, stores infinity.
 	 */
 	TimestampTz bucket_time_origin;
+	/*
+	 * Bucket offset. Note that we don't support
+	 * both offset and origin at the same time
+	 */
 	Interval *bucket_time_offset;
 	char *bucket_time_timezone;
 

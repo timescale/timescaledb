@@ -326,3 +326,51 @@ SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, ti
 -- since the chunks are new status should be COMPRESSED, UNORDERED
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
 ROLLBACK;
+
+-- test INSERT SELECT from compressed source into compressed target
+-- this tests that reading from ColumnarScan correctly copies all rows
+SET timescaledb.enable_direct_compress_insert = true;
+SET timescaledb.enable_direct_compress_insert_client_sorted = true;
+
+CREATE TABLE compress_src (
+    time TIMESTAMPTZ NOT NULL,
+    device_id TEXT NOT NULL,
+    value FLOAT NOT NULL
+) WITH (
+    tsdb.hypertable,
+    tsdb.partition_column = 'time',
+    tsdb.chunk_interval = '4 hours',
+    tsdb.orderby = 'time asc',
+    tsdb.segment_by = 'device_id'
+);
+
+CREATE TABLE compress_tgt (
+    time TIMESTAMPTZ NOT NULL,
+    device_id TEXT NOT NULL,
+    value FLOAT NOT NULL
+) WITH (
+    tsdb.hypertable,
+    tsdb.partition_column = 'time',
+    tsdb.chunk_interval = '4 hours',
+    tsdb.orderby = 'time asc',
+    tsdb.segment_by = 'device_id'
+);
+
+-- Insert with device_id, time ordering to create multi-row compressed blocks
+INSERT INTO compress_src (time, device_id, value)
+SELECT t.time, s.device_id, random()
+FROM (SELECT generate_series('2025-01-01'::timestamptz, '2025-01-02'::timestamptz, INTERVAL '1 minute') AS time) t
+CROSS JOIN (SELECT generate_series(1, 5)::TEXT AS device_id) s
+ORDER BY s.device_id, t.time;
+
+SELECT count(*) FROM compress_src;
+
+INSERT INTO compress_tgt SELECT * FROM compress_src ORDER BY device_id, time;
+
+SELECT count(*) FROM compress_tgt;
+
+RESET timescaledb.enable_direct_compress_insert;
+RESET timescaledb.enable_direct_compress_insert_client_sorted;
+
+DROP TABLE compress_src;
+DROP TABLE compress_tgt;
