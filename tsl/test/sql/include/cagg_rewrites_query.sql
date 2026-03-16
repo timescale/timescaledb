@@ -98,12 +98,29 @@ GROUP BY bucket, q.name
 ORDER BY 1, 2, 3;
 
 -- (cagg1_tz)
-SELECT time_bucket(INTERVAL '1 day', day, 'Australia/Sydney') AS bucket,
+SELECT time_bucket(INTERVAL '1 day', day, "offset"=>'30m'::interval, timezone=>'Australia/Sydney') AS bucket,
    AVG(temperature) AS avg,
    device_id
 FROM conditions
 GROUP BY device_id, bucket
 ORDER BY 1, 2, 3;
+
+-- (cagg1_origin)
+SELECT time_bucket(INTERVAL '1 day', day, origin=>'2001-01-02 00:00:00 UTC'::timestamptz) AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY 1,2,3
+LIMIT 3;
+
+-- (cagg3_int)
+SELECT time_bucket(3, day, 1) AS bucket,
+   AVG(temperature) AS avg,
+   count(device_id)
+FROM conditions_int
+GROUP BY bucket
+ORDER BY 1,2,3;
 
 -- Cagg rewrites in subqueries/SET ops
 

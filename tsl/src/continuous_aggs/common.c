@@ -895,25 +895,41 @@ cagg_hypertable_dim_supported(RangeTblEntry *ht_rte, Hypertable *ht, StringInfo 
 }
 bool
 
-caggtimebucket_equal(ContinuousAggBucketFunction *bf1, ContinuousAggBucketFunction *bf2)
+cagg_timebucket_equal(ContinuousAggBucketFunction *bf1, ContinuousAggBucketFunction *bf2)
 {
-	if (bf1->bucket_fixed_interval != bf2->bucket_fixed_interval)
+	if (bf1->bucket_time_based != bf2->bucket_time_based)
 		return false;
 
-	if (bf1->bucket_time_based != bf2->bucket_time_based)
+	if (bf1->bucket_fixed_interval != bf2->bucket_fixed_interval)
 		return false;
 
 	if (bf1->bucket_time_based)
 	{
 		if (bf1->bucket_time_origin != bf2->bucket_time_origin)
 			return false;
-		if (bf1->bucket_time_offset != bf2->bucket_time_offset)
+
+		if ((bf1->bucket_time_offset && !bf2->bucket_time_offset) ||
+			(!bf1->bucket_time_offset && bf2->bucket_time_offset))
 			return false;
+		if (bf1->bucket_time_offset && bf2->bucket_time_offset)
+		{
+			Datum offset1 = IntervalPGetDatum(bf1->bucket_time_offset);
+			Datum offset2 = IntervalPGetDatum(bf2->bucket_time_offset);
+			bool equal_offsets = DatumGetBool(DirectFunctionCall2(interval_eq, offset1, offset2));
+			if (!equal_offsets)
+				return false;
+		}
+
 		if ((bf1->bucket_time_timezone && !bf2->bucket_time_timezone) ||
 			(!bf1->bucket_time_timezone && bf2->bucket_time_timezone))
 			return false;
 		if (bf1->bucket_time_timezone && bf2->bucket_time_timezone &&
 			strcmp(bf1->bucket_time_timezone, bf2->bucket_time_timezone) != 0)
+			return false;
+	}
+	else
+	{
+		if (bf1->bucket_integer_offset != bf2->bucket_integer_offset)
 			return false;
 	}
 

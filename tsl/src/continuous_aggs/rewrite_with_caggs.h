@@ -20,6 +20,7 @@ typedef struct CaggRewriteContext
 	ContinuousAgg *cagg_parent;			/* parent Cagg for candidate Caggs */
 	ContinuousAgg *cagg;				/* matching Cagg, if match is found */
 	ContinuousAggTimeBucketInfo tbinfo; /* query bucket info to be matched with Caggs buckets*/
+	StringInfoData ht_name;				/* Cagg hypertable full name for debug info */
 	StringInfoData msg;					/* collects debug info */
 } CaggRewriteContext;
 

@@ -92,14 +92,6 @@ FROM conditions
 GROUP BY 1,2
 ORDER BY 1,2 LIMIT 1;
 
--- bucket time zone doesn't match
-SELECT time_bucket(INTERVAL '1 day', day, 'Europe/Berlin') AS bucket,
-   AVG(temperature) AS avg,
-   device_id
-FROM conditions
-GROUP BY device_id, bucket
-ORDER BY 1, 2, 3;
-
 -- time bucket not on primary dimension
 SELECT time_bucket(1, temperature) AS bucket,
    AVG(temperature),
@@ -226,6 +218,58 @@ WHERE location_id < 1 AND
 GROUP BY devices.name, bucket, devices.device_id
 ORDER BY 1,2,3,4
 LIMIT 2;
+
+-- Almost cagg_tz but bucket offset doesn't match
+SELECT time_bucket(INTERVAL '1 day', day,  "offset"=>'15s'::interval, timezone=>'Australia/Sydney') AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY 1, 2, 3 LIMIT 3;
+
+-- same as above but offset vs. no offset
+SELECT time_bucket(INTERVAL '1 day', day, timezone=>'Australia/Sydney') AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY 1, 2, 3 LIMIT 3;
+
+-- Almost cagg_tz but bucket time zone doesn't match
+SELECT time_bucket(INTERVAL '1 day', day,  "offset"=>'30m'::interval, timezone=>'Europe/Berlin') AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY 1, 2, 3 LIMIT 3;
+
+-- Almost cagg_origin but origins do not match
+SELECT time_bucket(INTERVAL '1 day', day, origin=>'2001-01-03') AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY 1, 2, 3 LIMIT 3;
+
+SELECT time_bucket(INTERVAL '1 day', day, origin=>'2001-01-02 00:00:00 Europe/Berlin'::timestamptz) AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY 1, 2, 3 LIMIT 3;
+
+-- Almost cagg3_int but integer offsets do not match
+SELECT time_bucket(3, day, 2) AS bucket,
+   AVG(temperature) AS avg,
+   count(device_id)
+FROM conditions_int
+GROUP BY bucket ORDER BY 1, 2, 3;
+
+SELECT time_bucket(3, day) AS bucket,
+   AVG(temperature) AS avg,
+   count(device_id)
+FROM conditions_int
+GROUP BY bucket  ORDER BY 1, 2, 3;
 
 -- Report on a query ineligible for hierarchical Cagg
 SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,

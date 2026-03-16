@@ -54,37 +54,6 @@ check_hypertable_dim_for_cagg_rewrites(CaggRewriteContext *cagg_rewrite_ctx)
 	return ret;
 }
 
-static void
-check_timebucket_for_cagg_rewrites(CaggRewriteContext *cagg_rewrite_ctx, Query *query)
-{
-	Assert(cagg_rewrite_ctx->ht);
-	const Dimension *part_dimension = check_hypertable_dim_for_cagg_rewrites(cagg_rewrite_ctx);
-	Assert(part_dimension || !cagg_rewrite_ctx->eligible);
-
-	if (part_dimension)
-	{
-		int32 parent_mat_hypertable_id = INVALID_HYPERTABLE_ID;
-		caggtimebucketinfo_init(&cagg_rewrite_ctx->tbinfo,
-								cagg_rewrite_ctx->ht->fd.id,
-								cagg_rewrite_ctx->ht->main_table_relid,
-								part_dimension->column_attno,
-								part_dimension->fd.column_type,
-								part_dimension->fd.interval_length,
-								parent_mat_hypertable_id);
-		bool is_cagg_create = false;
-		bool for_rewrites = true;
-		cagg_rewrite_ctx->eligible =
-			caggtimebucket_validate_common(cagg_rewrite_ctx->tbinfo.bf,
-										   query->groupClause,
-										   query->targetList,
-										   query->rtable,
-										   cagg_rewrite_ctx->tbinfo.htpartcolno,
-										   &(cagg_rewrite_ctx->msg),
-										   is_cagg_create,
-										   for_rewrites);
-	}
-}
-
 /* Methods to match Vars in queries with same tables joined in different but equivalent order
  */
 typedef struct
@@ -290,13 +259,8 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 		cagg_rewrite_ctx->eligible = false;
 		if (ts_guc_cagg_rewrites_debug_info)
 			appendStringInfo(&(cagg_rewrite_ctx->msg),
-							 "no continuous aggregates defined on \"%s.%s\"",
-							 (cagg_rewrite_ctx->cagg_parent ?
-								  NameStr(cagg_rewrite_ctx->cagg_parent->data.user_view_schema) :
-								  NameStr(cagg_rewrite_ctx->ht->fd.schema_name)),
-							 (cagg_rewrite_ctx->cagg_parent ?
-								  NameStr(cagg_rewrite_ctx->cagg_parent->data.user_view_name) :
-								  NameStr(cagg_rewrite_ctx->ht->fd.table_name)));
+							 "no continuous aggregates defined on %s",
+							 cagg_rewrite_ctx->ht_name.data);
 		return;
 	}
 
@@ -305,13 +269,8 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 		cagg_rewrite_ctx->eligible = false;
 		if (ts_guc_cagg_rewrites_debug_info)
 			appendStringInfo(&(cagg_rewrite_ctx->msg),
-							 "invalidated ranges are present in hypertable \"%s.%s\"",
-							 (cagg_rewrite_ctx->cagg_parent ?
-								  NameStr(cagg_rewrite_ctx->cagg_parent->data.user_view_schema) :
-								  NameStr(cagg_rewrite_ctx->ht->fd.schema_name)),
-							 (cagg_rewrite_ctx->cagg_parent ?
-								  NameStr(cagg_rewrite_ctx->cagg_parent->data.user_view_name) :
-								  NameStr(cagg_rewrite_ctx->ht->fd.table_name)));
+							 "invalidated ranges are present in hypertable %s",
+							 cagg_rewrite_ctx->ht_name.data);
 		return;
 	}
 
@@ -333,7 +292,7 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 	{
 		ContinuousAgg *cagg = lfirst(l);
 		/* Can only rewrite with Caggs with matching bucket */
-		if (!caggtimebucket_equal(cagg->bucket_function, cagg_rewrite_ctx->tbinfo.bf))
+		if (!cagg_timebucket_equal(cagg->bucket_function, cagg_rewrite_ctx->tbinfo.bf))
 		{
 			add_optional_debug_info(cagg, &nonmatching_buckets, "Buckets do not match:");
 			continue;
@@ -600,7 +559,7 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 		newrte->relid = cagg->relid;
 		newrte->inh = false;
 		newrte->alias = NULL;
-		newrte->eref = makeAlias(cagg->data.user_view_name.data, NIL);
+		newrte->eref = makeAlias(NameStr(cagg->data.user_view_name), NIL);
 		newrte->subquery = NULL;
 		newrte->inFromCl = true;
 		query->rtable = list_make1(newrte);
@@ -642,14 +601,9 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 		if (ts_guc_cagg_rewrites_debug_info)
 		{
 			appendStringInfo(&(cagg_rewrite_ctx->msg),
-							 "none of continuous aggregates defined on \"%s.%s\" are matching the "
+							 "none of continuous aggregates defined on %s are matching the "
 							 "query:\n",
-							 (cagg_rewrite_ctx->cagg_parent ?
-								  NameStr(cagg_rewrite_ctx->cagg_parent->data.user_view_schema) :
-								  NameStr(cagg_rewrite_ctx->ht->fd.schema_name)),
-							 (cagg_rewrite_ctx->cagg_parent ?
-								  NameStr(cagg_rewrite_ctx->cagg_parent->data.user_view_name) :
-								  NameStr(cagg_rewrite_ctx->ht->fd.table_name)));
+							 cagg_rewrite_ctx->ht_name.data);
 			if (not_realtime)
 			{
 				appendStringInfo(&(cagg_rewrite_ctx->msg), "%s\n", not_realtime->data);
@@ -763,9 +717,13 @@ rewrite_query_with_caggs(Node *node, RewriteWithCaggsContext *context)
 									/* Not inside Cagg query */
 									&& !OidIsValid(context->cagg_relid);
 		if (!OidIsValid(context->cagg_relid) && ts_guc_cagg_rewrites_debug_info)
+		{
 			initStringInfo(&cagg_rewrite_ctx.msg);
+		}
 		if (cagg_rewrite_ctx.eligible)
+		{
 			check_query_for_cagg_rewrites(&cagg_rewrite_ctx, query);
+		}
 
 		Cache *hcache = ts_hypertable_cache_pin();
 		foreach (lc, query->rtable)
@@ -785,7 +743,6 @@ rewrite_query_with_caggs(Node *node, RewriteWithCaggsContext *context)
 					cagg_rewrite_ctx.ht = ht;
 			}
 		}
-		ts_cache_release(&hcache);
 
 		if (cagg_rewrite_ctx.eligible && !cagg_rewrite_ctx.ht_rte)
 		{
@@ -804,14 +761,61 @@ rewrite_query_with_caggs(Node *node, RewriteWithCaggsContext *context)
 				cagg_rewrite_ctx.cagg_parent =
 					ts_continuous_agg_find_by_relid(cagg_rewrite_ctx.ht_rte->relid);
 				Assert(cagg_rewrite_ctx.cagg_parent);
-				Cache *hcache = ts_hypertable_cache_pin();
 				cagg_rewrite_ctx.ht =
 					ts_hypertable_cache_get_entry_by_id(hcache,
 														cagg_rewrite_ctx.cagg_parent->data
 															.mat_hypertable_id);
+			}
+			Assert(cagg_rewrite_ctx.ht);
+			/* Record hypertable full name so we can release hcache */
+			if (ts_guc_cagg_rewrites_debug_info)
+			{
+				initStringInfo(&cagg_rewrite_ctx.ht_name);
+				appendStringInfo(&cagg_rewrite_ctx.ht_name,
+								 "\"%s.%s\"",
+								 (cagg_rewrite_ctx.cagg_parent ?
+									  NameStr(cagg_rewrite_ctx.cagg_parent->data.user_view_schema) :
+									  NameStr(cagg_rewrite_ctx.ht->fd.schema_name)),
+								 (cagg_rewrite_ctx.cagg_parent ?
+									  NameStr(cagg_rewrite_ctx.cagg_parent->data.user_view_name) :
+									  NameStr(cagg_rewrite_ctx.ht->fd.table_name)));
+			}
+
+			const Dimension *part_dimension =
+				check_hypertable_dim_for_cagg_rewrites(&cagg_rewrite_ctx);
+			Assert(part_dimension || !cagg_rewrite_ctx.eligible);
+			if (part_dimension)
+			{
+				caggtimebucketinfo_init(&cagg_rewrite_ctx.tbinfo,
+										cagg_rewrite_ctx.ht->fd.id,
+										cagg_rewrite_ctx.ht->main_table_relid,
+										part_dimension->column_attno,
+										part_dimension->fd.column_type,
+										part_dimension->fd.interval_length,
+										INVALID_HYPERTABLE_ID);
+				/* Release hcache before "caggtimebucket_validate_common" as it can error out */
+				ts_cache_release(&hcache);
+
+				bool is_cagg_create = false;
+				bool for_rewrites = true;
+				cagg_rewrite_ctx.eligible =
+					caggtimebucket_validate_common(cagg_rewrite_ctx.tbinfo.bf,
+												   query->groupClause,
+												   query->targetList,
+												   query->rtable,
+												   cagg_rewrite_ctx.tbinfo.htpartcolno,
+												   &(cagg_rewrite_ctx.msg),
+												   is_cagg_create,
+												   for_rewrites);
+			}
+			else
+			{
 				ts_cache_release(&hcache);
 			}
-			check_timebucket_for_cagg_rewrites(&cagg_rewrite_ctx, query);
+		}
+		else
+		{
+			ts_cache_release(&hcache);
 		}
 
 		/* Validated all we could before retrieving CAggs for the hypertable,
@@ -841,14 +845,14 @@ rewrite_query_with_caggs(Node *node, RewriteWithCaggsContext *context)
 					elog(INFO,
 						 "%s was rewritten with Cagg \"%s.%s\"",
 						 query_label.data,
-						 cagg_rewrite_ctx.cagg->data.user_view_schema.data,
-						 cagg_rewrite_ctx.cagg->data.user_view_name.data);
+						 NameStr(cagg_rewrite_ctx.cagg->data.user_view_schema),
+						 NameStr(cagg_rewrite_ctx.cagg->data.user_view_name));
 				else
 					elog(INFO,
 						 "%s can be rewritten with Cagg \"%s.%s\"",
 						 query_label.data,
-						 cagg_rewrite_ctx.cagg->data.user_view_schema.data,
-						 cagg_rewrite_ctx.cagg->data.user_view_name.data);
+						 NameStr(cagg_rewrite_ctx.cagg->data.user_view_schema),
+						 NameStr(cagg_rewrite_ctx.cagg->data.user_view_name));
 			}
 			else
 				elog(INFO,

@@ -37,6 +37,15 @@ SELECT table_name FROM create_hypertable('conditions_dup', 'day', chunk_time_int
 CREATE TABLE conditions_custom AS SELECT * FROM conditions;
 SELECT table_name FROM create_hypertable('conditions_custom', 'city', chunk_time_interval => 6, time_partitioning_func => 'text_part_func', migrate_data => true);
 
+CREATE TABLE conditions_int(
+  day int NOT NULL,
+  city text NOT NULL,
+  temperature INT NOT NULL,
+  device_id int NOT NULL
+);
+INSERT INTO conditions_int SELECT (day::date - '2021-06-19'::date), city, temperature, device_id FROM conditions;
+SELECT table_name FROM create_hypertable('conditions_int', 'day', chunk_time_interval =>1, migrate_data => true);
+
 CREATE TABLE devices ( device_id int not null, name text, location text);
 INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
 
@@ -57,7 +66,16 @@ ORDER BY bucket;
 
 CREATE MATERIALIZED VIEW cagg1_tz
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
-SELECT time_bucket(INTERVAL '1 day', day, 'Australia/Sydney') AS bucket,
+SELECT time_bucket(INTERVAL '1 day', day, "offset"=>'30m'::interval, timezone=>'Australia/Sydney') AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY bucket;
+
+CREATE MATERIALIZED VIEW cagg1_origin
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day, origin=>'2001-01-02 00:00:00 UTC'::timestamptz) AS bucket,
    AVG(temperature) AS avg,
    device_id
 FROM conditions
@@ -80,6 +98,22 @@ SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
 FROM conditions
 GROUP BY bucket
 HAVING count(device_id) > 1;
+
+-- A Cagg over integer dimension
+CREATE OR REPLACE FUNCTION conditions_int_now()
+  RETURNS INT LANGUAGE SQL STABLE AS
+$BODY$
+  SELECT 150;
+$BODY$;
+SELECT set_integer_now_func('conditions_int','conditions_int_now');
+
+CREATE MATERIALIZED VIEW cagg3_int
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(3, day, 1) AS bucket,
+   AVG(temperature) AS avg,
+   count(device_id)
+FROM conditions_int
+GROUP BY bucket;
 
 -- Caggs with joins
 CREATE MATERIALIZED VIEW cagg_join
