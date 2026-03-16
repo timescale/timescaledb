@@ -45,10 +45,7 @@ extern Datum continuous_agg_process_hypertable_invalidations(PG_FUNCTION_ARGS);
 extern void invalidation_process_hypertable_log(int32 hypertable_id, Oid dimtype);
 
 extern InvalidationStore *invalidation_process_cagg_log(const ContinuousAgg *cagg,
-														const InternalTimeRange *refresh_window,
-														long max_materializations,
-														ContinuousAggRefreshContext context,
-														bool force);
+														const InternalTimeRange *refresh_window);
 
 extern void invalidation_store_free(InvalidationStore *store);
 extern void
