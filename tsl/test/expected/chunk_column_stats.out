@@ -480,24 +480,16 @@ SELECT clear_hypertable_cache();
                            Filter: (sensor_id > length("substring"(version(), 1, 9)))
 
 SET timescaledb.enable_chunk_skipping to ON;
--- IN/ANY is not supported for now
+-- IN/ANY uses bounding range [min, max] for chunk exclusion
 :PREFIX SELECT * FROM sample_table WHERE sensor_id IN (9, 10, 11);
 --- QUERY PLAN ---
- Append
-   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
-               Index Cond: (sensor_id = ANY ('{9,10,11}'::integer[]))
-   ->  Seq Scan on _hyper_1_2_chunk
-         Filter: (sensor_id = ANY ('{9,10,11}'::integer[]))
+ Seq Scan on _hyper_1_2_chunk
+   Filter: (sensor_id = ANY ('{9,10,11}'::integer[]))
 
 :PREFIX SELECT * FROM sample_table WHERE sensor_id = ANY(ARRAY[9, 10, 11]);
 --- QUERY PLAN ---
- Append
-   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
-               Index Cond: (sensor_id = ANY ('{9,10,11}'::integer[]))
-   ->  Seq Scan on _hyper_1_2_chunk
-         Filter: (sensor_id = ANY ('{9,10,11}'::integer[]))
+ Seq Scan on _hyper_1_2_chunk
+   Filter: (sensor_id = ANY ('{9,10,11}'::integer[]))
 
 -- Newly added chunks should also have MIN/MAX entry
 \set start_date '2024-01-28 01:09:51.583252+05:30'

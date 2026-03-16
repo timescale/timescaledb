@@ -55,11 +55,8 @@ $f$;
 :PREFIX SELECT * FROM test WHERE b >= 5 AND b <= 5 + 2 FOR UPDATE;
 --- QUERY PLAN ---
  LockRows
-   ->  Append
-         ->  Seq Scan on test test_1
-               Filter: ((b >= 5) AND (b <= 7))
-         ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk test_2
-               Index Cond: ((b >= 5) AND (b <= 7))
+   ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk
+         Index Cond: ((b >= 5) AND (b <= 7))
 
 -- test with CTE
 -- these cases are just to make sure we're everything is alright with

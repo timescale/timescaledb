@@ -435,7 +435,7 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 					{
 						/* Mark hypertable RTEs we'd like to expand ourselves */
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-							query->rowMarks == NIL && rte->inh)
+							rte->inh)
 						{
 							/*
 							 * UPDATE/DELETE: only mark the DML target.
@@ -1474,7 +1474,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * to avoid marking a DML target we don't handle.
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
-				rte->ctename == NULL && query->rowMarks == NIL)
+				rte->ctename == NULL)
 			{
 				/*
 				 * UPDATE/DELETE: only mark the DML target.
