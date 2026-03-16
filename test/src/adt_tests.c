@@ -35,15 +35,21 @@ i32_vec_test(void)
 	uint32 old_capacity;
 
 	for (i = 0; i < 100; i++)
+	{
 		int32_vec_append(vec, i);
+	}
 
 	TestAssertInt64Eq(vec->num_elements, 100);
 
 	if (vec->max_elements < 100)
+	{
 		elog(ERROR, "vec capacity %d, should be at least 100", vec->max_elements);
+	}
 
 	for (i = 0; i < 100; i++)
+	{
 		TestAssertInt64Eq(*int32_vec_at(vec, i), i);
+	}
 
 	TestAssertPtrEq(int32_vec_last(vec), int32_vec_at(vec, vec->num_elements - 1));
 
@@ -53,10 +59,14 @@ i32_vec_test(void)
 	TestAssertInt64Eq(vec->max_elements, old_capacity);
 
 	for (i = 0; i < 30; i++)
+	{
 		TestAssertInt64Eq(*int32_vec_at(vec, i), i);
+	}
 
 	for (; i < 51; i++)
+	{
 		TestAssertInt64Eq(*int32_vec_at(vec, i), i + 19);
+	}
 
 	TestAssertPtrEq(int32_vec_last(vec), int32_vec_at(vec, vec->num_elements - 1));
 
@@ -86,12 +96,16 @@ uint64_vec_test(void)
 	int i;
 	uint64_vec_init(&vec, CurrentMemoryContext, 100);
 	for (i = 0; i < 30; i++)
+	{
 		uint64_vec_append(&vec, i + 3);
+	}
 
 	TestAssertInt64Eq(vec.num_elements, 30);
 	TestAssertInt64Eq(vec.max_elements, 100);
 	for (i = 0; i < 30; i++)
+	{
 		TestAssertInt64Eq(*uint64_vec_at(&vec, i), i + 3);
+	}
 
 	uint64_vec_free_data(&vec);
 	TestAssertInt64Eq(vec.num_elements, 0);
@@ -108,7 +122,9 @@ bit_array_test(void)
 	bit_array_init(&bits, 0);
 
 	for (i = 0; i < 65; i++)
+	{
 		bit_array_append(&bits, i, i);
+	}
 
 	bit_array_append(&bits, 0, 0);
 	bit_array_append(&bits, 0, 0);
@@ -119,7 +135,9 @@ bit_array_test(void)
 
 	bit_array_iterator_init(&iter, &bits);
 	for (i = 0; i < 65; i++)
+	{
 		TestAssertInt64Eq(bit_array_iter_next(&iter, i), i);
+	}
 
 	TestAssertInt64Eq(bit_array_iter_next(&iter, 0), 0);
 	TestAssertInt64Eq(bit_array_iter_next(&iter, 0), 0);
@@ -136,7 +154,9 @@ bit_array_test(void)
 	TestAssertInt64Eq(bit_array_iter_next_rev(&iter, 0), 0);
 	TestAssertInt64Eq(bit_array_iter_next_rev(&iter, 0), 0);
 	for (i = 64; i >= 0; i--)
+	{
 		TestAssertInt64Eq(bit_array_iter_next_rev(&iter, i), i);
+	}
 }
 
 Datum

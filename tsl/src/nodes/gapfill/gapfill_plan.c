@@ -48,11 +48,15 @@ static Node *
 gapfill_aggref_mutator(Node *node, void *context)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 
 	if (IsA(node, Aggref))
+	{
 		return (Node *)
 			makeConst(((Aggref *) node)->aggtype, -1, InvalidOid, -2, UnassignedDatum, true, false);
+	}
 
 	return expression_tree_mutator(node, gapfill_aggref_mutator, context);
 }
@@ -65,7 +69,9 @@ static bool
 contains_nonconstant_walker(Node *node, void *context)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	if (IsA(node, Var))
 	{
@@ -133,7 +139,9 @@ static bool
 gapfill_function_walker(Node *node, gapfill_walker_context *context)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	if (IsA(node, FuncExpr) && is_gapfill_function_call(castNode(FuncExpr, node)))
 	{
@@ -151,7 +159,9 @@ static bool
 marker_function_walker(Node *node, gapfill_walker_context *context)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	if (IsA(node, FuncExpr) && is_marker_function_call(castNode(FuncExpr, node)))
 	{
@@ -169,7 +179,9 @@ static bool
 window_function_walker(Node *node, gapfill_walker_context *context)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	if (IsA(node, WindowFunc))
 	{
@@ -201,7 +213,9 @@ gapfill_correct_order(PlannerInfo *root, Path *subpath, FuncExpr *func)
 #endif
 
 	if (list_length(subpath->pathkeys) != num_groupby_pathkeys)
+	{
 		return false;
+	}
 
 	if (list_length(subpath->pathkeys) > 0)
 	{
@@ -217,7 +231,9 @@ gapfill_correct_order(PlannerInfo *root, Path *subpath, FuncExpr *func)
 			for (i = 0; i < num_groupby_pathkeys; i++)
 			{
 				if (!list_member(subpath->pathkeys, list_nth(root->group_pathkeys, i)))
+				{
 					return false;
+				}
 			}
 			return true;
 		}
@@ -320,10 +336,12 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
 		/* check for locf/interpolate calls */
 		gapfill_expression_walker(expr, marker_function_walker, &context);
 		if (context.count > 1)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("multiple interpolate/locf function calls per resultset column not "
 							"supported")));
+		}
 
 		if (context.count == 1)
 		{
@@ -332,24 +350,30 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
 			 * node above gapfill node
 			 */
 			if (expr != context.call.expr && !contain_window_function((Node *) expr))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("%s must be toplevel function call",
 								get_func_name(context.call.func->funcid))));
+			}
 
 			/* if there is an aggregation it needs to be a child of the marker function */
 			if (contain_agg_clause((Node *) expr) &&
 				!contain_agg_clause(linitial(context.call.func->args)))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("aggregate functions must be below %s",
 								get_func_name(context.call.func->funcid))));
+			}
 
 			if (contain_window_function(context.call.node))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("window functions must not be below %s",
 								get_func_name(context.call.func->funcid))));
+			}
 
 			add_column_to_pathtarget(pt_path, context.call.expr, pt_upper->sortgrouprefs[i]);
 			add_column_to_pathtarget(pt_subpath,
@@ -361,9 +385,11 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
 		/* check for plain window function calls without locf/interpolate */
 		gapfill_expression_walker(expr, window_function_walker, &context);
 		if (context.count > 1)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("multiple window function calls per column not supported")));
+		}
 
 		if (context.count == 1)
 		{
@@ -384,10 +410,12 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
 					 lc_arg = lnext(context.call.window->args, lc_arg))
 				{
 					if (contain_var_clause(lfirst(lc_arg)))
+					{
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("window functions with multiple column "
 										"references not supported")));
+					}
 				}
 
 				if (contain_var_clause(linitial(context.call.window->args)))
@@ -471,21 +499,29 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 				((FuncExpr *) em->em_expr)->funcid == func->funcid)
 			{
 				if (pk->pk_cmptype == COMPARE_LT)
+				{
 					pk_func = pk;
+				}
 				else
+				{
 					pk_func = make_canonical_pathkey(root,
 													 pk->pk_eclass,
 													 pk->pk_opfamily,
 													 BTLessStrategyNumber,
 													 pk->pk_nulls_first);
+				}
 			}
 			else
+			{
 				new_order = lappend(new_order, pk);
+			}
 		}
 		if (!pk_func)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("no top level time_bucket_gapfill in group by clause")));
+		}
 
 		new_order = lappend(new_order, pk_func);
 		subpath = (Path *)
@@ -514,7 +550,9 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 	gapfill_walker_context context = { .call.node = NULL, .count = 0 };
 
 	if (CMD_SELECT != parse->commandType || parse->groupClause == NIL)
+	{
 		return;
+	}
 
 	/*
 	 * Look for time_bucket_gapfill function call in the target list, which
@@ -525,12 +563,16 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 	gapfill_function_walker((Node *) parse->targetList, &context);
 
 	if (context.count == 0)
+	{
 		return;
+	}
 
 	if (context.count > 1)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("multiple time_bucket_gapfill calls not allowed")));
+	}
 
 	/*
 	 * Check for non-constant timezone parameter. Gapfill needs a consistent
@@ -547,10 +589,12 @@ plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel)
 	{
 		Expr *tz_arg = lthird(func->args);
 		if (contains_nonconstant_expr((Node *) tz_arg))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("time_bucket_gapfill does not support non-constant timezone"),
 					 errhint("Use a constant timezone value.")));
+		}
 	}
 	List *copy = group_rel->pathlist;
 	group_rel->pathlist = NIL;
@@ -605,7 +649,9 @@ gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel, RelOp
 	ListCell *lc;
 
 	if (!is_gapfill_path(linitial(input_rel->pathlist)))
+	{
 		return;
+	}
 
 	foreach (lc, output_rel->pathlist)
 	{
@@ -653,15 +699,18 @@ gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel, RelOp
 					if (context.count == 1)
 					{
 						if (context.call.window->winref <= path->winclause->winref)
+						{
 							/*
 							 * window function of current level or below
 							 * so we can put in verbatim
 							 */
 							add_column_to_pathtarget(pt, lfirst(lc_expr), pt_top->sortgrouprefs[i]);
+						}
 						else if (context.call.window->args != NIL)
 						{
 							ListCell *lc_arg;
 							if (list_length(context.call.window->args) > 1)
+							{
 								/*
 								 * check arguments past first argument dont have Vars
 								 */
@@ -671,20 +720,27 @@ gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel, RelOp
 									 lc_arg = lnext(context.call.window->args, lc_arg))
 								{
 									if (contain_var_clause(lfirst(lc_arg)))
+									{
 										ereport(ERROR,
 												(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 												 errmsg("window functions with multiple column "
 														"references not supported")));
+									}
 								}
+							}
 
 							if (contain_var_clause(linitial(context.call.window->args)))
+							{
 								add_column_to_pathtarget(pt,
 														 linitial(context.call.window->args),
 														 pt_top->sortgrouprefs[i]);
+							}
 						}
 					}
 					else
+					{
 						add_column_to_pathtarget(pt, lfirst(lc_expr), pt_top->sortgrouprefs[i]);
+					}
 				}
 				path->path.pathtarget = pt;
 			}

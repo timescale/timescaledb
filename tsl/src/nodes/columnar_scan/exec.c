@@ -109,14 +109,18 @@ static Node *
 constify_tableoid_walker(Node *node, ConstifyTableOidContext *ctx)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 
 	if (IsA(node, Var))
 	{
 		Var *var = castNode(Var, node);
 
 		if ((Index) var->varno != ctx->chunk_index)
+		{
 			return node;
+		}
 
 		if (var->varattno == TableOidAttributeNumber)
 		{
@@ -130,9 +134,11 @@ constify_tableoid_walker(Node *node, ConstifyTableOidContext *ctx)
 		 * segfault if any system columns get through
 		 */
 		if (var->varattno < SelfItemPointerAttributeNumber)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 					 errmsg("transparent decompression only supports tableoid system column")));
+		}
 
 		return node;
 	}
@@ -312,9 +318,13 @@ columnar_scan_begin(CustomScanState *node, EState *estate, int eflags)
 			get_typlenbyval(column.typid, &column.value_bytes, &column.by_value);
 
 			if (list_nth_int(chunk_state->is_segmentby_column, compressed_index))
+			{
 				column.type = SEGMENTBY_COLUMN;
+			}
 			else
+			{
 				column.type = COMPRESSED_COLUMN;
+			}
 
 			if (cscan->custom_scan_tlist == NIL)
 			{
@@ -480,7 +490,9 @@ columnar_scan_rescan(CustomScanState *node)
 	bq->funcs->reset(bq);
 
 	if (node->ss.ps.chgParam != NULL)
+	{
 		UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
+	}
 
 	ExecReScan(linitial(node->custom_ps));
 }

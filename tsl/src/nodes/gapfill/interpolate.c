@@ -28,9 +28,13 @@ gapfill_interpolate_initialize(GapFillInterpolateColumnState *interpolate, GapFi
 	interpolate->prev.isnull = true;
 	interpolate->next.isnull = true;
 	if (list_length(function->args) > 1)
+	{
 		interpolate->lookup_before = gapfill_adjust_varnos(state, lsecond(function->args));
+	}
 	if (list_length(function->args) > 2)
+	{
 		interpolate->lookup_after = gapfill_adjust_varnos(state, lthird(function->args));
+	}
 }
 
 /*
@@ -102,9 +106,11 @@ gapfill_fetch_sample(GapFillState *state, GapFillInterpolateColumnState *column,
 
 	th = DatumGetHeapTupleHeader(datum);
 	if (HeapTupleHeaderGetNatts(th) != 2)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("interpolate RECORD arguments must have 2 elements")));
+	}
 
 	/* Extract type information from the tuple itself */
 	Assert(RECORDOID == HeapTupleHeaderGetTypeId(th));
@@ -118,6 +124,7 @@ gapfill_fetch_sample(GapFillState *state, GapFillInterpolateColumnState *column,
 
 	/* check first element in record matches timestamp datatype */
 	if (TupleDescAttr(tupdesc, 0)->atttypid != state->columns[state->time_index]->typid)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("first argument of interpolate returned record must match used timestamp "
@@ -125,9 +132,11 @@ gapfill_fetch_sample(GapFillState *state, GapFillInterpolateColumnState *column,
 				 errdetail("Returned type %s does not match expected type %s.",
 						   format_type_be(TupleDescAttr(tupdesc, 0)->atttypid),
 						   format_type_be(column->base.typid))));
+	}
 
 	/* check second element in record matches interpolate datatype */
 	if (TupleDescAttr(tupdesc, 1)->atttypid != column->base.typid)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("second argument of interpolate returned record must match used "
@@ -135,6 +144,7 @@ gapfill_fetch_sample(GapFillState *state, GapFillInterpolateColumnState *column,
 				 errdetail("Returned type %s does not match expected type %s.",
 						   format_type_be(TupleDescAttr(tupdesc, 1)->atttypid),
 						   format_type_be(column->base.typid))));
+	}
 
 	value = heap_getattr(&tuple, 1, tupdesc, &sample->isnull);
 	if (!sample->isnull)
@@ -143,7 +153,9 @@ gapfill_fetch_sample(GapFillState *state, GapFillInterpolateColumnState *column,
 
 		value = heap_getattr(&tuple, 2, tupdesc, &sample->isnull);
 		if (!sample->isnull)
+		{
 			sample->value = datumCopy(value, column->base.typbyval, column->base.typlen);
+		}
 	}
 
 	ReleaseTupleDesc(tupdesc);
@@ -183,15 +195,21 @@ gapfill_interpolate_calculate(GapFillInterpolateColumnState *column, GapFillStat
 
 	/* only evaluate expr for first tuple */
 	if (column->prev.isnull && column->lookup_before && time == state->gapfill_start)
+	{
 		gapfill_fetch_sample(state, column, &column->prev, column->lookup_before);
+	}
 
 	if (column->next.isnull && column->lookup_after &&
 		(FETCHED_LAST == state->state || FETCHED_NEXT_GROUP == state->state))
+	{
 		gapfill_fetch_sample(state, column, &column->next, column->lookup_after);
+	}
 
 	*isnull = column->prev.isnull || column->next.isnull;
 	if (*isnull)
+	{
 		return;
+	}
 
 	y0 = column->prev.value;
 	y1 = column->next.value;
@@ -238,19 +256,27 @@ gapfill_interpolate_calculate(GapFillInterpolateColumnState *column, GapFillStat
 			/* Shortcircuit calculation when y0 == y1 for float because otherwise
 			 * output will be unstable for certain values due to float rounding. */
 			if (DatumGetFloat4(y0) == DatumGetFloat4(y1))
+			{
 				*value = y0;
+			}
 			else
+			{
 				*value =
 					Float4GetDatum(INTERPOLATE(x, x0, x1, DatumGetFloat4(y0), DatumGetFloat4(y1)));
+			}
 			break;
 		case FLOAT8OID:
 			/* Shortcircuit calculation when y0 == y1 for float because otherwise
 			 * output will be unstable for certain values due to float rounding. */
 			if (DatumGetFloat8(y0) == DatumGetFloat8(y1))
+			{
 				*value = y0;
+			}
 			else
+			{
 				*value =
 					Float8GetDatum(INTERPOLATE(x, x0, x1, DatumGetFloat8(y0), DatumGetFloat8(y1)));
+			}
 			break;
 		default:
 

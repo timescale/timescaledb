@@ -146,18 +146,26 @@ static Expr *
 get_start_arg(GapFillState *state)
 {
 	if (!state->have_timezone)
+	{
 		return lthird(state->args);
+	}
 	else
+	{
 		return lfourth(state->args);
+	}
 }
 
 static Expr *
 get_finish_arg(GapFillState *state)
 {
 	if (!state->have_timezone)
+	{
 		return lfourth(state->args);
+	}
 	else
+	{
 		return lfifth(state->args);
+	}
 }
 
 static Expr *
@@ -259,11 +267,13 @@ get_cast_func(Oid source, Oid target)
 	}
 
 	if (!OidIsValid(result))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("could not find cast from %s to %s",
 						format_type_be(source),
 						format_type_be(target))));
+	}
 
 	return result;
 }
@@ -281,7 +291,9 @@ static bool
 is_simple_expr_walker(Node *node, void *context)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	/*
 	 * since expression_tree_walker does early exit on true
@@ -308,7 +320,9 @@ is_simple_expr_walker(Node *node, void *context)
 			break;
 		case T_Param:
 			if (castNode(Param, node)->paramkind != PARAM_EXTERN)
+			{
 				return true;
+			}
 			break;
 		default:
 			return true;
@@ -346,10 +360,12 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 	bool isnull;
 
 	if (!is_simple_expr(expr))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg(
 					 "invalid time_bucket_gapfill argument: start must be a simple expression")));
+	}
 
 	if (state->have_timezone)
 	{
@@ -372,10 +388,12 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 
 	/* start expression must not evaluate to NULL */
 	if (isnull)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: start cannot be NULL"),
 				 errhint("Specify start and finish as arguments or in the WHERE clause.")));
+	}
 
 	return gapfill_datum_get_internal(value, state->gapfill_typid);
 }
@@ -404,11 +422,13 @@ get_boundary_expr_value(GapFillState *state, GapFillBoundary boundary, Expr *exp
 	arg_value = gapfill_exec_expr(state, state->scanslot, expr, &isnull);
 
 	if (isnull)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: %s cannot be NULL",
 						boundary == GAPFILL_START ? "start" : "finish"),
 				 errhint("Specify start and finish as arguments or in the WHERE clause.")));
+	}
 
 	return gapfill_datum_get_internal(arg_value, state->gapfill_typid);
 }
@@ -431,12 +451,16 @@ is_boundary_expr(Node *node, CollectBoundaryContext *context)
 	Node *left, *right;
 
 	if (!IsA(node, OpExpr))
+	{
 		return false;
+	}
 
 	op = castNode(OpExpr, node);
 
 	if (op->args->length != 2)
+	{
 		return false;
+	}
 
 	left = linitial(op->args);
 	right = llast(op->args);
@@ -444,13 +468,19 @@ is_boundary_expr(Node *node, CollectBoundaryContext *context)
 	/* Var OP Var is not useful here because we are not yet at a point
 	 * where we could evaluate them */
 	if (IsA(left, Var) && IsA(right, Var))
+	{
 		return false;
+	}
 
 	if (IsA(left, Var) && var_equal(castNode(Var, left), context->ts_var))
+	{
 		return true;
+	}
 
 	if (IsA(right, Var) && var_equal(castNode(Var, right), context->ts_var))
+	{
 		return true;
+	}
 
 	return false;
 }
@@ -461,7 +491,9 @@ collect_boundary_walker(Node *node, CollectBoundaryContext *context)
 	Node *quals = NULL;
 
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	if (IsA(node, FromExpr))
 	{
@@ -473,7 +505,9 @@ collect_boundary_walker(Node *node, CollectBoundaryContext *context)
 
 		/* don't descend into outer join */
 		if (IS_OUTER_JOIN(j->jointype))
+		{
 			return false;
+		}
 
 		quals = j->quals;
 	}
@@ -485,7 +519,9 @@ collect_boundary_walker(Node *node, CollectBoundaryContext *context)
 		foreach (lc, castNode(List, quals))
 		{
 			if (is_boundary_expr(lfirst(lc), context))
+			{
 				context->quals = lappend(context->quals, lfirst(lc));
+			}
 		}
 	}
 
@@ -527,11 +563,13 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 	 * we cannot match WHERE clause to the time column
 	 */
 	if (!IsA(lsecond(func->args), Var))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: ts needs to refer to a single "
 						"column if no start or finish is supplied"),
 				 errhint("Specify start and finish as arguments or in the WHERE clause.")));
+	}
 
 	ts_var = castNode(Var, lsecond(func->args));
 
@@ -565,7 +603,9 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 		}
 
 		if (!op_in_opfamily(op, tce->btree_opf))
+		{
 			continue;
+		}
 
 		/*
 		 * only allow simple expressions because Params have not been set up
@@ -573,16 +613,22 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 		 * separate execution context
 		 */
 		if (!is_simple_expr(expr) || !var_equal(ts_var, var))
+		{
 			continue;
+		}
 
 		get_op_opfamily_properties(op, tce->btree_opf, false, &strategy, &lefttype, &righttype);
 
 		if (boundary == GAPFILL_START && strategy != BTGreaterStrategyNumber &&
 			strategy != BTGreaterEqualStrategyNumber)
+		{
 			continue;
+		}
 		if (boundary == GAPFILL_END && strategy != BTLessStrategyNumber &&
 			strategy != BTLessEqualStrategyNumber)
+		{
 			continue;
+		}
 
 		value = get_boundary_expr_value(state, boundary, expr);
 
@@ -595,7 +641,9 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 		 * end < value + 1
 		 */
 		if (strategy == BTGreaterStrategyNumber || strategy == BTLessEqualStrategyNumber)
+		{
 			value += 1;
+		}
 
 		if (!boundary_found)
 		{
@@ -605,14 +653,20 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 		else
 		{
 			if (boundary == GAPFILL_START)
+			{
 				boundary_value = Max(boundary_value, value);
+			}
 			else
+			{
 				boundary_value = Min(boundary_value, value);
+			}
 		}
 	}
 
 	if (boundary_found)
+	{
 		return boundary_value;
+	}
 
 	ereport(ERROR,
 			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -727,16 +781,20 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 
 	/* bucket_width */
 	if (!is_simple_expr(linitial(state->args)))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: bucket_width must be a simple "
 						"expression")));
+	}
 
 	arg_value = gapfill_exec_expr(state, NULL, linitial(state->args), &isnull);
 	if (isnull)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: bucket_width cannot be NULL")));
+	}
 
 	state->gapfill_period = gapfill_period_get_internal(func->funcresulttype,
 														exprType(linitial(state->args)),
@@ -748,10 +806,12 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	 * but checking this explicitly here will make a nicer error message
 	 */
 	if (state->gapfill_period <= 0 && !state->gapfill_interval)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg(
 					 "invalid time_bucket_gapfill argument: bucket_width must be greater than 0")));
+	}
 
 	/*
 	 * check if gapfill start was left out so we have to infer from WHERE
@@ -777,14 +837,18 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 
 	/* gap fill end */
 	if (is_const_null(get_finish_arg(state)))
+	{
 		state->gapfill_end = infer_gapfill_boundary(state, GAPFILL_END);
+	}
 	else
 	{
 		if (!is_simple_expr(get_finish_arg(state)))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("invalid time_bucket_gapfill argument: finish must be a simple "
 							"expression")));
+		}
 		arg_value = gapfill_exec_expr(state, NULL, get_finish_arg(state), &isnull);
 
 		/*
@@ -792,10 +856,12 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 		 * when a non-Const is passed here that evaluates to NULL we bail
 		 */
 		if (isnull)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("invalid time_bucket_gapfill argument: finish cannot be NULL"),
 					 errhint("Specify start and finish as arguments or in the WHERE clause.")));
+		}
 
 		state->gapfill_end = gapfill_datum_get_internal(arg_value, func->funcresulttype);
 	}
@@ -836,9 +902,13 @@ gapfill_exec(CustomScanState *node)
 			if (slot)
 			{
 				if (state->multigroup && gapfill_state_is_new_group(state, slot))
+				{
 					state->state = FETCHED_NEXT_GROUP;
+				}
 				else
+				{
 					state->state = FETCHED_ONE;
+				}
 
 				gapfill_state_set_next(state, slot);
 			}
@@ -850,9 +920,13 @@ gapfill_exec(CustomScanState *node)
 				 * can do here
 				 */
 				if (state->multigroup && !state->groups_initialized)
+				{
 					return NULL;
+				}
 				else
+				{
 					state->state = FETCHED_LAST;
+				}
 			}
 		}
 
@@ -919,7 +993,9 @@ gapfill_rescan(CustomScanState *node)
 	if (node->custom_ps != NIL)
 	{
 		if (node->ss.ps.chgParam != NULL)
+		{
 			UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
+		}
 		ExecReScan(linitial(node->custom_ps));
 	}
 
@@ -928,7 +1004,9 @@ gapfill_rescan(CustomScanState *node)
 	state->next_offset = state->gapfill_interval;
 
 	if (state->multigroup)
+	{
 		state->groups_initialized = false;
+	}
 
 	/* Reset column states for locf and interpolate */
 	for (int i = 0; i < state->ncolumns; i++)
@@ -985,8 +1063,10 @@ gapfill_state_reset_group(GapFillState *state, TupleTableSlot *slot)
 			case DERIVED_COLUMN:
 				column.group->isnull = isnull;
 				if (!isnull)
+				{
 					column.group->value =
 						datumCopy(value, column.base->typbyval, column.base->typlen);
+				}
 				break;
 			default:
 				break;
@@ -1094,16 +1174,22 @@ gapfill_state_is_new_group(GapFillState *state, TupleTableSlot *slot)
 		{
 			value = slot_getattr(slot, AttrOffsetGetAttrNumber(i), &isnull);
 			if (isnull && column.group->isnull)
+			{
 				continue;
+			}
 			if (isnull != column.group->isnull)
+			{
 				return true;
+			}
 			/* We need to use FunctionCall2Coll here since equality comparison
 			 * functions can try to access flinfo (see arrayfuncs.c). */
 			if (!DatumGetBool(FunctionCall2Coll(&column.group->eq_func,
 												column.group->collation,
 												value,
 												column.group->value)))
+			{
 				return true;
+			}
 		}
 	}
 
@@ -1133,14 +1219,18 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 				 * purpose.
 				 */
 				if (isnull && column.locf->treat_null_as_missing)
+				{
 					gapfill_locf_calculate(column.locf,
 										   state,
 										   state->subslot,
 										   state->subslot_time,
 										   &state->subslot->tts_values[i],
 										   &state->subslot->tts_isnull[i]);
+				}
 				else
+				{
 					gapfill_locf_tuple_returned(column.locf, value, isnull);
+				}
 				break;
 			case INTERPOLATE_COLUMN:
 				value = slot_getattr(state->subslot, AttrOffsetGetAttrNumber(i), &isnull);
@@ -1178,7 +1268,9 @@ gapfill_state_set_next(GapFillState *state, TupleTableSlot *subslot)
 	 * updating of column state happens in gapfill_state_reset_group instead
 	 */
 	if (FETCHED_NEXT_GROUP == state->state)
+	{
 		return;
+	}
 
 	foreach_column(column.base, i, state)
 	{
@@ -1203,7 +1295,9 @@ gapfill_fetch_next_tuple(GapFillState *state)
 	TupleTableSlot *subslot = ExecProcNode(subplan);
 
 	if (TupIsNull(subslot))
+	{
 		return NULL;
+	}
 
 	/* we cannot simply treat an arbitrary source slot as virtual,
 	 * instead we must copy the data into our own slot in order to be able to
@@ -1212,9 +1306,11 @@ gapfill_fetch_next_tuple(GapFillState *state)
 	ExecCopySlot(state->subslot, subslot);
 	time_value = slot_getattr(subslot, AttrOffsetGetAttrNumber(state->time_index), &isnull);
 	if (isnull)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time_bucket_gapfill argument: ts cannot be NULL")));
+	}
 
 	state->subslot_time = gapfill_datum_get_internal(time_value, state->gapfill_typid);
 
@@ -1336,8 +1432,10 @@ gapfill_state_initialize_columns(GapFillState *state, List *exec_tlist)
 				state->groups_initialized = false;
 			}
 			else
+			{
 				state->columns[i] =
 					gapfill_column_state_create(NULL_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
+			}
 
 			lfirst(list_nth_cell(exec_tlist, i)) = entry;
 			continue;
@@ -1413,7 +1511,9 @@ gapfill_is_group_column(GapFillState *state, TargetEntry *tle)
 	foreach (lc, groups)
 	{
 		if (tle->ressortgroupref == ((SortGroupClause *) lfirst(lc))->tleSortGroupRef)
+		{
 			return true;
+		}
 	}
 
 	return false;
@@ -1438,7 +1538,9 @@ gapfill_get_fixed_agg_expr_column(GapFillState *state, TargetEntry *tle)
 	{
 		TargetEntry *mutated_agg_expr_tle = castNode(TargetEntry, lfirst(lc));
 		if (tle->resno == mutated_agg_expr_tle->resno)
+		{
 			return mutated_agg_expr_tle;
+		}
 	}
 	return NULL;
 }

@@ -67,9 +67,11 @@ ts_partition_cache_insert_chunk(const Hypertable *ht, Oid chunk_relid)
 	if (PartChunkCache == NULL)
 	{
 		if (PartChunkCacheCxt == NULL)
+		{
 			PartChunkCacheCxt = AllocSetContextCreate(PortalContext,
 													  "partition chunk cache",
 													  ALLOCSET_DEFAULT_SIZES);
+		}
 
 		HASHCTL ctl;
 		ctl.hcxt =
@@ -86,7 +88,9 @@ ts_partition_cache_insert_chunk(const Hypertable *ht, Oid chunk_relid)
 
 	entry = hash_search(PartChunkCache, &ht->main_table_relid, HASH_ENTER, &found);
 	if (!found)
+	{
 		entry->chunk_oids = NIL;
+	}
 
 	MemoryContext oldctx = MemoryContextSwitchTo(PartChunkCacheCxt);
 	entry->chunk_oids = lappend_oid(entry->chunk_oids, chunk_relid);
@@ -102,7 +106,9 @@ ts_partition_cache_get_by_hypertable(Oid ht_relid)
 	PartChunkCacheEntry *entry;
 
 	if (PartChunkCache == NULL)
+	{
 		return NULL;
+	}
 
 	entry = (PartChunkCacheEntry *) hash_search(PartChunkCache, &ht_relid, HASH_FIND, NULL);
 
@@ -153,7 +159,9 @@ ts_partition_chunk_prepare_attributes(Oid ht_relid, List **attlist, List **const
 		 * Ignore dropped columns in the parent.
 		 */
 		if (attribute->attisdropped)
+		{
 			continue; /* leave newattmap->attnums entry as zero */
+		}
 
 		/*
 		 * Create new column definition
@@ -167,7 +175,9 @@ ts_partition_chunk_prepare_attributes(Oid ht_relid, List **attlist, List **const
 		newdef->storage = attribute->attstorage;
 		newdef->generated = attribute->attgenerated;
 		if (CompressionMethodIsValid(attribute->attcompression))
+		{
 			newdef->compression = pstrdup(GetCompressionMethodName(attribute->attcompression));
+		}
 
 		newdef->inhcount = 0;
 		newdef->is_local = false;
@@ -195,10 +205,12 @@ ts_partition_chunk_prepare_attributes(Oid ht_relid, List **attlist, List **const
 				}
 			}
 			if (this_default == NULL)
+			{
 				elog(ERROR,
 					 "default expression not found for attribute %d of relation \"%s\"",
 					 parent_attno,
 					 RelationGetRelationName(rel));
+			}
 
 			/*
 			 * If it's a GENERATED default, it might contain Vars that
@@ -234,6 +246,7 @@ ts_partition_chunk_prepare_attributes(Oid ht_relid, List **attlist, List **const
 		 * generation expression, so the error message is correct.)
 		 */
 		if (found_whole_row)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot convert whole-row table reference"),
@@ -241,6 +254,7 @@ ts_partition_chunk_prepare_attributes(Oid ht_relid, List **attlist, List **const
 							   "reference to table \"%s\".",
 							   def->colname,
 							   RelationGetRelationName(rel))));
+		}
 
 		Assert(def->raw_default == NULL);
 		def->cooked_default = this_default;
@@ -259,7 +273,9 @@ ts_partition_chunk_prepare_attributes(Oid ht_relid, List **attlist, List **const
 
 			/* ignore if the constraint is non-inheritable */
 			if (constr->check[i].ccnoinherit)
+			{
 				continue;
+			}
 
 			/* Adjust Vars to match new table's column numbering */
 			expr = map_variable_attnos(stringToNode(constr->check[i].ccbin),
@@ -275,9 +291,11 @@ ts_partition_chunk_prepare_attributes(Oid ht_relid, List **attlist, List **const
 			 * but that hasn't been assigned yet.
 			 */
 			if (found_whole_row)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("cannot convert whole-row table reference")));
+			}
 
 			Constraint *c = makeNode(Constraint);
 			c->type = T_Constraint;
@@ -389,9 +407,13 @@ ts_executor_end_hook(QueryDesc *queryDesc)
 	ListCell *lc;
 
 	if (prev_executor_end_hook)
+	{
 		prev_executor_end_hook(queryDesc);
+	}
 	else
+	{
 		standard_ExecutorEnd(queryDesc);
+	}
 
 	/*
 	 * Chunks cannot be created as a partition or attached as partition until
@@ -414,7 +436,9 @@ ts_executor_end_hook(QueryDesc *queryDesc)
 					ts_hypertable_cache_get_entry(hcache, entry->ht_relid, CACHE_FLAG_MISSING_OK);
 
 				if (ht)
+				{
 					partition_chunk_attach(ht, ts_chunk_get_by_relid(lfirst_oid(lc), true));
+				}
 			}
 		}
 

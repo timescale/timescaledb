@@ -98,19 +98,25 @@ ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
 
 	/* TIMESTAMP */
 	for (i64 = -100; i64 < 100; i64++)
+	{
 		TestAssertInt64Eq(i64,
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, TIMESTAMPOID),
 													TIMESTAMPOID));
+	}
 
 	for (i64 = -10000000; i64 < 100000000; i64 += 1000000)
+	{
 		TestAssertInt64Eq(i64,
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, TIMESTAMPOID),
 													TIMESTAMPOID));
+	}
 
 	for (i64 = -1000000000; i64 < 10000000000; i64 += 100000000)
+	{
 		TestAssertInt64Eq(i64,
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, TIMESTAMPOID),
 													TIMESTAMPOID));
+	}
 
 	TestAssertInt64Eq(TS_TIME_NOBEGIN,
 					  ts_time_value_to_internal(TimestampGetDatum(DT_NOBEGIN), TIMESTAMPOID));
@@ -133,19 +139,25 @@ ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
 
 	/* TIMESTAMPTZ */
 	for (i64 = -100; i64 < 100; i64++)
+	{
 		TestAssertInt64Eq(i64,
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, TIMESTAMPTZOID),
 													TIMESTAMPTZOID));
+	}
 
 	for (i64 = -10000000; i64 < 100000000; i64 += 1000000)
+	{
 		TestAssertInt64Eq(i64,
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, TIMESTAMPTZOID),
 													TIMESTAMPTZOID));
+	}
 
 	for (i64 = -1000000000; i64 < 10000000000; i64 += 100000000)
+	{
 		TestAssertInt64Eq(i64,
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, TIMESTAMPTZOID),
 													TIMESTAMPTZOID));
+	}
 
 	TestAssertInt64Eq(TS_TIME_NOBEGIN,
 					  ts_time_value_to_internal(TimestampTzGetDatum(DT_NOBEGIN), TIMESTAMPTZOID));
@@ -169,9 +181,11 @@ ts_test_time_to_internal_conversion(PG_FUNCTION_ARGS)
 	/* DATE */
 
 	for (i64 = -100 * USECS_PER_DAY; i64 < 100 * USECS_PER_DAY; i64 += USECS_PER_DAY)
+	{
 		TestAssertInt64Eq(i64,
 						  ts_time_value_to_internal(ts_internal_to_time_value(i64, DATEOID),
 													DATEOID));
+	}
 	TestAssertInt64Eq(DATEVAL_NOBEGIN,
 					  DatumGetDateADT(ts_internal_to_time_value(PG_INT64_MIN, DATEOID)));
 	TestAssertInt64Eq(DATEVAL_NOEND,
@@ -259,22 +273,28 @@ ts_test_interval_to_internal_conversion(PG_FUNCTION_ARGS)
 
 	/* INTERVAL */
 	for (i64 = -100; i64 < 100; i64++)
+	{
 		TestAssertInt64Eq(i64,
 						  ts_interval_value_to_internal(ts_internal_to_interval_value(i64,
 																					  INTERVALOID),
 														INTERVALOID));
+	}
 
 	for (i64 = -10000000; i64 < 100000000; i64 += 1000000)
+	{
 		TestAssertInt64Eq(i64,
 						  ts_interval_value_to_internal(ts_internal_to_interval_value(i64,
 																					  INTERVALOID),
 														INTERVALOID));
+	}
 
 	for (i64 = -1000000000; i64 < 10000000000; i64 += 100000000)
+	{
 		TestAssertInt64Eq(i64,
 						  ts_interval_value_to_internal(ts_internal_to_interval_value(i64,
 																					  INTERVALOID),
 														INTERVALOID));
+	}
 
 	TestAssertInt64Eq(PG_INT64_MIN,
 					  ts_interval_value_to_internal(ts_internal_to_interval_value(PG_INT64_MIN,

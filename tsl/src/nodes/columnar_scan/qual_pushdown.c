@@ -133,9 +133,11 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 				}
 			}
 			else
+			{
 				compressed_rel->baserestrictinfo =
 					lappend(compressed_rel->baserestrictinfo,
 							make_simple_restrictinfo(root, (Expr *) pushed_down));
+			}
 		}
 
 		/*
@@ -178,7 +180,9 @@ expr_fetch_minmax_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 	*max_attno = InvalidAttrNumber;
 
 	if (!IsA(expr, Var))
+	{
 		return;
+	}
 
 	Var *var = castNode(Var, expr);
 
@@ -187,11 +191,15 @@ expr_fetch_minmax_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 	 * push down the join quals, only the baserestrictinfo.
 	 */
 	if ((Index) var->varno != context->chunk_rel->relid)
+	{
 		return;
+	}
 
 	/* ignore system attributes or whole row references */
 	if (var->varattno <= 0)
+	{
 		return;
+	}
 
 	*min_attno = compressed_column_metadata_attno(context->settings,
 												  context->chunk_rte->relid,
@@ -219,9 +227,13 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 	Expr *orig_rightop = lsecond(expr_args);
 
 	if (IsA(orig_leftop, RelabelType))
+	{
 		orig_leftop = ((RelabelType *) orig_leftop)->arg;
+	}
 	if (IsA(orig_rightop, RelabelType))
+	{
 		orig_rightop = ((RelabelType *) orig_rightop)->arg;
+	}
 
 	/* Find the side that has var with segment meta set expr to the other side */
 	Oid op_oid = orig_opexpr->opno;
@@ -391,7 +403,9 @@ expr_fetch_bloom1_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 	*bloom1_attno = InvalidAttrNumber;
 
 	if (!IsA(expr, Var))
+	{
 		return;
+	}
 
 	Var *var = castNode(Var, expr);
 
@@ -400,11 +414,15 @@ expr_fetch_bloom1_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 	 * push down the join quals, only the baserestrictinfo.
 	 */
 	if ((Index) var->varno != context->chunk_rel->relid)
+	{
 		return;
+	}
 
 	/* ignore system attributes or whole row references */
 	if (var->varattno <= 0)
+	{
 		return;
+	}
 
 	*bloom1_attno = compressed_column_metadata_attno(context->settings,
 													 context->chunk_rte->relid,
@@ -456,16 +474,22 @@ validate_hashable_equality(OpExpr *opexpr, QualPushdownContext *context)
 	info.right_hashable = false;
 
 	if (list_length(opexpr->args) != 2)
+	{
 		return info;
+	}
 
 	Expr *left = linitial(opexpr->args);
 	Expr *right = lsecond(opexpr->args);
 
 	/* Unwrap RelabelType */
 	if (IsA(left, RelabelType))
+	{
 		left = ((RelabelType *) left)->arg;
+	}
 	if (IsA(right, RelabelType))
+	{
 		right = ((RelabelType *) right)->arg;
+	}
 
 	info.left_expr = left;
 	info.right_expr = right;
@@ -473,7 +497,9 @@ validate_hashable_equality(OpExpr *opexpr, QualPushdownContext *context)
 
 	/* Must have valid operator OID */
 	if (!OidIsValid(info.opno))
+	{
 		return info;
+	}
 
 	/* Identify Vars on our relation and validate hash operator for each */
 	if (IsA(left, Var))
@@ -489,7 +515,9 @@ validate_hashable_equality(OpExpr *opexpr, QualPushdownContext *context)
 			{
 				int strategy = get_op_opfamily_strategy(info.opno, tce->hash_opf);
 				if (strategy == HTEqualStrategyNumber)
+				{
 					info.left_hashable = true;
+				}
 			}
 		}
 	}
@@ -507,18 +535,24 @@ validate_hashable_equality(OpExpr *opexpr, QualPushdownContext *context)
 			{
 				int strategy = get_op_opfamily_strategy(info.opno, tce->hash_opf);
 				if (strategy == HTEqualStrategyNumber)
+				{
 					info.right_hashable = true;
+				}
 			}
 		}
 	}
 
 	/* Must have at least one Var on our relation */
 	if (info.left_var == NULL && info.right_var == NULL)
+	{
 		return info;
+	}
 
 	/* Must have at least one Var that passes hashable equality check */
 	if (!info.left_hashable && !info.right_hashable)
+	{
 		return info;
+	}
 
 	info.valid = true;
 	return info;
@@ -553,7 +587,9 @@ extract_var_for_bloom1(OpExpr *opexpr, QualPushdownContext *context, Expr **valu
 	/* Validate the expression */
 	HashableEqualityInfo info = validate_hashable_equality(opexpr, context);
 	if (!info.valid)
+	{
 		return NULL;
+	}
 
 	/* Try to find a Var with bloom metadata that passes hash operator validation. */
 	Var *chosen_var = NULL;
@@ -602,7 +638,9 @@ extract_var_for_bloom1(OpExpr *opexpr, QualPushdownContext *context, Expr **valu
 
 	/* Cannot use non-deterministic collations */
 	if (OidIsValid(op_collation) && !get_collation_isdeterministic(op_collation))
+	{
 		return NULL;
+	}
 
 	*value_out = value_expr_tmp;
 	*op_oid_out = op_oid_tmp;
@@ -717,9 +755,13 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 	Expr *orig_rightop = lsecond(expr_args);
 
 	if (IsA(orig_leftop, RelabelType))
+	{
 		orig_leftop = ((RelabelType *) orig_leftop)->arg;
+	}
 	if (IsA(orig_rightop, RelabelType))
+	{
 		orig_rightop = ((RelabelType *) orig_rightop)->arg;
+	}
 
 	/*
 	 * For scalar array operation, we expect a var on the left side.
@@ -842,7 +884,9 @@ extract_var_for_composite_bloom(OpExpr *opexpr, QualPushdownContext *context, Ex
 	/* Validate the expression */
 	HashableEqualityInfo info = validate_hashable_equality(opexpr, context);
 	if (!info.valid)
+	{
 		return NULL;
+	}
 
 	/* Only one side is a Var. */
 	Var *chosen_var = NULL;
@@ -935,7 +979,9 @@ extract_var_for_composite_bloom(OpExpr *opexpr, QualPushdownContext *context, Ex
 
 		/* Cannot use non-deterministic collations */
 		if (OidIsValid(op_collation) && !get_collation_isdeterministic(op_collation))
+		{
 			return NULL;
+		}
 
 		/*
 		 * Reject non-segmentby Vars in value expression.
@@ -1014,7 +1060,9 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 	{
 		RestrictInfo *ri = lfirst_node(RestrictInfo, lc);
 		if (!IsA(ri->clause, OpExpr))
+		{
 			continue;
+		}
 
 		Expr *value = NULL;
 		Oid op_oid = InvalidOid;
@@ -1029,7 +1077,9 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 
 	/* Check if not enough vars with equality predicates. */
 	if (bms_num_members(var_attnos) < 2)
+	{
 		return;
+	}
 
 	/* Parse settings to get per-column compression settings. */
 	SparseIndexSettings *parsed = ts_convert_to_sparse_index_settings(settings->fd.index);

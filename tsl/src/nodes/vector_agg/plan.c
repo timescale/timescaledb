@@ -477,7 +477,9 @@ static bool
 vectoragg_plan_possible(Plan *childplan, VectorQualInfo *vqi)
 {
 	if (!IsA(childplan, CustomScan))
+	{
 		return false;
+	}
 
 	if (childplan->qual != NIL)
 	{
@@ -498,7 +500,9 @@ static Node *
 mark_partial_aggref_mutator(Node *node, void *context)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 
 	if (IsA(node, Aggref))
 	{
@@ -519,7 +523,9 @@ static Node *
 make_finalize_agg_mutator(Node *node, void *context)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 
 	if (IsA(node, TargetEntry))
 	{
@@ -535,7 +541,9 @@ make_finalize_agg_mutator(Node *node, void *context)
 			for (int k = 0; k < ctx->agg->numCols; k++)
 			{
 				if (ctx->agg->grpColIdx[k] == old_attno)
+				{
 					ctx->agg->grpColIdx[k] = tle->resno;
+				}
 			}
 			return node;
 		}

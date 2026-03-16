@@ -47,7 +47,9 @@ create_datum_serializer(Oid type_oid)
 	Form_pg_type type;
 	HeapTuple tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_oid));
 	if (!HeapTupleIsValid(tup))
+	{
 		elog(ERROR, "cache lookup failed for type %u", type_oid);
+	}
 	type = (Form_pg_type) GETSTRUCT(tup);
 
 	*res = (DatumSerializer){
@@ -75,14 +77,20 @@ static inline void
 load_send_fn(DatumSerializer *serializer)
 {
 	if (serializer->send_info_set)
+	{
 		return;
+	}
 
 	serializer->send_info_set = true;
 
 	if (serializer->use_binary_send)
+	{
 		fmgr_info(serializer->type_send, &serializer->send_flinfo);
+	}
 	else
+	{
 		fmgr_info(serializer->type_out, &serializer->send_flinfo);
+	}
 }
 
 #define TYPE_IS_PACKABLE(typlen, typstorage) ((typlen) == -1 && (typstorage) != 'p')
@@ -138,7 +146,9 @@ static void
 check_allowed_data_len(Size data_length, Size max_size)
 {
 	if (max_size < data_length)
+	{
 		elog(ERROR, "trying to serialize more data than was allocated");
+	}
 }
 
 static inline char *
@@ -265,7 +275,9 @@ create_datum_deserializer(Oid type_oid)
 	Form_pg_type type;
 	HeapTuple tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_oid));
 	if (!HeapTupleIsValid(tup))
+	{
 		elog(ERROR, "cache lookup failed for type %u", type_oid);
+	}
 	type = (Form_pg_type) GETSTRUCT(tup);
 
 	*res = (DatumDeserializer){
@@ -287,15 +299,21 @@ static inline void
 load_recv_fn(DatumDeserializer *des, bool use_binary)
 {
 	if (des->recv_info_set && des->use_binary_recv == use_binary)
+	{
 		return;
+	}
 
 	des->recv_info_set = true;
 	des->use_binary_recv = use_binary;
 
 	if (des->use_binary_recv)
+	{
 		fmgr_info(des->type_recv, &des->recv_flinfo);
+	}
 	else
+	{
 		fmgr_info(des->type_in, &des->recv_flinfo);
+	}
 }
 
 /* Loosely based on `range_deserialize` in rangetypes.c */
@@ -340,7 +358,9 @@ type_append_to_binary_string(Oid type_oid, StringInfo buffer)
 	HeapTuple tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_oid));
 	char *namespace_name;
 	if (!HeapTupleIsValid(tup))
+	{
 		elog(ERROR, "cache lookup failed for type %u", type_oid);
+	}
 
 	type_tuple = (Form_pg_type) GETSTRUCT(tup);
 
@@ -378,9 +398,13 @@ datum_append_to_binary_string(DatumSerializer *serializer, BinaryStringEncoding 
 	load_send_fn(serializer);
 
 	if (encoding == MESSAGE_SPECIFIES_ENCODING)
+	{
 		pq_sendbyte(buffer, serializer->use_binary_send);
+	}
 	else if (encoding != datum_serializer_binary_string_encoding(serializer))
+	{
 		elog(ERROR, "incorrect encoding chosen in datum_append_to_binary_string");
+	}
 
 	if (serializer->use_binary_send)
 	{

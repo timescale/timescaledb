@@ -430,7 +430,9 @@ compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is_
 		*is_default_value = true;
 	}
 	else
+	{
 		*is_default_value = false;
+	}
 
 	return vector;
 }

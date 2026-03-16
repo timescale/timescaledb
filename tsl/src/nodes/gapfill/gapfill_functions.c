@@ -14,9 +14,13 @@ Datum
 gapfill_marker(PG_FUNCTION_ARGS)
 {
 	if (PG_ARGISNULL(0))
+	{
 		PG_RETURN_NULL();
+	}
 	else
+	{
 		PG_RETURN_DATUM(PG_GETARG_DATUM(0));
+	}
 }
 
 #define GAPFILL_TIMEBUCKET_WRAPPER(datatype)                                                       \
@@ -48,7 +52,9 @@ gapfill_timestamptz_timezone_time_bucket(PG_FUNCTION_ARGS)
 	 * is not we need to add explicit checks for NULL here
 	 */
 	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+	{
 		PG_RETURN_NULL();
+	}
 	return DirectFunctionCall3(ts_timestamptz_timezone_bucket,
 							   PG_GETARG_DATUM(0),
 							   PG_GETARG_DATUM(1),

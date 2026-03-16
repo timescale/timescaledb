@@ -427,11 +427,15 @@ bloom1_hash_values(void *hasher_, const NullableDatum *values)
 	uint64 accumulated = 0;
 
 	if (values[0].isnull)
+	{
 		accumulated = NULL_MARKER;
+	}
 	else
+	{
 		accumulated = batch_metadata_builder_bloom1_calculate_hash(hasher->hash_functions[0],
 																   hasher->hash_function_finfos[0],
 																   values[0].value);
+	}
 
 	for (int i = 1; i < num_columns; i++)
 	{
@@ -466,7 +470,9 @@ bloom1_update_row(void *builder_, TupleTableSlot *slot)
 
 	/* For single-column blooms, skip NULLs to match old bloom1_update_null (no-op) behavior. */
 	if (num_columns == 1 && values[0].isnull)
+	{
 		return;
+	}
 
 	uint64 hash = hasher->hash_values(hasher, values);
 	batch_metadata_builder_bloom1_update_bloom_filter_with_hash(builder->bloom_varlena, hash);
@@ -518,14 +524,18 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 
 			num_columns = tupdesc->natts;
 			if (num_columns > MAX_BLOOM_FILTER_COLUMNS)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_DATA_EXCEPTION),
 						 errmsg("composite bloom filter supports at most %d columns, got %d",
 								MAX_BLOOM_FILTER_COLUMNS,
 								num_columns)));
+			}
 
 			for (int i = 0; i < num_columns; i++)
+			{
 				type_oids[i] = TupleDescAttr(tupdesc, i)->atttypid;
+			}
 			ReleaseTupleDesc(tupdesc);
 		}
 		else
@@ -627,7 +637,9 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	{
 		HeapTupleHeader tuple = DatumGetHeapTupleHeader(PG_GETARG_DATUM(1));
 		for (int i = 0; i < context->bloom_hasher.functions.num_columns; i++)
+		{
 			values[i].value = GetAttributeByNum(tuple, i + 1, &values[i].isnull);
+		}
 	}
 	else
 	{
@@ -838,10 +850,12 @@ bloom1_hasher_init(Bloom1HasherInternal *hasher, const Oid *type_oids, int num_c
 		hasher->hash_functions[i] =
 			bloom1_get_hash_function(type_oids[i], &hasher->hash_function_finfos[i]);
 		if (hasher->hash_functions[i] == NULL)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("the argument type %s lacks an extended hash function",
 							format_type_be(type_oids[i]))));
+		}
 	}
 }
 
@@ -920,10 +934,12 @@ ts_bloom1_debug_info(PG_FUNCTION_ARGS)
 	/* Build a tuple descriptor for our result type */
 	TupleDesc tuple_desc;
 	if (get_call_result_type(fcinfo, NULL, &tuple_desc) != TYPEFUNC_COMPOSITE)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
+	}
 
 	/* Output columns of this function. */
 	enum
@@ -1007,7 +1023,9 @@ Datum
 ts_bloom1_composite_debug_hash(PG_FUNCTION_ARGS)
 {
 	if (PG_ARGISNULL(0))
+	{
 		PG_RETURN_NULL();
+	}
 
 	HeapTupleHeader tuple = DatumGetHeapTupleHeader(PG_GETARG_DATUM(0));
 	Oid tupType = HeapTupleHeaderGetTypeId(tuple);
@@ -1016,22 +1034,28 @@ ts_bloom1_composite_debug_hash(PG_FUNCTION_ARGS)
 
 	int num_fields = tupdesc->natts;
 	if (num_fields < 2 || num_fields > MAX_BLOOM_FILTER_COLUMNS)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("composite bloom requires 2-%d fields, got %d",
 						MAX_BLOOM_FILTER_COLUMNS,
 						num_fields)));
+	}
 
 	Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
 	for (int i = 0; i < num_fields; i++)
+	{
 		type_oids[i] = TupleDescAttr(tupdesc, i)->atttypid;
+	}
 	ReleaseTupleDesc(tupdesc);
 
 	Bloom1Hasher *hasher = bloom1_hasher_create(type_oids, num_fields);
 
 	NullableDatum values[MAX_BLOOM_FILTER_COLUMNS];
 	for (int i = 0; i < num_fields; i++)
+	{
 		values[i].value = GetAttributeByNum(tuple, i + 1, &values[i].isnull);
+	}
 
 	uint64 hash = hasher->hash_values(hasher, values);
 	PG_RETURN_INT64((int64) hash);
@@ -1048,7 +1072,9 @@ bloom1_contains_hash(Datum bloom_datum, uint64 hash)
 {
 	struct varlena *bloom = DatumGetByteaPP(bloom_datum);
 	if (bloom == NULL)
+	{
 		return true; /* No bloom = might match */
+	}
 
 	const char *words_buf = VARDATA_ANY(bloom);
 	const uint32 num_bits = 8 * VARSIZE_ANY_EXHDR(bloom);

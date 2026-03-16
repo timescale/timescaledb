@@ -147,7 +147,9 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_raw_hypertable_id)] = rawht_id;
 
 	if (parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)] = true;
+	}
 	else
 	{
 		values[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)] =
@@ -290,9 +292,11 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 											 NULL,
 											 chunk_sizing_info);
 	if (!created)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not create materialization hypertable")));
+	}
 }
 
 /*
@@ -340,7 +344,9 @@ mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matco
 		indxtuple = SearchSysCache1(RELOID, ObjectIdGetDatum(indxaddr.objectId));
 
 		if (!HeapTupleIsValid(indxtuple))
+		{
 			elog(ERROR, "cache lookup failed for index relid %u", indxaddr.objectId);
+		}
 		indxname = ((Form_pg_class) GETSTRUCT(indxtuple))->relname;
 		elog(DEBUG1,
 			 "adding index %s ON %s.%s USING BTREE(%s, %s)",
@@ -424,7 +430,9 @@ create_materialization_table(MaterializationHypertableColumnInfo *matcolinfo, in
 
 	/* Create additional index on the group-by columns for the materialization table. */
 	if (create_addl_index)
+	{
 		mattablecolumninfo_add_mattable_index(matcolinfo, mat_ht);
+	}
 
 	/*
 	 * Initialize the invalidation log for the cagg. Initially, everything is
@@ -522,16 +530,22 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
 
 			/* Junk columns don't get aliases. */
 			if (tle->resjunk)
+			{
 				continue;
+			}
 			tle->resname = pstrdup(strVal(lfirst(alist_item)));
 			alist_item = lnext(tlist_aliases, alist_item);
 			if (alist_item == NULL)
+			{
 				break; /* done assigning aliases */
+			}
 		}
 
 		if (alist_item != NULL)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR), errmsg("too many column names specified")));
+		}
 	}
 }
 
@@ -620,7 +634,9 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 		/* Apply the factor just for non-Hierachical CAggs */
 		if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
+		{
 			matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;
+		}
 	}
 
 	/*
@@ -666,11 +682,13 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 													mat_rel->relname);
 
 	if (!materialized_only)
+	{
 		final_selquery = build_union_query(bucket_info,
 										   mattblinfo.matpartcolno,
 										   final_selquery,
 										   panquery,
 										   materialize_hypertable_id);
+	}
 
 	/* Copy view acl to materialization hypertable. */
 	ObjectAddress view_address = create_view_for_query(final_selquery, stmt->view);
@@ -962,7 +980,9 @@ sync_target_list_names(List *targetList, TupleDesc desc)
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
 		if (tle->resjunk)
+		{
 			break;
+		}
 		FormData_pg_attribute *attr = TupleDescAttr(desc, i);
 		tle->resname = NameStr(attr->attname);
 		++i;
@@ -1032,7 +1052,9 @@ cagg_rename_view_columns(ContinuousAgg *agg)
 		{
 			RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
 			if (rte->rtekind == RTE_SUBQUERY && rte->subquery)
+			{
 				sync_target_list_names(rte->subquery->targetList, user_desc);
+			}
 		}
 	}
 

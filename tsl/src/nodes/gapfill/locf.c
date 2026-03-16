@@ -21,19 +21,25 @@ gapfill_locf_initialize(GapFillLocfColumnState *locf, GapFillState *state, FuncE
 
 	/* check if out of boundary lookup expression was supplied */
 	if (list_length(function->args) > 1)
+	{
 		locf->lookup_last = gapfill_adjust_varnos(state, lsecond(function->args));
+	}
 
 	/* check if treat_null_as_missing was supplied */
 	if (list_length(function->args) > 2)
 	{
 		Const *treat_null_as_missing = lthird(function->args);
 		if (!IsA(treat_null_as_missing, Const) || treat_null_as_missing->consttype != BOOLOID)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg(
 						 "invalid locf argument: treat_null_as_missing must be a BOOL literal")));
+		}
 		if (!treat_null_as_missing->constisnull)
+		{
 			locf->treat_null_as_missing = DatumGetBool(treat_null_as_missing->constvalue);
+		}
 	}
 }
 
@@ -54,7 +60,9 @@ gapfill_locf_tuple_returned(GapFillLocfColumnState *locf, Datum value, bool isnu
 {
 	locf->isnull = isnull;
 	if (!isnull)
+	{
 		locf->value = datumCopy(value, locf->base.typbyval, locf->base.typlen);
+	}
 }
 
 /*
@@ -66,7 +74,9 @@ gapfill_locf_calculate(GapFillLocfColumnState *locf, GapFillState *state, TupleT
 {
 	/* only evaluate expr for first tuple */
 	if (locf->isnull && locf->lookup_last && time == state->gapfill_start)
+	{
 		locf->value = gapfill_exec_expr(state, ecxt_slot, locf->lookup_last, &locf->isnull);
+	}
 
 	*value = locf->value;
 	*isnull = locf->isnull;

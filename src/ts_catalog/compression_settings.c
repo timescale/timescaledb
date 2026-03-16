@@ -135,45 +135,71 @@ compression_settings_fill_from_tuple(CompressionSettings *settings, TupleInfo *t
 	fd->relid = DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_compression_settings_relid)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_compress_relid)])
+	{
 		fd->compress_relid = InvalidOid;
+	}
 	else
+	{
 		fd->compress_relid = DatumGetObjectId(
 			values[AttrNumberGetAttrOffset(Anum_compression_settings_compress_relid)]);
+	}
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_segmentby)])
+	{
 		fd->segmentby = NULL;
+	}
 	else
+	{
 		fd->segmentby = DatumGetArrayTypePCopy(
 			values[AttrNumberGetAttrOffset(Anum_compression_settings_segmentby)]);
+	}
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_orderby)])
+	{
 		fd->orderby = NULL;
+	}
 	else
+	{
 		fd->orderby = DatumGetArrayTypePCopy(
 			values[AttrNumberGetAttrOffset(Anum_compression_settings_orderby)]);
+	}
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_desc)])
+	{
 		fd->orderby_desc = NULL;
+	}
 	else
+	{
 		fd->orderby_desc = DatumGetArrayTypePCopy(
 			values[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_desc)]);
+	}
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_nullsfirst)])
+	{
 		fd->orderby_nullsfirst = NULL;
+	}
 	else
+	{
 		fd->orderby_nullsfirst = DatumGetArrayTypePCopy(
 			values[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_nullsfirst)]);
+	}
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_index)])
+	{
 		fd->index = NULL;
+	}
 	else
+	{
 		fd->index =
 			DatumGetJsonbPCopy(values[AttrNumberGetAttrOffset(Anum_compression_settings_index)]);
+	}
 
 	MemoryContextSwitchTo(old);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 }
 
 static void
@@ -209,7 +235,9 @@ compression_settings_get(Oid relid, bool by_compress_relid)
 	ts_scanner_start_scan(&iterator.ctx);
 	TupleInfo *ti = ts_scanner_next(&iterator.ctx);
 	if (!ti)
+	{
 		return NULL;
+	}
 
 	settings = palloc0(sizeof(CompressionSettings));
 	compression_settings_fill_from_tuple(settings, ti);
@@ -253,7 +281,9 @@ static bool
 compression_settings_delete(Oid relid, bool by_compress_relid)
 {
 	if (!OidIsValid(relid))
+	{
 		return false;
+	}
 
 	int count = 0;
 	ScanIterator iterator =
@@ -295,7 +325,9 @@ TSDLLEXPORT bool
 ts_compression_settings_delete_any(Oid relid)
 {
 	if (!ts_compression_settings_delete(relid))
+	{
 		return ts_compression_settings_delete_by_compress_relid(relid);
+	}
 	return true;
 }
 
@@ -318,13 +350,17 @@ compression_settings_rename_column(CompressionSettings *settings, const char *ol
 			{
 				Assert(obj != NULL);
 				if (!obj)
+				{
 					continue;
+				}
 
 				foreach_ptr(SparseIndexSettingsPair, pair, obj->pairs)
 				{
 					Assert(pair != NULL);
 					if (!pair)
+					{
 						continue;
+					}
 
 					ListCell *value_cell = NULL;
 					foreach (value_cell, pair->values)
@@ -332,7 +368,9 @@ compression_settings_rename_column(CompressionSettings *settings, const char *ol
 						const char *value = (const char *) lfirst(value_cell);
 						Assert(value != NULL);
 						if (!value)
+						{
 							continue;
+						}
 
 						if (strcmp(value, old) == 0)
 						{
@@ -361,7 +399,9 @@ ts_compression_settings_rename_column_cascade(Oid parent_relid, const char *old,
 	CompressionSettings *settings = ts_compression_settings_get(parent_relid);
 
 	if (settings)
+	{
 		compression_settings_rename_column(settings, old, new);
+	}
 
 	List *children = find_inheritance_children(parent_relid, NoLock);
 	ListCell *lc;
@@ -373,7 +413,9 @@ ts_compression_settings_rename_column_cascade(Oid parent_relid, const char *old,
 		settings = ts_compression_settings_get(relid);
 
 		if (settings)
+		{
 			compression_settings_rename_column(settings, old, new);
+		}
 	}
 }
 
@@ -487,40 +529,64 @@ compression_settings_formdata_make_tuple(const FormData_compression_settings *fd
 	values[AttrNumberGetAttrOffset(Anum_compression_settings_relid)] = ObjectIdGetDatum(fd->relid);
 
 	if (OidIsValid(fd->compress_relid))
+	{
 		values[AttrNumberGetAttrOffset(Anum_compression_settings_compress_relid)] =
 			ObjectIdGetDatum(fd->compress_relid);
+	}
 	else
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_compression_settings_compress_relid)] = true;
+	}
 
 	if (fd->segmentby)
+	{
 		values[AttrNumberGetAttrOffset(Anum_compression_settings_segmentby)] =
 			PointerGetDatum(fd->segmentby);
+	}
 	else
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_compression_settings_segmentby)] = true;
+	}
 
 	if (fd->orderby)
+	{
 		values[AttrNumberGetAttrOffset(Anum_compression_settings_orderby)] =
 			PointerGetDatum(fd->orderby);
+	}
 	else
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_compression_settings_orderby)] = true;
+	}
 
 	if (fd->orderby_desc)
+	{
 		values[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_desc)] =
 			PointerGetDatum(fd->orderby_desc);
+	}
 	else
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_desc)] = true;
+	}
 
 	if (fd->orderby_nullsfirst)
+	{
 		values[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_nullsfirst)] =
 			PointerGetDatum(fd->orderby_nullsfirst);
+	}
 	else
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_nullsfirst)] = true;
+	}
 
 	if (fd->index)
+	{
 		values[AttrNumberGetAttrOffset(Anum_compression_settings_index)] =
 			JsonbPGetDatum(fd->index);
+	}
 	else
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_compression_settings_index)] = true;
+	}
 
 	return heap_form_tuple(desc, values, nulls);
 }
@@ -600,7 +666,9 @@ ts_contains_sparse_index_config(CompressionSettings *settings, const char *attna
 {
 	bool result = false;
 	if (settings == NULL || settings->fd.index == NULL || attname == NULL)
+	{
 		return false;
+	}
 
 	SparseIndexSettings *parsed = ts_convert_to_sparse_index_settings(settings->fd.index);
 
@@ -761,7 +829,9 @@ ts_remove_orderby_sparse_index(CompressionSettings *settings)
 
 	/* this is a possible edge case, log it just in case */
 	if (!removed)
+	{
 		elog(LOG, "orderby settings existed, but no orderby sparse index was removed");
+	}
 
 	return has_object ? JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL)) : NULL;
 }
@@ -796,15 +866,21 @@ ts_convert_to_sparse_index_settings(Jsonb *jsonb)
 	Assert(jsonb != NULL);
 
 	if (jsonb == NULL)
+	{
 		return NULL;
+	}
 
 	if (JB_ROOT_IS_SCALAR(jsonb))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot convert scalar to SparseIndexSettings")));
+	}
 
 	if (JB_ROOT_COUNT(jsonb) == 0)
+	{
 		return NULL;
+	}
 
 	it = JsonbIteratorInit(&jsonb->root);
 
@@ -884,11 +960,13 @@ ts_convert_to_sparse_index_settings(Jsonb *jsonb)
 					/* We can ignore one begin array, but more than one is not allowed as we don't
 					 * support nested arrays */
 					if (num_arrays > 1)
+					{
 						ereport(ERROR,
 								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 								 errmsg("Jsonb value is of type \"%s\", but expected of type begin "
 										"object or end object, in state INIT",
 										JsonbTypeName(&jsonb_value))));
+					}
 				}
 				else
 				{
@@ -1050,10 +1128,14 @@ ts_convert_from_sparse_index_settings(SparseIndexSettings *settings)
 
 	Assert(settings != NULL);
 	if (settings == NULL)
+	{
 		return NULL;
+	}
 
 	if (list_length(settings->objects) == 0)
+	{
 		return NULL;
+	}
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_ARRAY, NULL);
 	foreach_ptr(SparseIndexSettingsObject, obj, settings->objects)
@@ -1105,10 +1187,14 @@ void
 ts_free_sparse_index_settings(SparseIndexSettings *settings)
 {
 	if (settings == NULL)
+	{
 		return;
+	}
 
 	if (settings->context != NULL)
+	{
 		MemoryContextDelete(settings->context);
+	}
 }
 
 const char *
@@ -1123,14 +1209,18 @@ ts_sparse_index_settings_to_cstring(const SparseIndexSettings *settings)
 	foreach_ptr(SparseIndexSettingsObject, obj, settings->objects)
 	{
 		if (i > 0)
+		{
 			appendStringInfo(&buf, ", ");
+		}
 		appendStringInfo(&buf, "{");
 
 		j = 0;
 		foreach_ptr(SparseIndexSettingsPair, pair, obj->pairs)
 		{
 			if (j > 0)
+			{
 				appendStringInfo(&buf, ", ");
+			}
 			escape_json(&buf, pair->key);
 			appendStringInfo(&buf, ": ");
 
@@ -1145,7 +1235,9 @@ ts_sparse_index_settings_to_cstring(const SparseIndexSettings *settings)
 				foreach_ptr(const char, value, pair->values)
 				{
 					if (k > 0)
+					{
 						appendStringInfo(&buf, ", ");
+					}
 					escape_json(&buf, value);
 					k++;
 				}
@@ -1179,7 +1271,9 @@ List *
 ts_get_per_column_compression_settings(const SparseIndexSettings *settings)
 {
 	if (settings == NULL)
+	{
 		return NIL;
+	}
 
 	List *result_settings = NIL;
 	int obj_id = 0;

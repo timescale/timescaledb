@@ -142,7 +142,9 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 	if (dimvalues->use_or && list_length(dimvalues->values) > 1)
 	{
 		if (strategy != BTEqualStrategyNumber)
+		{
 			return false;
+		}
 
 		int64 min_val = PG_INT64_MAX;
 		int64 max_val = PG_INT64_MIN;
@@ -151,9 +153,13 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 		{
 			int64 value = DatumGetInt64(PointerGetDatum(lfirst(lc)));
 			if (value < min_val)
+			{
 				min_val = value;
+			}
 			if (value > max_val)
+			{
 				max_val = value;
+			}
 		}
 		dri->lower_bound = min_val;
 		dri->upper_bound = max_val;
@@ -256,7 +262,9 @@ dimension_restrict_info_closed_add(DimensionRestrictInfoClosed *dri, StrategyNum
 	{
 		/* intersection with NULL is NULL */
 		if (dri->partitions == NIL)
+		{
 			return true;
+		}
 
 		/*
 		 * We are always ANDing the expressions thus intersection is used.
@@ -277,7 +285,9 @@ ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
 	 */
 	ChunkRangeSpace *range_space = ht->range_space;
 	if (!ts_guc_enable_chunk_skipping)
+	{
 		range_space = NULL;
+	}
 
 	int num_dimensions =
 		ht->space->num_dimensions + (range_space ? range_space->num_range_cols : 0);
@@ -319,7 +329,9 @@ hypertable_restrict_info_get(HypertableRestrictInfo *hri, AttrNumber attno)
 	for (i = 0; i < hri->num_dimensions; i++)
 	{
 		if (hri->dimension_restriction[i]->dimension->column_attno == attno)
+		{
 			return hri->dimension_restriction[i];
+		}
 	}
 	return NULL;
 }
@@ -343,18 +355,24 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	dri = hypertable_restrict_info_get(hri, v->varattno);
 	/* the attribute is not a dimension */
 	if (dri == NULL)
+	{
 		return;
+	}
 
 	expr = (Expr *) eval_const_expressions(root, (Node *) expr);
 
 	if (!IsA(expr, Const) || !OidIsValid(op_oid) || !op_strict(op_oid))
+	{
 		return;
+	}
 
 	c = (Const *) expr;
 
 	/* quick check for a NULL constant */
 	if (c->constisnull)
+	{
 		return;
+	}
 
 	rte = rt_fetch(v->varno, root->parse->rtable);
 
@@ -362,7 +380,9 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	tce = lookup_type_cache(columntype, TYPECACHE_BTREE_OPFAMILY);
 
 	if (!op_in_opfamily(op_oid, tce->btree_opf))
+	{
 		return;
+	}
 
 	get_op_opfamily_properties(op_oid, tce->btree_opf, false, &strategy, &lefttype, &righttype);
 
@@ -375,7 +395,9 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	Oid const_element_type = get_element_type(consttype);
 	bool is_array = OidIsValid(const_element_type);
 	if (is_array)
+	{
 		consttype = const_element_type;
+	}
 
 	/*
 	 * Coerce literal values to column type if needed. Coercion is required when
@@ -461,7 +483,9 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 											   strategy,
 											   c->constcollid,
 											   dimvalues))
+		{
 			hri->num_base_restrictions++;
+		}
 	}
 	else
 	{
@@ -498,7 +522,9 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 		if (dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
 											 strategy,
 											 dimvalues))
+		{
 			hri->num_base_restrictions++;
+		}
 	}
 }
 
@@ -527,15 +553,19 @@ dimension_values_create_from_array(Const *c, bool user_or)
 	while (array_iterate(iterator, &elem, &isnull))
 	{
 		if (!isnull)
+		{
 			values = lappend(values, DatumGetPointer(elem));
+		}
 	}
 
 	/* it's an array type, lets get the base element type */
 	base_el_type = get_element_type(c->consttype);
 	if (!OidIsValid(base_el_type))
+	{
 		elog(ERROR,
 			 "invalid base element type for array type: \"%s\"",
 			 format_type_be(c->consttype));
+	}
 
 	return dimension_values_create(values, base_el_type, user_or);
 }
@@ -560,7 +590,9 @@ hypertable_restrict_info_add_restrict_info(HypertableRestrictInfo *hri, PlannerI
 
 	/* Same as constraint_exclusion */
 	if (contain_mutable_functions((Node *) e))
+	{
 		return;
+	}
 
 	if (ts_extract_expr_args(e, &var, &arg_value, &opno, NULL))
 	{
@@ -616,7 +648,9 @@ static DimensionVec *
 scan_and_append_slices(ScanIterator *it, int old_nkeys, DimensionVec **dv, bool unique)
 {
 	if (old_nkeys != -1 && old_nkeys != it->ctx.nkeys)
+	{
 		ts_scan_iterator_end(it);
+	}
 
 	ts_scan_iterator_start_or_restart_scan(it);
 
@@ -628,9 +662,13 @@ scan_and_append_slices(ScanIterator *it, int old_nkeys, DimensionVec **dv, bool 
 		if (NULL != slice)
 		{
 			if (unique)
+			{
 				*dv = ts_dimension_vec_add_unique_slice(dv, slice);
+			}
 			else
+			{
 				*dv = ts_dimension_vec_add_slice(dv, slice);
+			}
 		}
 	}
 
@@ -857,7 +895,9 @@ ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *
 
 				if (range_invalid &&
 					ts_flags_are_set_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS))
+				{
 					chunk_ids = list_append_unique_int(chunk_ids, osm_chunk_id);
+				}
 			}
 		}
 	}
@@ -883,7 +923,9 @@ chunk_cmp_impl(const Chunk *c1, const Chunk *c2)
 	int cmp = ts_dimension_slice_cmp(c1->cube->slices[0], c2->cube->slices[0]);
 
 	if (cmp == 0)
+	{
 		cmp = VALUE_CMP(c1->fd.id, c2->fd.id);
+	}
 
 	return cmp;
 }
@@ -926,15 +968,21 @@ ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hype
 	}
 
 	if (*num_chunks == 0)
+	{
 		return NULL;
+	}
 
 	Assert(ht->space->num_dimensions > 0);
 	Assert(IS_OPEN_DIMENSION(&ht->space->dimensions[0]));
 
 	if (reverse)
+	{
 		qsort((void *) chunks, *num_chunks, sizeof(Chunk *), chunk_cmp_reverse);
+	}
 	else
+	{
 		qsort((void *) chunks, *num_chunks, sizeof(Chunk *), chunk_cmp);
+	}
 
 	for (i = 0; i < *num_chunks; i++)
 	{
@@ -948,13 +996,17 @@ ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrictInfo *hri, Hype
 		}
 
 		if (NULL != nested_oids)
+		{
 			slot_chunk_oids = lappend_oid(slot_chunk_oids, chunk->table_id);
+		}
 
 		slice = chunk->cube->slices[0];
 	}
 
 	if (slot_chunk_oids != NIL)
+	{
 		*nested_oids = lappend(*nested_oids, slot_chunk_oids);
+	}
 
 	return chunks;
 }

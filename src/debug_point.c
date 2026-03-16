@@ -103,9 +103,11 @@ debug_point_release(const DebugPoint *point)
 	ereport(DEBUG1, (errmsg("releasing debug point \"%s\"", point->name)));
 
 	if (!LockRelease(&point->tag, ExclusiveLock, true))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("cannot release debug point \"%s\"", point->name)));
+	}
 }
 
 /*
@@ -122,7 +124,9 @@ ts_debug_point_enable(PG_FUNCTION_ARGS)
 	DebugPoint point;
 
 	if (PG_ARGISNULL(0))
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
+	}
 
 	debug_point_init(&point, text_to_cstring(name));
 	debug_point_enable(&point);
@@ -140,7 +144,9 @@ ts_debug_point_release(PG_FUNCTION_ARGS)
 	DebugPoint point;
 
 	if (PG_ARGISNULL(0))
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
+	}
 
 	debug_point_init(&point, text_to_cstring(name));
 	debug_point_release(&point);
@@ -157,7 +163,9 @@ ts_debug_point_id(PG_FUNCTION_ARGS)
 	text *name = PG_GETARG_TEXT_PP(0);
 
 	if (PG_ARGISNULL(0))
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
+	}
 
 	PG_RETURN_UINT64(debug_point_name_to_id(text_to_cstring(name)));
 }
@@ -184,14 +192,18 @@ ts_debug_point_wait(const char *name, bool blocking)
 
 	/* Ensure that we are in a transaction before trying for locks */
 	if (!IsTransactionState())
+	{
 		return;
+	}
 
 	debug_point_init(&point, name);
 
 	ereport(DEBUG3, (errmsg("waiting on debug point '%s'", point.name)));
 
 	if (blocking)
+	{
 		lock_acquire_result = LockAcquire(&point.tag, ShareLock, true, false);
+	}
 	else
 	{
 		/*
@@ -213,11 +225,15 @@ ts_debug_point_wait(const char *name, bool blocking)
 			lock_acquire_result = LockAcquire(&point.tag, ShareLock, true, true);
 
 			if (lock_acquire_result == LOCKACQUIRE_OK)
+			{
 				break;
+			}
 
 			/* don't dare to take a lock when the proc is exiting! */
 			if (proc_exit_inprogress || ProcDiePending)
+			{
 				return;
+			}
 
 			if (retry_count == 0)
 			{
@@ -264,7 +280,9 @@ ts_debug_point_raise_error_if_enabled(const char *name)
 			/* Release/decrement lock count */
 			LockRelease(&point.tag, ExclusiveLock, true);
 			if (lock_acquire_result == LOCKACQUIRE_OK)
+			{
 				return;
+			}
 			break;
 		case LOCKACQUIRE_NOT_AVAIL:
 			break;

@@ -107,17 +107,21 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 		if (ctr->single_chunk_insert)
 		{
 			if (!chunk || chunk->table_id != RelationGetRelid(ctr->root_rri->ri_RelationDesc))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_CHECK_VIOLATION),
 						 errmsg("new row for relation \"%s\" violates chunk constraint",
 								RelationGetRelationName(ctr->root_rri->ri_RelationDesc))));
+			}
 		}
 
 		if (chunk && ts_chunk_is_frozen(chunk))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot INSERT into frozen chunk \"%s\"",
 							get_rel_name(chunk->table_id))));
+		}
 
 		if (chunk && IS_OSM_CHUNK(chunk))
 		{
@@ -200,7 +204,9 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 
 				/* mark chunk as partial unless completely new chunk */
 				if (!chunk_created)
+				{
 					needs_partial = true;
+				}
 			}
 		}
 
@@ -227,7 +233,9 @@ ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis, ResultRelInf
 {
 	if (!cis->chunk_compressed || (cis->cached_decompression_state &&
 								   !cis->cached_decompression_state->has_primary_or_unique_index))
+	{
 		return;
+	}
 
 	/*
 	 * If this is an INSERT into a compressed chunk with UNIQUE or
@@ -252,7 +260,9 @@ ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis, ResultRelInf
 
 	/* mark rows visible */
 	if (update_counter)
+	{
 		estate->es_output_cid = GetCurrentCommandId(true);
+	}
 
 	if (ts_guc_max_tuples_decompressed_per_dml > 0)
 	{

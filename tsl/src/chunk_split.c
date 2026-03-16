@@ -179,7 +179,9 @@ relation_split_info_cleanup(RelationWriteState *rws, int ti_options)
 	pfree(rws->isnull);
 
 	if (rws->tupmap)
+	{
 		free_conversion_map(rws->tupmap);
+	}
 
 	rws->targetrel = NULL;
 	rws->bistate = NULL;
@@ -227,7 +229,9 @@ reform_and_rewrite_tuple(HeapTuple tuple, Relation srcrel, RelationWriteState *r
 		for (i = 0; i < newTupDesc->natts; i++)
 		{
 			if (TupleDescAttr(newTupDesc, i)->attisdropped)
+			{
 				rws->isnull[i] = true;
+			}
 		}
 
 		tupcopy = heap_form_tuple(newTupDesc, rws->values, rws->isnull);
@@ -303,10 +307,14 @@ route_compressed_tuple(TupleTableSlot *slot, const SplitPoint *sp)
 	int64 max_point = ts_time_value_to_internal(max_value, dimtype);
 
 	if (max_point < sp->point)
+	{
 		return 0;
+	}
 
 	if (min_point >= sp->point)
+	{
 		return 1;
+	}
 
 	Assert(min_point < sp->point && max_point >= sp->point);
 	return -1;
@@ -559,9 +567,11 @@ copy_tuples_for_split(SplitContext *scontext)
 				 * apply; in any case we better copy it.
 				 */
 				if (!TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetXmin(tuple->t_data)))
+				{
 					elog(WARNING,
 						 "concurrent insert in progress within table \"%s\"",
 						 RelationGetRelationName(srcrel));
+				}
 				/* treat as live */
 				isdead = false;
 				isalive = true;
@@ -572,9 +582,11 @@ copy_tuples_for_split(SplitContext *scontext)
 				 */
 				if (!TransactionIdIsCurrentTransactionId(
 						HeapTupleHeaderGetUpdateXid(tuple->t_data)))
+				{
 					elog(WARNING,
 						 "concurrent delete in progress within table \"%s\"",
 						 RelationGetRelationName(srcrel));
+				}
 				/* treat as recently dead */
 				tups_recently_dead += 1;
 				isalive = true;
@@ -618,7 +630,9 @@ copy_tuples_for_split(SplitContext *scontext)
 				rws->stats.tuples_written++;
 
 				if (isalive)
+				{
 					rws->stats.tuples_alive++;
+				}
 
 				reform_and_rewrite_tuple(tuple2, srcrel, rws);
 			}
@@ -733,7 +747,9 @@ split_relation(Relation rel, SplitPoint *sp, unsigned int split_factor,
 			HeapTuple reltup = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(sri->relid));
 
 			if (!HeapTupleIsValid(reltup))
+			{
 				elog(ERROR, "cache lookup failed for relation %u", sri->relid);
+			}
 
 			Form_pg_class relform = (Form_pg_class) GETSTRUCT(reltup);
 			relform->relfrozenxid = scontext.cutoffs.FreezeLimit;
@@ -785,9 +801,13 @@ update_compression_stats_for_split(const SplitRelationInfo *split_relations,
 		Chunk *chunk = ts_chunk_get_by_relid(sri->relid, true);
 
 		if (sri->stats.tuples_written > 0)
+		{
 			ts_chunk_set_partial(chunk);
+		}
 		else
+		{
 			ts_chunk_clear_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
+		}
 
 		total_tuples += sri->stats.tuples_alive + csri->stats.tuples_in_segments;
 	}
@@ -811,7 +831,9 @@ update_compression_stats_for_split(const SplitRelationInfo *split_relations,
 		double fraction = 0.0;
 
 		if (total_tuples > 0)
+		{
 			fraction = (sri->stats.tuples_alive + csri->stats.tuples_in_segments) / total_tuples;
+		}
 
 		memcpy(&new_ccs, &ccs, sizeof(ccs));
 		compute_compression_size_stats_fraction(&new_ccs, fraction);
@@ -862,9 +884,11 @@ update_chunk_stats_for_split(const SplitRelationInfo *split_relations,
 							 const SplitRelationInfo *compressed_split_relations, int split_factor)
 {
 	if (compressed_split_relations)
+	{
 		update_compression_stats_for_split(split_relations,
 										   compressed_split_relations,
 										   split_factor);
+	}
 	/*
 	 * Update reltuples in pg_class. The reltuples are normally updated on
 	 * reindex, so this update only matters in case of no indexes.
@@ -922,26 +946,34 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	srcrel = table_open(relid, NoLock);
 
 	if (srcrel->rd_rel->relkind != RELKIND_RELATION)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot split non-table relations")));
+	}
 
 	Oid amoid = srcrel->rd_rel->relam;
 
 	if (amoid != HEAP_TABLE_AM_OID)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("access method \"%s\" is not supported for split", get_am_name(amoid))));
+	}
 
 	/* Only owner is allowed to split */
 	if (!object_ownercheck(RelationRelationId, relid, GetUserId()))
+	{
 		aclcheck_error(ACLCHECK_NOT_OWNER,
 					   get_relkind_objtype(srcrel->rd_rel->relkind),
 					   get_rel_name(relid));
+	}
 
 	/* Lock toast table to prevent it from being concurrently vacuumed */
 	if (srcrel->rd_rel->reltoastrelid)
+	{
 		LockRelationOid(srcrel->rd_rel->reltoastrelid, AccessExclusiveLock);
+	}
 
 	/*
 	 * Check for active uses of the relation in the current transaction,
@@ -950,15 +982,19 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	CheckTableNotInUse(srcrel, "split_chunk");
 
 	if (chunk->fd.osm_chunk)
+	{
 		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cannot split OSM chunks")));
+	}
 
 	if (ts_chunk_is_frozen(chunk))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot split frozen chunk \"%s.%s\" scheduled for tiering",
 						NameStr(chunk->fd.schema_name),
 						NameStr(chunk->fd.table_name)),
 				 errhint("Untier the chunk before splitting it.")));
+	}
 
 	Cache *hcache;
 	const Hypertable *ht =
@@ -968,9 +1004,11 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	Ensure(dim, "no primary dimension for chunk");
 
 	if (ht->fd.num_dimensions > 1)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot split chunk in multi-dimensional hypertable")));
+	}
 
 	NameData splitdim_name;
 	namestrcpy(&splitdim_name, NameStr(dim->fd.column_name));
@@ -1014,14 +1052,18 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 			argtype = splitdim_type;
 		}
 		else
+		{
 			split_at_datum = arg;
+		}
 
 		if (argtype != splitcolumn_type)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("invalid type '%s' for split_at argument", format_type_be(argtype)),
 					 errdetail("The argument type must match the dimension \"%s\"",
 							   NameStr(dim->fd.column_name))));
+		}
 
 		have_split_at = true;
 	}
@@ -1061,10 +1103,14 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		Datum dim_datum;
 
 		if (NULL != dim->partitioning)
+		{
 			dim_datum =
 				ts_partitioning_func_apply(dim->partitioning, C_COLLATION_OID, split_at_datum);
+		}
 		else
+		{
 			dim_datum = split_at_datum;
+		}
 
 		split_at = ts_time_value_to_internal(dim_datum, splitdim_type);
 
@@ -1083,7 +1129,9 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		}
 	}
 	else
+	{
 		split_at = slice->fd.range_start + (interval_range / 2);
+	}
 
 	elog(DEBUG1,
 		 "splitting chunk %s at %s",

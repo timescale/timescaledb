@@ -26,7 +26,9 @@ Datum
 policy_process_hyper_inval_proc(PG_FUNCTION_ARGS)
 {
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
+	{
 		PG_RETURN_VOID();
+	}
 
 	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
@@ -64,15 +66,19 @@ policy_process_hyper_inval_add_internal(Hypertable *ht, bool if_not_exists,
 	{
 		Assert(list_length(jobs) == 1);
 		if (!if_not_exists)
+		{
 			ereport(ERROR,
 					errcode(ERRCODE_DUPLICATE_OBJECT),
 					errmsg("move hypertable invalidations policy already exists for \"%s\"",
 						   get_rel_name(ht->main_table_relid)));
+		}
 		else
+		{
 			ereport(NOTICE,
 					errmsg("move hypertable invalidations policy already exists for \"%s\", "
 						   "skipping",
 						   get_rel_name(ht->main_table_relid)));
+		}
 		return -1;
 	}
 
@@ -126,11 +132,15 @@ policy_process_hyper_inval_add(PG_FUNCTION_ARGS)
 	{
 		ts_bgw_job_validate_schedule_interval(schedule_interval);
 		if (TIMESTAMP_NOT_FINITE(initial_start))
+		{
 			initial_start = ts_timer_get_current_timestamp();
+		}
 	}
 
 	if (!PG_ARGISNULL(4))
+	{
 		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(4));
+	}
 
 	Cache *hcache;
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(ht_oid, CACHE_FLAG_NONE, &hcache);
@@ -138,10 +148,12 @@ policy_process_hyper_inval_add(PG_FUNCTION_ARGS)
 	/* Check that we have a continuous aggregate attached */
 	List *caggs = ts_continuous_aggs_find_by_raw_table_id(ht->fd.id);
 	if (list_length(caggs) == 0)
+	{
 		ereport(ERROR,
 				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				errmsg("\"%s\" does not have an associated continuous aggregate",
 					   get_rel_name(ht_oid)));
+	}
 
 	Oid owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
 	ts_bgw_job_validate_job_owner(owner_id);
@@ -157,7 +169,9 @@ policy_process_hyper_inval_add(PG_FUNCTION_ARGS)
 	ts_cache_release(&hcache);
 
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
+	{
 		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);
+	}
 
 	PG_RETURN_INT32(job_id);
 }
@@ -168,9 +182,11 @@ policy_process_hyper_inval_remove_internal(Oid ht_oid, bool if_exists)
 	Cache *hcache;
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(ht_oid, CACHE_FLAG_NONE, &hcache);
 	if (!ht)
+	{
 		ereport(ERROR,
 				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				errmsg("\"%s\" is not a hypertable", get_rel_name(ht_oid)));
+	}
 
 	/* Check permissions */
 	Oid owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
@@ -181,9 +197,11 @@ policy_process_hyper_inval_remove_internal(Oid ht_oid, bool if_exists)
 														   FUNCTIONS_SCHEMA_NAME,
 														   ht->fd.id);
 	if (!jobs && !if_exists)
+	{
 		ereport(ERROR,
 				errcode(ERRCODE_UNDEFINED_OBJECT),
 				errmsg("move invalidations policy for \"%s\" not found", get_rel_name(ht_oid)));
+	}
 
 	if (!jobs && if_exists)
 	{

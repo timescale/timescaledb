@@ -415,7 +415,9 @@ save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 							  const Invalidation *invalidation)
 {
 	if (!IsValidInvalidation(invalidation))
+	{
 		return false;
+	}
 
 	int32 cagg_hyper_id = state->cagg->data.mat_hypertable_id;
 	TupleDesc tupdesc = RelationGetDescr(state->cagg_log_rel);
@@ -584,7 +586,9 @@ cut_invalidation_along_refresh_window(const ContinuousAggInvalidationState *stat
 				ts_catalog_update_tid_only(state->cagg_log_rel, &tid, tup);
 			}
 			else
+			{
 				ts_catalog_insert_only(state->cagg_log_rel, tup);
+			}
 
 			heap_freetuple(tup);
 		}
@@ -675,24 +679,34 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 	}
 
 	if (inv->lowest_modified_value < min_bucket_start)
+	{
 		/* Below the min bucket, so treat as invalid to -infinity. */
 		inv->lowest_modified_value = INVAL_NEG_INFINITY;
+	}
 	else if (inv->lowest_modified_value > max_bucket_end)
+	{
 		/* Above the max bucket, so treat as invalid to +infinity. */
 		inv->lowest_modified_value = INVAL_POS_INFINITY;
+	}
 	else
+	{
 		inv->lowest_modified_value = ts_time_bucket_by_type_extended(bucket_width,
 																	 inv->lowest_modified_value,
 																	 time_type_oid,
 																	 offset,
 																	 origin);
+	}
 
 	if (inv->greatest_modified_value < min_bucket_start)
+	{
 		/* Below the min bucket, so treat as invalid to -infinity. */
 		inv->greatest_modified_value = INVAL_NEG_INFINITY;
+	}
 	else if (inv->greatest_modified_value > max_bucket_end)
+	{
 		/* Above the max bucket, so treat as invalid to +infinity. */
 		inv->greatest_modified_value = INVAL_POS_INFINITY;
+	}
 	else
 	{
 		inv->greatest_modified_value = ts_time_bucket_by_type_extended(bucket_width,
@@ -805,11 +819,15 @@ static bool
 invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry)
 {
 	if (!IsValidInvalidation(newentry))
+	{
 		return false;
+	}
 
 	/* Quick exit if no overlap */
 	if (!invalidations_can_be_merged(entry, newentry))
+	{
 		return false;
+	}
 
 	/* Check if the new entry expands beyond the old one (first case above) */
 	if (entry->greatest_modified_value < newentry->greatest_modified_value)
@@ -931,7 +949,9 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 
 		/* Handle the last merged invalidation */
 		if (IsValidInvalidation(&mergedentry))
+		{
 			insert_new_cagg_invalidation(state, &mergedentry, cagg_hyper_id);
+		}
 	}
 }
 
@@ -1011,7 +1031,9 @@ cut_cagg_invalidation_and_compute_remainder(const ContinuousAggInvalidationState
 	new_remainder = cut_cagg_invalidation(state, refresh_window, mergedentry);
 
 	if (!IsValidInvalidation(&remainder))
+	{
 		remainder = new_remainder;
+	}
 	else if (!invalidation_entry_try_merge(&remainder, &new_remainder))
 	{
 		save_invalidation_for_refresh(state, &remainder);
@@ -1091,7 +1113,9 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 													  state->cagg->bucket_function);
 
 		if (!IsValidInvalidation(&mergedentry))
+		{
 			mergedentry = logentry;
+		}
 		else if (invalidation_entry_try_merge(&mergedentry, &logentry))
 		{
 			/*
@@ -1118,10 +1142,12 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 process_remainder:
 	/* Handle the last (merged) invalidation */
 	if (IsValidInvalidation(&mergedentry))
+	{
 		remainder = cut_cagg_invalidation_and_compute_remainder(state,
 																refresh_window,
 																&mergedentry,
 																&remainder);
+	}
 
 	/* Handle the last (merged) remainder */
 	save_invalidation_for_refresh(state, &remainder);

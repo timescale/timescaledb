@@ -112,7 +112,9 @@ dictionary_compressor_append_datum(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = dictionary_compressor_alloc(extended->element_type);
+	}
 
 	dictionary_compressor_append(extended->internal, val);
 }
@@ -122,7 +124,9 @@ dictionary_compressor_append_null_value(Compressor *compressor)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = dictionary_compressor_alloc(extended->element_type);
+	}
 
 	dictionary_compressor_append_null(extended->internal);
 }
@@ -132,12 +136,16 @@ dictionary_compressor_is_full(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = dictionary_compressor_alloc(extended->element_type);
+	}
 
 	Size datum_size_and_align;
 	DictionaryCompressor *dict_comp = (DictionaryCompressor *) extended->internal;
 	if (datum_serializer_value_may_be_toasted(dict_comp->serializer))
+	{
 		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
+	}
 
 	datum_size_and_align =
 		datum_get_bytes_size(dict_comp->serializer, dict_comp->dict_val_size, val) -
@@ -214,7 +222,9 @@ dictionary_compressor_append(DictionaryCompressor *compressor, Datum val)
 	Assert(compressor != NULL);
 
 	if (datum_serializer_value_may_be_toasted(compressor->serializer))
+	{
 		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
+	}
 
 	dict_item = dictionary_insert(compressor->dictionary_items, val, &found);
 
@@ -269,12 +279,16 @@ compressor_get_serialization_info(DictionaryCompressor *compressor)
 	Size header_size = sizeof(DictionaryCompressed);
 
 	if (sizes.dictionary_compressed_indexes == NULL)
+	{
 		return (DictionaryCompressorSerializationInfo){ .is_all_null = true };
+	}
 
 	sizes.bitmaps_size = simple8brle_serialized_total_size(dict_indexes);
 	sizes.total_size = MAXALIGN(header_size) + sizes.bitmaps_size;
 	if (compressor->has_nulls)
+	{
 		sizes.nulls_size = simple8brle_serialized_total_size(nulls);
+	}
 	sizes.total_size += sizes.nulls_size;
 
 	dictionary_start_iterate(compressor->dictionary_items, &dictionary_item_iterator);
@@ -297,9 +311,11 @@ compressor_get_serialization_info(DictionaryCompressor *compressor)
 	sizes.total_size += sizes.dictionary_size;
 
 	if (!AllocSizeIsValid(sizes.total_size))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
+	}
 	return sizes;
 }
 
@@ -322,7 +338,9 @@ dictionary_compressed_from_serialization_info(DictionaryCompressorSerializationI
 												sizes.dictionary_compressed_indexes);
 
 	if (bitmap->has_nulls)
+	{
 		data = bytes_serialize_simple8b_and_advance(data, sizes.nulls_size, sizes.compressed_nulls);
+	}
 
 	data = bytes_serialize_array_compressor_and_advance(data,
 														sizes.dictionary_size,
@@ -355,9 +373,13 @@ dictionary_compressed_to_array_compressed(DictionaryCompressed *compressed)
 		 res = dictionary_decompression_iterator_try_next_forward(&iterator.base))
 	{
 		if (res.is_null)
+		{
 			array_compressor_append_null(compressor);
+		}
 		else
+		{
 			array_compressor_append(compressor, res.val);
+		}
 	}
 
 	return array_compressor_finish(compressor);
@@ -371,7 +393,9 @@ dictionary_compressor_finish(DictionaryCompressor *compressor)
 	DictionaryCompressed *compressed;
 	DictionaryCompressorSerializationInfo sizes = compressor_get_serialization_info(compressor);
 	if (sizes.is_all_null)
+	{
 		return NULL;
+	}
 
 	Assert(0 != sizes.num_distinct);
 
@@ -382,7 +406,9 @@ dictionary_compressor_finish(DictionaryCompressor *compressor)
 	expected_array_size = average_element_size * sizes.dictionary_compressed_indexes->num_elements;
 	compressed = dictionary_compressed_from_serialization_info(sizes, compressor->type);
 	if (expected_array_size < sizes.total_size)
+	{
 		return dictionary_compressed_to_array_compressed(compressed);
+	}
 
 	return compressed;
 }
@@ -416,17 +442,25 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 	s8_bitmap = bytes_deserialize_simple8b_and_advance(&si);
 
 	if (scan_forward)
+	{
 		simple8brle_decompression_iterator_init_forward(&iter->bitmap, s8_bitmap);
+	}
 	else
+	{
 		simple8brle_decompression_iterator_init_reverse(&iter->bitmap, s8_bitmap);
+	}
 
 	if (iter->has_nulls)
 	{
 		Simple8bRleSerialized *s8_null = bytes_deserialize_simple8b_and_advance(&si);
 		if (scan_forward)
+		{
 			simple8brle_decompression_iterator_init_forward(&iter->nulls, s8_null);
+		}
 		else
+		{
 			simple8brle_decompression_iterator_init_reverse(&iter->nulls, s8_null);
+		}
 	}
 
 	dictionary_iterator = array_decompression_iterator_alloc_forward(&si,
@@ -793,9 +827,11 @@ dictionary_decompression_iterator_try_next_forward(DecompressionIterator *iter_b
 		Simple8bRleDecompressResult null =
 			simple8brle_decompression_iterator_try_next_forward(&iter->nulls);
 		if (null.is_done)
+		{
 			return (DecompressResult){
 				.is_done = true,
 			};
+		}
 
 		if ((null.val & 1) != 0)
 		{
@@ -807,9 +843,11 @@ dictionary_decompression_iterator_try_next_forward(DecompressionIterator *iter_b
 
 	result = simple8brle_decompression_iterator_try_next_forward(&iter->bitmap);
 	if (result.is_done)
+	{
 		return (DecompressResult){
 			.is_done = true,
 		};
+	}
 
 	CheckCompressedData(result.val < iter->compressed->num_distinct);
 	return (DecompressResult){
@@ -834,9 +872,11 @@ dictionary_decompression_iterator_try_next_reverse(DecompressionIterator *iter_b
 		Simple8bRleDecompressResult null =
 			simple8brle_decompression_iterator_try_next_reverse(&iter->nulls);
 		if (null.is_done)
+		{
 			return (DecompressResult){
 				.is_done = true,
 			};
+		}
 
 		if ((null.val & 1) != 0)
 		{
@@ -848,9 +888,11 @@ dictionary_decompression_iterator_try_next_reverse(DecompressionIterator *iter_b
 
 	result = simple8brle_decompression_iterator_try_next_reverse(&iter->bitmap);
 	if (result.is_done)
+	{
 		return (DecompressResult){
 			.is_done = true,
 		};
+	}
 
 	Assert(result.val < iter->compressed->num_distinct);
 	return (DecompressResult){
@@ -886,9 +928,13 @@ tsl_dictionary_compressor_append(PG_FUNCTION_ARGS)
 		compressor = dictionary_compressor_alloc(type_to_compress);
 	}
 	if (PG_ARGISNULL(1))
+	{
 		dictionary_compressor_append_null(compressor);
+	}
 	else
+	{
 		dictionary_compressor_append(compressor, PG_GETARG_DATUM(1));
+	}
 
 	MemoryContextSwitchTo(old_context);
 	PG_RETURN_POINTER(compressor);
@@ -901,11 +947,15 @@ tsl_dictionary_compressor_finish(PG_FUNCTION_ARGS)
 		(DictionaryCompressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 	void *compressed;
 	if (compressor == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 
 	compressed = dictionary_compressor_finish(compressor);
 	if (compressed == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 
 	PG_RETURN_POINTER(compressed);
 }
@@ -988,9 +1038,11 @@ dictionary_compressed_recv(StringInfo buffer)
 		array_compression_serialization_num_elements(info.dictionary_serialization_info);
 
 	if (!AllocSizeIsValid(info.total_size))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
+	}
 
 	return PointerGetDatum(dictionary_compressed_from_serialization_info(info, element_type));
 }

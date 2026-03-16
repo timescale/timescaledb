@@ -94,7 +94,9 @@ tsl_reorder_chunk(PG_FUNCTION_ARGS)
 	 * Allow reorder in transactions for testing purposes only
 	 */
 	if (!OidIsValid(wait_id))
+	{
 		PreventInTransactionBlock(true, "reorder");
+	}
 
 	reorder_chunk(chunk_id, index_id, verbose, wait_id, InvalidOid, InvalidOid);
 	PG_RETURN_VOID();
@@ -119,7 +121,9 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 	 * Allow move in transactions for testing purposes only
 	 */
 	if (!OidIsValid(wait_id))
+	{
 		PreventInTransactionBlock(true, "move");
+	}
 
 	/*
 	 * Index_destination_tablespace is currently a required parameter in order
@@ -131,17 +135,21 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 	 */
 	if (!OidIsValid(chunk_id) || !OidIsValid(destination_tablespace) ||
 		!OidIsValid(index_destination_tablespace))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("valid chunk, destination_tablespace, and index_destination_tablespaces "
 						"are required")));
+	}
 
 	chunk = ts_chunk_get_by_relid(chunk_id, false);
 
 	if (NULL == chunk)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("\"%s\" is not a chunk", get_rel_name(chunk_id))));
+	}
 
 	if (ts_chunk_contains_compressed_data(chunk))
 	{
@@ -167,10 +175,12 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 							  .name = get_tablespace_name(destination_tablespace) };
 
 		if (OidIsValid(index_id))
+		{
 			ereport(NOTICE,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("ignoring index parameter"),
 					 errdetail("Chunk will not be reordered as it has columnstore data.")));
+		}
 
 		ts_alter_table_with_event_trigger(chunk_id, fcinfo->context, list_make1(&cmd), false);
 		ts_alter_table_with_event_trigger(compressed_chunk->table_id,
@@ -203,16 +213,20 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	Hypertable *ht;
 
 	if (!OidIsValid(chunk_id))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("must provide a valid chunk to cluster")));
+	}
 
 	chunk = ts_chunk_get_by_relid(chunk_id, false);
 
 	if (NULL == chunk)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("\"%s\" is not a chunk", get_rel_name(chunk_id))));
+	}
 
 	ht = ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, CACHE_FLAG_NONE, &hcache);
 
@@ -232,16 +246,20 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	{
 		ts_cache_release(&hcache);
 		if (OidIsValid(index_id))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("\"%s\" is not a valid clustering index for table \"%s\"",
 							get_rel_name(index_id),
 							get_rel_name(chunk_id))));
+		}
 		else
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("there is no previously clustered index for table \"%s\"",
 							get_rel_name(chunk_id))));
+		}
 	}
 
 	if (OidIsValid(destination_tablespace) && destination_tablespace != MyDatabaseTableSpace)
@@ -251,11 +269,12 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 		aclresult =
 			object_aclcheck(TableSpaceRelationId, destination_tablespace, GetUserId(), ACL_CREATE);
 		if (aclresult != ACLCHECK_OK)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 					 errmsg("permission denied for tablespace \"%s\"",
 							get_tablespace_name(destination_tablespace))));
-		;
+		};
 	}
 
 	if (OidIsValid(index_tablespace) && index_tablespace != MyDatabaseTableSpace)
@@ -265,10 +284,12 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 		aclresult =
 			object_aclcheck(TableSpaceRelationId, index_tablespace, GetUserId(), ACL_CREATE);
 		if (aclresult != ACLCHECK_OK)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 					 errmsg("permission denied for tablespace \"%s\"",
 							get_tablespace_name(index_tablespace))));
+		}
 	}
 
 	/*
@@ -295,7 +316,9 @@ index_belongs_to_relation(Oid relid, Oid index_oid)
 
 	tuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(index_oid));
 	if (!HeapTupleIsValid(tuple))
+	{
 		return false;
+	}
 
 	rd_index = (Form_pg_index) GETSTRUCT(tuple);
 	result = rd_index->indrelid == relid;
@@ -322,7 +345,9 @@ chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid)
 	if (OidIsValid(index_relid))
 	{
 		if (index_belongs_to_relation(chunk->table_id, index_relid))
+		{
 			return index_relid;
+		}
 
 		if (index_belongs_to_relation(ht->main_table_relid, index_relid))
 		{
@@ -338,7 +363,9 @@ chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid)
 
 	index_relid = ts_indexing_find_clustered_index(chunk->table_id);
 	if (OidIsValid(index_relid))
+	{
 		return index_relid;
+	}
 
 	index_relid = ts_indexing_find_clustered_index(ht->main_table_relid);
 	if (OidIsValid(index_relid))
@@ -372,7 +399,9 @@ reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id, Oid destinati
 	Form_pg_index indexForm;
 
 	if (!OidIsValid(indexOid))
+	{
 		elog(ERROR, "Reorder must specify an index.");
+	}
 
 	/* Check for user-requested abort. */
 	CHECK_FOR_INTERRUPTS();
@@ -405,24 +434,32 @@ reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id, Oid destinati
 	}
 
 	if (IsSystemRelation(OldHeap))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot reorder a system relation")));
+	}
 
 	if (OldHeap->rd_rel->relpersistence != RELPERSISTENCE_PERMANENT)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("can only reorder a permanent table")));
+	}
 
 	/* We do not allow reordering on shared catalogs. */
 	if (OldHeap->rd_rel->relisshared)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot reorder a shared catalog")));
+	}
 
 	if (OldHeap->rd_rel->relkind != RELKIND_RELATION)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("can only reorder a relation")));
+	}
 
 	/*
 	 * Check that the index still exists
@@ -451,8 +488,10 @@ reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id, Oid destinati
 	 * command, if it's not marked as such here, something has gone wrong
 	 */
 	if (!indexForm->indisclustered)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_ASSERT_FAILURE), errmsg("invalid index heap during reorder")));
+	}
 	ReleaseSysCache(tuple);
 
 	/*
@@ -518,13 +557,17 @@ reorder_finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, char relpersistence, L
 									  false);
 
 	if (config_change == 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("deadlock_timeout guc does not exist.")));
+	}
 	else if (config_change < 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("could not set deadlock_timeout guc.")));
+	}
 
 	/* Upgrade to an AccessExclusiveLock for the heap swap */
 	LockRelationOid(OIDOldHeap, AccessExclusiveLock);
@@ -660,9 +703,13 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	OldHeap = table_open(OIDOldHeap, ExclusiveLock);
 
 	if (OidIsValid(OIDOldIndex))
+	{
 		OldIndex = index_open(OIDOldIndex, ExclusiveLock);
+	}
 	else
+	{
 		OldIndex = NULL;
+	}
 
 	/*
 	 * Their tuple descriptors should be exactly alike, but here we only need
@@ -691,7 +738,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	 * will be held till end of transaction.
 	 */
 	if (OldHeap->rd_rel->reltoastrelid)
+	{
 		LockRelationOid(OldHeap->rd_rel->reltoastrelid, ExclusiveLock);
+	}
 
 	/* use_wal off requires smgr_targblock be initially invalid */
 	Assert(RelationGetTargetBlock(NewHeap) == InvalidBlockNumber);
@@ -728,7 +777,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 		NewHeap->rd_toastoid = OldHeap->rd_rel->reltoastrelid;
 	}
 	else
+	{
 		*pSwapToastByContent = false;
+	}
 
 	/*
 	 * Compute xids used to freeze and weed out dead tuples and multixacts.
@@ -750,7 +801,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 		if (TransactionIdIsValid(relfrozenxid) &&
 			TransactionIdPrecedes(cutoffs.FreezeLimit, relfrozenxid))
+		{
 			cutoffs.FreezeLimit = relfrozenxid;
+		}
 	}
 
 	/*
@@ -761,7 +814,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 		if (MultiXactIdIsValid(relminmxid) &&
 			MultiXactIdPrecedes(cutoffs.MultiXactCutoff, relminmxid))
+		{
 			cutoffs.MultiXactCutoff = relminmxid;
+		}
 	}
 
 	/* return selected values to caller */
@@ -774,27 +829,37 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	 * indexscan for other indexes or plain seqscan if no index is supplied.
 	 */
 	if (OldIndex != NULL && OldIndex->rd_rel->relam == BTREE_AM_OID)
+	{
 		use_sort = true;
+	}
 	else
+	{
 		use_sort = false;
+	}
 
 	/* Log what we're doing */
 	if (OldIndex != NULL && !use_sort)
+	{
 		ereport(elevel,
 				(errmsg("reordering \"%s.%s\" using index scan on \"%s\"",
 						get_namespace_name(RelationGetNamespace(OldHeap)),
 						RelationGetRelationName(OldHeap),
 						RelationGetRelationName(OldIndex))));
+	}
 	else if (use_sort)
+	{
 		ereport(elevel,
 				(errmsg("reordering \"%s.%s\" using sequential scan and sort",
 						get_namespace_name(RelationGetNamespace(OldHeap)),
 						RelationGetRelationName(OldHeap))));
+	}
 	else
+	{
 		ereport(ERROR,
 				(errmsg("tried to use a reorder without an index \"%s.%s\"",
 						get_namespace_name(RelationGetNamespace(OldHeap)),
 						RelationGetRelationName(OldHeap))));
+	}
 
 	table_relation_copy_for_cluster(OldHeap,
 									NewHeap,
@@ -829,7 +894,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 	pfree(isnull);
 
 	if (OldIndex != NULL)
+	{
 		index_close(OldIndex, NoLock);
+	}
 	table_close(OldHeap, NoLock);
 	table_close(NewHeap, NoLock);
 
@@ -838,7 +905,9 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 	reltup = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(OIDNewHeap));
 	if (!HeapTupleIsValid(reltup))
+	{
 		elog(ERROR, "cache lookup failed for relation %u", OIDNewHeap);
+	}
 	relform = (Form_pg_class) GETSTRUCT(reltup);
 
 	relform->relpages = num_pages;

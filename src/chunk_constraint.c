@@ -80,7 +80,9 @@ chunk_constraints_expand(ChunkConstraints *ccs, int16 new_capacity)
 	MemoryContext old;
 
 	if (new_capacity <= ccs->capacity)
+	{
 		return;
+	}
 
 	old = MemoryContextSwitchTo(ccs->mctx);
 	ccs->capacity = new_capacity;
@@ -135,18 +137,26 @@ ts_chunk_constraints_add(ChunkConstraints *ccs, int32 chunk_id, int32 dimension_
 			namestrcpy(&cc->fd.hypertable_constraint_name, "");
 		}
 		else
+		{
 			chunk_constraint_choose_name(&cc->fd.constraint_name,
 										 hypertable_constraint_name,
 										 cc->fd.chunk_id);
+		}
 	}
 	else
+	{
 		namestrcpy(&cc->fd.constraint_name, constraint_name);
+	}
 
 	if (NULL != hypertable_constraint_name)
+	{
 		namestrcpy(&cc->fd.hypertable_constraint_name, hypertable_constraint_name);
+	}
 
 	if (is_dimension_constraint(cc))
+	{
 		ccs->num_dimension_constraints++;
+	}
 
 	return cc;
 }
@@ -166,9 +176,13 @@ chunk_constraint_fill_tuple_values(const ChunkConstraint *cc, Datum values[Natts
 		NameGetDatum(&cc->fd.hypertable_constraint_name);
 
 	if (is_dimension_constraint(cc))
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
+	}
 	else
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)] = true;
+	}
 }
 
 static void
@@ -198,7 +212,9 @@ ts_chunk_constraints_insert_metadata(const ChunkConstraints *ccs)
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 	for (i = 0; i < ccs->num_constraints; i++)
+	{
 		chunk_constraint_insert_relation(rel, &ccs->constraints[i]);
+	}
 
 	ts_catalog_restore_user(&sec_ctx);
 	table_close(rel, RowExclusiveLock);
@@ -265,7 +281,9 @@ ts_chunk_constraints_add_from_tuple(ChunkConstraints *ccs, const TupleInfo *ti)
 	MemoryContextSwitchTo(oldcxt);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	return constraints;
 }
@@ -284,7 +302,9 @@ ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlic
 	Oid type;
 
 	if (slice->fd.range_start == PG_INT64_MIN && slice->fd.range_end == PG_INT64_MAX)
+	{
 		return NULL;
+	}
 
 	colref = makeNode(ColumnRef);
 	colref->fields = list_make1(makeString(pstrdup(NameStr(dim->fd.column_name))));
@@ -365,9 +385,13 @@ ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlic
 	Assert(list_length(compexprs) >= 1);
 
 	if (list_length(compexprs) == 2)
+	{
 		constr->raw_expr = (Node *) makeBoolExpr(AND_EXPR, compexprs, -1);
+	}
 	else if (list_length(compexprs) == 1)
+	{
 		constr->raw_expr = linitial(compexprs);
+	}
 
 	return constr;
 }
@@ -441,7 +465,9 @@ get_slice_with_id(const Hypercube *cube, int32 id)
 		const DimensionSlice *slice = cube->slices[i];
 
 		if (slice->fd.id == id)
+		{
 			return slice;
+		}
 	}
 
 	return NULL;
@@ -476,7 +502,9 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 			/* In some cases, a CHECK constraint is not needed. For instance,
 			 * if the range is -INF to +INF. */
 			if (constr != NULL)
+			{
 				newconstrs = lappend(newconstrs, constr);
+			}
 		}
 		else
 		{
@@ -585,7 +613,9 @@ ts_chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size num_constraints_hint, 
 	}
 
 	if (num_found != constraints->num_constraints)
+	{
 		elog(ERROR, "unexpected number of constraints found for chunk ID %d", chunk_id);
+	}
 
 	return constraints;
 }
@@ -615,7 +645,9 @@ ts_chunk_constraint_scan_by_dimension_slice(const DimensionSlice *slice, ChunkSc
 
 		if (slot_attisnull(ts_scan_iterator_slot(&iterator),
 						   Anum_chunk_constraint_dimension_slice_id))
+		{
 			continue;
+		}
 
 		count++;
 
@@ -630,7 +662,9 @@ ts_chunk_constraint_scan_by_dimension_slice(const DimensionSlice *slice, ChunkSc
 			entry->stub = stub;
 		}
 		else
+		{
 			stub = entry->stub;
+		}
 
 		ts_chunk_constraints_add_from_tuple(stub->constraints, ti);
 
@@ -672,7 +706,9 @@ ts_chunk_constraint_scan_by_dimension_slice_to_list(const DimensionSlice *slice,
 		Datum chunk_id;
 
 		if (slot_attisnull(ti->slot, Anum_chunk_constraint_dimension_slice_id))
+		{
 			continue;
+		}
 
 		count++;
 		chunk_id = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &is_null);
@@ -700,11 +736,15 @@ ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkCo
 	{
 		if (slot_attisnull(ts_scan_iterator_slot(&iterator),
 						   Anum_chunk_constraint_dimension_slice_id))
+		{
 			continue;
+		}
 
 		count++;
 		if (ccs != NULL)
+		{
 			ts_chunk_constraints_add_from_tuple(ccs, ts_scan_iterator_tuple_info(&iterator));
+		}
 	}
 	return count;
 }
@@ -739,7 +779,9 @@ chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 	   referencing the parent table of the partitioned table.
 	*/
 	if (conform->contype == CONSTRAINT_FOREIGN && OidIsValid(conform->conparentid))
+	{
 		return false;
+	}
 
 	return true;
 }
@@ -751,7 +793,9 @@ ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chun
 	int i;
 
 	for (i = 0; i < cube->num_slices; i++)
+	{
 		ts_chunk_constraints_add(ccs, chunk_id, cube->slices[i]->fd.id, NULL, NULL);
+	}
 
 	return cube->num_slices;
 }
@@ -779,13 +823,17 @@ chunk_constraint_add(HeapTuple constraint_tuple, void *arg)
 		table_close(chunk, NoLock);
 
 		if (matching_const != NULL)
+		{
 			ts_chunk_constraints_add(cc->ccs,
 									 cc->chunk_id,
 									 0,
 									 NameStr(matching_const->conname),
 									 NameStr(constraint->conname));
+		}
 		else
+		{
 			ts_chunk_constraints_add(cc->ccs, cc->chunk_id, 0, NULL, NameStr(constraint->conname));
+		}
 		return CONSTR_PROCESSED;
 	}
 
@@ -852,7 +900,9 @@ ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oi
 	tuple = SearchSysCache1(CONSTROID, ObjectIdGetDatum(constraint_oid));
 
 	if (!HeapTupleIsValid(tuple))
+	{
 		elog(ERROR, "cache lookup failed for constraint %u", constraint_oid);
+	}
 
 	con = (Form_pg_constraint) GETSTRUCT(tuple);
 
@@ -903,8 +953,10 @@ chunk_constraint_drop_constraint(TupleInfo *ti)
 		};
 
 		if (OidIsValid(constrobj.objectId))
+		{
 			/* must use DROP_CASCADE if regular table references a hypertable */
 			performDeletion(&constrobj, DROP_CASCADE, 0);
+		}
 	}
 }
 
@@ -922,7 +974,9 @@ ts_chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
 	{
 		if (!hypertable_constraint_matches_tuple(ts_scan_iterator_tuple_info(&iterator),
 												 hypertable_constraint_name))
+		{
 			continue;
+		}
 
 		count++;
 
@@ -971,7 +1025,9 @@ ts_chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs, bo
 		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 
 		if (drop_constraint)
+		{
 			chunk_constraint_drop_constraint(ts_scan_iterator_tuple_info(&iterator));
+		}
 	}
 	return count;
 }
@@ -1073,7 +1129,9 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *new_nam
 	heap_freetuple(new_tuple);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 }
 
 /*
@@ -1125,7 +1183,9 @@ ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_name, const char 
 		heap_freetuple(new_tuple);
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 
 		count++;
 	}
@@ -1152,7 +1212,9 @@ ts_chunk_constraint_update_slice_id(int32 chunk_id, int32 old_slice_id, int32 ne
 			DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull));
 
 		if (isnull || current_chunk_id != chunk_id)
+		{
 			continue;
+		}
 
 		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 		HeapTuple new_tuple;
@@ -1170,7 +1232,9 @@ ts_chunk_constraint_update_slice_id(int32 chunk_id, int32 old_slice_id, int32 ne
 		heap_freetuple(new_tuple);
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 
 		ts_scan_iterator_close(&iterator);
 		return true;
@@ -1192,7 +1256,9 @@ ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *old
 	ts_scanner_foreach(&iterator)
 	{
 		if (!hypertable_constraint_matches_tuple(ts_scan_iterator_tuple_info(&iterator), old_name))
+		{
 			continue;
+		}
 
 		count++;
 		chunk_constraint_rename_hypertable_from_tuple(ts_scan_iterator_tuple_info(&iterator),
@@ -1220,7 +1286,9 @@ ts_chunk_constraint_get_name_from_hypertable_constraint(Oid chunk_relid,
 		char *name;
 
 		if (!hypertable_constraint_matches_tuple(ti, hypertable_constraint_name))
+		{
 			continue;
+		}
 
 		datum = slot_getattr(ti->slot, Anum_chunk_constraint_constraint_name, &isnull);
 		Assert(!isnull);
@@ -1252,7 +1320,9 @@ ts_chunk_constraint_delete_dimensional_constraints(int32 chunk_id, ChunkConstrai
 			slot_getattr(ti->slot, Anum_chunk_constraint_dimension_slice_id, &isnull));
 
 		if (isnull || slice_id == 0)
+		{
 			continue;
+		}
 
 		count++;
 
@@ -1285,7 +1355,9 @@ ts_chunk_constraint_drop_from_tuple(HeapTuple constraint_tuple)
 	}
 
 	if (OidIsValid(constrobj.objectId))
+	{
 		performDeletion(&constrobj, DROP_RESTRICT, 0);
+	}
 }
 
 static void
@@ -1319,17 +1391,25 @@ check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const Dim
 		}
 
 		if (dim->type == DIMENSION_TYPE_OPEN)
+		{
 			value = ts_time_value_to_internal(datum, ts_dimension_get_partition_type(dim));
+		}
 		else if (dim->type == DIMENSION_TYPE_CLOSED)
+		{
 			value = (int64) DatumGetInt32(datum);
+		}
 		else
+		{
 			elog(ERROR, "invalid dimension type when checking constraint");
+		}
 
 		if (value < slice->fd.range_start || value >= slice->fd.range_end)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_CHECK_VIOLATION),
 					 errmsg("dimension constraint for column \"%s\" violated by some row",
 							NameStr(dim->fd.column_name))));
+		}
 	}
 
 	ExecDropSingleTupleTableSlot(slot);
