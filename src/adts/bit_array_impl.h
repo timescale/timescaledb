@@ -116,7 +116,9 @@ bit_array_recv(const StringInfo buffer)
 	};
 
 	for (i = 0; i < num_elements; i++)
+	{
 		array.buckets.data[i] = pq_getmsgint64(buffer);
+	}
 
 	return array;
 }
@@ -127,7 +129,9 @@ bit_array_send(StringInfo buffer, const BitArray *data)
 	pq_sendint32(buffer, data->buckets.num_elements);
 	pq_sendbyte(buffer, data->bits_used_in_last_bucket);
 	for (uint32 i = 0; i < data->buckets.num_elements; i++)
+	{
 		pq_sendint64(buffer, data->buckets.data[i]);
+	}
 }
 
 static inline size_t
@@ -136,10 +140,14 @@ bit_array_output(const BitArray *array, uint64 *dst, size_t max_n_bytes, uint64 
 	size_t size = bit_array_data_bytes_used(array);
 
 	if (max_n_bytes < size)
+	{
 		elog(ERROR, "not enough memory to serialize bit array");
+	}
 
 	if (num_bits_out != NULL)
+	{
 		*num_bits_out = bit_array_num_bits(array);
+	}
 
 	memcpy(dst, array->buckets.data, size);
 	return size;
@@ -152,7 +160,9 @@ bytes_store_bit_array_and_advance(char *dest, size_t expected_size, const BitArr
 	size_t size = bit_array_data_bytes_used(array);
 
 	if (expected_size != size)
+	{
 		elog(ERROR, "the size to serialize does not match the  bit array");
+	}
 
 	*num_buckets_out = bit_array_num_buckets(array);
 	*bits_in_last_bucket_out = array->bits_used_in_last_bucket;
@@ -174,10 +184,14 @@ bit_array_wrap(BitArray *dst, uint64 *data, uint64 num_bits)
 	{
 		/* last bucket uses all bits */
 		if (num_buckets > 0)
+		{
 			bits_used_in_last_bucket = BITS_PER_BUCKET;
+		}
 	}
 	else
+	{
 		num_buckets += 1;
+	}
 	bit_array_wrap_internal(dst, num_buckets, bits_used_in_last_bucket, data);
 }
 
@@ -190,10 +204,14 @@ bit_array_append(BitArray *array, uint8 num_bits, uint64 bits)
 	uint64 bits_for_new_bucket;
 	Assert(num_bits <= 64);
 	if (num_bits == 0)
+	{
 		return;
+	}
 
 	if (array->buckets.num_elements == 0)
+	{
 		bit_array_append_bucket(array, 0, 0);
+	}
 
 	bits &= bit_array_low_bits_mask(num_bits);
 
@@ -241,7 +259,9 @@ bit_array_iter_next(BitArrayIterator *iter, uint8 num_bits)
 	uint64 value_from_next_bucket;
 	CheckCompressedData(num_bits <= 64);
 	if (num_bits == 0)
+	{
 		return 0;
+	}
 
 	CheckCompressedData(iter->current_bucket < iter->array->buckets.num_elements);
 
@@ -296,7 +316,9 @@ bit_array_iter_next_rev(BitArrayIterator *iter, uint8 num_bits)
 	uint64 bits_from_previous;
 	Assert(num_bits <= BITS_PER_BUCKET);
 	if (num_bits == 0)
+	{
 		return 0;
+	}
 
 	Assert(iter->current_bucket >= 0);
 

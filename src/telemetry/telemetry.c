@@ -119,40 +119,62 @@ bgw_job_type_counts()
 			if (namestrcmp(&job->fd.proc_name, "policy_refresh_continuous_aggregate") == 0)
 			{
 				if (job->fd.fixed_schedule)
+				{
 					counts.policy_cagg_fixed++;
+				}
 				else
+				{
 					counts.policy_cagg++;
+				}
 			}
 			else if (namestrcmp(&job->fd.proc_name, "policy_compression") == 0)
 			{
 				if (job->fd.fixed_schedule)
+				{
 					counts.policy_compression_fixed++;
+				}
 				else
+				{
 					counts.policy_compression++;
+				}
 			}
 			else if (namestrcmp(&job->fd.proc_name, "policy_reorder") == 0)
 			{
 				if (job->fd.fixed_schedule)
+				{
 					counts.policy_reorder_fixed++;
+				}
 				else
+				{
 					counts.policy_reorder++;
+				}
 			}
 			else if (namestrcmp(&job->fd.proc_name, "policy_retention") == 0)
 			{
 				if (job->fd.fixed_schedule)
+				{
 					counts.policy_retention_fixed++;
+				}
 				else
+				{
 					counts.policy_retention++;
+				}
 			}
 			else if (namestrcmp(&job->fd.proc_name, "policy_telemetry") == 0)
+			{
 				counts.policy_telemetry++;
+			}
 		}
 		else
 		{
 			if (job->fd.fixed_schedule)
+			{
 				counts.user_defined_action_fixed++;
+			}
 			else
+			{
 				counts.user_defined_action++;
+			}
 		}
 	}
 
@@ -235,7 +257,9 @@ ts_check_version_response(const char *json)
 								PointerGetDatum(cstring_to_text("true"))));
 
 	if (is_uptodate)
+	{
 		elog(NOTICE, "the \"%s\" extension is up-to-date", EXTENSION_NAME);
+	}
 	else
 	{
 		if (!ts_validate_server_version(json, &result))
@@ -296,27 +320,35 @@ add_errors_by_sqlerrcode_internal(JsonbParseState *parse_state, const char *job_
 	it = JsonbIteratorInit(&sqlerrs_jsonb->root);
 	type = JsonbIteratorNext(&it, &val, true /*skip_nested*/);
 	if (type != WJB_BEGIN_OBJECT)
+	{
 		elog(ERROR, "invalid JSON format");
+	}
 	while ((type = JsonbIteratorNext(&it, &val, true)))
 	{
 		const char *errcode;
 		int64 errcnt;
 
 		if (type == WJB_END_OBJECT)
+		{
 			break;
+		}
 		else if (type == WJB_KEY)
 		{
 			errcode = pnstrdup(val.val.string.val, val.val.string.len);
 			/* get the corresponding value for this key */
 			type = JsonbIteratorNext(&it, &val, true);
 			if (type != WJB_VALUE)
+			{
 				elog(ERROR, "unexpected jsonb type");
+			}
 			errcnt =
 				DatumGetInt64(DirectFunctionCall1(numeric_int8, NumericGetDatum(val.val.numeric)));
 			ts_jsonb_add_int64(parse_state, errcode, errcnt);
 		}
 		else
+		{
 			elog(ERROR, "unexpected jsonb type");
+		}
 	}
 
 	ret = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
@@ -361,7 +393,9 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 								 "GROUP BY q.job_type";
 
 	if (SPI_connect() != SPI_OK_CONNECT)
+	{
 		elog(ERROR, "could not connect to SPI");
+	}
 
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
@@ -372,9 +406,11 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 	appendStringInfoString(&command, command_string);
 	res = SPI_execute(command.data, true /*read only*/, 0 /* count */);
 	if (res < 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 (errmsg("could not get errors by sqlerrcode and job type"))));
+	}
 
 	/* we expect about 6 rows returned, each row is a record (TEXT, JSONB) */
 	for (uint64 i = 0; i < SPI_processed; i++)
@@ -385,14 +421,18 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 		record_jobtype =
 			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull_jobtype);
 		if (isnull_jobtype)
+		{
 			elog(ERROR, "null job type returned");
+		}
 		record_jsonb =
 			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 2, &isnull_jsonb);
 		/* this jsonb looks like {"P0001": 32, "42883": 6} */
 		Jsonb *sqlerrs_jsonb = isnull_jsonb ? NULL : DatumGetJsonbP(record_jsonb);
 
 		if (sqlerrs_jsonb == NULL)
+		{
 			continue;
+		}
 		/* the jsonb object cannot be created in the SPI context or it will be lost */
 		MemoryContext spi_context = MemoryContextSwitchTo(orig_context);
 		add_errors_by_sqlerrcode_internal(parse_state,
@@ -465,7 +505,9 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		"ORDER BY job_type";
 
 	if (SPI_connect() != SPI_OK_CONNECT)
+	{
 		elog(ERROR, "could not connect to SPI");
+	}
 
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
@@ -476,9 +518,11 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 	appendStringInfoString(&command, command_string);
 	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 	if (res < 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 (errmsg("could not get job statistics by job type"))));
+	}
 	/*
 	 * a row returned looks like this:
 	 * (job_type, total_runs, total_successes, total_failures, total_crashes, total_duration,
@@ -499,7 +543,9 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		jobtype_datum =
 			SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull_jobtype);
 		if (isnull_jobtype)
+		{
 			elog(ERROR, "null job type returned");
+		}
 		total_runs = SPI_getbinval(tuptable->vals[i], tupdesc, 2, &isnull_runs);
 		total_successes = SPI_getbinval(tuptable->vals[i], tupdesc, 3, &isnull_successes);
 		total_failures = SPI_getbinval(tuptable->vals[i], tupdesc, 4, &isnull_failures);
@@ -634,13 +680,17 @@ add_compression_stats_object(JsonbParseState *parse_state, StatsRelType reltype,
 	ts_jsonb_add_int64(parse_state, REQ_RELKIND_COMPRESSED_CHUNKS, hs->compressed_chunk_count);
 
 	if (reltype == RELTYPE_CONTINUOUS_AGG)
+	{
 		ts_jsonb_add_int64(parse_state,
 						   REQ_RELKIND_COMPRESSED_CAGGS,
 						   hs->compressed_hypertable_count);
+	}
 	else
+	{
 		ts_jsonb_add_int64(parse_state,
 						   REQ_RELKIND_COMPRESSED_HYPERTABLES,
 						   hs->compressed_hypertable_count);
+	}
 
 	ts_jsonb_add_int64(parse_state, REQ_RELKIND_COMPRESSED_ROWCOUNT, hs->compressed_row_count);
 	ts_jsonb_add_int64(parse_state, REQ_RELKIND_COMPRESSED_HEAP_SIZE, hs->compressed_heap_size);
@@ -692,7 +742,9 @@ add_relkind_stats_object(JsonbParseState *parse_state, const char *relkindname,
 		ts_jsonb_add_int64(parse_state, REQ_RELKIND_CHILDREN, hs->child_count);
 
 		if (reltype != RELTYPE_PARTITIONED_TABLE)
+		{
 			add_compression_stats_object(parse_state, reltype, hs);
+		}
 	}
 
 	if (statstype == STATS_TYPE_CAGG)
@@ -727,7 +779,9 @@ add_function_call_telemetry(JsonbParseState *state)
 
 	visible_extensions[0] = EXTENSION_NAME;
 	for (size_t i = 1; i < sizeof(visible_extensions) / sizeof(char *); i++)
+	{
 		visible_extensions[i] = related_extensions[i - 1];
+	}
 
 	functions =
 		ts_function_telemetry_read(visible_extensions, sizeof(visible_extensions) / sizeof(char *));
@@ -752,10 +806,14 @@ add_replication_telemetry(JsonbParseState *state)
 {
 	ReplicationInfo info = ts_telemetry_replication_info_gather();
 	if (info.got_num_wal_senders)
+	{
 		ts_jsonb_add_int32(state, REQ_NUM_WAL_SENDERS, info.num_wal_senders);
+	}
 
 	if (info.got_is_wal_receiver)
+	{
 		ts_jsonb_add_bool(state, REQ_IS_WAL_RECEIVER, info.is_wal_receiver);
+	}
 }
 
 #define REQ_RELS "relations"
@@ -802,7 +860,9 @@ add_query_result_dict(JsonbParseState *state, const char *query)
 
 	int res;
 	if (SPI_connect() != SPI_OK_CONNECT)
+	{
 		elog(ERROR, "could not connect to SPI");
+	}
 
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
@@ -883,10 +943,14 @@ build_telemetry_report()
 		ts_jsonb_add_str(parse_state, REQ_OS_VERSION, osinfo.version);
 		ts_jsonb_add_str(parse_state, REQ_OS_RELEASE, osinfo.release);
 		if (osinfo.has_pretty_version)
+		{
 			ts_jsonb_add_str(parse_state, REQ_OS_VERSION_PRETTY, osinfo.pretty_version);
+		}
 	}
 	else
+	{
 		ts_jsonb_add_str(parse_state, REQ_OS, "Unknown");
+	}
 
 	ts_jsonb_add_str(parse_state, REQ_PS_VERSION, get_pgversion_string());
 	ts_jsonb_add_str(parse_state, REQ_TS_VERSION, TIMESCALEDB_VERSION_MOD);
@@ -974,19 +1038,27 @@ build_telemetry_report()
 	pushJsonbValue(&parse_state, WJB_KEY, &key);
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	if (ts_license_is_apache())
+	{
 		ts_jsonb_add_str(parse_state, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_APACHE);
+	}
 	else
+	{
 		ts_jsonb_add_str(parse_state, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_COMMUNITY);
+	}
 	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
 	/* add tuned info, which is optional */
 	char *last_tune_time = GetConfigOptionByName("timescaledb.last_tune_time", NULL, true);
 	if (last_tune_time != NULL)
+	{
 		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_TIME, last_tune_time);
+	}
 
 	char *last_tune_version = GetConfigOptionByName("timescaledb.last_tune_version", NULL, true);
 	if (last_tune_version != NULL)
+	{
 		ts_jsonb_add_str(parse_state, REQ_TS_LAST_TUNE_VERSION, last_tune_version);
+	}
 
 	/* add cloud to telemetry when set */
 	if (ts_telemetry_cloud != NULL)
@@ -1069,9 +1141,13 @@ static ConnectionType
 connection_type(const char *service)
 {
 	if (strcmp("http", service) == 0)
+	{
 		return CONNECTION_PLAIN;
+	}
 	else if (strcmp("https", service) == 0)
+	{
 		return CONNECTION_SSL;
+	}
 
 	ereport(NOTICE,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1124,7 +1200,9 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 	const char *volatile json = NULL;
 
 	if (!ts_telemetry_on())
+	{
 		return false;
+	}
 
 	if (!IsTransactionOrTransactionBlock())
 	{
@@ -1135,7 +1213,9 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 	conn = ts_telemetry_connect(host, service);
 
 	if (conn == NULL)
+	{
 		goto cleanup;
+	}
 
 	if (!ActiveSnapshotSet())
 	{
@@ -1147,7 +1227,9 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 	req = ts_build_version_request(host, path);
 
 	if (snapshot_set)
+	{
 		PopActiveSnapshot();
+	}
 
 	rsp = ts_http_response_state_create();
 
@@ -1200,7 +1282,9 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 		   with the system. It's only telemetry that is having problems, so we
 		   just wrap this up and exit. */
 		if (started)
+		{
 			AbortCurrentTransaction();
+		}
 		return false;
 	}
 	PG_END_TRY();
@@ -1208,13 +1292,17 @@ ts_telemetry_main(const char *host, const char *path, const char *service)
 	ts_http_response_state_destroy(rsp);
 
 	if (started)
+	{
 		CommitTransactionCommand();
+	}
 
 	return true;
 
 cleanup:
 	if (started)
+	{
 		AbortCurrentTransaction();
+	}
 
 	return false;
 }

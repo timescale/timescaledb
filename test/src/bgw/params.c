@@ -89,7 +89,9 @@ params_get_dsm_handle()
 	static dsm_handle handle = 0;
 
 	if (handle == 0)
+	{
 		handle = params_load_dsm_handle();
+	}
 
 	return handle;
 }
@@ -110,11 +112,15 @@ params_open_wrapper(bool *do_close)
 	{
 		seg = dsm_attach(handle);
 		if (seg == NULL)
+		{
 			elog(ERROR, "got NULL segment in params_open_wrapper");
+		}
 		*do_close = true;
 	}
 	else
+	{
 		*do_close = false;
+	}
 
 	TestAssertTrue(seg != NULL);
 
@@ -152,7 +158,9 @@ ts_params_get()
 	SpinLockRelease(&wrapper->mutex);
 
 	if (do_close)
+	{
 		params_close_wrapper(wrapper);
+	}
 
 	return res;
 };
@@ -170,10 +178,14 @@ ts_params_set_time(int64 new_val, bool set_latch)
 	SpinLockRelease(&wrapper->mutex);
 
 	if (set_latch)
+	{
 		SetLatch(&wrapper->params.timer_latch);
+	}
 
 	if (do_close)
+	{
 		params_close_wrapper(wrapper);
+	}
 }
 
 void
@@ -191,7 +203,9 @@ ts_initialize_timer_latch()
 	SpinLockRelease(&wrapper->mutex);
 
 	if (do_close)
+	{
 		params_close_wrapper(wrapper);
+	}
 }
 
 void
@@ -209,7 +223,9 @@ ts_reset_and_wait_timer_latch()
 			  PG_WAIT_EXTENSION);
 
 	if (do_close)
+	{
 		params_close_wrapper(wrapper);
+	}
 }
 
 static void
@@ -227,7 +243,9 @@ params_set_mock_wait_type(MockWaitType new_val)
 	SpinLockRelease(&wrapper->mutex);
 
 	if (do_close)
+	{
 		params_close_wrapper(wrapper);
+	}
 }
 
 TS_FUNCTION_INFO_V1(ts_bgw_params_reset_time);

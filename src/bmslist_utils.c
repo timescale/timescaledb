@@ -21,7 +21,9 @@ ts_bmslist_add_member(TsBmsList bmslist, const int *items, int num_items)
 	Assert(num_items > 0);
 
 	if (items == NULL || num_items == 0)
+	{
 		return bmslist;
+	}
 
 	/* Create a new Bitmapset for the items */
 	int first_item = items[0];
@@ -52,7 +54,9 @@ ts_bmslist_contains_items(TsBmsList bmslist, const int *items, int num_items)
 	Assert(num_items > 0);
 
 	if (items == NULL || num_items == 0)
+	{
 		return false;
+	}
 
 	/* Create a new Bitmapset for the items */
 	int first_item = items[0];
@@ -76,13 +80,17 @@ ts_bmslist_contains_set(TsBmsList bmslist, Bitmapset *set)
 	Assert(set != NULL);
 
 	if (set == NULL)
+	{
 		return false;
+	}
 
 	foreach (lc, bmslist)
 	{
 		Bitmapset *item = (Bitmapset *) lfirst(lc);
 		if (bms_equal(item, set))
+		{
 			return true;
+		}
 	}
 
 	return false;

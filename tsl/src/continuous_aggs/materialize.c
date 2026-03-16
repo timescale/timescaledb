@@ -184,7 +184,9 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 	 * we are not allowed to materialize beyond that point
 	 */
 	if (materialization_range.start > materialization_range.end)
+	{
 		materialization_range.start = materialization_range.end;
+	}
 
 	/* Then insert the materializations */
 	context.materialization_range = internal_time_range_to_time_range(materialization_range);
@@ -209,7 +211,9 @@ continuous_agg_has_pending_materializations(const ContinuousAgg *cagg,
 	RestrictSearchPath();
 
 	if (materialization_range.start > materialization_range.end)
+	{
 		materialization_range.start = materialization_range.end;
+	}
 
 	PushActiveSnapshot(GetLatestSnapshot());
 	bool has_pending_materializations =
@@ -266,19 +270,25 @@ internal_to_time_value_or_infinite(int64 internal, Oid time_type, bool *is_infin
 	if (internal == PG_INT64_MIN)
 	{
 		if (is_infinite_out != NULL)
+		{
 			*is_infinite_out = true;
+		}
 		return time_range_internal_to_min_time_value(time_type);
 	}
 	else if (internal == PG_INT64_MAX)
 	{
 		if (is_infinite_out != NULL)
+		{
 			*is_infinite_out = true;
+		}
 		return time_range_internal_to_max_time_value(time_type);
 	}
 	else
 	{
 		if (is_infinite_out != NULL)
+		{
 			*is_infinite_out = false;
+		}
 		return ts_internal_to_time_value(internal, time_type);
 	}
 }
@@ -309,7 +319,9 @@ cagg_find_aggref_and_var_cols(ContinuousAgg *cagg, Hypertable *mat_ht)
 		if (!tle->resjunk && (tle->ressortgroupref == 0 ||
 							  get_sortgroupref_clause_noerr(tle->ressortgroupref,
 															cagg_view_query->groupClause) == NULL))
+		{
 			retlist = lappend(retlist, get_attname(mat_ht->main_table_relid, tle->resno, false));
+		}
 	}
 
 	return retlist;
@@ -328,10 +340,14 @@ build_merge_insert_columns(List *strings, const char *separator, const char *pre
 	{
 		char *grpcol = (char *) lfirst(lc);
 		if (ret.len > 0)
+		{
 			appendStringInfoString(&ret, separator);
+		}
 
 		if (prefix)
+		{
 			appendStringInfoString(&ret, prefix);
+		}
 		appendStringInfoString(&ret, quote_identifier(grpcol));
 	}
 
@@ -353,7 +369,9 @@ build_merge_join_clause(List *column_names)
 		char *column = (char *) lfirst(lc);
 
 		if (ret.len > 0)
+		{
 			appendStringInfoString(&ret, " AND ");
+		}
 
 		appendStringInfoString(&ret, "P.");
 		appendStringInfoString(&ret, quote_identifier(column));
@@ -379,7 +397,9 @@ build_merge_update_clause(List *column_names)
 		char *column = (char *) lfirst(lc);
 
 		if (ret.len > 0)
+		{
 			appendStringInfoString(&ret, ", ");
+		}
 
 		appendStringInfoString(&ret, quote_identifier(column));
 		appendStringInfoString(&ret, " = P.");
@@ -396,7 +416,9 @@ build_order_by_clause(MaterializationContext *context)
 {
 	/* Don't build ORDER BY clause if compression is not enabled */
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht))
+	{
 		return ""; /* No ORDER BY if no compression */
+	}
 
 	CompressionSettings *settings = ts_compression_settings_get(context->mat_ht->main_table_relid);
 
@@ -410,7 +432,9 @@ build_order_by_clause(MaterializationContext *context)
 	for (int i = 1; i <= num_segmentby; i++)
 	{
 		if (i > 1)
+		{
 			appendStringInfoString(ret, ", ");
+		}
 		appendStringInfoString(ret,
 							   quote_identifier(
 								   ts_array_get_element_text(settings->fd.segmentby, i)));
@@ -423,18 +447,28 @@ build_order_by_clause(MaterializationContext *context)
 		bool is_null_first = ts_array_get_element_bool(settings->fd.orderby_nullsfirst, i);
 
 		if (num_segmentby > 0 || i > 1)
+		{
 			appendStringInfoString(ret, ", ");
+		}
 		appendStringInfoString(ret,
 							   quote_identifier(
 								   ts_array_get_element_text(settings->fd.orderby, i)));
 		if (is_orderby_desc)
+		{
 			appendStringInfoString(ret, " DESC");
+		}
 		else
+		{
 			appendStringInfoString(ret, " ASC");
+		}
 		if (is_null_first)
+		{
 			appendStringInfoString(ret, " NULLS FIRST");
+		}
 		else
+		{
 			appendStringInfoString(ret, " NULLS LAST");
+		}
 	}
 
 	elog(DEBUG2, "%s: %s", __func__, ret->data);
@@ -716,7 +750,9 @@ create_materialization_plan(MaterializationContext *context, MaterializationPlan
 		elog(DEBUG2, "%s: %s", __func__, query);
 		materialization->plan = SPI_prepare(query, materialization->nargs, argtypes);
 		if (materialization->plan == NULL)
+		{
 			elog(ERROR, "%s: SPI_prepare failed: %s", __func__, query);
+		}
 
 		SPI_keepplan(materialization->plan);
 		pfree(query);
@@ -791,12 +827,16 @@ execute_materialization_plan(MaterializationContext *context, MaterializationPla
 
 	CatalogSecurityContext sec_ctx;
 	if (materialization->catalog_security_context)
+	{
 		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	}
 
 	int res = SPI_execute_plan(materialization->plan, values, nulls, materialization->read_only, 0);
 
 	if (materialization->catalog_security_context)
+	{
 		ts_catalog_restore_user(&sec_ctx);
+	}
 
 	if (res < 0)
 	{
@@ -899,7 +939,9 @@ update_watermark(MaterializationContext *context)
 								0 /* count */);
 
 	if (res < 0)
+	{
 		elog(ERROR, "%s: could not get the last bucket of the materialized data", __func__);
+	}
 
 	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == context->materialization_range.type,
 		   "partition types for result (%d) and dimension (%d) do not match",

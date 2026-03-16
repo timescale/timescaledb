@@ -66,12 +66,16 @@ check_for_system_columns(Bitmapset *attrs_used)
 	{
 		/* we support tableoid so skip that */
 		if (bit == TableOidAttributeNumber - FirstLowInvalidHeapAttributeNumber)
+		{
 			bit = bms_next_member(attrs_used, bit);
+		}
 
 		if (bit > 0 && bit + FirstLowInvalidHeapAttributeNumber < 0)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 					 errmsg("transparent decompression only supports tableoid system column")));
+		}
 	}
 }
 
@@ -533,7 +537,9 @@ static Node *
 replace_compressed_vars(Node *node, const CompressionInfo *info)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 
 	if (IsA(node, Var))
 	{
@@ -544,14 +550,18 @@ replace_compressed_vars(Node *node, const CompressionInfo *info)
 		/* constify tableoid in quals */
 		if ((Index) var->varno == info->chunk_rel->relid &&
 			var->varattno == TableOidAttributeNumber)
+		{
 			return (Node *)
 				makeConst(OIDOID, -1, InvalidOid, 4, (Datum) info->chunk_rte->relid, false, true);
+		}
 
 		/* Upper-level Vars should be long gone at this point */
 		Assert(var->varlevelsup == 0);
 		/* If not to be replaced, we can just return the Var unmodified */
 		if ((Index) var->varno != info->compressed_rel->relid)
+		{
 			return node;
+		}
 
 		/* Create a decompressed Var to replace the compressed one */
 		colname = get_attname(info->compressed_rte->relid, var->varattno, false);
@@ -563,13 +573,17 @@ replace_compressed_vars(Node *node, const CompressionInfo *info)
 						  var->varlevelsup);
 
 		if (!AttributeNumberIsValid(new_var->varattno))
+		{
 			elog(ERROR, "cannot find column %s on decompressed chunk", colname);
+		}
 
 		/* And return the replacement var */
 		return (Node *) new_var;
 	}
 	if (IsA(node, PlaceHolderVar))
+	{
 		elog(ERROR, "ignoring placeholders");
+	}
 
 	return expression_tree_mutator(node, replace_compressed_vars, (void *) info);
 }
@@ -590,13 +604,17 @@ find_attr_pos_in_tlist(List *targetlist, AttrNumber pos)
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 
 		if (!IsA(target->expr, Var))
+		{
 			elog(ERROR, "compressed scan targetlist entries must be Vars");
+		}
 
 		Var *var = castNode(Var, target->expr);
 		AttrNumber compressed_attno = var->varattno;
 
 		if (compressed_attno == pos)
+		{
 			return target->resno;
+		}
 	}
 
 	elog(ERROR, "Unable to locate var %d in targetlist", pos);
@@ -1276,12 +1294,14 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 												 var->vartype,
 												 pk->pk_cmptype);
 				if (!OidIsValid(sortop)) /* should not happen */
+				{
 					elog(ERROR,
 						 "missing operator %d(%u,%u) in opfamily %u",
 						 pk->pk_cmptype,
 						 var->vartype,
 						 var->vartype,
 						 pk->pk_opfamily);
+				}
 
 				sort_col_idx = lappend_oid(sort_col_idx, decompressed_scan_attno);
 				sort_collations = lappend_oid(sort_collations, var->varcollid);
@@ -1320,7 +1340,9 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 											&opfamily,
 											&opcintype,
 											&strategy))
+			{
 				elog(ERROR, "operator %u is not a valid ordering operator", sortOperators[i]);
+			}
 
 			/*
 			 * This way to determine the matching metadata column works, because
@@ -1336,7 +1358,9 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				get_attnum(dcpath->info->compressed_rte->relid, meta_col_name);
 
 			if (attr_position == InvalidAttrNumber)
+			{
 				elog(ERROR, "couldn't find metadata column \"%s\"", meta_col_name);
+			}
 
 			/*
 			 * If the the compressed target list is not based on the layout of
@@ -1344,10 +1368,14 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 			 * adjust the position of the attribute.
 			 */
 			if (target_list_compressed_is_physical)
+			{
 				sortColIdx[i] = attr_position;
+			}
 			else
+			{
 				sortColIdx[i] =
 					find_attr_pos_in_tlist(compressed_scan->plan.targetlist, attr_position);
+			}
 
 			sortOperators[i] = sortop;
 			collations[i] = list_nth_oid(sort_collations, i);

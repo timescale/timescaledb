@@ -205,7 +205,9 @@ static bool
 drop_statement_drops_extension(DropStmt const *const stmt, TsExtension const *const ext)
 {
 	if (!extension_exists(ext->name))
+	{
 		return false;
+	}
 
 	if (stmt->removeType == OBJECT_EXTENSION)
 	{
@@ -216,7 +218,9 @@ drop_statement_drops_extension(DropStmt const *const stmt, TsExtension const *co
 
 			ext_name = strVal(name);
 			if (strcmp(ext_name, ext->name) == 0)
+			{
 				return true;
+			}
 		}
 	}
 	return false;
@@ -251,14 +255,18 @@ extension_owner(TsExtension const *const ext)
 		result = heap_getattr(tuple, Anum_pg_extension_extowner, RelationGetDescr(rel), &is_null);
 
 		if (!is_null)
+		{
 			extension_owner = ObjectIdGetDatum(result);
+		}
 	}
 
 	systable_endscan(scandesc);
 	table_close(rel, AccessShareLock);
 
 	if (!OidIsValid(extension_owner))
+	{
 		elog(ERROR, "extension not found while getting owner");
+	}
 
 	return extension_owner;
 }
@@ -271,7 +279,9 @@ drop_owned_statement_drops_extension(DropOwnedStmt const *const stmt, TsExtensio
 	ListCell *lc;
 
 	if (!extension_exists(ext->name))
+	{
 		return false;
+	}
 
 	Assert(IsTransactionState());
 	extension_owner_oid = extension_owner(ext);
@@ -284,7 +294,9 @@ drop_owned_statement_drops_extension(DropOwnedStmt const *const stmt, TsExtensio
 		Oid role_id = lfirst_oid(lc);
 
 		if (role_id == extension_owner_oid)
+		{
 			return true;
+		}
 	}
 	return false;
 }
@@ -312,10 +324,13 @@ should_load_on_alter_extension(Node const *const utility_stmt, TsExtension const
 	AlterExtensionStmt *stmt = (AlterExtensionStmt *) utility_stmt;
 
 	if (strcmp(stmt->extname, ext->name) != 0)
+	{
 		return true;
+	}
 
 	/* disallow loading two .so from different versions */
 	if (extension_is_loaded(ext))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("extension \"%s\" cannot be updated after the old version has already been "
@@ -323,6 +338,7 @@ should_load_on_alter_extension(Node const *const utility_stmt, TsExtension const
 						stmt->extname),
 				 errhint("Start a new session and execute ALTER EXTENSION as the first command. "
 						 "Make sure to pass the \"-X\" flag to psql.")));
+	}
 	/* do not load the current (old) version's .so */
 	return false;
 }
@@ -333,11 +349,15 @@ should_load_on_create_extension(Node const *const utility_stmt, TsExtension cons
 	CreateExtensionStmt *stmt = (CreateExtensionStmt *) utility_stmt;
 
 	if (strcmp(stmt->extname, ext->name) != 0)
+	{
 		return false;
+	}
 
 	/* If set, a library has already been loaded */
 	if (!extension_is_loaded(ext))
+	{
 		return true;
+	}
 
 	/*
 	 * If the extension exists and the create statement has an IF NOT EXISTS
@@ -351,7 +371,9 @@ should_load_on_create_extension(Node const *const utility_stmt, TsExtension cons
 	 * might taint the backend.
 	 */
 	if (extension_exists(ext->name) && stmt->if_not_exists)
+	{
 		return false;
+	}
 
 	/*
 	 * If the extension does not exist (e.g., was dropped via DROP SCHEMA
@@ -381,7 +403,9 @@ should_load_on_create_extension(Node const *const utility_stmt, TsExtension cons
 		}
 
 		if (requested_version == NULL || strcmp(requested_version, ext->soversion) == 0)
+		{
 			return false;
+		}
 	}
 
 	/* disallow loading two .so from different versions */
@@ -452,9 +476,11 @@ database_allowconn(const Oid db_oid)
 
 	/* We assume that there can be at most one matching tuple */
 	if (!HeapTupleIsValid(dbtuple))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_DATABASE),
 				 errmsg("database with OID \"%u\" does not exist", db_oid)));
+	}
 
 	allowconn = ((Form_pg_database) GETSTRUCT(dbtuple))->datallowconn;
 
@@ -515,7 +541,9 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 						Oid db_oid = get_database_oid(defGetString(option), false);
 
 						if (OidIsValid(db_oid) && database_allowconn(db_oid))
+						{
 							ts_bgw_message_send_and_wait(RESTART, db_oid);
+						}
 					}
 				}
 				break;
@@ -614,7 +642,9 @@ static void
 timescaledb_shmem_startup_hook(void)
 {
 	if (prev_shmem_startup_hook)
+	{
 		prev_shmem_startup_hook();
+	}
 	ts_bgw_counter_shmem_startup();
 	ts_bgw_message_queue_shmem_startup();
 	ts_lwlocks_shmem_startup();
@@ -630,7 +660,9 @@ static void
 timescaledb_shmem_request_hook(void)
 {
 	if (prev_shmem_request_hook)
+	{
 		prev_shmem_request_hook();
+	}
 
 	ts_bgw_counter_shmem_alloc();
 	ts_bgw_message_queue_alloc();
@@ -722,7 +754,9 @@ do_load(TsExtension *const ext)
 	if (extension_is_loaded(ext))
 	{
 		if (strcmp(ext->soversion, version) == 0)
+		{
 			return;
+		}
 		ereport(FATAL,
 				(errcode(ERRCODE_DUPLICATE_OBJECT),
 				 errmsg("\"%s\" already loaded with a different version", ext->name),

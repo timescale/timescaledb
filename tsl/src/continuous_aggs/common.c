@@ -47,16 +47,20 @@ static Const *
 check_time_bucket_argument(Node *arg, char *position, bool process_checks)
 {
 	if (IsA(arg, NamedArgExpr))
+	{
 		arg = (Node *) castNode(NamedArgExpr, arg)->arg;
+	}
 
 	Node *expr = eval_const_expressions(NULL, arg);
 
 	if (process_checks && !IsA(expr, Const))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("only immutable expressions allowed in time bucket function"),
 				 errhint("Use an immutable expression as %s argument to the time bucket function.",
 						 position)));
+	}
 
 	return castNode(Const, expr);
 }
@@ -102,10 +106,14 @@ function_allowed_in_cagg_definition(Oid funcid)
 {
 	FuncInfo *finfo = ts_func_cache_get_bucketing_func(funcid);
 	if (finfo == NULL)
+	{
 		return false;
+	}
 
 	if (finfo->allowed_in_cagg_definition)
+	{
 		return true;
+	}
 
 	return false;
 }
@@ -190,8 +198,10 @@ process_additional_timebucket_parameter(ContinuousAggBucketFunction *bf, Const *
 		case DATEOID:
 			/* Bucket origin as Date */
 			if (!arg->constisnull)
+			{
 				bf->bucket_time_origin =
 					date2timestamptz_opt_overflow(DatumGetDateADT(arg->constvalue), NULL);
+			}
 			*custom_origin = true;
 			break;
 		case TIMESTAMPOID:
@@ -245,14 +255,18 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 
 	/* Could be a named argument */
 	if (IsA(col_arg, NamedArgExpr))
+	{
 		col_arg = (Node *) castNode(NamedArgExpr, col_arg)->arg;
+	}
 
 	if (process_checks && htpartcolno != InvalidAttrNumber &&
 		(!(IsA(col_arg, Var)) || castNode(Var, col_arg)->varattno != htpartcolno))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("time bucket function must reference the primary hypertable "
 						"dimension column")));
+	}
 
 	nargs = list_length(fe->args);
 	Assert(nargs >= 2 && nargs <= 5);
@@ -316,7 +330,9 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 	width_arg = linitial(fe->args);
 
 	if (IsA(width_arg, NamedArgExpr))
+	{
 		width_arg = (Node *) castNode(NamedArgExpr, width_arg)->arg;
+	}
 
 	width_arg = eval_const_expressions(NULL, width_arg);
 	if (IsA(width_arg, Const))
@@ -327,9 +343,11 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 		if (width->constisnull)
 		{
 			if (process_checks && is_cagg_create)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("invalid bucket width for time bucket function")));
+			}
 		}
 		else
 		{
@@ -348,11 +366,13 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 	else
 	{
 		if (process_checks)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("only immutable expressions allowed in time bucket function"),
 					 errhint("Use an immutable expression as first argument to the time bucket "
 							 "function.")));
+		}
 	}
 
 	bf->bucket_function = fe->funcid;
@@ -391,7 +411,9 @@ caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause, 
 		RangeTblEntry *rte = (RangeTblEntry *) lfirst(l);
 
 		if (rte->rtekind == RTE_GROUP)
+		{
 			group_rte_exprs = list_concat(group_rte_exprs, rte->groupexprs);
+		}
 	}
 
 	group_exprs = group_rte_exprs;
@@ -424,12 +446,16 @@ caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause, 
 			}
 
 			if (found)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("continuous aggregate view cannot contain"
 								" multiple time bucket functions")));
+			}
 			else
+			{
 				found = true;
+			}
 
 			process_timebucket_parameters(fe,
 										  tbinfo->bf,
@@ -467,9 +493,11 @@ caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause, 
 	}
 
 	if (!found)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("continuous aggregate view must include a valid time bucket function")));
+	}
 }
 
 /*
@@ -694,43 +722,55 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 			{
 				num_hypertables++;
 				if (rte == NULL)
+				{
 					rte = copyObject(inner_rte);
+				}
 			}
 
 			if (is_hypertable && inner_rte->inh == false)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("invalid continuous aggregate view"),
 						 errdetail(
 							 "FROM ONLY on hypertables is not allowed in continuous aggregate.")));
+			}
 		}
 
 		/* Only inner joins are allowed. */
 		if (inner_rte->jointype != JOIN_INNER && inner_rte->jointype != JOIN_LEFT)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("only INNER or LEFT joins are supported in continuous aggregates")));
+		}
 
 		/* Subquery only using LATERAL */
 		if (inner_rte->subquery && !inner_rte->lateral)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("invalid continuous aggregate view"),
 					 errdetail("Sub-queries are not supported in FROM clause.")));
+		}
 
 		/* TABLESAMPLE not allowed */
 		if (inner_rte->tablesample)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("invalid continuous aggregate view"),
 					 errdetail("TABLESAMPLE is not supported in continuous aggregate.")));
+		}
 	}
 
 	if (num_hypertables > 1)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("invalid continuous aggregate view"),
 				 errdetail("Only one hypertable is allowed in continuous aggregate view.")));
+	}
 
 	if (rte == NULL)
 	{
@@ -775,11 +815,15 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 
 		/* If parent cagg is hierarchical then we should get the matht otherwise the rawht. */
 		if (ContinuousAggIsHierarchical(cagg_parent))
+		{
 			ht_parent =
 				ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.mat_hypertable_id);
+		}
 		else
+		{
 			ht_parent =
 				ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.raw_hypertable_id);
+		}
 
 		/* Get the querydef for the source cagg. */
 		is_hierarchical = true;
@@ -907,9 +951,11 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 
 	/* Check row security settings for the table. */
 	if (ts_has_row_security(rte->relid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot create continuous aggregate on hypertable with row security")));
+	}
 
 	/* At this point, we should have a valid bucket function. Otherwise, we have errored out before.
 	 */
@@ -961,9 +1007,13 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 		if (bucket_width_parent != 0)
 		{
 			if (bucket_width_parent > bucket_width && bucket_width != 0)
+			{
 				is_multiple_of_parent = ((bucket_width_parent % bucket_width) == 0);
+			}
 			else
+			{
 				is_multiple_of_parent = ((bucket_width % bucket_width_parent) == 0);
+			}
 		}
 
 		/* Proceed with validation errors. */
@@ -973,11 +1023,15 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 
 			/* New bucket should be multiple of the parent. */
 			if (!is_multiple_of_parent)
+			{
 				message = "multiple of";
+			}
 
 			/* New bucket should be greater than the parent. */
 			if (!is_greater_or_equal_than_parent)
+			{
 				message = "greater or equal than";
+			}
 
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1081,7 +1135,9 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 	}
 
 	if (is_hierarchical)
+	{
 		bucket_info.htoidparent = cagg_parent->relid;
+	}
 
 	return bucket_info;
 }
@@ -1314,7 +1370,9 @@ makeRangeTblEntry(Query *query, const char *aliasname)
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
 		if (!tle->resjunk)
+		{
 			rte->eref->colnames = lappend(rte->eref->colnames, makeString(pstrdup(tle->resname)));
+		}
 	}
 
 	rte->lateral = false;
@@ -1359,7 +1417,9 @@ build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *
 	q2 = copyObject(q2);
 
 	if (q1->sortClause)
+	{
 		sortClause = copyObject(q1->sortClause);
+	}
 
 	/*
 	 * For UUID-partitioned hypertables, the materialization table's partition
@@ -1371,7 +1431,9 @@ build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *
 	Oid q2_partcoltype = tbinfo->htpartcoltype;
 
 	if (tbinfo->htpartcoltype == UUIDOID)
+	{
 		q1_partcoltype = TIMESTAMPTZOID;
+	}
 
 	TypeCacheEntry *tce_q1 = lookup_type_cache(q1_partcoltype, TYPECACHE_LT_OPR);
 	TypeCacheEntry *tce_q2 = lookup_type_cache(q2_partcoltype, TYPECACHE_LT_OPR);
@@ -1502,8 +1564,10 @@ cagg_get_by_relid_or_fail(const Oid cagg_relid)
 	ContinuousAgg *cagg;
 
 	if (!OidIsValid(cagg_relid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid continuous aggregate")));
+	}
 
 	cagg = ts_continuous_agg_find_by_relid(cagg_relid);
 
@@ -1512,13 +1576,17 @@ cagg_get_by_relid_or_fail(const Oid cagg_relid)
 		const char *relname = get_rel_name(cagg_relid);
 
 		if (relname == NULL)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_TABLE),
 					 (errmsg("continuous aggregate does not exist"))));
+		}
 		else
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 (errmsg("relation \"%s\" is not a continuous aggregate", relname))));
+		}
 	}
 
 	return cagg;
@@ -1559,7 +1627,9 @@ ts_cagg_get_bucket_function_info(Oid view_oid)
 			Assert(var->varattno > 0);
 			Expr *node = list_nth(rte->groupexprs, var->varattno - 1);
 			if (IsA(node, FuncExpr))
+			{
 				expr = node;
+			}
 		}
 #endif
 
@@ -1570,7 +1640,9 @@ ts_cagg_get_bucket_function_info(Oid view_oid)
 			/* Filter any non bucketing functions */
 			FuncInfo *finfo = ts_func_cache_get_bucketing_func(fe->funcid);
 			if (finfo == NULL)
+			{
 				continue;
+			}
 
 			Assert(finfo->is_bucketing_func);
 
@@ -1624,9 +1696,11 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 		RangeTblEntry *finalize_query_rte = linitial(cagg_view_query->rtable);
 #endif
 		if (finalize_query_rte->rtekind != RTE_SUBQUERY)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_UNEXPECTED),
 					 errmsg("unexpected rte type for view %d", finalize_query_rte->rtekind)));
+		}
 
 		finalize_query = finalize_query_rte->subquery;
 	}
@@ -1642,7 +1716,9 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 
 		/* "resname" is the same as "mat column names" */
 		if (!cagg_tle->resjunk && cagg_tle->resname)
+		{
 			retlist = lappend(retlist, get_attname(mat_relid, cagg_tle->resno, false));
+		}
 	}
 	return retlist;
 }

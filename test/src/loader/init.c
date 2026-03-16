@@ -41,27 +41,35 @@ static void
 cache_invalidate_callback(Datum arg, Oid relid)
 {
 	if (ts_extension_is_proxy_table_relid(relid))
+	{
 		ts_extension_invalidate();
+	}
 }
 
 static void
 post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 {
 	if (ts_extension_is_loaded_and_not_upgrading())
+	{
 		elog(WARNING, "mock post_analyze_hook " STR(TIMESCALEDB_VERSION_MOD));
+	}
 
-		/*
-		 * a symbol needed by IsParallelWorker is not exported on windows so we do
-		 * not perform this check
-		 */
+	/*
+	 * a symbol needed by IsParallelWorker is not exported on windows so we do
+	 * not perform this check
+	 */
 #ifndef WIN32
 	if (prev_post_parse_analyze_hook != NULL && !IsParallelWorker())
+	{
 		elog(ERROR, "the extension called with a loader should always have a NULL prev hook");
+	}
 #endif
 	if (BROKEN && !creating_extension)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION),
 				 errmsg("mock broken " STR(TIMESCALEDB_VERSION_MOD))));
+	}
 }
 
 void
@@ -81,7 +89,9 @@ _PG_init(void)
 	 */
 #ifndef WIN32
 	if (prev_post_parse_analyze_hook != NULL && !IsParallelWorker())
+	{
 		elog(ERROR, "the extension called with a loader should always have a NULL prev hook");
+	}
 #endif
 	post_parse_analyze_hook = post_analyze_hook;
 	CacheRegisterRelcacheCallback(cache_invalidate_callback, PointerGetDatum(NULL));

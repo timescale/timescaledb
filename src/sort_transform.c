@@ -47,11 +47,15 @@ transform_timestamp_cast(FuncExpr *func)
 	Expr *first;
 
 	if (list_length(func->args) != 1)
+	{
 		return (Expr *) func;
+	}
 
 	first = ts_sort_transform_expr(linitial(func->args));
 	if (!IsA(first, Var))
+	{
 		return (Expr *) func;
+	}
 
 	return (Expr *) copyObject(first);
 }
@@ -74,11 +78,15 @@ transform_timestamptz_cast(FuncExpr *func)
 	Expr *first;
 
 	if (list_length(func->args) != 1)
+	{
 		return (Expr *) func;
+	}
 
 	first = ts_sort_transform_expr(linitial(func->args));
 	if (!IsA(first, Var))
+	{
 		return (Expr *) func;
+	}
 
 	return (Expr *) copyObject(first);
 }
@@ -102,7 +110,9 @@ transform_time_op_const_interval(OpExpr *op)
 		{
 			Interval *interval = DatumGetIntervalP((lsecond_node(Const, op->args))->constvalue);
 			if (interval->month != 0 || interval->day != 0)
+			{
 				return (Expr *) op;
+			}
 
 			char *name = get_opname(op->opno);
 
@@ -111,7 +121,9 @@ transform_time_op_const_interval(OpExpr *op)
 				Expr *first = ts_sort_transform_expr((Expr *) linitial(op->args));
 
 				if (IsA(first, Var))
+				{
 					return copyObject(first);
+				}
 			}
 		}
 	}
@@ -153,14 +165,18 @@ transform_int_op_const(OpExpr *op)
 							Expr *nonconst = ts_sort_transform_expr((Expr *) lsecond(op->args));
 
 							if (IsA(nonconst, Var))
+							{
 								return copyObject(nonconst);
+							}
 						}
 						else
 						{
 							Expr *nonconst = ts_sort_transform_expr((Expr *) linitial(op->args));
 
 							if (IsA(nonconst, Var))
+							{
 								return copyObject(nonconst);
+							}
 						}
 						break;
 					case '/':
@@ -170,7 +186,9 @@ transform_int_op_const(OpExpr *op)
 							Expr *nonconst = ts_sort_transform_expr((Expr *) linitial(op->args));
 
 							if (IsA(nonconst, Var))
+							{
 								return copyObject(nonconst);
+							}
 						}
 						break;
 					default:
@@ -213,7 +231,9 @@ ts_sort_transform_expr(Expr *orig_expr)
 		if (NULL != finfo)
 		{
 			if (NULL == finfo->sort_transform)
+			{
 				return orig_expr;
+			}
 
 			return finfo->sort_transform(func);
 		}
@@ -374,9 +394,13 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig, Relids child_relids
 			 * https://github.com/postgres/postgres/commit/d69d45a5
 			 */
 			if (em->em_is_child)
+			{
 				ts_add_child_eq_member(root, newec, em, it.current_relid);
+			}
 			else
+			{
 				newec->ec_members = lappend(newec->ec_members, em);
+			}
 #endif
 
 			int i = -1;
@@ -450,7 +474,9 @@ ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry
 	 * nothing to do for empty pathkeys
 	 */
 	if (root->query_pathkeys == NIL)
+	{
 		return NIL;
+	}
 
 	/*
 	 * These sort transformations are only safe for single member ORDER BY
@@ -508,7 +534,9 @@ ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry
 	transformed = sort_transform_ec(root, last_pk_eclass, child_relids);
 
 	if (transformed == NULL)
+	{
 		return NIL;
+	}
 
 	new_pk = make_canonical_pathkey(root,
 									transformed,
@@ -522,9 +550,13 @@ ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry
 	foreach (lc, root->query_pathkeys)
 	{
 		if (lfirst(lc) != last_pk)
+		{
 			transformed_query_pathkeys = lappend(transformed_query_pathkeys, lfirst(lc));
+		}
 		else
+		{
 			transformed_query_pathkeys = lappend(transformed_query_pathkeys, new_pk);
+		}
 	}
 
 	return transformed_query_pathkeys;

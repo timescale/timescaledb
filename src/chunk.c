@@ -170,7 +170,9 @@ chunk_formdata_make_tuple(const FormData_chunk *fd, TupleDesc desc)
 	values[AttrNumberGetAttrOffset(Anum_chunk_table_name)] = NameGetDatum(&fd->table_name);
 	/*when we insert a chunk the compressed chunk id is always NULL */
 	if (fd->compressed_chunk_id == INVALID_CHUNK_ID)
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] = true;
+	}
 	else
 	{
 		values[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)] =
@@ -210,17 +212,23 @@ ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 			   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_chunk_table_name)]));
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)])
+	{
 		fd->compressed_chunk_id = INVALID_CHUNK_ID;
+	}
 	else
+	{
 		fd->compressed_chunk_id =
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)]);
+	}
 
 	fd->status = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_status)]);
 	fd->osm_chunk = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_chunk_osm_chunk)]);
 	fd->creation_time = DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_chunk_creation_time)]);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 }
 
 int64
@@ -339,7 +347,9 @@ do_dimension_alignment(ChunkScanCtx *scanctx, ChunkStub *stub)
 		int64 coord = scanctx->point->coordinates[i];
 
 		if (!dim->fd.aligned)
+		{
 			continue;
+		}
 
 		/*
 		 * The stub might not have a slice for each dimension, so we cannot
@@ -348,7 +358,9 @@ do_dimension_alignment(ChunkScanCtx *scanctx, ChunkStub *stub)
 		chunk_slice = ts_hypercube_get_slice_by_dimension_id(stub->cube, dim->fd.id);
 
 		if (NULL == chunk_slice)
+		{
 			continue;
+		}
 
 		cube_slice = cube->slices[i];
 
@@ -380,7 +392,9 @@ calculate_and_set_new_chunk_interval(const Hypertable *ht, const Point *p)
 	int i;
 
 	if (!OidIsValid(ht->chunk_sizing_func) || ht->fd.chunk_target_size <= 0)
+	{
 		return false;
+	}
 
 	/* Find first open dimension */
 	for (i = 0; i < hs->num_dimensions; i++)
@@ -388,7 +402,9 @@ calculate_and_set_new_chunk_interval(const Hypertable *ht, const Point *p)
 		dim = &hs->dimensions[i];
 
 		if (IS_OPEN_DIMENSION(dim))
+		{
 			break;
+		}
 
 		dim = NULL;
 	}
@@ -412,7 +428,9 @@ calculate_and_set_new_chunk_interval(const Hypertable *ht, const Point *p)
 
 	/* Check if the function didn't set and interval or nothing changed */
 	if (chunk_interval <= 0 || chunk_interval == dim->fd.interval_length)
+	{
 		return false;
+	}
 
 	/* Update the dimension */
 	ts_dimension_set_chunk_interval(dim, chunk_interval);
@@ -438,7 +456,9 @@ do_collision_resolution(ChunkScanCtx *scanctx, ChunkStub *stub)
 	int i;
 
 	if (stub->cube->num_slices != space->num_dimensions || !ts_hypercubes_collide(cube, stub->cube))
+	{
 		return CHUNK_IGNORED;
+	}
 
 	for (i = 0; i < space->num_dimensions; i++)
 	{
@@ -461,7 +481,9 @@ do_collision_resolution(ChunkScanCtx *scanctx, ChunkStub *stub)
 			 * dimension might have resolved the collision in another
 			 */
 			if (!ts_hypercubes_collide(cube, stub->cube))
+			{
 				return res;
+			}
 		}
 	}
 
@@ -625,7 +647,9 @@ set_attoptions(Relation ht_rel, Oid chunk_oid)
 
 		/* Ignore dropped */
 		if (attribute->attisdropped)
+		{
 			continue;
+		}
 
 		tuple = SearchSysCacheAttName(RelationGetRelid(ht_rel), attributeName);
 
@@ -780,14 +804,20 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 	 * owner, otherwise become the hypertable owner
 	 */
 	if (namestrcmp((Name) &chunk->fd.schema_name, INTERNAL_SCHEMA_NAME) == 0)
+	{
 		uid = ts_catalog_database_info_get()->owner_uid;
+	}
 	else
+	{
 		uid = rel->rd_rel->relowner;
+	}
 
 	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
 
 	if (uid != saved_uid)
+	{
 		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+	}
 
 	/* Prepare event trigger state and invoke ddl_command_start triggers */
 	if (ts_guc_enable_event_triggers)
@@ -828,14 +858,20 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		set_attoptions(rel, address.objectId);
 
 		if (uid != saved_uid)
+		{
 			SetUserIdAndSecContext(saved_uid, sec_ctx);
+		}
 	}
 	else
+	{
 		elog(ERROR, "invalid relkind \"%c\" when creating chunk", chunk->relkind);
+	}
 
 	/* Insert the table into the cache to attach it as partition later */
 	if (is_partitioning_allowed(ht->main_table_relid))
+	{
 		ts_partition_cache_insert_chunk(ht, address.objectId);
+	}
 
 	table_close(rel, AccessShareLock);
 
@@ -877,7 +913,9 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 	const char relkind = RELKIND_RELATION;
 
 	if (NULL == schema_name || schema_name[0] == '\0')
+	{
 		schema_name = NameStr(ht->fd.associated_schema_name);
+	}
 
 	/* Create a new chunk based on the hypercube */
 	chunk = ts_chunk_create_base(chunk_id, hs->num_dimensions, relkind);
@@ -892,7 +930,9 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 		int len;
 
 		if (NULL == prefix)
+		{
 			prefix = NameStr(ht->fd.associated_table_prefix);
+		}
 
 		len = snprintf(NameStr(chunk->fd.table_name),
 					   NAMEDATALEN,
@@ -901,10 +941,14 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 					   chunk->fd.id);
 
 		if (len >= NAMEDATALEN)
+		{
 			elog(ERROR, "chunk table name too long");
+		}
 	}
 	else
+	{
 		namestrcpy(&chunk->fd.table_name, table_name);
+	}
 
 	return chunk;
 }
@@ -957,12 +1001,18 @@ chunk_set_replica_identity(const Chunk *chunk)
 		Oid chunk_index_relid = InvalidOid;
 
 		if (OidIsValid(ht_indexoid))
+		{
 			chunk_index_relid = ts_chunk_index_get_by_hypertable_indexrelid(ch_rel, ht_indexoid);
+		}
 
 		if (OidIsValid(chunk_index_relid))
+		{
 			stmt.name = get_rel_name(chunk_index_relid);
+		}
 		else
+		{
 			stmt.identity_type = REPLICA_IDENTITY_NOTHING;
+		}
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -977,7 +1027,9 @@ chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 {
 	/* Do not create any of these for partitioned hypertables */
 	if (is_partitioning_allowed(ht->main_table_relid))
+	{
 		return;
+	}
 
 	/* Create the chunk's constraints, triggers, and indexes */
 	ts_chunk_constraints_create(ht, chunk);
@@ -1049,7 +1101,9 @@ get_hypertable_publication_filters(Oid puboid, const Chunk *chunk, List **column
 							   ObjectIdGetDatum(puboid));
 
 	if (!HeapTupleIsValid(pubtuple))
+	{
 		return;
+	}
 
 	datum = SysCacheGetAttr(PUBLICATIONRELMAP, pubtuple, Anum_pg_publication_rel_prqual, &isnull);
 	if (!isnull)
@@ -1165,7 +1219,9 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 
 	/* Add chunk to publications if hypertable is in any publications */
 	if (ts_guc_enable_chunk_auto_publication)
+	{
 		chunk_add_to_publications(chunk);
+	}
 
 	return chunk;
 }
@@ -1229,11 +1285,14 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 
 		/* Ignore dropped */
 		if (att->attisdropped)
+		{
 			continue;
+		}
 
 		ht_attnum = get_attnum(ht->main_table_relid, NameStr(att->attname));
 		/* Try to find the column in parent (matching on column name) */
 		if (ht_attnum == InvalidAttrNumber)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_DATATYPE_MISMATCH),
 					 errmsg("table \"%s\" contains column \"%s\" not found in parent \"%s\"",
@@ -1241,6 +1300,7 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 							NameStr(att->attname),
 							RelationGetRelationName(ht_rel)),
 					 errdetail("The new chunk can contain only the columns present in parent.")));
+		}
 
 		/*
 		 * PG16 and later does not allow generated columns on child tables if the parent
@@ -1271,11 +1331,13 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 			char *ht_expr = ts_get_attr_expr(ht_rel, ht_attnum);
 
 			if (strcmp(chunk_expr, ht_expr) != 0)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_DATATYPE_MISMATCH),
 						 errmsg("chunk column \"%s\" must have the same expression as the "
 								"hypertable column.",
 								NameStr(att->attname))));
+			}
 		}
 	}
 	table_close(ht_rel, NoLock);
@@ -1328,7 +1390,9 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 
 	/* Add chunk to publications if hypertable is in any publications */
 	if (ts_guc_enable_chunk_auto_publication)
+	{
 		chunk_add_to_publications(chunk);
+	}
 
 	return chunk;
 }
@@ -1397,18 +1461,24 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 			ts_hypercube_find_existing_slices(hc, &tuplock);
 
 			if (OidIsValid(chunk_table_relid))
+			{
 				chunk = chunk_create_from_hypercube_and_table_after_lock(ht,
 																		 hc,
 																		 chunk_table_relid,
 																		 schema_name,
 																		 table_name,
 																		 NULL);
+			}
 			else
+			{
 				chunk =
 					chunk_create_from_hypercube_after_lock(ht, hc, schema_name, table_name, NULL);
+			}
 
 			if (NULL != created)
+			{
 				*created = true;
+			}
 
 			ASSERT_IS_VALID_CHUNK(chunk);
 
@@ -1426,16 +1496,20 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 	/* We can only use an existing chunk if it has identical dimensional
 	 * constraints. Otherwise, throw an error */
 	if (OidIsValid(chunk_table_relid) || !ts_hypercube_equal(stub->cube, hc))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_CHUNK_COLLISION),
 				 errmsg("chunk creation failed due to collision")));
+	}
 
 	/* chunk_collides only returned a stub, so we need to lookup the full
 	 * chunk. */
 	chunk = ts_chunk_get_by_id(stub->id, true);
 
 	if (NULL != created)
+	{
 		*created = false;
+	}
 
 	DEBUG_WAITPOINT("find_or_create_chunk_found");
 
@@ -1460,7 +1534,9 @@ ts_chunk_find_for_point(const Hypertable *ht, const Point *p, LOCKMODE lockmode)
 	int32 chunk_id = ts_chunk_point_find_chunk_id(ht, p, NULL);
 
 	if (chunk_id == INVALID_CHUNK_ID)
+	{
 		return NULL;
+	}
 
 	/* The chunk might be dropped, so we don't fail if we haven't found it. */
 	return ts_chunk_get_by_id_with_slice_lock(chunk_id,
@@ -1643,7 +1719,9 @@ ts_chunk_stub_create(int32 id, int16 num_constraints)
 	stub->id = id;
 
 	if (num_constraints > 0)
+	{
 		stub->constraints = ts_chunk_constraints_alloc(num_constraints, CurrentMemoryContext);
+	}
 
 	return stub;
 }
@@ -1660,7 +1738,9 @@ ts_chunk_create_base(int32 id, int16 num_constraints, const char relkind)
 	chunk->fd.creation_time = GetCurrentTimestamp();
 
 	if (num_constraints > 0)
+	{
 		chunk->constraints = ts_chunk_constraints_alloc(num_constraints, CurrentMemoryContext);
+	}
 
 	return chunk;
 }
@@ -1680,10 +1760,14 @@ ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkS
 	int num_constraints_hint = stub ? stub->constraints->num_constraints : 2;
 
 	if (chunkptr == NULL)
+	{
 		chunkptr = &chunk;
+	}
 
 	if (*chunkptr == NULL)
+	{
 		*chunkptr = MemoryContextAllocZero(ti->mctx, sizeof(Chunk));
+	}
 
 	chunk = *chunkptr;
 	ts_chunk_formdata_fill(&chunk->fd, ti);
@@ -1764,7 +1848,9 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 		Relation rel = table_openrv_extended(rv, stubctx->chunk_lockmode, true);
 
 		if (!rel)
+		{
 			return SCAN_DONE;
+		}
 
 		table_close(rel, NoLock);
 	}
@@ -1806,7 +1892,9 @@ chunk_create_from_stub(ChunkStubScanCtx *stubctx)
 	Assert(num_found == 0 || num_found == 1);
 
 	if (num_found != 1)
+	{
 		elog(ERROR, "no chunk found with ID %d", stubctx->stub->id);
+	}
 
 	Assert(stubctx->chunk != NULL);
 
@@ -2000,7 +2088,9 @@ ts_chunk_lock_for_creating_compressed_chunk(int32 chunk_id, int32 *compressed_ch
 	ts_scan_iterator_close(&iterator);
 
 	if (!found)
+	{
 		elog(ERROR, "chunk with ID %d does not exist", chunk_id);
+	}
 
 	return lockresult;
 }
@@ -2186,27 +2276,37 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 		if (!time_dim)
+		{
 			time_dim = hyperspace_get_closed_dimension(ht->space, 0);
+		}
 
 		if (time_dim && IS_CLOSED_DIMENSION(time_dim) && (!PG_ARGISNULL(1) || !PG_ARGISNULL(2)))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot specify \"older_than\" or \"newer_than\" for "
 							"\"closed\"-like partitioning types"),
 					 errhint("Use \"created_before\" and/or \"created_after\" which rely on the "
 							 "chunk creation time values.")));
+		}
 
 		if (time_dim)
+		{
 			time_type = ts_dimension_get_partition_type(time_dim);
+		}
 		else
+		{
 			time_type = InvalidOid;
+		}
 
 		/*
 		 * Treat UUID (v7) as a timestamptz type. The expected input is an interval or absolute
 		 * timestamptz.
 		 */
 		if (IS_UUID_TYPE(time_type))
+		{
 			time_type = TIMESTAMPTZOID;
+		}
 
 		/* note that arg_types will be the same for all specified "ANY" elements for a given call */
 		arg_type = InvalidOid;
@@ -2233,11 +2333,13 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		if (!PG_ARGISNULL(3))
 		{
 			if (older_newer)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("cannot specify \"older_than\" or \"newer_than\" together with "
 								"\"created_before\""
 								"or \"created_after\"")));
+			}
 
 			arg_type = get_fn_expr_argtype(fcinfo->flinfo, 3);
 			/* We use the existing function for various type/conversion checks */
@@ -2251,11 +2353,13 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		if (!PG_ARGISNULL(4))
 		{
 			if (older_newer)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("cannot specify \"older_than\" or \"newer_than\" together with "
 								"\"created_before\""
 								"or \"created_after\"")));
+			}
 
 			arg_type = get_fn_expr_argtype(fcinfo->flinfo, 4);
 			/* We use the existing function for various type/conversion checks */
@@ -2268,7 +2372,9 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 
 		/* if both have not been specified then default to older_newer */
 		if (!older_newer && !before_after)
+		{
 			older_newer = true;
+		}
 
 		funcctx = SRF_FIRSTCALL_INIT();
 		/*
@@ -2280,6 +2386,7 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		{
 			/* check that we use proper inputs for such cases */
 			if (older_newer)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("cannot specify \"older_than\" and/or \"newer_than\" for "
@@ -2287,6 +2394,7 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 						 errhint(
 							 "Use \"created_before\" and/or \"created_after\" which rely on the "
 							 "chunk creation time values.")));
+			}
 			funcctx->user_fctx = get_chunks_in_creation_time_range(ht,
 																   created_before,
 																   created_after,
@@ -2308,12 +2416,14 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 													  NULL);
 			}
 			else
+			{
 				funcctx->user_fctx = get_chunks_in_time_range(ht,
 															  older_than,
 															  newer_than,
 															  funcctx->multi_call_memory_ctx,
 															  &funcctx->max_calls,
 															  NULL);
+			}
 		}
 		ts_cache_release(&hcache);
 	}
@@ -2335,22 +2445,28 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than, Mem
 	uint64 num_chunks = 0;
 
 	if (older_than <= newer_than)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time range"),
 				 errhint("The start of the time range must be before the end.")));
+	}
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("invalid operation on compressed hypertable")));
+	}
 
 	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterEqualStrategyNumber;
 	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	if (time_dim == NULL)
+	{
 		time_dim = hyperspace_get_closed_dimension(ht->space, 0);
+	}
 
 	Ensure(time_dim != NULL,
 		   "partitioning dimension not found for hypertable \"%s\".\"%s\"",
@@ -2395,7 +2511,9 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than, Mem
 		uint64 i = 0;
 		/* Assert that we never return dropped chunks */
 		for (i = 0; i < *num_chunks_returned; i++)
+		{
 			ASSERT_IS_VALID_CHUNK(&chunks[i]);
+		}
 	} while (false);
 #endif
 
@@ -2412,10 +2530,14 @@ ts_chunk_copy(const Chunk *chunk)
 	memcpy(copy, chunk, sizeof(Chunk));
 
 	if (NULL != chunk->constraints)
+	{
 		copy->constraints = ts_chunk_constraints_copy(chunk->constraints);
+	}
 
 	if (NULL != chunk->cube)
+	{
 		copy->cube = ts_hypercube_copy(chunk->cube);
+	}
 
 	return copy;
 }
@@ -2511,7 +2633,9 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 
 			/* Dropped chunks do not contain valid data and must not be returned */
 			if (!chunk)
+			{
 				continue;
+			}
 			chunk->constraints = ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, 1, mctx);
 
 			it = ts_dimension_slice_scan_iterator_create(NULL, mctx);
@@ -2582,7 +2706,9 @@ chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, MemoryContext mct
 									 displaykey[i].name,
 									 displaykey[i].as_string(scankey[i].sk_argument));
 					if (++i < nkeys)
+					{
 						appendStringInfoString(&info, ", ");
+					}
 				}
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
@@ -2619,14 +2745,18 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 	if (schema_name == NULL || table_name == NULL)
 	{
 		if (fail_if_not_found)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("chunk not found"),
 					 errdetail("schema_name: %s, table_name: %s",
 							   schema_name ? schema_name : "<null>",
 							   table_name ? table_name : "<null>")));
+		}
 		else
+		{
 			return NULL;
+		}
 	}
 
 	namestrcpy(&schema, schema_name);
@@ -2644,10 +2774,12 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 		if (!rel)
 		{
 			if (fail_if_not_found)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
 						 errmsg("chunk not found"),
 						 errdetail("schema_name: %s, table_name: %s", schema_name, table_name)));
+			}
 			return NULL;
 		}
 
@@ -2688,9 +2820,13 @@ ts_chunk_get_by_relid_locked(Oid relid, LOCKMODE chunk_lockmode, const ScanTupLo
 	if (!OidIsValid(relid))
 	{
 		if (fail_if_not_found)
+		{
 			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid Oid")));
+		}
 		else
+		{
 			return NULL;
+		}
 	}
 
 	schema = get_namespace_name(get_rel_namespace(relid));
@@ -2804,7 +2940,9 @@ chunk_simple_scan(ScanIterator *iterator, FormData_chunk *form, bool missing_ok,
 							 displaykey[i].name,
 							 displaykey[i].as_string(iterator->ctx.scankey[i].sk_argument));
 			if (++i < iterator->ctx.nkeys)
+			{
 				appendStringInfoString(&info, ", ");
+			}
 		}
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
@@ -2826,7 +2964,9 @@ chunk_simple_scan_by_name(const char *schema, const char *table, FormData_chunk 
 	};
 
 	if (schema == NULL || table == NULL)
+	{
 		return false;
+	}
 
 	iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
 	init_scan_by_qualified_table_name(&iterator, schema, table);
@@ -2853,9 +2993,11 @@ ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form, bool missing_ok
 	}
 
 	if (!found && !missing_ok)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("chunk with reloid %u not found", reloid)));
+	}
 
 	return found;
 }
@@ -2886,7 +3028,9 @@ ts_chunk_id_from_relid(PG_FUNCTION_ARGS)
 	FormData_chunk form;
 
 	if (last_relid == relid)
+	{
 		return last_id;
+	}
 
 	ts_chunk_simple_scan_by_reloid(relid, &form, false);
 
@@ -2938,12 +3082,16 @@ ts_chunk_get_relid(int32 chunk_id, bool missing_ok)
 	Oid relid = InvalidOid;
 
 	if (chunk_simple_scan_by_id(chunk_id, &form, missing_ok))
+	{
 		relid = ts_get_relation_relid(NameStr(form.schema_name), NameStr(form.table_name), true);
+	}
 
 	if (!OidIsValid(relid) && !missing_ok)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_SCHEMA),
 				 errmsg("chunk with id %d not found", chunk_id)));
+	}
 
 	return relid;
 }
@@ -2960,7 +3108,9 @@ ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok)
 	FormData_chunk form = { 0 };
 
 	if (!chunk_simple_scan_by_id(chunk_id, &form, missing_ok))
+	{
 		return InvalidOid;
+	}
 
 	return get_namespace_oid(NameStr(form.schema_name), missing_ok);
 }
@@ -2971,10 +3121,14 @@ ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id, bool mis
 	FormData_chunk form = { 0 };
 
 	if (!chunk_simple_scan_by_name(schema, table, &form, missing_ok))
+	{
 		return false;
+	}
 
 	if (NULL != chunk_id)
+	{
 		*chunk_id = form.id;
+	}
 
 	return true;
 }
@@ -3056,7 +3210,9 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 			else if (ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id,
 																	NULL,
 																	CurrentMemoryContext) == 0)
+			{
 				ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
+			}
 		}
 	}
 
@@ -3066,7 +3222,9 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 	 * intended to reference the hypertable, not the chunk.
 	 */
 	if (detach)
+	{
 		ts_chunk_drop_referencing_fk_by_chunk_id(form.id);
+	}
 	ts_compression_chunk_size_delete(form.id);
 
 	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */
@@ -3100,7 +3258,9 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool detach)
 		Chunk *compressed_chunk = ts_chunk_get_by_id(form.compressed_chunk_id, false);
 
 		if (OidIsValid(relid))
+		{
 			ts_compression_settings_delete(relid);
+		}
 
 		/* The chunk may have been deleted by a CASCADE */
 		if (compressed_chunk != NULL)
@@ -3182,7 +3342,9 @@ ts_chunk_delete_by_relid_and_relname(Oid relid, const char *schemaname, const ch
 									 DropBehavior behavior)
 {
 	if (!OidIsValid(relid))
+	{
 		return 0;
+	}
 
 	return ts_chunk_delete_by_name_internal(schemaname, tablename, relid, behavior);
 }
@@ -3260,11 +3422,15 @@ ts_chunk_get_compressed_chunk_parent(const Chunk *chunk)
 		datum = slot_getattr(ti->slot, Anum_chunk_id, &isnull);
 
 		if (!isnull)
+		{
 			parent_id = DatumGetObjectId(datum);
+		}
 	}
 
 	if (OidIsValid(parent_id))
+	{
 		return ts_chunk_get_by_id(parent_id, true);
+	}
 
 	return NULL;
 }
@@ -3289,7 +3455,9 @@ ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id)
 		bool isnull;
 		Datum id = slot_getattr(ts_scan_iterator_slot(&iterator), Anum_chunk_id, &isnull);
 		if (!isnull)
+		{
 			chunkids = lappend_int(chunkids, DatumGetInt32(id));
+		}
 	}
 
 	return chunkids;
@@ -3350,14 +3518,18 @@ ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int32 dimension_
 	slices = ts_dimension_slice_scan_by_dimension(dimension_id, 0);
 
 	if (NULL == slices)
+	{
 		return;
+	}
 
 	chunk_scan_ctx_init(&chunkctx, ht, NULL);
 
 	for (i = 0; i < slices->num_slices; i++)
+	{
 		ts_chunk_constraint_scan_by_dimension_slice(slices->slices[i],
 													&chunkctx,
 													CurrentMemoryContext);
+	}
 
 	chunk_scan_ctx_foreach_chunk_stub(&chunkctx, chunk_recreate_constraint, 0);
 	chunk_scan_ctx_destroy(&chunkctx);
@@ -3583,7 +3755,9 @@ ts_chunk_clear_status(Chunk *chunk, int32 status)
 
 	/* Row-level locks are released at transaction end or during savepoint rollback */
 	if (old_status != form.status)
+	{
 		chunk_update_catalog_tuple(&tid, &form);
+	}
 
 	return true;
 }
@@ -3793,13 +3967,21 @@ chunk_cmp(const void *ch1, const void *ch2)
 	const Chunk *v2 = ((const Chunk *) ch2);
 
 	if (v1->fd.hypertable_id < v2->fd.hypertable_id)
+	{
 		return -1;
+	}
 	if (v1->fd.hypertable_id > v2->fd.hypertable_id)
+	{
 		return 1;
+	}
 	if (v1->table_id < v2->table_id)
+	{
 		return -1;
+	}
 	if (v1->table_id > v2->table_id)
+	{
 		return 1;
+	}
 	return 0;
 }
 
@@ -3824,10 +4006,12 @@ show_chunks_return_srf(FunctionCallInfo fcinfo)
 		/* Build a tuple descriptor for our result type */
 		/* not quite necessary */
 		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_SCALAR)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("function returning record called in context "
 							"that cannot accept type record")));
+		}
 	}
 
 	/* stuff done on every call of the function */
@@ -3856,9 +4040,13 @@ show_chunks_return_srf(FunctionCallInfo fcinfo)
 
 	/* do when there is more left to send */
 	if (call_cntr < funcctx->max_calls)
+	{
 		SRF_RETURN_NEXT(funcctx, result_set[call_cntr].table_id);
+	}
 	else /* do when there is no more left */
+	{
 		SRF_RETURN_DONE(funcctx);
+	}
 }
 
 void
@@ -3870,10 +4058,12 @@ ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 	};
 
 	if (log_level >= 0)
+	{
 		elog(log_level,
 			 "dropping chunk %s.%s",
 			 NameStr(chunk->fd.schema_name),
 			 NameStr(chunk->fd.table_name));
+	}
 
 	/* Remove the chunk from the chunk table */
 	ts_chunk_delete_by_relid_and_relname(chunk->table_id,
@@ -3906,7 +4096,9 @@ lock_referenced_tables(Oid table_relid)
 	}
 	table_close(table_rel, AccessShareLock);
 	foreach (lf, fk_relids)
+	{
 		LockRelationOid(lfirst_oid(lf), AccessExclusiveLock);
+	}
 }
 
 List *
@@ -3977,19 +4169,23 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		else
 		{
 			if (!older_newer)
+			{
 				chunks = get_chunks_in_creation_time_range(ht,
 														   older_than,
 														   newer_than,
 														   CurrentMemoryContext,
 														   &num_chunks,
 														   &tuplock);
+			}
 			else
+			{
 				chunks = get_chunks_in_time_range(ht,
 												  older_than,
 												  newer_than,
 												  CurrentMemoryContext,
 												  &num_chunks,
 												  &tuplock);
+			}
 		}
 	}
 	PG_CATCH();
@@ -4091,7 +4287,9 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		 * ensure the library is loaded.
 		 */
 		if (!osm_drop_chunks_hook && GetFdwRoutineByRelId(osm_chunk->table_id))
+		{
 			osm_drop_chunks_hook = ts_get_osm_hypertable_drop_chunks_hook();
+		}
 
 		if (osm_drop_chunks_hook)
 		{
@@ -4145,10 +4343,12 @@ list_return_srf(FunctionCallInfo fcinfo)
 		/* Build a tuple descriptor for our result type */
 		/* not quite necessary */
 		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_SCALAR)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("function returning record called in context "
 							"that cannot accept type record")));
+		}
 	}
 
 	/* stuff done on every call of the function */
@@ -4166,7 +4366,9 @@ list_return_srf(FunctionCallInfo fcinfo)
 		SRF_RETURN_NEXT(funcctx, retval);
 	}
 	else /* do when there is no more left */
+	{
 		SRF_RETURN_DONE(funcctx);
+	}
 }
 
 Datum
@@ -4190,11 +4392,13 @@ ts_chunk_drop_single_chunk(PG_FUNCTION_ARGS)
 	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
 
 	if (ts_chunk_contains_compressed_data(ch))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("dropping compressed chunks not supported"),
 				 errhint("Please drop the corresponding chunk on the uncompressed hypertable "
 						 "instead.")));
+	}
 
 	/* do not drop any chunk dependencies */
 	ts_chunk_drop(ch, DROP_RESTRICT, LOG);
@@ -4237,13 +4441,17 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	 * so we just return the next chunk in the list of dropped chunks.
 	 */
 	if (!SRF_IS_FIRSTCALL())
+	{
 		return list_return_srf(fcinfo);
+	}
 
 	if (PG_ARGISNULL(0))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid hypertable or continuous aggregate"),
 				 errhint("Specify a hypertable or continuous aggregate.")));
+	}
 
 	/* Find either the hypertable or view, or error out if the relid is
 	 * neither.
@@ -4257,9 +4465,11 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	if (!time_dim)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("hypertable has no open partitioning dimension")));
+	}
 
 	time_type = ts_dimension_get_partition_type(time_dim);
 
@@ -4268,7 +4478,9 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	 * timestamptz.
 	 */
 	if (IS_UUID_TYPE(time_type))
+	{
 		time_type = TIMESTAMPTZOID;
+	}
 
 	/* note that arg_types will be the same for all specified "ANY" elements for a given call */
 	if (!PG_ARGISNULL(1))
@@ -4294,6 +4506,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(4))
 	{
 		if (older_newer)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("cannot specify \"older_than\" or \"newer_than\" together with "
@@ -4304,6 +4517,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 							 " and  \"created_before\" and/or \"created_after\" is recommended "
 							 "with \"integer\"-like"
 							 " partitioning.")));
+		}
 
 		arg_type = get_fn_expr_argtype(fcinfo->flinfo, 4);
 		/* We use the existing function for various type/conversion checks */
@@ -4318,6 +4532,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(5))
 	{
 		if (older_newer)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("cannot specify \"older_than\" or \"newer_than\" together with "
@@ -4328,6 +4543,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 							 " and  \"created_before\" and/or \"created_after\" is recommended "
 							 "with \"integer\"-like"
 							 " partitioning.")));
+		}
 		arg_type = get_fn_expr_argtype(fcinfo->flinfo, 5);
 		/* We use the existing function for various type/conversion checks */
 		created_after = ts_time_value_from_arg(PG_GETARG_DATUM(5), arg_type, TIMESTAMPTZOID, false);
@@ -4339,11 +4555,13 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 
 	/* if both have not been specified then error out */
 	if (!older_newer && !before_after)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time range for dropping chunks"),
 				 errhint("At least one of older_than/newer_than or created_before/created_after"
 						 " must be provided.")));
+	}
 
 	/*
 	 * For INTEGER type dimensions, we support querying using intervals or any
@@ -4354,12 +4572,14 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	{
 		/* check that we use proper inputs for such cases */
 		if (older_newer)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("cannot specify \"older_than\" and/or \"newer_than\" for "
 							"\"integer\"-like partitioning types"),
 					 errhint("Use \"created_before\" and/or \"created_after\" which rely on the "
 							 "chunk creation time values.")));
+		}
 	}
 
 	verbose = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
@@ -4394,7 +4614,9 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 		FlushErrorState();
 
 		if (edata->sqlerrcode == ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST)
+		{
 			edata->hint = pstrdup("Use DROP ... to drop the dependent objects.");
+		}
 
 		ts_cache_release(&hcache);
 		ReThrowError(edata);
@@ -4443,9 +4665,13 @@ ts_chunk_get_compression_status(int32 chunk_id)
 		if (status_is_compressed)
 		{
 			if (status_is_unordered || status_is_partial)
+			{
 				st = CHUNK_COMPRESS_UNORDERED;
+			}
 			else
+			{
 				st = CHUNK_COMPRESS_ORDERED;
+			}
 		}
 		else
 		{
@@ -4532,11 +4758,13 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 
 			default:
 				if (throw_error)
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("%s not permitted on tiered chunk \"%s\" ",
 									get_chunk_operation_str(cmd),
 									get_rel_name(chunk_relid))));
+				}
 				return false;
 				break;
 		}
@@ -4556,11 +4784,13 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 			case CHUNK_DROP:
 			{
 				if (throw_error)
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("%s not permitted on frozen chunk \"%s\" ",
 									get_chunk_operation_str(cmd),
 									get_rel_name(chunk_relid))));
+				}
 				return false;
 				break;
 			}
@@ -4582,20 +4812,24 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 			case CHUNK_COMPRESS:
 			{
 				if (ts_flags_are_set_32(chunk_status, CHUNK_STATUS_COMPRESSED))
+				{
 					ereport((throw_error ? ERROR : NOTICE),
 							(errcode(ERRCODE_DUPLICATE_OBJECT),
 							 errmsg("chunk \"%s\" is already compressed",
 									get_rel_name(chunk_relid))));
+				}
 				return false;
 			}
 			/* Only compressed chunks can be decompressed */
 			case CHUNK_DECOMPRESS:
 			{
 				if (!ts_flags_are_set_32(chunk_status, CHUNK_STATUS_COMPRESSED))
+				{
 					ereport((throw_error ? ERROR : NOTICE),
 							(errcode(ERRCODE_DUPLICATE_OBJECT),
 							 errmsg("chunk \"%s\" is already decompressed",
 									get_rel_name(chunk_relid))));
+				}
 				return false;
 			}
 			default:
@@ -4648,38 +4882,48 @@ ts_chunk_status_text(PG_FUNCTION_ARGS)
 	ArrayBuildState *astate = initArrayResult(TEXTOID, CurrentMemoryContext, false);
 
 	if (status & CHUNK_STATUS_COMPRESSED)
+	{
 		astate = accumArrayResult(astate,
 								  CStringGetTextDatum("COMPRESSED"),
 								  false,
 								  TEXTOID,
 								  CurrentMemoryContext);
+	}
 
 	if (status & CHUNK_STATUS_COMPRESSED_UNORDERED)
+	{
 		astate = accumArrayResult(astate,
 								  CStringGetTextDatum("UNORDERED"),
 								  false,
 								  TEXTOID,
 								  CurrentMemoryContext);
+	}
 
 	if (status & CHUNK_STATUS_FROZEN)
+	{
 		astate = accumArrayResult(astate,
 								  CStringGetTextDatum("FROZEN"),
 								  false,
 								  TEXTOID,
 								  CurrentMemoryContext);
+	}
 
 	if (status & CHUNK_STATUS_COMPRESSED_PARTIAL)
+	{
 		astate = accumArrayResult(astate,
 								  CStringGetTextDatum("PARTIAL"),
 								  false,
 								  TEXTOID,
 								  CurrentMemoryContext);
+	}
 
 	if (status < 0 || status > (CHUNK_STATUS_COMPRESSED | CHUNK_STATUS_COMPRESSED_UNORDERED |
 								CHUNK_STATUS_FROZEN | CHUNK_STATUS_COMPRESSED_PARTIAL))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid chunk status %d", status)));
+	}
 
 	PG_RETURN_DATUM(makeArrayResult(astate, CurrentMemoryContext));
 }
@@ -4785,15 +5029,19 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	Oid ht_ownerid = ts_rel_get_owner(parent_ht->main_table_relid);
 
 	if (!has_privs_of_role(GetUserId(), ht_ownerid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("must be owner of hypertable \"%s\"",
 						get_rel_name(parent_ht->main_table_relid))));
+	}
 
 	Assert(get_rel_relkind(relid) == RELKIND_FOREIGN_TABLE);
 	if (hs->num_dimensions > 1)
+	{
 		elog(ERROR,
 			 "cannot attach a  foreign table to a hypertable that has more than 1 dimension");
+	}
 	/* Create a new chunk based on the hypercube */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK),
@@ -4858,12 +5106,14 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 	bool dimension_slice_found = false;
 
 	if (chunk->hypertable_relid != merge_chunk->hypertable_relid)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("cannot merge chunks from different hypertables"),
 				 errhint("chunk 1: \"%s\", chunk 2: \"%s\"",
 						 get_rel_name(chunk->table_id),
 						 get_rel_name(merge_chunk->table_id))));
+	}
 
 	for (int i = 0; i < chunk->cube->num_slices; i++)
 	{
@@ -4888,6 +5138,7 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 	}
 
 	if (!dimension_slice_found)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("cannot find slice for merging dimension"),
@@ -4895,8 +5146,10 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 						 get_rel_name(chunk->table_id),
 						 get_rel_name(merge_chunk->table_id),
 						 dimension_id)));
+	}
 
 	if (slice->fd.range_end != merge_slice->fd.range_start)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("cannot merge non-adjacent chunks over supplied dimension"),
@@ -4904,6 +5157,7 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 						 get_rel_name(chunk->table_id),
 						 get_rel_name(merge_chunk->table_id),
 						 dimension_id)));
+	}
 
 	num_ccs =
 		ts_chunk_constraint_scan_by_dimension_slice_id(slice->fd.id, NULL, CurrentMemoryContext);
@@ -4912,12 +5166,14 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 	 * This can only occur when the catalog metadata is corrupt.
 	 */
 	if (num_ccs <= 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("missing chunk constraint for dimension slice"),
 				 errhint("chunk: \"%s\", slice ID %d",
 						 get_rel_name(chunk->table_id),
 						 slice->fd.id)));
+	}
 
 	DimensionSlice *new_slice =
 		ts_dimension_slice_create(dimension_id, slice->fd.range_start, merge_slice->fd.range_end);
@@ -4926,7 +5182,9 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 	 * we can go ahead and delete it since we are dropping the chunk.
 	 */
 	if (num_ccs == 1)
+	{
 		ts_dimension_slice_delete_by_id(slice->fd.id, false);
+	}
 
 	/* Check for dimension slice already exists, if not create a new one. */
 	ScanTupLock tuplock = {
@@ -4960,12 +5218,14 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 	}
 
 	if (num_ccs <= 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("missing chunk constraint for merged dimension slice"),
 				 errhint("chunk: \"%s\", slice ID %d",
 						 get_rel_name(chunk->table_id),
 						 new_slice->fd.id)));
+	}
 
 	/* Update the slice in the chunk's hypercube. Needed to make recreate constraints work. */
 	for (int i = 0; i < chunk->cube->num_slices; i++)
@@ -5031,11 +5291,15 @@ ts_chunk_attach_osm_table_chunk(PG_FUNCTION_ARGS)
 		char *name = get_rel_name(hypertable_relid);
 
 		if (!name)
+		{
 			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid Oid")));
+		}
 		else
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 					 errmsg("\"%s\" is not a hypertable", name)));
+		}
 	}
 
 	if (get_rel_relkind(ftable_relid) == RELKIND_FOREIGN_TABLE)
@@ -5058,7 +5322,9 @@ chunk_tuple_osm_chunk_found(TupleInfo *ti, void *arg)
 	bool is_osm_chunk = DatumGetBool(osm_chunk);
 
 	if (!is_osm_chunk)
+	{
 		return SCAN_CONTINUE;
+	}
 
 	int *chunk_id = (int *) arg;
 	Datum chunk_id_datum = slot_getattr(ti->slot, Anum_chunk_id, &isnull);
@@ -5136,12 +5402,18 @@ static ChunkVec *
 chunk_vec_expand(ChunkVec *chunks, uint32 new_capacity)
 {
 	if (chunks != NULL && chunks->capacity >= new_capacity)
+	{
 		return chunks;
+	}
 
 	if (chunks == NULL)
+	{
 		chunks = palloc(CHUNK_VEC_SIZE(new_capacity));
+	}
 	else
+	{
 		chunks = repalloc(chunks, CHUNK_VEC_SIZE(new_capacity));
+	}
 
 	chunks->capacity = new_capacity;
 
@@ -5163,7 +5435,9 @@ ts_chunk_vec_sort(ChunkVec **chunks)
 	ChunkVec *vec = *chunks;
 
 	if (vec->num_chunks > 1)
+	{
 		qsort(&vec->chunks, vec->num_chunks, sizeof(Chunk), chunk_cmp);
+	}
 
 	return vec;
 }
@@ -5180,7 +5454,9 @@ ts_chunk_vec_add_from_tuple(ChunkVec **chunks, TupleInfo *ti)
 	num_constraints_hint = 2;
 
 	if (vec->num_chunks + 1 > vec->capacity)
+	{
 		*chunks = vec = chunk_vec_expand(vec, vec->capacity + DEFAULT_CHUNK_VEC_SIZE);
+	}
 
 	chunkptr = &vec->chunks[vec->num_chunks++];
 	ts_chunk_formdata_fill(&chunkptr->fd, ti);
@@ -5288,7 +5564,9 @@ get_chunks_in_creation_time_range_limit(Hypertable *ht, StrategyNumber start_str
 #ifdef TS_DEBUG
 	/* allow testing of the chunk vec expansion in debug builds */
 	if (limit == -1)
+	{
 		limit = 1;
+	}
 #endif
 
 	chunk_vec = ts_chunk_vec_create(limit > 0 ? limit : DEFAULT_CHUNK_VEC_SIZE);
@@ -5320,10 +5598,12 @@ get_chunks_in_creation_time_range(Hypertable *ht, int64 older_than, int64 newer_
 	uint64 num_chunks = 0;
 
 	if (older_than <= newer_than)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid chunk creation time range"),
 				 errhint("The start of the time range must be before the end.")));
+	}
 
 	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterEqualStrategyNumber;
 	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;

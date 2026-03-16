@@ -105,12 +105,16 @@ compute_rel_vacuum_cutoffs(Relation rel, struct VacuumCutoffs *cutoffs)
 
 	if (TransactionIdIsValid(relfrozenxid) &&
 		TransactionIdPrecedes(cutoffs->FreezeLimit, relfrozenxid))
+	{
 		cutoffs->FreezeLimit = relfrozenxid;
+	}
 
 	MultiXactId relminmxid = rel->rd_rel->relminmxid;
 
 	if (MultiXactIdIsValid(relminmxid) && MultiXactIdPrecedes(cutoffs->MultiXactCutoff, relminmxid))
+	{
 		cutoffs->MultiXactCutoff = relminmxid;
+	}
 }
 
 static void
@@ -179,15 +183,21 @@ merge_chunks_finish(Oid new_relid, RelationMergeInfo *relinfos, int nrelids,
 	 * non-result relations are deleted when the corresponding chunk is
 	 * dropped. Only done in concurrent mode as indicated by a valid TID. */
 	if (ItemPointerIsValid(&result_minfo->chunk_rewrite_tid))
+	{
 		ts_chunk_rewrite_delete_by_tid(&result_minfo->chunk_rewrite_tid);
+	}
 
 	/* Don't need to drop objects for internal compressed relations, they are
 	 * dropped when the main chunk is dropped. */
 	if (result_minfo->iscompressed_rel)
+	{
 		return;
+	}
 
 	if (ts_chunk_is_compressed(result_minfo->chunk))
+	{
 		ts_chunk_set_partial(result_minfo->chunk);
+	}
 
 	Assert(stats->relid == result_minfo->relid);
 
@@ -209,7 +219,9 @@ merge_chunks_finish(Oid new_relid, RelationMergeInfo *relinfos, int nrelids,
 		};
 
 		if (!OidIsValid(relid))
+		{
 			continue;
+		}
 
 		if (!relinfo->isresult)
 		{
@@ -255,17 +267,25 @@ cmp_relations(const void *left, const void *right)
 
 			/* Compare start of range for the dimension */
 			if (lslice->fd.range_start < rslice->fd.range_start)
+			{
 				return -1;
+			}
 
 			if (lslice->fd.range_start > rslice->fd.range_start)
+			{
 				return 1;
+			}
 
 			/* If start of range is equal, compare by end of range */
 			if (lslice->fd.range_end < rslice->fd.range_end)
+			{
 				return -1;
+			}
 
 			if (lslice->fd.range_end > rslice->fd.range_end)
+			{
 				return 1;
+			}
 		}
 
 		/* Should only reach here if partitioning is equal across all
@@ -348,17 +368,23 @@ validate_merge_possible(const Hypercube *cube1, const Hypercube *cube2)
 		const DimensionSlice *slice2 = cube2->slices[i];
 
 		if (ts_dimension_slices_equal(slice1, slice2))
+		{
 			equal_edges++;
+		}
 
 		if (slice1->fd.range_end == slice2->fd.range_start)
+		{
 			follow_edges++;
+		}
 	}
 
 	if (follow_edges != 1 || (cube1->num_slices - equal_edges) != 1)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot create new chunk partition boundaries"),
 				 errhint("Try merging chunks that have adjacent partitions.")));
+	}
 }
 
 static const ChunkConstraint *
@@ -369,7 +395,9 @@ get_chunk_constraint_by_slice_id(const ChunkConstraints *ccs, int32 slice_id)
 		const ChunkConstraint *cc = &ccs->constraints[i];
 
 		if (cc->fd.dimension_slice_id == slice_id)
+		{
 			return cc;
+		}
 	}
 
 	return NULL;
@@ -395,7 +423,9 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 
 		/* If nothing changed in this dimension, move on to the next */
 		if (ts_dimension_slices_equal(old_slice, new_slice))
+		{
 			continue;
+		}
 
 		cc = get_chunk_constraint_by_slice_id(chunk->constraints, old_slice->fd.id);
 
@@ -421,7 +451,9 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 			/* Constraint could be NULL, e.g., if the merged chunk covers the
 			 * entire range in a space dimension it needs no constraint. */
 			if (constr != NULL)
+			{
 				new_constraints = lappend(new_constraints, constr);
+			}
 		}
 
 		/* Check if there's already a slice with the new range. If so, avoid
@@ -477,10 +509,14 @@ merge_cubes(Hypercube *merged_cube, const Hypercube *cube)
 		Assert(slice->fd.dimension_id == merged_slice->fd.dimension_id);
 
 		if (slice->fd.range_start < merged_slice->fd.range_start)
+		{
 			merged_slice->fd.range_start = slice->fd.range_start;
+		}
 
 		if (slice->fd.range_end > merged_slice->fd.range_end)
+		{
 			merged_slice->fd.range_end = slice->fd.range_end;
+		}
 	}
 }
 
@@ -495,7 +531,9 @@ merge_chunks_multidim_allowed(void)
 		GetConfigOption(MAKE_EXTOPTION("enable_merge_multidim_chunks"), true, false);
 
 	if (multidim_merge_enabled == NULL)
+	{
 		return false;
+	}
 
 	return (pg_strcasecmp("on", multidim_merge_enabled) == 0 ||
 			pg_strcasecmp("1", multidim_merge_enabled) == 0 ||
@@ -562,7 +600,9 @@ pq17_workaround_merge_relation_size(Relation rel, ForkNumber forkNumber)
 	uint64 nblocks = merge_rel_nblocks;
 
 	if (forkNumber == MAIN_FORKNUM)
+	{
 		return nblocks * BLCKSZ;
+	}
 
 	return old_routine->relation_size(rel, forkNumber);
 }
@@ -620,7 +660,9 @@ update_relstats(Relation catrel, Oid relid, BlockNumber num_pages, double ntuple
 {
 	HeapTuple reltup = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(relid));
 	if (!HeapTupleIsValid(reltup))
+	{
 		elog(ERROR, "cache lookup failed for relation %u", relid);
+	}
 	Form_pg_class relform = (Form_pg_class) GETSTRUCT(reltup);
 	relform->relpages = num_pages;
 	relform->reltuples = ntuples;
@@ -657,10 +699,14 @@ copy_table_data(Relation fromrel, Relation torel, struct VacuumCutoffs *cutoffs,
 		 tups_recently_dead);
 
 	if (TransactionIdPrecedes(merged_cutoffs->FreezeLimit, cutoffs->FreezeLimit))
+	{
 		merged_cutoffs->FreezeLimit = cutoffs->FreezeLimit;
+	}
 
 	if (MultiXactIdPrecedes(merged_cutoffs->MultiXactCutoff, cutoffs->MultiXactCutoff))
+	{
 		merged_cutoffs->MultiXactCutoff = cutoffs->MultiXactCutoff;
+	}
 
 	return num_tuples;
 }
@@ -695,7 +741,9 @@ merge_relinfos(RelationMergeInfo *relinfos, int nrelids, int mergeindex, LOCKMOD
 	MemSet(stats, 0, sizeof(RelationMergeStats));
 
 	if (result_rel == NULL)
+	{
 		return InvalidOid;
+	}
 
 	stats->relid = result_minfo->relid;
 	stats->chunk_id = result_minfo->chunk->fd.id;
@@ -818,14 +866,18 @@ relock_rel(const Relation hyper_rel, RelationMergeInfo *rmi, LOCKMODE lockmode)
 	rmi->rel = try_table_open(rmi->relid, lockmode);
 
 	if (NULL == rmi->rel)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("chunk \"%s\" was removed concurrently",
 						NameStr(rmi->chunk->fd.table_name))));
+	}
 
 	/* Re-lock toast tables, heap swap expects it */
 	if (OidIsValid(rmi->rel->rd_rel->reltoastrelid))
+	{
 		LockRelationOid(rmi->rel->rd_rel->reltoastrelid, lockmode);
+	}
 
 	/* Get a lock on the rewrite entry for this merge */
 	if (!ts_chunk_rewrite_get_with_lock(rmi->relid, NULL, &rmi->chunk_rewrite_tid))
@@ -853,9 +905,11 @@ lock_merged_rels(Oid hyper_relid, RelationMergeInfo *relinfos, RelationMergeInfo
 		const RelationMergeInfo *rmi = &relinfos[0];
 
 		if (NULL != rmi->rel)
+		{
 			elog(WARNING,
 				 "dangling chunk \"%s\" remains, can't fix",
 				 RelationGetRelationName(rmi->rel));
+		}
 
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
@@ -867,7 +921,9 @@ lock_merged_rels(Oid hyper_relid, RelationMergeInfo *relinfos, RelationMergeInfo
 		relock_rel(hyper_rel, &relinfos[i], lockmode);
 
 		if (OidIsValid(crelinfos[i].relid))
+		{
 			relock_rel(hyper_rel, &crelinfos[i], lockmode);
+		}
 	}
 
 	table_close(hyper_rel, NoLock);
@@ -888,9 +944,11 @@ relock_new_rels(Oid new_relid, Oid new_crelid, LOCKMODE lockmode)
 	Relation new_rel = try_table_open(new_relid, lockmode);
 
 	if (NULL == new_rel)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("new heap was removed concurrently during chunk merge")));
+	}
 
 	if (OidIsValid(new_rel->rd_rel->reltoastrelid))
 	{
@@ -913,9 +971,11 @@ relock_new_rels(Oid new_relid, Oid new_crelid, LOCKMODE lockmode)
 		Relation new_crel = try_table_open(new_crelid, lockmode);
 
 		if (NULL == new_crel)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 					 errmsg("new compressed heap was removed concurrently during chunk merge")));
+		}
 
 		if (OidIsValid(new_crel->rd_rel->reltoastrelid))
 		{
@@ -993,11 +1053,15 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 	PreventCommandIfReadOnly("merge_chunks");
 
 	if (concurrently)
+	{
 		PreventInTransactionBlock(true, "merge_chunks");
+	}
 
 	if (chunks_array == NULL)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no chunks to merge specified")));
+	}
 
 	deconstruct_array(chunks_array,
 					  REGCLASSOID,
@@ -1009,9 +1073,11 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 					  &nrelids);
 
 	if (nrelids < 2)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("must specify at least two chunks to merge")));
+	}
 
 	/* Create a private memory context that will survive transaction boundaries */
 	merge_cxt = AllocSetContextCreate(PortalContext, "MergeChunksConcurrent", ALLOCSET_SMALL_SIZES);
@@ -1043,13 +1109,17 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		};
 
 		if (nulls[i] || !OidIsValid(relid))
+		{
 			ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid relation")));
+		}
 
 		if (i > 0 && DatumGetObjectId(relids[i]) == DatumGetObjectId(relids[i - 1]))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("duplicate relation \"%s\" in merge",
 							get_rel_name(DatumGetObjectId(relids[i])))));
+		}
 
 		/* Lock the relation before doing other checks that can lock dependent
 		 * objects (this can otherwise lead to deadlocks with concurrent
@@ -1089,13 +1159,17 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 				relation_close(rel, AccessShareLock);
 
 				if (is_table)
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("can only merge hypertable chunks")));
+				}
 				else
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("cannot merge non-table relations")));
+				}
 			}
 			else
 			{
@@ -1109,16 +1183,20 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		}
 
 		if (chunk->fd.osm_chunk)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cannot merge OSM chunks")));
+		}
 
 		if (ts_chunk_is_frozen(chunk))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot merge frozen chunk \"%s.%s\" scheduled for tiering",
 							NameStr(chunk->fd.schema_name),
 							NameStr(chunk->fd.table_name)),
 					 errhint("Untier the chunk before merging.")));
+		}
 
 		ChunkRewriteDeleteResult rewrite_result = ts_chunk_rewrite_delete(relid, true);
 
@@ -1140,13 +1218,17 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 
 		/* Only owner is allowed to merge */
 		if (!object_ownercheck(RelationRelationId, relid, GetUserId()))
+		{
 			aclcheck_error(ACLCHECK_NOT_OWNER,
 						   get_relkind_objtype(rel->rd_rel->relkind),
 						   get_rel_name(relid));
+		}
 
 		/* Lock toast table to prevent it from being concurrently vacuumed */
 		if (rel->rd_rel->reltoastrelid)
+		{
 			LockRelationOid(rel->rd_rel->reltoastrelid, lockmode);
+		}
 
 		/* Add heap relation to the list of locked relations. We need this to
 		 * later grab session locks. */
@@ -1167,9 +1249,11 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			Ensure(ht, "missing hypertable for chunk");
 
 			if (ht->fd.num_dimensions > 1)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("cannot merge chunk in multi-dimensional hypertable")));
+			}
 
 			ts_cache_release(&hcache);
 		}
@@ -1189,15 +1273,19 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			table_close(crel, NoLock);
 
 			if (mergeindex == -1)
+			{
 				mergeindex = i;
+			}
 
 			/* Read compression chunk size stats */
 			bool found = ts_compression_chunk_size_get(chunk->fd.id, &relinfo->ccs);
 
 			if (!found)
+			{
 				elog(WARNING,
 					 "missing compression chunk size stats for compressed chunk \"%s\"",
 					 NameStr(chunk->fd.table_name));
+			}
 		}
 
 		if (hypertable_id == INVALID_HYPERTABLE_ID)
@@ -1228,10 +1316,12 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		Oid amoid = rel->rd_rel->relam;
 
 		if (amoid != HEAP_TABLE_AM_OID)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("access method \"%s\" is not supported for merge",
 							get_am_name(amoid))));
+		}
 
 		relinfo->relid = relid;
 		relinfo->rel = rel;
@@ -1247,7 +1337,9 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 
 	/* No compressed chunk found, so use index 0 for resulting merged chunk */
 	if (mergeindex == -1)
+	{
 		mergeindex = 0;
+	}
 
 	relinfos[mergeindex].isresult = true;
 
@@ -1318,7 +1410,9 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		/* Need to update the index of the result (merged) relation after
 		 * resort */
 		if (relinfos[i].isresult)
+		{
 			mergeindex = i;
+		}
 	}
 
 	DEBUG_WAITPOINT("merge_chunks_before_rewrite");
@@ -1420,7 +1514,9 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 	merge_chunks_finish(new_relid, relinfos, nrelids, &merge_stats);
 
 	if (OidIsValid(new_crelid))
+	{
 		merge_chunks_finish(new_crelid, crelinfos, nrelids, &cmerge_stats);
+	}
 
 	/*
 	 * Step 5: Update the dimensional metadata and constraints for the chunk

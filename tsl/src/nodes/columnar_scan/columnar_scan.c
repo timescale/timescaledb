@@ -91,7 +91,9 @@ append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortI
 
 	/* Find the operator in pg_amop --- failure shouldn't happen */
 	if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+	{
 		elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+	}
 
 	/*
 	 * EquivalenceClasses need to contain opfamily lists based on the family
@@ -101,15 +103,19 @@ append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortI
 	 */
 	equality_op = get_opfamily_member(opfamily, opcintype, opcintype, BTEqualStrategyNumber);
 	if (!OidIsValid(equality_op)) /* shouldn't happen */
+	{
 		elog(ERROR,
 			 "missing operator %d(%u,%u) in opfamily %u",
 			 BTEqualStrategyNumber,
 			 opcintype,
 			 opcintype,
 			 opfamily);
+	}
 	opfamilies = get_mergejoin_opfamilies(equality_op);
 	if (!opfamilies) /* certainly should find some */
+	{
 		elog(ERROR, "could not find opfamilies for equality operator %u", equality_op);
+	}
 
 	em->em_expr = (Expr *) var;
 	em->em_relids = bms_make_singleton(info->compressed_rel->relid);
@@ -230,7 +236,9 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 			 * build_sortinfo().
 			 */
 			if (!compressed_em)
+			{
 				break;
+			}
 
 			required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
 		}
@@ -274,7 +282,9 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 			Oid opfamily, opcintype;
 			CompareType strategy;
 			if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+			{
 				elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+			}
 
 			pk = make_canonical_pathkey(root, ec, opfamily, strategy, nulls_first);
 
@@ -662,7 +672,9 @@ ts_columnar_estimate_compressed_batch_size(const Oid relid)
 {
 	AttrNumber attnum = get_attnum(relid, "_ts_meta_count");
 	if (attnum == InvalidAttrNumber)
+	{
 		return TARGET_COMPRESSED_BATCH_SIZE;
+	}
 
 	/* fetch statistics */
 	HeapTuple statsTuple = SearchSysCache3(STATRELATTINH,
@@ -1304,7 +1316,9 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 * EquivalenceClasses.
 	 */
 	if (IsA(compressed_path, BitmapHeapPath) && compressed_path->param_info)
+	{
 		return NIL;
+	}
 
 	/*
 	 * Filter out all paths that try to JOIN the compressed chunk on the
@@ -1320,7 +1334,9 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	if (compressed_path->param_info != NULL)
 	{
 		if (bms_is_member(chunk_rel->relid, compressed_path->param_info->ppi_req_outer))
+		{
 			return NIL;
+		}
 
 		/* check if this is path made with references between
 		 * compressed_rel + hypertable or a nesting subquery.
@@ -1862,7 +1878,9 @@ static Node *
 chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 
 	if (IsA(node, Var))
 	{
@@ -1871,7 +1889,9 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 		char *column_name;
 		AttrNumber compressed_attno;
 		if ((Index) var->varno != context->chunk_rel->relid)
+		{
 			return (Node *) var;
+		}
 
 		column_name = get_attname(context->chunk_rte->relid, var->varattno, false);
 		compressed_attno = get_attnum(context->compressed_rte->relid, column_name);
@@ -2079,7 +2099,9 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		 * uncompressed chunk */
 		node = strip_implicit_coercions((Node *) cur_em->em_expr);
 		if (!(node && IsA(node, Var)))
+		{
 			continue;
+		}
 		var = castNode(Var, node);
 
 		/*
@@ -2090,7 +2112,9 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		 * we have to specify a parent for the newly created equivalence member.
 		 */
 		if ((Index) var->varno != info->ht_rel->relid)
+		{
 			continue;
+		}
 
 		if (var->varattno <= 0)
 		{
@@ -2110,11 +2134,15 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		const char *attname = get_attname(info->ht_rte->relid, var->varattno, false);
 
 		if (!ts_array_is_member(context->settings->fd.segmentby, attname))
+		{
 			continue;
+		}
 
 		child_expr = (Expr *) create_var_for_compressed_equivalence_member(var, context, attname);
 		if (child_expr == NULL)
+		{
 			continue;
+		}
 
 		/* #8681: coerce compressed var to current equivalence member type/collation,
 		 *  in case we dug the "cur_em->em_expr" var from under RelabelTypes
@@ -2224,19 +2252,25 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 		 * volatile EC having only one EM.
 		 */
 		if (cur_ec->ec_has_volatile)
+		{
 			continue;
+		}
 
 		/* if the compressed rel is already part of this EC,
 		 * we don't need to re-add it
 		 */
 		if (bms_overlap(cur_ec->ec_relids, info->compressed_rel->relids))
+		{
 			continue;
+		}
 
 		bool em_added = add_segmentby_to_equivalence_class(root, cur_ec, info, &context);
 		/* Record this EC index for the compressed rel */
 		if (em_added)
+		{
 			info->compressed_rel->eclass_indexes =
 				bms_add_member(info->compressed_rel->eclass_indexes, i);
+		}
 	}
 	info->compressed_rel->has_eclass_joins = info->chunk_rel->has_eclass_joins;
 }
@@ -2312,7 +2346,9 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 		Form_pg_attribute attr = TupleDescAttr(r->rd_att, i);
 
 		if (attr->attisdropped || attr->atttypid != info->compresseddata_oid)
+		{
 			continue;
+		}
 
 		info->compressed_attnos_in_compressed_chunk =
 			bms_add_member(info->compressed_attnos_in_compressed_chunk, attr->attnum);
@@ -2597,7 +2633,9 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 				Expr *other;
 
 				if (op->opretset)
+				{
 					continue;
+				}
 
 				lnode = strip_implicit_coercions(linitial(op->args));
 				rnode = strip_implicit_coercions(lsecond(op->args));
@@ -2614,10 +2652,14 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 					other = linitial(op->args);
 				}
 				else
+				{
 					continue;
+				}
 
 				if ((Index) var->varno != chunk_rel->relid || var->varattno <= 0)
+				{
 					continue;
+				}
 
 				if (IsA(other, Const) || IsA(other, Param))
 				{
@@ -2657,11 +2699,15 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 							}
 						}
 						if (!equality)
+						{
 							continue;
+						}
 					}
 
 					if (bms_is_member(var->varattno, info->chunk_segmentby_attnos))
+					{
 						segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
+					}
 				}
 			}
 		}
@@ -2865,15 +2911,21 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 			Node *node = strip_implicit_coercions((Node *) list_nth(chunk_em_exprs, i));
 
 			if (node == NULL || !IsA(node, Var))
+			{
 				break;
+			}
 			var = castNode(Var, node);
 
 			if (var->varattno <= 0)
+			{
 				break;
+			}
 
 			column_name = get_attname(compression_info->chunk_rte->relid, var->varattno, false);
 			if (!ts_array_is_member(compression_info->settings->fd.segmentby, column_name))
+			{
 				break;
+			}
 
 			segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
 		}
@@ -2917,7 +2969,9 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	 * if the chunk has batches overlapping on orderby columns
 	 */
 	if (ts_chunk_is_unordered(chunk))
+	{
 		return sort_info;
+	}
 
 	/*
 	 * Pathkeys includes columns past segmentby columns, so we need sequence_num

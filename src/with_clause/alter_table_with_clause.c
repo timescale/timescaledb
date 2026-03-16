@@ -106,7 +106,9 @@ select_stmt_as_expected(SelectStmt *stmt)
 		stmt->valuesLists != NULL || stmt->limitOffset != NULL || stmt->limitCount != NULL ||
 		stmt->lockingClause != NIL || stmt->withClause != NULL || stmt->op != 0 ||
 		stmt->all != false || stmt->larg != NULL || stmt->rarg != NULL)
+	{
 		return false;
+	}
 	return true;
 }
 
@@ -121,7 +123,9 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 
 	/* segmentby can have empty array */
 	if (strlen(inpstr) == 0)
+	{
 		return ts_array_add_element_text(NULL, NULL);
+	}
 
 	initStringInfo(&buf);
 
@@ -160,33 +164,49 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 	PG_END_TRY();
 
 	if (list_length(parsed) != 1)
+	{
 		throw_segment_by_error(inpstr);
+	}
 	if (!IsA(linitial(parsed), RawStmt))
+	{
 		throw_segment_by_error(inpstr);
+	}
 	raw = linitial(parsed);
 
 	if (!IsA(raw->stmt, SelectStmt))
+	{
 		throw_segment_by_error(inpstr);
+	}
 	select = (SelectStmt *) raw->stmt;
 
 	if (!select_stmt_as_expected(select))
+	{
 		throw_segment_by_error(inpstr);
+	}
 
 	if (select->sortClause != NIL)
+	{
 		throw_segment_by_error(inpstr);
+	}
 
 	ArrayType *segmentby = NULL;
 	foreach (lc, select->groupClause)
 	{
 		if (!IsA(lfirst(lc), ColumnRef))
+		{
 			throw_segment_by_error(inpstr);
+		}
 
 		ColumnRef *cf = lfirst(lc);
 		if (list_length(cf->fields) != 1)
+		{
 			throw_segment_by_error(inpstr);
+		}
 
 		if (!IsA(linitial(cf->fields), String))
+		{
 			throw_segment_by_error(inpstr);
+		}
 
 		char *colname = strVal(linitial(cf->fields));
 		AttrNumber col_attno = get_attnum(hypertable->main_table_relid, colname);
@@ -204,11 +224,13 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 
 		/* check if segmentby columns are distinct. */
 		if (ts_array_is_member(segmentby, colname))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
 					 errmsg("duplicate column name \"%s\"", colname),
 					 errhint("The timescaledb.compress_segmentby option must reference distinct "
 							 "column.")));
+		}
 
 		segmentby = ts_array_add_element_text(segmentby, pstrdup(colname));
 	}
@@ -239,11 +261,13 @@ ts_compress_parse_order_collist(char *inpstr, Hypertable *hypertable)
 	OrderBySettings settings = { 0 };
 
 	if (strlen(inpstr) == 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("ordering column can not be empty"),
 				 errhint("timescaledb.compress_orderby option must reference a valid "
 						 "column or be removed to use default settings.")));
+	}
 
 	initStringInfo(&buf);
 
@@ -283,19 +307,29 @@ ts_compress_parse_order_collist(char *inpstr, Hypertable *hypertable)
 	PG_END_TRY();
 
 	if (list_length(parsed) != 1)
+	{
 		throw_order_by_error(inpstr);
+	}
 	if (!IsA(linitial(parsed), RawStmt))
+	{
 		throw_order_by_error(inpstr);
+	}
 	raw = linitial(parsed);
 	if (!IsA(raw->stmt, SelectStmt))
+	{
 		throw_order_by_error(inpstr);
+	}
 	select = (SelectStmt *) raw->stmt;
 
 	if (!select_stmt_as_expected(select))
+	{
 		throw_order_by_error(inpstr);
+	}
 
 	if (select->groupClause != NIL)
+	{
 		throw_order_by_error(inpstr);
+	}
 
 	foreach (lc, select->sortClause)
 	{
@@ -305,53 +339,69 @@ ts_compress_parse_order_collist(char *inpstr, Hypertable *hypertable)
 		bool desc, nullsfirst;
 
 		if (!IsA(lfirst(lc), SortBy))
+		{
 			throw_order_by_error(inpstr);
+		}
 		sort_by = lfirst(lc);
 
 		if (!IsA(sort_by->node, ColumnRef))
+		{
 			throw_order_by_error(inpstr);
+		}
 		cf = (ColumnRef *) sort_by->node;
 
 		if (list_length(cf->fields) != 1)
+		{
 			throw_order_by_error(inpstr);
+		}
 
 		if (!IsA(linitial(cf->fields), String))
+		{
 			throw_order_by_error(inpstr);
+		}
 
 		namestrcpy(&col->colname, strVal(linitial(cf->fields)));
 		char *colname = strVal(linitial(cf->fields));
 
 		AttrNumber col_attno = get_attnum(hypertable->main_table_relid, colname);
 		if (col_attno == InvalidAttrNumber)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
 					 errmsg("column \"%s\" does not exist", NameStr(col->colname)),
 					 errhint("The timescaledb.compress_orderby option must reference a valid "
 							 "column.")));
+		}
 
 		Oid col_type = get_atttype(hypertable->main_table_relid, col_attno);
 		TypeCacheEntry *type = lookup_type_cache(col_type, TYPECACHE_LT_OPR);
 
 		if (!OidIsValid(type->lt_opr))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_FUNCTION),
 					 errmsg("invalid ordering column type %s", format_type_be(col_type)),
 					 errdetail("Could not identify a less-than operator for the type.")));
+		}
 
 		/* get normalized column name */
 		colname = get_attname(hypertable->main_table_relid, col_attno, false);
 
 		/* check if orderby columns are distinct. */
 		if (ts_array_is_member(settings.orderby, colname))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
 					 errmsg("duplicate column name \"%s\"", colname),
 					 errhint("The timescaledb.compress_orderby option must reference distinct "
 							 "column.")));
+		}
 
 		if (sort_by->sortby_dir != SORTBY_ASC && sort_by->sortby_dir != SORTBY_DESC &&
 			sort_by->sortby_dir != SORTBY_DEFAULT)
+		{
 			throw_order_by_error(inpstr);
+		}
 
 		desc = sort_by->sortby_dir == SORTBY_DESC;
 
@@ -416,23 +466,29 @@ parse_sparse_index_column(Hypertable *hypertable, FuncCall *sparse_index_details
 	Assert(list_length(sparse_index_details->args) > index);
 
 	if (index >= list_length(sparse_index_details->args) || index >= MAX_BLOOM_FILTER_COLUMNS)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("sparse index %s has too many columns", ts_sparse_index_type_names[type])));
+	}
 
 	Node *arg = list_nth(sparse_index_details->args, index);
 	if (!IsA(arg, ColumnRef))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("sparse index column reference must reference a valid column name")));
+	}
 
 	ColumnRef *cf = (ColumnRef *) arg;
 	if (list_length(cf->fields) != 1 || !IsA(linitial(cf->fields), String))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_SYNTAX_ERROR),
 				 errmsg("invalid sparse index column reference syntax"),
 				 errdetail(
 					 "Wildcard or qualified references like '*' or 'table.col' are not allowed.")));
+	}
 
 	column.name = strVal(linitial(cf->fields));
 	column.attnum = get_attnum(hypertable->main_table_relid, column.name);
@@ -463,7 +519,9 @@ column_name_list_as_string(BloomFilterConfig *config)
 	{
 		appendStringInfo(&buf, "'%s'", config->columns[i].name);
 		if (i < config->num_columns - 1)
+		{
 			appendStringInfo(&buf, ",");
+		}
 	}
 	appendStringInfo(&buf, ")");
 	return buf.data;
@@ -495,17 +553,21 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 		{
 			/* This will be enabled once all composite bloom index functionality is rolled out */
 			if (!ts_guc_enable_composite_bloom_indexes)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("composite bloom indexes are disabled"),
 						 errhint("Set timescaledb.enable_composite_bloom_indexes = true")));
+			}
 
 			if (num_columns > MAX_BLOOM_FILTER_COLUMNS)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_SYNTAX_ERROR),
 						 errmsg("bloom index has too many columns: %d > max %d",
 								num_columns,
 								MAX_BLOOM_FILTER_COLUMNS)));
+			}
 		}
 		else
 		{
@@ -545,6 +607,7 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 					parse_sparse_index_column(hypertable, sparse_index_details, i, config.type);
 				attnums_bitmap = bms_add_member(attnums_bitmap, bloom_config.columns[i].attnum);
 				if (bms_num_members(attnums_bitmap) <= i)
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_SYNTAX_ERROR),
 							 errmsg("duplicate column name ('%s') in composite bloom index "
@@ -553,6 +616,7 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 									column_name_list_as_string(&bloom_config)),
 							 errhint(
 								 "The sparse index option must reference distinct column set.")));
+				}
 			}
 
 			if (ts_bmslist_contains_set(*sparse_index_columns, attnums_bitmap))
@@ -574,11 +638,13 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 				FmgrInfo *finfo = NULL;
 				if (ts_cm_functions->bloom1_get_hash_function(bloom_config.columns[i].type,
 															  &finfo) == NULL)
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_FUNCTION),
 							 errmsg("invalid bloom filter column type %s",
 									format_type_be(bloom_config.columns[i].type)),
 							 errdetail("Could not identify a hashing function for the type.")));
+				}
 			}
 
 			/* the convention is that the column names are sorted by attribute number */
@@ -604,10 +670,12 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 			 * a comparison operator is required for min max operations
 			 */
 			if (!OidIsValid(type_cache->lt_opr))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_FUNCTION),
 						 errmsg("invalid minmax column type %s", format_type_be(first_column.type)),
 						 errdetail("Could not identify a less-than operator for the type.")));
+			}
 
 			minmax_config.base = config;
 			config_ptr = (SparseIndexConfigBase *) &minmax_config;
@@ -676,17 +744,25 @@ parse_sparse_index_config_list(char *inpstr, Hypertable *hypertable)
 	PG_END_TRY();
 
 	if (list_length(parsed) != 1)
+	{
 		throw_sparse_index_error(inpstr);
+	}
 	if (!IsA(linitial(parsed), RawStmt))
+	{
 		throw_sparse_index_error(inpstr);
+	}
 	raw = linitial(parsed);
 
 	if (!IsA(raw->stmt, SelectStmt))
+	{
 		throw_sparse_index_error(inpstr);
+	}
 	select = (SelectStmt *) raw->stmt;
 
 	if (select->targetList == NULL)
+	{
 		throw_sparse_index_error(inpstr);
+	}
 
 	/* json format will be
 	 * [{"type": "bloom", "source":"config", "column": "u"},
@@ -701,7 +777,9 @@ parse_sparse_index_config_list(char *inpstr, Hypertable *hypertable)
 		ResTarget *target = lfirst_node(ResTarget, lc);
 
 		if (!IsA(target->val, FuncCall))
+		{
 			throw_sparse_index_error(inpstr);
+		}
 
 		FuncCall *fc = (FuncCall *) target->val;
 
@@ -723,7 +801,9 @@ ts_compress_hypertable_parse_segment_by(WithClauseResult segmentby, Hypertable *
 		return parse_segment_collist(TextDatumGetCString(segmentby.parsed), hypertable);
 	}
 	else
+	{
 		return NULL;
+	}
 }
 
 /* returns List of CompressedParsedCol
@@ -749,7 +829,9 @@ ts_compress_hypertable_parse_chunk_time_interval(WithClauseResult *parsed_option
 		return DatumGetIntervalP(textarg);
 	}
 	else
+	{
 		return NULL;
+	}
 }
 
 /* returns List of CompressedParsedCol
@@ -763,5 +845,7 @@ ts_compress_hypertable_parse_index(WithClauseResult index, Hypertable *hypertabl
 		return parse_sparse_index_config_list(TextDatumGetCString(index.parsed), hypertable);
 	}
 	else
+	{
 		return NULL;
+	}
 }

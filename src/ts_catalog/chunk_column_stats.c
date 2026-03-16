@@ -73,10 +73,12 @@ chunk_column_stats_enable_datum(FunctionCallInfo fcinfo, int32 id, bool enabled)
 	bool nulls[Natts_enable_chunk_column_stats] = { false };
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("function returning record called in "
 						"context that cannot accept type record")));
+	}
 
 	tupdesc = BlessTupleDesc(tupdesc);
 
@@ -101,10 +103,12 @@ chunk_column_stats_disable_datum(FunctionCallInfo fcinfo, int32 hypertable_id, N
 	bool nulls[Natts_disable_chunk_column_stats] = { false };
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("function returning record called in "
 						"context that cannot accept type record")));
+	}
 
 	tupdesc = BlessTupleDesc(tupdesc);
 
@@ -144,7 +148,9 @@ chunk_column_stats_insert_relation(const Relation rel, Form_chunk_column_stats i
 	values[AttrNumberGetAttrOffset(Anum_chunk_column_stats_valid)] = BoolGetDatum(info->valid);
 
 	if (info->chunk_id == INVALID_CHUNK_ID)
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_chunk_column_stats_chunk_id)] = true;
+	}
 
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
@@ -194,7 +200,9 @@ chunk_column_stats_tuple_update(TupleInfo *ti, void *data)
 
 	heap_freetuple(new_tuple);
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	return SCAN_DONE;
 }
@@ -256,9 +264,11 @@ ts_chunk_column_stats_validate(Form_chunk_column_stats info, const Oid hypertabl
 	tuple = SearchSysCacheAttName(hypertable_relid, NameStr(info->column_name));
 
 	if (!HeapTupleIsValid(tuple))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_COLUMN),
 				 errmsg("column \"%s\" does not exist", NameStr(info->column_name))));
+	}
 
 	datum = SysCacheGetAttr(ATTNAME, tuple, Anum_pg_attribute_atttypid, &isnull);
 	Assert(!isnull);
@@ -350,7 +360,9 @@ ts_chunk_column_stats_add_internal(FunctionCallInfo fcinfo, Oid table_relid, Nam
 
 	/* refresh the ht entry to accommodate this new chunk_column_stats entry */
 	if (ht->range_space)
+	{
 		pfree(ht->range_space);
+	}
 	ht->range_space = ts_chunk_column_stats_range_space_scan(ht->fd.id,
 															 ht->main_table_relid,
 															 ts_cache_memory_ctx(hcache));
@@ -410,19 +422,25 @@ ts_chunk_column_stats_enable(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (!ts_guc_enable_chunk_skipping)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("chunk skipping functionality disabled, "
 						"enable it by first setting timescaledb.enable_chunk_skipping to on")));
+	}
 
 	if (PG_ARGISNULL(0))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("hypertable cannot be NULL")));
+	}
 	hypertable_relid = PG_GETARG_OID(0);
 
 	if (PG_ARGISNULL(1))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("column name cannot be NULL")));
+	}
 	namestrcpy(&colname, NameStr(*PG_GETARG_NAME(1)));
 
 	if_not_exists = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
@@ -452,19 +470,25 @@ ts_chunk_column_stats_disable(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (!ts_guc_enable_chunk_skipping)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("chunk skipping functionality disabled, "
 						"enable it by first setting timescaledb.enable_chunk_skipping to on")));
+	}
 
 	if (PG_ARGISNULL(0))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("hypertable cannot be NULL")));
+	}
 	hypertable_relid = PG_GETARG_OID(0);
 
 	if (PG_ARGISNULL(1))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("column name cannot be NULL")));
+	}
 	namestrcpy(&colname, NameStr(*PG_GETARG_NAME(1)));
 
 	if_not_exists = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
@@ -505,7 +529,9 @@ ts_chunk_column_stats_disable(PG_FUNCTION_ARGS)
 
 	/* refresh the ht entry to accommodate this deleted chunk_column_stats entry */
 	if (ht->range_space)
+	{
 		pfree(ht->range_space);
+	}
 	ht->range_space = ts_chunk_column_stats_range_space_scan(ht->fd.id,
 															 ht->main_table_relid,
 															 ts_cache_memory_ctx(hcache));
@@ -556,7 +582,9 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 	int attno;
 
 	if (info->range_start == PG_INT64_MIN && info->range_end == PG_INT64_MAX)
+	{
 		return NULL;
+	}
 
 	colref = makeNode(ColumnRef);
 	colref->fields = list_make1(makeString(pstrdup(NameStr(info->column_name))));
@@ -607,9 +635,13 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 	Assert(list_length(compexprs) >= 1);
 
 	if (list_length(compexprs) == 2)
+	{
 		constr->raw_expr = (Node *) makeBoolExpr(AND_EXPR, compexprs, -1);
+	}
 	else if (list_length(compexprs) == 1)
+	{
 		constr->raw_expr = linitial(compexprs);
+	}
 
 	return constr;
 }
@@ -635,10 +667,14 @@ fill_form_from_slot(TupleTableSlot *slot, Form_chunk_column_stats form)
 		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_column_stats_hypertable_id)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_chunk_column_stats_chunk_id)])
+	{
 		form->chunk_id = INVALID_CHUNK_ID;
+	}
 	else
+	{
 		form->chunk_id =
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_column_stats_chunk_id)]);
+	}
 
 	namestrcpy(&form->column_name,
 			   NameStr(*DatumGetName(
@@ -650,7 +686,9 @@ fill_form_from_slot(TupleTableSlot *slot, Form_chunk_column_stats form)
 	form->valid = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_chunk_column_stats_valid)]);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 }
 
 static ScanTupleResult
@@ -809,16 +847,20 @@ chunk_get_minmax(const Chunk *chunk, Oid col_type, const char *col_name, Datum *
 	MemoryContext caller = CurrentMemoryContext;
 
 	if (SPI_connect() != SPI_OK_CONNECT)
+	{
 		elog(ERROR, "could not connect to SPI");
+	}
 
 	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 	if (res < 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 (errmsg("could not get the min/max values for column \"%s\" of chunk \"%s.%s\"",
 						 col_name,
 						 chunk->fd.schema_name.data,
 						 chunk->fd.table_name.data))));
+	}
 
 	pfree(command.data);
 
@@ -848,7 +890,9 @@ chunk_get_minmax(const Chunk *chunk, Oid col_type, const char *col_name, Datum *
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
+	{
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+	}
 
 	return found;
 }
@@ -875,7 +919,9 @@ ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk)
 
 	/* Quick check. Bail out early if none */
 	if (rs == NULL)
+	{
 		return i;
+	}
 
 	work_mcxt =
 		AllocSetContextCreate(CurrentMemoryContext, "dimension-range-work", ALLOCSET_DEFAULT_SIZES);
@@ -947,7 +993,9 @@ ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk)
 			}
 		}
 		else
+		{
 			ereport(WARNING, errmsg("unable to calculate min/max values for column ranges"));
+		}
 	}
 
 	MemoryContextSwitchTo(orig_mcxt);
@@ -975,7 +1023,9 @@ ts_chunk_column_stats_insert(const Hypertable *ht, const Chunk *chunk)
 
 	/* Quick check. Bail out early if none */
 	if (rs == NULL)
+	{
 		return range_index;
+	}
 
 	work_mcxt =
 		AllocSetContextCreate(CurrentMemoryContext, "dimension-range-work", ALLOCSET_DEFAULT_SIZES);
@@ -1249,7 +1299,9 @@ ts_chunk_column_stats_get_chunk_ids_by_scan(DimensionRestrictInfo *dri)
 		 * -INF/+INF range entries for it. Ignore that.
 		 */
 		if (chunk_id_isnull)
+		{
 			goto done;
+		}
 
 		fill_form_from_slot(it.tinfo->slot, &fd);
 
@@ -1294,7 +1346,9 @@ ts_chunk_column_stats_get_chunk_ids_by_scan(DimensionRestrictInfo *dri)
 		}
 
 		if (open->upper_strategy != InvalidStrategy && !matched)
+		{
 			goto done;
+		}
 
 		/* range_end checks didn't match, check for range_start now */
 		switch (open->lower_strategy)
@@ -1318,7 +1372,9 @@ ts_chunk_column_stats_get_chunk_ids_by_scan(DimensionRestrictInfo *dri)
 
 	done:
 		if (matched)
+		{
 			chunkids = lappend_int(chunkids, fd.chunk_id);
+		}
 	}
 	ts_scan_iterator_close(&it);
 
@@ -1371,7 +1427,9 @@ ts_chunk_column_stats_set_name(FormData_chunk_column_stats *in_fd, char *new_col
 
 		heap_freetuple(new_tuple);
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 
 		count++;
 	}
@@ -1401,7 +1459,9 @@ invalidate_range_tuple_found(TupleInfo *ti, void *data)
 
 	heap_freetuple(new_tuple);
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	return SCAN_CONTINUE;
 }
@@ -1464,10 +1524,14 @@ construct_check_constraint_range_tuple(TupleInfo *ti, void *data)
 											   NULL);
 
 	if (constr)
+	{
 		checklist->cclist = lappend(checklist->cclist, constr);
+	}
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	return SCAN_CONTINUE;
 }
@@ -1488,7 +1552,9 @@ ts_chunk_column_stats_construct_check_constraints(Relation relation, Oid reloid,
 
 	/* check if it's not a chunk and return early in that case */
 	if (!ts_chunk_simple_scan_by_reloid(reloid, &fd, true))
+	{
 		return NIL;
+	}
 
 	clist.chunk_relid = reloid;
 	clist.main_table_relid = ts_hypertable_id_to_relid(fd.hypertable_id, false);
@@ -1546,7 +1612,9 @@ ts_chunk_column_stats_construct_check_constraints(Relation relation, Oid reloid,
 
 		/* Fix Vars to have the desired varno */
 		if (varno != 1)
+		{
 			ChangeVarNodes(expr, 1, varno, 0);
+		}
 
 		/*
 		 * Finally, convert to implicit-AND format (that is, a List) and

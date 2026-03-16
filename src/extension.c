@@ -92,7 +92,9 @@ ts_extension_check_version(const char *so_version)
 	char *sql_version;
 
 	if (!IsNormalProcessingMode() || !IsTransactionState() || !extension_exists(EXTENSION_NAME))
+	{
 		return;
+	}
 	sql_version = extension_version(EXTENSION_NAME);
 
 	if (strcmp(sql_version, so_version) != 0)
@@ -190,7 +192,9 @@ extension_update_state()
 	 * actual state has to be made next time the state is queried.
 	 */
 	if (new_state == EXTENSION_STATE_NOT_INSTALLED)
+	{
 		new_state = EXTENSION_STATE_UNKNOWN;
+	}
 
 	extension_set_state(new_state);
 	/*
@@ -240,14 +244,18 @@ ts_extension_schema_oid(void)
 			heap_getattr(tuple, Anum_pg_extension_extnamespace, RelationGetDescr(rel), &is_null);
 
 		if (!is_null)
+		{
 			schema = DatumGetObjectId(result);
+		}
 	}
 
 	systable_endscan(scandesc);
 	table_close(rel, AccessShareLock);
 
 	if (!OidIsValid(schema))
+	{
 		elog(ERROR, "extension schema not found");
+	}
 	return schema;
 }
 
@@ -322,7 +330,9 @@ ts_extension_is_loaded(void)
 				if (update_script_stage &&
 					(strncmp(update_script_stage, POST_UPDATE, strlen(POST_UPDATE)) == 0) &&
 					(strlen(POST_UPDATE) == strlen(update_script_stage)))
+				{
 					return true;
+				}
 			}
 			return false;
 		default:
@@ -343,7 +353,9 @@ ts_extension_is_loaded_and_not_upgrading(void)
 	 *
 	 * See dumpDatabaseConfig in pg_dump.c. */
 	if (ts_guc_restoring || IsBinaryUpgrade)
+	{
 		return false;
+	}
 
 	return ts_extension_is_loaded();
 }

@@ -162,7 +162,9 @@ bgw_policy_chunk_stats_update_tuple_found(TupleInfo *ti, void *const data)
 	BgwPolicyChunkStats *chunk_stats = (BgwPolicyChunkStats *) GETSTRUCT(new_tuple);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	chunk_stats->fd.num_times_job_run++;
 	chunk_stats->fd.last_time_job_run = *updated_last_time_job_run;

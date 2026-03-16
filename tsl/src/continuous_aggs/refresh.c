@@ -85,10 +85,12 @@ cagg_get_hypertable_or_fail(int32 hypertable_id)
 	Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
 
 	if (NULL == ht)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("invalid continuous aggregate state"),
 				 errdetail("A continuous aggregate references a hypertable that does not exist.")));
+	}
 
 	return ht;
 }
@@ -426,6 +428,7 @@ log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRang
 {
 	const char *msg = "continuous aggregate refresh (individual invalidation) on";
 	if (context.callctx == CAGG_REFRESH_POLICY_BATCHED)
+	{
 		elog(elevel,
 			 "%s \"%s\" in window [ %s, %s ] (batch %d of %d)",
 			 msg,
@@ -434,13 +437,16 @@ log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRang
 			 ts_internal_to_time_string(refresh_window->end, refresh_window->type),
 			 context.processing_batch,
 			 context.number_of_batches);
+	}
 	else
+	{
 		elog(elevel,
 			 "%s \"%s\" in window [ %s, %s ]",
 			 msg,
 			 NameStr(cagg->data.user_view_name),
 			 ts_internal_to_time_string(refresh_window->start, refresh_window->type),
 			 ts_internal_to_time_string(refresh_window->end, refresh_window->type));
+	}
 }
 
 typedef void (*scan_refresh_ranges_funct_t)(const InternalTimeRange *bucketed_refresh_window,
@@ -597,21 +603,29 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	refresh_window.type = cagg->partition_type;
 
 	if (!PG_ARGISNULL(1))
+	{
 		refresh_window.start = ts_time_value_from_arg(PG_GETARG_DATUM(1),
 													  get_fn_expr_argtype(fcinfo->flinfo, 1),
 													  refresh_window.type,
 													  true);
+	}
 	else
+	{
 		/* get min time for a cagg depending of the primary partition type */
 		refresh_window.start = cagg_get_time_min(cagg);
+	}
 
 	if (!PG_ARGISNULL(2))
+	{
 		refresh_window.end = ts_time_value_from_arg(PG_GETARG_DATUM(2),
 													get_fn_expr_argtype(fcinfo->flinfo, 2),
 													refresh_window.type,
 													true);
+	}
 	else
+	{
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
+	}
 
 	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_WINDOW };
 	continuous_agg_refresh_internal(cagg,
@@ -693,7 +707,9 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 										   context,
 										   bucketing_refresh_window);
 		if (invalidations)
+		{
 			invalidation_store_free(invalidations);
+		}
 		return true;
 	}
 
@@ -743,7 +759,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	/* Connect to SPI manager due to the underlying SPI calls */
 	int rc = SPI_connect_ext(SPI_OPT_NONATOMIC);
 	if (rc != SPI_OK_CONNECT)
+	{
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
+	}
 
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
@@ -751,9 +769,11 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	/* Like regular materialized views, require owner to refresh. */
 	if (!object_ownercheck(RelationRelationId, cagg->relid, GetUserId()))
+	{
 		aclcheck_error(ACLCHECK_NOT_OWNER,
 					   get_relkind_objtype(get_rel_relkind(cagg->relid)),
 					   get_rel_name(cagg->relid));
+	}
 
 	/* No bucketing when open ended */
 	if (bucketing_refresh_window && !(start_isnull && end_isnull))
@@ -775,12 +795,14 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	}
 
 	if (refresh_window.start >= refresh_window.end)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("refresh window too small"),
 				 errdetail("The refresh window must cover at least one bucket of data."),
 				 errhint("Align the refresh window with the bucket"
 						 " time zone or use at least two buckets.")));
+	}
 
 	/* If there is no other policy defined after this, the inscribed bucket calculated above
 	 * is correct. However, in the case of concurrent policies, if this isn't the last
@@ -832,7 +854,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * future. The invalidation threshold should already be aligned on bucket
 	 * boundary. */
 	if (refresh_window.end > invalidation_threshold)
+	{
 		refresh_window.end = invalidation_threshold;
+	}
 
 	/* Capping the end might have made the window 0, or negative, so nothing to refresh in that
 	 * case.
@@ -854,7 +878,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 		rc = SPI_finish();
 		if (rc != SPI_OK_FINISH)
+		{
 			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
+		}
 
 		return;
 	}
@@ -941,7 +967,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	}
 
 	if (!refreshed && !has_pending_materializations)
+	{
 		emit_up_to_date_notice(cagg, context);
+	}
 
 	DEBUG_WAITPOINT("after_process_cagg_materializations");
 
@@ -955,7 +983,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	rc = SPI_finish();
 	if (rc != SPI_OK_FINISH)
+	{
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
+	}
 }
 
 static void
@@ -1182,7 +1212,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	MemoryContext oldcontext = CurrentMemoryContext;
 
 	if (SPI_connect() != SPI_OK_CONNECT)
+	{
 		elog(ERROR, "could not connect to SPI");
+	}
 
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
@@ -1197,7 +1229,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 								0 /* count */);
 
 	if (res < 0)
+	{
 		elog(ERROR, "%s: could not produce batches for the policy cagg refresh", __func__);
+	}
 
 	if (SPI_processed == 1)
 	{
@@ -1212,7 +1246,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
+		{
 			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+		}
 
 		return NIL;
 	}
@@ -1282,7 +1318,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
+	{
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+	}
 
 	if (refresh_window_list == NIL)
 	{

@@ -127,7 +127,9 @@ array_compressor_append_datum(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = array_compressor_alloc(extended->element_type);
+	}
 
 	array_compressor_append(extended->internal, val);
 }
@@ -137,7 +139,9 @@ array_compressor_append_null_value(Compressor *compressor)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = array_compressor_alloc(extended->element_type);
+	}
 
 	array_compressor_append_null(extended->internal);
 }
@@ -147,12 +151,16 @@ array_compressor_is_full(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = array_compressor_alloc(extended->element_type);
+	}
 
 	Size datum_size_and_align;
 	ArrayCompressor *array_comp = extended->internal;
 	if (datum_serializer_value_may_be_toasted(array_comp->serializer))
+	{
 		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
+	}
 
 	datum_size_and_align =
 		datum_get_bytes_size(array_comp->serializer, array_comp->data.num_elements, val) -
@@ -219,7 +227,9 @@ array_compressor_append(ArrayCompressor *compressor, Datum val)
 	char *start_ptr;
 	simple8brle_compressor_append(&compressor->nulls, 0);
 	if (datum_serializer_value_may_be_toasted(compressor->serializer))
+	{
 		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
+	}
 
 	datum_size_and_align =
 		datum_get_bytes_size(compressor->serializer, compressor->data.num_elements, val) -
@@ -255,10 +265,14 @@ array_compressor_get_serialization_info(ArrayCompressor *compressor)
 		.total = 0,
 	};
 	if (info->nulls != NULL)
+	{
 		info->total += simple8brle_serialized_total_size(info->nulls);
+	}
 
 	if (info->sizes != NULL)
+	{
 		info->total += simple8brle_serialized_total_size(info->sizes);
+	}
 
 	info->total += compressor->data.num_elements;
 	return info;
@@ -310,9 +324,11 @@ array_compressed_from_serialization_info(ArrayCompressorSerializationInfo *info,
 	Size compressed_size = sizeof(ArrayCompressed) + info->total;
 
 	if (!AllocSizeIsValid(compressed_size))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
+	}
 
 	compressed_data = palloc0(compressed_size);
 	compressed_array = (ArrayCompressed *) compressed_data;
@@ -334,7 +350,9 @@ array_compressor_finish(ArrayCompressor *compressor)
 {
 	ArrayCompressorSerializationInfo *info = array_compressor_get_serialization_info(compressor);
 	if (info->sizes == NULL)
+	{
 		return NULL;
+	}
 
 	return array_compressed_from_serialization_info(info, compressor->type);
 }
@@ -376,7 +394,9 @@ array_decompression_iterator_alloc_forward(StringInfo serialized_data, Oid eleme
 
 	iterator->has_nulls = data.nulls != NULL;
 	if (iterator->has_nulls)
+	{
 		simple8brle_decompression_iterator_init_forward(&iterator->nulls, data.nulls);
+	}
 
 	simple8brle_decompression_iterator_init_forward(&iterator->sizes, data.sizes);
 
@@ -422,9 +442,11 @@ array_decompression_iterator_try_next_forward(DecompressionIterator *general_ite
 		Simple8bRleDecompressResult null =
 			simple8brle_decompression_iterator_try_next_forward(&iter->nulls);
 		if (null.is_done)
+		{
 			return (DecompressResult){
 				.is_done = true,
 			};
+		}
 
 		if ((null.val & 1) != 0)
 		{
@@ -436,9 +458,11 @@ array_decompression_iterator_try_next_forward(DecompressionIterator *general_ite
 
 	datum_size = simple8brle_decompression_iterator_try_next_forward(&iter->sizes);
 	if (datum_size.is_done)
+	{
 		return (DecompressResult){
 			.is_done = true,
 		};
+	}
 
 	CheckCompressedData(iter->data_offset + datum_size.val <= iter->num_data_bytes);
 
@@ -473,7 +497,9 @@ tsl_array_decompression_iterator_from_datum_reverse(Datum compressed_array, Oid 
 
 	Assert(compressed_array_header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
 	if (element_type != compressed_array_header->element_type)
+	{
 		elog(ERROR, "trying to decompress the wrong type");
+	}
 
 	array_compressed_data = array_compressed_data_from_bytes(&si,
 															 compressed_array_header->element_type,
@@ -481,8 +507,10 @@ tsl_array_decompression_iterator_from_datum_reverse(Datum compressed_array, Oid 
 
 	iterator->has_nulls = array_compressed_data.nulls != NULL;
 	if (iterator->has_nulls)
+	{
 		simple8brle_decompression_iterator_init_reverse(&iterator->nulls,
 														array_compressed_data.nulls);
+	}
 
 	simple8brle_decompression_iterator_init_reverse(&iterator->sizes, array_compressed_data.sizes);
 
@@ -863,9 +891,11 @@ array_decompression_iterator_try_next_reverse(DecompressionIterator *base_iter)
 		Simple8bRleDecompressResult null =
 			simple8brle_decompression_iterator_try_next_reverse(&iter->nulls);
 		if (null.is_done)
+		{
 			return (DecompressResult){
 				.is_done = true,
 			};
+		}
 
 		if ((null.val & 1) != 0)
 		{
@@ -877,9 +907,11 @@ array_decompression_iterator_try_next_reverse(DecompressionIterator *base_iter)
 
 	datum_size = simple8brle_decompression_iterator_try_next_reverse(&iter->sizes);
 	if (datum_size.is_done)
+	{
 		return (DecompressResult){
 			.is_done = true,
 		};
+	}
 
 	Assert((int64) iter->data_offset - (int64) datum_size.val >= 0);
 
@@ -909,8 +941,10 @@ array_compressed_data_recv(StringInfo buffer, Oid element_type)
 
 	has_nulls = pq_getmsgbyte(buffer) != 0;
 	if (has_nulls)
+	{
 		simple8brle_decompression_iterator_init_forward(&nulls,
 														simple8brle_serialized_recv(buffer));
+	}
 
 	use_binary_recv = pq_getmsgbyte(buffer) != 0;
 
@@ -919,7 +953,9 @@ array_compressed_data_recv(StringInfo buffer, Oid element_type)
 
 	/* if there are nulls, use that count instead */
 	if (has_nulls)
+	{
 		num_elements = nulls.num_elements;
+	}
 
 	for (i = 0; i < num_elements; i++)
 	{
@@ -964,7 +1000,9 @@ array_compressed_data_send(StringInfo buffer, const char *_serialized_data, Size
 
 	pq_sendbyte(buffer, array_compressed_data.nulls != NULL);
 	if (array_compressed_data.nulls != NULL)
+	{
 		simple8brle_serialized_send(buffer, array_compressed_data.nulls);
+	}
 
 	pq_sendbyte(buffer, encoding == BINARY_ENCODING);
 
@@ -979,7 +1017,9 @@ array_compressed_data_send(StringInfo buffer, const char *_serialized_data, Size
 		 datum = array_decompression_iterator_try_next_forward(data_iter))
 	{
 		if (datum.is_null)
+		{
 			continue;
+		}
 
 		datum_append_to_binary_string(serializer, encoding, buffer, datum.val);
 	}
@@ -1056,9 +1096,13 @@ tsl_array_compressor_append(PG_FUNCTION_ARGS)
 		compressor = array_compressor_alloc(type_to_compress);
 	}
 	if (PG_ARGISNULL(1))
+	{
 		array_compressor_append_null(compressor);
+	}
 	else
+	{
 		array_compressor_append(compressor, PG_GETARG_DATUM(1));
+	}
 
 	MemoryContextSwitchTo(old_context);
 	PG_RETURN_POINTER(compressor);
@@ -1071,11 +1115,15 @@ tsl_array_compressor_finish(PG_FUNCTION_ARGS)
 		(ArrayCompressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 	void *compressed;
 	if (compressor == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 
 	compressed = array_compressor_finish(compressor);
 	if (compressed == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 
 	PG_RETURN_POINTER(compressed);
 }

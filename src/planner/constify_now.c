@@ -40,7 +40,9 @@ get_hypertable_dimension(Oid relid, int flags)
 {
 	Hypertable *ht = ts_planner_get_hypertable(relid, flags);
 	if (!ht)
+	{
 		return NULL;
+	}
 	return hyperspace_get_open_dimension(ht->space, 0);
 }
 
@@ -48,11 +50,15 @@ bool
 is_valid_now_func(Node *node)
 {
 	if (IsA(node, FuncExpr) && castNode(FuncExpr, node)->funcid == F_NOW)
+	{
 		return true;
+	}
 
 	if (IsA(node, SQLValueFunction) &&
 		castNode(SQLValueFunction, node)->type == SVFOP_CURRENT_TIMESTAMP)
+	{
 		return true;
+	}
 
 	return false;
 }
@@ -64,7 +70,9 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 	/* Var > or Var >= */
 	if ((op->opfuncid != F_TIMESTAMPTZ_GT && op->opfuncid != F_TIMESTAMPTZ_GE) ||
 		!IsA(linitial(op->args), Var))
+	{
 		return false;
+	}
 
 	/*
 	 * Check that the constraint is actually on a partitioning
@@ -73,7 +81,9 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 	 */
 	Var *var = linitial_node(Var, op->args);
 	if (var->varlevelsup != 0)
+	{
 		return false;
+	}
 	Assert((int) var->varno <= list_length(rtable));
 	RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
 
@@ -94,10 +104,14 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 		flags = CACHE_FLAG_MISSING_OK;
 		TargetEntry *tle = list_nth(rte->subquery->targetList, var->varattno - 1);
 		if (!IsA(tle->expr, Var))
+		{
 			return false;
+		}
 		var = castNode(Var, tle->expr);
 		if (var->varlevelsup != 0)
+		{
 			return false;
+		}
 #if PG18_GE
 		/* PG18 introduced RTEs for group clauses so
 		 * we can use rtable to look up GROUP BY expressions.
@@ -110,11 +124,15 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 			Assert(var->varattno > 0);
 			Expr *node = list_nth(group_rte->groupexprs, var->varattno - 1);
 			if (!IsA(node, Var))
+			{
 				return false;
+			}
 			var = castNode(Var, node);
 			Assert(var->varno > 0);
 			if (var->varlevelsup != 0)
+			{
 				return false;
+			}
 		}
 #endif
 		rte = list_nth(rte->subquery->rtable, var->varno - 1);
@@ -122,21 +140,29 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 
 	const Dimension *dim = get_hypertable_dimension(rte->relid, flags);
 	if (!dim || dim->fd.column_type != TIMESTAMPTZOID || dim->column_attno != var->varattno)
+	{
 		return false;
+	}
 
 	/* Var > now() or Var >= now() */
 	if (is_valid_now_func(lsecond(op->args)))
+	{
 		return true;
+	}
 
 	if (!IsA(lsecond(op->args), OpExpr))
+	{
 		return false;
+	}
 
 	/* Var >|>= now() +|- Const */
 	OpExpr *op_inner = lsecond_node(OpExpr, op->args);
 	if ((op_inner->opfuncid != F_TIMESTAMPTZ_MI_INTERVAL &&
 		 op_inner->opfuncid != F_TIMESTAMPTZ_PL_INTERVAL) ||
 		!is_valid_now_func(linitial(op_inner->args)) || !IsA(lsecond(op_inner->args), Const))
+	{
 		return false;
+	}
 
 	/*
 	 * The consttype check should not be necessary since the
@@ -145,7 +171,9 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 	Const *c = lsecond_node(Const, op_inner->args);
 	Assert(c->consttype == INTERVALOID);
 	if (c->constisnull || c->consttype != INTERVALOID)
+	{
 		return false;
+	}
 
 	return true;
 }
@@ -218,9 +246,13 @@ constify_now_expr(PlannerInfo *root, OpExpr *op)
 		{
 			TimestampTz now_value = DatumGetTimestampTz(now->constvalue);
 			if (offset->month != 0)
+			{
 				now_value -= 7 * USECS_PER_DAY;
+			}
 			if (offset->day != 0)
+			{
 				now_value -= 4 * USECS_PER_HOUR;
+			}
 
 			now->constvalue = TimestampTzGetDatum(now_value);
 		}
@@ -264,7 +296,9 @@ ts_constify_now(PlannerInfo *root, List *rtable, Node *node)
 
 			/* We only look for top-level AND */
 			if (be->boolop != AND_EXPR)
+			{
 				return node;
+			}
 
 			foreach (lc, be->args)
 			{
@@ -272,7 +306,9 @@ ts_constify_now(PlannerInfo *root, List *rtable, Node *node)
 			}
 
 			if (additions)
+			{
 				be->args = additions;
+			}
 
 			break;
 		}

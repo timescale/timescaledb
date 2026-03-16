@@ -49,10 +49,14 @@ mock_read(Connection *conn, char *buf, size_t readlen)
 	MockConnection *mock = (MockConnection *) conn;
 
 	if (mock->recv_buf_offset >= mock->recv_buf_len)
+	{
 		return 0;
+	}
 
 	if (max >= mock->recv_buf_len - mock->recv_buf_offset)
+	{
 		max = mock->recv_buf_len - mock->recv_buf_offset;
+	}
 
 	/* Now read a random amount */
 	while (bytes_to_read == 0)
@@ -87,7 +91,9 @@ ts_connection_mock_set_recv_buf(Connection *conn, char *buf, size_t buf_len)
 	MockConnection *mock = (MockConnection *) conn;
 
 	if (buf_len > MOCK_MAX_BUF_SIZE)
+	{
 		return -1;
+	}
 
 	memcpy(mock->recv_buf, buf, buf_len);
 	mock->recv_buf_len = buf_len;
