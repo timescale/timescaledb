@@ -73,7 +73,9 @@ TSDLLEXPORT bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted = false;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_on_cagg_refresh = false;
-int ts_guc_direct_compress_insert_tuple_sort_limit = 10000;
+int ts_guc_direct_compress_insert_tuple_sort_limit = 30000;
+TSDLLEXPORT int ts_guc_direct_compress_segmentby_min_rows = 5000;
+TSDLLEXPORT int ts_guc_direct_compress_segmentby_batch_size_limit = 500;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -591,9 +593,37 @@ _guc_init(void)
 							"operations like importing large amounts of data in "
 							"single transaction. Setting this to 0 would make it unlimited.",
 							&ts_guc_direct_compress_insert_tuple_sort_limit,
-							10000,
+							30000,
 							0,
 							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("direct_compress_segmentby_min_rows"),
+							"Minimum number of rows required for automatic segmentby analysis",
+							"During direct compress, automatic segmentby selection only runs "
+							"when the number of buffered tuples meets this threshold.",
+							&ts_guc_direct_compress_segmentby_min_rows,
+							5000,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("direct_compress_segmentby_batch_size_limit"),
+							"Minimum rows per distinct value for automatic segmentby selection",
+							"Each distinct value of a candidate segmentby column must have at "
+							"least this many rows for the column to be selected.",
+							&ts_guc_direct_compress_segmentby_batch_size_limit,
+							500,
+							1,
+							TARGET_COMPRESSED_BATCH_SIZE,
 							PGC_USERSET,
 							0,
 							NULL,
