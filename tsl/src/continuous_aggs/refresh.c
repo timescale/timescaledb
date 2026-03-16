@@ -661,11 +661,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	 * relaxing this lock.
 	 */
 	LockRelationOid(hyper_relid, ShareUpdateExclusiveLock);
-	invalidations = invalidation_process_cagg_log(cagg,
-												  refresh_window,
-												  ts_guc_cagg_max_individual_materializations,
-												  context,
-												  force);
+	invalidations = invalidation_process_cagg_log(cagg, refresh_window);
 
 	DEBUG_WAITPOINT("before_process_cagg_invalidations_for_refresh_lock");
 
