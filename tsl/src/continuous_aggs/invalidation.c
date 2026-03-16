@@ -128,8 +128,8 @@ static void hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hype
 											  LOCKMODE lockmode);
 static bool save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 										  const Invalidation *invalidation);
-static void set_remainder_after_cut(Invalidation *remainder, int32 hyper_id,
-									int64 lowest_modified_value, int64 greatest_modified_value);
+static void invalidation_entry_set(Invalidation *inner_range, int32 hyper_id,
+								   int64 lowest_modified_value, int64 greatest_modified_value);
 static void invalidation_entry_reset(Invalidation *entry);
 static void
 invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
@@ -148,12 +148,12 @@ static void cagg_invalidations_scan_by_hypertable_init(ScanIterator *iterator, i
 static Invalidation cut_cagg_invalidation(const ContinuousAggInvalidationState *state,
 										  const InternalTimeRange *refresh_window,
 										  const Invalidation *entry);
-static Invalidation cut_cagg_invalidation_and_compute_remainder(
+static Invalidation cut_cagg_invalidation_and_compute_inner_range(
 	const ContinuousAggInvalidationState *state, const InternalTimeRange *refresh_window,
-	const Invalidation *mergedentry, const Invalidation *current_remainder);
-static void clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state,
-												 const InternalTimeRange *refresh_window,
-												 bool force);
+	const Invalidation *mergedentry, const Invalidation *current_inner_range);
+static void process_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state,
+												   const InternalTimeRange *refresh_window,
+												   bool force);
 static void cagg_invalidation_state_init(ContinuousAggInvalidationState *state,
 										 const ContinuousAgg *cagg);
 static void cagg_invalidation_state_cleanup(const ContinuousAggInvalidationState *state);
@@ -288,7 +288,7 @@ continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat
 typedef enum InvalidationResult
 {
 	INVAL_NOMATCH,
-	INVAL_DELETE,
+	INVAL_FULLY_MATCH,
 	INVAL_CUT,
 } InvalidationResult;
 
@@ -320,13 +320,13 @@ save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 }
 
 static void
-set_remainder_after_cut(Invalidation *remainder, int32 hyper_id, int64 lowest_modified_value,
-						int64 greatest_modified_value)
+invalidation_entry_set(Invalidation *inner_range, int32 hyper_id, int64 lowest_modified_value,
+					   int64 greatest_modified_value)
 {
-	MemSet(remainder, 0, sizeof(*remainder));
-	remainder->hyper_id = hyper_id;
-	remainder->lowest_modified_value = lowest_modified_value;
-	remainder->greatest_modified_value = greatest_modified_value;
+	MemSet(inner_range, 0, sizeof(*inner_range));
+	inner_range->hyper_id = hyper_id;
+	inner_range->lowest_modified_value = lowest_modified_value;
+	inner_range->greatest_modified_value = greatest_modified_value;
 }
 
 /*
@@ -337,7 +337,7 @@ set_remainder_after_cut(Invalidation *remainder, int32 hyper_id, int64 lowest_mo
  *
  * The part(s) of the invalidation that are outside the refresh window after
  * the cut will remain in the log. The part of the invalidation that fits
- * within the window is returned as the "remainder".
+ * within the window is returned as the "inner range".
  *
  * Note that the refresh window is exclusive in the end while invalidations
  * are inclusive.
@@ -346,7 +346,7 @@ static InvalidationResult
 cut_invalidation_along_refresh_window(const ContinuousAggInvalidationState *state,
 									  const Invalidation *invalidation,
 									  const InternalTimeRange *refresh_window,
-									  Invalidation *remainder)
+									  Invalidation *inner_range)
 {
 	int32 cagg_hyper_id = state->cagg->data.mat_hypertable_id;
 	TupleDesc tupdesc = RelationGetDescr(state->cagg_log_rel);
@@ -354,7 +354,7 @@ cut_invalidation_along_refresh_window(const ContinuousAggInvalidationState *stat
 	HeapTuple lower = NULL;
 	HeapTuple upper = NULL;
 
-	Assert(remainder != NULL);
+	Assert(inner_range != NULL);
 
 	/* Entry is completely enclosed by the refresh window */
 	if (invalidation->lowest_modified_value >= refresh_window->start &&
@@ -367,11 +367,11 @@ cut_invalidation_along_refresh_window(const ContinuousAggInvalidationState *stat
 		 *     [+++++]
 		 */
 
-		result = INVAL_DELETE;
-		set_remainder_after_cut(remainder,
-								cagg_hyper_id,
-								invalidation->lowest_modified_value,
-								invalidation->greatest_modified_value);
+		result = INVAL_FULLY_MATCH;
+		invalidation_entry_set(inner_range,
+							   cagg_hyper_id,
+							   invalidation->lowest_modified_value,
+							   invalidation->greatest_modified_value);
 	}
 	else
 	{
@@ -390,12 +390,12 @@ cut_invalidation_along_refresh_window(const ContinuousAggInvalidationState *stat
 											cagg_hyper_id,
 											invalidation->lowest_modified_value,
 											refresh_window->start - 1);
-			set_remainder_after_cut(remainder,
-									cagg_hyper_id,
-									refresh_window->start,
-									/* Refresh window not exclusive at end */
-									MIN(refresh_window->end - 1,
-										invalidation->greatest_modified_value));
+			invalidation_entry_set(inner_range,
+								   cagg_hyper_id,
+								   refresh_window->start,
+								   /* Refresh window not exclusive at end */
+								   MIN(refresh_window->end - 1,
+									   invalidation->greatest_modified_value));
 			result = INVAL_CUT;
 		}
 
@@ -403,11 +403,11 @@ cut_invalidation_along_refresh_window(const ContinuousAggInvalidationState *stat
 			invalidation->greatest_modified_value >= refresh_window->end)
 		{
 			/*
-			 * If the invalidation is already cut on the left above, the reminder is set and
-			 * will be reset here. The assert prevents from losing information from the reminder.
+			 * If the invalidation is already cut on the left above, the inner_range is set and
+			 * will be reset here. The assert prevents from losing information from the inner_range.
 			 */
 			Assert((result == INVAL_CUT &&
-					remainder->lowest_modified_value == refresh_window->start) ||
+					inner_range->lowest_modified_value == refresh_window->start) ||
 				   result == INVAL_NOMATCH);
 
 			/*
@@ -422,11 +422,11 @@ cut_invalidation_along_refresh_window(const ContinuousAggInvalidationState *stat
 											cagg_hyper_id,
 											refresh_window->end,
 											invalidation->greatest_modified_value);
-			set_remainder_after_cut(remainder,
-									cagg_hyper_id,
-									MAX(invalidation->lowest_modified_value, refresh_window->start),
-									/* Refresh window exclusive at end */
-									refresh_window->end - 1);
+			invalidation_entry_set(inner_range,
+								   cagg_hyper_id,
+								   MAX(invalidation->lowest_modified_value, refresh_window->start),
+								   /* Refresh window exclusive at end */
+								   refresh_window->end - 1);
 			result = INVAL_CUT;
 		}
 	}
@@ -841,12 +841,12 @@ cut_cagg_invalidation(const ContinuousAggInvalidationState *state,
 					  const InternalTimeRange *refresh_window, const Invalidation *entry)
 {
 	InvalidationResult result;
-	Invalidation remainder;
+	Invalidation inner_range;
 	ItemPointerData tid = entry->tid;
 
-	invalidation_entry_reset(&remainder);
+	invalidation_entry_reset(&inner_range);
 
-	result = cut_invalidation_along_refresh_window(state, entry, refresh_window, &remainder);
+	result = cut_invalidation_along_refresh_window(state, entry, refresh_window, &inner_range);
 
 	switch (result)
 	{
@@ -865,7 +865,7 @@ cut_cagg_invalidation(const ContinuousAggInvalidationState *state,
 				heap_freetuple(tuple);
 			}
 			break;
-		case INVAL_DELETE:
+		case INVAL_FULLY_MATCH:
 			ts_catalog_delete_tid_only(state->cagg_log_rel, &tid);
 			break;
 		case INVAL_CUT:
@@ -873,32 +873,32 @@ cut_cagg_invalidation(const ContinuousAggInvalidationState *state,
 			break;
 	}
 
-	return remainder;
+	return inner_range;
 }
 
 static Invalidation
-cut_cagg_invalidation_and_compute_remainder(const ContinuousAggInvalidationState *state,
-											const InternalTimeRange *refresh_window,
-											const Invalidation *mergedentry,
-											const Invalidation *current_remainder)
+cut_cagg_invalidation_and_compute_inner_range(const ContinuousAggInvalidationState *state,
+											  const InternalTimeRange *refresh_window,
+											  const Invalidation *mergedentry,
+											  const Invalidation *current_inner_range)
 {
-	Invalidation new_remainder;
-	Invalidation remainder = *current_remainder;
+	Invalidation new_inner_range;
+	Invalidation inner_range = *current_inner_range;
 
 	/* The previous and current invalidation could not be merged. We
 	 * need to cut the prev invalidation against the refresh window */
-	new_remainder = cut_cagg_invalidation(state, refresh_window, mergedentry);
+	new_inner_range = cut_cagg_invalidation(state, refresh_window, mergedentry);
 
-	if (!IsValidInvalidation(&remainder))
-		remainder = new_remainder;
-	else if (IsValidInvalidation(&new_remainder) &&
-			 !invalidation_entry_try_merge(&remainder, &new_remainder))
+	if (!IsValidInvalidation(&inner_range))
+		inner_range = new_inner_range;
+	else if (IsValidInvalidation(&new_inner_range) &&
+			 !invalidation_entry_try_merge(&inner_range, &new_inner_range))
 	{
-		save_invalidation_for_refresh(state, &remainder);
-		remainder = new_remainder;
+		save_invalidation_for_refresh(state, &inner_range);
+		inner_range = new_inner_range;
 	}
 
-	return remainder;
+	return inner_range;
 }
 
 /*
@@ -920,15 +920,15 @@ cut_cagg_invalidation_and_compute_remainder(const ContinuousAggInvalidationState
  * lowest_modified_value.
  */
 static void
-clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state,
-									 const InternalTimeRange *refresh_window, bool force)
+process_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state,
+									   const InternalTimeRange *refresh_window, bool force)
 {
 	ScanIterator iterator;
 	Invalidation mergedentry;
-	Invalidation remainder;
+	Invalidation inner_range;
 
 	invalidation_entry_reset(&mergedentry);
-	invalidation_entry_reset(&remainder);
+	invalidation_entry_reset(&inner_range);
 	cagg_invalidations_scan_by_hypertable_init(&iterator,
 											   state->cagg->data.mat_hypertable_id,
 											   RowExclusiveLock,
@@ -959,22 +959,22 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 	 * buckets to materialize.
 	 *
 	 * Synthesize an invalidation covering [start, end-1] (inclusive) and use
-	 * it as the initial remainder.  We use end-1 because greatest_modified_value
+	 * it as the initial inner_range.  We use end-1 because greatest_modified_value
 	 * is inclusive while refresh_window->end is exclusive.
 	 *
-	 * By seeding the remainder with this forced entry, any cagg invalidation
+	 * By seeding the inner_range with this forced entry, any cagg invalidation
 	 * log entries whose inside parts overlap the window will be merged into it
 	 * in the scan loop below rather than being saved as separate entries.
-	 * The single merged remainder is then saved once at the end of this function.
+	 * The single merged inner_range is then saved once at the end of this function.
 	 */
 	if (force)
 	{
-		remainder.hyper_id = state->cagg->data.mat_hypertable_id;
-		remainder.lowest_modified_value = refresh_window->start;
-		remainder.greatest_modified_value =
+		inner_range.hyper_id = state->cagg->data.mat_hypertable_id;
+		inner_range.lowest_modified_value = refresh_window->start;
+		inner_range.greatest_modified_value =
 			ts_time_saturating_sub(refresh_window->end, 1, refresh_window->type);
-		remainder.is_modified = false;
-		ItemPointerSetInvalid(&remainder.tid);
+		inner_range.is_modified = false;
+		ItemPointerSetInvalid(&inner_range.tid);
 	}
 
 	/* Process all invalidations for the continuous aggregate */
@@ -1002,10 +1002,10 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 		}
 		else
 		{
-			remainder = cut_cagg_invalidation_and_compute_remainder(state,
-																	refresh_window,
-																	&mergedentry,
-																	&remainder);
+			inner_range = cut_cagg_invalidation_and_compute_inner_range(state,
+																		refresh_window,
+																		&mergedentry,
+																		&inner_range);
 			mergedentry = logentry;
 		}
 
@@ -1017,13 +1017,13 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 
 	/* Handle the last (merged) invalidation */
 	if (IsValidInvalidation(&mergedentry))
-		remainder = cut_cagg_invalidation_and_compute_remainder(state,
-																refresh_window,
-																&mergedentry,
-																&remainder);
+		inner_range = cut_cagg_invalidation_and_compute_inner_range(state,
+																	refresh_window,
+																	&mergedentry,
+																	&inner_range);
 
-	/* Handle the last (merged) remainder */
-	save_invalidation_for_refresh(state, &remainder);
+	/* Save the last (merged) inner range into the invalidation tuplestore */
+	save_invalidation_for_refresh(state, &inner_range);
 }
 
 static void
@@ -1094,7 +1094,7 @@ invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange
 
 	cagg_invalidation_state_init(&state, cagg);
 	state.invalidations = tuplestore_begin_heap(false, false, work_mem);
-	clear_cagg_invalidations_for_refresh(&state, refresh_window, force);
+	process_cagg_invalidations_for_refresh(&state, refresh_window, force);
 	count = tuplestore_tuple_count(state.invalidations);
 
 	if (count == 0)
