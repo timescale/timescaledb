@@ -85,6 +85,8 @@ typedef struct SegmentInfo
 	Datum val;
 	FmgrInfo eq_fn;
 	FunctionCallInfo eq_fcinfo;
+	AttrNumber attnum;
+	const char *attname;
 	int16 typlen;
 	bool is_null;
 	bool typ_by_val;
@@ -99,6 +101,30 @@ typedef struct CompressedSegmentInfo
 	SegmentInfo *segment_info;
 	int16 chunk_offset;
 } CompressedSegmentInfo;
+
+/*
+ * Segmentby analysis uses three nested linear scans: over every row,
+ * every candidate column, and every distinct value per column.
+ * These constants cap the inner two loops. Raising either increases
+ * direct compression overhead.
+ */
+#define MAX_SEGMENTBY_CANDIDATES 10
+#define MAX_SEGMENTBY_DISTINCT 20
+
+typedef struct DistinctEntry
+{
+	Datum value;
+	bool is_null;
+	int64 count;
+} DistinctEntry;
+
+typedef struct ColumnAnalysis
+{
+	SegmentInfo *seg_info;
+	int n_distinct;
+	bool rejected;
+	DistinctEntry entries[MAX_SEGMENTBY_DISTINCT];
+} ColumnAnalysis;
 
 typedef struct PerCompressedColumn
 {
@@ -377,7 +403,7 @@ extern void compress_chunk_populate_sort_info_for_column(const CompressionSettin
 														 AttrNumber *att_nums, Oid *sort_operator,
 														 Oid *collation, bool *nulls_first);
 extern Tuplesortstate *compression_create_tuplesort_state(CompressionSettings *settings,
-														  Relation rel);
+														  Relation rel, bool random_access);
 extern void row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *settings,
 								const TupleDesc noncompressed_tupdesc,
 								const TupleDesc compressed_tupdesc);
