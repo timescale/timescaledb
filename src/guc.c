@@ -73,7 +73,7 @@ TSDLLEXPORT bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted = false;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_on_cagg_refresh = false;
-int ts_guc_direct_compress_insert_tuple_sort_limit = 10000;
+int ts_guc_direct_compress_insert_tuple_sort_limit = 30000;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -591,7 +591,7 @@ _guc_init(void)
 							"operations like importing large amounts of data in "
 							"single transaction. Setting this to 0 would make it unlimited.",
 							&ts_guc_direct_compress_insert_tuple_sort_limit,
-							10000,
+							30000,
 							0,
 							2147483647,
 							PGC_USERSET,
