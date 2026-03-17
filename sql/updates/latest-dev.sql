@@ -139,6 +139,9 @@ CREATE INDEX continuous_aggs_backfill_tracker_idx ON _timescaledb_catalog.contin
 
 GRANT SELECT ON _timescaledb_catalog.continuous_aggs_backfill_tracker TO PUBLIC;
 
+-- Add tenant_column_name to continuous_agg table
+ALTER TABLE _timescaledb_catalog.continuous_agg ADD COLUMN tenant_column_name name;
+
 -- drop the catalog tables for continuous aggregate migration plans
 
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;

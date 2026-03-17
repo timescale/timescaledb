@@ -83,6 +83,9 @@ GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 -- Drop continuous_aggs_backfill_tracker table
 DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_backfill_tracker;
 
+-- Remove tenant_column_name from continuous_agg table
+ALTER TABLE _timescaledb_catalog.continuous_agg DROP COLUMN IF EXISTS tenant_column_name;
+
 -- Rebuild the catalog tables for continuous aggregate migration plans
 
 CREATE TABLE _timescaledb_catalog.continuous_agg_migrate_plan (
