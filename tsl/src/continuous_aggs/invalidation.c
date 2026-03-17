@@ -1012,7 +1012,8 @@ cut_cagg_invalidation_and_compute_remainder(const ContinuousAggInvalidationState
 
 	if (!IsValidInvalidation(&remainder))
 		remainder = new_remainder;
-	else if (!invalidation_entry_try_merge(&remainder, &new_remainder))
+	else if (IsValidInvalidation(&new_remainder) &&
+			 !invalidation_entry_try_merge(&remainder, &new_remainder))
 	{
 		save_invalidation_for_refresh(state, &remainder);
 		remainder = new_remainder;
@@ -1064,17 +1065,30 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 
 	MemoryContextReset(state->per_tuple_mctx);
 
-	/* Force refresh within the entire window */
+	/*
+	 * Force refresh within the entire window.
+	 *
+	 * At this point the refresh window has already been inscribed to bucket
+	 * boundaries by the caller, so [start, end) covers exactly the set of
+	 * buckets to materialize.
+	 *
+	 * Synthesize an invalidation covering [start, end-1] (inclusive) and use
+	 * it as the initial remainder.  We use end-1 because greatest_modified_value
+	 * is inclusive while refresh_window->end is exclusive.
+	 *
+	 * By seeding the remainder with this forced entry, any cagg invalidation
+	 * log entries whose inside parts overlap the window will be merged into it
+	 * in the scan loop below rather than being saved as separate entries.
+	 * The single merged remainder is then saved once at the end of this function.
+	 */
 	if (force)
 	{
-		mergedentry.hyper_id = state->cagg->data.mat_hypertable_id;
-		mergedentry.lowest_modified_value = refresh_window->start;
-		mergedentry.greatest_modified_value = refresh_window->end;
-		mergedentry.is_modified = false;
-		ItemPointerSet(&mergedentry.tid, InvalidBlockNumber, 0);
-
-		/* Jump to process remainder to properly cut the invalidation */
-		goto process_remainder;
+		remainder.hyper_id = state->cagg->data.mat_hypertable_id;
+		remainder.lowest_modified_value = refresh_window->start;
+		remainder.greatest_modified_value =
+			ts_time_saturating_sub(refresh_window->end, 1, refresh_window->type);
+		remainder.is_modified = false;
+		ItemPointerSetInvalid(&remainder.tid);
 	}
 
 	/* Process all invalidations for the continuous aggregate */
@@ -1115,7 +1129,6 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 
 	ts_scan_iterator_close(&iterator);
 
-process_remainder:
 	/* Handle the last (merged) invalidation */
 	if (IsValidInvalidation(&mergedentry))
 		remainder = cut_cagg_invalidation_and_compute_remainder(state,
