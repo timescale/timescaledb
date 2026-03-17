@@ -1,0 +1,44 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Test error cases for backfill tracking tenant column configuration.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- Setup
+CREATE TABLE metrics(
+    ts TIMESTAMPTZ NOT NULL,
+    device_id INT NOT NULL,
+    sensor_id UUID,
+    temp INTEGER
+);
+SELECT create_hypertable('metrics', 'ts', chunk_time_interval => interval '6 hours');
+  create_hypertable   
+----------------------
+ (1,public,metrics,t)
+
+CREATE MATERIALIZED VIEW metrics_hourly
+WITH (timescaledb.continuous) AS
+SELECT device_id, time_bucket('1 hour', ts) AS bucket, avg(temp) AS avg_temp
+FROM metrics
+GROUP BY device_id, bucket
+WITH NO DATA;
+\set ON_ERROR_STOP 0
+-- Test 1: Tenant column already set
+ALTER MATERIALIZED VIEW metrics_hourly SET (timescaledb.tenant_column = 'device_id');
+ALTER MATERIALIZED VIEW metrics_hourly SET (timescaledb.tenant_column = 'device_id');
+ERROR:  tenant column "device_id" is already set on continuous aggregate "metrics_hourly"
+-- Test 2: Column exists on hypertable but is not a GROUP BY column
+CREATE MATERIALIZED VIEW metrics_daily
+WITH (timescaledb.continuous) AS
+SELECT device_id, sensor_id, time_bucket('1 day', ts) AS bucket, avg(temp) AS avg_temp
+FROM metrics
+GROUP BY device_id, sensor_id, bucket
+WITH NO DATA;
+ALTER MATERIALIZED VIEW metrics_daily SET (timescaledb.tenant_column = 'temp');
+ERROR:  tenant column "temp" must be a GROUP BY column of continuous aggregate "metrics_daily"
+-- Test 3: Sibling cagg with different tenant column
+ALTER MATERIALIZED VIEW metrics_daily SET (timescaledb.tenant_column = 'sensor_id');
+ERROR:  all continuous aggregates on the same hypertable must use the same tenant column
+\set ON_ERROR_STOP 1
+-- Cleanup
+DROP TABLE metrics CASCADE;
+NOTICE:  drop cascades to 4 other objects
