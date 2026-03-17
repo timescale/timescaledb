@@ -28,6 +28,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
+#include <optimizer/appendinfo.h>
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
@@ -60,6 +61,7 @@
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
 #include "import/planner.h"
+#include "import/ts_inherit.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner.h"
 #include "time_utils.h"
@@ -85,27 +87,6 @@ is_time_bucket_function(Expr *node)
 		return true;
 
 	return false;
-}
-
-static void
-ts_add_append_rel_infos(PlannerInfo *root, List *appinfos)
-{
-	ListCell *lc;
-
-	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
-
-	/* root->append_rel_array is required to be able to hold all the
-	 * additional entries by previous call to expand_planner_arrays */
-	Assert(root->append_rel_array);
-
-	foreach (lc, appinfos)
-	{
-		AppendRelInfo *appinfo = lfirst_node(AppendRelInfo, lc);
-		int child_relid = appinfo->child_relid;
-		Assert(child_relid < root->simple_rel_array_size);
-
-		root->append_rel_array[child_relid] = appinfo;
-	}
 }
 
 /*
@@ -1203,9 +1184,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
 	Oid parent_oid = rte->relid;
 	Relation oldrelation;
-	Query *parse = root->parse;
 	Index rti = rel->relid;
-	List *appinfos = NIL;
 	CollectQualCtx ctx = {
 		.root = root,
 		.rel = rel,
@@ -1217,7 +1196,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	Index first_chunk_index = 0;
 
 	/* double check our permissions are valid */
-	Assert(rti != (Index) parse->resultRelation);
 
 	/* Walk the tree and find restrictions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
@@ -1277,10 +1255,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		Relation newrelation;
 		RangeTblEntry *childrte;
 		Index child_rtindex;
-		AppendRelInfo *appinfo;
 		LOCKMODE chunk_lock = rte->rellockmode;
-
-		/* Open rel if needed */
 
 		Assert(child_oid != parent_oid);
 		newrelation = table_open(child_oid, chunk_lock);
@@ -1288,70 +1263,26 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		/* chunks cannot be temp tables */
 		Assert(!RELATION_IS_OTHER_TEMP(newrelation));
 
-		/*
-		 * Build an RTE for the child, and attach to query's rangetable list.
-		 * We copy most fields of the parent's RTE, but replace relation OID
-		 * and relkind, and set inh = false.  Also, set requiredPerms to zero
-		 * since all required permissions checks are done on the original RTE.
-		 * Likewise, set the child's securityQuals to empty, because we only
-		 * want to apply the parent's RLS conditions regardless of what RLS
-		 * properties individual children may have.  (This is an intentional
-		 * choice to make inherited RLS work like regular permissions checks.)
-		 * The parent securityQuals will be propagated to children along with
-		 * other base restriction clauses, so we don't need to do it here.
-		 */
-		childrte = copyObject(rte);
-		childrte->relid = child_oid;
-		childrte->relkind = newrelation->rd_rel->relkind;
-		childrte->inh = false;
-		/* clear the magic bit */
+		ts_expand_single_inheritance_child(root,
+										   rte,
+										   rti,
+										   oldrelation,
+										   oldrc,
+										   newrelation,
+										   &childrte,
+										   &child_rtindex);
 		childrte->ctename = NULL;
-#if PG16_LT
-		childrte->requiredPerms = 0;
-#else
-		/* Since PG16, the permission info is maintained separately. Unlink
-		 * the old perminfo from the RTE to disable permission checking.
+
+		/*
+		 * For non-result relations where the parent had no explicit alias,
+		 * clear the alias so EXPLAIN shows the chunk table name rather than
+		 * the parent alias, matching prior behavior.
 		 */
-		childrte->perminfoindex = 0;
-#endif
-		childrte->securityQuals = NIL;
-		parse->rtable = lappend(parse->rtable, childrte);
-		child_rtindex = list_length(parse->rtable);
+		if (!bms_is_member(rti, root->all_result_relids) && rte->alias == NULL)
+			childrte->alias = NULL;
+
 		if (first_chunk_index == 0)
 			first_chunk_index = child_rtindex;
-		root->simple_rte_array[child_rtindex] = childrte;
-		Assert(root->simple_rel_array[child_rtindex] == NULL);
-
-		appinfo = makeNode(AppendRelInfo);
-		appinfo->parent_relid = rti;
-		appinfo->child_relid = child_rtindex;
-		appinfo->parent_reltype = oldrelation->rd_rel->reltype;
-		appinfo->child_reltype = newrelation->rd_rel->reltype;
-		ts_make_inh_translation_list(oldrelation, newrelation, child_rtindex, appinfo);
-		appinfo->parent_reloid = parent_oid;
-		appinfos = lappend(appinfos, appinfo);
-
-		/*
-		 * Create child PlanRowMark if parent has one. This replicates
-		 * expand_single_inheritance_child() in inherit.c.
-		 */
-		if (oldrc)
-		{
-			PlanRowMark *childrc = makeNode(PlanRowMark);
-
-			childrc->rti = child_rtindex;
-			childrc->prti = oldrc->rti;
-			childrc->rowmarkId = oldrc->rowmarkId;
-			childrc->markType = select_rowmark_type(childrte, oldrc->strength);
-			childrc->allMarkTypes = (1 << childrc->markType);
-			childrc->strength = oldrc->strength;
-			childrc->waitPolicy = oldrc->waitPolicy;
-			childrc->isParent = false; /* chunks are never partitioned */
-
-			oldrc->allMarkTypes |= childrc->allMarkTypes;
-
-			root->rowMarks = lappend(root->rowMarks, childrc);
-		}
 
 		/* Close child relations, but keep locks */
 		if (child_oid != parent_oid)
@@ -1417,7 +1348,73 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		add_vars_to_targetlist_compat(root, newvars, bms_make_singleton(0));
 	}
 
-	ts_add_append_rel_infos(root, appinfos);
+	/*
+	 * For UPDATE/DELETE result relations, fix up processed_tlist and
+	 * reltarget.
+	 *
+	 * In standard PG, expand_inherited_rtentry() runs before
+	 * preprocess_targetlist(), so PG knows about children when building
+	 * the target list and uses per-child ROWID_VAR entries from the start.
+	 *
+	 * TimescaleDB expands hypertable chunks later (in set_rel_pathlist
+	 * hook, which fires during query_planner), after preprocess_targetlist
+	 * has already run. Since rte_mark_for_expansion cleared rte->inh,
+	 * preprocess_targetlist saw no inheritance and added a direct ctid Var
+	 * for the parent. We must remove it since per-child ctids are now
+	 * ROWID_VAR entries added by ts_expand_single_inheritance_child.
+	 *
+	 * Similarly, PG's distribute_row_identity_vars() already ran in
+	 * query_planner before our hook, so we must manually distribute
+	 * ROWID_VAR entries to the parent reltarget.
+	 *
+	 * None of this is needed for SELECT because preprocess_targetlist only
+	 * adds row identity junk columns (ctid, tableoid) for UPDATE/DELETE
+	 * result relations.
+	 */
+	if (bms_is_member(rti, root->all_result_relids))
+	{
+		/* Remove parent's direct ctid from processed_tlist. */
+		List *new_tlist = NIL;
+		ListCell *lc;
+		int resno = 1;
+		foreach (lc, root->processed_tlist)
+		{
+			TargetEntry *tle = lfirst_node(TargetEntry, lc);
+			Var *var = (Var *) tle->expr;
+			if (tle->resjunk && IsA(var, Var) && var->varno == (int) rti &&
+				var->varattno == SelfItemPointerAttributeNumber)
+				continue;
+			tle->resno = resno++;
+			new_tlist = lappend(new_tlist, tle);
+		}
+		root->processed_tlist = new_tlist;
+
+		/* Remove parent's direct ctid from reltarget. */
+		List *new_exprs = NIL;
+		foreach (lc, rel->reltarget->exprs)
+		{
+			Var *var = (Var *) lfirst(lc);
+			if (IsA(var, Var) && var->varno == (int) rti &&
+				var->varattno == SelfItemPointerAttributeNumber)
+				continue;
+			new_exprs = lappend(new_exprs, var);
+		}
+		rel->reltarget->exprs = new_exprs;
+
+		/* Parent is not a leaf result rel; children are. */
+		root->leaf_result_relids = bms_del_member(root->leaf_result_relids, rti);
+
+		/* Distribute ROWID_VAR entries to the parent rel's reltarget. */
+		foreach (lc, root->processed_tlist)
+		{
+			TargetEntry *tle = lfirst_node(TargetEntry, lc);
+			Var *var = (Var *) tle->expr;
+			if (var && IsA(var, Var) && var->varno == ROWID_VAR)
+			{
+				rel->reltarget->exprs = lappend(rel->reltarget->exprs, copyObject(var));
+			}
+		}
+	}
 
 	/* PostgreSQL will not set up the child rels for use, due to the games
 	 * we're playing with inheritance, so we must do it ourselves.
