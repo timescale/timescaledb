@@ -75,3 +75,10 @@ WITH orphaned_settings AS (
 )
 DELETE FROM _timescaledb_catalog.compression_settings AS cs
 USING orphaned_settings AS os WHERE cs.relid = os.relid;
+
+--
+-- Include the `hypertable` and the `chunk` catalog tables in the historical
+-- snapshot during logical replication
+--
+ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
+ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);
