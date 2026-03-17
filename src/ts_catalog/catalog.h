@@ -854,6 +854,7 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_direct_view_schema,
 	Anum_continuous_agg_direct_view_name,
 	Anum_continuous_agg_materialize_only,
+	Anum_continuous_agg_tenant_column_name,
 	_Anum_continuous_agg_max,
 } Anum_continuous_agg;
 
@@ -871,6 +872,7 @@ typedef struct FormData_continuous_agg
 	NameData direct_view_schema;
 	NameData direct_view_name;
 	bool materialized_only;
+	NameData tenant_column_name; /* nullable — NULL means backfill tracking disabled */
 } FormData_continuous_agg;
 
 typedef FormData_continuous_agg *Form_continuous_agg;
@@ -1224,7 +1226,7 @@ typedef enum Anum_continuous_aggs_backfill_tracker_idx
 	_Anum_continuous_aggs_backfill_tracker_idx_max,
 } Anum_continuous_aggs_backfill_tracker_idx;
 
-#define Natts_continuous_aggs_backfill_tracker_idx                                                  \
+#define Natts_continuous_aggs_backfill_tracker_idx                                                 \
 	(_Anum_continuous_aggs_backfill_tracker_idx_max - 1)
 
 #define COMPRESSION_SETTINGS_TABLE_NAME "compression_settings"

@@ -202,3 +202,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 CREATE INDEX continuous_aggs_backfill_tracker_idx ON _timescaledb_catalog.continuous_aggs_backfill_tracker (hypertable_id, lowest_modified_value ASC);
 
 GRANT SELECT ON _timescaledb_catalog.continuous_aggs_backfill_tracker TO PUBLIC;
+
+-- TO FIX : need to rwrite table 
+-- Add tenant_column_name to continuous_agg table
+ALTER TABLE _timescaledb_catalog.continuous_agg ADD COLUMN tenant_column_name name;

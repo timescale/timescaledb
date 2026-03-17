@@ -263,6 +263,12 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(fd->materialized_only);
 
+	if (strlen(NameStr(fd->tenant_column_name)) == 0)
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)] = true;
+	else
+		values[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)] =
+			NameGetDatum(&fd->tenant_column_name);
+
 	return heap_form_tuple(desc, values, nulls);
 }
 
@@ -315,6 +321,14 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 
 	fd->materialized_only =
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)]);
+
+	if (nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)])
+		namestrcpy(&fd->tenant_column_name, "");
+	else
+		namestrcpy(&fd->tenant_column_name,
+				   DatumGetCString(
+					   values[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)]));
+
 	if (should_free)
 	{
 		heap_freetuple(tuple);
