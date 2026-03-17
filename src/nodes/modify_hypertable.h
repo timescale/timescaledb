@@ -49,6 +49,7 @@ typedef struct ModifyHypertableState
 	int64 batches_filtered_decompressed;
 	int64 batches_deleted;
 	int64 tuples_deleted;
+	int64 batches_scanned;
 
 	/* bloom stats */
 	int64 batches_checked_by_bloom;

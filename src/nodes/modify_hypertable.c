@@ -288,11 +288,14 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		state->batches_filtered_decompressed += counters->batches_filtered_decompressed;
 		state->batches_decompressed += counters->batches_decompressed;
 		state->tuples_decompressed += counters->tuples_decompressed;
+		state->batches_scanned += counters->batches_scanned;
 		state->batches_checked_by_bloom += counters->batches_checked_by_bloom;
 		state->batches_pruned_by_bloom += counters->batches_pruned_by_bloom;
 		state->batches_without_bloom += counters->batches_without_bloom;
 		state->batches_bloom_false_positives += counters->batches_bloom_false_positives;
 	}
+	if (state->batches_scanned > 0)
+		ExplainPropertyInteger("Batches scanned", NULL, state->batches_scanned, es);
 	if (state->batches_filtered_compressed > 0)
 		ExplainPropertyInteger("Compressed batches filtered",
 							   NULL,

@@ -449,6 +449,7 @@ struct decompress_batches_stats
 {
 	int64 batches_deleted;
 	int64 batches_decompressed;
+	int64 batches_scanned;
 	int64 batches_checked_by_bloom;
 	int64 batches_pruned_by_bloom;
 	int64 batches_without_bloom;
