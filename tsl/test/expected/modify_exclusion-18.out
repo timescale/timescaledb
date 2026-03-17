@@ -1337,7 +1337,7 @@ BEGIN;
          Delete on _timescaledb_internal._hyper_2_18_chunk m4_3
          Delete on _timescaledb_internal._hyper_2_26_chunk m4_4
          ->  Merge Join (actual rows=4.00 loops=1)
-               Output: m2.ctid, m2.tableoid, m4.tableoid, m4.ctid
+               Output: m2.ctid, m4.tableoid, m4.ctid, m2.tableoid
                Merge Cond: (m4."time" = m2."time")
                ->  Merge Append (actual rows=4.00 loops=1)
                      Sort Key: m4."time"
@@ -1446,7 +1446,7 @@ BEGIN;
          Update on _timescaledb_internal._hyper_2_18_chunk m4_3
          Update on _timescaledb_internal._hyper_2_26_chunk m4_4
          ->  Merge Join (actual rows=4.00 loops=1)
-               Output: '0.15'::double precision, m2.ctid, m2.tableoid, m4.tableoid, m4.ctid
+               Output: '0.15'::double precision, m2.ctid, m4.tableoid, m4.ctid, m2.tableoid
                Merge Cond: (m4."time" = m2."time")
                ->  Merge Append (actual rows=4.00 loops=1)
                      Sort Key: m4."time"

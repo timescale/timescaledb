@@ -449,7 +449,8 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 							 */
 							if (IS_UPDL_CMD(context->rootquery))
 							{
-								if (rti == (Index) query->resultRelation)
+								if (rti == (Index) query->resultRelation &&
+									!contain_mutable_functions((Node *) query->jointree->quals))
 									rte_mark_for_expansion(rte);
 							}
 							/* SELECT: mark all hypertables */
@@ -1484,7 +1485,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 				 */
 				if (IS_UPDL_CMD(query))
 				{
-					if (rel->relid == (Index) query->resultRelation)
+					if (rel->relid == (Index) query->resultRelation &&
+						!contain_mutable_functions((Node *) query->jointree->quals))
 						rte_mark_for_expansion(rte);
 				}
 				/*
