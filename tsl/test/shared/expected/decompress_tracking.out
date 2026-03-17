@@ -114,7 +114,7 @@ BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking WHERE device = 'd3'; ROL
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01 1:30','d1',random(); ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 1
+   Batches filtered after decompression: 1
    ->  Insert on decompress_tracking (actual rows=0.00 loops=1)
          ->  Subquery Scan on "*SELECT*" (actual rows=1.00 loops=1)
                ->  Result (actual rows=1.00 loops=1)
@@ -136,7 +136,7 @@ BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01','d4'
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking (VALUES ('2020-01-01 1:30','d1',random()),('2020-01-01 1:30','d2',random())); ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 2
+   Batches filtered after decompression: 2
    ->  Insert on decompress_tracking (actual rows=0.00 loops=1)
          ->  Values Scan on "*VALUES*" (actual rows=2.00 loops=1)
 

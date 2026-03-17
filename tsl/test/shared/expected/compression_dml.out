@@ -242,7 +242,7 @@ BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:01','d1',ran
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 6
+   Batches filtered after decompression: 6
    ->  Update on lazy_decompress (actual rows=0.00 loops=1)
          Update on _hyper_X_X_chunk lazy_decompress_1
          ->  Result (actual rows=0.00 loops=1)
@@ -252,7 +252,7 @@ BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0; ROLLBAC
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 6
+   Batches filtered after decompression: 6
    ->  Update on lazy_decompress (actual rows=0.00 loops=1)
          Update on _hyper_X_X_chunk lazy_decompress_1
          ->  Result (actual rows=0.00 loops=1)
@@ -263,7 +263,7 @@ BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND devi
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 2300; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 5
+   Batches filtered after decompression: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
    ->  Update on lazy_decompress (actual rows=0.00 loops=1)
@@ -276,7 +276,7 @@ BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 2300; ROLL
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value > 3100 AND value < 3200; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 5
+   Batches filtered after decompression: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
    ->  Update on lazy_decompress (actual rows=0.00 loops=1)
@@ -289,7 +289,7 @@ BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value > 3100 AND v
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 5
+   Batches filtered after decompression: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
    ->  Update on lazy_decompress (actual rows=0.00 loops=1)
@@ -318,7 +318,7 @@ RESET timescaledb.enable_dml_decompression_tuple_filtering;
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 6
+   Batches filtered after decompression: 6
    ->  Delete on lazy_decompress (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk lazy_decompress_1
          ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=0.00 loops=1)
@@ -327,7 +327,7 @@ BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0; ROLLBACK;
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 6
+   Batches filtered after decompression: 6
    ->  Delete on lazy_decompress (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk lazy_decompress_1
          ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=0.00 loops=1)
@@ -337,7 +337,7 @@ BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROL
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 2300; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 5
+   Batches filtered after decompression: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
    ->  Delete on lazy_decompress (actual rows=0.00 loops=1)
@@ -349,7 +349,7 @@ BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 2300; ROLLBACK;
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value > 3100 AND value < 3200; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 5
+   Batches filtered after decompression: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
    ->  Delete on lazy_decompress (actual rows=0.00 loops=1)
@@ -361,7 +361,7 @@ BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value > 3100 AND value < 3200;
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 5
+   Batches filtered after decompression: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
    ->  Delete on lazy_decompress (actual rows=0.00 loops=1)
@@ -690,7 +690,7 @@ BEGIN;
 :ANALYZE DELETE FROM compress_dml WHERE reading <> 'r1';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
-   Batches filtered: 2
+   Batches filtered after decompression: 2
    Batches decompressed: 3
    Tuples decompressed: 7
    Batches deleted: 1

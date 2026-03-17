@@ -46,7 +46,7 @@ typedef struct ModifyHypertableState
 	Snapshot snapshot;
 	int64 tuples_decompressed;
 	int64 batches_decompressed;
-	int64 batches_filtered;
+	int64 batches_filtered_decompressed;
 	int64 batches_deleted;
 	int64 tuples_deleted;
 
@@ -55,6 +55,9 @@ typedef struct ModifyHypertableState
 	int64 batches_pruned_by_bloom;
 	int64 batches_without_bloom;
 	int64 batches_bloom_false_positives;
+
+	/* bloom, betadata and null filters */
+	int64 batches_filtered_compressed;
 
 	/*
 	 * When EXPLAIN VERBOSE is used, we temporarily nullify the targetlist of the
