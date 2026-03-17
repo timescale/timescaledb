@@ -34,6 +34,7 @@ ANALYZE decompress_tracking;
 BEGIN; :EXPLAIN_ANALYZE UPDATE decompress_tracking SET value = value + 3; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 5
    Batches decompressed: 5
    Tuples decompressed: 60
    ->  Update on decompress_tracking (actual rows=0.00 loops=1)
@@ -47,6 +48,7 @@ BEGIN; :EXPLAIN_ANALYZE UPDATE decompress_tracking SET value = value + 3; ROLLBA
 BEGIN; :EXPLAIN_ANALYZE UPDATE decompress_tracking SET value = value + 3 WHERE device = 'd2'; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 2
    Batches decompressed: 2
    Tuples decompressed: 20
    ->  Update on decompress_tracking (actual rows=0.00 loops=1)
@@ -63,6 +65,7 @@ SET timescaledb.enable_compressed_direct_batch_delete TO false;
 BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 5
    Batches decompressed: 5
    Tuples decompressed: 60
    ->  Delete on decompress_tracking (actual rows=0.00 loops=1)
@@ -75,6 +78,7 @@ BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking; ROLLBACK;
 BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking WHERE device = 'd3'; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 2
    Batches decompressed: 2
    Tuples decompressed: 30
    ->  Delete on decompress_tracking (actual rows=0.00 loops=1)
@@ -90,6 +94,7 @@ RESET timescaledb.enable_compressed_direct_batch_delete;
 BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 5
    Batches deleted: 5
    ->  Delete on decompress_tracking (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk decompress_tracking_1
@@ -101,6 +106,7 @@ BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking; ROLLBACK;
 BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking WHERE device = 'd3'; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 2
    Batches deleted: 2
    ->  Delete on decompress_tracking (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk decompress_tracking_1
@@ -114,6 +120,7 @@ BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking WHERE device = 'd3'; ROL
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01 1:30','d1',random(); ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 1
    Batches filtered after decompression: 1
    ->  Insert on decompress_tracking (actual rows=0.00 loops=1)
          ->  Subquery Scan on "*SELECT*" (actual rows=1.00 loops=1)
@@ -122,6 +129,7 @@ BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01 1:30'
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01','d2',random(); ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 1
    ->  Insert on decompress_tracking (actual rows=0.00 loops=1)
          ->  Subquery Scan on "*SELECT*" (actual rows=1.00 loops=1)
                ->  Result (actual rows=1.00 loops=1)
@@ -136,6 +144,7 @@ BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01','d4'
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking (VALUES ('2020-01-01 1:30','d1',random()),('2020-01-01 1:30','d2',random())); ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 2
    Batches filtered after decompression: 2
    ->  Insert on decompress_tracking (actual rows=0.00 loops=1)
          ->  Values Scan on "*VALUES*" (actual rows=2.00 loops=1)

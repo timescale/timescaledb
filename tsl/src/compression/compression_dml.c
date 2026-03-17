@@ -510,6 +510,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 	cis->counters->batches_filtered_decompressed += stats.batches_filtered_decompressed;
 	cis->counters->batches_decompressed += stats.batches_decompressed;
 	cis->counters->tuples_decompressed += stats.tuples_decompressed;
+	cis->counters->batches_scanned += stats.batches_scanned;
 	cis->counters->batches_checked_by_bloom += stats.batches_checked_by_bloom;
 	cis->counters->batches_pruned_by_bloom += stats.batches_pruned_by_bloom;
 	cis->counters->batches_without_bloom += stats.batches_without_bloom;
@@ -677,6 +678,7 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	ht_state->batches_decompressed += stats.batches_decompressed;
 	ht_state->tuples_decompressed += stats.tuples_decompressed;
 	ht_state->tuples_deleted += stats.tuples_deleted;
+	ht_state->batches_scanned += stats.batches_scanned;
 	ht_state->batches_checked_by_bloom += stats.batches_checked_by_bloom;
 	ht_state->batches_pruned_by_bloom += stats.batches_pruned_by_bloom;
 	ht_state->batches_without_bloom += stats.batches_without_bloom;
@@ -779,7 +781,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	RowDecompressor decompressor;
 	bool decompressor_initialized = false;
 	bool valid = false;
-	int num_scanned_rows = 0;
 	TM_Result result;
 	DecompressBatchScanDesc scan = NULL;
 	ScanKeyData *index_scankeys = cdst->index_scankeys.scankeys;
@@ -815,7 +816,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 
 	while (decompress_batch_scan_getnext_slot(scan, ForwardScanDirection, slot))
 	{
-		num_scanned_rows++;
+		stats.batches_scanned++;
 
 		/* Deconstruct the tuple */
 		Assert(slot->tts_ops->get_heap_tuple);
@@ -1067,10 +1068,10 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	if (ts_guc_debug_compression_path_info)
 	{
 		elog(INFO,
-			 "Number of compressed rows fetched from %s: %d. "
+			 "Number of compressed rows fetched from %s: " INT64_FORMAT ". "
 			 "Number of compressed rows filtered%s: " INT64_FORMAT ".",
 			 index_rel ? "index" : "table scan",
-			 num_scanned_rows,
+			 stats.batches_scanned,
 			 index_rel ? " by heap filters" : "",
 			 stats.batches_filtered_compressed);
 	}

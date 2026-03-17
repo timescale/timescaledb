@@ -72,6 +72,8 @@ typedef struct SharedCounters
 	int64 batches_decompressed;
 	/* Number of tuples decompressed */
 	int64 tuples_decompressed;
+	/* Number of batches scanned */
+	int64 batches_scanned;
 	/* Number of batches checked by bloom */
 	int64 batches_checked_by_bloom;
 	/* Number of batches pruned by bloom */
