@@ -49,3 +49,9 @@ WHERE cc.chunk_id = c.id
   AND cc.dimension_slice_id IS NULL
   AND cc.hypertable_constraint_name IS NOT NULL;
 
+--
+-- Include the `hypertable` and the `chunk` catalog tables in the historical
+-- snapshot during logical replication
+--
+ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
+ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);
