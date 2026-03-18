@@ -689,11 +689,24 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 		invalidation_store_free(invalidations);
 	}
 
-	/* Remove the refresh window registration inserted in Txn 1, held until
-	 * here to block concurrent refreshes from overlapping our window. */
+	return invalidations != NULL;
+}
+
+static void
+cleanup_before_cagg_refresh_exit(const ContinuousAgg *cagg, const char *old_decompression_limit,
+								 int save_nestlevel)
+{
+	/* Remove the refresh window registration inserted above so it does
+	 * not block future refreshes from the same backend. */
 	ts_cagg_jobs_refresh_ranges_delete_by_pid(cagg->data.mat_hypertable_id, MyProcPid);
 
-	return invalidations != NULL;
+	SetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction",
+					old_decompression_limit,
+					PGC_USERSET,
+					PGC_S_SESSION);
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
 }
 
 void
@@ -919,8 +932,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	{
 		emit_up_to_date_notice(cagg, context);
 
-		/* Restore search_path */
-		AtEOXact_GUC(false, save_nestlevel);
+		cleanup_before_cagg_refresh_exit(cagg, old_decompression_limit, save_nestlevel);
 
 		rc = SPI_finish();
 		if (rc != SPI_OK_FINISH)
@@ -929,27 +941,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		return;
 	}
 
-	if (process_hypertable_invalidations)
+	if (process_hypertable_invalidations) //fix this : remove this
 	{
-		/*
-		 * If we are using trigger-based invalidations, we can process the
-		 * invalidations for the associated hypertable only and later read the
-		 * invalidations for other hypertables, but when using WAL-based
-		 * invalidation we need to process all of the hypertables that are
-		 * currently using WAL.
-		 *
-		 * We want to prevent any changes to how invalidations are collected
-		 * in the meantime since changing the invalidation collection method
-		 * while this is running might cause problems and miss invalidations.
-		 *
-		 * Concurrency on the replication slot is controlled using some
-		 * special sauce in ReplicationSlotAcquire(), which is called inside
-		 * pg_logical_slot_get_changes_guts().
-		 *
-		 * This will currently generate an error rather than blocking on the
-		 * lock, so we need to add a separate lock to ensure a blocking
-		 * behaviour.
-		 */
 		invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
 	}
 
@@ -968,14 +961,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		emit_up_to_date_notice(cagg, context);
 
 	DEBUG_WAITPOINT("after_process_cagg_materializations");
-
-	/* Restore search_path */
-	AtEOXact_GUC(false, save_nestlevel);
-
-	SetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction",
-					old_decompression_limit,
-					PGC_USERSET,
-					PGC_S_SESSION);
+	cleanup_before_cagg_refresh_exit(cagg, old_decompression_limit, save_nestlevel);
 
 	rc = SPI_finish();
 	if (rc != SPI_OK_FINISH)
