@@ -71,7 +71,6 @@ static void continuous_agg_refresh_execute_wrapper(const InternalTimeRange *buck
 static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   const InternalTimeRange *refresh_window,
 											   const InvalidationStore *invalidations,
-
 											   const ContinuousAggRefreshContext context,
 											   bool bucketing_refresh_window);
 static void emit_up_to_date_notice(const ContinuousAgg *cagg,
@@ -651,7 +650,6 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 									   const ContinuousAggRefreshContext context,
 									   bool bucketing_refresh_window, bool force)
 {
-	InvalidationStore *invalidations;
 	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id, false);
 
 	/* Lock the continuous aggregate's materialized hypertable to protect against
@@ -661,13 +659,16 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	 * relaxing this lock.
 	 */
 	LockRelationOid(hyper_relid, ShareUpdateExclusiveLock);
-	invalidations = invalidation_process_cagg_log(cagg, refresh_window);
+	invalidation_process_cagg_log(cagg, refresh_window);
 
 	DEBUG_WAITPOINT("before_process_cagg_invalidations_for_refresh_lock");
 
 	SPI_commit_and_chain();
 
 	DEBUG_WAITPOINT("after_process_cagg_invalidations_for_refresh_lock");
+
+	InvalidationStore *invalidations =
+		collect_and_delete_cagg_invalidations_in_window(cagg, refresh_window, force);
 
 	if (invalidations != NULL)
 	{
@@ -685,12 +686,14 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 										   invalidations,
 										   context,
 										   bucketing_refresh_window);
-		if (invalidations)
-			invalidation_store_free(invalidations);
-		return true;
+		invalidation_store_free(invalidations);
 	}
 
-	return false;
+	/* Remove the refresh window registration inserted in Txn 1, held until
+	 * here to block concurrent refreshes from overlapping our window. */
+	ts_cagg_jobs_refresh_ranges_delete_by_pid(cagg->data.mat_hypertable_id, MyProcPid);
+
+	return invalidations != NULL;
 }
 
 void

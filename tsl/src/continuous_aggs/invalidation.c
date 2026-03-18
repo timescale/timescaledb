@@ -85,10 +85,6 @@
  *
  *       |-|  |---| |--|    invalidations that are used for refreshing
  *
- * The invalidation store will spill to disk in case of many invalidations so
- * it won't blow up memory usage. If there are no invalidations in the store
- * after processing, then the continuous aggregate is up-to-date in the region
- * defined by the refresh window.
  */
 
 /*
@@ -101,7 +97,6 @@ typedef struct ContinuousAggInvalidationState
 	MemoryContext per_tuple_mctx;
 	Relation cagg_log_rel;
 	Snapshot snapshot;
-	Tuplestorestate *invalidations;
 } ContinuousAggInvalidationState;
 
 /*
@@ -147,6 +142,7 @@ static void insert_new_cagg_invalidation(const HypertableInvalidationState *stat
 static void move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *state);
 static void cagg_invalidations_scan_by_hypertable_init(ScanIterator *iterator, int32 cagg_hyper_id,
 													   LOCKMODE lockmode, int64 window_end);
+static ScanFilterResult cagg_invalidation_window_end_filter(const TupleInfo *ti, void *data);
 static Invalidation cut_cagg_invalidation(const ContinuousAggInvalidationState *state,
 										  const InternalTimeRange *refresh_window,
 										  const Invalidation *entry);
@@ -1062,30 +1058,133 @@ invalidation_process_hypertable_log(int32 hypertable_id, Oid dimtype)
 	hypertable_invalidation_state_cleanup(&state);
 }
 
-InvalidationStore *
+void
 invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window)
 {
 	ContinuousAggInvalidationState state;
-	InvalidationStore *store = NULL;
-	long count;
 
 	cagg_invalidation_state_init(&state, cagg);
-	state.invalidations = tuplestore_begin_heap(false, false, work_mem);
 	process_cagg_invalidations_for_refresh(&state, refresh_window);
-	count = tuplestore_tuple_count(state.invalidations);
+	cagg_invalidation_state_cleanup(&state);
+}
 
-	if (count == 0)
+/*
+ * Scanner filter that excludes cagg invalidation log entries whose
+ * greatest_modified_value extends beyond the refresh window end.
+ * The exclusive window_end (int64 *) is passed as data.
+ */
+static ScanFilterResult
+cagg_invalidation_window_end_filter(const TupleInfo *ti, void *data)
+{
+	int64 window_end = *(const int64 *) data;
+	bool isnull;
+	Datum greatest = slot_getattr(
+		ti->slot,
+		Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value,
+		&isnull);
+
+	Assert(!isnull);
+	return DatumGetInt64(greatest) < window_end ? SCAN_INCLUDE : SCAN_EXCLUDE;
+}
+
+/*
+ * Read all cagg invalidation log entries that fall entirely within
+ * [refresh_window->start, refresh_window->end) — i.e., entries written by
+ * Txn 2 as "ready to materialize" — collect them into an InvalidationStore,
+ * and delete them from the log.
+ *
+ * Txn 2 cuts all log entries to be either fully inside or fully outside the
+ * refresh window.  However, between Txn 2 and Txn 3, a concurrent session's
+ * Txn 1 (invalidation_process_hypertable_log) may insert new cagg log entries
+ * that partially overlap the window and have not been cut.  The scan
+ * skips those entries.
+ *
+ * The (materialization_id, lowest_modified_value) index is used for a range
+ * scan scoped to [window_start, window_end).  The greatest_modified_value
+ * check is applied as a heap-side filter via the scanner's filter callback.
+ *
+ * Returns an InvalidationStore with the collected entries, or NULL if no
+ * entries were found.
+ */
+InvalidationStore *
+collect_and_delete_cagg_invalidations_in_window(const ContinuousAgg *cagg,
+												const InternalTimeRange *refresh_window,
+												bool force)
+{
+	ScanIterator iterator;
+	int64 window_end = refresh_window->end;
+	InvalidationStore *store = NULL;
+	TupleDesc tupdesc = NULL;
+	Tuplestorestate *tupstore = NULL;
+
+	if (force)
 	{
-		tuplestore_end(state.invalidations);
+		/*
+		 * Forced refresh: pre-build a store covering the entire window.
+		 * Log entries will be deleted below but not collected into the store.
+		 */
+		Relation rel = open_cagg_table(CAGG_INVALIDATION_LOG, AccessShareLock);
+		tupdesc = CreateTupleDescCopy(RelationGetDescr(rel));
+		table_close(rel, AccessShareLock);
+
+		int64 inclusive_end =
+			ts_time_saturating_sub(refresh_window->end, 1, refresh_window->type);
+		HeapTuple forced_tuple = create_invalidation_tup(tupdesc,
+														 cagg->data.mat_hypertable_id,
+														 refresh_window->start,
+														 inclusive_end);
+		tupstore = tuplestore_begin_heap(false, false, work_mem);
+		tuplestore_puttuple(tupstore, forced_tuple);
+		heap_freetuple(forced_tuple);
 	}
-	else
+
+	cagg_invalidations_scan_by_hypertable_init(&iterator,
+											   cagg->data.mat_hypertable_id,
+											   RowExclusiveLock,
+											   window_end);
+	/* Add lower bound: only entries whose start is inside the refresh window */
+	ts_scan_iterator_scan_key_init(
+		&iterator,
+		Anum_continuous_aggs_materialization_invalidation_log_idx_lowest_modified_value,
+		BTGreaterEqualStrategyNumber,
+		F_INT8GE,
+		Int64GetDatum(refresh_window->start));
+	/* Filter out entries that extend beyond the window end */
+	iterator.ctx.filter = cagg_invalidation_window_end_filter;
+	iterator.ctx.data = &window_end;
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
+		if (!force)
+		{
+			if (tupdesc == NULL)
+			{
+				/* Initialize the tuplestore on first match */
+				tupstore = tuplestore_begin_heap(false, false, work_mem);
+				tupdesc = CreateTupleDescCopy(RelationGetDescr(ti->scanrel));
+			}
+
+			bool should_free;
+			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+			tuplestore_puttuple(tupstore, tuple);
+			if (should_free)
+			{
+				heap_freetuple(tuple);
+			}
+		}
+
+		ts_catalog_delete_tid_only(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+	}
+	ts_scan_iterator_close(&iterator);
+
+	if (tupstore != NULL)
 	{
 		store = palloc(sizeof(InvalidationStore));
-		store->tupstore = state.invalidations;
-		store->tupdesc = CreateTupleDescCopy(RelationGetDescr(state.cagg_log_rel));
+		store->tupstore = tupstore;
+		store->tupdesc = tupdesc;
 	}
-
-	cagg_invalidation_state_cleanup(&state);
 
 	return store;
 }
