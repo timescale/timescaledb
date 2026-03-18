@@ -98,6 +98,7 @@ bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
+TSDLLEXPORT bool ts_guc_enable_dml_bloom_filter = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
 TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
@@ -741,6 +742,19 @@ _guc_init(void)
 							 "Recheck tuples during DML decompression to only decompress batches "
 							 "with matching tuples",
 							 &ts_guc_enable_dml_decompression_tuple_filtering,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_dml_bloom_filter"),
+							 "Enable bloom filter pruning for DML on compressed chunks",
+							 "When enabled, bloom filters are used to skip compressed batches "
+							 "that definitely do not contain matching rows during DELETE and "
+							 "UPDATE operations, reducing decompression overhead.",
+							 &ts_guc_enable_dml_bloom_filter,
 							 true,
 							 PGC_USERSET,
 							 0,

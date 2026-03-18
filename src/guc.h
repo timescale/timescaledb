@@ -38,6 +38,7 @@ extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
+extern TSDLLEXPORT bool ts_guc_enable_dml_bloom_filter;
 extern bool ts_guc_enable_direct_compress_copy;
 extern bool ts_guc_enable_direct_compress_copy_sort_batches;
 extern bool ts_guc_enable_direct_compress_copy_client_sorted;

@@ -24,6 +24,7 @@ set(TEST_FILES
     compress_auto_sparse_index.sql
     compress_batch_size.sql
     compress_bitmap_scan.sql
+    compress_bloom_dml.sql
     compress_bloom_hash.sql
     compress_compbloom_basics.sql
     compress_compbloom_config.sql
