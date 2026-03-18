@@ -950,11 +950,15 @@ chunk_set_replica_identity(const Chunk *chunk)
 
 	if (stmt.identity_type == REPLICA_IDENTITY_INDEX)
 	{
-		/* Lookup the corresponding chunk index. If this index is
-		 * dropped, the behavior is the same as NOTHING (as per PG
-		 * documentation). */
-		Oid chunk_index_relid =
-			ts_chunk_index_get_by_hypertable_indexrelid(ch_rel, ht_rel->rd_replidindex);
+		/* Use RelationGetReplicaIndex() instead of rd_replidindex
+		 * directly to ensure the index list is loaded after any
+		 * relcache invalidation. */
+		Oid ht_indexoid = RelationGetReplicaIndex(ht_rel);
+		Oid chunk_index_relid = InvalidOid;
+
+		if (OidIsValid(ht_indexoid))
+			chunk_index_relid = ts_chunk_index_get_by_hypertable_indexrelid(ch_rel, ht_indexoid);
+
 		if (OidIsValid(chunk_index_relid))
 			stmt.name = get_rel_name(chunk_index_relid);
 		else
@@ -989,6 +993,10 @@ chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 
 		chunk_set_replica_identity(chunk);
 	}
+
+	/* Copy FK constraints after indexes are created, since FK validation
+	 * requires the supporting unique index to exist on the chunk. */
+	ts_chunk_copy_referencing_fk(ht, chunk);
 }
 
 static Oid
@@ -4995,6 +5003,7 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 	chunk->constraints = ccs;
 	ts_process_utility_set_expect_chunk_modification(true);
 	ts_chunk_constraints_create(ht, chunk);
+	ts_chunk_copy_referencing_fk(ht, chunk);
 	ts_process_utility_set_expect_chunk_modification(false);
 	chunk->constraints = oldccs;
 

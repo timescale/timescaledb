@@ -11,6 +11,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
+#include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
 #include <utils/fmgroids.h>
 #include <utils/lsyscache.h>
@@ -146,6 +147,72 @@ is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type
 	}
 
 	return false;
+}
+
+/*
+ * Check if all quals reference only segmentby columns.
+ *
+ * This function is only relevant for partial chunks.  For fully compressed
+ * chunks, segmentby quals are pushed to the compressed scan and removed from
+ * plan->qual, so plan->qual is NIL and this function is never called.
+ * For partial chunks, segmentby quals remain on plan->qual because they must
+ * also be checked against the uncompressed portion, but they have already been
+ * pushed to the compressed scan as well.  ColumnarIndexScan only reads
+ * compressed metadata, so these quals are already handled.
+ *
+ * Uses the decompression_map and is_segmentby_column lists from the
+ * ColumnarScan's custom_private to build a set of custom_scan_tlist
+ * positions that are segmentby columns, then checks each qual's Vars
+ * against that set.
+ *
+ * Returns false for quals containing no Vars (e.g. constified tableoid),
+ * since those constant expressions are not handled by the compressed scan
+ * and must still be evaluated.  In practice these only appear on partial
+ * chunks from constraint exclusion checks (e.g. tableoid comparisons for
+ * hypertable expansion) and should be uncommon.
+ */
+static bool
+quals_only_reference_segmentby(List *quals, CustomScan *cscan)
+{
+	List *decompression_map = list_nth(cscan->custom_private, DCP_DecompressionMap);
+	List *is_segmentby = list_nth(cscan->custom_private, DCP_IsSegmentbyColumn);
+
+	Bitmapset *segmentby_positions = NULL;
+	ListCell *lc_map, *lc_seg;
+	forboth (lc_map, decompression_map, lc_seg, is_segmentby)
+	{
+		int tlist_pos = lfirst_int(lc_map);
+		if (lfirst_int(lc_seg) && tlist_pos > 0)
+			segmentby_positions = bms_add_member(segmentby_positions, tlist_pos);
+	}
+
+	bool result = true;
+	ListCell *lc;
+	foreach (lc, quals)
+	{
+		List *vars = pull_var_clause(lfirst(lc), 0);
+		if (vars == NIL)
+		{
+			result = false;
+			break;
+		}
+
+		ListCell *lc2;
+		foreach (lc2, vars)
+		{
+			Var *var = lfirst_node(Var, lc2);
+			if (!bms_is_member(var->varattno, segmentby_positions))
+			{
+				result = false;
+				break;
+			}
+		}
+		if (!result)
+			break;
+	}
+
+	bms_free(segmentby_positions);
+	return result;
 }
 
 /*
@@ -620,9 +687,11 @@ insert_columnar_index_scan(Plan *plan, void *context)
 	CustomScan *cscan = castNode(CustomScan, childplan);
 
 	/*
-	 * No Postgres quals on the ColumnarScan.
+	 * No Postgres quals on the ColumnarScan, or quals only on segmentby
+	 * columns. Segmentby filters are pushed to the compressed scan so
+	 * ColumnarIndexScan can skip them.
 	 */
-	if (childplan->qual != NIL)
+	if (childplan->qual != NIL && !quals_only_reference_segmentby(childplan->qual, cscan))
 		return plan;
 
 	/*

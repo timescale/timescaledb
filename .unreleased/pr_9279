@@ -1,1 +1,0 @@
-Fixes: #9279 Fix EXPLAIN VERBOSE corrupting targetlist of cached ModifyHypertable plans

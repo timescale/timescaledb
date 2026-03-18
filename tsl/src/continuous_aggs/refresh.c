@@ -79,10 +79,6 @@ static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 												   const InternalTimeRange *refresh_window,
 												   const ContinuousAggRefreshContext context,
 												   bool bucketing_refresh_window, bool force);
-static void fill_bucket_offset_origin(const ContinuousAgg *cagg,
-									  const InternalTimeRange *const refresh_window,
-									  NullableDatum *offset, NullableDatum *origin);
-
 static Hypertable *
 cagg_get_hypertable_or_fail(int32 hypertable_id)
 {
@@ -158,10 +154,17 @@ compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 	Assert(cagg != NULL);
 	Assert(cagg->bucket_function != NULL);
 
-	NullableDatum NULL_DATUM = INIT_NULL_DATUM;
 	InternalTimeRange result = *refresh_window;
 	InternalTimeRange largest_bucketed_window =
 		get_largest_bucketed_window(refresh_window->type, bucket_width);
+
+	/* Get offset and origin for bucket function */
+	NullableDatum offset = INIT_NULL_DATUM;
+	NullableDatum origin = INIT_NULL_DATUM;
+	fill_bucket_offset_origin(cagg->bucket_function, refresh_window->type, &offset, &origin);
+
+	/* Defined offset and origin in one function is not supported */
+	Assert(offset.isnull == true || origin.isnull == true);
 
 	if (refresh_window->start <= largest_bucketed_window.start)
 	{
@@ -179,8 +182,8 @@ compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 		result.start = ts_time_bucket_by_type_extended(bucket_width,
 													   included_bucket,
 													   refresh_window->type,
-													   NULL_DATUM,
-													   NULL_DATUM);
+													   offset,
+													   origin);
 	}
 
 	if (refresh_window->end >= largest_bucketed_window.end)
@@ -194,8 +197,8 @@ compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 		result.end = ts_time_bucket_by_type_extended(bucket_width,
 													 refresh_window->end,
 													 refresh_window->type,
-													 NULL_DATUM,
-													 NULL_DATUM);
+													 offset,
+													 origin);
 	}
 	return result;
 }
@@ -225,47 +228,47 @@ int_bucket_offset_to_datum(Oid type, const ContinuousAggBucketFunction *bucket_f
 /*
  * Get a NullableDatum for offset and origin based on the CAgg information
  */
-static void
-fill_bucket_offset_origin(const ContinuousAgg *cagg, const InternalTimeRange *const refresh_window,
+void
+fill_bucket_offset_origin(const ContinuousAggBucketFunction *bucket_function, Oid type,
 						  NullableDatum *offset, NullableDatum *origin)
 {
-	Assert(cagg != NULL);
+	Assert(bucket_function != NULL);
 	Assert(offset != NULL);
 	Assert(origin != NULL);
 	Assert(offset->isnull);
 	Assert(origin->isnull);
 
-	if (cagg->bucket_function->bucket_time_based)
+	if (bucket_function->bucket_time_based)
 	{
-		if (cagg->bucket_function->bucket_time_offset != NULL)
+		if (bucket_function->bucket_time_offset != NULL)
 		{
 			offset->isnull = false;
-			offset->value = IntervalPGetDatum(cagg->bucket_function->bucket_time_offset);
+			offset->value = IntervalPGetDatum(bucket_function->bucket_time_offset);
 		}
 
-		if (TIMESTAMP_NOT_FINITE(cagg->bucket_function->bucket_time_origin) == false)
+		if (TIMESTAMP_NOT_FINITE(bucket_function->bucket_time_origin) == false)
 		{
 			origin->isnull = false;
-			if (refresh_window->type == DATEOID)
+			if (type == DATEOID)
 			{
 				/* Date was converted into a timestamp in process_additional_timebucket_parameter(),
 				 * build a Date again */
-				origin->value = DirectFunctionCall1(timestamp_date,
-													TimestampGetDatum(
-														cagg->bucket_function->bucket_time_origin));
+				origin->value =
+					DirectFunctionCall1(timestamp_date,
+										TimestampGetDatum(bucket_function->bucket_time_origin));
 			}
 			else
 			{
-				origin->value = TimestampGetDatum(cagg->bucket_function->bucket_time_origin);
+				origin->value = TimestampGetDatum(bucket_function->bucket_time_origin);
 			}
 		}
 	}
 	else
 	{
-		if (cagg->bucket_function->bucket_integer_offset != 0)
+		if (bucket_function->bucket_integer_offset != 0)
 		{
 			offset->isnull = false;
-			offset->value = int_bucket_offset_to_datum(refresh_window->type, cagg->bucket_function);
+			offset->value = int_bucket_offset_to_datum(type, bucket_function);
 		}
 	}
 }
@@ -325,7 +328,7 @@ compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 	/* Get offset and origin for bucket function */
 	NullableDatum offset = INIT_NULL_DATUM;
 	NullableDatum origin = INIT_NULL_DATUM;
-	fill_bucket_offset_origin(cagg, refresh_window, &offset, &origin);
+	fill_bucket_offset_origin(cagg->bucket_function, refresh_window->type, &offset, &origin);
 
 	/* Defined offset and origin in one function is not supported */
 	Assert(offset.isnull == true || origin.isnull == true);

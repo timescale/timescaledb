@@ -424,7 +424,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXT_CONTROL_FILE}
 
 find_program(
   CLANG_FORMAT
-  NAMES clang-format-14 clang-format
+  NAMES clang-format-17 clang-format
   PATHS /usr/bin /usr/local/bin /usr/local/opt/ /usr/local/opt/llvm/bin /opt/bin
   DOC "The path to clang-format")
 
@@ -441,8 +441,8 @@ if(CLANG_FORMAT)
         "Could not parse clang-format version ${CLANG_FORMAT_VERSION_OUTPUT}")
   endif()
 
-  if((${CMAKE_MATCH_1} LESS "14"))
-    message(WARNING "clang-format version 14 or greater required")
+  if((${CMAKE_MATCH_1} LESS "17"))
+    message(WARNING "clang-format version 17 or greater required")
     set(CLANG_FORMAT False)
   endif()
 endif()
@@ -662,6 +662,13 @@ if(CODECOVERAGE)
   # -fprofile-arcs -ftest-coverage when compiling and -lgcov when linking
   add_compile_options(--coverage -O0)
   add_link_options(--coverage)
+  # When a source file is recompiled, the compiler regenerates the .gcno file
+  # but any .gcda file from a previous test run remains with a stale checksum.
+  # lcov then silently produces incorrect coverage data.  Delete the .gcda
+  # alongside the .o to prevent this.  The $$ escaping produces a literal $ for
+  # the shell in both Ninja and Make generators.
+  set(CMAKE_C_COMPILE_OBJECT
+      "${CMAKE_C_COMPILE_OBJECT} && o=<OBJECT> && rm -f \$\${o%.o}.gcda")
 endif(CODECOVERAGE)
 
 # TAP test support
