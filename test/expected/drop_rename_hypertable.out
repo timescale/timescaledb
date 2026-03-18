@@ -192,6 +192,7 @@ SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_
  _timescaledb_catalog  | continuous_aggs_bucket_function
  _timescaledb_catalog  | continuous_aggs_hypertable_invalidation_log
  _timescaledb_catalog  | continuous_aggs_invalidation_threshold
+ _timescaledb_catalog  | continuous_aggs_jobs_refresh_ranges
  _timescaledb_catalog  | continuous_aggs_materialization_invalidation_log
  _timescaledb_catalog  | continuous_aggs_materialization_ranges
  _timescaledb_catalog  | continuous_aggs_watermark
