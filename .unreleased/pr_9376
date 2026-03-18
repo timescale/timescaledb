@@ -1,0 +1,2 @@
+Fixes: #9376 Allow CREATE EXTENSION after drop in the same session
+Thanks: @janpio for reporting an issue with CREATE EXTENSION after dropping and recreating schema
