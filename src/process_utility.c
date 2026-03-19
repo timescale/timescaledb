@@ -109,6 +109,8 @@ static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPL
 static void check_no_timescale_options(AlterTableCmd *cmd, Oid reloid);
 static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
 static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
+static void ts_bgw_job_update_owner(Relation rel, HeapTuple tuple, TupleDesc tupledesc,
+									Oid newrole_oid);
 
 /* Call the default ProcessUtility and handle PostgreSQL version differences */
 static void
@@ -2286,11 +2288,12 @@ process_rename_table(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 	}
 }
 
-static void
+static DDLResult
 process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameStmt *stmt)
 {
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 	Dimension *dim;
+	bool is_cagg = false;
 
 	if (!ht)
 	{
@@ -2315,6 +2318,8 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
 		if (cagg)
 		{
+			is_cagg = true;
+
 			RenameStmt *direct_view_stmt = castNode(RenameStmt, copyObject(stmt));
 			direct_view_stmt->relation = makeRangeVar(NameStr(cagg->data.direct_view_schema),
 													  NameStr(cagg->data.direct_view_name),
@@ -2337,6 +2342,19 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 			mat_hypertable_stmt->relation =
 				makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1);
 			ExecRenameStmt(mat_hypertable_stmt);
+
+			/*
+			 * Also rename the user view column now so that
+			 * cagg_rename_view_columns() can update stored query trees for
+			 * all views (including the user view) in a single pass. We
+			 * return DDL_DONE below to skip PostgreSQL's standard rename
+			 * which would otherwise fail on the already-renamed column.
+			 * We need CommandCounterIncrement here so that
+			 * cagg_rename_view_columns() sees the new column names when it
+			 * opens the relations and reads their TupleDescs.
+			 */
+			ExecRenameStmt(stmt);
+			CommandCounterIncrement();
 		}
 	}
 	else
@@ -2364,6 +2382,14 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 	 * */
 	if (ht)
 	{
+		/* The column rename needs to be processed before the compression settings updated
+		 * because the composite bloom filter renaming need to have the old column names
+		 * and this comes from the compression settings.
+		 */
+		if (ts_cm_functions->process_rename_cmd)
+			ts_cm_functions->process_rename_cmd(relid, hcache, stmt);
+
+		/* The compression settings update can only proceed after the columns are renamed */
 		ts_compression_settings_rename_column_cascade(ht->main_table_relid,
 													  stmt->subname,
 													  stmt->newname);
@@ -2390,10 +2416,14 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 														   ts_cache_memory_ctx(hcache));
 			}
 		}
-
-		if (ts_cm_functions->process_rename_cmd)
-			ts_cm_functions->process_rename_cmd(relid, hcache, stmt);
 	}
+
+	/*
+	 * For continuous aggregates we renamed the user view column above via
+	 * ExecRenameStmt, so tell the caller to skip PostgreSQL's standard
+	 * rename which would fail on the already-renamed column.
+	 */
+	return is_cagg ? DDL_DONE : DDL_CONTINUE;
 }
 
 static void
@@ -2563,13 +2593,15 @@ process_rename(ProcessUtilityArgs *args)
 
 	hcache = ts_hypertable_cache_pin();
 
+	DDLResult result = DDL_CONTINUE;
+
 	switch (stmt->renameType)
 	{
 		case OBJECT_TABLE:
 			process_rename_table(args, hcache, relid, stmt);
 			break;
 		case OBJECT_COLUMN:
-			process_rename_column(args, hcache, relid, stmt);
+			result = process_rename_column(args, hcache, relid, stmt);
 			break;
 		case OBJECT_INDEX:
 			process_rename_index(args, hcache, relid, stmt);
@@ -2594,7 +2626,7 @@ process_rename(ProcessUtilityArgs *args)
 	}
 
 	ts_cache_release(&hcache);
-	return DDL_CONTINUE;
+	return result;
 }
 
 static void
@@ -2607,10 +2639,33 @@ process_altertable_change_owner_chunk(Hypertable *ht, Oid chunk_relid, void *arg
 }
 
 static void
+process_altertable_change_owner_bgw_jobs(int32 hypertable_id, Oid newrole_oid)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(BGW_JOB, RowExclusiveLock, CurrentMemoryContext);
+	ts_scanner_foreach(&iterator)
+	{
+		bool should_free, isnull;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		Datum htid = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
+		if (!isnull && DatumGetInt32(htid) == hypertable_id)
+		{
+			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+			ts_bgw_job_update_owner(ti->scanrel, tuple, ts_scanner_get_tupledesc(ti), newrole_oid);
+			if (should_free)
+				heap_freetuple(tuple);
+		}
+	}
+}
+
+static void
 process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 {
+	Oid newrole_oid = get_rolespec_oid(cmd->newowner, false);
+
 	Assert(IsA(cmd->newowner, RoleSpec));
 
+	process_altertable_change_owner_bgw_jobs(ht->fd.id, newrole_oid);
 	foreach_chunk(ht, process_altertable_change_owner_chunk, cmd);
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))

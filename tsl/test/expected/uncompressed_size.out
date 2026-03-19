@@ -19,9 +19,30 @@ SELECT compress_chunk(chunk) FROM show_chunks('t2') AS chunk;
 ----------------------------------------
  _timescaledb_internal._hyper_3_2_chunk
 
-SELECT ccs.compressed_chunk_id,round(ccs.uncompressed_heap_size, -5) uncompressed_heap_size,ccs.uncompressed_toast_size,round(ccs.uncompressed_index_size,-5) uncompressed_index_size, ccs.uncompressed_heap_size + ccs.uncompressed_toast_size + ccs.uncompressed_index_size AS uncompressed_total_size, l.relation_size, l.index_size, l.total_size FROM _timescaledb_catalog.compression_chunk_size ccs JOIN _timescaledb_catalog.chunk ch ON ch.id=ccs.compressed_chunk_id JOIN LATERAL (SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(format('%I.%I',ch.schema_name,ch.table_name))) l ON true;
- compressed_chunk_id | uncompressed_heap_size | uncompressed_toast_size | uncompressed_index_size | uncompressed_total_size | relation_size | index_size | total_size 
----------------------+------------------------+-------------------------+-------------------------+-------------------------+---------------+------------+------------
-                   3 |                6000000 |                    8192 |                 2300000 |                 8298496 |       5980000 |    2000000 |    7980000
-                   4 |                5200000 |                       0 |                 2300000 |                 7479296 |       5520000 |    2000000 |    7520000
+SELECT ccs.compressed_chunk_id, l.relation_size, l.index_size, l.total_size FROM _timescaledb_catalog.compression_chunk_size ccs JOIN _timescaledb_catalog.chunk ch ON ch.id=ccs.compressed_chunk_id JOIN LATERAL (SELECT * FROM _timescaledb_functions.estimate_uncompressed_size(format('%I.%I',ch.schema_name,ch.table_name))) l ON true;
+ compressed_chunk_id | relation_size | index_size | total_size 
+---------------------+---------------+------------+------------
+                   3 |       5980000 |    2000000 |    7980000
+                   4 |       5520000 |    2000000 |    7520000
+
+-- test NULL compression does not error and returns NULL
+INSERT INTO t1 SELECT '2026-01-01'::timestamptz + format('%s ms', i)::interval, NULL, NULL FROM generate_series(1, 3000) i;
+SELECT compress_chunk(chunk) FROM show_chunks('t1') AS chunk;
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+
+SELECT _timescaledb_functions.compressed_data_info(time), _timescaledb_functions.compressed_data_info(device), _timescaledb_functions.compressed_data_info(value) FROM _timescaledb_internal.compress_hyper_2_6_chunk;
+ compressed_data_info | compressed_data_info | compressed_data_info 
+----------------------+----------------------+----------------------
+ (DELTADELTA,f)       | (NULL,t)             | (NULL,t)
+ (DELTADELTA,f)       | (NULL,t)             | (NULL,t)
+ (DELTADELTA,f)       | (NULL,t)             | (NULL,t)
+
+SELECT * FROM _timescaledb_functions.estimate_uncompressed_size('_timescaledb_internal.compress_hyper_2_6_chunk');
+ tuples | relation_size | index_size | total_size 
+--------+---------------+------------+------------
+   3000 |        138000 |      60000 |     198000
 

@@ -226,7 +226,7 @@ gapfill_state_create(CustomScan *cscan)
 
 	state->csstate.methods = &gapfill_state_methods;
 	state->subplan = linitial(cscan->custom_plans);
-	state->args = lfourth(cscan->custom_private);
+	state->args = list_nth(cscan->custom_private, GFP_Args);
 	state->have_timezone = list_length(state->args) == 5;
 
 	return (Node *) state;
@@ -341,7 +341,7 @@ static int64
 align_with_time_bucket(GapFillState *state, Expr *expr)
 {
 	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
-	FuncExpr *time_bucket = copyObject(linitial(cscan->custom_private));
+	FuncExpr *time_bucket = copyObject(list_nth(cscan->custom_private, GFP_GapfillFunc));
 	Datum value;
 	bool isnull;
 
@@ -510,8 +510,8 @@ static int64
 infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 {
 	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
-	FuncExpr *func = linitial(cscan->custom_private);
-	FromExpr *jt = lthird(cscan->custom_private);
+	FuncExpr *func = list_nth(cscan->custom_private, GFP_GapfillFunc);
+	FromExpr *jt = list_nth(cscan->custom_private, GFP_JoinTree);
 	ListCell *lc;
 	Var *ts_var;
 	TypeCacheEntry *tce = lookup_type_cache(state->gapfill_typid, TYPECACHE_BTREE_OPFAMILY);
@@ -714,7 +714,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	 * this is the time_bucket_gapfill call from the plan which is used to
 	 * extract arguments and to align gapfill_start
 	 */
-	FuncExpr *func = linitial(cscan->custom_private);
+	FuncExpr *func = list_nth(cscan->custom_private, GFP_GapfillFunc);
 	TupleDesc tupledesc = state->csstate.ss.ps.ps_ResultTupleSlot->tts_tupleDescriptor;
 	List *targetlist = copyObject(state->csstate.ss.ps.plan->targetlist);
 	bool isnull;
@@ -914,11 +914,49 @@ gapfill_end(CustomScanState *node)
 static void
 gapfill_rescan(CustomScanState *node)
 {
+	GapFillState *state = (GapFillState *) node;
+
 	if (node->custom_ps != NIL)
 	{
+		if (node->ss.ps.chgParam != NULL)
+			UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
 		ExecReScan(linitial(node->custom_ps));
 	}
-	((GapFillState *) node)->state = FETCHED_NONE;
+
+	state->state = FETCHED_NONE;
+	state->next_timestamp = state->gapfill_start;
+	state->next_offset = state->gapfill_interval;
+
+	if (state->multigroup)
+		state->groups_initialized = false;
+
+	/* Reset column states for locf and interpolate */
+	for (int i = 0; i < state->ncolumns; i++)
+	{
+		GapFillColumnState *column = state->columns[i];
+		switch (column->ctype)
+		{
+			case LOCF_COLUMN:
+				gapfill_locf_group_change((GapFillLocfColumnState *) column);
+				break;
+			case INTERPOLATE_COLUMN:
+			{
+				GapFillInterpolateColumnState *ic = (GapFillInterpolateColumnState *) column;
+				ic->prev.isnull = true;
+				ic->next.isnull = true;
+				break;
+			}
+			case GROUP_COLUMN:
+			case DERIVED_COLUMN:
+			{
+				GapFillGroupColumnState *gc = (GapFillGroupColumnState *) column;
+				gc->isnull = true;
+				break;
+			}
+			default:
+				break;
+		}
+	}
 }
 
 static void
@@ -1370,7 +1408,7 @@ gapfill_is_group_column(GapFillState *state, TargetEntry *tle)
 {
 	ListCell *lc;
 	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
-	List *groups = lsecond(cscan->custom_private);
+	List *groups = list_nth(cscan->custom_private, GFP_GroupClause);
 
 	foreach (lc, groups)
 	{

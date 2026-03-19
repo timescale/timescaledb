@@ -512,17 +512,18 @@ set_rel_consider_parallel(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte
 	rel->consider_parallel = true;
 }
 
-/* copied from allpaths.c */
+/* copied from allpaths.c, REL_18_3 */
 static void
 ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
 {
-	int parentRTindex = rti;
-	bool has_live_children;
-	double parent_rows;
-	double parent_size;
-	double *parent_attrsizes;
-	int nattrs;
-	ListCell *l;
+	int			parentRTindex = rti;
+	bool		has_live_children;
+	double		parent_tuples;
+	double		parent_rows;
+	double		parent_size;
+	double	   *parent_attrsizes;
+	int			nattrs;
+	ListCell   *l;
 
 	/* Guard against stack overflow due to overly deep inheritance tree. */
 	check_stack_depth();
@@ -534,13 +535,27 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 	 * flag; currently, we only consider partitionwise joins with the baserel
 	 * if its targetlist doesn't contain a whole-row Var.
 	 */
-	if (enable_partitionwise_join && rel->reloptkind == RELOPT_BASEREL &&
+	if (enable_partitionwise_join &&
+		rel->reloptkind == RELOPT_BASEREL &&
 		rte->relkind == RELKIND_PARTITIONED_TABLE &&
+#if PG16_GE
+		bms_is_empty(rel->attr_needed[InvalidAttrNumber - rel->min_attr]))
+#else
 		rel->attr_needed[InvalidAttrNumber - rel->min_attr] == NULL)
+#endif
 		rel->consider_partitionwise_join = true;
 
 	/*
 	 * Initialize to compute size estimates for whole append relation.
+	 *
+	 * We handle tuples estimates by setting "tuples" to the total number of
+	 * tuples accumulated from each live child, rather than using "rows".
+	 * Although an appendrel itself doesn't directly enforce any quals, its
+	 * child relations may.  Therefore, setting "tuples" equal to "rows" for
+	 * an appendrel isn't always appropriate, and can lead to inaccurate cost
+	 * estimates.  For example, when estimating the number of distinct values
+	 * from an appendrel, we would be unable to adjust the estimate based on
+	 * the restriction selectivity (see estimate_num_groups).
 	 *
 	 * We handle width estimates by weighting the widths of different child
 	 * rels proportionally to their number of rows.  This is sensible because
@@ -554,19 +569,24 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 	 * have zero rows and/or width, if they were excluded by constraints.
 	 */
 	has_live_children = false;
+	parent_tuples = 0;
 	parent_rows = 0;
 	parent_size = 0;
 	nattrs = rel->max_attr - rel->min_attr + 1;
 	parent_attrsizes = (double *) palloc0(nattrs * sizeof(double));
 
-	foreach (l, root->append_rel_list)
+	foreach(l, root->append_rel_list)
 	{
 		AppendRelInfo *appinfo = (AppendRelInfo *) lfirst(l);
-		int childRTindex;
+		int			childRTindex;
 		RangeTblEntry *childRTE;
 		RelOptInfo *childrel;
-		ListCell *parentvars;
-		ListCell *childvars;
+#if PG16_GE
+		List *childrinfos;
+		ListCell   *lc;
+#endif
+		ListCell   *parentvars;
+		ListCell   *childvars;
 
 		/* append_rel_list contains all append rels; ignore others */
 		if (appinfo->parent_relid != (Index) parentRTindex)
@@ -607,6 +627,33 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		 * Constraint exclusion failed, so copy the parent's join quals and
 		 * targetlist to the child, with appropriate variable substitutions.
 		 *
+		 * We skip join quals that came from above outer joins that can null
+		 * this rel, since they would be of no value while generating paths
+		 * for the child.  This saves some effort while processing the child
+		 * rel, and it also avoids an implementation restriction in
+		 * adjust_appendrel_attrs (it can't apply nullingrels to a non-Var).
+		 */
+#if PG16_GE
+		childrinfos = NIL;
+		foreach(lc, rel->joininfo)
+		{
+			RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
+
+			if (!bms_overlap(rinfo->clause_relids, rel->nulling_relids))
+				childrinfos = lappend(childrinfos,
+									  adjust_appendrel_attrs(root,
+															 (Node *) rinfo,
+															 1, &appinfo));
+		}
+		childrel->joininfo = childrinfos;
+#else
+		childrel->joininfo =
+			(List *) adjust_appendrel_attrs(root, (Node *) rel->joininfo, 1, &appinfo);
+#endif
+
+		/*
+		 * Now for the child's targetlist.
+		 *
 		 * NB: the resulting childrel->reltarget->exprs may contain arbitrary
 		 * expressions, which otherwise would not occur in a rel's targetlist.
 		 * Code that might be looking at an appendrel child must cope with
@@ -614,10 +661,10 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		 * PlaceHolderVars.)  XXX we do not bother to update the cost or width
 		 * fields of childrel->reltarget; not clear if that would be useful.
 		 */
-		childrel->joininfo =
-			(List *) adjust_appendrel_attrs(root, (Node *) rel->joininfo, 1, &appinfo);
-		childrel->reltarget->exprs =
-			(List *) adjust_appendrel_attrs(root, (Node *) rel->reltarget->exprs, 1, &appinfo);
+		childrel->reltarget->exprs = (List *)
+			adjust_appendrel_attrs(root,
+								   (Node *) rel->reltarget->exprs,
+								   1, &appinfo);
 
 		/*
 		 * We have to make child entries in the EquivalenceClass data
@@ -696,6 +743,7 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		 */
 		Assert(childrel->rows > 0);
 
+		parent_tuples += childrel->tuples;
 		parent_rows += childrel->rows;
 		parent_size += childrel->reltarget->width * childrel->rows;
 
@@ -707,24 +755,27 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		 *
 		 * By construction, child's targetlist is 1-to-1 with parent's.
 		 */
-		forboth (parentvars, rel->reltarget->exprs, childvars, childrel->reltarget->exprs)
+		forboth(parentvars, rel->reltarget->exprs,
+				childvars, childrel->reltarget->exprs)
 		{
-			Var *parentvar = (Var *) lfirst(parentvars);
-			Node *childvar = (Node *) lfirst(childvars);
+			Var		   *parentvar = (Var *) lfirst(parentvars);
+			Node	   *childvar = (Node *) lfirst(childvars);
 
-			if (IsA(parentvar, Var))
+			if (IsA(parentvar, Var) && parentvar->varno == parentRTindex)
 			{
-				int pndx = parentvar->varattno - rel->min_attr;
-				int32 child_width = 0;
+				int			pndx = parentvar->varattno - rel->min_attr;
+				int32		child_width = 0;
 
-				if (IsA(childvar, Var) && (Index) ((Var *) childvar)->varno == childrel->relid)
+				if (IsA(childvar, Var) &&
+					(Index) ((Var *) childvar)->varno == childrel->relid)
 				{
-					int cndx = ((Var *) childvar)->varattno - childrel->min_attr;
+					int			cndx = ((Var *) childvar)->varattno - childrel->min_attr;
 
 					child_width = childrel->attr_widths[cndx];
 				}
 				if (child_width <= 0)
-					child_width = get_typavgwidth(exprType(childvar), exprTypmod(childvar));
+					child_width = get_typavgwidth(exprType(childvar),
+												  exprTypmod(childvar));
 				Assert(child_width > 0);
 				parent_attrsizes[pndx] += child_width * childrel->rows;
 			}
@@ -736,19 +787,14 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		/*
 		 * Save the finished size estimates.
 		 */
-		int i;
+		int			i;
 
 		Assert(parent_rows > 0);
+		rel->tuples = parent_tuples;
 		rel->rows = parent_rows;
 		rel->reltarget->width = rint(parent_size / parent_rows);
 		for (i = 0; i < nattrs; i++)
 			rel->attr_widths[i] = rint(parent_attrsizes[i] / parent_rows);
-
-		/*
-		 * Set "raw tuples" count equal to "rows" for the appendrel; needed
-		 * because some places assume rel->tuples is valid for any baserel.
-		 */
-		rel->tuples = parent_rows;
 
 		/*
 		 * Note that we leave rel->pages as zero; this is important to avoid

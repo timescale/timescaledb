@@ -36,7 +36,6 @@
 #include "debug_assert.h"
 #include "import/allpaths.h"
 #include "import/planner.h"
-#include "nodes/columnar_index_scan/columnar_index_scan.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/columnar_scan/planner.h"
 #include "nodes/columnar_scan/qual_pushdown.h"
@@ -148,16 +147,17 @@ append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortI
 }
 
 static EquivalenceClass *
-append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Var *var, PathKey *pk)
+append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Expr *expr, PathKey *pk,
+						   Oid em_datatype)
 {
 	MemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
 	EquivalenceMember *em = makeNode(EquivalenceMember);
 
-	em->em_expr = (Expr *) var;
+	em->em_expr = expr;
 	em->em_relids = bms_make_singleton(info->compressed_rel->relid);
 	em->em_is_const = false;
 	em->em_is_child = false;
-	em->em_datatype = var->vartype;
+	em->em_datatype = em_datatype;
 	EquivalenceClass *ec = makeNode(EquivalenceClass);
 	ec->ec_opfamilies = pk->pk_eclass->ec_opfamilies;
 	ec->ec_collation = pk->pk_eclass->ec_collation;
@@ -293,9 +293,21 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 			for (; lc != NULL; lc = lnext(chunk_pathkeys, lc))
 			{
 				pk = lfirst(lc);
-				expr = ts_find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
+				EquivalenceMember *chunk_em = ts_find_em_for_rel(pk->pk_eclass, info->chunk_rel);
 
-				Assert(expr != NULL && IsA(expr, Var));
+				Assert(chunk_em);
+				expr = chunk_em->em_expr;
+				/*
+				 * Use em_datatype from the original equivalence member as the
+				 * opcintype. For polymorphic types like anyenum,
+				 * canonicalize_ec_expression will not add a RelabelType (it
+				 * replaces polymorphic req_type with the concrete type), so we
+				 * must explicitly pass the correct em_datatype to the metadata
+				 * column EC.
+				 */
+				Oid opcintype = chunk_em->em_datatype;
+				Oid collation = exprCollation((Node *) expr);
+				expr = (Expr *) strip_implicit_coercions((Node *) expr);
 				var = castNode(Var, expr);
 				Assert(var->varattno > 0);
 
@@ -323,26 +335,32 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 					nulls_first = orderby_nullsfirst;
 				}
 
-				var = makeVar(info->compressed_rel->relid,
-							  varattno,
-							  var->vartype,
-							  var->vartypmod,
-							  var->varcollid,
-							  var->varlevelsup);
-				EquivalenceClass *min_ec = append_ec_for_metadata_col(root, info, var, pk);
+				Var *metadata_var = makeVar(info->compressed_rel->relid,
+											varattno,
+											var->vartype,
+											var->vartypmod,
+											var->varcollid,
+											var->varlevelsup);
+				Expr *min_expr =
+					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
+				EquivalenceClass *min_ec =
+					append_ec_for_metadata_col(root, info, min_expr, pk, opcintype);
 				PathKey *min =
 					make_canonical_pathkey(root, min_ec, pk->pk_opfamily, strategy, nulls_first);
 				required_compressed_pathkeys = lappend(required_compressed_pathkeys, min);
 
 				varattno =
 					get_attnum(info->compressed_rte->relid, column_segment_max_name(orderby_index));
-				var = makeVar(info->compressed_rel->relid,
-							  varattno,
-							  var->vartype,
-							  var->vartypmod,
-							  var->varcollid,
-							  var->varlevelsup);
-				EquivalenceClass *max_ec = append_ec_for_metadata_col(root, info, var, pk);
+				metadata_var = makeVar(info->compressed_rel->relid,
+									   varattno,
+									   var->vartype,
+									   var->vartypmod,
+									   var->varcollid,
+									   var->varlevelsup);
+				Expr *max_expr =
+					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
+				EquivalenceClass *max_ec =
+					append_ec_for_metadata_col(root, info, max_expr, pk, opcintype);
 				PathKey *max =
 					make_canonical_pathkey(root, max_ec, pk->pk_opfamily, strategy, nulls_first);
 
@@ -1163,11 +1181,14 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 
 	/* translate chunk_rel->baserestrictinfo */
-	pushdown_quals(root,
-				   compression_info->settings,
-				   chunk_rel,
-				   compressed_rel,
-				   add_uncompressed_part);
+	if (ts_guc_enable_columnar_scan_filter_pushdown)
+	{
+		columnar_scan_filter_pushdown(root,
+									  compression_info->settings,
+									  chunk_rel,
+									  compressed_rel,
+									  add_uncompressed_part);
+	}
 	/*
 	 * Estimate the size of the compressed chunk table.
 	 */
@@ -1400,22 +1421,6 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("debug: batch sorted merge is required but not possible at planning "
 						"time")));
-	}
-
-	/*
-	 * Try to create a ColumnarIndexScan path for the metadata-only optimization.
-	 */
-	{
-		ColumnarIndexScanPath *index_scan_path =
-			ts_columnar_index_scan_path_create(root,
-											   chunk,
-											   chunk_rel,
-											   compression_info,
-											   compressed_path);
-		if (index_scan_path)
-		{
-			decompressed_paths = lappend(decompressed_paths, index_scan_path);
-		}
 	}
 
 	/*
@@ -2416,7 +2421,19 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 		path->custom_path.path.param_info = NULL;
 	}
 
-	path->custom_path.flags = 0;
+	/*
+	 * Setting this flags means that Postgres can change the result targetlist
+	 * after the plan creation. This node can cope with this because it performs
+	 * the usual Postgres projection to produce the result tuple from the scan
+	 * tuple. The decompression-specific code works before that, and produces
+	 * the scan tuple based on the compressed tuple. The scan tuple descriptor
+	 * is based either on custom_scan_tlist or scanrelid, and the decompression
+	 * map is based on the compressed tuple, so they are not dependent on the
+	 * result targetlist, and we can allow it to be changed later. This allows
+	 * us to avoid a separate Result node, for a small performance saving.
+	 */
+	path->custom_path.flags = CUSTOMPATH_SUPPORT_PROJECTION;
+
 	path->custom_path.methods = &columnar_scan_path_methods;
 	path->batch_sorted_merge = false;
 	path->enable_bulk_decompression = ts_guc_enable_bulk_decompression;

@@ -53,3 +53,25 @@ RESET client_min_messages;
 -- drop the public schema and all its objects
 DROP SCHEMA public CASCADE;
 \dn
+
+-- Recreate the public schema and extension in the same session.
+-- This should work without requiring a reconnect (issue #5884).
+CREATE SCHEMA public;
+SET client_min_messages=error;
+CREATE EXTENSION timescaledb SCHEMA public;
+RESET client_min_messages;
+SELECT extname FROM pg_extension WHERE extname = 'timescaledb';
+
+-- Verify the extension is functional after re-creation
+CREATE TABLE drop_test2(time timestamptz, temp float8);
+SELECT create_hypertable('drop_test2', 'time');
+INSERT INTO drop_test2 VALUES('2024-01-01', 23.4);
+SELECT * FROM drop_test2;
+DROP TABLE drop_test2;
+
+-- Test that dropping and recreating extension directly also works in the same session
+DROP EXTENSION timescaledb CASCADE;
+SET client_min_messages=error;
+CREATE EXTENSION timescaledb;
+RESET client_min_messages;
+SELECT extname FROM pg_extension WHERE extname = 'timescaledb';

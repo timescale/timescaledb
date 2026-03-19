@@ -33,8 +33,6 @@ typedef struct BulkInsertStateData *BulkInsertState;
 	char vl_len_[4];                                                                               \
 	uint8 compression_algorithm
 
-#define TARGET_COMPRESSED_BATCH_SIZE 1000
-
 typedef struct CompressedDataHeader
 {
 	CompressedDataHeaderFields;
@@ -150,6 +148,7 @@ typedef struct RowDecompressor
 	int64 tuples_decompressed;
 
 	TupleTableSlot **decompressed_slots;
+	int decompressed_slots_capacity;
 	int unprocessed_tuples;
 	AttrMap *attrmap;
 
@@ -214,11 +213,6 @@ typedef struct PerColumn
 {
 	/* the compressor to use for regular columns, NULL for segmenters */
 	Compressor *compressor;
-	/*
-	 * Information on the metadata we'll store for this column (currently only min/max).
-	 * Only used for order-by columns right now, will be {-1, NULL} for others.
-	 */
-	BatchMetadataBuilder *metadata_builder;
 
 	/* segment info; only used if compressor is NULL */
 	SegmentInfo *segment_info;
@@ -279,6 +273,8 @@ typedef struct RowCompressor
 	Tuplesortstate *sort_state;
 	int64 tuples_to_sort;	/* number of tuples to sort with tuplesort */
 	int64 tuple_sort_limit; /* number of tuples to flush the compressor on */
+
+	List *metadata_builders; /* List of BatchMetadataBuilder */
 } RowCompressor;
 
 /*
@@ -447,18 +443,19 @@ consumeCompressedData(StringInfo si, int bytes)
 	return result;
 }
 
-/*
- * We use this limit for sanity checks in case the compressed data is corrupt.
- */
-#define GLOBAL_MAX_ROWS_PER_COMPRESSION INT16_MAX
-
 const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm algo);
 
 struct decompress_batches_stats
 {
 	int64 batches_deleted;
-	int64 batches_filtered;
 	int64 batches_decompressed;
+	int64 batches_scanned;
+	int64 batches_checked_by_bloom;
+	int64 batches_pruned_by_bloom;
+	int64 batches_without_bloom;
+	int64 batches_bloom_false_positives;
 	int64 tuples_decompressed;
 	int64 tuples_deleted;
+	int64 batches_filtered_compressed;
+	int64 batches_filtered_decompressed;
 };

@@ -23,6 +23,7 @@ extern bool ts_guc_enable_ordered_append;
 extern bool ts_guc_enable_chunk_append;
 extern bool ts_guc_enable_parallel_chunk_append;
 extern bool ts_guc_enable_qual_propagation;
+extern TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown;
 extern bool ts_guc_enable_qual_filtering;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
@@ -38,6 +39,7 @@ extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
+extern TSDLLEXPORT bool ts_guc_enable_dml_bloom_filter;
 extern bool ts_guc_enable_direct_compress_copy;
 extern bool ts_guc_enable_direct_compress_copy_sort_batches;
 extern bool ts_guc_enable_direct_compress_copy_client_sorted;
@@ -108,6 +110,7 @@ extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 extern TSDLLEXPORT bool ts_guc_enable_bulk_decompression;
 extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
 extern TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom;
+extern TSDLLEXPORT bool ts_guc_enable_composite_bloom_indexes;
 extern TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1;
 extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
 extern TSDLLEXPORT bool ts_guc_enable_columnarindexscan;
@@ -163,3 +166,10 @@ typedef enum
 extern TSDLLEXPORT void ts_feature_flag_check(FeatureFlagType);
 extern TSDLLEXPORT Oid ts_guc_default_segmentby_fn_oid(void);
 extern TSDLLEXPORT Oid ts_guc_default_orderby_fn_oid(void);
+
+#define TARGET_COMPRESSED_BATCH_SIZE 1000
+
+/*
+ * We use this limit for sanity checks in case the compressed data is corrupt.
+ */
+#define GLOBAL_MAX_ROWS_PER_COMPRESSION INT16_MAX

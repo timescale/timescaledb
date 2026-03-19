@@ -10,6 +10,7 @@ set(TEST_FILES
     cagg_direct_compress.sql
     cagg_errors.sql
     cagg_invalidation.sql
+    cagg_invalidation_variable_bucket.sql
     cagg_policy.sql
     cagg_policy_move.sql
     cagg_policy_concurrent.sql
@@ -21,8 +22,16 @@ set(TEST_FILES
     columnar_scan_cost.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
+    compress_batch_size.sql
     compress_bitmap_scan.sql
+    compress_bloom_dml.sql
     compress_bloom_hash.sql
+    compress_compbloom_basics.sql
+    compress_compbloom_config.sql
+    compress_compbloom_index_add.sql
+    compress_compbloom_index_drop.sql
+    compress_compbloom_manual_config.sql
+    compress_compbloom_upsert.sql
     compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
@@ -30,6 +39,7 @@ set(TEST_FILES
     compress_float8_corrupt.sql
     compress_unordered_sort.sql
     compress_qualpushdown_saop.sql
+    compress_qualpushdown_complex.sql
     compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
@@ -124,6 +134,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_utils_compression.sql
     chunk_utils_internal.sql
     compress_bloom_sparse_debug.sql
+    compress_composite_bloom_debug.sql
     compression_algos.sql
     compression_bgw.sql
     compression_bools.sql

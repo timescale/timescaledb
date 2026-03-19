@@ -1,0 +1,45 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+SHOW timescaledb.enable_vectorized_aggregation;
+
+-- SubqueryScan
+:EXPLAIN SELECT mx, mn, device FROM (SELECT device, count(time) mn, max(time) mx FROM metrics GROUP BY device) sub;
+
+-- CteScan
+:EXPLAIN WITH q1 AS MATERIALIZED (SELECT count(*) FROM metrics) SELECT * FROM q1;
+
+-- InitPlan
+:EXPLAIN SELECT FROM pg_class WHERE EXISTS (SELECT count(*) FROM metrics) LIMIT 1;
+
+-- HAVING on aggregate without GROUP BY.
+:EXPLAIN SELECT sum(value) from metrics HAVING sum(value) > 0;
+:EXPLAIN SELECT sum(value) from metrics HAVING sum(value) < 0;
+
+-- HAVING on aggregate with GROUP BY.
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING sum(value) > 500 ORDER BY device;
+:EXPLAIN SELECT device, count(*) from metrics GROUP BY device HAVING count(*) > 100 ORDER BY device;
+
+-- HAVING referencing a different aggregate than the target list.
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING count(*) > 100 ORDER BY device;
+:EXPLAIN SELECT device, count(*) from metrics GROUP BY device HAVING sum(value) > 500 ORDER BY device;
+
+-- HAVING with multiple conditions.
+:EXPLAIN SELECT device, sum(value), count(*) from metrics GROUP BY device
+    HAVING sum(value) > 500 and count(*) > 100 ORDER BY device;
+
+-- HAVING on grouping column (pushed down by planner to WHERE).
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING device = 'dev 5' ORDER BY device;
+
+-- HAVING with expressions on aggregates.
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING sum(value) * 2 > 1000 ORDER BY device;
+
+-- HAVING with different aggregate functions.
+:EXPLAIN SELECT device, min(value) from metrics GROUP BY device HAVING min(value) = 0 ORDER BY device;
+:EXPLAIN SELECT device, max(value) from metrics GROUP BY device HAVING max(value) < 90 ORDER BY device;
+:EXPLAIN SELECT device, avg(value) from metrics GROUP BY device HAVING avg(value) > 49 ORDER BY device;
+
+-- HAVING with segmentby grouping.
+:EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING sum(value) > 10000 ORDER BY device;
+

@@ -102,8 +102,20 @@ SELECT * FROM cte ORDER BY value;
 \qecho Multi AND
 :PREFIX SELECT * FROM hyper_w_space WHERE time < 10 AND time < 100 ORDER BY value;
 
-\qecho Time dimension doesnt filter chunks when using IN/ANY with multiple arguments
+\qecho Time dimension doesnt filter chunks when using non-equality IN/ANY with multiple arguments
 :PREFIX SELECT * FROM hyper_w_space WHERE time < ANY(ARRAY[1,2]) ORDER BY value;
+
+\qecho Time dimension chunk exclusion with IN/ANY equality uses bounding range
+:PREFIX SELECT * FROM hyper WHERE time IN (5, 15) ORDER BY value;
+:PREFIX SELECT * FROM hyper WHERE time = ANY(ARRAY[5, 15, 25]) ORDER BY value;
+:PREFIX SELECT * FROM hyper WHERE time = ANY(ARRAY[25, 15, 5]) ORDER BY value;
+:PREFIX SELECT * FROM hyper_w_space WHERE time IN (5, 15) ORDER BY value;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time IN ('2000-01-05'::timestamp, '2000-01-15'::timestamp) ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time IN ('2000-01-05'::timestamptz, '2000-01-15'::timestamptz) ORDER BY time;
+:PREFIX SELECT * FROM metrics_date WHERE time IN ('2000-01-05'::date, '2000-01-15'::date) ORDER BY time;
+
+\qecho cross-type IN/ANY: timestamp to timestamptz column does not use bounding range (stable cast)
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time IN ('2000-01-05'::timestamp, '2000-01-15'::timestamp) ORDER BY time;
 
 \qecho Time dimension chunk filtering works for ANY with single argument
 :PREFIX SELECT * FROM hyper_w_space WHERE time < ANY(ARRAY[1]) ORDER BY value;

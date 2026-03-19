@@ -84,6 +84,7 @@ bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
+TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
 bool ts_guc_enable_qual_filtering = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
@@ -98,6 +99,7 @@ bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
+TSDLLEXPORT bool ts_guc_enable_dml_bloom_filter = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
 TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
@@ -107,7 +109,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom = true;
-
+TSDLLEXPORT bool ts_guc_enable_composite_bloom_indexes = true;
 TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1 = false;
 
 bool ts_guc_enable_chunk_skipping = false;
@@ -116,7 +118,7 @@ TSDLLEXPORT bool ts_guc_enable_in_memory_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT bool ts_guc_enable_uuid_compression = true;
-TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
+TSDLLEXPORT int ts_guc_compression_batch_size_limit = TARGET_COMPRESSED_BATCH_SIZE;
 TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
 bool ts_guc_enable_event_triggers = false;
@@ -130,7 +132,7 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
-TSDLLEXPORT bool ts_guc_enable_columnarindexscan = false;
+TSDLLEXPORT bool ts_guc_enable_columnarindexscan = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 #if PG16_GE
@@ -725,6 +727,18 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnar_scan_filter_pushdown"),
+							 "Enable columnar scan filter pushdown",
+							 "Enable pushing down the filters into the compressed scan part of the "
+							 "columnar scan",
+							 &ts_guc_enable_columnar_scan_filter_pushdown,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_dml_decompression"),
 							 "Enable DML decompression",
 							 "Enable DML decompression when modifying compressed hypertable",
@@ -741,6 +755,19 @@ _guc_init(void)
 							 "Recheck tuples during DML decompression to only decompress batches "
 							 "with matching tuples",
 							 &ts_guc_enable_dml_decompression_tuple_filtering,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_dml_bloom_filter"),
+							 "Enable bloom filter pruning for DML on compressed chunks",
+							 "When enabled, bloom filters are used to skip compressed batches "
+							 "that definitely do not contain matching rows during DELETE and "
+							 "UPDATE operations, reducing decompression overhead.",
+							 &ts_guc_enable_dml_bloom_filter,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -1008,15 +1035,17 @@ _guc_init(void)
 	DefineCustomIntVariable(MAKE_EXTOPTION("compression_batch_size_limit"),
 							"The max number of tuples that can be batched together during "
 							"compression",
-							"Setting this option to a number between 1 and 999 will force "
+							"Setting this option to a number between 1 and 32767 will force "
 							"compression "
 							"to limit the size of compressed batches to that amount of "
-							"uncompressed tuples."
-							"Setting this to 0 defaults to the max batch size of 1000.",
+							"uncompressed tuples. The setting influences only the compression "
+							"process itself. The value of the setting is taken from the context "
+							"of the session where the compression is performed. It is not "
+							"persisted in any way.",
 							&ts_guc_compression_batch_size_limit,
-							1000,
+							TARGET_COMPRESSED_BATCH_SIZE,
 							1,
-							1000,
+							GLOBAL_MAX_ROWS_PER_COMPRESSION,
 							PGC_USERSET,
 							0,
 							NULL,
@@ -1165,6 +1194,18 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_composite_bloom_indexes"),
+							 "Enable creation of the bloom1 composite index on compressed chunks",
+							 "This composite index speeds up the equality queries on compressed "
+							 "columns, and can be disabled when not desired.",
+							 &ts_guc_enable_composite_bloom_indexes,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("read_legacy_bloom1_v1"),
 							 "Enable reading the legacy bloom1 version 1 sparse indexes for SELECT "
 							 "queries",
@@ -1196,7 +1237,7 @@ _guc_init(void)
 							 "Enable experimental support for returning results directly from "
 							 "compression metadata without decompression",
 							 &ts_guc_enable_columnarindexscan,
-							 false,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,

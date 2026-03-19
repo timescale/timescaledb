@@ -177,6 +177,26 @@ static void
 modify_hypertable_end(CustomScanState *node)
 {
 	ModifyHypertableState *state = (ModifyHypertableState *) node;
+
+	/*
+	 * Restore targetlists that were temporarily nullified during EXPLAIN
+	 * VERBOSE (see modify_hypertable_explain). This prevents corruption of
+	 * cached plans for prepared statements.
+	 */
+	if (state->explain_saved_tlist)
+	{
+		ModifyTableState *mtstate = linitial_node(ModifyTableState, node->custom_ps);
+		Plan *lefttree = mtstate->ps.plan->lefttree;
+		lefttree->targetlist = state->explain_saved_tlist;
+		if (IsA(lefttree, CustomScan) && state->explain_saved_custom_scan_tlist)
+		{
+			castNode(CustomScan, lefttree)->custom_scan_tlist =
+				state->explain_saved_custom_scan_tlist;
+		}
+		state->explain_saved_tlist = NULL;
+		state->explain_saved_custom_scan_tlist = NULL;
+	}
+
 	if (state->compressor)
 	{
 		ts_cm_functions->compressor_flush(state->compressor, state->bulk_writer);
@@ -197,13 +217,15 @@ modify_hypertable_rescan(CustomScanState *node)
 	ExecReScan(linitial(node->custom_ps));
 }
 
+/*
+ * Check if the plan is a ChunkAppend, possibly wrapped in one or more
+ * Result nodes (for projection and/or pseudoconstant gating quals like EXISTS).
+ */
 static bool
 is_chunk_append_or_projection(Plan *plan)
 {
-	if (IsA(plan, Result) && plan->lefttree != NULL)
-	{
-		return ts_is_chunk_append_plan(plan->lefttree);
-	}
+	while (IsA(plan, Result) && plan->lefttree != NULL)
+		plan = plan->lefttree;
 	return ts_is_chunk_append_plan(plan);
 }
 
@@ -218,15 +240,23 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 	 * EXPLAIN. So for EXPLAIN VERBOSE we clear the targetlist so that EXPLAIN does not
 	 * complain. PostgreSQL does something equivalent and does not print the targetlist
 	 * for ModifyTable for EXPLAIN VERBOSE.
+	 *
+	 * We save the original pointers and restore them in modify_hypertable_end
+	 * to avoid corrupting cached Plan trees (e.g. for prepared statements).
 	 */
 	const CmdType operation = ((ModifyTable *) mtstate->ps.plan)->operation;
 	if ((operation == CMD_MERGE || operation == CMD_DELETE) && es->verbose &&
 		is_chunk_append_or_projection(mtstate->ps.plan->lefttree))
 	{
-		mtstate->ps.plan->lefttree->targetlist = NULL;
-		if (IsA(mtstate->ps.plan->lefttree, CustomScan))
+		Plan *lefttree = mtstate->ps.plan->lefttree;
+		state->explain_saved_tlist = lefttree->targetlist;
+		lefttree->targetlist = NULL;
+
+		if (IsA(lefttree, CustomScan))
 		{
-			castNode(CustomScan, mtstate->ps.plan->lefttree)->custom_scan_tlist = NULL;
+			state->explain_saved_custom_scan_tlist =
+				castNode(CustomScan, lefttree)->custom_scan_tlist;
+			castNode(CustomScan, lefttree)->custom_scan_tlist = NULL;
 		}
 	}
 
@@ -255,18 +285,47 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		SharedCounters *counters = state->ctr->counters;
 
 		state->batches_deleted += counters->batches_deleted;
-		state->batches_filtered += counters->batches_filtered;
+		state->batches_filtered_decompressed += counters->batches_filtered_decompressed;
 		state->batches_decompressed += counters->batches_decompressed;
 		state->tuples_decompressed += counters->tuples_decompressed;
+		state->batches_scanned += counters->batches_scanned;
+		state->batches_checked_by_bloom += counters->batches_checked_by_bloom;
+		state->batches_pruned_by_bloom += counters->batches_pruned_by_bloom;
+		state->batches_without_bloom += counters->batches_without_bloom;
+		state->batches_bloom_false_positives += counters->batches_bloom_false_positives;
 	}
-	if (state->batches_filtered > 0)
-		ExplainPropertyInteger("Batches filtered", NULL, state->batches_filtered, es);
+	if (state->batches_scanned > 0)
+		ExplainPropertyInteger("Batches scanned", NULL, state->batches_scanned, es);
+	if (state->batches_filtered_compressed > 0)
+		ExplainPropertyInteger("Compressed batches filtered",
+							   NULL,
+							   state->batches_filtered_compressed,
+							   es);
+	if (state->batches_filtered_decompressed > 0)
+		ExplainPropertyInteger("Batches filtered after decompression",
+							   NULL,
+							   state->batches_filtered_decompressed,
+							   es);
 	if (state->batches_decompressed > 0)
 		ExplainPropertyInteger("Batches decompressed", NULL, state->batches_decompressed, es);
 	if (state->tuples_decompressed > 0)
 		ExplainPropertyInteger("Tuples decompressed", NULL, state->tuples_decompressed, es);
 	if (state->batches_deleted > 0)
 		ExplainPropertyInteger("Batches deleted", NULL, state->batches_deleted, es);
+	if (state->batches_checked_by_bloom > 0)
+		ExplainPropertyInteger("Batches checked by bloom",
+							   NULL,
+							   state->batches_checked_by_bloom,
+							   es);
+	if (state->batches_pruned_by_bloom > 0)
+		ExplainPropertyInteger("Batches pruned by bloom", NULL, state->batches_pruned_by_bloom, es);
+	if (state->batches_without_bloom > 0)
+		ExplainPropertyInteger("Batches without bloom", NULL, state->batches_without_bloom, es);
+	if (state->batches_bloom_false_positives > 0)
+		ExplainPropertyInteger("Batches bloom false positives",
+							   NULL,
+							   state->batches_bloom_false_positives,
+							   es);
 	if (ts_guc_enable_direct_compress_insert && state->mt->operation == CMD_INSERT)
 		ExplainPropertyBool("Direct Compress", state->columnstore_insert, es);
 }
@@ -466,10 +525,28 @@ modify_hypertable_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *be
 		cscan->scan.plan.targetlist =
 			ts_replace_rowid_vars(root, cscan->scan.plan.targetlist, mt->nominalRelation);
 
-		if (mt->operation == CMD_UPDATE && is_chunk_append_or_projection(mt->plan.lefttree))
+		/*
+		 * When the ModifyTable's lefttree contains a ChunkAppend (possibly
+		 * wrapped in one or more Result nodes for projection and/or
+		 * pseudoconstant gating quals like EXISTS), ChunkAppend will have
+		 * already replaced ROWID_VAR entries in its own targetlist to avoid
+		 * assertions in set_customscan_references. However, the wrapping
+		 * Result nodes' targetlists still contain the original ROWID_VAR
+		 * entries. When set_plan_references later calls set_upper_references
+		 * on these Result nodes, it tries to resolve the ROWID_VAR entries
+		 * against the child's (already replaced) targetlist so we have to
+		 * replace ROWID_VAR entries in all Result nodes' targetlists between
+		 * ModifyTable and ChunkAppend.
+		 */
+		if (is_chunk_append_or_projection(mt->plan.lefttree))
 		{
-			mt->plan.lefttree->targetlist =
-				ts_replace_rowid_vars(root, mt->plan.lefttree->targetlist, mt->nominalRelation);
+			Plan *plan = mt->plan.lefttree;
+			while (IsA(plan, Result) && plan->lefttree != NULL)
+			{
+				plan->targetlist =
+					ts_replace_rowid_vars(root, plan->targetlist, mt->nominalRelation);
+				plan = plan->lefttree;
+			}
 		}
 	}
 	cscan->custom_scan_tlist = cscan->scan.plan.targetlist;

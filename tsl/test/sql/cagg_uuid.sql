@@ -241,3 +241,56 @@ WHERE hypertable_name = (SELECT materialization_hypertable_name FROM timescaledb
 -- Verify data is still accessible after compression (compare with counts before)
 SELECT count(*) AS uuid_events_count_after FROM uuid_events;
 SELECT * FROM daily_uuid_events ORDER BY day;
+
+--
+-- Test real-time aggregation (materialized_only = false) with UUID
+-- This exercises the build_union_query code path for UUID-partitioned hypertables
+--
+CREATE TABLE uuid_realtime(id uuid primary key, device int, temp float);
+SELECT create_hypertable('uuid_realtime', 'id', chunk_time_interval => interval '1 day');
+
+INSERT INTO uuid_realtime VALUES
+       ('0194214e-cd00-7000-a9a7-63f1416dab45', 1, 10.0),
+       ('0194263e-3a80-7000-8f40-82c987b1bc1f', 2, 20.0),
+       ('01942675-2900-7000-8db1-a98694b18785', 3, 30.0);
+
+-- Create cagg with materialized_only = false (real-time aggregation)
+CREATE MATERIALIZED VIEW daily_uuid_realtime
+WITH (
+  timescaledb.continuous,
+  timescaledb.materialized_only = false
+)
+AS
+SELECT time_bucket('1 day', id) AS day, sum(temp) AS total_temp
+FROM uuid_realtime
+GROUP BY 1;
+
+-- Verify it works
+SELECT * FROM daily_uuid_realtime ORDER BY day;
+
+-- Insert new data that is NOT yet materialized
+INSERT INTO uuid_realtime VALUES
+       ('01942bd2-7380-7000-9bc4-5f97443907b8', 4, 40.0);
+
+-- Real-time aggregation should include the new data without refresh
+SELECT * FROM daily_uuid_realtime ORDER BY day;
+
+-- Refresh and verify results are consistent
+CALL refresh_continuous_aggregate('daily_uuid_realtime', NULL, NULL);
+SELECT * FROM daily_uuid_realtime ORDER BY day;
+
+-- Test toggling materialized_only on a UUID cagg
+ALTER MATERIALIZED VIEW daily_uuid_realtime SET (timescaledb.materialized_only = true);
+
+-- Insert data well beyond the current watermark (March 2025)
+INSERT INTO uuid_realtime VALUES
+       ('01958280-4800-7000-bc29-713158a4e8b6', 5, 50.0);
+
+-- With materialized_only = true, new unrefreshed data should not appear
+SELECT * FROM daily_uuid_realtime ORDER BY day;
+
+-- Toggle back to real-time
+ALTER MATERIALIZED VIEW daily_uuid_realtime SET (timescaledb.materialized_only = false);
+
+-- Now the new data should appear via real-time aggregation
+SELECT * FROM daily_uuid_realtime ORDER BY day;

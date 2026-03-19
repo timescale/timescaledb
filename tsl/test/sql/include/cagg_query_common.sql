@@ -821,7 +821,7 @@ SELECT * FROM cagg_int_offset;
 INSERT INTO table_int VALUES(114, 0);
 
 SET client_min_messages TO DEBUG1;
-CALL refresh_continuous_aggregate('cagg_int_offset', 110, 130);
+CALL refresh_continuous_aggregate('cagg_int_offset', 100, 130);
 RESET client_min_messages;
 
 SELECT * FROM cagg_int_offset;

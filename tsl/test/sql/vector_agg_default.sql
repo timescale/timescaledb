@@ -10,6 +10,8 @@
 set timescaledb.enable_decompression_sorted_merge to off;
 set enable_sort to off;
 
+set timescaledb.enable_columnarindexscan = off;
+
 create function stable_abs(x int4) returns int4 as 'int4abs' language internal stable;
 
 create table dvagg(a int, b int);

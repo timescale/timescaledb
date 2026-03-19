@@ -1131,3 +1131,113 @@ EXPLAIN (costs off,timing off, summary off) INSERT INTO :CHUNK SELECT * FROM com
 INSERT INTO :CHUNK SELECT * FROM compressed_batches;
 
 SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 DESC;
+
+-- Test: unique constraint violation detection with single-value (default)
+-- columns in vectorized batch matching.
+
+CREATE TABLE sv_default(time timestamptz NOT NULL, device_id int)
+WITH (tsdb.hypertable, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+
+INSERT INTO sv_default SELECT '2025-01-01'::timestamptz + format('%s day',i)::interval, 1 FROM generate_series(1, 2) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('sv_default') c;
+
+-- Add column with non-null default: creates single-value column in compressed batch
+ALTER TABLE sv_default ADD COLUMN extra int DEFAULT 42;
+CREATE UNIQUE INDEX sv_default_unique ON sv_default(time, extra);
+
+SELECT * FROM sv_default;
+
+-- Duplicates should fail
+\set ON_ERROR_STOP 0
+INSERT INTO sv_default VALUES('2025-01-02', 1, 42);
+INSERT INTO sv_default VALUES('2025-01-03', 1, 42);
+\set ON_ERROR_STOP 1
+
+-- Non-duplicate should succeed
+INSERT INTO sv_default VALUES('2025-01-02', 1, 23);
+
+-- should be 3 rows total
+SELECT count(*) FROM sv_default;
+
+-- Same test with all-NULL column and NULLS NOT DISTINCT
+CREATE TABLE sv_null(time timestamptz NOT NULL, device_id int, tag text, value float)
+WITH (tsdb.hypertable, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+
+-- Insert rows where tag is always NULL
+INSERT INTO sv_null SELECT '2025-01-01'::timestamptz + format('%s day',i)::interval, 1, NULL, i::float FROM generate_series(1, 2) i;
+SELECT count(compress_chunk(c)) FROM show_chunks('sv_null') c;
+
+CREATE UNIQUE INDEX sv_null_unique ON sv_null(time, tag) NULLS NOT DISTINCT;
+
+-- Duplicate of first row - should fail
+\set ON_ERROR_STOP 0
+INSERT INTO sv_null VALUES('2025-01-02', 1, NULL, 999);
+INSERT INTO sv_null VALUES('2025-01-03', 1, NULL, 999);
+\set ON_ERROR_STOP 1
+
+-- Non-duplicate should succeed
+INSERT INTO sv_null VALUES('2024-01-05', 1, NULL, 6.0);
+
+-- should be 3 rows total
+SELECT count(*) FROM sv_null;
+
+-- Test: generated stored columns should not be NULL in compressed chunks
+-- GitHub issue #9314
+CREATE TABLE i9314 (
+    time timestamptz NOT NULL,
+    value int,
+    doubled int GENERATED ALWAYS AS (value * 2) STORED
+) WITH (tsdb.hypertable, tsdb.chunk_interval = '180 day');
+
+-- Insert initial data and compress
+INSERT INTO i9314 VALUES ('2024-01-01', 1);
+SELECT compress_chunk(show_chunks('i9314'));
+
+-- Insert multiple rows into the compressed chunk
+-- All rows should have correct generated column values
+INSERT INTO i9314 VALUES
+    ('2024-01-02', 2),
+    ('2024-01-03', 3),
+    ('2024-01-04', 4);
+
+SELECT compress_chunk(show_chunks('i9314'));
+
+-- show explain to ensure its all compressed
+:PREFIX SELECT * FROM i9314 ORDER BY time;
+SELECT * FROM i9314 ORDER BY time;
+
+SET timescaledb.enable_direct_compress_insert = true;
+
+-- Insert >= 10 rows to trigger direct compress path
+INSERT INTO i9314 SELECT '2024-02-01'::timestamptz + format('%s day',i)::interval, i + 10 FROM generate_series(1, 10) i;
+
+:PREFIX SELECT * FROM i9314 ORDER BY time;
+SELECT * FROM i9314 ORDER BY time;
+
+-- test copy
+COPY i9314 FROM STDIN DELIMITER ',' CSV;
+2024-03-13,20
+2024-03-14,21
+2024-03-15,22
+2024-03-16,23
+2024-03-17,24
+\.
+
+SELECT compress_chunk(show_chunks('i9314'));
+
+:PREFIX SELECT * FROM i9314 ORDER BY time;
+SELECT * FROM i9314 ORDER BY time;
+
+SET timescaledb.enable_direct_compress_copy = true;
+COPY i9314 FROM STDIN DELIMITER ',' CSV;
+2024-04-13,30
+2024-04-14,31
+2024-04-15,32
+2024-04-16,33
+2024-04-17,34
+\.
+
+:PREFIX SELECT * FROM i9314 ORDER BY time;
+SELECT * FROM i9314 ORDER BY time;
+
+RESET timescaledb.enable_direct_compress_insert;

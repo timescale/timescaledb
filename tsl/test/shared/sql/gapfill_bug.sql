@@ -197,3 +197,38 @@ SELECT
  GROUP BY 1,  agg+signal order by 1,2,3;
 
 drop table hourly cascade;
+
+-- github issue #4693: test time_bucket_gapfill inside LATERAL subquery
+CREATE TYPE i4693_type AS (time timestamptz, num bigint);
+CREATE TABLE i4693(id integer, reports i4693_type[]);
+
+INSERT INTO i4693(id, reports) VALUES
+    (1, ARRAY[ROW('2020-09-01 13:22:02+00', 360), ROW('2020-09-01 13:24:02+00', 3600)]::i4693_type[]),
+    (2, ARRAY[ROW('2020-09-01 13:22:02+00', 90), ROW('2020-09-01 13:25:02+00', 900)]::i4693_type[]);
+
+-- Gapfill inside LATERAL should produce gap-filled rows for each outer row
+SELECT id, rep.* FROM i4693, LATERAL (
+    SELECT time_bucket_gapfill('1 minute', time,
+        start := '2020-09-01 13:22:00+00'::timestamptz,
+        finish := '2020-09-01 13:28:00+00'::timestamptz) AS mins,
+        sum(num)
+    FROM unnest(reports)
+    GROUP BY mins
+) AS rep
+ORDER BY id, mins;
+
+-- test with locf and interpolate
+SELECT id, rep.* FROM i4693, LATERAL (
+    SELECT time_bucket_gapfill('1 minute', time,
+        start := '2020-09-01 13:22:00+00'::timestamptz,
+        finish := '2020-09-01 13:28:00+00'::timestamptz) AS mins,
+        locf(sum(num)),
+        interpolate(sum(num)),
+        sum(num)
+    FROM unnest(reports)
+    GROUP BY mins
+) AS rep
+ORDER BY id, mins;
+
+DROP TABLE i4693;
+DROP TYPE i4693_type;

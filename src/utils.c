@@ -285,6 +285,16 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 				}
 			}
 
+			/*
+			 * Timestamp is valid in PostgreSQL but exceeds TimescaleDB's
+			 * supported range (TS_TIMESTAMP_END < END_TIMESTAMP due to the
+			 * Unix epoch shift). Treat as +infinity to avoid errors during
+			 * chunk exclusion. No equivalent check is needed on the lower
+			 * bound since TS_TIMESTAMP_MIN == MIN_TIMESTAMP.
+			 */
+			if (ts >= TS_TIMESTAMP_END)
+				return PG_INT64_MAX;
+
 			return ts_time_value_to_internal(time_val, type_oid);
 		}
 		case TIMESTAMPTZOID:
@@ -302,6 +312,10 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 				}
 			}
 
+			/* See comment in TIMESTAMPOID case above. */
+			if (ts >= TS_TIMESTAMP_END)
+				return PG_INT64_MAX;
+
 			return ts_time_value_to_internal(time_val, type_oid);
 		}
 		case DATEOID:
@@ -318,6 +332,10 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 					return PG_INT64_MAX;
 				}
 			}
+
+			/* See comment in TIMESTAMPOID case above. */
+			if (d >= TS_DATE_END)
+				return PG_INT64_MAX;
 
 			return ts_time_value_to_internal(time_val, type_oid);
 		}
@@ -807,8 +825,8 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
  * This function was moved to postgres main in PG13 but was removed
  * again in PG15. So we use our own implementation for PG15+.
  */
-Expr *
-ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
+EquivalenceMember *
+ts_find_em_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 {
 	EquivalenceMember *em;
 #if PG18_GE
@@ -836,12 +854,19 @@ ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 			 * taken entirely from this relation, we'll be content to choose
 			 * any one of those.
 			 */
-			return em->em_expr;
+			return em;
 		}
 	}
 
-	/* We didn't find any suitable equivalence class expression */
+	/* We didn't find any suitable equivalence class member */
 	return NULL;
+}
+
+Expr *
+ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
+{
+	EquivalenceMember *em = ts_find_em_for_rel(ec, rel);
+	return em ? em->em_expr : NULL;
 }
 
 bool

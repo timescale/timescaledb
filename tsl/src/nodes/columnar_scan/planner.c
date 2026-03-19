@@ -609,12 +609,6 @@ find_attr_pos_in_tlist(List *targetlist, AttrNumber pos)
 }
 
 static bool
-contains_volatile_functions_checker(Oid func_id, void *context)
-{
-	return (func_volatile(func_id) == PROVOLATILE_VOLATILE);
-}
-
-static bool
 is_not_runtime_constant_walker(Node *node, void *context)
 {
 	if (node == NULL)

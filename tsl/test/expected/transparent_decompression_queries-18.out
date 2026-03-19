@@ -260,3 +260,23 @@ SELECT max(date) AS date FROM options_data WHERE contract_code='CONTRACT2023-12-
  
 
 RESET random_page_cost;
+-- gh issue 8918
+-- test enum in order by
+CREATE TYPE animal AS ENUM ('raccoon', 'hedgehog', 'tiger');
+CREATE TABLE i8918(time timestamptz, sensor_id int, enum_type animal, value float) WITH (tsdb.hypertable, tsdb.compress_segmentby='sensor_id', tsdb.compress_orderby='enum_type, time');
+NOTICE:  using column "time" as partitioning column
+INSERT INTO i8918 VALUES ('2020-01-01'::timestamptz, 1, 'raccoon', 1);
+INSERT INTO i8918 VALUES ('2020-01-01'::timestamptz, 1, 'hedgehog', 1);
+SELECT compress_chunk(show_chunks('i8918'));
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_9_22_chunk
+
+SET enable_hashagg TO off;
+EXPLAIN (costs off, buffers off, analyze, timing off, summary off) SELECT sensor_id, enum_type, count(*) FROM i8918 GROUP BY sensor_id, enum_type;
+--- QUERY PLAN ---
+ GroupAggregate (actual rows=2.00 loops=1)
+   Group Key: _hyper_9_22_chunk.sensor_id, _hyper_9_22_chunk.enum_type
+   ->  Custom Scan (ColumnarScan) on _hyper_9_22_chunk (actual rows=2.00 loops=1)
+         ->  Index Scan using compress_hyper_10_23_chunk_sensor_id__ts_meta_min_1__ts_met_idx on compress_hyper_10_23_chunk (actual rows=1.00 loops=1)
+

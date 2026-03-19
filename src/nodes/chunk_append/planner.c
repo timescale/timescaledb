@@ -122,6 +122,30 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 
 	cscan->scan.plan.targetlist = tlist;
 
+	/*
+	 * For parameterized paths (e.g., LATERAL joins), transform outer-relation
+	 * Vars to NestLoop Params. We store clauses in custom_private rather than
+	 * custom_exprs because chunk_ri_clauses reference chunk relations (after
+	 * adjust_appendrel_attrs), but setrefs.c processing of custom_exprs expects
+	 * Vars to reference the parent relation (scanrelid). Since custom_private
+	 * bypasses setrefs, we must transform outer Vars to Params ourselves.
+	 */
+	if (path->path.param_info && root->curOuterRels)
+	{
+		List *transformed_clauses = NIL;
+		ListCell *lc;
+		foreach (lc, clauses)
+		{
+			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
+			RestrictInfo *newrinfo = makeNode(RestrictInfo);
+
+			memcpy(newrinfo, rinfo, sizeof(RestrictInfo));
+			newrinfo->clause = (Expr *) ts_replace_nestloop_params(root, (Node *) rinfo->clause);
+			transformed_clauses = lappend(transformed_clauses, newrinfo);
+		}
+		clauses = transformed_clauses;
+	}
+
 	ListCell *lc_plan, *lc_path;
 	forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
 	{

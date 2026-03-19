@@ -257,20 +257,27 @@ mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *inpu
 				Var *var = castNode(Var, tle->expr);
 				Assert((int) var->varno <= list_length(rtable));
 				RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
-				Assert(rte->rtekind == RTE_GROUP);
 				Assert(var->varattno > 0);
-				Node *node = list_nth(rte->groupexprs, var->varattno - 1);
-				if (IsA(node, FuncExpr))
+				/*
+				 * Var might not be part of the GROUP BY clause
+				 * eg for functionally dependent columns on tables with primary key
+				 */
+				if (rte->rtekind == RTE_GROUP)
 				{
-					if (contain_mutable_functions(node))
+					Node *node = list_nth(rte->groupexprs, var->varattno - 1);
+					if (IsA(node, FuncExpr))
 					{
-						ereport(WARNING,
-								(errmsg("using non-immutable functions in continuous aggregate "
-										"view may lead to "
-										"inconsistent results on rematerialization")));
+						if (contain_mutable_functions(node))
+						{
+							ereport(WARNING,
+									(errmsg("using non-immutable functions in continuous aggregate "
+											"view may lead to "
+											"inconsistent results on rematerialization")));
+						}
+						FuncExpr *expr = (FuncExpr *) node;
+						timebkt_chk =
+							function_allowed_in_cagg_definition(((FuncExpr *) expr)->funcid);
 					}
-					FuncExpr *expr = (FuncExpr *) node;
-					timebkt_chk = function_allowed_in_cagg_definition(((FuncExpr *) expr)->funcid);
 				}
 			}
 #endif

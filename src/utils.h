@@ -71,9 +71,11 @@ interval_to_usec(const Interval *interval)
 #define MAX(x, y) ((x) > (y) ? x : y)
 #define MIN(x, y) ((x) < (y) ? x : y)
 
-/* Use a special pseudo-random field 4 value to avoid conflicting with user-advisory-locks */
-#define TS_SET_LOCKTAG_ADVISORY(tag, id1, id2, id3)                                                \
-	SET_LOCKTAG_ADVISORY((tag), (id1), (id2), (id3), 29749)
+static inline bool
+contains_volatile_functions_checker(Oid func_id, void *context)
+{
+	return (func_volatile(func_id) == PROVOLATILE_VOLATILE);
+}
 
 /* find the length of a statically sized array */
 #define TS_ARRAY_LEN(array) (sizeof(array) / sizeof(*array))
@@ -138,6 +140,7 @@ extern TSDLLEXPORT AppendRelInfo *ts_get_appendrelinfo(PlannerInfo *root, Index 
 													   bool missing_ok);
 
 extern TSDLLEXPORT Expr *ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
+extern TSDLLEXPORT EquivalenceMember *ts_find_em_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
 
 extern TSDLLEXPORT bool ts_has_row_security(Oid relid);
 
