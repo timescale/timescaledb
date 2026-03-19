@@ -531,71 +531,6 @@ dimension_values_create_from_single_element(Const *c, bool user_or)
 }
 
 /*
- * Returns true if the restriction was accepted as a dimension restriction.
- */
-static bool
-hypertable_restrict_info_add_restrict_info(HypertableRestrictInfo *hri, PlannerInfo *root,
-										   RestrictInfo *ri)
-{
-	Oid opno;
-	Var *var;
-	Expr *arg_value;
-
-	Expr *e = ri->clause;
-
-	/* Same as constraint_exclusion */
-	if (contain_mutable_functions((Node *) e))
-		return false;
-
-	if (ts_extract_expr_args(e, &var, &arg_value, &opno, NULL))
-	{
-		get_dimension_values value_func;
-		bool use_or;
-
-		switch (nodeTag(e))
-		{
-			case T_OpExpr:
-			{
-				value_func = dimension_values_create_from_single_element;
-				use_or = false;
-				break;
-			}
-			case T_ScalarArrayOpExpr:
-			{
-				value_func = dimension_values_create_from_array;
-				use_or = castNode(ScalarArrayOpExpr, e)->useOr;
-				break;
-			}
-			default:
-				/* we don't support other node types */
-				return false;
-		}
-		return hypertable_restrict_info_add_expr(hri,
-												 root,
-												 var,
-												 arg_value,
-												 opno,
-												 value_func,
-												 use_or);
-	}
-	return false;
-}
-
-void
-ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri, PlannerInfo *root,
-								List *base_restrict_infos)
-{
-	ListCell *lc;
-
-	foreach (lc, base_restrict_infos)
-	{
-		RestrictInfo *ri = lfirst(lc);
-
-		hypertable_restrict_info_add_restrict_info(hri, root, ri);
-	}
-}
-
-/*
  * Add a single expression (not necessarily from a RestrictInfo) and return
  * whether it was accepted as a dimension restriction.
  */
@@ -640,6 +575,20 @@ ts_hypertable_restrict_info_add_one(HypertableRestrictInfo *hri, PlannerInfo *ro
 												 use_or);
 	}
 	return false;
+}
+
+void
+ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri, PlannerInfo *root,
+								List *base_restrict_infos)
+{
+	ListCell *lc;
+
+	foreach (lc, base_restrict_infos)
+	{
+		RestrictInfo *ri = lfirst(lc);
+
+		ts_hypertable_restrict_info_add_one(hri, root, ri->clause);
+	}
 }
 
 /*
