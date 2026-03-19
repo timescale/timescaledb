@@ -2470,6 +2470,12 @@ tsl_compressed_data_column_size(PG_FUNCTION_ARGS)
 	/* Get compressed data header and validate */
 	header = get_compressed_data_header(compressed_data);
 
+	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
+	{
+		/* All values are NULL, so size is 0 */
+		PG_RETURN_INT32(0);
+	}
+
 	/* Initialize the decompression iterator */
 	iter = definitions[header->compression_algorithm].iterator_init_forward(PointerGetDatum(header),
 																			element_type);
