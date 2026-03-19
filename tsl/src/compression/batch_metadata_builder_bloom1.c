@@ -839,7 +839,7 @@ bloom1_hasher_init(Bloom1HasherInternal *hasher, const Oid *type_oids, int num_c
 			bloom1_get_hash_function(type_oids[i], &hasher->hash_function_finfos[i]);
 		if (hasher->hash_functions[i] == NULL)
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_UNDEFINED_FUNCTION),
 					 errmsg("the argument type %s lacks an extended hash function",
 							format_type_be(type_oids[i]))));
 	}
