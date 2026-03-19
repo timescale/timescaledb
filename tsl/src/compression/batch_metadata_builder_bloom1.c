@@ -597,6 +597,15 @@ bloom1_contains_hash_internal(const char *words_buf, uint32 num_bits, uint64 has
 Datum
 bloom1_contains(PG_FUNCTION_ARGS)
 {
+	/*
+	 * A null value cannot match the equality condition, although this probably
+	 * should be optimized away by the planner.
+	 */
+	if (PG_ARGISNULL(1))
+	{
+		PG_RETURN_BOOL(false);
+	}
+
 	Bloom1ContainsContext *context =
 		bloom1_contains_context_prepare(fcinfo, /* use_element_type = */ false);
 
@@ -608,15 +617,6 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	if (bloom == NULL)
 	{
 		PG_RETURN_BOOL(true);
-	}
-
-	/*
-	 * A null value cannot match the equality condition, although this probably
-	 * should be optimized away by the planner.
-	 */
-	if (PG_ARGISNULL(1))
-	{
-		PG_RETURN_BOOL(false);
 	}
 
 	uint64 hash = 0;
