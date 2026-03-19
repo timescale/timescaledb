@@ -10,6 +10,32 @@
 
 #include "hypertable.h"
 
+/*
+ * Indexes into the settings list (first element of custom_private).
+ */
+typedef enum
+{
+	CAS_StartupExclusion = 0,
+	CAS_RuntimeExclusionParent = 1,
+	CAS_RuntimeExclusionChildren = 2,
+	CAS_Limit = 3,
+	CAS_FirstPartialPath = 4,
+	CAS_Count
+} ChunkAppendSettingsIndex;
+
+/*
+ * Indexes into custom_private for ChunkAppend.
+ */
+typedef enum
+{
+	CAP_Settings = 0,
+	CAP_ChunkRIClauses = 1,
+	CAP_RTIndexes = 2,
+	CAP_SortOptions = 3,
+	CAP_ParentClauses = 4,
+	CAP_Count
+} ChunkAppendPrivateIndex;
+
 typedef struct ChunkAppendPath
 {
 	CustomPath cpath;

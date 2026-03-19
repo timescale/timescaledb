@@ -1,0 +1,2 @@
+Fixes: #9378 Fix FK constraint failure when inserting into hypertable with referencing FK
+Thanks: @bronzinni for reporting an issue with foreign keys on hypertables

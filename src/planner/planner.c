@@ -436,7 +436,7 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 						/* Mark hypertable RTEs we'd like to expand ourselves */
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
 							!IS_UPDL_CMD(context->rootquery) && query->resultRelation == 0 &&
-							query->rowMarks == NIL && rte->inh)
+							rte->inh)
 							rte_mark_for_expansion(rte);
 
 						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
@@ -948,6 +948,18 @@ static inline bool
 should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
 					int order_attno)
 {
+	if (path->param_info != NULL && ordered)
+	{
+		/*
+		 * Ordered ChunkAppend might create MergeAppend path for individual
+		 * chunks when we have space partitioning or partial chunks. MergeAppend
+		 * paths cannot be parameterized. Refuse to use parameterized ordered
+		 * ChunkAppend altogether, because the more precise conditions are
+		 * difficult to check.
+		 */
+		return false;
+	}
+
 	if (
 		/*
 		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved on PG14+.
@@ -1452,7 +1464,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
 				rte->ctename == NULL && !IS_UPDL_CMD(query) && query->resultRelation == 0 &&
-				query->rowMarks == NIL && (requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
+				(requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
 			{
 				rte_mark_for_expansion(rte);
 			}

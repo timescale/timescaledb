@@ -1656,8 +1656,10 @@ SELECT compress_chunk(show_chunks('i9314'));
 
 :PREFIX SELECT * FROM i9314 ORDER BY time;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_50_103_chunk
-   ->  Index Scan Backward using compress_hyper_51_104_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_51_104_chunk
+ Sort
+   Sort Key: _hyper_50_103_chunk."time"
+   ->  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+         ->  Seq Scan on compress_hyper_51_104_chunk
 
 SELECT * FROM i9314 ORDER BY time;
              time             | value | doubled 
@@ -1688,8 +1690,10 @@ COPY i9314 FROM STDIN DELIMITER ',' CSV;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on i9314
    Order: i9314."time"
-   ->  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
-         ->  Index Scan Backward using compress_hyper_51_104_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_51_104_chunk
+   ->  Sort
+         Sort Key: _hyper_50_103_chunk."time"
+         ->  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+               ->  Seq Scan on compress_hyper_51_104_chunk
    ->  Sort
          Sort Key: _hyper_50_105_chunk."time"
          ->  Custom Scan (ColumnarScan) on _hyper_50_105_chunk

@@ -1144,11 +1144,14 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 
 	/* translate chunk_rel->baserestrictinfo */
-	pushdown_quals(root,
-				   compression_info->settings,
-				   chunk_rel,
-				   compressed_rel,
-				   add_uncompressed_part);
+	if (ts_guc_enable_columnar_scan_filter_pushdown)
+	{
+		columnar_scan_filter_pushdown(root,
+									  compression_info->settings,
+									  chunk_rel,
+									  compressed_rel,
+									  add_uncompressed_part);
+	}
 	/*
 	 * Estimate the size of the compressed chunk table.
 	 */
@@ -2380,7 +2383,19 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 		path->custom_path.path.param_info = NULL;
 	}
 
-	path->custom_path.flags = 0;
+	/*
+	 * Setting this flags means that Postgres can change the result targetlist
+	 * after the plan creation. This node can cope with this because it performs
+	 * the usual Postgres projection to produce the result tuple from the scan
+	 * tuple. The decompression-specific code works before that, and produces
+	 * the scan tuple based on the compressed tuple. The scan tuple descriptor
+	 * is based either on custom_scan_tlist or scanrelid, and the decompression
+	 * map is based on the compressed tuple, so they are not dependent on the
+	 * result targetlist, and we can allow it to be changed later. This allows
+	 * us to avoid a separate Result node, for a small performance saving.
+	 */
+	path->custom_path.flags = CUSTOMPATH_SUPPORT_PROJECTION;
+
 	path->custom_path.methods = &columnar_scan_path_methods;
 	path->batch_sorted_merge = false;
 

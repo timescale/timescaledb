@@ -23,9 +23,11 @@
 #include <time_utils.h>
 
 #include "continuous_aggs/materialize.h"
+#include "continuous_aggs/refresh.h"
 #include "debug_point.h"
 #include "invalidation_threshold.h"
 #include "ts_catalog/continuous_agg.h"
+#include <utils.h>
 
 /*
  * Invalidation threshold.
@@ -327,7 +329,17 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 
 			int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
 			Assert(bucket_width > 0);
-			int64 bucket_start = ts_time_bucket_by_type(bucket_width, maxval, refresh_window->type);
+			NullableDatum offset = INIT_NULL_DATUM;
+			NullableDatum origin = INIT_NULL_DATUM;
+			fill_bucket_offset_origin(cagg->bucket_function,
+									  refresh_window->type,
+									  &offset,
+									  &origin);
+			int64 bucket_start = ts_time_bucket_by_type_extended(bucket_width,
+																 maxval,
+																 refresh_window->type,
+																 offset,
+																 origin);
 			/* Add one bucket to get to the end of the last bucket */
 			return ts_time_saturating_add(bucket_start, bucket_width, refresh_window->type);
 		}
