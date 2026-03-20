@@ -573,6 +573,20 @@ Time dimension chunk exclusion with IN/ANY equality uses bounding range
          ->  Seq Scan on _hyper_1_3_chunk
                Filter: ("time" = ANY ('{25,15,5}'::integer[]))
 
+:PREFIX SELECT * FROM hyper WHERE time < 10 AND time = ANY(ARRAY[5, 15, 25]) ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.value
+   ->  Seq Scan on _hyper_1_1_chunk
+         Filter: (("time" < 10) AND ("time" = ANY ('{5,15,25}'::integer[])))
+
+:PREFIX SELECT * FROM hyper WHERE time = ANY(ARRAY[5, 15, 25]) AND time < 10 ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.value
+   ->  Seq Scan on _hyper_1_1_chunk
+         Filter: (("time" < 10) AND ("time" = ANY ('{5,15,25}'::integer[])))
+
 :PREFIX SELECT * FROM hyper_w_space WHERE time IN (5, 15) ORDER BY value;
 --- QUERY PLAN ---
  Sort
