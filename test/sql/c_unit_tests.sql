@@ -24,6 +24,9 @@ AS :MODULE_PATHNAME, 'ts_test_jsonb_utils' LANGUAGE C;
 CREATE OR REPLACE FUNCTION test.compression_settings() RETURNS VOID
 AS :MODULE_PATHNAME, 'ts_test_compression_settings' LANGUAGE C;
 
+CREATE OR REPLACE FUNCTION test.dimension_vector() RETURNS VOID
+AS :MODULE_PATHNAME, 'ts_test_dimension_vector' LANGUAGE C;
+
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 SELECT test.time_to_internal_conversion();
@@ -33,4 +36,4 @@ SELECT test.time_utils();
 SELECT test.bmslist_utils();
 SELECT test.jsonb_utils();
 SELECT test.compression_settings();
-
+SELECT test.dimension_vector();
