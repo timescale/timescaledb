@@ -1129,8 +1129,12 @@ filter_baserestrictions(List *accepted_quals, List *base_restrictions)
 }
 
 /*
- * Returns true if the given chunk is fully included by the restrictions
- * on the primary dimension.
+ * Returns true if the given chunk is fully included by the computed
+ * restrictions on the primary dimension.
+ * Even when true, the baserestrictinfos on that chunk can still filter some
+ * rows out. The computed restrictions are an approximation, e.g. we simplify
+ * some timestamp comparisons or scalar array operations to a wider dimension
+ * range that includes the original condition.
  */
 static bool
 chunk_fully_covered(HypertableRestrictInfo *hri, Chunk *chunk)
