@@ -148,8 +148,11 @@ ts_cagg_jobs_refresh_ranges_lock_and_register(int32 materialization_id, int64 st
 		Assert(!isnull);
 		int32 row_pid = DatumGetInt32(pid_datum);
 
-		/* Remove entries whose backend is no longer alive. */
-		if (BackendPidGetProc(row_pid) == NULL)
+		/*
+		 * Remove entries whose backend is no longer alive, or entries of the same PID
+		 * (due to PID reuse).
+		 */
+		if (BackendPidGetProc(row_pid) == NULL || row_pid == MyProcPid)
 		{
 			ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 			continue;
