@@ -374,3 +374,51 @@ RESET timescaledb.enable_direct_compress_insert_client_sorted;
 
 DROP TABLE compress_src;
 DROP TABLE compress_tgt;
+
+-- simple test to check default segmentby does not get set for direct compress
+BEGIN;
+RESET timescaledb.enable_direct_compress_insert;
+CREATE TABLE test_segmentby_stats (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INT NOT NULL,
+    value FLOAT
+) WITH (tsdb.hypertable, tsdb.compress);
+
+INSERT INTO test_segmentby_stats
+SELECT t, (i % 5), random()
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 minute') t,
+     generate_series(1, 5) i;
+
+ANALYZE test_segmentby_stats;
+SELECT compress_chunk(c) FROM show_chunks('test_segmentby_stats') c;
+
+-- will have devide_id as default segmentby for compressed chunk;
+SELECT * FROM _timescaledb_catalog.compression_settings;
+
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO test_segmentby_stats
+SELECT t, (i % 5), random()
+FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 minute') t,
+     generate_series(1, 5) i;
+ANALYZE test_segmentby_stats;
+-- will have default segmentby set for a newly created direct compressed chunk (should observe a skipped chunk id);
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+
+BEGIN;
+RESET timescaledb.enable_direct_compress_insert;
+CREATE TABLE test_segmentby_stats (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INT NOT NULL,
+    value FLOAT
+) WITH (tsdb.hypertable, tsdb.compress, tsdb.segmentby='device_id');
+
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO test_segmentby_stats
+SELECT t, (i % 5), random()
+FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 minute') t,
+     generate_series(1, 5) i;
+ANALYZE test_segmentby_stats;
+-- will have device_id by as configured segmentby for direct compressed chunk (should not observe skipped chunk id);
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;

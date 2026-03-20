@@ -48,6 +48,7 @@
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
+#include "with_clause/alter_table_with_clause.h"
 #include <nodes/columnar_scan/vector_quals.h>
 
 /*
@@ -643,7 +644,7 @@ compression_create_tuplesort_state(CompressionSettings *settings, Relation rel)
 								nulls_first,
 								maintenance_work_mem,
 								NULL,
-								false /*=randomAccess*/);
+								false);
 }
 
 static Tuplesortstate *
@@ -984,6 +985,11 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 		{
 			tuplesort_performsort(compressor->sort_state);
 
+			if (compressor->needs_analyze_segmentby)
+			{
+				tsl_compressor_apply_segmentby_and_rebuild(compressor, bulk_writer);
+				compressor->needs_analyze_segmentby = false;
+			}
 			TupleTableSlot *slot = MakeTupleTableSlot(compressor->in_desc, &TTSOpsMinimalTuple);
 
 			while (tuplesort_gettupleslot(compressor->sort_state,
@@ -1004,8 +1010,14 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 	else
 	{
 		if (compressor->rows_compressed_into_current_value > 0)
+		{
+			Ensure(!compressor->needs_analyze_segmentby,
+				   "trying to analyze segmentby with no sort state");
 			row_compressor_flush(compressor, bulk_writer, false);
+		}
 	}
+
+	Assert(!compressor->needs_analyze_segmentby);
 }
 
 void
@@ -1022,13 +1034,110 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
 }
 
 /*
+ * Determine the segmentby column from tuples in Tuplesortstate in the RowCompressor,
+ * then rebuild the compressed chunk and compressor to use it.
+ */
+void
+tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *compressor, BulkWriter *bulk_writer)
+{
+	if (compressor->sort_state == NULL || compressor->tuples_to_sort == 0)
+	{
+		return;
+	}
+
+	Oid old_compressed_relid = RelationGetRelid(bulk_writer->out_rel);
+	CompressionSettings *settings =
+		ts_compression_settings_get_by_compress_relid(old_compressed_relid);
+	Chunk *src_chunk = ts_chunk_get_by_relid(settings->fd.relid, true);
+	Chunk *old_compressed_chunk = ts_chunk_get_by_relid(old_compressed_relid, true);
+	Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
+	Hypertable *compress_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+
+	if (settings->fd.segmentby)
+	{
+		/* Something went wrong, but just throw a warning to not stop workflow */
+		elog(WARNING, "trying to apply segmentby when segmentby is not NULL");
+		return;
+	}
+
+	/* Can happen for partial chunks, but problematic if happening otherwise */
+	if (!CheckRelationOidLockedByMe(src_chunk->table_id, AccessExclusiveLock, false))
+	{
+		elog(DEBUG1,
+			 "chunk \"%s\".\"%s\" does not have AccessExclusiveLock "
+			 "but trying to apply segmentby",
+			 NameStr(src_chunk->fd.schema_name),
+			 NameStr(src_chunk->fd.table_name));
+	}
+
+	Ensure(CheckRelationOidLockedByMe(old_compressed_relid, AccessExclusiveLock, false),
+		   "compressed chunk \"%s\".\"%s\" must have AccessExclusiveLock "
+		   "to apply segmentby",
+		   NameStr(old_compressed_chunk->fd.schema_name),
+		   NameStr(old_compressed_chunk->fd.table_name));
+
+	settings->fd.segmentby = tsl_compression_setting_segmentby_get_default(ht);
+
+	/* nothing qualified as segmentby */
+	if (!settings->fd.segmentby)
+	{
+		return;
+	}
+
+	Relation in_rel = table_open(src_chunk->table_id, NoLock);
+
+	/* Tear down old internals */
+	Tuplesortstate *old_sort_state = compressor->sort_state;
+	int saved_tuple_sort_limit = compressor->tuple_sort_limit;
+	TupleDesc old_in_desc = compressor->in_desc;
+	compressor->sort_state = NULL;
+	row_compressor_close(compressor);
+	bulk_writer_close(bulk_writer);
+	table_close(bulk_writer->out_rel, NoLock);
+
+	/* Create before drop. We must update settings first to point to the new chunk. */
+	Chunk *new_compressed_chunk =
+		create_compress_chunk_with_settings(compress_ht, src_chunk, settings);
+	ts_chunk_set_compressed_chunk(src_chunk, new_compressed_chunk->fd.id);
+	ts_chunk_drop(old_compressed_chunk, DROP_RESTRICT, -1);
+
+	/* Re-init bulk writer in place and compressor against the new compressed relation */
+	Relation out_rel = table_open(new_compressed_chunk->table_id, RowExclusiveLock);
+	*bulk_writer = bulk_writer_build(out_rel, 0);
+	row_compressor_init(compressor, settings, RelationGetDescr(in_rel), RelationGetDescr(out_rel));
+	compressor->sort_state = compression_create_tuplesort_state(settings, in_rel);
+	compressor->tuple_sort_limit = saved_tuple_sort_limit;
+
+	/* Transfer from old sort state into the new one with segmentby settings */
+	TupleTableSlot *slot = MakeTupleTableSlot(old_in_desc, &TTSOpsMinimalTuple);
+
+	while (tuplesort_gettupleslot(old_sort_state,
+								  true /*=forward*/,
+								  false /*=copy*/,
+								  slot,
+								  NULL /*=abbrev*/))
+	{
+		tuplesort_puttupleslot(compressor->sort_state, slot);
+		compressor->tuples_to_sort++;
+	}
+
+	ExecDropSingleTupleTableSlot(slot);
+	tuplesort_performsort(compressor->sort_state);
+	tuplesort_end(old_sort_state);
+
+	FreeTupleDesc(old_in_desc);
+	table_close(in_rel, NoLock);
+}
+
+/*
  * Initialize a RowCompressor for compressing tuples
  *
  * When `sort` is true, the compressor will buffer all the tuples in a
  * Tuplesortstate and sort them before flushing to the output relation.
  */
 RowCompressor *
-tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int sort_limit)
+tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int sort_limit,
+					bool created_compressed_chunk)
 {
 	RowCompressor *compressor = palloc0(sizeof(RowCompressor));
 	CompressionSettings *settings = ts_compression_settings_get(in_rel->rd_id);
@@ -1038,6 +1147,12 @@ tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int so
 
 	if (sort)
 	{
+		/*
+		 * Analyze segmentby on first flush if none is configured
+		 * and if client is not responsible for sorting (sort = true)
+		 */
+		compressor->needs_analyze_segmentby =
+			(settings->fd.segmentby == NULL) && created_compressed_chunk;
 		compressor->sort_state = compression_create_tuplesort_state(settings, in_rel);
 		compressor->tuple_sort_limit = sort_limit;
 	}
