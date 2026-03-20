@@ -156,11 +156,10 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 				max_val = value;
 		}
 
-		DimensionValues range_values = (DimensionValues) {
-			.values = list_make1(DatumGetPointer(Int64GetDatum(min_val))),
-			.use_or = false,
-			.type = dimvalues->type
-		};
+		DimensionValues range_values =
+			(DimensionValues){ .values = list_make1(DatumGetPointer(Int64GetDatum(min_val))),
+							   .use_or = false,
+							   .type = dimvalues->type };
 
 		dimension_restrict_info_open_add(dri, BTGreaterEqualStrategyNumber, &range_values);
 
