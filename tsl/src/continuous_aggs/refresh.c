@@ -951,11 +951,34 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
 
-	bool refreshed = process_cagg_invalidations_and_refresh(cagg,
-															&refresh_window,
-															context,
-															bucketing_refresh_window,
-															force);
+	volatile bool refreshed = false;
+	PG_TRY();
+	{
+		refreshed = process_cagg_invalidations_and_refresh(cagg,
+														   &refresh_window,
+														   context,
+														   bucketing_refresh_window,
+														   force);
+	}
+	PG_CATCH();
+	{
+		/*
+		 * The current transaction (Txn2 or Txn3) is in an aborted state.
+		 * but the removal of the refresh ranges in jobs_refresh_ranges needs a live transaction.
+		 * Roll it back and start a new transaction so we can perform cleanup.
+		 */
+		SPI_rollback_and_chain();
+
+		/*
+		 * Clean up, including removing the refresh window registration inserted in Txn1
+		 */
+		cleanup_before_cagg_refresh_exit(cagg, old_decompression_limit, save_nestlevel);
+
+		/* Commit the cleanup transaction, then re-throw the original error. */
+		SPI_commit_and_chain();
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 
 	if (!refreshed)
 		emit_up_to_date_notice(cagg, context);
