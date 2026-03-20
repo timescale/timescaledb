@@ -2479,8 +2479,14 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 				if (!ht_state->compressor)
 				{
-					bool sort = ts_guc_enable_direct_compress_insert_sort_batches && !ts_guc_enable_direct_compress_insert_client_sorted;
-					ht_state->compressor = ts_cm_functions->compressor_init(ctr->cis->rel, &ht_state->bulk_writer, sort, ts_guc_direct_compress_insert_tuple_sort_limit);
+					bool sort = ts_guc_enable_direct_compress_insert_sort_batches &&
+							   !ts_guc_enable_direct_compress_insert_client_sorted;
+					ht_state->compressor =
+						ts_cm_functions->compressor_init(ctr->cis->rel,
+														 &ht_state->bulk_writer,
+														 sort,
+														 ts_guc_direct_compress_insert_tuple_sort_limit,
+														 ctr->cis->created_compressed_chunk);
 					ht_state->compressor_relid = RelationGetRelid(ctr->cis->rel);
 
 					if (ht_state->has_continuous_aggregate)

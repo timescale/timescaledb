@@ -85,6 +85,8 @@ typedef struct SegmentInfo
 	Datum val;
 	FmgrInfo eq_fn;
 	FunctionCallInfo eq_fcinfo;
+	AttrNumber attnum;
+	const char *attname;
 	int16 typlen;
 	bool is_null;
 	bool typ_by_val;
@@ -99,6 +101,23 @@ typedef struct CompressedSegmentInfo
 	SegmentInfo *segment_info;
 	int16 chunk_offset;
 } CompressedSegmentInfo;
+
+#define MAX_SEGMENTBY_DISTINCT 20
+
+typedef struct DistinctEntry
+{
+	Datum value;
+	bool is_null;
+	int64 count;
+} DistinctEntry;
+
+typedef struct ColumnAnalysis
+{
+	SegmentInfo *seg_info;
+	int n_distinct;
+	bool rejected;
+	DistinctEntry entries[MAX_SEGMENTBY_DISTINCT];
+} ColumnAnalysis;
 
 typedef struct PerCompressedColumn
 {
@@ -274,6 +293,8 @@ typedef struct RowCompressor
 	int64 tuples_to_sort;	/* number of tuples to sort with tuplesort */
 	int64 tuple_sort_limit; /* number of tuples to flush the compressor on */
 
+	bool needs_analyze_segmentby;
+
 	List *metadata_builders; /* List of BatchMetadataBuilder */
 } RowCompressor;
 
@@ -375,13 +396,15 @@ extern void compress_chunk_populate_sort_info_for_column(const CompressionSettin
 														 AttrNumber *att_nums, Oid *sort_operator,
 														 Oid *collation, bool *nulls_first);
 extern Tuplesortstate *compression_create_tuplesort_state(CompressionSettings *settings,
-														  Relation rel);
+														  Relation rel, bool random_access);
 extern void row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *settings,
 								const TupleDesc noncompressed_tupdesc,
 								const TupleDesc compressed_tupdesc);
 
 extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort,
-										  int tuple_sort_limit);
+										  int tuple_sort_limit, bool created_compressed_chunk);
+extern void tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *compressor,
+													   BulkWriter *bulk_writer);
 extern void tsl_compressor_set_invalidation(RowCompressor *compressor, Hypertable *ht,
 											Oid chunk_relid);
 extern void tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer,

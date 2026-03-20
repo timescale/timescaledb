@@ -43,6 +43,7 @@ set(TEST_FILES
     compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
+    direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
     compression.sql
     compression_allocation.sql
