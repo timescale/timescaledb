@@ -214,7 +214,7 @@ SET max_parallel_workers_per_gather TO 0;
 SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000;
 
 SET max_parallel_workers_per_gather TO 2;
-:PREFIX SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
+explain SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
 SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
 
 SET parallel_leader_participation = off;

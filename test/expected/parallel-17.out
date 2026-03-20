@@ -681,23 +681,23 @@ SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000;
  80000
 
 SET max_parallel_workers_per_gather TO 2;
-:PREFIX SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
+explain SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
 --- QUERY PLAN ---
- Finalize Aggregate
-   ->  Gather
+ Finalize Aggregate  (cost=1928.22..1928.23 rows=1 width=8)
+   ->  Gather  (cost=1928.00..1928.21 rows=2 width=8)
          Workers Planned: 2
-         ->  Partial Aggregate
-               ->  Result
+         ->  Partial Aggregate  (cost=1928.00..1928.01 rows=1 width=8)
+               ->  Result  (cost=0.01..1786.33 rows=56668 width=8)
                      One-Time Filter: (length(version()) > 0)
-                     ->  Parallel Custom Scan (ChunkAppend) on test3
+                     ->  Parallel Custom Scan (ChunkAppend) on test3  (cost=0.01..1786.33 rows=56668 width=8)
                            Chunks excluded during startup: 1
-                           ->  Result
+                           ->  Result  (cost=0.01..1155.01 rows=40000 width=8)
                                  One-Time Filter: (length(version()) > 0)
-                                 ->  Seq Scan on _hyper_3_93_chunk
+                                 ->  Seq Scan on _hyper_3_93_chunk  (cost=0.01..1155.01 rows=40000 width=8)
                                        Filter: (i >= ((length(version()) * 0) + 200000))
-                           ->  Result
+                           ->  Result  (cost=0.01..630.01 rows=16667 width=8)
                                  One-Time Filter: (length(version()) > 0)
-                                 ->  Parallel Seq Scan on _hyper_3_94_chunk
+                                 ->  Parallel Seq Scan on _hyper_3_94_chunk  (cost=0.01..630.01 rows=16667 width=8)
                                        Filter: (i >= ((length(version()) * 0) + 200000))
 
 SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
