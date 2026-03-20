@@ -133,9 +133,34 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 	ListCell *item;
 	bool restriction_added = false;
 
-	/* can't handle IN/ANY with multiple values */
+	/*
+	 * For IN/ANY with multiple equality values on an open dimension,
+	 * use the bounding range [min, max] as an over-approximation.
+	 * This may include extra chunks, which PG constraint exclusion
+	 * will prune later. Much better than returning all chunks.
+	 */
 	if (dimvalues->use_or && list_length(dimvalues->values) > 1)
-		return false;
+	{
+		if (strategy != BTEqualStrategyNumber)
+			return false;
+
+		int64 min_val = PG_INT64_MAX;
+		int64 max_val = PG_INT64_MIN;
+		ListCell *lc;
+		foreach (lc, dimvalues->values)
+		{
+			int64 value = DatumGetInt64(PointerGetDatum(lfirst(lc)));
+			if (value < min_val)
+				min_val = value;
+			if (value > max_val)
+				max_val = value;
+		}
+		dri->lower_bound = min_val;
+		dri->upper_bound = max_val;
+		dri->lower_strategy = BTGreaterEqualStrategyNumber;
+		dri->upper_strategy = BTLessEqualStrategyNumber;
+		return true;
+	}
 
 	foreach (item, dimvalues->values)
 	{

@@ -580,6 +580,7 @@ SELECT count(*) FROM :CHUNK;
 EXPLAIN (analyze,buffers off,costs off,summary off,timing off) DELETE FROM :CHUNK WHERE time > '2025-01-01'::timestamptz;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 1
    Batches decompressed: 1
    Tuples decompressed: 101
    ->  Delete on _hyper_6_56_chunk (actual rows=0.00 loops=1)
