@@ -155,10 +155,18 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 			if (value > max_val)
 				max_val = value;
 		}
-		dri->lower_bound = min_val;
-		dri->upper_bound = max_val;
-		dri->lower_strategy = BTGreaterEqualStrategyNumber;
-		dri->upper_strategy = BTLessEqualStrategyNumber;
+
+		DimensionValues range_values = (DimensionValues) {
+			.values = list_make1(DatumGetPointer(Int64GetDatum(min_val))),
+			.use_or = false,
+			.type = dimvalues->type
+		};
+
+		dimension_restrict_info_open_add(dri, BTGreaterEqualStrategyNumber, &range_values);
+
+		linitial(range_values.values) = DatumGetPointer(Int64GetDatum(max_val));
+		dimension_restrict_info_open_add(dri, BTLessEqualStrategyNumber, &range_values);
+
 		return true;
 	}
 
