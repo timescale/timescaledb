@@ -8,6 +8,7 @@ set(TEST_FILES
     bgw_policy.sql
     bgw_security.sql
     cagg_direct_compress.sql
+    chunk_append_space_runtime_exclusion.sql
     cagg_errors.sql
     cagg_invalidation.sql
     cagg_invalidation_variable_bucket.sql
