@@ -1022,6 +1022,10 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 
 	ts_compression_settings_delete(ht->main_table_relid);
 
+	/* Remove any existing columnstore policy so it does not continue running
+	 * against a hypertable that no longer has compression enabled. */
+	policy_compression_remove_internal(ht->main_table_relid, true /* if_exists */);
+
 	return true;
 }
 
