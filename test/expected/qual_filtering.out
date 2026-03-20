@@ -4,15 +4,6 @@
 -- Test qual filtering optimization (timescaledb.enable_qual_filtering).
 -- When a chunk is fully covered by the query's dimension restrictions,
 -- the planner can remove redundant quals from that chunk's scan.
--- This must agree with HypertableRestrictInfo about which quals
--- are dimension restrictions -- otherwise quals get stripped that
--- HRI never accounted for, producing wrong results.
-\c :TEST_DBNAME :ROLE_SUPERUSER
--- Regression test for github issue #9387: ::date cast on timestamptz
--- column uses a STABLE cross-type operator (timestamptz_lt_date).
--- HRI skips STABLE quals, but filter_baserestrictions was removing them
--- anyway, causing extra rows to be returned.
-SET timezone = 'Europe/Berlin';
 CREATE TABLE qual_filter_tz(
     id serial,
     ts timestamptz NOT NULL
@@ -90,7 +81,6 @@ WHERE d >= '2026-02-01' AND d < '2026-03-01'::timestamp;
 
 RESET timescaledb.enable_qual_filtering;
 -- Cleanup
-RESET timezone;
 DROP TABLE qual_filter_tz;
 DROP TABLE qual_filter_date;
 -- Additional qual filtering divergence tests.

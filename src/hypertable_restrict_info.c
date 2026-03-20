@@ -530,8 +530,8 @@ dimension_values_create_from_single_element(Const *c, bool user_or)
 								   user_or);
 }
 
-static bool
-hypertable_restrict_info_add_clause(HypertableRestrictInfo *hri, PlannerInfo *root, Expr *e)
+bool
+ts_hypertable_restrict_info_add_clause(HypertableRestrictInfo *hri, PlannerInfo *root, Expr *e)
 {
 	Oid opno;
 	Var *var;
@@ -541,7 +541,7 @@ hypertable_restrict_info_add_clause(HypertableRestrictInfo *hri, PlannerInfo *ro
 	if (contain_mutable_functions((Node *) e))
 	{
 		return false;
-    }
+	}
 
 	if (!ts_extract_expr_args(e, &var, &arg_value, &opno, NULL))
 	{
@@ -569,6 +569,7 @@ hypertable_restrict_info_add_clause(HypertableRestrictInfo *hri, PlannerInfo *ro
 			/* we don't support other node types */
 			return false;
 	}
+
 	return hypertable_restrict_info_add_expr(hri, root, var, arg_value, opno, value_func, use_or);
 }
 
@@ -582,7 +583,7 @@ ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri, PlannerInfo *root,
 	{
 		RestrictInfo *ri = lfirst(lc);
 
-		hypertable_restrict_info_add_clause(hri, root, ri->clause);
+		ts_hypertable_restrict_info_add_clause(hri, root, ri->clause);
 	}
 }
 

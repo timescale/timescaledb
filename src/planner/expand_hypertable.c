@@ -1022,8 +1022,10 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 	foreach (lc_ri, rel->baserestrictinfo)
 	{
 		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc_ri));
-		if (ts_hypertable_restrict_info_add_one(hri, root, ri->clause))
+		if (ts_hypertable_restrict_info_add_clause(hri, root, ri->clause))
+		{
 			accepted_quals = lappend(accepted_quals, ri);
+		}
 	}
 
 	List *simplified_restrictions = get_simplified_restrictions(root, rel->baserestrictinfo);
@@ -1110,10 +1112,7 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 
 /*
  * Build a list of baserestrictinfo with the accepted dimension
- * restrictions removed. The caller provides the list of accepted
- * RestrictInfos built via ts_hypertable_restrict_info_add_one(), so
- * there is no separate logic deciding which quals are dimension
- * restrictions.
+ * restrictions removed.
  */
 static List *
 filter_baserestrictions(List *accepted_quals, List *base_restrictions)

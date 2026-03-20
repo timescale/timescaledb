@@ -45,8 +45,8 @@ extern HypertableRestrictInfo *ts_hypertable_restrict_info_create(RelOptInfo *re
 extern void ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri, PlannerInfo *root,
 											List *base_restrict_infos);
 /* Add a single restriction. Returns true if accepted as dimension restriction. */
-extern bool ts_hypertable_restrict_info_add_one(HypertableRestrictInfo *hri, PlannerInfo *root,
-												Expr *clause);
+extern bool ts_hypertable_restrict_info_add_clause(HypertableRestrictInfo *hri, PlannerInfo *root,
+												   Expr *clause);
 
 /* Get a list of chunk oids for chunks whose constraints match the restriction clauses */
 extern Chunk **ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *ht,
