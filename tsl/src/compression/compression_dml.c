@@ -1413,7 +1413,7 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 				if (!ts_guc_enable_dml_decompression)
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("UPDATE/DELETE is disabled on compressed chunks"),
+							 errmsg("UPDATE/DELETE/MERGE is disabled on compressed chunks"),
 							 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 
 				batches_decompressed = decompress_batches_for_update_delete(ctx->ht_state,

@@ -66,6 +66,7 @@ set(TEST_FILES
     compression_trigger.sql
     create_table_with.sql
     decompress_index.sql
+    merge.sql
     merge_compress.sql
     move.sql
     plan_skip_scan_notnull.sql

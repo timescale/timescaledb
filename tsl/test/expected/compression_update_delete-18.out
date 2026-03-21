@@ -2080,9 +2080,9 @@ SET timescaledb.enable_dml_decompression = false;
 \set ON_ERROR_STOP 0
 -- should ERROR both UPDATE/DELETE statements because the DML decompression is disabled
 UPDATE sample_table SET c3 = NULL WHERE c4 = 5;
-ERROR:  UPDATE/DELETE is disabled on compressed chunks
+ERROR:  UPDATE/DELETE/MERGE is disabled on compressed chunks
 DELETE FROM sample_table WHERE c4 = 5;
-ERROR:  UPDATE/DELETE is disabled on compressed chunks
+ERROR:  UPDATE/DELETE/MERGE is disabled on compressed chunks
 \set ON_ERROR_STOP 1
 -- make sure reseting the GUC we will be able to UPDATE/DELETE compressed chunks
 RESET timescaledb.enable_dml_decompression;
@@ -2179,9 +2179,9 @@ ROLLBACK;
 -- should ERROR both UPDATE/DELETE statements because the DML decompression is disabled
 -- and both statements we're touching compressed and uncompressed chunks
 UPDATE sample_table SET c3 = NULL WHERE time >= '2023-03-17 00:00:00-00'::timestamptz AND c3 IS NULL;
-ERROR:  UPDATE/DELETE is disabled on compressed chunks
+ERROR:  UPDATE/DELETE/MERGE is disabled on compressed chunks
 DELETE FROM sample_table WHERE time >= '2023-03-17 00:00:00-00'::timestamptz;
-ERROR:  UPDATE/DELETE is disabled on compressed chunks
+ERROR:  UPDATE/DELETE/MERGE is disabled on compressed chunks
 \set ON_ERROR_STOP 1
 --github issue: 5586
 --testcase with multiple indexes
