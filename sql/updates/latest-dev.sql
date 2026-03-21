@@ -99,3 +99,64 @@ CREATE INDEX IF NOT EXISTS bgw_job_stat_history_job_id_execution_start_idx
 
 DROP INDEX IF EXISTS _timescaledb_internal.bgw_job_stat_history_job_id_idx;
 
+
+--
+-- #9418: Keep bgw_job.proc_schema in sync when a procedure moves schema.
+--
+-- When ALTER PROCEDURE ... SET SCHEMA is executed, proc_schema in bgw_job
+-- is not updated, causing the next scheduler run to fail with
+-- "cache lookup failed for function 0".
+--
+-- The event trigger fires after every ALTER FUNCTION/PROCEDURE command.
+-- It finds job rows whose procedure no longer exists at the stored schema
+-- (meaning it was moved) and updates proc_schema to the new location.
+--
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.bgw_job_proc_schema_update()
+RETURNS event_trigger
+LANGUAGE plpgsql
+SET search_path TO pg_catalog, pg_temp
+AS $$
+DECLARE
+    obj      record;
+    new_nsp  name;
+    proc_nm  name;
+BEGIN
+    FOR obj IN
+        SELECT *
+        FROM pg_event_trigger_ddl_commands()
+        WHERE command_tag IN ('ALTER FUNCTION', 'ALTER PROCEDURE')
+          AND object_type IN ('function', 'procedure')
+    LOOP
+        -- Resolve the function's current (new) schema and name by OID.
+        SELECT p.proname, n.nspname
+        INTO   proc_nm, new_nsp
+        FROM   pg_catalog.pg_proc     p
+        JOIN   pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+        WHERE  p.oid = obj.objid;
+
+        IF NOT FOUND THEN
+            CONTINUE;
+        END IF;
+
+        -- Update any bgw_job row that references this function by name but
+        -- in a schema where it no longer exists (i.e. it was moved away).
+        UPDATE _timescaledb_config.bgw_job
+        SET    proc_schema = new_nsp
+        WHERE  proc_name = proc_nm
+          AND  proc_schema <> new_nsp
+          AND  NOT EXISTS (
+                   SELECT 1
+                   FROM   pg_catalog.pg_proc     p2
+                   JOIN   pg_catalog.pg_namespace n2 ON n2.oid = p2.pronamespace
+                   WHERE  p2.proname = proc_nm
+                     AND  n2.nspname = proc_schema
+               );
+    END LOOP;
+END;
+$$;
+
+CREATE EVENT TRIGGER timescaledb_bgw_job_proc_schema_sync
+    ON ddl_command_end
+    WHEN TAG IN ('ALTER FUNCTION', 'ALTER PROCEDURE')
+    EXECUTE FUNCTION _timescaledb_functions.bgw_job_proc_schema_update();
