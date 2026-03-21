@@ -18,6 +18,7 @@ SET LOCAL max_parallel_workers = 0;
 -- library before those functions have been updated.
 DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_command_end;
 DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_sql_drop;
+DROP EVENT TRIGGER IF EXISTS timescaledb_bgw_job_proc_schema_sync;
 
 -- Since we want to call the new version of restart_background_workers we
 -- create a function that points to that version. The proper restart_background_workers
