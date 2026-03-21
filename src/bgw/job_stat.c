@@ -815,5 +815,16 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 		return calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
 	}
 
+	/*
+	 * A next_start of DT_NOBEGIN in a persisted job stat row means the value
+	 * was never legitimately set — this can happen after a primary failover
+	 * where the replica inherits sentinel values from a job that was running
+	 * when the primary crashed.  Propagating DT_NOBEGIN downstream causes
+	 * ts_bgw_job_stat_upsert_next_start to error ("next_start cannot be
+	 * -infinity"), leaving the job permanently stuck.  Treat it as "run now".
+	 */
+	if (jobstat->fd.next_start == DT_NOBEGIN)
+		return GetCurrentTimestamp();
+
 	return jobstat->fd.next_start;
 }
