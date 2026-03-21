@@ -12,6 +12,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/planner.h>
 #include <parser/parsetree.h>
 #include <utils/fmgroids.h>
@@ -625,12 +626,47 @@ insert_vector_agg(Plan *plan, void *context)
 	}
 
 	/*
+	 * When converting AGGSPLIT_SIMPLE to partial+finalize, the finalize Agg
+	 * needs all grouping columns in its input (VectorAgg output). The Agg's
+	 * output targetlist may not include grouping columns that aren't needed by
+	 * parent nodes. Add any missing ones before validation so they are checked
+	 * for vectorizability. If validation fails, undo the modification.
+	 */
+	List *partial_agg_targetlist = list_copy(agg->plan.targetlist);
+	if (agg->aggsplit == AGGSPLIT_SIMPLE)
+	{
+		Bitmapset *tlist_attnos = NULL;
+		pull_varattnos((Node *) agg->plan.targetlist, OUTER_VAR, &tlist_attnos);
+
+		for (int k = 0; k < agg->numCols; k++)
+		{
+			AttrNumber grp_attno = agg->grpColIdx[k];
+			if (bms_is_member(grp_attno - FirstLowInvalidHeapAttributeNumber, tlist_attnos))
+				continue;
+
+			TargetEntry *child_tle =
+				list_nth(childplan->targetlist, AttrNumberGetAttrOffset(grp_attno));
+			AttrNumber new_resno = AttrOffsetGetAttrNumber(list_length(partial_agg_targetlist));
+			Var *var = makeVar(OUTER_VAR,
+							   grp_attno,
+							   exprType((Node *) child_tle->expr),
+							   exprTypmod((Node *) child_tle->expr),
+							   exprCollation((Node *) child_tle->expr),
+							   0);
+			partial_agg_targetlist =
+				lappend(partial_agg_targetlist,
+						makeTargetEntry((Expr *) var, new_resno, child_tle->resname, true));
+		}
+		bms_free(tlist_attnos);
+	}
+
+	/*
 	 * To make it easier to examine the variables participating in the aggregation,
 	 * the subsequent checks are performed on the aggregated targetlist with
 	 * all variables resolved to uncompressed chunk variables.
 	 */
 	List *resolved_targetlist =
-		castNode(List, ts_resolve_outer_special_vars((Node *) agg->plan.targetlist, childplan));
+		castNode(List, ts_resolve_outer_special_vars((Node *) partial_agg_targetlist, childplan));
 
 	const VectorAggGroupingType grouping_type =
 		get_vectorized_grouping_type(&vqi, agg, resolved_targetlist);
@@ -673,6 +709,7 @@ insert_vector_agg(Plan *plan, void *context)
 	 * Finally, all requirements are satisfied and we can vectorize this
 	 * aggregation node.
 	 */
+	agg->plan.targetlist = partial_agg_targetlist;
 	Plan *vector_agg_plan =
 		vector_agg_plan_create(childplan, agg, resolved_targetlist, grouping_type);
 
