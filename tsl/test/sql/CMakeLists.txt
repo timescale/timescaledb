@@ -137,6 +137,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compress_composite_bloom_debug.sql
     compression_algos.sql
     compression_bgw.sql
+    compression_policy_on_disable.sql
     compression_bools.sql
     compression_bool_vectorized.sql
     compression_ddl.sql
