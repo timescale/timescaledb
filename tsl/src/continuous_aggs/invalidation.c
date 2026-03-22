@@ -1104,6 +1104,13 @@ cagg_invalidation_window_end_filter(const TupleInfo *ti, void *data)
  *
  * Returns an InvalidationStore with the collected entries, or NULL if no
  * entries were found.
+ *
+ * NOTE: Txn2 can process only entries strictly falling within its refresh window.
+ * This is because a concurrent transaction could be processing an adjacent ranges.
+ * So Txn2 can no longer attempt to work on entries outside its refresh window.
+ * When this transaction commits, all new entries written by it will be visible to
+ * refresh processes in Txn 3.
+ * 
  */
 InvalidationStore *
 collect_and_delete_cagg_invalidations_in_window(const ContinuousAgg *cagg,
