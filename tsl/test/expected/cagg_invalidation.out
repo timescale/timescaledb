@@ -126,34 +126,36 @@ ORDER BY 1 DESC, 2;
  bucket | device | avg_temp 
 --------+--------+----------
 
-CREATE OR REPLACE FUNCTION get_hyper_invals() RETURNS  TABLE (
-      "hyper_id" INT,
-      "start" BIGINT,
-      "end" BIGINT
-)
-LANGUAGE SQL VOLATILE AS
-$$
-SELECT hypertable_id,
-       lowest_modified_value,
-       greatest_modified_value
+CREATE VIEW hyper_invals AS 
+SELECT hypertable_id as "hyper_id",
+       lowest_modified_value as "start",
+       greatest_modified_value as "end"
        FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
-       ORDER BY 1,2,3
-$$;
-CREATE OR REPLACE FUNCTION get_cagg_invals() RETURNS TABLE (
-      "cagg_id" INT,
-      "start" BIGINT,
-      "end" BIGINT
-)
-LANGUAGE SQL VOLATILE AS
-$$
-SELECT materialization_id,
-       lowest_modified_value,
-       greatest_modified_value
+       ORDER BY 1,2,3;
+CREATE VIEW hyper_invals_view AS 
+SELECT hypertable_id as "hyper_id",
+       ht.table_name as "hypertable_name",
+       lowest_modified_value as "start",
+       greatest_modified_value as "end"
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il,
+  _timescaledb_catalog.hypertable ht
+  WHERE ht.id = il.hypertable_id;
+CREATE VIEW cagg_invals_view AS
+  SELECT il.materialization_id AS "cagg_id",
+         ca.user_view_name AS "cagg_name",                       
+         il.lowest_modified_value AS "start",
+         il.greatest_modified_value AS "end"
+  FROM 
+  _timescaledb_catalog.continuous_aggs_materialization_invalidation_log il,
+  _timescaledb_catalog.continuous_agg ca
+  WHERE ca.mat_hypertable_id = il.materialization_id;
+CREATE VIEW cagg_invals AS 
+SELECT materialization_id AS "cagg_id",
+       lowest_modified_value AS "start",
+       greatest_modified_value AS "end"
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
        ORDER BY 1,2,3
-$$;
-CREATE VIEW hyper_invals AS SELECT * FROM get_hyper_invals();
-CREATE VIEW cagg_invals AS SELECT * FROM get_cagg_invals();
+;
 -- Must refresh to move the invalidation threshold, or no
 -- invalidations will be generated. Initially, threshold is the
 -- MIN of the time dimension data type:
@@ -174,6 +176,11 @@ SELECT * FROM cagg_invals;
        5 | -9223372036854775808 | 9223372036854775807
 
 -- Now refresh up to 50 without the first bucket, and the threshold should be updated accordingly:
+SELECT min(time), max(time) FROM conditions;
+ min | max 
+-----+-----
+   1 | 100
+
 CALL refresh_continuous_aggregate('cond_10', 1, 50);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
@@ -241,6 +248,11 @@ SELECT * FROM cagg_invals;
 
 -- Refresh on the second continuous aggregate, cond_20, on the first
 -- hypertable moves the same threshold as when refreshing cond_10:
+SELECT min(time), max(time) FROM conditions;
+ min | max 
+-----+-----
+   1 | 100
+
 CALL refresh_continuous_aggregate('cond_20', 60, 100);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
@@ -281,6 +293,7 @@ SELECT * FROM cagg_invals;
 -- Entries that should be left unmodified:
 INSERT INTO conditions VALUES (10, 4, 23.7);
 INSERT INTO conditions VALUES (10, 5, 23.8), (19, 3, 23.6);
+--This generates 2 entries as the inv. entry is per chunk.
 INSERT INTO conditions VALUES (60, 3, 23.7), (70, 4, 23.7);
 -- Should see some invaliations in the hypertable invalidation log:
 SELECT * FROM hyper_invals;
@@ -295,6 +308,7 @@ SELECT * FROM hyper_invals;
 INSERT INTO measurements VALUES (20, 4, 23.7);
 INSERT INTO measurements VALUES (30, 5, 23.8), (80, 3, 23.6);
 -- Should now see invalidations for both hypertables
+-- watermark for measurements is at 30. so we will only see 20.
 SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
@@ -307,6 +321,20 @@ SELECT * FROM hyper_invals;
 -- First refresh a window where we don't have any invalidations. This
 -- allows us to see only the copying of the invalidations to the per
 -- cagg log without additional processing.
+SELECT * FROM cagg_invals_view WHERE cagg_name = 'cond_10';;
+ cagg_id | cagg_name |        start         |         end         
+---------+-----------+----------------------+---------------------
+       3 | cond_10   | -9223372036854775808 |                  -1
+       3 | cond_10   |                   50 | 9223372036854775807
+
+SELECT * FROM hyper_invals_view WHERE hypertable_name = 'conditions';;
+ hyper_id | hypertable_name | start | end 
+----------+-----------------+-------+-----
+        1 | conditions      |    10 |  10
+        1 | conditions      |    10 |  19
+        1 | conditions      |    60 |  60
+        1 | conditions      |    70 |  70
+
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
 -- Invalidation threshold remains at 100:
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
@@ -315,6 +343,28 @@ ORDER BY 1,2;
 ---------------+-----------
              1 |       100
              2 |        30
+
+-- check the output of raw cagg query and the cagg
+\set QUERY 'SELECT time_bucket( 10, time) AS bucket, device, avg(temp) FROM conditions WHERE time>= 20 and time < 60 GROUP BY 1, 2'
+\set VIEW_QUERY 'SELECT * FROM cond_10 WHERE bucket>= 20 and bucket < 60'
+\ir include/cont_agg_test_equal_query.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+--expects QUERY and VIEW_QUERY to be set
+with original AS (
+  SELECT row_number() OVER(ORDER BY q.*) row_number, * FROM (:QUERY) as q
+),
+view AS (
+  SELECT row_number() OVER (ORDER BY q.*) row_number, * FROM (:VIEW_QUERY) as q
+)
+SELECT 'Number of rows different (expect 0)' as Descr, count(*)
+FROM original
+FULL OUTER JOIN view ON (original.row_number = view.row_number)
+WHERE (original.*) IS DISTINCT FROM (view.*);
+                descr                | count 
+-------------------------------------+-------
+ Number of rows different (expect 0) |     0
 
 -- Invalidations should be moved from the hypertable invalidation log
 -- to the continuous aggregate log, but only for the hypertable that
@@ -329,6 +379,7 @@ SELECT * FROM cagg_invals;
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
        3 |                   10 |                  19
+       3 |                   60 |                  79
        3 |                   60 | 9223372036854775807
        4 | -9223372036854775808 |                  59
        4 |                    0 |                  19
@@ -380,6 +431,7 @@ SELECT * FROM cagg_invals;
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
        3 |                   10 |                  19
+       3 |                   60 |                  79
        3 |                   60 | 9223372036854775807
        4 | -9223372036854775808 |                  59
        4 |                    0 |                  19
@@ -389,9 +441,16 @@ SELECT * FROM cagg_invals;
        5 |                   30 | 9223372036854775807
 
 -- Refresh to process invalidations for daily temperature:
+SELECT min(time), max(time) FROM conditions;
+ min | max 
+-----+-----
+   1 | 100
+
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
 -- Invalidations should be moved from the hypertable invalidation log
 -- to the continuous aggregate log.
+-- Note how invalidations for cagg inv log is combined together (the chunk separation is lost when
+-- adjacent intervals are combined together.
 SELECT * FROM hyper_invals;
  hyper_id | start | end 
 ----------+-------+-----
@@ -401,8 +460,13 @@ SELECT * FROM hyper_invals;
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
-       3 | -9223372036854775808 |                  19
+       3 | -9223372036854775808 |                  -1
+       3 |                    0 |                  19
+       3 |                   10 |                  19
+       3 |                   60 |                  69
+       3 |                   60 |                  79
        3 |                   60 | 9223372036854775807
+       3 |                   80 |                  99
        4 | -9223372036854775808 |                  59
        4 |                    0 |                  19
        4 |                    0 |                  99
@@ -417,29 +481,207 @@ CALL refresh_continuous_aggregate('cond_20', 20, 60);
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
-       3 | -9223372036854775808 |                  19
+       3 | -9223372036854775808 |                  -1
+       3 |                    0 |                  19
+       3 |                   10 |                  19
+       3 |                   60 |                  69
+       3 |                   60 |                  79
        3 |                   60 | 9223372036854775807
+       3 |                   80 |                  99
        4 | -9223372036854775808 |                  19
-       4 |                   60 | 9223372036854775807
+       4 |                    0 |                  19
+       4 |                   60 |                  79
+       4 |                   60 |                  99
+       4 |                  100 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
 
+-- check the output of raw cagg query and the cagg
+\set QUERY 'SELECT time_bucket( 20, time) AS bucket, device, avg(temp) FROM conditions WHERE time>= 20 and time < 60 GROUP BY 1, 2'
+\set VIEW_QUERY 'SELECT * FROM cond_20 WHERE bucket>= 20 and bucket < 60'
+\ir include/cont_agg_test_equal_query.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+--expects QUERY and VIEW_QUERY to be set
+with original AS (
+  SELECT row_number() OVER(ORDER BY q.*) row_number, * FROM (:QUERY) as q
+),
+view AS (
+  SELECT row_number() OVER (ORDER BY q.*) row_number, * FROM (:VIEW_QUERY) as q
+)
+SELECT 'Number of rows different (expect 0)' as Descr, count(*)
+FROM original
+FULL OUTER JOIN view ON (original.row_number = view.row_number)
+WHERE (original.*) IS DISTINCT FROM (view.*);
+                descr                | count 
+-------------------------------------+-------
+ Number of rows different (expect 0) |     0
+
 -- Refresh cond_10 to completely remove an invalidation:
+SELECT min(time), max(time) FROM conditions;
+ min | max 
+-----+-----
+   1 | 100
+
 CALL refresh_continuous_aggregate('cond_10', 0, 20);
 -- The 1-19 invalidation should be deleted:
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
+       3 |                   60 |                  69
+       3 |                   60 |                  79
        3 |                   60 | 9223372036854775807
+       3 |                   80 |                  99
        4 | -9223372036854775808 |                  19
-       4 |                   60 | 9223372036854775807
+       4 |                    0 |                  19
+       4 |                   60 |                  79
+       4 |                   60 |                  99
+       4 |                  100 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
 
--- Clear everything between 0 and 100 to make way for new
+-- Clear everything between 60 and 100 to make way for new
 -- invalidations
-CALL refresh_continuous_aggregate('cond_10', 0, 100);
+-- Verifies whether the multiple entries were processed correctly.
+CALL refresh_continuous_aggregate('cond_10', 60, 110);
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         
+---------+----------------------+---------------------
+       3 | -9223372036854775808 |                  -1
+       3 |                  110 | 9223372036854775807
+       4 | -9223372036854775808 |                  19
+       4 |                    0 |                  19
+       4 |                   60 |                  79
+       4 |                   60 |                  99
+       4 |                  100 | 9223372036854775807
+       5 | -9223372036854775808 |                  -1
+       5 |                   30 | 9223372036854775807
+
+\set QUERY 'SELECT time_bucket( 10, time) AS bucket, device, avg(temp) FROM conditions WHERE time>= 60 and time < 110 GROUP BY 1, 2'
+\set VIEW_QUERY 'SELECT * FROM cond_10 WHERE bucket>= 60 and bucket < 110'
+\ir include/cont_agg_test_equal_query.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+--expects QUERY and VIEW_QUERY to be set
+with original AS (
+  SELECT row_number() OVER(ORDER BY q.*) row_number, * FROM (:QUERY) as q
+),
+view AS (
+  SELECT row_number() OVER (ORDER BY q.*) row_number, * FROM (:VIEW_QUERY) as q
+)
+SELECT 'Number of rows different (expect 0)' as Descr, count(*)
+FROM original
+FULL OUTER JOIN view ON (original.row_number = view.row_number)
+WHERE (original.*) IS DISTINCT FROM (view.*);
+                descr                | count 
+-------------------------------------+-------
+ Number of rows different (expect 0) |     0
+
+-------------------------------------------------------
+-- Test all INVAL_CUT code paths with adjacent-chunk
+-- invalidations that merge after bucket expansion.
+-- Refresh window is [20, 60), bucket_width=10,
+-- chunk_time_interval=10.
+-------------------------------------------------------
+-- First, clear all existing invalidations so we start clean
+CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
+CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         
+---------+----------------------+---------------------
+       3 |                  110 | 9223372036854775807
+       4 |                  120 | 9223372036854775807
+       5 | -9223372036854775808 |                  -1
+       5 |                   30 | 9223372036854775807
+
+SELECT * FROM hyper_invals;
+ hyper_id | start | end 
+----------+-------+-----
+        2 |    20 |  20
+
+-- Test cutting logic after the per chunk invalidation entry change. 
+-- Case 1: Left-cut only.
+-- Values in chunks [10,20) and [20,30) merge after bucket expansion
+-- to [10, 29]. Against window [20, 60): lower [10,19], inner [20,29].
+INSERT INTO conditions VALUES (15, 4, 23.7), (25, 1, 23.4);
+-- Case 2: Cut both sides.
+-- Values across adjacent chunks [10,20) through [60,70) merge after
+-- bucket expansion to [10, 69]. Against window [20, 60):
+-- lower [10,19], inner [20,59], upper [60,69].
+INSERT INTO conditions VALUES (15, 2, 23.5), (25, 2, 23.5), (35, 2, 23.5), (45, 2, 23.5), (55, 2, 23.5), (65, 2, 23.5);
+-- Case 3: Right-cut only (mid-window start).
+-- Values in chunks [50,60) and [60,70) merge after bucket expansion
+-- to [50, 69]. Against window [20, 60): inner [50,59], upper [60,69].
+INSERT INTO conditions VALUES (55, 6, 23.9), (65, 6, 23.9);
+SELECT * FROM hyper_invals;
+ hyper_id | start | end 
+----------+-------+-----
+        1 |    15 |  15
+        1 |    15 |  15
+        1 |    25 |  25
+        1 |    25 |  25
+        1 |    35 |  35
+        1 |    45 |  45
+        1 |    55 |  55
+        1 |    55 |  55
+        1 |    65 |  65
+        1 |    65 |  65
+        2 |    20 |  20
+
+-- Refresh to process the invalidations
+CALL refresh_continuous_aggregate('cond_10', 20, 60);
+-- Should see the cut results in the cagg invalidation log
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         
+---------+----------------------+---------------------
+       3 |                   10 |                  19
+       3 |                   60 |                  69
+       3 |                  110 | 9223372036854775807
+       4 |                    0 |                  79
+       4 |                  120 | 9223372036854775807
+       5 | -9223372036854775808 |                  -1
+       5 |                   30 | 9223372036854775807
+
+-- check the output of raw cagg query and the cagg
+\set QUERY 'SELECT time_bucket( 10, time) AS bucket, device, avg(temp) FROM conditions WHERE time>= 20 and time < 60 GROUP BY 1, 2'
+\set VIEW_QUERY 'SELECT * FROM cond_10 WHERE bucket>= 20 and bucket < 60'
+\ir include/cont_agg_test_equal_query.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+--expects QUERY and VIEW_QUERY to be set
+with original AS (
+  SELECT row_number() OVER(ORDER BY q.*) row_number, * FROM (:QUERY) as q
+),
+view AS (
+  SELECT row_number() OVER (ORDER BY q.*) row_number, * FROM (:VIEW_QUERY) as q
+)
+SELECT 'Number of rows different (expect 0)' as Descr, count(*)
+FROM original
+FULL OUTER JOIN view ON (original.row_number = view.row_number)
+WHERE (original.*) IS DISTINCT FROM (view.*);
+                descr                | count 
+-------------------------------------+-------
+ Number of rows different (expect 0) |     0
+
+ 
+-- Clean up the remaining invalidations
+--CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
+--CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
+SELECT * FROM cagg_invals;
+ cagg_id |        start         |         end         
+---------+----------------------+---------------------
+       3 |                   10 |                  19
+       3 |                   60 |                  69
+       3 |                  110 | 9223372036854775807
+       4 |                    0 |                  79
+       4 |                  120 | 9223372036854775807
+       5 | -9223372036854775808 |                  -1
+       5 |                   30 | 9223372036854775807
+
 -- Test refreshing with non-overlapping invalidations
 INSERT INTO conditions VALUES (20, 1, 23.4), (25, 1, 23.4);
 INSERT INTO conditions VALUES (30, 1, 23.4), (46, 1, 23.4);
@@ -447,32 +689,42 @@ CALL refresh_continuous_aggregate('cond_10', 1, 40);
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
-       3 | -9223372036854775808 |                  -1
        3 |                   40 |                  49
-       3 |                  100 | 9223372036854775807
-       4 | -9223372036854775808 |                  19
+       3 |                   60 |                  69
+       3 |                  110 | 9223372036854775807
+       4 |                    0 |                  79
        4 |                   20 |                  59
-       4 |                   60 | 9223372036854775807
+       4 |                  120 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
 
 -- Refresh whithout cutting (in area where there are no
--- invalidations). Merging of overlapping entries should still happen:
+-- invalidations).  See another entry for [ 40 49] in the cagg
+-- logs. No merging during 2nd transaction of cagg refresh outside
+-- refresh window.
 INSERT INTO conditions VALUES (15, 1, 23.4), (42, 1, 23.4);
+SELECT * FROM hyper_invals;
+ hyper_id | start | end 
+----------+-------+-----
+        1 |    15 |  15
+        1 |    42 |  42
+        2 |    20 |  20
+
 CALL refresh_continuous_aggregate('cond_10', 90, 100);
 NOTICE:  continuous aggregate "cond_10" is already up-to-date
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
-       3 | -9223372036854775808 |                  -1
        3 |                   10 |                  19
        3 |                   40 |                  49
-       3 |                  100 | 9223372036854775807
-       4 | -9223372036854775808 |                  19
+       3 |                   40 |                  49
+       3 |                   60 |                  69
+       3 |                  110 | 9223372036854775807
        4 |                    0 |                  19
+       4 |                    0 |                  79
        4 |                   20 |                  59
        4 |                   40 |                  59
-       4 |                   60 | 9223372036854775807
+       4 |                  120 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
 
@@ -481,12 +733,12 @@ CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
-       3 |                  110 | 9223372036854775807
-       4 | -9223372036854775808 |                  19
+       3 |                  120 | 9223372036854775807
        4 |                    0 |                  19
+       4 |                    0 |                  79
        4 |                   20 |                  59
        4 |                   40 |                  59
-       4 |                   60 | 9223372036854775807
+       4 |                  120 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
 
@@ -559,11 +811,11 @@ ORDER BY 1,2
 LIMIT 5;
  bucket | device |     avg_temp     
 --------+--------+------------------
-     20 |      0 | 18.2857142857143
-     20 |      1 | 23.5142857142857
-     20 |      2 |               26
-     20 |      3 |               23
-     20 |      5 |             23.8
+      0 |      0 |               17
+      0 |      1 |             22.6
+      0 |      2 | 20.5555555555556
+      0 |      3 |            25.15
+      0 |      4 |             23.7
 
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
 CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
@@ -586,6 +838,29 @@ INSERT INTO conditions VALUES
        (21, 1, 15.3), (22, 2, 12.3), (29, 3, 16.3);
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
 CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
+-- check the output of raw cagg query and the cagg
+\set QUERY 'SELECT time_bucket( 10, time) AS bucket, device, avg(temp) FROM conditions GROUP BY 1, 2'
+\set VIEW_QUERY 'SELECT * FROM cond_10 '
+\ir include/cont_agg_test_equal_query.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+--expects QUERY and VIEW_QUERY to be set
+with original AS (
+  SELECT row_number() OVER(ORDER BY q.*) row_number, * FROM (:QUERY) as q
+),
+view AS (
+  SELECT row_number() OVER (ORDER BY q.*) row_number, * FROM (:VIEW_QUERY) as q
+)
+SELECT 'Number of rows different (expect 0)' as Descr, count(*)
+FROM original
+FULL OUTER JOIN view ON (original.row_number = view.row_number)
+WHERE (original.*) IS DISTINCT FROM (view.*);
+                descr                | count 
+-------------------------------------+-------
+ Number of rows different (expect 0) |     0
+
+ 
 -- Should now hold data again
 SELECT * FROM cond_10
 ORDER BY 1,2;
@@ -794,7 +1069,9 @@ WHERE cagg_id = :cond_1_id;
 ---------+-------+---------------------
        6 |     0 |                   0
        6 |     2 |                   2
-       6 |   110 | 9223372036854775807
+       6 |   120 | 9223372036854775807
+       6 |   120 | 9223372036854775807
+       6 |   120 | 9223372036854775807
 
 -- Refresh the two remaining invalidations
 CALL refresh_continuous_aggregate('cond_1', 0, 1);
@@ -1025,8 +1302,8 @@ SELECT show_chunks AS chunk_to_drop
 FROM show_chunks('conditions');
               chunk_to_drop              
 -----------------------------------------
- _timescaledb_internal._hyper_1_35_chunk
- _timescaledb_internal._hyper_1_41_chunk
+ _timescaledb_internal._hyper_1_36_chunk
+ _timescaledb_internal._hyper_1_42_chunk
 
 -- Pick the first one to drop
 SELECT show_chunks AS chunk_to_drop
@@ -1084,7 +1361,9 @@ WHERE cagg_id = :cond_1_id;
 ---------+-------+---------------------
        6 |     1 |                   4
        6 |     6 |                   6
-       6 |   110 | 9223372036854775807
+       6 |   120 | 9223372036854775807
+       6 |   120 | 9223372036854775807
+       6 |   120 | 9223372036854775807
 
 ---------------------------------------------------------------------
 -- Test that single timestamp invalidations are expanded to buckets,
@@ -1113,6 +1392,9 @@ WHERE cagg_id = :cond_10_id;
        3 |                    0 |                  29
        3 |                   40 |                  49
        3 |                   60 | 9223372036854775807
+       3 |                  120 | 9223372036854775807
+       3 |                  120 | 9223372036854775807
+       3 |                  120 | 9223372036854775807
 
 -- should trigger two individual refreshes
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
@@ -1284,9 +1566,9 @@ SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timesc
 EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_insert;
 --- QUERY PLAN ---
  Append
-   ->  Seq Scan on _hyper_18_59_chunk
-   ->  Custom Scan (ColumnarScan) on _hyper_18_61_chunk
-         ->  Seq Scan on compress_hyper_19_62_chunk
+   ->  Seq Scan on _hyper_18_60_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_18_62_chunk
+         ->  Seq Scan on compress_hyper_19_63_chunk
 
 RESET timescaledb.enable_direct_compress_insert;
 -- test direct compress copy invalidation
@@ -1326,13 +1608,13 @@ SELECT _timescaledb_functions.to_timestamp(lowest_modified_value) start, _timesc
 EXPLAIN (costs off,timing off,summary off) SELECT FROM direct_compress_copy;
 --- QUERY PLAN ---
  Append
-   ->  Seq Scan on _hyper_21_63_chunk
-   ->  Custom Scan (ColumnarScan) on _hyper_21_65_chunk
-         ->  Seq Scan on compress_hyper_22_66_chunk
-   ->  Custom Scan (ColumnarScan) on _hyper_21_67_chunk
-         ->  Seq Scan on compress_hyper_22_68_chunk
-   ->  Custom Scan (ColumnarScan) on _hyper_21_69_chunk
-         ->  Seq Scan on compress_hyper_22_70_chunk
+   ->  Seq Scan on _hyper_21_64_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_21_66_chunk
+         ->  Seq Scan on compress_hyper_22_67_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_21_68_chunk
+         ->  Seq Scan on compress_hyper_22_69_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_21_70_chunk
+         ->  Seq Scan on compress_hyper_22_71_chunk
 
 RESET timescaledb.enable_direct_compress_copy;
 -- test direct compress invalidation with custom partitioning function (not supported atm)
@@ -1356,7 +1638,7 @@ NOTICE:  refreshing continuous aggregate "cagg_inval_update"
 -- check setting to NULL is handled gracefully
 \set ON_ERROR_STOP 0
 UPDATE inval_update SET time = NULL WHERE time = '2025-01-01';
-ERROR:  null value in column "time" of relation "_hyper_25_71_chunk" violates not-null constraint
+ERROR:  null value in column "time" of relation "_hyper_25_72_chunk" violates not-null constraint
 \set ON_ERROR_STOP 1
 UPDATE inval_update SET time = '2025-01-01 00:00:23' WHERE time = '2025-01-01';
 -- should have 1 entries now
