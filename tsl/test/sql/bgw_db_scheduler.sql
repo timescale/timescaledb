@@ -725,5 +725,3 @@ SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_i
 -- clean up jobs
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();
-
--- end of bgw_db_scheduler

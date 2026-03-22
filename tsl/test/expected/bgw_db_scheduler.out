@@ -1575,5 +1575,3 @@ SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-
--- end of bgw_db_scheduler
