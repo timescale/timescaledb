@@ -904,6 +904,44 @@ SELECT * FROM sorted_bgw_log;
       0 | test_job_3_long  | Before sleep job 3
       1 | test_job_3_long  | After sleep job 3
 
+-- Simulate failover-inherited sentinel with no crash counter: sanitize and run now
+TRUNCATE bgw_log;
+UPDATE _timescaledb_internal.bgw_job_stat
+SET next_start = '-infinity', consecutive_crashes = 0
+WHERE job_id = 1005;
+SELECT job_id,
+       (next_start = '-infinity'::timestamptz) AS next_start_is_infinity,
+       total_runs,
+       total_successes,
+       consecutive_crashes
+FROM _timescaledb_internal.bgw_job_stat;
+ job_id | next_start_is_infinity | total_runs | total_successes | consecutive_crashes 
+--------+------------------------+------------+-----------------+---------------------
+   1005 | t                      |          2 |               1 |                   0
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(500);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+
+SELECT job_id,
+       (next_start = '-infinity'::timestamptz) AS next_start_is_infinity,
+       total_runs,
+       total_successes,
+       consecutive_crashes
+FROM _timescaledb_internal.bgw_job_stat;
+ job_id | next_start_is_infinity | total_runs | total_successes | consecutive_crashes 
+--------+------------------------+------------+-----------------+---------------------
+   1005 | f                      |          3 |               2 |                   0
+
+SELECT * FROM sorted_bgw_log;
+ msg_no | application_name |                        msg                         
+--------+------------------+----------------------------------------------------
+      0 | DB Scheduler     | [TESTING] Registered new background worker
+      1 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | test_job_3_long  | Before sleep job 3
+      1 | test_job_3_long  | After sleep job 3
+
 CREATE FUNCTION wait_for_timer_to_run(started_at INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -1538,3 +1576,4 @@ SELECT _timescaledb_functions.stop_background_workers();
 -------------------------
  t
 
+-- end of bgw_db_scheduler
