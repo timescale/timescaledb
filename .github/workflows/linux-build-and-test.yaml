@@ -21,7 +21,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
     - name: Build matrix
       id: set-matrix
@@ -42,8 +42,8 @@ jobs:
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
           filters: .github/filters.yaml
@@ -101,7 +101,7 @@ jobs:
       run: sudo chmod 777 /cores
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
@@ -123,7 +123,7 @@ jobs:
     - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       id: cache-postgresql
       if: matrix.snapshot != 'snapshot' && runner.os == 'Linux'
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
@@ -159,7 +159,7 @@ jobs:
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: ~/${{ env.PG_SRC_DIR }}/config.log
@@ -189,7 +189,7 @@ jobs:
 
     - name: Upload CMake Logs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: CMake Logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |
@@ -220,14 +220,14 @@ jobs:
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ./build/coverage/timescaledb-coverage.info
 
     - name: Save LCOV coverage report
       if: matrix.coverage
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: LCOV coverage report ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: ./build/coverage/lcov-report
@@ -253,7 +253,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |
@@ -262,7 +262,7 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: postmaster.*
@@ -298,21 +298,21 @@ jobs:
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: Coredumps ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: coredumps
 
     - name: Save stacktraces
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: Stacktraces ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: stacktrace.log
 
     - name: Save TAP test logs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |

@@ -26,7 +26,7 @@ jobs:
 
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -68,7 +68,7 @@ jobs:
           libtest-most-perl pkgconf icu-devtools clang-14 llvm-14 llvm-14-dev llvm-14-tools cmake
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
     - name: Download Postgres ${{ matrix.pg }}
       run: |
@@ -164,14 +164,14 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: Regression diff Snapshot ABI Breakage PG${{ matrix.pg }}
         path: regression.log
 
     - name: Save postmaster.log
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: PostgreSQL log Snapshot ABI Breakage PG${{ matrix.pg }}
         path: postmaster.log

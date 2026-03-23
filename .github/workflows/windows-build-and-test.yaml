@@ -25,7 +25,7 @@ jobs:
 
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -47,8 +47,8 @@ jobs:
          }}
       run_installcheck: ${{ github.event_name == 'push' || steps.filters.outputs.windows-workflow == 'true' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
           filters: .github/filters.yaml
@@ -130,7 +130,7 @@ jobs:
         }
 
     - name: Setup WSL
-      uses: Vampire/setup-wsl@v3.1.4
+      uses: Vampire/setup-wsl@6c400b755bcd0583e60c2e7aa0cdc61794355c9b # v3.1.4
       with:
         distribution: Debian
 
@@ -158,7 +158,7 @@ jobs:
         git config --global core.eol lf
 
     - name: Checkout TimescaleDB source
-      uses: actions/checkout@v4
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
@@ -178,7 +178,7 @@ jobs:
       # --extract-only and launch our own test instance, which is
       # probably better anyway since it gives us more control.
     - name: Cache PostgreSQL installation
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       id: cache-postgresql
       with:
         path: C:\Progra~1\PostgreSQL\${{ matrix.versions.pg }}
@@ -328,7 +328,7 @@ jobs:
 
     - name: Upload crash dumps and stack traces
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: Crash dumps PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
         path: |
@@ -337,7 +337,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: Regression ${{ matrix.versions.pg }} diff ${{ matrix.os }} ${{ matrix.build_type }} Build
         path: |
@@ -346,14 +346,14 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: PostgreSQL ${{ matrix.versions.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
         path: ${{ env.PGDATA }}\log\postmaster.log
 
     - name: Upload CMake Logs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: CMake Logs ${{ matrix.versions.pg }} ${{ matrix.os }} ${{ matrix.build_type }}
         path: |
