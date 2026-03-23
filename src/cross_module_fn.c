@@ -259,6 +259,12 @@ ts_tsl_loaded(PG_FUNCTION_ARGS)
 }
 
 static void
+modify_realtime_caggs_ondemand_tsl_default_fn_community(RangeTblEntry *rte, ContinuousAgg *cagg)
+{
+	/* No op in community licensed code */
+}
+
+static void
 preprocess_query_tsl_default_fn_community(Query *parse, int *cursor_opts)
 {
 	/* No op in community licensed code */
@@ -387,6 +393,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
 
+	.modify_realtime_caggs_ondemand_tsl = modify_realtime_caggs_ondemand_tsl_default_fn_community,
 	.preprocess_query_tsl = preprocess_query_tsl_default_fn_community,
 	.merge_chunks = error_no_default_fn_pg_community,
 	.split_chunk = error_no_default_fn_pg_community,

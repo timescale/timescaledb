@@ -90,6 +90,21 @@ typedef struct ContinuousAggRefreshContext
 	int32 number_of_batches;
 } ContinuousAggRefreshContext;
 
+typedef struct InvalidatedRanges
+{
+	int32 num_bounds;
+	int64 *low_bounds;
+	int64 *high_bounds;
+	bool is_valid;
+} InvalidatedRanges;
+
+typedef struct RealTimeDataContext
+{
+	bool for_materialized_query;
+	int64 watermark;
+	InvalidatedRanges invalidated_ranges;
+} RealTimeDataContext;
+
 #define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_function)                                            \
 	(bucket_function->bucket_width_type == INTERVALOID)
 
@@ -114,7 +129,9 @@ extern ContinuousAggTimeBucketInfo cagg_validate_query(const Query *query, const
 extern Query *destroy_union_query(Query *q);
 extern void RemoveRangeTableEntries(Query *query);
 extern Query *build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *q1,
-								Query *q2, int materialize_htid);
+								Query *q2, int materialize_htid, RealTimeDataContext *rtd_context);
+extern InvalidatedRanges invalidation_get_cagg_invalidations(const ContinuousAgg *cagg,
+															 long max_materializations);
 extern bool function_allowed_in_cagg_definition(Oid funcid);
 extern Oid get_watermark_function_oid(void);
 extern Oid cagg_get_boundary_converter_funcoid(Oid typoid);
@@ -148,3 +165,5 @@ cagg_get_time_min(const ContinuousAgg *cagg)
 }
 
 ContinuousAggBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);
+
+void tsl_modify_realtime_caggs_ondemand(RangeTblEntry *rte, ContinuousAgg *cagg);
