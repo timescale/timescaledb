@@ -123,6 +123,13 @@ CALL refresh_continuous_aggregate('cagg_2', NULL, 14);
 select * from cagg_2 order by 1;
 --this insert will be processed only by cagg_1 and copied over to cagg_2
 insert into continuous_agg_test values( 14, -2, 100);
+--we have a new entry 14 in the hypertable inv log. when cagg_1 is refreshed, it will
+--add entry [14 15] to mat inv log for cagg_2. (invalidations are expanded to bucket 
+--boundaries and we have bucket size of 2.
+SET ROLE :ROLE_SUPERUSER;
+select * from _timescaledb_catalog.continuous_aggs_materialization_invalidation_log order by 1;
+select * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log order by 1;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 CALL refresh_continuous_aggregate('cagg_1', NULL, NULL);
 select * from cagg_1 order by 1;
 CALL refresh_continuous_aggregate('cagg_2', NULL, 14);
