@@ -5,9 +5,10 @@
   ],
   "packageRules": [
     {
-      "matchUpdateTypes": ["patch", "minor", "digest"],
-      "groupName": "maintenance",
-      "schedule": ["on monday"]
+      "matchUpdateTypes": ["patch", "minor", "major", "digest"],
+      "groupName": "dependencies",
+      "schedule": ["on monday"],
+      "minimumReleaseAge": "3 days"
     }
   ]
 }
