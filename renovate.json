@@ -10,5 +10,6 @@
       "schedule": ["on monday"],
       "minimumReleaseAge": "3 days"
     }
-  ]
+  ],
+  "pinDigests": true
 }
