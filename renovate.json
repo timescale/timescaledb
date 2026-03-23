@@ -2,5 +2,12 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["patch", "minor", "digest"],
+      "groupName": "maintenance",
+      "schedule": ["every week"]
+    }
   ]
 }
