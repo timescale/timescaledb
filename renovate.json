@@ -7,7 +7,7 @@
     {
       "matchUpdateTypes": ["patch", "minor", "digest"],
       "groupName": "maintenance",
-      "schedule": ["every week"]
+      "schedule": ["on monday"]
     }
   ]
 }
