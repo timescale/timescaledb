@@ -50,6 +50,12 @@ typedef struct ContinuousAggRefreshState
 	bool bucketing_refresh_window;
 } ContinuousAggRefreshState;
 
+typedef struct CaggRefreshSpiContext
+{
+	const char *old_decompression_limit;
+	int save_nestlevel;
+} CaggRefreshSpiContext;
+
 static Hypertable *cagg_get_hypertable_or_fail(int32 hypertable_id);
 static InternalTimeRange get_largest_bucketed_window(Oid timetype, int64 bucket_width);
 static InternalTimeRange
@@ -693,37 +699,30 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 }
 
 static void
-cleanup_before_cagg_refresh_exit(const ContinuousAgg *cagg, const char *old_decompression_limit,
-								 int save_nestlevel)
+cleanup_before_cagg_refresh_exit(const ContinuousAgg *cagg,
+								 const CaggRefreshSpiContext *cagg_spi_ctx)
 {
 	/* Remove the refresh window registration inserted above so it does
 	 * not block future refreshes from the same backend. */
 	ts_cagg_jobs_refresh_ranges_delete_by_pid(cagg->data.mat_hypertable_id, MyProcPid);
 
 	SetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction",
-					old_decompression_limit,
+					cagg_spi_ctx->old_decompression_limit,
 					PGC_USERSET,
 					PGC_S_SESSION);
 
 	/* Restore search_path */
-	AtEOXact_GUC(false, save_nestlevel);
+	AtEOXact_GUC(false, cagg_spi_ctx->save_nestlevel);
 }
 
-void
-continuous_agg_refresh_internal(const ContinuousAgg *cagg,
-								const InternalTimeRange *refresh_window_arg,
-								const ContinuousAggRefreshContext context, const bool start_isnull,
-								const bool end_isnull, bool bucketing_refresh_window, bool force,
-								bool process_hypertable_invalidations, bool extend_last_bucket)
+static void continuous_agg_refresh_spi_setup_and_connect(CaggRefreshSpiContext *cagg_spi_ctx)
 {
-	int32 mat_id = cagg->data.mat_hypertable_id;
-	InternalTimeRange refresh_window = *refresh_window_arg;
-	int64 invalidation_threshold;
 	bool nonatomic = ts_process_utility_is_context_nonatomic();
 
 	/* Reset the saved ProcessUtilityContext value promptly before
 	 * calling Prevent* checks so the potential unsupported (atomic)
 	 * value won't linger there in case of ereport exit.
+         * See: https://github.com/timescale/timescaledb/pull/7566
 	 */
 	ts_process_utility_context_reset();
 
@@ -742,7 +741,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * We don't cagg refresh to fail because of decompression limit. So disable
 	 * the decompression limit for the duration of the refresh.
 	 */
-	const char *old_decompression_limit =
+	cagg_spi_ctx->old_decompression_limit =
 		GetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction", false, false);
 	SetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction",
 					"0",
@@ -755,15 +754,28 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
 
 	/* Lock down search_path */
-	int save_nestlevel = NewGUCNestLevel();
+	cagg_spi_ctx->save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
+}
 
+void
+continuous_agg_refresh_internal(const ContinuousAgg *cagg,
+								const InternalTimeRange *refresh_window_arg,
+								const ContinuousAggRefreshContext context, const bool start_isnull,
+								const bool end_isnull, bool bucketing_refresh_window, bool force,
+								bool process_hypertable_invalidations, bool extend_last_bucket)
+{
+	int32 mat_id = cagg->data.mat_hypertable_id;
+	InternalTimeRange refresh_window = *refresh_window_arg;
+	int64 invalidation_threshold;
+	CaggRefreshSpiContext cagg_spi_ctx = {};
 	/* Like regular materialized views, require owner to refresh. */
 	if (!object_ownercheck(RelationRelationId, cagg->relid, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER,
 					   get_relkind_objtype(get_rel_relkind(cagg->relid)),
 					   get_rel_name(cagg->relid));
 
+	continuous_agg_refresh_spi_setup_and_connect(&cagg_spi_ctx);
 	/* No bucketing when open ended */
 	if (bucketing_refresh_window && !(start_isnull && end_isnull))
 	{
@@ -884,9 +896,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	{
 		emit_up_to_date_notice(cagg, context);
 
-		cleanup_before_cagg_refresh_exit(cagg, old_decompression_limit, save_nestlevel);
+		cleanup_before_cagg_refresh_exit(cagg, &cagg_spi_ctx);
 
-		rc = SPI_finish();
+		int rc = SPI_finish();
 		if (rc != SPI_OK_FINISH)
 			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 
@@ -924,7 +936,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		/*
 		 * Clean up, including removing the refresh window registration inserted in Txn1
 		 */
-		cleanup_before_cagg_refresh_exit(cagg, old_decompression_limit, save_nestlevel);
+		cleanup_before_cagg_refresh_exit(cagg, &cagg_spi_ctx);
 
 		/* Commit the cleanup transaction, then re-throw the original error. */
 		SPI_commit_and_chain();
@@ -936,9 +948,9 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		emit_up_to_date_notice(cagg, context);
 
 	DEBUG_WAITPOINT("after_process_cagg_materializations");
-	cleanup_before_cagg_refresh_exit(cagg, old_decompression_limit, save_nestlevel);
+	cleanup_before_cagg_refresh_exit(cagg, &cagg_spi_ctx);
 
-	rc = SPI_finish();
+	int rc = SPI_finish();
 	if (rc != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 }
