@@ -463,7 +463,15 @@ SELECT _timescaledb_functions.cagg_watermark(100);
 SELECT _timescaledb_functions.cagg_watermark(NULL);
 \set ON_ERROR_STOP 1
 
--- Remove stored watermark, so query and refresh should error
+-- TEST Remove stored watermark, so query and refresh should error
+-- first generate some invalidations so that refresh will have to do soemthing
+-- then remove the watermark
+INSERT INTO smallint_table VALUES (1, 1);
+INSERT INTO int_table VALUES (1, 1);
+INSERT INTO bigint_table VALUES (1, 1);
+INSERT INTO date_table VALUES ('2000-01-01', 1);
+INSERT INTO timestamp_table VALUES ('2000-01-01 00:00:00-00', 1);
+INSERT INTO timestamptz_table VALUES ('2000-01-01 00:00:00-00', 1);
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DELETE FROM _timescaledb_catalog.continuous_aggs_watermark;
 
