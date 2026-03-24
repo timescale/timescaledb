@@ -12,7 +12,7 @@ This release contains performance improvements and bug fixes since the 2.25.2 re
 **Highlighted features in TimescaleDB v2.26.0**
 * The vectorized aggregation engine now evaluates PostgreSQL functions directly on columnar arguments and stores the results in a columnar format to preserve the high-speed execution pipeline. For analytical queries that leverage functions like `time_bucket()` in grouping or aggregation expressions, the function is evaluated natively without falling back to standard row-based processing. This enhancement ensures that the remainder of the query can seamlessly continue using the highly efficient columnar pipeline, yielding performance improvements of 3.5 times faster.
 * The query execution engine now supports composite bloom filters for `SELECT` and `UPSERT` operations, pushing down multi-column predicates directly to compressed table scans. This optimization bypasses costly batch decompression by automatically selecting the most restrictive bloom filter to quickly verify if target values are present. Showing over two times faster query performance when a composite bloom filter is used. Additionally, query profiling now includes detailed `EXPLAIN` statistics to monitor batch pruning and false-positive rates.
-* The custom node `ColumnarIndexScan` adjusts the query plan to fetch values from the sparse minmax indexes, improving query performance on the columnstore by up to 70x. For analytical queries that leverage functions like `MIN`, `MAX`, `FIRST`, and `LAST`, the sparse index is being read instead of decompressing the batch.
+* The custom node `ColumnarIndexScan` adjusts the query plan to fetch values from the sparse minmax indexes, improving query performance on the columnstore by up to 70x. For analytical queries that leverage functions like `COUNT`, `MIN`, `MAX`, `FIRST` (limited), and `LAST` (limited), the sparse index is being read instead of decompressing the batch.
 
 **Features**
 * [#9104](https://github.com/timescale/timescaledb/pull/9104) Support `min(text)`, `max(text)` for C collation in columnar aggregation pipeline
@@ -39,6 +39,9 @@ This release contains performance improvements and bug fixes since the 2.25.2 re
 * [#9376](https://github.com/timescale/timescaledb/pull/9376) Allow `CREATE EXTENSION` after drop in the same session
 * [#9378](https://github.com/timescale/timescaledb/pull/9378) Fix foreign key constraint failure when inserting into hypertable with referencing a foreign key
 * [#9381](https://github.com/timescale/timescaledb/pull/9381) Data loss with direct compress with client-ordered data in an `INSERT SELECT` from a compressed hypertable
+* [#9413](https://github.com/timescale/timescaledb/pull/9413) Fix incorrect decompress markers on full batch delete
+* [#9414](https://github.com/timescale/timescaledb/pull/9414) Fix `NULL` compression handling in `estimate_uncompressed_size`
+* [#9417](https://github.com/timescale/timescaledb/pull/9417) Fix segfault in `bloom1_contains`
 
 **GUCs**
 * `default_chunk_time_interval`: Default chunk time interval for new hypertables. This is an expert configuration, please do not alter unless recommended from Tiger Data.
