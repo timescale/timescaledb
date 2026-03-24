@@ -16,8 +16,8 @@ jobs:
           || (steps.filter.outputs.sql == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
         id: filter
         with:
           filters: .github/filters.yaml
@@ -70,7 +70,7 @@ jobs:
             timescaledb-2-postgresql-${{ matrix.pg_version_new }}
 
       - name: Checkout TimescaleDB
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Build and install TimescaleDB on PostgreSQL ${{ matrix.pg_version_old}}
         env:
@@ -124,7 +124,7 @@ jobs:
 
       - name: Upload pg_upgrade logs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: pg_upgrade logs from ${{ matrix.pg_version_old }} to ${{ matrix.pg_version_new }}
           path: /tmp/pg_upgrade_artifacts.tgz
