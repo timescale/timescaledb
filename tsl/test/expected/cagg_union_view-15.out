@@ -823,7 +823,15 @@ SELECT _timescaledb_functions.cagg_watermark(NULL);
                
 
 \set ON_ERROR_STOP 1
--- Remove stored watermark, so query and refresh should error
+-- TEST Remove stored watermark, so query and refresh should error
+-- first generate some invalidations so that refresh will have to do soemthing
+-- then remove the watermark
+INSERT INTO smallint_table VALUES (1, 1);
+INSERT INTO int_table VALUES (1, 1);
+INSERT INTO bigint_table VALUES (1, 1);
+INSERT INTO date_table VALUES ('2000-01-01', 1);
+INSERT INTO timestamp_table VALUES ('2000-01-01 00:00:00-00', 1);
+INSERT INTO timestamptz_table VALUES ('2000-01-01 00:00:00-00', 1);
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DELETE FROM _timescaledb_catalog.continuous_aggs_watermark;
 \set ON_ERROR_STOP 0
@@ -852,11 +860,11 @@ ERROR:  watermark not defined for continuous aggregate: 16
 CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
 ERROR:  watermark not defined for continuous aggregate: 18
 CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
-NOTICE:  continuous aggregate "date_agg" is already up-to-date
+ERROR:  watermark not defined for continuous aggregate: 19
 CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
-NOTICE:  continuous aggregate "timestamp_agg" is already up-to-date
+ERROR:  watermark not defined for continuous aggregate: 20
 CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
-NOTICE:  continuous aggregate "timestamptz_agg" is already up-to-date
+ERROR:  watermark not defined for continuous aggregate: 21
 \set ON_ERROR_STOP 1
 -- Fix all continuous aggregates inserting materialized watermark into the metadata table
 -- Fix by removing materialization_ranges from previous forced failure
@@ -926,8 +934,5 @@ CALL refresh_continuous_aggregate('int_agg', NULL, NULL);
 CALL refresh_continuous_aggregate('smallint_agg', NULL, NULL);
 CALL refresh_continuous_aggregate('bigint_agg', NULL, NULL);
 CALL refresh_continuous_aggregate('date_agg', NULL, NULL);
-NOTICE:  continuous aggregate "date_agg" is already up-to-date
 CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
-NOTICE:  continuous aggregate "timestamp_agg" is already up-to-date
 CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
-NOTICE:  continuous aggregate "timestamptz_agg" is already up-to-date
