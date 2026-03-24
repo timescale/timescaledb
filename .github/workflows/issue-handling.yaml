@@ -16,14 +16,14 @@ jobs:
     runs-on: timescaledb-runner-arm64
     steps:
       - name: Add to bugs board
-        uses: actions/add-to-project@31b3f3ccdc584546fc445612dec3f38ff5edb41c # v0.5.0
+        uses: actions/add-to-project@1b844f0c5ac6446a402e0cb3693f9be5eca188c5 # v0.6.1
         with:
           project-url: https://github.com/orgs/timescale/projects/55
           github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           labeled: bug, needs-triage, flaky-test
           label-operator: OR
       - name: Add to CAggs board
-        uses: actions/add-to-project@31b3f3ccdc584546fc445612dec3f38ff5edb41c # v0.5.0
+        uses: actions/add-to-project@1b844f0c5ac6446a402e0cb3693f9be5eca188c5 # v0.6.1
         with:
           project-url: https://github.com/orgs/timescale/projects/128
           github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
@@ -46,7 +46,7 @@ jobs:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
     steps:
       - name: Post to Security Channel
-        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        uses: slackapi/slack-github-action@fcfb566f8b0aab22203f066d80ca1d7e4b5d05b3 # v1.27.1
         with:
           channel-id: '${{ secrets.SLACK_CHANNEL_SECURITY }}'
           payload: |
@@ -68,7 +68,7 @@ jobs:
     runs-on: timescaledb-runner-arm64
     if: github.event_name == 'issues' && github.event.action == 'closed' && contains(github.event.issues.issue.labels.*.name, 'bug')
     steps:
-      - uses: leonsteinhaeuser/project-beta-automations@6ad2dc04dc4ca680c7e2583e9503708bd454e6a2 # v2.0.0
+      - uses: leonsteinhaeuser/project-beta-automations@939000fb1900c9fc4f7b5058a09d9f833ebc6859 # v2.2.1
         with:
           gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           organization: timescale
@@ -87,7 +87,7 @@ jobs:
     if: github.event_name == 'issues' && github.event.action == 'labeled'
       && github.event.label.name == 'waiting-for-author'
     steps:
-      - uses: leonsteinhaeuser/project-beta-automations@6ad2dc04dc4ca680c7e2583e9503708bd454e6a2 # v2.0.0
+      - uses: leonsteinhaeuser/project-beta-automations@939000fb1900c9fc4f7b5058a09d9f833ebc6859 # v2.2.1
         with:
           gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           organization: timescale
@@ -183,7 +183,7 @@ jobs:
       - name: Move to waiting for engineering column
         if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false'
           && steps.extract_board_column.outputs.issue_board_column == 'Waiting for Author' }}
-        uses: leonsteinhaeuser/project-beta-automations@6ad2dc04dc4ca680c7e2583e9503708bd454e6a2 # v2.0.0
+        uses: leonsteinhaeuser/project-beta-automations@939000fb1900c9fc4f7b5058a09d9f833ebc6859 # v2.2.1
         with:
           gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           organization: timescale
