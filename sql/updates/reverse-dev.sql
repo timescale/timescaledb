@@ -119,3 +119,5 @@ CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_st
 DROP INDEX _timescaledb_internal.bgw_job_stat_history_execution_start_idx;
 DROP INDEX _timescaledb_internal.bgw_job_stat_history_job_id_execution_start_idx;
 
+ALTER TABLE _timescaledb_catalog.hypertable RESET (user_catalog_table);
+ALTER TABLE _timescaledb_catalog.chunk RESET (user_catalog_table);

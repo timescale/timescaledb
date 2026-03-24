@@ -99,3 +99,9 @@ CREATE INDEX IF NOT EXISTS bgw_job_stat_history_job_id_execution_start_idx
 
 DROP INDEX IF EXISTS _timescaledb_internal.bgw_job_stat_history_job_id_idx;
 
+--
+-- Include the `hypertable` and the `chunk` catalog tables in the historical
+-- snapshot during logical replication
+--
+ALTER TABLE _timescaledb_catalog.hypertable SET (user_catalog_table = true);
+ALTER TABLE _timescaledb_catalog.chunk SET (user_catalog_table = true);
