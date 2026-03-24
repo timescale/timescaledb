@@ -1,0 +1,1 @@
+Implements: #9437 Allow running compression as part of refresh policy for compressed continuous aggregates
