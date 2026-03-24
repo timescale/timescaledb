@@ -1254,7 +1254,7 @@ invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
 	int32 cagg_hyper_id = cagg->data.mat_hypertable_id;
 
 	ScanIterator iterator;
-	cagg_invalidations_scan_by_hypertable_init(&iterator, cagg_hyper_id, AccessShareLock);
+	cagg_invalidations_scan_by_hypertable_init(&iterator, cagg_hyper_id, AccessShareLock, PG_INT64_MAX);
 
 	int64 watermark = ts_cagg_watermark_get(cagg_hyper_id);
 	ts_scanner_foreach(&iterator)
