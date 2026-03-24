@@ -505,6 +505,28 @@ WHERE materialization_id = (
   WHERE user_view_name = 'conditions_by_hour')
 ORDER BY 1;
 
+--run another refresh to verify that the 2 inval entries for [ 2025-07-04 12:00 , ..] are consumed
+CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 12:00:00+00'::timestamptz, '2025-07-04 14:00:00+00'::timestamptz);
+SELECT
+  _timescaledb_functions.to_timestamp(lowest_modified_value) AS start,
+  _timescaledb_functions.to_timestamp(greatest_modified_value) AS end
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'conditions_by_hour')
+ORDER BY 1;
+
+--run another refresh to verify that the 2 inval entries for [ ..., 2025-07-04 09:59.59 , ..] are consumed
+CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 06:00:00+00'::timestamptz, '2025-07-04 10:00:00+00'::timestamptz);
+SELECT
+  _timescaledb_functions.to_timestamp(lowest_modified_value) AS start,
+  _timescaledb_functions.to_timestamp(greatest_modified_value) AS end
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'conditions_by_hour')
+ORDER BY 1;
+
 
 SET timezone TO :'original_timezone';
 
