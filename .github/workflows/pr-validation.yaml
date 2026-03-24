@@ -25,11 +25,6 @@ jobs:
       with:
         ref: ${{ github.event.pull_request.head.sha }}
         fetch-depth: 0
-    - name: Dump GitHub context (for debugging)
-      env:
-        GITHUB_CONTEXT: ${{ toJSON(github) }}
-      run: |
-        echo "GITHUB_CONTEXT: $GITHUB_CONTEXT"
     - name: Check number of commits
       shell: bash --norc --noprofile {0}
       env:
