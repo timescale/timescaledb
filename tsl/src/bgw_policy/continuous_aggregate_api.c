@@ -38,6 +38,8 @@
 #define DEFAULT_MAX_BATCHES_PER_EXECUTION 0
 /* Default refresh newest first is true, which means from newest data to the oldest */
 #define DEFAULT_REFRESH_NEWEST_FIRST true
+/* Default compress after refresh is true, which means compression runs after refresh */
+#define DEFAULT_COMPRESS_AFTER_REFRESH false
 
 int32
 policy_continuous_aggregate_get_mat_hypertable_id(const Jsonb *config)
@@ -184,6 +186,19 @@ policy_refresh_cagg_get_refresh_newest_first(const Jsonb *config)
 
 	if (!found)
 		res = DEFAULT_REFRESH_NEWEST_FIRST; /* default value */
+
+	return res;
+}
+
+bool
+policy_refresh_cagg_get_compress_after_refresh(const Jsonb *config)
+{
+	bool found;
+	bool res =
+		ts_jsonb_get_bool_field(config, POL_REFRESH_CONF_KEY_COMPRESS_AFTER_REFRESH, &found);
+
+	if (!found)
+		res = DEFAULT_COMPRESS_AFTER_REFRESH; /* default value */
 
 	return res;
 }
