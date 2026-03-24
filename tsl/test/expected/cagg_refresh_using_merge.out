@@ -661,7 +661,8 @@ ORDER BY 1;
             start             |                 end                 |      start_raw       |       end_raw       
 ------------------------------+-------------------------------------+----------------------+---------------------
  -infinity                    | Fri Jul 04 00:59:59.999999 2025 UTC | -9223372036854775808 |    1751590799999999
- Fri Jul 04 06:00:00 2025 UTC | Fri Jul 04 10:59:59.999999 2025 UTC |     1751608800000000 |    1751626799999999
+ Fri Jul 04 06:00:00 2025 UTC | Fri Jul 04 09:59:59.999999 2025 UTC |     1751608800000000 |    1751623199999999
+ Fri Jul 04 10:00:00 2025 UTC | Fri Jul 04 10:59:59.999999 2025 UTC |     1751623200000000 |    1751626799999999
  Fri Jul 04 12:00:00 2025 UTC | infinity                            |     1751630400000000 | 9223372036854775807
 
 -- generate invalidations that will overlap the force refresh range,
@@ -693,7 +694,41 @@ ORDER BY 1;
 ------------------------------+-------------------------------------
  -infinity                    | Fri Jul 04 00:59:59.999999 2025 UTC
  Fri Jul 04 06:00:00 2025 UTC | Fri Jul 04 09:59:59.999999 2025 UTC
+ Fri Jul 04 09:00:00 2025 UTC | Fri Jul 04 09:59:59.999999 2025 UTC
  Fri Jul 04 12:00:00 2025 UTC | infinity
+ Fri Jul 04 12:00:00 2025 UTC | Fri Jul 04 12:59:59.999999 2025 UTC
+
+--run another refresh to verify that the 2 inval entries for [ 2025-07-04 12:00 , ..] are consumed
+CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 12:00:00+00'::timestamptz, '2025-07-04 14:00:00+00'::timestamptz);
+SELECT
+  _timescaledb_functions.to_timestamp(lowest_modified_value) AS start,
+  _timescaledb_functions.to_timestamp(greatest_modified_value) AS end
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'conditions_by_hour')
+ORDER BY 1;
+            start             |                 end                 
+------------------------------+-------------------------------------
+ -infinity                    | Fri Jul 04 00:59:59.999999 2025 UTC
+ Fri Jul 04 06:00:00 2025 UTC | Fri Jul 04 09:59:59.999999 2025 UTC
+ Fri Jul 04 09:00:00 2025 UTC | Fri Jul 04 09:59:59.999999 2025 UTC
+ Fri Jul 04 14:00:00 2025 UTC | infinity
+
+--run another refresh to verify that the 2 inval entries for [ ..., 2025-07-04 09:59.59 , ..] are consumed
+CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 06:00:00+00'::timestamptz, '2025-07-04 10:00:00+00'::timestamptz);
+SELECT
+  _timescaledb_functions.to_timestamp(lowest_modified_value) AS start,
+  _timescaledb_functions.to_timestamp(greatest_modified_value) AS end
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'conditions_by_hour')
+ORDER BY 1;
+            start             |                 end                 
+------------------------------+-------------------------------------
+ -infinity                    | Fri Jul 04 00:59:59.999999 2025 UTC
+ Fri Jul 04 14:00:00 2025 UTC | infinity
 
 SET timezone TO :'original_timezone';
 -- Monthly buckets
