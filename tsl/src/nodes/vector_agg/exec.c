@@ -679,9 +679,16 @@ static void
 vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchState *batch_state,
 								   List *quals)
 {
+	if (list_length(quals) == 0)
+	{
+		/* The remaining code counts on the quals list being non-empty. */
+		return;
+	}
+
 	Assert(batch_state->next_batch_row == 0);
 
 	const int num_words = (batch_state->total_batch_rows + 63) / 64;
+	int passing_rows = 0;
 	ListCell *lc;
 	foreach (lc, quals)
 	{
@@ -704,18 +711,17 @@ vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchS
 		}
 		else if (single_qual_result.decompression_type == DT_Scalar)
 		{
-			if (!single_qual_result.buffers[0] ||
-				!DatumGetBool(PointerGetDatum(single_qual_result.buffers[1])))
+			/*
+			 * The entire batch is either filtered out or passes.
+			 */
+			const bool isnull = single_qual_result.buffers[0];
+			const bool value = DatumGetBool(PointerGetDatum(single_qual_result.buffers[1]));
+			if (isnull || !value)
 			{
-				/*
-				 * The entire batch is filtered out.
-				 */
 				batch_state->vector_qual_result =
 					MemoryContextAllocZero(batch_state->per_batch_context,
 										   num_words * sizeof(*batch_state->vector_qual_result));
-				break;
 			}
-			/* All rows pass. */
 		}
 		else
 		{
@@ -724,12 +730,19 @@ vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchS
 				   single_qual_result.decompression_type);
 		}
 
-		const int passing_rows =
+		passing_rows =
 			arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
+
 		if (passing_rows == 0)
 		{
-			batch_state->next_batch_row = batch_state->total_batch_rows;
+			/* Early exit when all rows are already filtered out. */
+			break;
 		}
+	}
+
+	if (passing_rows == 0)
+	{
+		batch_state->next_batch_row = batch_state->total_batch_rows;
 	}
 }
 

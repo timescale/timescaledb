@@ -171,7 +171,6 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 	 */
 	if (expr == NULL)
 	{
-		fprintf(stderr, "%d\n", __LINE__);
 		return true;
 	}
 
@@ -211,7 +210,6 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 			if (var->varattno <= 0)
 			{
 				/* Can't work with special attributes like tableoid. */
-				fprintf(stderr, "%d\n", __LINE__);
 				return false;
 			}
 
@@ -235,17 +233,14 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 			{
 				if (!is_vector_expr(vqinfo, (Expr *) lfirst(lc)))
 				{
-					fprintf(stderr, "%d\n", __LINE__);
 					return false;
 				}
 			}
 
-			fprintf(stderr, "%d\n", __LINE__);
 			return true;
 		}
 
 		default:
-			fprintf(stderr, "%d\n", __LINE__);
 			return false;
 	}
 }
@@ -637,14 +632,14 @@ insert_vector_agg(Plan *plan, void *context)
 		return plan;
 	}
 
-	my_print(childplan->qual);
 	List *resolved_child_qual =
 		(List *) ts_resolve_outer_special_vars((Node *) childplan->qual, childplan);
-	my_print(resolved_child_qual);
 	if (!is_vector_expr(&vqinfo, (Expr *) resolved_child_qual))
 	{
-		/* Can't do vectorized aggregation if we have Postgres quals. */
-		fprintf(stderr, "%d\n", __LINE__);
+		/*
+		 * Can't do vectorized aggregation if we have Postgres quals that we
+		 * cannot evaluate in the columnar pipeline.
+		 */
 		return plan;
 	}
 
@@ -736,8 +731,6 @@ insert_vector_agg(Plan *plan, void *context)
 	Plan *vector_agg_plan =
 		vector_agg_plan_create(childplan, agg, resolved_targetlist, grouping_type);
 	castNode(CustomScan, vector_agg_plan)->custom_exprs = resolved_child_qual;
-
-	// childplan->qual = resolved_
 
 	if (agg->aggsplit == AGGSPLIT_SIMPLE)
 	{
