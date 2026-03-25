@@ -1078,10 +1078,10 @@ cagg_invalidation_window_end_filter(const TupleInfo *ti, void *data)
 {
 	int64 window_end = *(const int64 *) data;
 	bool isnull;
-	Datum greatest = slot_getattr(
-		ti->slot,
-		Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value,
-		&isnull);
+	Datum greatest =
+		slot_getattr(ti->slot,
+					 Anum_continuous_aggs_materialization_invalidation_log_greatest_modified_value,
+					 &isnull);
 
 	Assert(!isnull);
 	return DatumGetInt64(greatest) < window_end ? SCAN_INCLUDE : SCAN_EXCLUDE;
@@ -1111,12 +1111,11 @@ cagg_invalidation_window_end_filter(const TupleInfo *ti, void *data)
  * So Txn2 can no longer attempt to work on entries outside its refresh window.
  * When this transaction commits, all new entries written by it will be visible to
  * refresh processes in Txn 3.
- * 
+ *
  */
 InvalidationStore *
 collect_and_delete_cagg_invalidations_in_window(const ContinuousAgg *cagg,
-												const InternalTimeRange *refresh_window,
-												bool force)
+												const InternalTimeRange *refresh_window, bool force)
 {
 	ScanIterator iterator;
 	int64 window_end = refresh_window->end;
@@ -1134,8 +1133,7 @@ collect_and_delete_cagg_invalidations_in_window(const ContinuousAgg *cagg,
 		tupdesc = CreateTupleDescCopy(RelationGetDescr(rel));
 		table_close(rel, AccessShareLock);
 
-		int64 inclusive_end =
-			ts_time_saturating_sub(refresh_window->end, 1, refresh_window->type);
+		int64 inclusive_end = ts_time_saturating_sub(refresh_window->end, 1, refresh_window->type);
 		HeapTuple forced_tuple = create_invalidation_tup(tupdesc,
 														 cagg->data.mat_hypertable_id,
 														 refresh_window->start,
@@ -1254,7 +1252,10 @@ invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
 	int32 cagg_hyper_id = cagg->data.mat_hypertable_id;
 
 	ScanIterator iterator;
-	cagg_invalidations_scan_by_hypertable_init(&iterator, cagg_hyper_id, AccessShareLock, PG_INT64_MAX);
+	cagg_invalidations_scan_by_hypertable_init(&iterator,
+											   cagg_hyper_id,
+											   AccessShareLock,
+											   PG_INT64_MAX);
 
 	int64 watermark = ts_cagg_watermark_get(cagg_hyper_id);
 	ts_scanner_foreach(&iterator)

@@ -148,6 +148,7 @@ step "CreateMatView2_Begin" {
 step "CreateMatView2_Commit" { COMMIT; }
 
 #only one refresh
+#refresh2 will error out instead of completing because it detects that "Refresh" is running on the same range, same cagg
 permutation "LockInvalThrEx" "Refresh" "Refresh2" (Refresh) "Refresh3" (Refresh, Refresh2) "UnlockInvalThrEx"
 
 #refresh and insert do not block each other once refresh is out of the

@@ -114,10 +114,9 @@ ts_cagg_jobs_refresh_ranges_lock_and_register(int32 materialization_id, int64 st
 	 * PostgreSQL requires at least AccessShareLock on each relation opened,
 	 * including indexes.
 	 */
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGGS_JOBS_REFRESH_RANGES,
-								RowExclusiveLock,
-								CurrentMemoryContext);
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_JOBS_REFRESH_RANGES,
+													RowExclusiveLock,
+													CurrentMemoryContext);
 	init_scan_by_materialization_id(&iterator, materialization_id);
 
 	/*

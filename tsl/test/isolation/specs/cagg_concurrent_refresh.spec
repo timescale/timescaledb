@@ -143,13 +143,38 @@ setup
     END;
     $$ LANGUAGE plpgsql;
 
+    CREATE OR REPLACE PROCEDURE killpids() AS
+    $$
+    DECLARE
+        max_attempts INT := 100; -- 2 seconds total (100 * 20ms), enough for 500ms lock_timeout + buffer
+        attempts INT := 0;
+        remaining_pids INT;
+    BEGIN
+        PERFORM pg_terminate_backend(pid) FROM cancelpid;
+        WHILE EXISTS (SELECT FROM pg_stat_activity WHERE pid IN (SELECT pid FROM cancelpid)) AND attempts < max_attempts
+        LOOP
+            PERFORM pg_sleep(0.02);
+            attempts := attempts + 1;
+        END LOOP;
+        -- Check if any processes are still active after timeout
+        SELECT COUNT(*) INTO remaining_pids
+        FROM pg_stat_activity
+        WHERE pid IN (SELECT pid FROM cancelpid) AND state = 'active';
+        IF remaining_pids > 0 THEN
+            RAISE EXCEPTION 'Timeout waiting for % process(es) to become inactive after cancellation', remaining_pids;
+        END IF;
+        DELETE FROM cancelpid;
+    END;
+    $$ LANGUAGE plpgsql;
+
+
     CREATE OR REPLACE VIEW pending_materialization_ranges AS
     SELECT
         c.user_view_name,
-        m.lowest_modified_value,
-        m.greatest_modified_value
+        m.start_range,
+        m.end_range
     FROM
-        _timescaledb_catalog.continuous_aggs_materialization_ranges m
+        _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges m
         LEFT JOIN _timescaledb_catalog.continuous_agg c on c.mat_hypertable_id = m.materialization_id
     ORDER BY
         1, 2, 3;
@@ -191,13 +216,13 @@ teardown {
     DROP TABLE cancelpid;
 }
 
-# Waitpoint for cagg invalidation logs
-session "WP_after"
-step "WP_after_enable"
+# Waitpoint at the start of Txn3 (after Txn2 commits the cagg invalidation log processing)
+session "WP_before_txn3_start"
+step "WP_before_txn3_start_enable"
 {
     SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
 }
-step "WP_after_release"
+step "WP_before_txn3_start_release"
 {
     SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
 }
@@ -239,7 +264,9 @@ step "R1_refresh2"
 {
     CALL refresh_continuous_aggregate('cond_10', 30, 120);
 }
-step "R1_drop"
+
+session "D1"
+step "D1_drop"
 {
     DROP MATERIALIZED VIEW cond_10;
 }
@@ -458,6 +485,11 @@ step "K1_cancelpid"
     CALL cancelpids();
 }
 
+session "K2"
+step "K2_kill_pids"
+{
+    CALL killpids();
+}
 ####################################################################
 #
 # Tests for concurrent updates to the invalidation threshold (first
@@ -492,9 +524,9 @@ permutation "R3_refresh" "L2_read_lock_threshold_table" "R1_refresh" "L2_read_un
 # Interleave two refreshes that are overlapping (one simulated)
 permutation "L3_lock_cagg_table" "R1_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
-# R1 and R2 queued to refresh
-# TODO: pending materialization ranges not populated yet
-#permutation "L3_lock_cagg_table" "R1_refresh" "R2_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
+# R1 blocked by L3 (share update exlusive lock on the cagg) while keeping the register on the range [25,70)
+# R2 attempted to refresh the overlaping range of [35,62] and was rejected with an error.
+permutation "L3_lock_cagg_table" "R1_refresh" "R2_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
 # R1 and R3 don't have overlapping refresh windows, but should serialize
 # anyway cause we're locking the cagg hypertable
@@ -510,20 +542,7 @@ permutation "R1_refresh" "R12_refresh"
 
 # CAgg invalidation logs processing in a separated transaction and the materialization
 # transaction can be executed concurrently
-# TODO: pending materialization ranges not populated yet
-#permutation "WP_after_enable" "R1_refresh"("WP_after_enable") "R6_pending_materialization_ranges" "R5_refresh"("WP_after_enable") "R6_pending_materialization_ranges" "WP_after_release" "R6_pending_materialization_ranges" "S1_select"
-
-# CAgg materialization phase (third trasaction of the refresh procedure) terminated by another session and then
-# refreshing again and make sure the pending ranges will be processed
-# TODO: pending materialization ranges not populated yet
-#permutation "WP_after_enable" "R6_pending_materialization_ranges" "R1_refresh"("WP_after_enable") "R3_refresh"("WP_after_enable") "K1_cancelpid"("R1_refresh") "R6_pending_materialization_ranges" "WP_after_release" "R13_refresh1"("K1_cancelpid") "R6_pending_materialization_ranges" "R13_refresh2" "R6_pending_materialization_ranges"
-
-# TODO: pending materialization ranges not populated yet
-#permutation "WP_after_enable" "R6_pending_materialization_ranges" "R1_refresh2"("WP_after_enable") "R3_refresh"("WP_after_enable") "K1_cancelpid"("R1_refresh2") "R6_pending_materialization_ranges" "WP_after_release" "R13_refresh3"("K1_cancelpid") "R6_pending_materialization_ranges" "R13_refresh5" "R6_pending_materialization_ranges" "R13_refresh4" "R6_pending_materialization_ranges"
-
-# When dropping a CAgg pending ranges left behind should be removed
-# TODO: pending materialization ranges not populated yet
-#permutation "WP_after_enable" "R6_pending_materialization_ranges" "R1_refresh"("WP_after_enable") "K1_cancelpid"("R1_refresh") "R6_pending_materialization_ranges" "WP_after_release" "R1_drop" "R6_pending_materialization_ranges_orphan"
+permutation "WP_before_txn3_start_enable" "R1_refresh"("WP_before_txn3_start_enable") "R6_pending_materialization_ranges" "R5_refresh"("WP_before_txn3_start_enable") "R6_pending_materialization_ranges" "WP_before_txn3_start_release" "R6_pending_materialization_ranges" "S1_select"
 
 # R3 should wait for R1 to finish because there are cagg invalidation rows locked
 permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "R3_refresh" "WP_before_release"
@@ -532,21 +551,17 @@ permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "R3_refresh" "WP
 # block each other in the third transaction (materialization)
 permutation "WP_after_materialization_enable" "R1_refresh"("WP_after_materialization_enable") "WP_after_materialization_release" "R3_refresh" 
 
-# Concurrent refresh on same cagg that generate overlapping  materialization range will error out. Only 1 can proceed
-# R1 and R2 have overlap refresh and  we add invalidations. So R2 materialization range will overlap with R1
-## R1 will process invalidation first, add cagg ranges, then wait. R2 should fail as it attempts to process an
-## overlapping range
-# TODO: overlapping ranges now wait on lock instead of erroring
-#permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "RI2_invalidation" "WP_after_enable" "WP_before_release" "R2_refresh" "WP_after_release"
-
 # Exact match overlap: R2 materializes [30, 70) which exactly matches R1's [30, 70)
-# TODO: overlapping ranges now wait on lock instead of erroring
-#permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "RI2_invalidation" "WP_after_enable" "WP_before_release" "R2_refresh_exact" "WP_after_release"
+# Should error
+permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "RI2_invalidation" "WP_before_txn3_start_enable" "WP_before_release" "R2_refresh_exact" "WP_before_txn3_start_release"
 
 # Left overlap: R2 materializes [20, 50) which overlaps R1's [30, 70) from the left
-# TODO: overlapping ranges now wait on lock instead of erroring
-#permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "RI2_invalidation" "WP_after_enable" "WP_before_release" "R2_refresh_left" "WP_after_release"
+# Should error
+permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "RI2_invalidation" "WP_before_txn3_start_enable" "WP_before_release" "R2_refresh_left" "WP_before_txn3_start_release"
 
 # Superset overlap: R2 materializes [20, 80) which fully contains R1's [30, 70)
-# TODO: overlapping ranges now wait on lock instead of erroring
-#permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "RI2_invalidation" "WP_after_enable" "WP_before_release" "R2_refresh_superset" "WP_after_release"
+# Should error
+permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "RI2_invalidation" "WP_before_txn3_start_enable" "WP_before_release" "R2_refresh_superset" "WP_before_txn3_start_release"
+
+# When dropping a CAgg pending ranges left behind should be removed
+permutation "WP_before_txn3_start_enable" "R6_pending_materialization_ranges" "R1_refresh"("WP_before_txn3_start_enable") "R6_pending_materialization_ranges" "K2_kill_pids" "R6_pending_materialization_ranges" "WP_before_txn3_start_release" "R6_pending_materialization_ranges" "D1_drop" "R6_pending_materialization_ranges_orphan"

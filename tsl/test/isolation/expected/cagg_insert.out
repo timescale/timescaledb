@@ -8,6 +8,7 @@ step Refresh3: CALL refresh_continuous_aggregate('continuous_view_2', NULL, 15);
 step UnlockInvalThrEx: ROLLBACK;
 step Refresh: <... completed>
 step Refresh2: <... completed>
+ERROR:  could not refresh continuous aggregate "continuous_view_1" due to a concurrent refresh
 step Refresh3: <... completed>
 
 starting permutation: Ib LockCagg1 I1 Refresh Ic UnLockCagg1

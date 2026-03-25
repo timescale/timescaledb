@@ -4,19 +4,8 @@ unused step name: R13_refresh2
 unused step name: R13_refresh3
 unused step name: R13_refresh4
 unused step name: R13_refresh5
-unused step name: R1_drop
 unused step name: R1_refresh2
-unused step name: R2_refresh
-unused step name: R2_refresh_exact
-unused step name: R2_refresh_left
-unused step name: R2_refresh_superset
-unused step name: R5_refresh
-unused step name: R6_pending_materialization_ranges
-unused step name: R6_pending_materialization_ranges_orphan
-unused step name: RI2_invalidation
-unused step name: WP_after_enable
-unused step name: WP_after_release
-Parsed test spec with 17 sessions
+Parsed test spec with 19 sessions
 
 starting permutation: R1_refresh S1_select R3_refresh S1_select L2_read_unlock_threshold_table L3_unlock_cagg_table L1_unlock_threshold_table
 step R1_refresh: 
@@ -331,6 +320,68 @@ step L2_read_unlock_threshold_table:
     ROLLBACK;
 
 
+starting permutation: L3_lock_cagg_table R1_refresh R2_refresh L3_unlock_cagg_table S1_select L1_unlock_threshold_table L2_read_unlock_threshold_table
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
+step L3_lock_cagg_table: 
+    SELECT lock_cagg('cond_10');
+
+lock_cagg
+---------
+         
+
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+ <waiting ...>
+step R2_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 35, 62);
+
+ERROR:  could not refresh continuous aggregate "cond_10" due to a concurrent refresh
+step L3_unlock_cagg_table: 
+    ROLLBACK;
+
+step R1_refresh: <... completed>
+step S1_select: 
+    SELECT bucket, avg_temp
+    FROM cond_10
+    ORDER BY 1;
+
+    SELECT * FROM cagg_bucket_count('cond_10');
+    SELECT h.table_name AS hypertable, it.watermark AS threshold
+    FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
+    _timescaledb_catalog.hypertable h
+    WHERE it.hypertable_id = h.id
+    ORDER BY 1;
+
+bucket|        avg_temp
+------+----------------
+     0|15.8888888888889
+    10|            14.2
+    20|            13.4
+    30|            18.3
+    40|16.0909090909091
+    50|            26.9
+    60|            18.9
+
+cagg_bucket_count
+-----------------
+                7
+
+hypertable |  threshold
+-----------+-----------
+conditions |         70
+conditions2|-2147483648
+
+step L1_unlock_threshold_table: 
+    ROLLBACK;
+
+step L2_read_unlock_threshold_table: 
+    ROLLBACK;
+
+
 starting permutation: L3_lock_cagg_table R1_refresh R3_refresh L3_unlock_cagg_table S1_select L1_unlock_threshold_table L2_read_unlock_threshold_table
 R5: LOG:  statement: 
     SET SESSION lock_timeout = '500ms';
@@ -469,6 +520,99 @@ step R12_refresh:
     CALL refresh_continuous_aggregate('cond2_10', 25, 70);
 
 
+starting permutation: WP_before_txn3_start_enable R1_refresh R6_pending_materialization_ranges R5_refresh R6_pending_materialization_ranges WP_before_txn3_start_release R6_pending_materialization_ranges S1_select
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
+L1: WARNING:  there is already a transaction in progress
+L2: WARNING:  there is already a transaction in progress
+L3: WARNING:  there is already a transaction in progress
+step WP_before_txn3_start_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+ <waiting ...>
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|start_range|end_range
+--------------+-----------+---------
+cond_10       |         30|       70
+
+R5: LOG:  statement: 
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
+
+step R5_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
+ <waiting ...>
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|start_range|end_range
+--------------+-----------+---------
+cond_10       |         30|       70
+cond_10       |         70|      100
+
+step WP_before_txn3_start_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step R1_refresh: <... completed>
+R5: DEBUG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 70, 100 ]
+R5: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R5: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step R5_refresh: <... completed>
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|start_range|end_range
+--------------+-----------+---------
+
+step S1_select: 
+    SELECT bucket, avg_temp
+    FROM cond_10
+    ORDER BY 1;
+
+    SELECT * FROM cagg_bucket_count('cond_10');
+    SELECT h.table_name AS hypertable, it.watermark AS threshold
+    FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
+    _timescaledb_catalog.hypertable h
+    WHERE it.hypertable_id = h.id
+    ORDER BY 1;
+
+bucket|        avg_temp
+------+----------------
+     0|15.8888888888889
+    10|            14.2
+    20|            13.4
+    30|            18.3
+    40|16.0909090909091
+    50|            26.9
+    60|            18.9
+    70|            24.6
+    80|            23.6
+    90|            21.3
+
+cagg_bucket_count
+-----------------
+               10
+
+hypertable |  threshold
+-----------+-----------
+conditions |        100
+conditions2|-2147483648
+
+
 starting permutation: WP_before_enable R1_refresh R3_refresh WP_before_release
 R5: LOG:  statement: 
     SET SESSION lock_timeout = '500ms';
@@ -530,4 +674,225 @@ debug_waitpoint_release
 step R1_refresh: <... completed>
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
+
+
+starting permutation: WP_before_enable R1_refresh RI2_invalidation WP_before_txn3_start_enable WP_before_release R2_refresh_exact WP_before_txn3_start_release
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
+L1: WARNING:  there is already a transaction in progress
+L2: WARNING:  there is already a transaction in progress
+L3: WARNING:  there is already a transaction in progress
+step WP_before_enable: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+ <waiting ...>
+step RI2_invalidation: 
+    INSERT INTO conditions VALUES  (20, 1000), (30, 1000), (40, 1000), (50, 1000), (60, 1000), (70, 1000), (79, 1000);
+
+step WP_before_txn3_start_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step WP_before_release: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step R2_refresh_exact: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+
+ERROR:  could not refresh continuous aggregate "cond_10" due to a concurrent refresh
+step WP_before_txn3_start_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step R1_refresh: <... completed>
+
+starting permutation: WP_before_enable R1_refresh RI2_invalidation WP_before_txn3_start_enable WP_before_release R2_refresh_left WP_before_txn3_start_release
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
+L1: WARNING:  there is already a transaction in progress
+L2: WARNING:  there is already a transaction in progress
+L3: WARNING:  there is already a transaction in progress
+step WP_before_enable: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+ <waiting ...>
+step RI2_invalidation: 
+    INSERT INTO conditions VALUES  (20, 1000), (30, 1000), (40, 1000), (50, 1000), (60, 1000), (70, 1000), (79, 1000);
+
+step WP_before_txn3_start_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step WP_before_release: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step R2_refresh_left: 
+    CALL refresh_continuous_aggregate('cond_10', 15, 55);
+
+ERROR:  could not refresh continuous aggregate "cond_10" due to a concurrent refresh
+step WP_before_txn3_start_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step R1_refresh: <... completed>
+
+starting permutation: WP_before_enable R1_refresh RI2_invalidation WP_before_txn3_start_enable WP_before_release R2_refresh_superset WP_before_txn3_start_release
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
+L1: WARNING:  there is already a transaction in progress
+L2: WARNING:  there is already a transaction in progress
+L3: WARNING:  there is already a transaction in progress
+step WP_before_enable: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+ <waiting ...>
+step RI2_invalidation: 
+    INSERT INTO conditions VALUES  (20, 1000), (30, 1000), (40, 1000), (50, 1000), (60, 1000), (70, 1000), (79, 1000);
+
+step WP_before_txn3_start_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step WP_before_release: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step R2_refresh_superset: 
+    CALL refresh_continuous_aggregate('cond_10', 15, 85);
+
+ERROR:  could not refresh continuous aggregate "cond_10" due to a concurrent refresh
+step WP_before_txn3_start_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step R1_refresh: <... completed>
+
+starting permutation: WP_before_txn3_start_enable R6_pending_materialization_ranges R1_refresh R6_pending_materialization_ranges K2_kill_pids R6_pending_materialization_ranges WP_before_txn3_start_release R6_pending_materialization_ranges D1_drop R6_pending_materialization_ranges_orphan
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
+L1: WARNING:  there is already a transaction in progress
+L2: WARNING:  there is already a transaction in progress
+L3: WARNING:  there is already a transaction in progress
+step WP_before_txn3_start_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|start_range|end_range
+--------------+-----------+---------
+
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+ <waiting ...>
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|start_range|end_range
+--------------+-----------+---------
+cond_10       |         30|       70
+
+step K2_kill_pids: 
+    CALL killpids();
+
+step R1_refresh: <... completed>
+FATAL:  terminating connection due to administrator command
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|start_range|end_range
+--------------+-----------+---------
+cond_10       |         30|       70
+
+step WP_before_txn3_start_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|start_range|end_range
+--------------+-----------+---------
+cond_10       |         30|       70
+
+D1: NOTICE:  drop cascades to table _timescaledb_internal._hyper_X_X_chunk
+step D1_drop: 
+    DROP MATERIALIZED VIEW cond_10;
+
+step R6_pending_materialization_ranges_orphan: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name IS NULL;
+
+user_view_name|start_range|end_range
+--------------+-----------+---------
+              |         30|       70
 

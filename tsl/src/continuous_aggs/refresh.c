@@ -715,14 +715,15 @@ cleanup_before_cagg_refresh_exit(const ContinuousAgg *cagg,
 	AtEOXact_GUC(false, cagg_spi_ctx->save_nestlevel);
 }
 
-static void continuous_agg_refresh_spi_setup_and_connect(CaggRefreshSpiContext *cagg_spi_ctx)
+static void
+continuous_agg_refresh_spi_setup_and_connect(CaggRefreshSpiContext *cagg_spi_ctx)
 {
 	bool nonatomic = ts_process_utility_is_context_nonatomic();
 
 	/* Reset the saved ProcessUtilityContext value promptly before
 	 * calling Prevent* checks so the potential unsupported (atomic)
 	 * value won't linger there in case of ereport exit.
-         * See: https://github.com/timescale/timescaledb/pull/7566
+	 * See: https://github.com/timescale/timescaledb/pull/7566
 	 */
 	ts_process_utility_context_reset();
 
@@ -825,7 +826,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 				 errdetail("The refresh window must cover at least one bucket of data."),
 				 errhint("Align the refresh window with the bucket"
 						 " time zone or use at least two buckets.")));
-
 
 	/*
 	 * Perform the refresh across three transactions.
