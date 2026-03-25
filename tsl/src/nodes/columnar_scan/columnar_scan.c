@@ -1144,11 +1144,14 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 
 	/* translate chunk_rel->baserestrictinfo */
-	pushdown_quals(root,
-				   compression_info->settings,
-				   chunk_rel,
-				   compressed_rel,
-				   add_uncompressed_part);
+	if (ts_guc_enable_columnar_scan_filter_pushdown)
+	{
+		columnar_scan_filter_pushdown(root,
+									  compression_info->settings,
+									  chunk_rel,
+									  compressed_rel,
+									  add_uncompressed_part);
+	}
 	/*
 	 * Estimate the size of the compressed chunk table.
 	 */

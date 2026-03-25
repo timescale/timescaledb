@@ -7,5 +7,6 @@
 
 #include <postgres.h>
 
-void pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chunk_rel,
-					RelOptInfo *compressed_rel, bool chunk_partial);
+void columnar_scan_filter_pushdown(PlannerInfo *root, CompressionSettings *settings,
+								   RelOptInfo *chunk_rel, RelOptInfo *compressed_rel,
+								   bool chunk_partial);

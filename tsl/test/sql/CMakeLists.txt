@@ -24,10 +24,14 @@ set(TEST_FILES
     compress_auto_sparse_index.sql
     compress_batch_size.sql
     compress_bitmap_scan.sql
+    compress_bloom_dml.sql
     compress_bloom_hash.sql
     compress_compbloom_basics.sql
     compress_compbloom_config.sql
+    compress_compbloom_index_add.sql
+    compress_compbloom_index_drop.sql
     compress_compbloom_manual_config.sql
+    compress_compbloom_upsert.sql
     compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
@@ -35,6 +39,7 @@ set(TEST_FILES
     compress_float8_corrupt.sql
     compress_unordered_sort.sql
     compress_qualpushdown_saop.sql
+    compress_qualpushdown_complex.sql
     compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
@@ -195,7 +200,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES cagg_planning.sql skip_scan_dagg.sql)
+  list(APPEND TEST_FILES cagg_planning.sql cagg_rewrites.sql skip_scan_dagg.sql)
   list(APPEND TEST_TEMPLATES plan_skip_scan_dagg.sql.in)
 endif()
 

@@ -9,12 +9,14 @@
 #include <access/tupconvert.h>
 #include <funcapi.h>
 
+#include "bmslist_utils.h"
 #include "cache.h"
 #include "chunk.h"
 
 typedef struct ChunkTupleRouting ChunkTupleRouting;
 typedef struct CompressionSettings CompressionSettings;
 typedef struct tuple_filtering_constraints tuple_filtering_constraints;
+typedef struct Bloom1Hasher Bloom1Hasher;
 
 /*
  * Bundle the ScanKey and the attribute numbers together
@@ -46,18 +48,44 @@ typedef struct CachedDecompressionState
 	ScanKeyWithAttnos index_scankeys;
 	ScanKeyWithAttnos mem_scankeys;
 	Oid index_relid;
+
+	/*
+	 * Bloom information for UPSERT bloom optimization.
+	 * This is the best bloom filter match for the chunk out
+	 * of the (potentially) multiple bloom filters for the
+	 * chunk, based on the number of columns in the bloom filter.
+	 */
+	char *bloom_column_name;
+	Bitmapset *bloom_insert_attnums;
+	AttrNumber upsert_bloom_attnum;
+	Bloom1Hasher *bloom_hasher;
+
+	/* Pre-computed bloom filter checks for UPDATE/DELETE (List of BloomFilterCheck) */
+	List *bloom_filters;
 } CachedDecompressionState;
 
 typedef struct SharedCounters
 {
 	/* Number of batches deleted */
 	int64 batches_deleted;
-	/* Number of batches filtered */
-	int64 batches_filtered;
-	/* Number of batches decompressed */
+	/* Number of batches decompressed into the uncompressed table */
 	int64 batches_decompressed;
 	/* Number of tuples decompressed */
 	int64 tuples_decompressed;
+	/* Number of batches scanned */
+	int64 batches_scanned;
+	/* Number of batches checked by bloom */
+	int64 batches_checked_by_bloom;
+	/* Number of batches pruned by bloom */
+	int64 batches_pruned_by_bloom;
+	/* Number of batches without bloom */
+	int64 batches_without_bloom;
+	/* Number of batches bloom false positives */
+	int64 batches_bloom_false_positives;
+	/* Number of batches skipped by pre-decompression filters */
+	int64 batches_filtered_compressed;
+	/* Number of batches filtered after decompression */
+	int64 batches_filtered_decompressed;
 } SharedCounters;
 
 typedef struct ChunkInsertState
@@ -97,6 +125,7 @@ typedef struct ChunkInsertState
 	bool chunk_partial;
 	bool columnstore_insert;
 	bool needs_partial;
+	bool created_compressed_chunk;
 
 	/* To speedup repeated calls of `decompress_batches_for_insert` */
 	CachedDecompressionState *cached_decompression_state;

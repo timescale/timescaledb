@@ -196,6 +196,19 @@ SHOW timescaledb.enable_vectorized_aggregation;
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                ->  Seq Scan on compress_hyper_2_2_chunk
 
+-- Correlated Subquery on single chunk
+:EXPLAIN SELECT FROM (SELECT 12 AS c7 FROM pg_class LIMIT 1) AS subq_1 WHERE EXISTS(SELECT FROM _timescaledb_internal._hyper_1_1_chunk WHERE subq_1.c7 = CASE WHEN value = 1 THEN NULL::int2 END);
+--- QUERY PLAN ---
+ Hash Join
+   Hash Cond: (CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END = (12))
+   ->  HashAggregate
+         Group Key: CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Seq Scan on compress_hyper_2_2_chunk
+   ->  Hash
+         ->  Limit
+               ->  Seq Scan on pg_class
+
 -- run queries with single chunk
 \set EXPLAIN ''
 \set ECHO errors
@@ -471,6 +484,19 @@ SHOW timescaledb.enable_vectorized_aggregation;
                ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
                            ->  Seq Scan on compress_hyper_2_4_chunk
+
+-- Correlated Subquery on single chunk
+:EXPLAIN SELECT FROM (SELECT 12 AS c7 FROM pg_class LIMIT 1) AS subq_1 WHERE EXISTS(SELECT FROM _timescaledb_internal._hyper_1_1_chunk WHERE subq_1.c7 = CASE WHEN value = 1 THEN NULL::int2 END);
+--- QUERY PLAN ---
+ Hash Join
+   Hash Cond: (CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END = (12))
+   ->  HashAggregate
+         Group Key: CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Seq Scan on compress_hyper_2_2_chunk
+   ->  Hash
+         ->  Limit
+               ->  Seq Scan on pg_class
 
 \set EXPLAIN ''
 \set ECHO errors

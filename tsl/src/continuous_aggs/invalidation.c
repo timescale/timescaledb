@@ -38,6 +38,7 @@
 #include "refresh.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 
 /*
  * Invalidation processing for continuous aggregates.
@@ -1012,7 +1013,8 @@ cut_cagg_invalidation_and_compute_remainder(const ContinuousAggInvalidationState
 
 	if (!IsValidInvalidation(&remainder))
 		remainder = new_remainder;
-	else if (!invalidation_entry_try_merge(&remainder, &new_remainder))
+	else if (IsValidInvalidation(&new_remainder) &&
+			 !invalidation_entry_try_merge(&remainder, &new_remainder))
 	{
 		save_invalidation_for_refresh(state, &remainder);
 		remainder = new_remainder;
@@ -1064,17 +1066,30 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 
 	MemoryContextReset(state->per_tuple_mctx);
 
-	/* Force refresh within the entire window */
+	/*
+	 * Force refresh within the entire window.
+	 *
+	 * At this point the refresh window has already been inscribed to bucket
+	 * boundaries by the caller, so [start, end) covers exactly the set of
+	 * buckets to materialize.
+	 *
+	 * Synthesize an invalidation covering [start, end-1] (inclusive) and use
+	 * it as the initial remainder.  We use end-1 because greatest_modified_value
+	 * is inclusive while refresh_window->end is exclusive.
+	 *
+	 * By seeding the remainder with this forced entry, any cagg invalidation
+	 * log entries whose inside parts overlap the window will be merged into it
+	 * in the scan loop below rather than being saved as separate entries.
+	 * The single merged remainder is then saved once at the end of this function.
+	 */
 	if (force)
 	{
-		mergedentry.hyper_id = state->cagg->data.mat_hypertable_id;
-		mergedentry.lowest_modified_value = refresh_window->start;
-		mergedentry.greatest_modified_value = refresh_window->end;
-		mergedentry.is_modified = false;
-		ItemPointerSet(&mergedentry.tid, InvalidBlockNumber, 0);
-
-		/* Jump to process remainder to properly cut the invalidation */
-		goto process_remainder;
+		remainder.hyper_id = state->cagg->data.mat_hypertable_id;
+		remainder.lowest_modified_value = refresh_window->start;
+		remainder.greatest_modified_value =
+			ts_time_saturating_sub(refresh_window->end, 1, refresh_window->type);
+		remainder.is_modified = false;
+		ItemPointerSetInvalid(&remainder.tid);
 	}
 
 	/* Process all invalidations for the continuous aggregate */
@@ -1115,7 +1130,6 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 
 	ts_scan_iterator_close(&iterator);
 
-process_remainder:
 	/* Handle the last (merged) invalidation */
 	if (IsValidInvalidation(&mergedentry))
 		remainder = cut_cagg_invalidation_and_compute_remainder(state,
@@ -1222,4 +1236,83 @@ invalidation_store_free(InvalidationStore *store)
 	FreeTupleDesc(store->tupdesc);
 	tuplestore_end(store->tupstore);
 	pfree(store);
+}
+
+bool
+invalidation_hypertable_has_invalidations(int32 hyper_id)
+{
+	bool found = false;
+	ScanIterator iterator;
+	hypertable_invalidation_scan_init(&iterator, hyper_id, AccessShareLock);
+	iterator.ctx.limit = 1; /* we only need to know if there is at least one */
+
+	ts_scan_iterator_start_scan(&iterator);
+	if (ts_scan_iterator_next(&iterator))
+		found = true;
+	ts_scan_iterator_close(&iterator);
+
+	return found;
+}
+
+bool
+invalidation_cagg_has_pending_mat_ranges(ContinuousAgg *cagg)
+{
+	bool found = false;
+	int32 cagg_hyper_id = cagg->data.mat_hypertable_id;
+
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
+													AccessShareLock,
+													CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(),
+										   CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
+										   CONTINUOUS_AGGS_MATERIALIZATION_RANGES_IDX);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_aggs_materialization_ranges_materialization_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(cagg_hyper_id));
+	iterator.ctx.limit = 1; /* we only need to know if there is at least one */
+
+	ts_scan_iterator_start_scan(&iterator);
+	if (ts_scan_iterator_next(&iterator))
+		found = true;
+	ts_scan_iterator_close(&iterator);
+
+	return found;
+}
+
+bool
+invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
+{
+	bool found = false;
+	int32 cagg_hyper_id = cagg->data.mat_hypertable_id;
+
+	ScanIterator iterator;
+	cagg_invalidations_scan_by_hypertable_init(&iterator, cagg_hyper_id, AccessShareLock);
+
+	int64 watermark = ts_cagg_watermark_get(cagg_hyper_id);
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti;
+		Invalidation logentry;
+
+		ti = ts_scan_iterator_tuple_info(&iterator);
+
+		invalidation_entry_set_from_cagg_invalidation(&logentry,
+													  ti,
+													  cagg->partition_type,
+													  cagg->bucket_function);
+		/* Entries which cannot be invalidations */
+		if (logentry.greatest_modified_value == INVAL_NEG_INFINITY ||
+			logentry.lowest_modified_value >= watermark)
+			continue;
+		else
+		{
+			found = true;
+			break;
+		}
+	}
+	ts_scan_iterator_close(&iterator);
+
+	return found;
 }
