@@ -51,7 +51,9 @@ get_input_offset(const DecompressContext *dcontext, const Var *var)
 			break;
 		}
 	}
-	Ensure(value_column_description != NULL, "aggregated compressed column not found");
+	Ensure(value_column_description != NULL,
+		   "compressed column %d not found in columnar aggregation",
+		   var->varattno);
 
 	Assert(value_column_description->type == COMPRESSED_COLUMN ||
 		   value_column_description->type == SEGMENTBY_COLUMN);
@@ -673,6 +675,64 @@ vector_agg_rescan(CustomScanState *node)
 	state->grouping->gp_reset(state->grouping);
 }
 
+static void
+vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchState *batch_state,
+								   List *quals)
+{
+	Assert(batch_state->next_batch_row == 0);
+
+	const int num_words = (batch_state->total_batch_rows + 63) / 64;
+	ListCell *lc;
+	foreach (lc, quals)
+	{
+		const CompressedColumnValues single_qual_result =
+			vector_slot_evaluate_expression(dcontext,
+											&batch_state->decompressed_scan_slot_data.base,
+											batch_state->vector_qual_result,
+											lfirst(lc));
+
+		if (single_qual_result.decompression_type == DT_ArrowBits)
+		{
+			uint64 *storage =
+				MemoryContextAlloc(batch_state->per_batch_context, num_words * sizeof(*storage));
+			batch_state->vector_qual_result =
+				arrow_combine_validity(num_words,
+									   storage,
+									   batch_state->vector_qual_result,
+									   single_qual_result.buffers[0],
+									   single_qual_result.buffers[1]);
+		}
+		else if (single_qual_result.decompression_type == DT_Scalar)
+		{
+			if (!single_qual_result.buffers[0] ||
+				!DatumGetBool(PointerGetDatum(single_qual_result.buffers[1])))
+			{
+				/*
+				 * The entire batch is filtered out.
+				 */
+				batch_state->vector_qual_result =
+					MemoryContextAllocZero(batch_state->per_batch_context,
+										   num_words * sizeof(*batch_state->vector_qual_result));
+				break;
+			}
+			/* All rows pass. */
+		}
+		else
+		{
+			Ensure(false,
+				   "unexpected decompression type %d for postgres qual result",
+				   single_qual_result.decompression_type);
+		}
+
+		const int passing_rows =
+			arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
+		if (passing_rows == 0)
+		{
+			batch_state->next_batch_row = batch_state->total_batch_rows;
+		}
+	}
+}
+
 /*
  * Get the next slot to aggregate for a compressed batch.
  *
@@ -727,6 +787,12 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 		}
 
 		compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
+
+		List *pg_quals = castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_exprs;
+		if (pg_quals && batch_state->next_batch_row < batch_state->total_batch_rows)
+		{
+			vector_agg_evaluate_postgres_quals(dcontext, batch_state, pg_quals);
+		}
 
 		/* If the entire batch is filtered out, then immediately read the next
 		 * one */
