@@ -191,7 +191,7 @@ RESET parallel_leader_participation;
 CREATE TABLE test3 (i int, j double precision, ts timestamp);
 SELECT create_hypertable('test3', 'i', chunk_time_interval => 200000);
 INSERT INTO test3 SELECT x, x+0.1, _timescaledb_functions.to_timestamp(x*1000)
-  FROM generate_series(0, 599999, 3) AS x;
+  FROM generate_series(0, 599999, 2) AS x;
 ANALYZE test3;
 
 SELECT show_chunks('test3') AS chunk3_1 LIMIT 1 OFFSET 0 \gset
