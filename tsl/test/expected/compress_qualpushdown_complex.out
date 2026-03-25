@@ -180,6 +180,7 @@ SELECT * FROM complex_pushdown WHERE
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Filter: (((segby = 1) AND (mm1 = 1)) OR ((other = 1) AND (blm2 = 10)))
    ->  Seq Scan on compress_hyper_2_2_chunk
+         Filter: (((segby = 1) AND (_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1)) OR _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2, 10))
 
 -- R3: we can relax the qual within a disjunction. segby and blm2 should be
 -- pushed down, but blm1 and mm1 should not
@@ -190,6 +191,7 @@ SELECT * FROM complex_pushdown WHERE
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Filter: (((segby = 1) AND ((mm1 % 10) = 1)) OR (((blm1 % 10) = 1) AND (blm2 = 10)))
    ->  Seq Scan on compress_hyper_2_2_chunk
+         Filter: ((segby = 1) OR _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2, 10))
 
 -- R3: another variation
 explain (buffers off, costs off)
@@ -199,6 +201,7 @@ SELECT * FROM complex_pushdown WHERE
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Filter: (((segby = 1) AND ((other % 10) = 1)) OR ((blm1 = 10) AND ((other % 10) = 2)))
    ->  Seq Scan on compress_hyper_2_2_chunk
+         Filter: ((segby = 1) OR _timescaledb_functions.bloom1_contains(regress-test-bloom_blm1, 10))
 
 -- R4: when we relax the qual within a disjunction, we cannot eliminate all quals
 explain (buffers off, costs off)
@@ -245,6 +248,7 @@ SELECT * FROM complex_pushdown WHERE
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Filter: (((segby = 1) AND (mm1 = 10)) OR ((blm2 = 10) AND (other = 11)))
    ->  Seq Scan on compress_hyper_2_2_chunk
+         Filter: (((segby = 1) AND (_ts_meta_min_2 <= 10) AND (_ts_meta_max_2 >= 10)) OR _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2, 10))
 
 explain (buffers off, costs off)
 SELECT * FROM complex_pushdown WHERE
@@ -253,6 +257,7 @@ SELECT * FROM complex_pushdown WHERE
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Filter: (((segby = 1) AND (blm2 = 10)) OR ((mm1 = 1) AND (other = 11)))
    ->  Seq Scan on compress_hyper_2_2_chunk
+         Filter: (((segby = 1) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_blm2, 10)) OR ((_ts_meta_min_2 <= 1) AND (_ts_meta_max_2 >= 1)))
 
 -- composite bloom index used in an equality qual
 explain (buffers off, costs off)
@@ -347,6 +352,7 @@ blm2 = segby and other in (1,2,3) or blm1 = segby;
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Filter: (((blm2 = segby) AND (other = ANY ('{1,2,3}'::integer[]))) OR (blm1 = segby))
    ->  Seq Scan on compress_hyper_2_2_chunk
+         Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_blm2, segby) OR _timescaledb_functions.bloom1_contains(regress-test-bloom_blm1, segby))
 
 explain (buffers off, costs off)
 SELECT * FROM complex_pushdown WHERE

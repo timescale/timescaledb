@@ -205,7 +205,7 @@ SELECT clear_hypertable_cache();
 :PREFIX UPDATE sample_table set sensor_id = 10 WHERE sensor_id > length(substring(version(),1,9));
 SET timescaledb.enable_chunk_skipping to ON;
 
--- IN/ANY is not supported for now
+-- IN/ANY uses bounding range [min, max] for chunk exclusion
 :PREFIX SELECT * FROM sample_table WHERE sensor_id IN (9, 10, 11);
 :PREFIX SELECT * FROM sample_table WHERE sensor_id = ANY(ARRAY[9, 10, 11]);
 

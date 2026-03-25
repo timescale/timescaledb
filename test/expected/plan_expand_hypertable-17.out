@@ -503,8 +503,8 @@ Multi AND
          ->  Seq Scan on _hyper_2_106_chunk
                Filter: (("time" < 10) AND ("time" < 100))
 
-\qecho Time dimension doesnt filter chunks when using IN/ANY with multiple arguments
-Time dimension doesnt filter chunks when using IN/ANY with multiple arguments
+\qecho Time dimension doesnt filter chunks when using non-equality IN/ANY with multiple arguments
+Time dimension doesnt filter chunks when using non-equality IN/ANY with multiple arguments
 :PREFIX SELECT * FROM hyper_w_space WHERE time < ANY(ARRAY[1,2]) ORDER BY value;
 --- QUERY PLAN ---
  Sort
@@ -536,6 +536,123 @@ Time dimension doesnt filter chunks when using IN/ANY with multiple arguments
                Filter: ("time" < ANY ('{1,2}'::integer[]))
          ->  Seq Scan on _hyper_2_115_chunk
                Filter: ("time" < ANY ('{1,2}'::integer[]))
+
+\qecho Time dimension chunk exclusion with IN/ANY equality uses bounding range
+Time dimension chunk exclusion with IN/ANY equality uses bounding range
+:PREFIX SELECT * FROM hyper WHERE time IN (5, 15) ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: hyper.value
+   ->  Append
+         ->  Seq Scan on _hyper_1_1_chunk
+               Filter: ("time" = ANY ('{5,15}'::bigint[]))
+         ->  Seq Scan on _hyper_1_2_chunk
+               Filter: ("time" = ANY ('{5,15}'::bigint[]))
+
+:PREFIX SELECT * FROM hyper WHERE time = ANY(ARRAY[5, 15, 25]) ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: hyper.value
+   ->  Append
+         ->  Seq Scan on _hyper_1_1_chunk
+               Filter: ("time" = ANY ('{5,15,25}'::integer[]))
+         ->  Seq Scan on _hyper_1_2_chunk
+               Filter: ("time" = ANY ('{5,15,25}'::integer[]))
+         ->  Seq Scan on _hyper_1_3_chunk
+               Filter: ("time" = ANY ('{5,15,25}'::integer[]))
+
+:PREFIX SELECT * FROM hyper WHERE time = ANY(ARRAY[25, 15, 5]) ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: hyper.value
+   ->  Append
+         ->  Seq Scan on _hyper_1_1_chunk
+               Filter: ("time" = ANY ('{25,15,5}'::integer[]))
+         ->  Seq Scan on _hyper_1_2_chunk
+               Filter: ("time" = ANY ('{25,15,5}'::integer[]))
+         ->  Seq Scan on _hyper_1_3_chunk
+               Filter: ("time" = ANY ('{25,15,5}'::integer[]))
+
+:PREFIX SELECT * FROM hyper WHERE time < 10 AND time = ANY(ARRAY[5, 15, 25]) ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.value
+   ->  Seq Scan on _hyper_1_1_chunk
+         Filter: (("time" < 10) AND ("time" = ANY ('{5,15,25}'::integer[])))
+
+:PREFIX SELECT * FROM hyper WHERE time = ANY(ARRAY[5, 15, 25]) AND time < 10 ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.value
+   ->  Seq Scan on _hyper_1_1_chunk
+         Filter: (("time" < 10) AND ("time" = ANY ('{5,15,25}'::integer[])))
+
+:PREFIX SELECT * FROM hyper_w_space WHERE time IN (5, 15) ORDER BY value;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: hyper_w_space.value
+   ->  Append
+         ->  Seq Scan on _hyper_2_103_chunk
+               Filter: ("time" = ANY ('{5,15}'::bigint[]))
+         ->  Seq Scan on _hyper_2_104_chunk
+               Filter: ("time" = ANY ('{5,15}'::bigint[]))
+         ->  Seq Scan on _hyper_2_105_chunk
+               Filter: ("time" = ANY ('{5,15}'::bigint[]))
+         ->  Seq Scan on _hyper_2_106_chunk
+               Filter: ("time" = ANY ('{5,15}'::bigint[]))
+         ->  Seq Scan on _hyper_2_107_chunk
+               Filter: ("time" = ANY ('{5,15}'::bigint[]))
+         ->  Seq Scan on _hyper_2_108_chunk
+               Filter: ("time" = ANY ('{5,15}'::bigint[]))
+         ->  Seq Scan on _hyper_2_109_chunk
+               Filter: ("time" = ANY ('{5,15}'::bigint[]))
+         ->  Seq Scan on _hyper_2_110_chunk
+               Filter: ("time" = ANY ('{5,15}'::bigint[]))
+
+:PREFIX SELECT * FROM metrics_timestamp WHERE time IN ('2000-01-05'::timestamp, '2000-01-15'::timestamp) ORDER BY time;
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
+         Index Cond: ("time" = ANY ('{"Wed Jan 05 00:00:00 2000","Sat Jan 15 00:00:00 2000"}'::timestamp without time zone[]))
+   ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
+         Index Cond: ("time" = ANY ('{"Wed Jan 05 00:00:00 2000","Sat Jan 15 00:00:00 2000"}'::timestamp without time zone[]))
+   ->  Index Only Scan Backward using _hyper_5_157_chunk_metrics_timestamp_time_idx on _hyper_5_157_chunk
+         Index Cond: ("time" = ANY ('{"Wed Jan 05 00:00:00 2000","Sat Jan 15 00:00:00 2000"}'::timestamp without time zone[]))
+
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time IN ('2000-01-05'::timestamptz, '2000-01-15'::timestamptz) ORDER BY time;
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+         Index Cond: ("time" = ANY ('{"Wed Jan 05 00:00:00 2000 PST","Sat Jan 15 00:00:00 2000 PST"}'::timestamp with time zone[]))
+   ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
+         Index Cond: ("time" = ANY ('{"Wed Jan 05 00:00:00 2000 PST","Sat Jan 15 00:00:00 2000 PST"}'::timestamp with time zone[]))
+   ->  Index Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
+         Index Cond: ("time" = ANY ('{"Wed Jan 05 00:00:00 2000 PST","Sat Jan 15 00:00:00 2000 PST"}'::timestamp with time zone[]))
+
+:PREFIX SELECT * FROM metrics_date WHERE time IN ('2000-01-05'::date, '2000-01-15'::date) ORDER BY time;
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on metrics_date
+   Order: metrics_date."time"
+   ->  Index Only Scan Backward using _hyper_8_171_chunk_metrics_date_time_idx on _hyper_8_171_chunk
+         Index Cond: ("time" = ANY ('{01-05-2000,01-15-2000}'::date[]))
+   ->  Index Only Scan Backward using _hyper_8_172_chunk_metrics_date_time_idx on _hyper_8_172_chunk
+         Index Cond: ("time" = ANY ('{01-05-2000,01-15-2000}'::date[]))
+   ->  Index Only Scan Backward using _hyper_8_173_chunk_metrics_date_time_idx on _hyper_8_173_chunk
+         Index Cond: ("time" = ANY ('{01-05-2000,01-15-2000}'::date[]))
+
+\qecho cross-type IN/ANY: timestamp to timestamptz column does not use bounding range (stable cast)
+cross-type IN/ANY: timestamp to timestamptz column does not use bounding range (stable cast)
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time IN ('2000-01-05'::timestamp, '2000-01-15'::timestamp) ORDER BY time;
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 3
+   ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+         Index Cond: ("time" = ANY (ARRAY[('Wed Jan 05 00:00:00 2000'::timestamp without time zone)::timestamp with time zone, ('Sat Jan 15 00:00:00 2000'::timestamp without time zone)::timestamp with time zone]))
+   ->  Index Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
+         Index Cond: ("time" = ANY (ARRAY[('Wed Jan 05 00:00:00 2000'::timestamp without time zone)::timestamp with time zone, ('Sat Jan 15 00:00:00 2000'::timestamp without time zone)::timestamp with time zone]))
 
 \qecho Time dimension chunk filtering works for ANY with single argument
 Time dimension chunk filtering works for ANY with single argument

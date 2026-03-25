@@ -112,8 +112,14 @@ explain (buffers off, costs off) select * from sparse where o in (1,2) and big2 
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((o = ANY ('{1,2}'::bigint[])) AND (big2 = 1))
-   ->  Seq Scan on compress_hyper_2_2_chunk
+   ->  Bitmap Heap Scan on compress_hyper_2_2_chunk
+         Recheck Cond: (((_ts_meta_min_1 <= '1'::bigint) AND (_ts_meta_max_1 >= '1'::bigint)) OR ((_ts_meta_min_1 <= '2'::bigint) AND (_ts_meta_max_1 >= '2'::bigint)))
          Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_big2, 1)
+         ->  BitmapOr
+               ->  Bitmap Index Scan on compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx
+                     Index Cond: ((_ts_meta_min_1 <= '1'::bigint) AND (_ts_meta_max_1 >= '1'::bigint))
+               ->  Bitmap Index Scan on compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx
+                     Index Cond: ((_ts_meta_min_1 <= '2'::bigint) AND (_ts_meta_max_1 >= '2'::bigint))
 
 explain (buffers off, costs off) select * from sparse where o = 1 and big2 in (1,2);
 --- QUERY PLAN ---
@@ -127,8 +133,14 @@ explain (buffers off, costs off) select * from sparse where o in (1,2) and big2 
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((o = ANY ('{1,2}'::bigint[])) AND (big2 = ANY ('{1,2}'::bigint[])))
-   ->  Seq Scan on compress_hyper_2_2_chunk
+   ->  Bitmap Heap Scan on compress_hyper_2_2_chunk
+         Recheck Cond: (((_ts_meta_min_1 <= '1'::bigint) AND (_ts_meta_max_1 >= '1'::bigint)) OR ((_ts_meta_min_1 <= '2'::bigint) AND (_ts_meta_max_1 >= '2'::bigint)))
          Filter: _timescaledb_functions.bloom1_contains_any(regress-test-bloom_big2, '{1,2}'::bigint[])
+         ->  BitmapOr
+               ->  Bitmap Index Scan on compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx
+                     Index Cond: ((_ts_meta_min_1 <= '1'::bigint) AND (_ts_meta_max_1 >= '1'::bigint))
+               ->  Bitmap Index Scan on compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx
+                     Index Cond: ((_ts_meta_min_1 <= '2'::bigint) AND (_ts_meta_max_1 >= '2'::bigint))
 
 -- segmentby = bloom
 explain (buffers off, costs off) select * from sparse where big1 = sby and value = 1;

@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
       
@@ -75,7 +75,7 @@ jobs:
 
     steps:
       - name: Checkout TimescaleDB
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       # git user config timescale-automation
       - run: |
@@ -112,7 +112,7 @@ jobs:
       # -------------------------------------------------------
       
       # Bump minor in main for minor releases
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: main
 
@@ -163,7 +163,7 @@ jobs:
       # -------------------------------------------------------
 
       # Generate the CHANGELOG and submit it in a separate PR
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ env.RELEASE_BRANCH }}
 
@@ -189,7 +189,7 @@ jobs:
           echo "* ✅ CHANGELOG: $PR_URL" >> $GITHUB_STEP_SUMMARY
 
       # Rework version.config and up & down grade scripts
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ env.RELEASE_BRANCH }}
       - name: Generate release artefacts
