@@ -658,7 +658,7 @@ WARNING:  column type "timestamp without time zone" used for "ts" does not follo
  (3,public,test3,t)
 
 INSERT INTO test3 SELECT x, x+0.1, _timescaledb_functions.to_timestamp(x*1000)
-  FROM generate_series(0, 599999, 2) AS x;
+  FROM generate_series(0, 599999, 10) AS x;
 ANALYZE test3;
 SELECT show_chunks('test3') AS chunk3_1 LIMIT 1 OFFSET 0 \gset
 SELECT show_chunks('test3') AS chunk3_2 LIMIT 1 OFFSET 1 \gset
@@ -676,44 +676,46 @@ ALTER TABLE :chunk3_3 SET (parallel_workers=2);
 -- Remaining: chunk2(non-partial), chunk3(partial).
 SET max_parallel_workers_per_gather TO 0;
 SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000;
- count  
---------
- 200000
+ count 
+-------
+ 40000
 
 SET max_parallel_workers_per_gather TO 2;
-explain SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
+SET enable_indexscan to OFF;
+:PREFIX SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
 --- QUERY PLAN ---
- Finalize Aggregate  (cost=4817.35..4817.36 rows=1 width=8)
-   ->  Gather  (cost=4817.13..4817.34 rows=2 width=8)
+ Finalize Aggregate
+   ->  Gather
          Workers Planned: 2
-         ->  Partial Aggregate  (cost=4817.13..4817.14 rows=1 width=8)
-               ->  Result  (cost=0.01..4462.96 rows=141668 width=8)
+         ->  Partial Aggregate
+               ->  Result
                      One-Time Filter: (length(version()) > 0)
-                     ->  Parallel Custom Scan (ChunkAppend) on test3  (cost=0.01..4462.96 rows=141668 width=8)
+                     ->  Parallel Custom Scan (ChunkAppend) on test3
                            Chunks excluded during startup: 1
-                           ->  Result  (cost=0.01..2887.01 rows=100000 width=8)
+                           ->  Result
                                  One-Time Filter: (length(version()) > 0)
-                                 ->  Seq Scan on _hyper_3_93_chunk  (cost=0.01..2887.01 rows=100000 width=8)
+                                 ->  Seq Scan on _hyper_3_93_chunk
                                        Filter: (i >= ((length(version()) * 0) + 200000))
-                           ->  Result  (cost=0.01..1574.51 rows=41667 width=8)
+                           ->  Result
                                  One-Time Filter: (length(version()) > 0)
-                                 ->  Parallel Seq Scan on _hyper_3_94_chunk  (cost=0.01..1574.51 rows=41667 width=8)
+                                 ->  Parallel Seq Scan on _hyper_3_94_chunk
                                        Filter: (i >= ((length(version()) * 0) + 200000))
 
 SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
- count  
---------
- 200000
+ count 
+-------
+ 40000
 
 SET parallel_leader_participation = off;
 SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
- count  
---------
- 200000
+ count 
+-------
+ 40000
 
 RESET parallel_leader_participation;
 DROP TABLE test3;
 RESET max_parallel_workers_per_gather;
+RESET enable_indexscan;
 ALTER TABLE :CHUNK1 RESET (parallel_workers);
 ALTER TABLE :CHUNK2 RESET (parallel_workers);
 RESET max_parallel_workers_per_gather;
