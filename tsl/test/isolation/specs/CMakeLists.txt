@@ -18,6 +18,7 @@ list(
   compression_conflicts_iso.spec
   cagg_insert.spec
   cagg_multi_iso.spec
+  cagg_concurrent_register.spec
   deadlock_drop_chunks_compress.spec
   deadlock_drop_index_vacuum.spec
   fk_hypertable_lock.spec

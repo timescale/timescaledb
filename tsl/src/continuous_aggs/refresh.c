@@ -795,14 +795,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		}
 	}
 
-	if (refresh_window.start >= refresh_window.end)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("refresh window too small"),
-				 errdetail("The refresh window must cover at least one bucket of data."),
-				 errhint("Align the refresh window with the bucket"
-						 " time zone or use at least two buckets.")));
-
 	/* If there is no other policy defined after this, the inscribed bucket calculated above
 	 * is correct. However, in the case of concurrent policies, if this isn't the last
 	 * policy defined then we should extend the end of the window to include the partial
@@ -825,6 +817,15 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 				ts_time_saturating_add(refresh_window.end, bucket_width - 1, refresh_window.type);
 		}
 	}
+
+	if (refresh_window.start >= refresh_window.end)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("refresh window too small"),
+				 errdetail("The refresh window must cover at least one bucket of data."),
+				 errhint("Align the refresh window with the bucket"
+						 " time zone or use at least two buckets.")));
+
 
 	/*
 	 * Perform the refresh across three transactions.
@@ -862,11 +863,14 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 													   MyProcPid))
 		ereport(ERROR,
 				(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
-				 errmsg("could not refresh continuous aggregate \"%s\"",
+				 errmsg("could not refresh continuous aggregate \"%s\" due to a concurrent refresh",
 						NameStr(cagg->data.user_view_name)),
 				 errdetail("A concurrent refresh on window [%s, %s) is already in progress.",
 						   ts_internal_to_time_string(refresh_window.start, refresh_window.type),
 						   ts_internal_to_time_string(refresh_window.end, refresh_window.type))));
+
+	/* Commit and Start a new transaction */
+	SPI_commit_and_chain();
 
 	/* Set the new invalidation threshold. Note that this only updates the
 	 * threshold if the new value is greater than the old one. Otherwise, the
