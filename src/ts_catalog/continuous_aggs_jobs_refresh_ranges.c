@@ -9,6 +9,7 @@
 #include <miscadmin.h>
 #include <storage/lmgr.h>
 #include <storage/procarray.h>
+#include <utils/snapmgr.h>
 
 #include "scan_iterator.h"
 #include "ts_catalog/catalog.h"
@@ -136,6 +137,14 @@ ts_cagg_jobs_refresh_ranges_lock_and_register(int32 materialization_id, int64 st
 								CurrentMemoryContext);
 	init_scan_by_materialization_id(&iterator, materialization_id);
 
+	/*
+	 * Use the latest snapshot so that we can see rows committed by the
+	 * transaction that previously held the ShareUpdateExclusiveLock.
+	 * Without this, our scan would use the statement snapshot taken before
+	 * we blocked on the lock, missing their inserts entirely.
+	 */
+	iterator.ctx.snapshot = RegisterSnapshot(GetLatestSnapshot());
+
 	bool overlap_found = false;
 
 	ts_scanner_foreach(&iterator)
@@ -179,6 +188,7 @@ ts_cagg_jobs_refresh_ranges_lock_and_register(int32 materialization_id, int64 st
 		}
 	}
 	ts_scan_iterator_close(&iterator);
+	UnregisterSnapshot(iterator.ctx.snapshot);
 
 	if (overlap_found)
 		return false;
