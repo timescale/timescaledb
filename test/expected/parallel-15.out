@@ -656,7 +656,7 @@ WARNING:  column type "timestamp without time zone" used for "ts" does not follo
  (3,public,test3,t)
 
 INSERT INTO test3 SELECT x, x+0.1, _timescaledb_functions.to_timestamp(x*1000)
-  FROM generate_series(0, 599999, 5) AS x;
+  FROM generate_series(0, 599999, 10) AS x;
 ANALYZE test3;
 SELECT show_chunks('test3') AS chunk3_1 LIMIT 1 OFFSET 0 \gset
 SELECT show_chunks('test3') AS chunk3_2 LIMIT 1 OFFSET 1 \gset
@@ -676,9 +676,10 @@ SET max_parallel_workers_per_gather TO 0;
 SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000;
  count 
 -------
- 80000
+ 40000
 
 SET max_parallel_workers_per_gather TO 2;
+SET enable_indexscan to OFF;
 :PREFIX SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
 --- QUERY PLAN ---
  Finalize Aggregate
@@ -701,17 +702,18 @@ SET max_parallel_workers_per_gather TO 2;
 SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
  count 
 -------
- 80000
+ 40000
 
 SET parallel_leader_participation = off;
 SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
  count 
 -------
- 80000
+ 40000
 
 RESET parallel_leader_participation;
 DROP TABLE test3;
 RESET max_parallel_workers_per_gather;
+RESET enable_indexscan;
 ALTER TABLE :CHUNK1 RESET (parallel_workers);
 ALTER TABLE :CHUNK2 RESET (parallel_workers);
 RESET max_parallel_workers_per_gather;
