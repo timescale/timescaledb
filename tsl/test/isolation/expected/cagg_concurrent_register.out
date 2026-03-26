@@ -1,0 +1,96 @@
+unused step name: s1_run_cagg2_nonoverlap_refresh
+Parsed test spec with 5 sessions
+
+starting permutation: s2_insert_new_data_2020 s3_lock_before_register s1_run_cagg1_refresh s2_run_cagg2_overlap_refresh s4_enable_before_process_cagg_invalidations s3_release_after_register s5_show_running_jobs s4_release_before_process_cagg_invalidations
+step s2_insert_new_data_2020: 
+  INSERT INTO temperature
+    SELECT time, ceil(random() * 100)::int
+      FROM generate_series('2020-01-01 0:00:00+0'::timestamptz,
+                          '2020-01-07 00:59:59+0','1m') time;
+
+step s3_lock_before_register: 
+    BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+
+step s1_run_cagg1_refresh: 
+   CALL refresh_continuous_aggregate('cagg_1', '2020-01-01 00:00:00+00', '2020-01-03 00:00:00+00');
+ <waiting ...>
+step s2_run_cagg2_overlap_refresh: 
+   CALL refresh_continuous_aggregate('cagg_2', '2020-01-03 00:00:00+00', '2020-01-05 00:00:00+00');
+ <waiting ...>
+step s4_enable_before_process_cagg_invalidations: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s3_release_after_register: 
+   ROLLBACK;
+
+step s5_show_running_jobs: 
+  SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+  FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+  JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+  ORDER BY ca.user_view_name;
+
+cagg_name|     start_range|       end_range
+---------+----------------+----------------
+cagg_1   |1577836800000000|1578009600000000
+cagg_2   |1578009600000000|1578182400000000
+
+step s4_release_before_process_cagg_invalidations: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_run_cagg1_refresh: <... completed>
+step s2_run_cagg2_overlap_refresh: <... completed>
+
+starting permutation: s2_insert_new_data_2020 s3_lock_before_register s1_run_cagg2_overlap_refresh s2_run_cagg2_overlap_refresh s4_enable_before_process_cagg_invalidations s3_release_after_register s5_show_running_jobs s4_release_before_process_cagg_invalidations
+step s2_insert_new_data_2020: 
+  INSERT INTO temperature
+    SELECT time, ceil(random() * 100)::int
+      FROM generate_series('2020-01-01 0:00:00+0'::timestamptz,
+                          '2020-01-07 00:59:59+0','1m') time;
+
+step s3_lock_before_register: 
+    BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+
+step s1_run_cagg2_overlap_refresh: 
+   CALL refresh_continuous_aggregate('cagg_2', '2020-01-01 00:00:00+00', '2020-01-07 00:00:00+00');
+ <waiting ...>
+step s2_run_cagg2_overlap_refresh: 
+   CALL refresh_continuous_aggregate('cagg_2', '2020-01-03 00:00:00+00', '2020-01-05 00:00:00+00');
+ <waiting ...>
+step s4_enable_before_process_cagg_invalidations: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s3_release_after_register: 
+   ROLLBACK;
+
+step s2_run_cagg2_overlap_refresh: <... completed>
+ERROR:  could not refresh continuous aggregate "cagg_2" due to a concurrent refresh
+step s5_show_running_jobs: 
+  SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+  FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+  JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+  ORDER BY ca.user_view_name;
+
+cagg_name|     start_range|       end_range
+---------+----------------+----------------
+cagg_2   |1577836800000000|1578355200000000
+
+step s4_release_before_process_cagg_invalidations: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_run_cagg2_overlap_refresh: <... completed>
