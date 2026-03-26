@@ -45,7 +45,7 @@ jobs:
         ${{ github.event_name == 'push'
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
-      run_installcheck: ${{ github.event_name == 'push' || steps.filters.outputs.windows-workflow == 'true' }}
+      run_installcheck: ${{ github.event_name == 'push' || steps.filter.outputs.windows-workflow == 'true' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
@@ -68,7 +68,7 @@ jobs:
           - { pg: 17, pg_version: "${{ needs.config.outputs.pg17_latest }}" }
           - { pg: 18, pg_version: "${{ needs.config.outputs.pg18_latest }}" }
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
-        pg_config: ["-cfsync=off -cstatement_timeout=60s"]
+        pg_config: ["-cfsync=off -cstatement_timeout=60s -clisten_addresses=0.0.0.0"]
         event_name: ["${{ github.event_name }}"]
         exclude:
           - versions: { pg: 15, pg_version: "${{ needs.config.outputs.pg15_latest }}" }
@@ -235,6 +235,7 @@ jobs:
         icacls ${{ env.TABLESPACE2 }} /grant runneradmin:F /T
         copy build_win/test/postgresql.conf ${{ env.PGDATA }}
         icacls . /grant runneradmin:F /T
+        Add-Content ${{ env.PGDATA }}\pg_hba.conf "host all all 0.0.0.0/0 trust"
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postmaster.log
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_isready -U postgres -d postgres --timeout=60
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
@@ -247,6 +248,8 @@ jobs:
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'SELECT pg_current_logfile();'
         echo "Data directory:"
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'SHOW data_directory;'
+
+        New-NetFirewallRule -DisplayName "Allow PG from WSL" -Direction Inbound -LocalPort 55432 -Protocol TCP -Action Allow
 
     - name: Install postgres for test runner
       if: needs.check_paths.outputs.run_installcheck == 'true'
@@ -266,7 +269,8 @@ jobs:
       run: |
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
-        cmake -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }}
+        WIN_HOST=$(ip route show default | awk '{print $3}')
+        cmake -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }} -DTEST_PGHOST=$WIN_HOST
 
         make -C build_wsl isolationchecklocal | tee -a installcheck.log
         make -C build_wsl regresschecklocal IGNORES="${IGNORES}" SKIPS="${SKIPS}" | tee -a installcheck.log
@@ -279,6 +283,7 @@ jobs:
         Remove-Item -Recurse ${{ env.PGDATA }}
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         copy build_win/tsl/test/postgresql.conf ${{ env.PGDATA }}
+        Add-Content ${{ env.PGDATA }}\pg_hba.conf "host all all 0.0.0.0/0 trust"
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log="postmaster.log"
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
