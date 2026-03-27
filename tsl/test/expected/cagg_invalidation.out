@@ -1587,7 +1587,7 @@ SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cagg_4hrs', NULL, NULL);
 LOG:  statement: CALL refresh_continuous_aggregate('cagg_4hrs', NULL, NULL);
 DEBUG:  hypertable 31 existing watermark >= new invalidation threshold 1577858400000000 1577851200000000
-DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4hrs" in window [ 4714-11-24 00:00:00+00 BC, 2020-01-01 08:00:00+00 ]
+DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4hrs" in window [ 4714-11-24 00:00:00+00 BC, 2020-01-01 04:00:00+00 ]
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_32"
 DEBUG:  building index "_hyper_32_94_chunk__materialized_hypertable_32_bucket_idx" on table "_hyper_32_94_chunk" serially
 DEBUG:  index "_hyper_32_94_chunk__materialized_hypertable_32_bucket_idx" can safely use deduplication
@@ -1621,7 +1621,7 @@ ORDER BY 1,2;
           low           |   high    
 ------------------------+-----------
  -infinity              | -infinity
- 2020-01-01 06:00:00+00 | infinity
+ 2020-01-01 04:00:00+00 | infinity
 
 DROP TABLE test_data CASCADE;
 NOTICE:  drop cascades to 4 other objects

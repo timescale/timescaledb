@@ -178,6 +178,48 @@ invalidation_threshold_scan_update(TupleInfo *ti, void *const data)
 			 current_invalidation_threshold,
 			 invthresh->computed_invalidation_threshold);
 		invthresh->computed_invalidation_threshold = current_invalidation_threshold;
+
+		/*
+		 * Floor the computed threshold to this cagg's own bucket boundary.
+		 * The stored threshold may have been set by a sibling cagg with a
+		 * different bucket width, so it may not be aligned to this cagg's
+		 * boundaries.
+		 *
+		 * Skip flooring when the threshold is at type max. That value means
+		 * data is inserted so near the type's maximum value that the end of
+		 * the bucket that holds the data is beyond the type's maximum value.
+		 * We skip flooring when the threshold is at type max to cover the last bucket.
+		 */
+		if (invthresh->computed_invalidation_threshold >
+				ts_time_get_min(invthresh->refresh_window->type) &&
+			invthresh->computed_invalidation_threshold <
+				ts_time_get_max(invthresh->refresh_window->type))
+		{
+			if (invthresh->cagg->bucket_function->bucket_fixed_interval)
+			{
+				NullableDatum offset = INIT_NULL_DATUM;
+				NullableDatum origin = INIT_NULL_DATUM;
+				fill_bucket_offset_origin(invthresh->cagg->bucket_function,
+										  invthresh->refresh_window->type,
+										  &offset,
+										  &origin);
+				int64 bucket_width =
+					ts_continuous_agg_fixed_bucket_width(invthresh->cagg->bucket_function);
+				invthresh->computed_invalidation_threshold =
+					ts_time_bucket_by_type_extended(bucket_width,
+													invthresh->computed_invalidation_threshold,
+													invthresh->refresh_window->type,
+													offset,
+													origin);
+			}
+			else
+			{
+				invthresh->computed_invalidation_threshold =
+					ts_compute_start_of_current_bucket_variable(
+						invthresh->computed_invalidation_threshold,
+						invthresh->cagg->bucket_function);
+			}
+		}
 	}
 
 	return SCAN_CONTINUE;
