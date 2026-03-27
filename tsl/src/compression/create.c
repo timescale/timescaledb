@@ -1443,6 +1443,12 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 		 get_namespace_name(get_func_namespace(default_segmentby_fn)),
 		 get_func_name(default_segmentby_fn),
 		 confidence);
+
+	if (result.data[0] != '\0')
+		ereport(NOTICE,
+				(errmsg("automatically selected \"%s\" as the default segmentby for columnstore",
+						result.data)));
+
 	pfree(result.data);
 	return column_res;
 }
