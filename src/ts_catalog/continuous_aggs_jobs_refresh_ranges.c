@@ -29,7 +29,7 @@ init_scan_by_materialization_id(ScanIterator *iterator, const int32 materializat
 								   Int32GetDatum(materialization_id));
 }
 
-TSDLLEXPORT void
+static void
 ts_cagg_jobs_refresh_ranges_insert(int32 materialization_id, int64 start_range, int64 end_range,
 								   int32 pid)
 {
@@ -55,23 +55,6 @@ ts_cagg_jobs_refresh_ranges_insert(int32 materialization_id, int64 start_range, 
 	ts_catalog_restore_user(&sec_ctx);
 
 	table_close(rel, NoLock);
-}
-
-TSDLLEXPORT void
-ts_cagg_jobs_refresh_ranges_delete_by_materialization_id(int32 materialization_id)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_JOBS_REFRESH_RANGES,
-													RowExclusiveLock,
-													CurrentMemoryContext);
-
-	init_scan_by_materialization_id(&iterator, materialization_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	}
-	ts_scan_iterator_close(&iterator);
 }
 
 TSDLLEXPORT void
