@@ -1074,17 +1074,15 @@ WHERE hypertable_id = (
 
 -- Now refresh cagg_4hrs with NULL,NULL.
 -- cagg_4hrs computes its own threshold = 04:00, but stored threshold = 06:00 > 04:00,
--- so the stored (misaligned) value is used as window_end instead.
--- BUG:   window_end = 2020-01-01 06:00 UTC (stored threshold, mid-bucket for cagg_4hrs)
---        -> materializes bucket [00:00, 04:00) but leaves residual at misaligned 06:00
--- FIXED: window_end = 2020-01-01 04:00 UTC (cagg_4hrs bucket boundary)
+-- so the stored (misaligned) value is used but capped to the start of the current bucket of cagg_4hrs,
+-- which is 2020-01-01 04:00 UTC.
 SET client_min_messages TO DEBUG1;
 CALL refresh_continuous_aggregate('cagg_4hrs', NULL, NULL);
 RESET client_min_messages;
 
 -- Show invalidations left in cagg_4hrs's invalidation log,
 -- BUG:   lowest = 2020-01-01 06:00 UTC (stored threshold, not cagg_4hrs-aligned)
--- FIXED: lowest = 2020-01-01 04:00 UTC (cagg_4hrs bucket boundary)
+-- FIXED: lowest = 2020-01-01 04:00 UTC (at cagg_4hrs bucket boundary)
 SELECT
     CASE
         WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
