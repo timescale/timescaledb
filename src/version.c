@@ -64,7 +64,7 @@ ts_get_git_commit(PG_FUNCTION_ARGS)
 #endif
 
 #ifdef EXT_GIT_COMMIT_HASH
-	values[1] = CStringGetTextDatum(EXT_GIT_COMMIT_HASH);
+	values[1] = CStringGetTextDatum("hash: " EXT_GIT_COMMIT_HASH);
 #else
 	nulls[1] = true;
 #endif
