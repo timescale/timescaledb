@@ -1,0 +1,909 @@
+Parsed test spec with 8 sessions
+
+starting permutation: chk_hyper_invals WP_after_enable L1_refresh_jan1 chk_pending_ranges WP_after_release chk_hyper_invals WP_after_enable L2_refresh_jan1 chk_pending_ranges WP_after_release chk_cagg_6h chk_cagg_1d chk_6h_consistency chk_1d_consistency
+step chk_hyper_invals: 
+    SELECT h.table_name AS hypertable,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log l
+    JOIN _timescaledb_catalog.hypertable h ON h.id = l.hypertable_id
+    ORDER BY 1, 2, 3;
+
+hypertable|lowest                      |greatest                    
+----------+----------------------------+----------------------------
+conditions|Thu Jan 01 00:00:00 2026 UTC|Thu Jan 01 23:45:00 2026 UTC
+conditions|Fri Jan 02 00:00:00 2026 UTC|Fri Jan 02 11:45:00 2026 UTC
+conditions|Fri Jan 02 12:00:00 2026 UTC|Fri Jan 02 23:45:00 2026 UTC
+conditions|Sat Jan 03 00:00:00 2026 UTC|Sat Jan 03 23:45:00 2026 UTC
+
+step WP_after_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step L1_refresh_jan1: 
+    CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01 00:00', '2026-01-02 00:00');
+ <waiting ...>
+step chk_pending_ranges: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg   |lowest                      |greatest                    
+-------+----------------------------+----------------------------
+cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Fri Jan 02 00:00:00 2026 UTC
+
+step WP_after_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step L1_refresh_jan1: <... completed>
+step chk_hyper_invals: 
+    SELECT h.table_name AS hypertable,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log l
+    JOIN _timescaledb_catalog.hypertable h ON h.id = l.hypertable_id
+    ORDER BY 1, 2, 3;
+
+hypertable                |lowest                      |greatest                    
+--------------------------+----------------------------+----------------------------
+_materialized_hypertable_X|Thu Jan 01 00:00:00 2026 UTC|Thu Jan 01 18:00:00 2026 UTC
+
+step WP_after_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step L2_refresh_jan1: 
+    CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-02');
+ <waiting ...>
+step chk_pending_ranges: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg   |lowest                      |greatest                    
+-------+----------------------------+----------------------------
+cagg_1d|Thu Jan 01 00:00:00 2026 UTC|Fri Jan 02 00:00:00 2026 UTC
+
+step WP_after_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step L2_refresh_jan1: <... completed>
+step chk_cagg_6h: 
+    SELECT bucket, avg_temp, max_temp, row_count
+    FROM cagg_6h
+    ORDER BY 1;
+
+bucket                      |avg_temp|max_temp|row_count
+----------------------------+--------+--------+---------
+Thu Jan 01 00:00:00 2026 UTC|   26.25|      30|       48
+Thu Jan 01 06:00:00 2026 UTC|   29.25|      31|       48
+Thu Jan 01 12:00:00 2026 UTC|   32.25|      37|       48
+Thu Jan 01 18:00:00 2026 UTC|   35.25|      43|       48
+Fri Jan 02 00:00:00 2026 UTC|    22.5|      25|       24
+Fri Jan 02 06:00:00 2026 UTC|    28.5|      31|       24
+Fri Jan 02 12:00:00 2026 UTC|    34.5|      37|       24
+Fri Jan 02 18:00:00 2026 UTC|    40.5|      43|       24
+Sat Jan 03 00:00:00 2026 UTC|    22.5|      25|       24
+Sat Jan 03 06:00:00 2026 UTC|    28.5|      31|       24
+Sat Jan 03 12:00:00 2026 UTC|    34.5|      37|       24
+Sat Jan 03 18:00:00 2026 UTC|    40.5|      43|       24
+
+step chk_cagg_1d: 
+    SELECT bucket, avg_temp, min_temp, max_temp, row_count
+    FROM cagg_1d
+    ORDER BY 1;
+
+bucket                      |avg_temp|min_temp|max_temp|row_count
+----------------------------+--------+--------+--------+---------
+Thu Jan 01 00:00:00 2026 UTC|   30.75|      20|      43|      192
+Fri Jan 02 00:00:00 2026 UTC|    31.5|      20|      43|       96
+Sat Jan 03 00:00:00 2026 UTC|    31.5|      20|      43|       96
+
+step chk_6h_consistency: 
+    -- Verify L1 (6-hour) matches re-aggregation from raw hypertable
+    SELECT c.bucket,
+           c.avg_temp AS cagg_avg,
+           r.reagg_avg AS raw_avg,
+           c.row_count AS cagg_count,
+           r.reagg_count AS raw_count,
+           (c.avg_temp = r.reagg_avg) AS avg_match,
+           (c.row_count = r.reagg_count) AS count_match
+    FROM cagg_6h c
+    JOIN (
+        SELECT time_bucket('6 hours', time) AS bucket,
+               avg(temp) AS reagg_avg,
+               count(*) AS reagg_count
+        FROM conditions GROUP BY 1
+    ) r ON r.bucket = c.bucket
+    ORDER BY 1;
+
+bucket                      |cagg_avg|raw_avg|cagg_count|raw_count|avg_match|count_match
+----------------------------+--------+-------+----------+---------+---------+-----------
+Thu Jan 01 00:00:00 2026 UTC|   26.25|  26.25|        48|       48|t        |t          
+Thu Jan 01 06:00:00 2026 UTC|   29.25|  29.25|        48|       48|t        |t          
+Thu Jan 01 12:00:00 2026 UTC|   32.25|  32.25|        48|       48|t        |t          
+Thu Jan 01 18:00:00 2026 UTC|   35.25|  35.25|        48|       48|t        |t          
+Fri Jan 02 00:00:00 2026 UTC|    22.5|  16.25|        24|       48|f        |f          
+Fri Jan 02 06:00:00 2026 UTC|    28.5|  19.25|        24|       48|f        |f          
+Fri Jan 02 12:00:00 2026 UTC|    34.5|  27.25|        24|       48|f        |f          
+Fri Jan 02 18:00:00 2026 UTC|    40.5|  30.25|        24|       48|f        |f          
+Sat Jan 03 00:00:00 2026 UTC|    22.5|  31.25|        24|       48|f        |f          
+Sat Jan 03 06:00:00 2026 UTC|    28.5|  34.25|        24|       48|f        |f          
+Sat Jan 03 12:00:00 2026 UTC|    34.5|  37.25|        24|       48|f        |f          
+Sat Jan 03 18:00:00 2026 UTC|    40.5|  40.25|        24|       48|f        |f          
+
+step chk_1d_consistency: 
+    -- Verify L2 (daily) matches re-aggregation from L1 (6-hour)
+    SELECT d.bucket,
+           d.avg_temp AS daily_avg,
+           h.reagg_avg AS from_6h_avg,
+           d.row_count AS daily_count,
+           h.reagg_count AS from_6h_count,
+           (d.avg_temp = h.reagg_avg) AS avg_match,
+           (d.row_count = h.reagg_count) AS count_match
+    FROM cagg_1d d
+    JOIN (
+        SELECT time_bucket('1 day', bucket) AS day,
+               avg(avg_temp) AS reagg_avg,
+               sum(row_count) AS reagg_count
+        FROM cagg_6h GROUP BY 1
+    ) h ON h.day = d.bucket
+    ORDER BY 1;
+
+bucket                      |daily_avg|from_6h_avg|daily_count|from_6h_count|avg_match|count_match
+----------------------------+---------+-----------+-----------+-------------+---------+-----------
+Thu Jan 01 00:00:00 2026 UTC|    30.75|      30.75|        192|          192|t        |t          
+Fri Jan 02 00:00:00 2026 UTC|     31.5|       31.5|         96|           96|t        |t          
+Sat Jan 03 00:00:00 2026 UTC|     31.5|       31.5|         96|           96|t        |t          
+
+
+starting permutation: WP_before_enable WP_after_enable chk_hyper_invals L1_refresh_jan1 insert_ht chk_mat_invals L1b_refresh_jan1_2 chk_mat_invals chk_pending_ranges WP_before_release chk_pending_ranges WP_after_release chk_mat_invals chk_pending_ranges L2_refresh_full chk_6h_consistency chk_1d_consistency
+step WP_before_enable: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step WP_after_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step chk_hyper_invals: 
+    SELECT h.table_name AS hypertable,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log l
+    JOIN _timescaledb_catalog.hypertable h ON h.id = l.hypertable_id
+    ORDER BY 1, 2, 3;
+
+hypertable|lowest                      |greatest                    
+----------+----------------------------+----------------------------
+conditions|Thu Jan 01 00:00:00 2026 UTC|Thu Jan 01 23:45:00 2026 UTC
+conditions|Fri Jan 02 00:00:00 2026 UTC|Fri Jan 02 11:45:00 2026 UTC
+conditions|Fri Jan 02 12:00:00 2026 UTC|Fri Jan 02 23:45:00 2026 UTC
+conditions|Sat Jan 03 00:00:00 2026 UTC|Sat Jan 03 23:45:00 2026 UTC
+
+step L1_refresh_jan1: 
+    CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01 00:00', '2026-01-02 00:00');
+ <waiting ...>
+step insert_ht: 
+    INSERT INTO conditions (time, temp)
+    SELECT ts, 50.0
+    FROM generate_series('2026-01-01 00:00:00+00'::timestamptz,
+                         '2026-01-04 23:45:00+00', '15 minutes') ts;
+
+step chk_mat_invals: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg   |lowest                      |greatest                           
+-------+----------------------------+-----------------------------------
+cagg_1d|-infinity                   |Wed Dec 31 23:59:59.999999 2025 UTC
+cagg_1d|Mon Jan 05 00:00:00 2026 UTC|infinity                           
+cagg_6h|-infinity                   |Wed Dec 31 23:59:59.999999 2025 UTC
+cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 23:59:59.999999 2026 UTC
+cagg_6h|Sun Jan 04 00:00:00 2026 UTC|infinity                           
+
+step L1b_refresh_jan1_2: 
+    CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01 00:00', '2026-01-03 00:00');
+ <waiting ...>
+step chk_mat_invals: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg   |lowest                      |greatest                           
+-------+----------------------------+-----------------------------------
+cagg_1d|-infinity                   |Wed Dec 31 23:59:59.999999 2025 UTC
+cagg_1d|Mon Jan 05 00:00:00 2026 UTC|infinity                           
+cagg_6h|-infinity                   |Wed Dec 31 23:59:59.999999 2025 UTC
+cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 23:59:59.999999 2026 UTC
+cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 23:59:59.999999 2026 UTC
+cagg_6h|Sun Jan 04 00:00:00 2026 UTC|infinity                           
+
+step chk_pending_ranges: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg|lowest|greatest
+----+------+--------
+
+step WP_before_release: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step L1b_refresh_jan1_2: <... completed>
+ERROR:  materialization range [Thu Jan 01 00:00:00 2026 UTC, Sat Jan 03 00:00:00 2026 UTC) overlaps with existing range [Thu Jan 01 00:00:00 2026 UTC, Fri Jan 02 00:00:00 2026 UTC) in materialization_ranges table for continuous aggregate "public"."cagg_6h"
+step chk_pending_ranges: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg   |lowest                      |greatest                    
+-------+----------------------------+----------------------------
+cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Fri Jan 02 00:00:00 2026 UTC
+
+step WP_after_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step L1_refresh_jan1: <... completed>
+step chk_mat_invals: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg   |lowest                      |greatest                           
+-------+----------------------------+-----------------------------------
+cagg_1d|-infinity                   |Wed Dec 31 23:59:59.999999 2025 UTC
+cagg_1d|Mon Jan 05 00:00:00 2026 UTC|infinity                           
+cagg_6h|-infinity                   |Wed Dec 31 23:59:59.999999 2025 UTC
+cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 23:59:59.999999 2026 UTC
+cagg_6h|Fri Jan 02 00:00:00 2026 UTC|infinity                           
+
+step chk_pending_ranges: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg|lowest|greatest
+----+------+--------
+
+step L2_refresh_full: 
+    CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-05');
+
+step chk_6h_consistency: 
+    -- Verify L1 (6-hour) matches re-aggregation from raw hypertable
+    SELECT c.bucket,
+           c.avg_temp AS cagg_avg,
+           r.reagg_avg AS raw_avg,
+           c.row_count AS cagg_count,
+           r.reagg_count AS raw_count,
+           (c.avg_temp = r.reagg_avg) AS avg_match,
+           (c.row_count = r.reagg_count) AS count_match
+    FROM cagg_6h c
+    JOIN (
+        SELECT time_bucket('6 hours', time) AS bucket,
+               avg(temp) AS reagg_avg,
+               count(*) AS reagg_count
+        FROM conditions GROUP BY 1
+    ) r ON r.bucket = c.bucket
+    ORDER BY 1;
+
+bucket                      |        cagg_avg|         raw_avg|cagg_count|raw_count|avg_match|count_match
+----------------------------+----------------+----------------+----------+---------+---------+-----------
+Thu Jan 01 00:00:00 2026 UTC|34.1666666666667|34.1666666666667|        72|       72|t        |t          
+Thu Jan 01 06:00:00 2026 UTC|36.1666666666667|36.1666666666667|        72|       72|t        |t          
+Thu Jan 01 12:00:00 2026 UTC|38.1666666666667|38.1666666666667|        72|       72|t        |t          
+Thu Jan 01 18:00:00 2026 UTC|40.1666666666667|40.1666666666667|        72|       72|t        |t          
+Fri Jan 02 00:00:00 2026 UTC|            22.5|            27.5|        24|       72|f        |f          
+Fri Jan 02 06:00:00 2026 UTC|            28.5|            29.5|        24|       72|f        |f          
+Fri Jan 02 12:00:00 2026 UTC|            34.5|34.8333333333333|        24|       72|f        |f          
+Fri Jan 02 18:00:00 2026 UTC|            40.5|36.8333333333333|        24|       72|f        |f          
+Sat Jan 03 00:00:00 2026 UTC|            22.5|            37.5|        24|       72|f        |f          
+Sat Jan 03 06:00:00 2026 UTC|            28.5|            39.5|        24|       72|f        |f          
+Sat Jan 03 12:00:00 2026 UTC|            34.5|            41.5|        24|       72|f        |f          
+Sat Jan 03 18:00:00 2026 UTC|            40.5|            43.5|        24|       72|f        |f          
+
+step chk_1d_consistency: 
+    -- Verify L2 (daily) matches re-aggregation from L1 (6-hour)
+    SELECT d.bucket,
+           d.avg_temp AS daily_avg,
+           h.reagg_avg AS from_6h_avg,
+           d.row_count AS daily_count,
+           h.reagg_count AS from_6h_count,
+           (d.avg_temp = h.reagg_avg) AS avg_match,
+           (d.row_count = h.reagg_count) AS count_match
+    FROM cagg_1d d
+    JOIN (
+        SELECT time_bucket('1 day', bucket) AS day,
+               avg(avg_temp) AS reagg_avg,
+               sum(row_count) AS reagg_count
+        FROM cagg_6h GROUP BY 1
+    ) h ON h.day = d.bucket
+    ORDER BY 1;
+
+bucket                      |       daily_avg|     from_6h_avg|daily_count|from_6h_count|avg_match|count_match
+----------------------------+----------------+----------------+-----------+-------------+---------+-----------
+Thu Jan 01 00:00:00 2026 UTC|37.1666666666667|37.1666666666667|        288|          288|t        |t          
+Fri Jan 02 00:00:00 2026 UTC|            31.5|            31.5|         96|           96|t        |t          
+Sat Jan 03 00:00:00 2026 UTC|            31.5|            31.5|         96|           96|t        |t          
+
+
+starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals L2_refresh_jan1 insert_ht L1_refresh_full lock_L2_source WP_before_release L2b_refresh_jan1_2 WP_after_enable unlock_L2_source chk_pending_ranges WP_after_release chk_pending_ranges chk_cagg_1d chk_1d_consistency
+step L1_refresh_full: 
+    CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01', '2026-01-04');
+
+step chk_1d_consistency: 
+    -- Verify L2 (daily) matches re-aggregation from L1 (6-hour)
+    SELECT d.bucket,
+           d.avg_temp AS daily_avg,
+           h.reagg_avg AS from_6h_avg,
+           d.row_count AS daily_count,
+           h.reagg_count AS from_6h_count,
+           (d.avg_temp = h.reagg_avg) AS avg_match,
+           (d.row_count = h.reagg_count) AS count_match
+    FROM cagg_1d d
+    JOIN (
+        SELECT time_bucket('1 day', bucket) AS day,
+               avg(avg_temp) AS reagg_avg,
+               sum(row_count) AS reagg_count
+        FROM cagg_6h GROUP BY 1
+    ) h ON h.day = d.bucket
+    ORDER BY 1;
+
+bucket                      |daily_avg|from_6h_avg|daily_count|from_6h_count|avg_match|count_match
+----------------------------+---------+-----------+-----------+-------------+---------+-----------
+Thu Jan 01 00:00:00 2026 UTC|     31.5|      30.75|         96|          192|f        |f          
+Fri Jan 02 00:00:00 2026 UTC|     31.5|      23.25|         96|          192|f        |f          
+Sat Jan 03 00:00:00 2026 UTC|     31.5|      35.75|         96|          192|f        |f          
+
+step WP_before_enable: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step chk_hyper_invals: 
+    SELECT h.table_name AS hypertable,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log l
+    JOIN _timescaledb_catalog.hypertable h ON h.id = l.hypertable_id
+    ORDER BY 1, 2, 3;
+
+hypertable                |lowest                      |greatest                    
+--------------------------+----------------------------+----------------------------
+_materialized_hypertable_X|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 18:00:00 2026 UTC
+
+step L2_refresh_jan1: 
+    CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-02');
+ <waiting ...>
+step insert_ht: 
+    INSERT INTO conditions (time, temp)
+    SELECT ts, 50.0
+    FROM generate_series('2026-01-01 00:00:00+00'::timestamptz,
+                         '2026-01-04 23:45:00+00', '15 minutes') ts;
+
+step L1_refresh_full: 
+    CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01', '2026-01-04');
+ <waiting ...>
+step lock_L2_source: 
+    BEGIN;
+    DO $$
+    DECLARE
+        mat_ht text;
+    BEGIN
+        SELECT format('%I.%I', h.schema_name, h.table_name) INTO mat_ht
+        FROM _timescaledb_catalog.continuous_agg ca
+        JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
+        WHERE ca.user_view_name = 'cagg_1d';
+        EXECUTE format('LOCK TABLE %s IN ACCESS EXCLUSIVE MODE', mat_ht);
+    END;
+    $$;
+ <waiting ...>
+step WP_before_release: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step L1_refresh_full: <... completed>
+step lock_L2_source: <... completed>
+step L2b_refresh_jan1_2: 
+    CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-03');
+ <waiting ...>
+step WP_after_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step unlock_L2_source: 
+    ROLLBACK;
+
+step L2_refresh_jan1: <... completed>
+step L2b_refresh_jan1_2: <... completed>
+ERROR:  materialization range [Thu Jan 01 00:00:00 2026 UTC, Sat Jan 03 00:00:00 2026 UTC) overlaps with existing range [Thu Jan 01 00:00:00 2026 UTC, Fri Jan 02 00:00:00 2026 UTC) in materialization_ranges table for continuous aggregate "public"."cagg_1d"
+step chk_pending_ranges: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg|lowest|greatest
+----+------+--------
+
+step WP_after_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step chk_pending_ranges: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg|lowest|greatest
+----+------+--------
+
+step chk_cagg_1d: 
+    SELECT bucket, avg_temp, min_temp, max_temp, row_count
+    FROM cagg_1d
+    ORDER BY 1;
+
+bucket                      |        avg_temp|min_temp|max_temp|row_count
+----------------------------+----------------+--------+--------+---------
+Thu Jan 01 00:00:00 2026 UTC|37.1666666666667|      20|      50|      288
+Fri Jan 02 00:00:00 2026 UTC|            31.5|      20|      43|       96
+Sat Jan 03 00:00:00 2026 UTC|            31.5|      20|      43|       96
+
+step chk_1d_consistency: 
+    -- Verify L2 (daily) matches re-aggregation from L1 (6-hour)
+    SELECT d.bucket,
+           d.avg_temp AS daily_avg,
+           h.reagg_avg AS from_6h_avg,
+           d.row_count AS daily_count,
+           h.reagg_count AS from_6h_count,
+           (d.avg_temp = h.reagg_avg) AS avg_match,
+           (d.row_count = h.reagg_count) AS count_match
+    FROM cagg_1d d
+    JOIN (
+        SELECT time_bucket('1 day', bucket) AS day,
+               avg(avg_temp) AS reagg_avg,
+               sum(row_count) AS reagg_count
+        FROM cagg_6h GROUP BY 1
+    ) h ON h.day = d.bucket
+    ORDER BY 1;
+
+bucket                      |       daily_avg|     from_6h_avg|daily_count|from_6h_count|avg_match|count_match
+----------------------------+----------------+----------------+-----------+-------------+---------+-----------
+Thu Jan 01 00:00:00 2026 UTC|37.1666666666667|37.1666666666667|        288|          288|t        |t          
+Fri Jan 02 00:00:00 2026 UTC|            31.5|32.1666666666667|         96|          288|f        |f          
+Sat Jan 03 00:00:00 2026 UTC|            31.5|            40.5|         96|          288|f        |f          
+
+
+starting permutation: WP_before_enable WP_after_enable chk_hyper_invals L1_refresh_jan1 insert_ht chk_mat_invals L1b_refresh_jan3 chk_mat_invals chk_pending_ranges WP_before_release chk_pending_ranges WP_after_release chk_mat_invals chk_pending_ranges L2_refresh_full chk_6h_consistency chk_1d_consistency
+step WP_before_enable: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step WP_after_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step chk_hyper_invals: 
+    SELECT h.table_name AS hypertable,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log l
+    JOIN _timescaledb_catalog.hypertable h ON h.id = l.hypertable_id
+    ORDER BY 1, 2, 3;
+
+hypertable|lowest                      |greatest                    
+----------+----------------------------+----------------------------
+conditions|Thu Jan 01 00:00:00 2026 UTC|Thu Jan 01 23:45:00 2026 UTC
+conditions|Fri Jan 02 00:00:00 2026 UTC|Fri Jan 02 11:45:00 2026 UTC
+conditions|Fri Jan 02 12:00:00 2026 UTC|Fri Jan 02 23:45:00 2026 UTC
+conditions|Sat Jan 03 00:00:00 2026 UTC|Sat Jan 03 23:45:00 2026 UTC
+
+step L1_refresh_jan1: 
+    CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01 00:00', '2026-01-02 00:00');
+ <waiting ...>
+step insert_ht: 
+    INSERT INTO conditions (time, temp)
+    SELECT ts, 50.0
+    FROM generate_series('2026-01-01 00:00:00+00'::timestamptz,
+                         '2026-01-04 23:45:00+00', '15 minutes') ts;
+
+step chk_mat_invals: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg   |lowest                      |greatest                           
+-------+----------------------------+-----------------------------------
+cagg_1d|-infinity                   |Wed Dec 31 23:59:59.999999 2025 UTC
+cagg_1d|Mon Jan 05 00:00:00 2026 UTC|infinity                           
+cagg_6h|-infinity                   |Wed Dec 31 23:59:59.999999 2025 UTC
+cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 23:59:59.999999 2026 UTC
+cagg_6h|Sun Jan 04 00:00:00 2026 UTC|infinity                           
+
+step L1b_refresh_jan3: 
+    CALL refresh_continuous_aggregate('cagg_6h', '2026-01-03 00:00', '2026-01-04 00:00');
+ <waiting ...>
+step chk_mat_invals: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg   |lowest                      |greatest                           
+-------+----------------------------+-----------------------------------
+cagg_1d|-infinity                   |Wed Dec 31 23:59:59.999999 2025 UTC
+cagg_1d|Mon Jan 05 00:00:00 2026 UTC|infinity                           
+cagg_6h|-infinity                   |Wed Dec 31 23:59:59.999999 2025 UTC
+cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 23:59:59.999999 2026 UTC
+cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 23:59:59.999999 2026 UTC
+cagg_6h|Sun Jan 04 00:00:00 2026 UTC|infinity                           
+
+step chk_pending_ranges: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg|lowest|greatest
+----+------+--------
+
+step WP_before_release: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step chk_pending_ranges: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg   |lowest                      |greatest                    
+-------+----------------------------+----------------------------
+cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Fri Jan 02 00:00:00 2026 UTC
+cagg_6h|Sat Jan 03 00:00:00 2026 UTC|Sun Jan 04 00:00:00 2026 UTC
+
+step WP_after_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step L1_refresh_jan1: <... completed>
+step L1b_refresh_jan3: <... completed>
+step chk_mat_invals: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg   |lowest                      |greatest                           
+-------+----------------------------+-----------------------------------
+cagg_1d|-infinity                   |Wed Dec 31 23:59:59.999999 2025 UTC
+cagg_1d|Mon Jan 05 00:00:00 2026 UTC|infinity                           
+cagg_6h|-infinity                   |Fri Jan 02 23:59:59.999999 2026 UTC
+cagg_6h|Sun Jan 04 00:00:00 2026 UTC|infinity                           
+
+step chk_pending_ranges: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg|lowest|greatest
+----+------+--------
+
+step L2_refresh_full: 
+    CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-05');
+
+step chk_6h_consistency: 
+    -- Verify L1 (6-hour) matches re-aggregation from raw hypertable
+    SELECT c.bucket,
+           c.avg_temp AS cagg_avg,
+           r.reagg_avg AS raw_avg,
+           c.row_count AS cagg_count,
+           r.reagg_count AS raw_count,
+           (c.avg_temp = r.reagg_avg) AS avg_match,
+           (c.row_count = r.reagg_count) AS count_match
+    FROM cagg_6h c
+    JOIN (
+        SELECT time_bucket('6 hours', time) AS bucket,
+               avg(temp) AS reagg_avg,
+               count(*) AS reagg_count
+        FROM conditions GROUP BY 1
+    ) r ON r.bucket = c.bucket
+    ORDER BY 1;
+
+bucket                      |        cagg_avg|         raw_avg|cagg_count|raw_count|avg_match|count_match
+----------------------------+----------------+----------------+----------+---------+---------+-----------
+Thu Jan 01 00:00:00 2026 UTC|34.1666666666667|34.1666666666667|        72|       72|t        |t          
+Thu Jan 01 06:00:00 2026 UTC|36.1666666666667|36.1666666666667|        72|       72|t        |t          
+Thu Jan 01 12:00:00 2026 UTC|38.1666666666667|38.1666666666667|        72|       72|t        |t          
+Thu Jan 01 18:00:00 2026 UTC|40.1666666666667|40.1666666666667|        72|       72|t        |t          
+Fri Jan 02 00:00:00 2026 UTC|            22.5|            27.5|        24|       72|f        |f          
+Fri Jan 02 06:00:00 2026 UTC|            28.5|            29.5|        24|       72|f        |f          
+Fri Jan 02 12:00:00 2026 UTC|            34.5|34.8333333333333|        24|       72|f        |f          
+Fri Jan 02 18:00:00 2026 UTC|            40.5|36.8333333333333|        24|       72|f        |f          
+Sat Jan 03 00:00:00 2026 UTC|            37.5|            37.5|        72|       72|t        |t          
+Sat Jan 03 06:00:00 2026 UTC|            39.5|            39.5|        72|       72|t        |t          
+Sat Jan 03 12:00:00 2026 UTC|            41.5|            41.5|        72|       72|t        |t          
+Sat Jan 03 18:00:00 2026 UTC|            43.5|            43.5|        72|       72|t        |t          
+
+step chk_1d_consistency: 
+    -- Verify L2 (daily) matches re-aggregation from L1 (6-hour)
+    SELECT d.bucket,
+           d.avg_temp AS daily_avg,
+           h.reagg_avg AS from_6h_avg,
+           d.row_count AS daily_count,
+           h.reagg_count AS from_6h_count,
+           (d.avg_temp = h.reagg_avg) AS avg_match,
+           (d.row_count = h.reagg_count) AS count_match
+    FROM cagg_1d d
+    JOIN (
+        SELECT time_bucket('1 day', bucket) AS day,
+               avg(avg_temp) AS reagg_avg,
+               sum(row_count) AS reagg_count
+        FROM cagg_6h GROUP BY 1
+    ) h ON h.day = d.bucket
+    ORDER BY 1;
+
+bucket                      |       daily_avg|     from_6h_avg|daily_count|from_6h_count|avg_match|count_match
+----------------------------+----------------+----------------+-----------+-------------+---------+-----------
+Thu Jan 01 00:00:00 2026 UTC|37.1666666666667|37.1666666666667|        288|          288|t        |t          
+Fri Jan 02 00:00:00 2026 UTC|            31.5|            31.5|         96|           96|t        |t          
+Sat Jan 03 00:00:00 2026 UTC|            40.5|            40.5|        288|          288|t        |t          
+
+
+starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals L2_refresh_jan1 insert_ht L1_refresh_full lock_L2_source WP_before_release L2b_refresh_jan3 WP_after_enable unlock_L2_source chk_pending_ranges WP_after_release chk_pending_ranges chk_cagg_1d chk_1d_consistency
+step L1_refresh_full: 
+    CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01', '2026-01-04');
+
+step chk_1d_consistency: 
+    -- Verify L2 (daily) matches re-aggregation from L1 (6-hour)
+    SELECT d.bucket,
+           d.avg_temp AS daily_avg,
+           h.reagg_avg AS from_6h_avg,
+           d.row_count AS daily_count,
+           h.reagg_count AS from_6h_count,
+           (d.avg_temp = h.reagg_avg) AS avg_match,
+           (d.row_count = h.reagg_count) AS count_match
+    FROM cagg_1d d
+    JOIN (
+        SELECT time_bucket('1 day', bucket) AS day,
+               avg(avg_temp) AS reagg_avg,
+               sum(row_count) AS reagg_count
+        FROM cagg_6h GROUP BY 1
+    ) h ON h.day = d.bucket
+    ORDER BY 1;
+
+bucket                      |daily_avg|from_6h_avg|daily_count|from_6h_count|avg_match|count_match
+----------------------------+---------+-----------+-----------+-------------+---------+-----------
+Thu Jan 01 00:00:00 2026 UTC|     31.5|      30.75|         96|          192|f        |f          
+Fri Jan 02 00:00:00 2026 UTC|     31.5|      23.25|         96|          192|f        |f          
+Sat Jan 03 00:00:00 2026 UTC|     31.5|      35.75|         96|          192|f        |f          
+
+step WP_before_enable: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step chk_hyper_invals: 
+    SELECT h.table_name AS hypertable,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log l
+    JOIN _timescaledb_catalog.hypertable h ON h.id = l.hypertable_id
+    ORDER BY 1, 2, 3;
+
+hypertable                 |lowest                      |greatest                    
+---------------------------+----------------------------+----------------------------
+_materialized_hypertable_X|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 18:00:00 2026 UTC
+
+step L2_refresh_jan1: 
+    CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-02');
+ <waiting ...>
+step insert_ht: 
+    INSERT INTO conditions (time, temp)
+    SELECT ts, 50.0
+    FROM generate_series('2026-01-01 00:00:00+00'::timestamptz,
+                         '2026-01-04 23:45:00+00', '15 minutes') ts;
+
+step L1_refresh_full: 
+    CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01', '2026-01-04');
+ <waiting ...>
+step lock_L2_source: 
+    BEGIN;
+    DO $$
+    DECLARE
+        mat_ht text;
+    BEGIN
+        SELECT format('%I.%I', h.schema_name, h.table_name) INTO mat_ht
+        FROM _timescaledb_catalog.continuous_agg ca
+        JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
+        WHERE ca.user_view_name = 'cagg_1d';
+        EXECUTE format('LOCK TABLE %s IN ACCESS EXCLUSIVE MODE', mat_ht);
+    END;
+    $$;
+ <waiting ...>
+step WP_before_release: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step L1_refresh_full: <... completed>
+step lock_L2_source: <... completed>
+step L2b_refresh_jan3: 
+    CALL refresh_continuous_aggregate('cagg_1d', '2026-01-03', '2026-01-04');
+ <waiting ...>
+step WP_after_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step unlock_L2_source: 
+    ROLLBACK;
+
+step L2_refresh_jan1: <... completed>
+step chk_pending_ranges: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg   |lowest                      |greatest                    
+-------+----------------------------+----------------------------
+cagg_1d|Sat Jan 03 00:00:00 2026 UTC|Sun Jan 04 00:00:00 2026 UTC
+
+step WP_after_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step L2b_refresh_jan3: <... completed>
+step chk_pending_ranges: 
+    SELECT ca.user_view_name AS cagg,
+           _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
+           _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges l
+    JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = l.materialization_id
+    ORDER BY 1, 2, 3;
+
+cagg|lowest|greatest
+----+------+--------
+
+step chk_cagg_1d: 
+    SELECT bucket, avg_temp, min_temp, max_temp, row_count
+    FROM cagg_1d
+    ORDER BY 1;
+
+bucket                      |        avg_temp|min_temp|max_temp|row_count
+----------------------------+----------------+--------+--------+---------
+Thu Jan 01 00:00:00 2026 UTC|37.1666666666667|      20|      50|      288
+Fri Jan 02 00:00:00 2026 UTC|            31.5|      20|      43|       96
+Sat Jan 03 00:00:00 2026 UTC|            40.5|      20|      50|      288
+
+step chk_1d_consistency: 
+    -- Verify L2 (daily) matches re-aggregation from L1 (6-hour)
+    SELECT d.bucket,
+           d.avg_temp AS daily_avg,
+           h.reagg_avg AS from_6h_avg,
+           d.row_count AS daily_count,
+           h.reagg_count AS from_6h_count,
+           (d.avg_temp = h.reagg_avg) AS avg_match,
+           (d.row_count = h.reagg_count) AS count_match
+    FROM cagg_1d d
+    JOIN (
+        SELECT time_bucket('1 day', bucket) AS day,
+               avg(avg_temp) AS reagg_avg,
+               sum(row_count) AS reagg_count
+        FROM cagg_6h GROUP BY 1
+    ) h ON h.day = d.bucket
+    ORDER BY 1;
+
+bucket                      |       daily_avg|     from_6h_avg|daily_count|from_6h_count|avg_match|count_match
+----------------------------+----------------+----------------+-----------+-------------+---------+-----------
+Thu Jan 01 00:00:00 2026 UTC|37.1666666666667|37.1666666666667|        288|          288|t        |t          
+Fri Jan 02 00:00:00 2026 UTC|            31.5|32.1666666666667|         96|          288|f        |f          
+Sat Jan 03 00:00:00 2026 UTC|            40.5|            40.5|        288|          288|t        |t          
+
