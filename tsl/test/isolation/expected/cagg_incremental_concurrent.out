@@ -1,0 +1,325 @@
+Parsed test spec with 5 sessions
+
+starting permutation: wp_enable r1_run s1_refresh_ranges s1_count r2_refresh wp_release s1_count s1_check_duplicates
+step wp_enable: 
+    SELECT debug_waitpoint_enable('cagg_policy_batch_2_after_txn_1_wait');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+R1: LOG:  statement: 
+    DO $$
+    DECLARE
+        jid int;
+    BEGIN
+        SELECT job_id INTO jid FROM timescaledb_information.jobs
+        WHERE hypertable_name = 'cond_10'
+        AND proc_name = 'policy_refresh_continuous_aggregate';
+        CALL run_job(jid);
+    END;
+    $$;
+
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 60, 70 ] (batch 1 of 7)
+R1: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step r1_run: 
+    DO $$
+    DECLARE
+        jid int;
+    BEGIN
+        SELECT job_id INTO jid FROM timescaledb_information.jobs
+        WHERE hypertable_name = 'cond_10'
+        AND proc_name = 'policy_refresh_continuous_aggregate';
+        CALL run_job(jid);
+    END;
+    $$;
+ <waiting ...>
+step s1_refresh_ranges: 
+    SELECT materialization_id, start_range, end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+    ORDER BY materialization_id;
+
+materialization_id|start_range|end_range
+------------------+-----------+---------
+                 2|         50|       60
+
+step s1_count: 
+    SELECT count(*) AS row_count FROM cond_10;
+
+row_count
+---------
+       18
+
+R2: LOG:  statement: 
+    -- Non-overlapping with R1's registered batch range [50, 60)
+    CALL refresh_continuous_aggregate('cond_10', 1, 50);
+
+R2: LOG:  deleted 12 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R2: LOG:  inserted 12 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step r2_refresh: 
+    -- Non-overlapping with R1's registered batch range [50, 60)
+    CALL refresh_continuous_aggregate('cond_10', 1, 50);
+
+step wp_release: 
+    SELECT debug_waitpoint_release('cagg_policy_batch_2_after_txn_1_wait');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 50, 60 ] (batch 2 of 7)
+R1: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ -2147483648, 10 ] (batch 7 of 7)
+R1: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step r1_run: <... completed>
+step s1_count: 
+    SELECT count(*) AS row_count FROM cond_10;
+
+row_count
+---------
+       21
+
+step s1_check_duplicates: 
+    -- Check for duplicate (bucket, device_id) rows in the materialization hypertable.
+    -- If duplicates exist, the same range was materialized twice without proper cleanup.
+    SELECT bucket, device_id, count(*) AS copies
+    FROM cond_10
+    GROUP BY bucket, device_id
+    HAVING count(*) > 1
+    ORDER BY bucket, device_id;
+
+bucket|device_id|copies
+------+---------+------
+
+
+starting permutation: wp_enable r1_run i1_insert s1_refresh_ranges r2_refresh s1_refresh_ranges s1_count wp_release s1_count s1_check_duplicates
+R1: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+
+R2: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+
+step wp_enable: 
+    SELECT debug_waitpoint_enable('cagg_policy_batch_2_after_txn_1_wait');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+R1: LOG:  statement: 
+    DO $$
+    DECLARE
+        jid int;
+    BEGIN
+        SELECT job_id INTO jid FROM timescaledb_information.jobs
+        WHERE hypertable_name = 'cond_10'
+        AND proc_name = 'policy_refresh_continuous_aggregate';
+        CALL run_job(jid);
+    END;
+    $$;
+
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 60, 70 ] (batch 1 of 7)
+R1: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step r1_run: 
+    DO $$
+    DECLARE
+        jid int;
+    BEGIN
+        SELECT job_id INTO jid FROM timescaledb_information.jobs
+        WHERE hypertable_name = 'cond_10'
+        AND proc_name = 'policy_refresh_continuous_aggregate';
+        CALL run_job(jid);
+    END;
+    $$;
+ <waiting ...>
+step i1_insert: 
+    INSERT INTO conditions
+    SELECT t, d, 30
+    FROM generate_series(61, 90, 1) AS t,
+         generate_series(1, 3) AS d;
+
+step s1_refresh_ranges: 
+    SELECT materialization_id, start_range, end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+    ORDER BY materialization_id;
+
+materialization_id|start_range|end_range
+------------------+-----------+---------
+                 4|         50|       60
+
+R2: LOG:  statement: 
+    -- Non-overlapping with R1's registered batch range [50, 60)
+    CALL refresh_continuous_aggregate('cond_10', 1, 50);
+
+R2: LOG:  deleted 12 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R2: LOG:  inserted 12 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step r2_refresh: 
+    -- Non-overlapping with R1's registered batch range [50, 60)
+    CALL refresh_continuous_aggregate('cond_10', 1, 50);
+
+step s1_refresh_ranges: 
+    SELECT materialization_id, start_range, end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+    ORDER BY materialization_id;
+
+materialization_id|start_range|end_range
+------------------+-----------+---------
+                 4|         50|       60
+
+step s1_count: 
+    SELECT count(*) AS row_count FROM cond_10;
+
+row_count
+---------
+       18
+
+step wp_release: 
+    SELECT debug_waitpoint_release('cagg_policy_batch_2_after_txn_1_wait');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 50, 60 ] (batch 2 of 7)
+R1: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ -2147483648, 10 ] (batch 7 of 7)
+R1: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step r1_run: <... completed>
+step s1_count: 
+    SELECT count(*) AS row_count FROM cond_10;
+
+row_count
+---------
+       21
+
+step s1_check_duplicates: 
+    -- Check for duplicate (bucket, device_id) rows in the materialization hypertable.
+    -- If duplicates exist, the same range was materialized twice without proper cleanup.
+    SELECT bucket, device_id, count(*) AS copies
+    FROM cond_10
+    GROUP BY bucket, device_id
+    HAVING count(*) > 1
+    ORDER BY bucket, device_id;
+
+bucket|device_id|copies
+------+---------+------
+
+
+starting permutation: wp_enable r1_run s1_refresh_ranges r2_refresh_overlap wp_release s1_count s1_check_duplicates
+R1: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+
+R2: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'LOG';
+
+step wp_enable: 
+    SELECT debug_waitpoint_enable('cagg_policy_batch_2_after_txn_1_wait');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+R1: LOG:  statement: 
+    DO $$
+    DECLARE
+        jid int;
+    BEGIN
+        SELECT job_id INTO jid FROM timescaledb_information.jobs
+        WHERE hypertable_name = 'cond_10'
+        AND proc_name = 'policy_refresh_continuous_aggregate';
+        CALL run_job(jid);
+    END;
+    $$;
+
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 60, 70 ] (batch 1 of 7)
+R1: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step r1_run: 
+    DO $$
+    DECLARE
+        jid int;
+    BEGIN
+        SELECT job_id INTO jid FROM timescaledb_information.jobs
+        WHERE hypertable_name = 'cond_10'
+        AND proc_name = 'policy_refresh_continuous_aggregate';
+        CALL run_job(jid);
+    END;
+    $$;
+ <waiting ...>
+step s1_refresh_ranges: 
+    SELECT materialization_id, start_range, end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+    ORDER BY materialization_id;
+
+materialization_id|start_range|end_range
+------------------+-----------+---------
+                 6|         50|       60
+
+R2: LOG:  statement: 
+    -- Overlapping with R1's registered batch range [50, 60)
+    CALL refresh_continuous_aggregate('cond_10', 40, 60);
+
+step r2_refresh_overlap: 
+    -- Overlapping with R1's registered batch range [50, 60)
+    CALL refresh_continuous_aggregate('cond_10', 40, 60);
+
+ERROR:  could not refresh continuous aggregate "cond_10"
+step wp_release: 
+    SELECT debug_waitpoint_release('cagg_policy_batch_2_after_txn_1_wait');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 50, 60 ] (batch 2 of 7)
+R1: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 40, 50 ] (batch 3 of 7)
+R1: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 30, 40 ] (batch 4 of 7)
+R1: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 20, 30 ] (batch 5 of 7)
+R1: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 10, 20 ] (batch 6 of 7)
+R1: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ -2147483648, 10 ] (batch 7 of 7)
+R1: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step r1_run: <... completed>
+step s1_count: 
+    SELECT count(*) AS row_count FROM cond_10;
+
+row_count
+---------
+       21
+
+step s1_check_duplicates: 
+    -- Check for duplicate (bucket, device_id) rows in the materialization hypertable.
+    -- If duplicates exist, the same range was materialized twice without proper cleanup.
+    SELECT bucket, device_id, count(*) AS copies
+    FROM cond_10
+    GROUP BY bucket, device_id
+    HAVING count(*) > 1
+    ORDER BY bucket, device_id;
+
+bucket|device_id|copies
+------+---------+------
+
