@@ -511,7 +511,128 @@ SELECT * FROM sorted_bgw_log;
 --clean up
 DROP TABLE test_data CASCADE;
 
+------------------------------------------------------------------------------------------
+-- Test incremental refresh policy crashing between batches
+------------------------------------------------------------------------------------------
+
+-- Test 1: Between batches after batch 1 finishes the refresh
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log, _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+\c :TEST_DBNAME test_cagg_refresh_policy_user
+
+TRUNCATE bgw_log, conditions, conditions_by_day, conditions_by_day_manual_refresh;
+
+SELECT delete_job(job_id) FROM timescaledb_information.jobs WHERE hypertable_name = 'conditions_by_day';
+
+INSERT INTO conditions
+SELECT
+    t, d, 10
+FROM
+    generate_series(
+        '2025-02-05 00:00:00+00',
+        '2025-03-05 00:00:00+00',
+        '1 hour'::interval) AS t,
+    generate_series(1,5) AS d;
+
+SELECT
+    add_continuous_aggregate_policy(
+        'conditions_by_day',
+        start_offset => NULL,
+        end_offset => NULL,
+        schedule_interval => INTERVAL '1 h',
+        buckets_per_batch => 10
+    ) AS crash_job_id2 \gset
+
+-- Crash after batch 1 finishes refreshing
+SELECT debug_waitpoint_enable('cagg_policy_batch_1_after_refresh');
+
+SET client_min_messages TO LOG;
+\set ON_ERROR_STOP 0
+CALL run_job(:crash_job_id2);
+\set ON_ERROR_STOP 1
+RESET client_min_messages;
+
+-- Rows processed by batch 1 should be materialized
+SELECT count(*) AS rows_after_refresh FROM conditions_by_day;
+
+SELECT debug_waitpoint_release('cagg_policy_batch_1_after_refresh');
+
+-- Process reminaing invalidations and verify
+CALL run_job(:crash_job_id2);
+
+-- Verify against manual refresh
+CALL refresh_continuous_aggregate('conditions_by_day_manual_refresh', NULL, NULL);
+
+SELECT
+    count(*) > 0 AS has_diff
+FROM
+    ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
+    EXCEPT
+    (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
+
+-- Test 2: Crash after txn 1 commits for next batch
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log, _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+\c :TEST_DBNAME test_cagg_refresh_policy_user
+
+TRUNCATE bgw_log, conditions, conditions_by_day, conditions_by_day_manual_refresh;
+
+-- Remove all existing policies
+SELECT delete_job(job_id) FROM timescaledb_information.jobs WHERE hypertable_name = 'conditions_by_day';
+SELECT delete_job(job_id) FROM timescaledb_information.jobs WHERE hypertable_name = 'conditions_by_day_manual_refresh';
+
+-- Insert data
+INSERT INTO conditions
+SELECT
+    t, d, 10
+FROM
+    generate_series(
+        '2025-02-05 00:00:00+00',
+        '2025-03-05 00:00:00+00',
+        '1 hour'::interval) AS t,
+    generate_series(1,5) AS d;
+
+SELECT
+    add_continuous_aggregate_policy(
+        'conditions_by_day',
+        start_offset => NULL,
+        end_offset => NULL,
+        schedule_interval => INTERVAL '1 h',
+        buckets_per_batch => 10
+    ) AS crash_job_id \gset
+
+-- Enable error injection to crash the job after the first batch completes
+SELECT debug_waitpoint_enable('cagg_policy_batch_2_after_txn_1');
+
+-- Run the job; it should crash after the first batch
+SET client_min_messages TO LOG;
+\set ON_ERROR_STOP 0
+CALL run_job(:crash_job_id);
+\set ON_ERROR_STOP 1
+RESET client_min_messages;
+
+-- Data corresponding to first batch should be materialized
+SELECT count(*) AS rows_after_refresh FROM conditions_by_day;
+
+-- Disable error injection
+SELECT debug_waitpoint_release('cagg_policy_batch_2_after_txn_1');
+
+-- Run the job to process remaining invalidations
+CALL run_job(:crash_job_id);
+
+-- Verify materialized data against a manually refreshed CAgg (which doesn't use the incremental policy)
+CALL refresh_continuous_aggregate('conditions_by_day_manual_refresh', NULL, NULL);
+
+SELECT
+    count(*) > 0 AS has_diff
+FROM
+    ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
+    EXCEPT
+    (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
+
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_SUPERUSER;
 REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_policy_user;
+
 DROP ROLE test_cagg_refresh_policy_user;
