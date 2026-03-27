@@ -1501,6 +1501,25 @@ ts_compute_beginning_of_the_next_bucket_variable(int64 timeval,
 	return ts_time_value_to_internal(val_new, TIMESTAMPOID);
 }
 
+/*
+ * Calculates the beginning of the current bucket (i.e., floors timeval to the
+ * nearest bucket boundary).
+ *
+ * The algorithm is just:
+ *
+ * val = time_bucket(bucket_size, val)
+ */
+int64
+ts_compute_start_of_current_bucket_variable(int64 timeval, const ContinuousAggBucketFunction *bf)
+{
+	/*
+	 * It's OK to use TIMESTAMPOID here.
+	 * See the comment in ts_compute_inscribed_bucketed_refresh_window_variable()
+	 */
+	Datum val_old = ts_internal_to_time_value(timeval, TIMESTAMPOID);
+	return ts_time_value_to_internal(generic_time_bucket(bf, val_old), TIMESTAMPOID);
+}
+
 Oid
 ts_cagg_permissions_check(Oid cagg_oid, Oid userid)
 {

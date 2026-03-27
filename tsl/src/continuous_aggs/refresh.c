@@ -829,8 +829,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	/* We must also cap the refresh window at the invalidation threshold. If
 	 * we process invalidations after the threshold, the continuous aggregates
 	 * won't be refreshed when the threshold is moved forward in the
-	 * future. The invalidation threshold should already be aligned on bucket
-	 * boundary. */
+	 * future. */
 	if (refresh_window.end > invalidation_threshold)
 		refresh_window.end = invalidation_threshold;
 

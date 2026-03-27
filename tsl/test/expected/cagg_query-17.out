@@ -1653,9 +1653,6 @@ psql:include/cagg_query_common.sql:725: DEBUG:  continuous aggregate refresh (in
 psql:include/cagg_query_common.sql:725: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_33"
 psql:include/cagg_query_common.sql:725: LOG:  inserted 6 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
 psql:include/cagg_query_common.sql:725: DEBUG:  hypertable 33 existing watermark >= new watermark 1577995200000000 1577952000000000
-psql:include/cagg_query_common.sql:725: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours" in window [ Thu Jan 02 12:00:00 2020 PST, Thu Jan 02 16:00:00 2020 PST ]
-psql:include/cagg_query_common.sql:725: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_33"
-psql:include/cagg_query_common.sql:725: LOG:  inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_33"
 CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
 psql:include/cagg_query_common.sql:726: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_offset', NULL, NULL);
 psql:include/cagg_query_common.sql:726: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577998800000000 1577953800000000
@@ -1667,9 +1664,6 @@ psql:include/cagg_query_common.sql:726: DEBUG:  continuous aggregate refresh (in
 psql:include/cagg_query_common.sql:726: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
 psql:include/cagg_query_common.sql:726: LOG:  inserted 7 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
 psql:include/cagg_query_common.sql:726: DEBUG:  hypertable 34 existing watermark >= new watermark 1577997000000000 1577953800000000
-psql:include/cagg_query_common.sql:726: DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4_hours_offset" in window [ Thu Jan 02 12:30:00 2020 PST, Thu Jan 02 16:30:00 2020 PST ]
-psql:include/cagg_query_common.sql:726: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_34"
-psql:include/cagg_query_common.sql:726: LOG:  inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_34"
 CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
 psql:include/cagg_query_common.sql:727: LOG:  statement: CALL refresh_continuous_aggregate('cagg_4_hours_origin', NULL, NULL);
 psql:include/cagg_query_common.sql:727: DEBUG:  hypertable 4 existing watermark >= new invalidation threshold 1577998800000000 1577955600000000
@@ -1857,9 +1851,9 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_
                   3 |  -9223372036854775808 |     -210866803200000001
                   3 |      1541289600000000 |     9223372036854775807
                  33 |  -9223372036854775808 |     -210866803200000001
-                 33 |      1577998800000000 |     9223372036854775807
+                 33 |      1577995200000000 |     9223372036854775807
                  34 |  -9223372036854775808 |     -210866803200000001
-                 34 |      1577998800000000 |     9223372036854775807
+                 34 |      1577997000000000 |     9223372036854775807
                  35 |  -9223372036854775808 |     -210866803200000001
                  35 |      1577998800000000 |     9223372036854775807
 
@@ -1878,10 +1872,10 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_
                   3 |      1541289600000000 |     9223372036854775807
                  33 |  -9223372036854775808 |     -210866803200000001
                  33 |  -9223372036854775808 |     9223372036854775807
-                 33 |      1577998800000000 |     9223372036854775807
+                 33 |      1577995200000000 |     9223372036854775807
                  34 |  -9223372036854775808 |     -210866803200000001
                  34 |  -9223372036854775808 |     9223372036854775807
-                 34 |      1577998800000000 |     9223372036854775807
+                 34 |      1577997000000000 |     9223372036854775807
                  35 |  -9223372036854775808 |     -210866803200000001
                  35 |  -9223372036854775808 |     9223372036854775807
                  35 |      1577998800000000 |     9223372036854775807
