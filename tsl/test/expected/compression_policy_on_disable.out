@@ -1,0 +1,38 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Test that disabling columnstore on a hypertable automatically removes
+-- any associated columnstore policy (regression test for issue #8960).
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE compress_policy_disable_test (
+    time TIMESTAMPTZ NOT NULL,
+    device TEXT,
+    value FLOAT
+);
+SELECT create_hypertable('compress_policy_disable_test', 'time');
+             create_hypertable             
+-------------------------------------------
+ (1,public,compress_policy_disable_test,t)
+
+ALTER TABLE compress_policy_disable_test SET (timescaledb.compress = true);
+-- Add a compression policy
+SELECT add_compression_policy('compress_policy_disable_test', '7 days'::interval) AS policyid \gset
+-- Verify the policy exists before disabling compression
+SELECT count(*) AS policy_count
+FROM _timescaledb_catalog.bgw_job
+WHERE id = :policyid;
+ policy_count 
+--------------
+            1
+
+-- Disable columnstore/compression — this should also remove the policy
+ALTER TABLE compress_policy_disable_test SET (timescaledb.compress = 'f');
+-- Verify the policy has been removed (should be 0 after fix)
+SELECT count(*) AS policy_count
+FROM _timescaledb_catalog.bgw_job
+WHERE id = :policyid;
+ policy_count 
+--------------
+            0
+
+DROP TABLE compress_policy_disable_test;
