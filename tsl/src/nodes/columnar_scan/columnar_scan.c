@@ -2391,7 +2391,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 	 * result targetlist, and we can allow it to be changed later. This allows
 	 * us to avoid a separate Result node, for a small performance saving.
 	 */
-	path->custom_path.flags = CUSTOMPATH_SUPPORT_PROJECTION;
+	path->custom_path.flags = 0;
 
 	path->custom_path.methods = &columnar_scan_path_methods;
 	path->batch_sorted_merge = false;
