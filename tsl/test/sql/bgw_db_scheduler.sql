@@ -408,6 +408,30 @@ SELECT job_id, last_finish, next_start, last_run_success, total_runs, total_succ
 FROM _timescaledb_internal.bgw_job_stat;
 SELECT * FROM sorted_bgw_log;
 
+-- Simulate failover-inherited sentinel with no crash counter: sanitize and run now
+TRUNCATE bgw_log;
+UPDATE _timescaledb_internal.bgw_job_stat
+SET next_start = '-infinity', consecutive_crashes = 0
+WHERE job_id = 1005;
+
+SELECT job_id,
+       (next_start = '-infinity'::timestamptz) AS next_start_is_infinity,
+       total_runs,
+       total_successes,
+       consecutive_crashes
+FROM _timescaledb_internal.bgw_job_stat;
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(500);
+
+SELECT job_id,
+       (next_start = '-infinity'::timestamptz) AS next_start_is_infinity,
+       total_runs,
+       total_successes,
+       consecutive_crashes
+FROM _timescaledb_internal.bgw_job_stat;
+
+SELECT * FROM sorted_bgw_log;
+
 
 CREATE FUNCTION wait_for_timer_to_run(started_at INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
