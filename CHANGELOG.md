@@ -5,6 +5,26 @@ This page lists all the latest features and updates to TimescaleDB. When
 you use psql to update your database, use the -X flag and prevent any .psqlrc
 commands from accidentally triggering the load of a previous DB version.**
 
+## 2.26.1 (2026-03-28)
+
+This release contains performance improvements and bug fixes since the 2.26.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.26.1**
+* 
+
+**Backward-Incompatible Changes**
+
+**Features**
+
+**Bugfixes**
+* 
+
+**New Settings**
+
+**GUCs**
+
+**Thanks**
+
 ## 2.26.0 (2026-03-24)
 
 This release contains performance improvements and bug fixes since the 2.25.2 release. We recommend that you upgrade at the next available opportunity.
