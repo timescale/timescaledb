@@ -7,8 +7,6 @@
 
 #include <postgres.h>
 
-#include "guc.h"
-
 #include "compression/arrow_c_data_interface.h"
 #include "compression_sql_test.h"
 

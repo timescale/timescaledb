@@ -22,7 +22,6 @@ set(TEST_FILES
     columnar_scan_cost.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
-    compress_batch_size.sql
     compress_bitmap_scan.sql
     compress_bloom_hash.sql
     compress_compbloom_basics.sql

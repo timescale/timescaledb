@@ -17,7 +17,6 @@
 #include "array.h"
 #include "compression/compression.h"
 #include "datum_serialize.h"
-#include "guc.h"
 #include "simple8b_rle.h"
 #include "simple8b_rle_bitarray.h"
 #include "simple8b_rle_bitmap.h"

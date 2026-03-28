@@ -23,7 +23,6 @@
 
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
-#include "guc.h"
 #include "simple8b_rle.h"
 #include "simple8b_rle_bitmap.h"
 

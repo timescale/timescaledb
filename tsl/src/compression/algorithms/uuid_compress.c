@@ -11,7 +11,6 @@
 #include "compression/compression.h"
 #include "deltadelta.h"
 #include "dictionary.h"
-#include "guc.h"
 #include "lib/hyperloglog.h"
 #include "null.h"
 #include "simple8b_rle.h"
