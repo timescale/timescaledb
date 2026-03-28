@@ -464,6 +464,7 @@ columnar_scan_exec_impl(ColumnarScanState *chunk_state, const BatchQueueFunction
 	if (chunk_state->csstate.ss.ps.ps_ProjInfo)
 	{
 		ExprContext *econtext = chunk_state->csstate.ss.ps.ps_ExprContext;
+		ResetExprContext(econtext);
 		econtext->ecxt_scantuple = result_slot;
 		return ExecProject(chunk_state->csstate.ss.ps.ps_ProjInfo);
 	}
