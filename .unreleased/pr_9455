@@ -1,0 +1,1 @@
+Fixes: #9455 Fix memory leak in ColumnarScan
