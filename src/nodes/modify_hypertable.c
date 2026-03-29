@@ -197,13 +197,9 @@ modify_hypertable_end(CustomScanState *node)
 		state->explain_saved_custom_scan_tlist = NULL;
 	}
 
-	if (state->compressor)
-	{
-		ts_cm_functions->compressor_flush(state->compressor, state->bulk_writer);
-		ts_cm_functions->compressor_free(state->compressor, state->bulk_writer);
-		state->compressor = NULL;
-		state->bulk_writer = NULL;
-	}
+	/* compressor is flushed in ExecModifyTable */
+	Assert(!state->compressor);
+
 	ExecEndNode(linitial(node->custom_ps));
 	if (state->ctr)
 		ts_chunk_tuple_routing_destroy(state->ctr);
