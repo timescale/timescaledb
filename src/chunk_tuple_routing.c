@@ -154,7 +154,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 		Assert(CheckRelationLockedByMe(chunk_rel, lockmode, true));
 		RelationClose(chunk_rel);
 #endif
-		if (ctr->create_compressed_chunk && !chunk->fd.compressed_chunk_id)
+		if (ctr->create_compressed_chunk && !ts_chunk_is_compressed(chunk))
 		{
 			/*
 			 * When creating a compressed chunk, the operation must be
