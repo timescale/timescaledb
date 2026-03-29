@@ -374,3 +374,4 @@ RESET timescaledb.enable_direct_compress_insert_client_sorted;
 
 DROP TABLE compress_src;
 DROP TABLE compress_tgt;
+
