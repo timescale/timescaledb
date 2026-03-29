@@ -101,6 +101,11 @@ set(TEST_TEMPLATES
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
 
+# WAL numbers will differ on 32-bit platform so we only run on 64-bit
+if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
+  list(APPEND TEST_FILES explain_wal.sql)
+endif()
+
 if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
 endif()
@@ -227,6 +232,7 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_policy_incremental
+    explain_wal
     move
     reorder
     split_chunk
