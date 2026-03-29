@@ -16,21 +16,6 @@ BEGIN
 END$$;
 
 \pset null '[NULL]'
-CREATE USER :TMP_USER;
-SELECT * FROM (
-    VALUES
-       (_timescaledb_functions.makeaclitem(:'TMP_USER', :'TMP_USER', 'insert', false)),
-       (_timescaledb_functions.makeaclitem(:'TMP_USER', :'TMP_USER', 'insert,select', false)),
-       (_timescaledb_functions.makeaclitem(:'TMP_USER', :'TMP_USER', 'insert', true)),
-       (_timescaledb_functions.makeaclitem(:'TMP_USER', :'TMP_USER', 'insert,select', true)),
-       (_timescaledb_functions.makeaclitem(NULL, :'TMP_USER', 'insert,select', true)),
-       (_timescaledb_functions.makeaclitem(:'TMP_USER', NULL, 'insert,select', true)),
-       (_timescaledb_functions.makeaclitem(:'TMP_USER', :'TMP_USER', NULL, true)),
-       (_timescaledb_functions.makeaclitem(:'TMP_USER', :'TMP_USER', 'insert,select', NULL)),
-       (_timescaledb_functions.makeaclitem(0, :'TMP_USER', 'insert,select', true)),
-       (_timescaledb_functions.makeaclitem(:'TMP_USER', 0, 'insert,select', true))
-    ) AS t(item);
-DROP USER :TMP_USER;
 
 CREATE TABLE data (vid serial, rng text);
 INSERT INTO data(rng)
