@@ -103,7 +103,7 @@ use_columnar_scan(const RelOptInfo *rel, const RangeTblEntry *rte, const Chunk *
 		return false;
 
 	/* Check that the chunk is actually compressed */
-	return chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID &&
+	return ts_chunk_is_compressed(chunk) &&
 		   /* Check that it is _not_ SELECT FROM ONLY <chunk> */
 		   (rel->reloptkind != RELOPT_BASEREL || ts_rte_is_marked_for_expansion(rte));
 }
