@@ -15,6 +15,7 @@ set(TEST_FILES
     copy_where.sql
     create_chunks.sql
     create_hypertable.sql
+    create_hypertable_declarative.sql
     create_table.sql
     create_table_with.sql
     cursor.sql
