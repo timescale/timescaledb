@@ -9,9 +9,7 @@
       "groupName": "dependencies",
       "schedule": ["on monday"],
       "minimumReleaseAge": "7 days",
-      "formatConfig": {
-        "versioning": "semver"
-      }
+      "versioning": "semver"
     }
   ],
   "pinDigests": true
