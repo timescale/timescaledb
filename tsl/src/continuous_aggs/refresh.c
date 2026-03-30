@@ -914,8 +914,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	SPI_commit_and_chain();
 
 	/* Debug error injection / waitpoint based on which batch is being processed */
-	DEBUG_ERROR_INJECTION(psprintf("cagg_policy_batch_%d_after_txn_1", context.processing_batch));
 	DEBUG_WAITPOINT(psprintf("cagg_policy_batch_%d_after_txn_1_wait", context.processing_batch));
+	DEBUG_ERROR_INJECTION(psprintf("cagg_policy_batch_%d_after_txn_1", context.processing_batch));
 
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
 

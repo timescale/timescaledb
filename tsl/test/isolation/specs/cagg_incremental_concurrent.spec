@@ -66,6 +66,7 @@ setup
     SELECT t, d, 20
     FROM generate_series(1, 60, 1) AS t,
          generate_series(1, 3) AS d;
+
 }
 
 teardown
