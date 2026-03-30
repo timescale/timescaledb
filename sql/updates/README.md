@@ -48,11 +48,6 @@ by using multiple modfiles in order. There are two types of modfiles:
   version, but are no longer present in the transition modfiles.
 
 Notes on post_update.sql
-   We use a special config var (timescaledb.update_script_stage )
-to notify that dependencies have been setup and now timescaledb
-specific queries can be enabled. This is useful if we want to,
-for example, modify objects that need timescaledb specific syntax as
-part of the extension update).
 The scripts in post_update.sql are executed as part of the `ALTER
 EXTENSION` stmt.
 
@@ -93,33 +88,12 @@ variable in the target version of `cmake/ScriptFiles.cmake`.
 The version-specific code is found in the source version of the file
 `sql/updates/reverse-dev.sql`.
 
-The epilog consists of the files in variables `SOURCE_FILES`,
-`SET_POST_UPDATE_STAGE`, `POST_UPDATE_FILES`, and `UNSET_UPDATE_STAGE`
-in that order.
-
-For downgrades to work correctly, some rules need to be followed:
-
-1. If you add new objects in `sql/updates/latest-dev.sql`, you need to
-   remove them in the version-specific downgrade file. The
-   `sql/updates/pre-update.sql` in the target version do not know
-   about objects created in the source version, so they need to be
-   dropped explicitly.
-2. Since `sql/updates/pre-update.sql` can be executed on a later
-   version of the extension, it might be that some objects have been
-   removed and do not exist. Hence `DROP` calls need to use `IF NOT
-   EXISTS`.
+The epilog consists of the files in variables `SOURCE_FILES` and
+`POST_UPDATE_FILES`.
 
 Note that, in contrast to update scripts, downgrade scripts are not
 built by composing several downgrade scripts into a more extensive
-downgrade script. The downgrade scripts are intended to be use only in
-special cases and are not intended to be use to move up and down
-between versions at will, which is why we only generate a downgrade
-script to the immediately preceeding version.
+downgrade script. We only build a downgrade script to the immediate
+preceeding version. To downgrade multiple versions multiple downgrades
+need to be chained.
 
-### When releasing a new version
-
-When releasing a new version, please rename the file `reverse-dev.sql`
-to `<version>--<previous_version>.sql` and add that name to
-`REV_FILES` variable in the `sql/CMakeLists.txt`. This will allow
-generation of downgrade scripts for any version in that list, but it
-is currently not added.
