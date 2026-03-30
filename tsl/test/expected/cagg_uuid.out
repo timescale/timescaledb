@@ -362,10 +362,10 @@ WHERE hypertable_name = (SELECT materialization_hypertable_name FROM timescaledb
 ORDER BY chunk_name;
     chunk_name     | is_compressed 
 -------------------+---------------
- _hyper_3_13_chunk | f
- _hyper_3_22_chunk | f
+ _hyper_3_13_chunk | t
+ _hyper_3_22_chunk | t
  _hyper_3_7_chunk  | t
- _hyper_3_8_chunk  | f
+ _hyper_3_8_chunk  | t
 
 -- Add columnstore policy on the continuous aggregate
 CALL add_columnstore_policy('daily_uuid_events', after => '1 day'::interval);
