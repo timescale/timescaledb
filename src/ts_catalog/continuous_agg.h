@@ -29,7 +29,7 @@
 		if (OidIsValid((newuid)))                                                                  \
 		{                                                                                          \
 			GetUserIdAndSecContext(&(saved_uid), &(saved_secctx));                                 \
-			SetUserIdAndSecContext(uid, (saved_secctx) | SECURITY_LOCAL_USERID_CHANGE);            \
+			SetUserIdAndSecContext(newuid, (saved_secctx) | SECURITY_LOCAL_USERID_CHANGE);         \
 		}                                                                                          \
 	} while (0)
 
