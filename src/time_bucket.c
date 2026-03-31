@@ -465,17 +465,22 @@ ts_date_offset_bucket(PG_FUNCTION_ARGS)
 {
 	Datum period = PG_GETARG_DATUM(0);
 	Datum date = PG_GETARG_DATUM(1);
+	Interval *offset = PG_GETARG_INTERVAL_P(2);
+
+	/* Validate the offset is day-aligned, same as the bucket width requirement. */
+	int64 offset_period = get_interval_period_timestamp_units(offset);
+	check_period_is_daily(offset_period);
 
 	if (DATE_NOT_FINITE(DatumGetDateADT(date)))
 		PG_RETURN_DATUM(date);
 
 	/* Apply offset. */
-	Datum time = DirectFunctionCall2(date_mi_interval, date, PG_GETARG_DATUM(2));
+	Datum time = DirectFunctionCall2(date_mi_interval, date, IntervalPGetDatum(offset));
 	date = DirectFunctionCall1(timestamp_date, time);
 	date = DirectFunctionCall2(ts_date_bucket, period, date);
 
 	/* Remove offset. */
-	time = DirectFunctionCall2(date_pl_interval, date, PG_GETARG_DATUM(2));
+	time = DirectFunctionCall2(date_pl_interval, date, IntervalPGetDatum(offset));
 	date = DirectFunctionCall1(timestamp_date, time);
 	PG_RETURN_DATUM(date);
 }
