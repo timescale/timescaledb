@@ -155,9 +155,10 @@ step "s1_check_duplicates"
 }
 step "s1_refresh_ranges"
 {
-    SELECT materialization_id, start_range, end_range
-    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
-    ORDER BY materialization_id;
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name;
 }
 
 # Test 1: Run 1 pauses after batch 1. Manual refresh on overlapping range [1,50).
