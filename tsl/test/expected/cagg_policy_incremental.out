@@ -876,6 +876,95 @@ SELECT * FROM sorted_bgw_log;
 DROP TABLE test_data CASCADE;
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
+------------------------------------------------------------------------------------------
+-- Test incremental refresh policy crashing between batches
+------------------------------------------------------------------------------------------
+-- Rows processed by a batch should be visible immediately after it finishes
+-- We test this by injecting an error after the first batch completes and observing the CAgg state
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log, _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+\c :TEST_DBNAME test_cagg_refresh_policy_user
+TRUNCATE bgw_log, conditions, conditions_by_day, conditions_by_day_manual_refresh;
+SELECT delete_job(job_id) FROM timescaledb_information.jobs WHERE hypertable_name = 'conditions_by_day';
+ delete_job 
+------------
+
+INSERT INTO conditions
+SELECT
+    t, d, 10
+FROM
+    generate_series(
+        '2025-02-05 00:00:00+00',
+        '2025-03-05 00:00:00+00',
+        '1 hour'::interval) AS t,
+    generate_series(1,5) AS d;
+SELECT
+    add_continuous_aggregate_policy(
+        'conditions_by_day',
+        start_offset => NULL,
+        end_offset => '1 hour',
+        schedule_interval => INTERVAL '1 h',
+        buckets_per_batch => 10
+    ) AS crash_job_id2 \gset
+-- Crash after batch 1 finishes refreshing
+SELECT debug_waitpoint_enable('cagg_policy_batch_1_after_refresh');
+ debug_waitpoint_enable 
+------------------------
+ 
+
+-- CAgg state before refresh starts
+SELECT min(time_bucket), max(time_bucket) FROM conditions_by_day;
+ min | max 
+-----+-----
+     | 
+
+SET client_min_messages TO LOG;
+\set ON_ERROR_STOP 0
+CALL run_job(:crash_job_id2);
+LOG:  statement: CALL run_job(1006);
+LOG:  continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Fri Feb 28 16:00:00 2025 PST, Sun Mar 09 17:00:00 2025 PDT ] (batch 1 of 4)
+LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
+LOG:  inserted 25 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
+ERROR:  error injected at debug point 'cagg_policy_batch_1_after_refresh'
+\set ON_ERROR_STOP 1
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+-- Rows processed by batch 1 should be materialized
+SELECT count(*) AS rows_after_refresh FROM conditions_by_day;
+ rows_after_refresh 
+--------------------
+                 25
+
+SELECT min(time_bucket), max(time_bucket) FROM conditions_by_day;
+             min              |             max              
+------------------------------+------------------------------
+ Fri Feb 28 16:00:00 2025 PST | Tue Mar 04 16:00:00 2025 PST
+
+-- Verify registered ranges are cleaned up after the crash
+SELECT count(*) AS registered_ranges FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+ registered_ranges 
+-------------------
+                 0
+
+SELECT debug_waitpoint_release('cagg_policy_batch_1_after_refresh');
+ debug_waitpoint_release 
+-------------------------
+ 
+
+-- Process reminaing invalidations and verify
+CALL run_job(:crash_job_id2);
+-- Verify against manual refresh
+CALL refresh_continuous_aggregate('conditions_by_day_manual_refresh', NULL, '1 hour'::interval);
+SELECT
+    count(*) > 0 AS has_diff
+FROM
+    ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
+    EXCEPT
+    (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
+ has_diff 
+----------
+ f
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_SUPERUSER;
 REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_policy_user;
