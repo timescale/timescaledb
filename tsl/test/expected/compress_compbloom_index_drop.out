@@ -4,9 +4,6 @@
 ---------------------------------------------------------------------
 -- Some chunks don't have a composite bloom index after index change
 ---------------------------------------------------------------------
--- disable hash pushdown so we don't include the hash values in the plans
--- which makes the test stable. the hash pushdown is tested separately
-set timescaledb.enable_bloom1_hash_pushdown = false;
 CREATE TABLE mixed_avail_drop(ts timestamptz, a int, b int, seg int);
 SELECT create_hypertable('mixed_avail_drop', by_range('ts', interval '1 day'));
  create_hypertable 
@@ -45,7 +42,7 @@ ORDER BY 1,2,3,4;
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
                Vectorized Filter: ((a = 1) AND (b = 2))
                ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0.00 loops=1)
-                     Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_a, 1) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_b, 2))
+                     Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a_b, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_b, TEST-HASHES::bigint[]))
                      Rows Removed by Filter: 2
    ->  Sort (actual rows=0.00 loops=1)
          Sort Key: _hyper_1_2_chunk.ts, _hyper_1_2_chunk.seg
@@ -53,7 +50,7 @@ ORDER BY 1,2,3,4;
          ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
                Vectorized Filter: ((a = 1) AND (b = 2))
                ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=0.00 loops=1)
-                     Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_a, 1) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_b, 2))
+                     Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a_b, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_b, TEST-HASHES::bigint[]))
                      Rows Removed by Filter: 3
    ->  Sort (actual rows=0.00 loops=1)
          Sort Key: _hyper_1_3_chunk.ts, _hyper_1_3_chunk.seg
@@ -90,7 +87,7 @@ ORDER BY 1,2,3,4;
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
                Vectorized Filter: ((a = 1) AND (b = 2))
                ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0.00 loops=1)
-                     Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_a, 1) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_b, 2))
+                     Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a_b, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_b, TEST-HASHES::bigint[]))
                      Rows Removed by Filter: 2
    ->  Sort (actual rows=0.00 loops=1)
          Sort Key: _hyper_1_2_chunk.ts, _hyper_1_2_chunk.seg
@@ -98,7 +95,7 @@ ORDER BY 1,2,3,4;
          ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
                Vectorized Filter: ((a = 1) AND (b = 2))
                ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=0.00 loops=1)
-                     Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_a_b, ROW(1, 2)) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_a, 1) AND _timescaledb_functions.bloom1_contains(regress-test-bloom_b, 2))
+                     Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a_b, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_b, TEST-HASHES::bigint[]))
                      Rows Removed by Filter: 3
    ->  Sort (actual rows=0.00 loops=1)
          Sort Key: _hyper_1_3_chunk.ts, _hyper_1_3_chunk.seg
