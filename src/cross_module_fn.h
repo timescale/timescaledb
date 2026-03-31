@@ -168,6 +168,8 @@ typedef struct CrossModuleFunctions
 	PGFunction uuid_compressor_finish;
 	PGFunction bloom1_contains;
 	PGFunction bloom1_contains_any;
+	PGFunction bloom1_contains_any_hashes;
+	PGFunction bloom1_hash;
 	PGFunction (*bloom1_get_hash_function)(Oid type, FmgrInfo **finfo);
 
 	PGFunction create_chunk;
