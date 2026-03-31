@@ -24,6 +24,7 @@ set(TEST_FILES
     compress_auto_sparse_index.sql
     compress_batch_size.sql
     compress_bitmap_scan.sql
+    compress_bloom_dml.sql
     compress_bloom_hash.sql
     compress_compbloom_basics.sql
     compress_compbloom_config.sql
@@ -65,7 +66,6 @@ set(TEST_FILES
     compression_trigger.sql
     create_table_with.sql
     decompress_index.sql
-    merge_compress.sql
     move.sql
     plan_skip_scan_notnull.sql
     policy_generalization.sql
@@ -167,6 +167,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     uuid_policies.sql
     license_tsl.sql
     merge_chunks.sql
+    merge_compress.sql
     fixed_schedules.sql
     recompress_chunk_segmentwise.sql
     feature_flags.sql
@@ -199,7 +200,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES cagg_planning.sql skip_scan_dagg.sql)
+  list(APPEND TEST_FILES cagg_planning.sql cagg_rewrites.sql skip_scan_dagg.sql)
   list(APPEND TEST_TEMPLATES plan_skip_scan_dagg.sql.in)
 endif()
 

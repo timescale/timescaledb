@@ -149,7 +149,6 @@ BEGIN
           RAISE WARNING 'reindexing index "%.%" for chunk "%" to columnstore failed when columnstore policy is executed', idx_rec.schemaname, idx_rec.indexname, chunk_rec.oid::regclass::text
               USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
                     ERRCODE = _sqlstate;
-          chunks_failure := chunks_failure + 1;
         END;
         COMMIT;
       END LOOP;
@@ -169,10 +168,15 @@ BEGIN
   END LOOP;
 
   IF chunks_failure > 0 THEN
-    RAISE EXCEPTION 'columnstore policy failure'
-      USING
-        DETAIL = format('Failed to convert %L chunks to columnstore. Successfully converted %L chunks.', chunks_failure, numchunks_compressed),
-        ERRCODE = 'data_exception';
+    IF numchunks_compressed > 0 THEN
+      RAISE WARNING 'columnstore policy completed with some failures'
+        USING DETAIL = format('Failed to convert %L chunks to columnstore. Successfully converted %L chunks.', chunks_failure, numchunks_compressed);
+    ELSE
+      RAISE EXCEPTION 'columnstore policy failure'
+        USING
+          DETAIL = format('Failed to convert %L chunks to columnstore. Successfully converted %L chunks.', chunks_failure, numchunks_compressed),
+          ERRCODE = 'data_exception';
+    END IF;
   END IF;
 END;
 $$ LANGUAGE PLPGSQL;

@@ -23,10 +23,10 @@ jobs:
         sudo ln -sf /usr/bin/clang-tidy-19 /usr/bin/clang-tidy
 
     - name: Checkout timescaledb
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
     - name: Checkout pg_ladybug
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       with:
         repository: 'timescale/pg_ladybug'
         path: 'pg_ladybug'

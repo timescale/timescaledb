@@ -64,6 +64,7 @@
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner.h"
 #include "time_utils.h"
+#include "utils.h"
 #include "uuid.h"
 
 typedef struct CollectQualCtx
@@ -77,16 +78,6 @@ typedef struct CollectQualCtx
 } CollectQualCtx;
 
 static void propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx);
-
-static bool
-is_time_bucket_function(Expr *node)
-{
-	if (IsA(node, FuncExpr) &&
-		strncmp(get_func_name(castNode(FuncExpr, node)->funcid), "time_bucket", NAMEDATALEN) == 0)
-		return true;
-
-	return false;
-}
 
 /*
  * Pre-check to determine if an expression is eligible for constification.
@@ -421,7 +412,7 @@ extract_time_bucket_qual(Expr *node, TimeBucketQual *tbqual)
 		return false;
 	}
 
-	if (!is_time_bucket_function((Expr *) time_bucket) || tbqual->value->constisnull)
+	if (!ts_is_time_bucket_function((Expr *) time_bucket) || tbqual->value->constisnull)
 		return false;
 
 	Const *width = linitial(time_bucket->args);
