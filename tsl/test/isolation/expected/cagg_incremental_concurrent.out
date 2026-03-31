@@ -36,13 +36,14 @@ step r1_run:
     $$;
  <waiting ...>
 step s1_refresh_ranges: 
-    SELECT materialization_id, start_range, end_range
-    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
-    ORDER BY materialization_id;
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name;
 
-materialization_id|start_range|end_range
-------------------+-----------+---------
-                 2|         50|       60
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |         50|       60
 
 step s1_count: 
     SELECT count(*) AS row_count FROM cond_10;
@@ -147,13 +148,14 @@ step i1_insert:
          generate_series(1, 3) AS d;
 
 step s1_refresh_ranges: 
-    SELECT materialization_id, start_range, end_range
-    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
-    ORDER BY materialization_id;
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name;
 
-materialization_id|start_range|end_range
-------------------+-----------+---------
-                 4|         50|       60
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |         50|       60
 
 R2: LOG:  statement: 
     -- Non-overlapping with R1's registered batch range [50, 60)
@@ -166,13 +168,14 @@ step r2_refresh:
     CALL refresh_continuous_aggregate('cond_10', 1, 50);
 
 step s1_refresh_ranges: 
-    SELECT materialization_id, start_range, end_range
-    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
-    ORDER BY materialization_id;
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name;
 
-materialization_id|start_range|end_range
-------------------+-----------+---------
-                 4|         50|       60
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |         50|       60
 
 step s1_count: 
     SELECT count(*) AS row_count FROM cond_10;
@@ -261,13 +264,14 @@ step r1_run:
     $$;
  <waiting ...>
 step s1_refresh_ranges: 
-    SELECT materialization_id, start_range, end_range
-    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
-    ORDER BY materialization_id;
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name;
 
-materialization_id|start_range|end_range
-------------------+-----------+---------
-                 6|         50|       60
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |         50|       60
 
 R2: LOG:  statement: 
     -- Overlapping with R1's registered batch range [50, 60)
@@ -277,7 +281,7 @@ step r2_refresh_overlap:
     -- Overlapping with R1's registered batch range [50, 60)
     CALL refresh_continuous_aggregate('cond_10', 40, 60);
 
-ERROR:  could not refresh continuous aggregate "cond_10"
+ERROR:  could not refresh continuous aggregate "cond_10" due to a concurrent refresh
 step wp_release: 
     SELECT debug_waitpoint_release('cagg_policy_batch_2_after_txn_1_wait');
 
