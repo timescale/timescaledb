@@ -1,0 +1,1 @@
+Fixes: #9486 Fix use-after-free in job owner validation
