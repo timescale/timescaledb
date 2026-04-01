@@ -17,7 +17,7 @@ jobs:
 
     steps:
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       with:
         fetch-depth: 0
 
@@ -90,7 +90,7 @@ jobs:
     - name: Cache PostgreSQL ${{ steps.pg.outputs.version }}
       if: steps.check.outputs.should_run == 'true'
       id: cache-postgresql
-      uses: actions/cache@v4
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "pg-${{ steps.pg.outputs.version }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
@@ -150,7 +150,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: Regression diff PG${{ steps.pg.outputs.version }}
         path: |
@@ -159,7 +159,7 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always() && steps.check.outputs.should_run == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: PostgreSQL log ${{ steps.pg.outputs.version }}
         path: postmaster.*

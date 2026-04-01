@@ -395,7 +395,6 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 			}
 		}
 	}
-
 	else if (IsA(node, Query))
 	{
 		Query *query = castNode(Query, node);
@@ -680,21 +679,26 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 #ifdef USE_TELEMETRY
 			ts_telemetry_function_info_gather(parse);
 #endif
+#if PG16_GE
+			if (ts_guc_enable_optimizations &&
+				ts_cm_functions->continuous_agg_apply_rewrites_tsl != NULL)
+				context.rootquery = ts_cm_functions->continuous_agg_apply_rewrites_tsl(parse);
+#endif
 			/*
 			 * Preprocess the hypertables in the query and warm up the caches.
 			 */
-			preprocess_query((Node *) parse, &context);
+			preprocess_query((Node *) context.rootquery, &context);
 
 			if (ts_guc_enable_optimizations)
-				ts_cm_functions->preprocess_query_tsl(parse, &cursor_opts);
+				ts_cm_functions->preprocess_query_tsl(context.rootquery, &cursor_opts);
 		}
 
 		if (prev_planner_hook != NULL)
 			/* Call any earlier hooks */
-			stmt = (prev_planner_hook) (parse, query_string, cursor_opts, bound_params);
+			stmt = (prev_planner_hook) (context.rootquery, query_string, cursor_opts, bound_params);
 		else
 			/* Call the standard planner */
-			stmt = standard_planner(parse, query_string, cursor_opts, bound_params);
+			stmt = standard_planner(context.rootquery, query_string, cursor_opts, bound_params);
 
 		if (ts_extension_is_loaded_and_not_upgrading())
 		{
@@ -1389,28 +1393,11 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 		case TS_REL_CHUNK_STANDALONE:
 		case TS_REL_CHUNK_CHILD:
 			/* Check for UPDATE/DELETE/MERGE (DML) on compressed chunks */
-			if (IS_UPDL_CMD(root->parse) && dml_involves_hypertable(root, ht, rti))
+			if ((IS_UPDL_CMD(root->parse) || root->parse->commandType == CMD_MERGE) &&
+				dml_involves_hypertable(root, ht, rti))
 			{
 				if (ts_cm_functions->set_rel_pathlist_dml != NULL)
 					ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
-				break;
-			}
-			/*
-			 * For MERGE command if there is an UPDATE or DELETE action, then
-			 * do not allow this to succeed on compressed chunks
-			 */
-			if (root->parse->commandType == CMD_MERGE && dml_involves_hypertable(root, ht, rti))
-			{
-				ListCell *ml;
-				foreach (ml, root->parse->mergeActionList)
-				{
-					MergeAction *action = (MergeAction *) lfirst(ml);
-					if (action->commandType == CMD_UPDATE || action->commandType == CMD_DELETE)
-					{
-						if (ts_cm_functions->set_rel_pathlist_dml != NULL)
-							ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
-					}
-				}
 				break;
 			}
 			TS_FALLTHROUGH;
@@ -1683,21 +1670,29 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 				}
 				case CMD_MERGE:
 				{
-					List *firstMergeActionList = linitial(mt->mergeActionLists);
-					ListCell *l;
 					/*
-					 * Iterate over merge action to check if there is an INSERT sql.
-					 * If so, then add ModifyHypertable node.
+					 * Create ModifyHypertable node for MERGE when:
+					 * - INSERT actions need chunk tuple routing
+					 * - Compressed chunks need decompression for correct
+					 *   join evaluation of matched vs not-matched rows
 					 */
-					foreach (l, firstMergeActionList)
+					bool need_modify = (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht));
+					if (!need_modify)
 					{
-						MergeAction *action = (MergeAction *) lfirst(l);
-						if (action->commandType == CMD_INSERT)
+						List *firstMergeActionList = linitial(mt->mergeActionLists);
+						ListCell *l;
+						foreach (l, firstMergeActionList)
 						{
-							path = ts_modify_hypertable_path_create(root, mt, input_rel);
-							break;
+							MergeAction *action = (MergeAction *) lfirst(l);
+							if (action->commandType == CMD_INSERT)
+							{
+								need_modify = true;
+								break;
+							}
 						}
 					}
+					if (need_modify)
+						path = ts_modify_hypertable_path_create(root, mt, input_rel);
 					break;
 				}
 				default:

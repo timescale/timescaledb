@@ -510,6 +510,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 	cis->counters->batches_filtered_decompressed += stats.batches_filtered_decompressed;
 	cis->counters->batches_decompressed += stats.batches_decompressed;
 	cis->counters->tuples_decompressed += stats.tuples_decompressed;
+	cis->counters->batches_scanned += stats.batches_scanned;
 	cis->counters->batches_checked_by_bloom += stats.batches_checked_by_bloom;
 	cis->counters->batches_pruned_by_bloom += stats.batches_pruned_by_bloom;
 	cis->counters->batches_without_bloom += stats.batches_without_bloom;
@@ -677,6 +678,7 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	ht_state->batches_decompressed += stats.batches_decompressed;
 	ht_state->tuples_decompressed += stats.tuples_decompressed;
 	ht_state->tuples_deleted += stats.tuples_deleted;
+	ht_state->batches_scanned += stats.batches_scanned;
 	ht_state->batches_checked_by_bloom += stats.batches_checked_by_bloom;
 	ht_state->batches_pruned_by_bloom += stats.batches_pruned_by_bloom;
 	ht_state->batches_without_bloom += stats.batches_without_bloom;
@@ -779,7 +781,6 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	RowDecompressor decompressor;
 	bool decompressor_initialized = false;
 	bool valid = false;
-	int num_scanned_rows = 0;
 	TM_Result result;
 	DecompressBatchScanDesc scan = NULL;
 	ScanKeyData *index_scankeys = cdst->index_scankeys.scankeys;
@@ -815,7 +816,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 
 	while (decompress_batch_scan_getnext_slot(scan, ForwardScanDirection, slot))
 	{
-		num_scanned_rows++;
+		stats.batches_scanned++;
 
 		/* Deconstruct the tuple */
 		Assert(slot->tts_ops->get_heap_tuple);
@@ -848,6 +849,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		int pos = 0;
 		bool is_null_condition = 0;
 		bool seg_col_is_null = false;
+		bool complete_batch_delete;
 		valid = true;
 		/*
 		 * Since the heap scan API does not support SK_SEARCHNULL we have to check
@@ -981,6 +983,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 				continue;
 			}
 		}
+		complete_batch_delete = (delete_only && summary == AllRowsPass);
 
 		row_decompressor_reset(&decompressor);
 
@@ -992,7 +995,11 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			ExecDropSingleTupleTableSlot(slot);
 			return stats;
 		}
-		write_logical_replication_msg_decompression_start();
+
+		if (!complete_batch_delete)
+		{
+			write_logical_replication_msg_decompression_start();
+		}
 
 		TM_FailureData tmfd;
 		result = table_tuple_delete(in_rel,
@@ -1024,7 +1031,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			return stats;
 		}
 		/* If all rows pass, complete batch can be deleted */
-		if (delete_only && summary == AllRowsPass)
+		if (complete_batch_delete)
 		{
 			stats.batches_deleted++;
 			stats.tuples_deleted += DatumGetInt32(
@@ -1053,8 +1060,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			stats.tuples_decompressed +=
 				row_decompressor_decompress_row_to_table(&decompressor, &writer);
 			stats.batches_decompressed++;
+			write_logical_replication_msg_decompression_end();
 		}
-		write_logical_replication_msg_decompression_end();
 	}
 	ExecDropSingleTupleTableSlot(slot);
 	decompress_batch_endscan(scan);
@@ -1067,10 +1074,10 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	if (ts_guc_debug_compression_path_info)
 	{
 		elog(INFO,
-			 "Number of compressed rows fetched from %s: %d. "
+			 "Number of compressed rows fetched from %s: " INT64_FORMAT ". "
 			 "Number of compressed rows filtered%s: " INT64_FORMAT ".",
 			 index_rel ? "index" : "table scan",
-			 num_scanned_rows,
+			 stats.batches_scanned,
 			 index_rel ? " by heap filters" : "",
 			 stats.batches_filtered_compressed);
 	}

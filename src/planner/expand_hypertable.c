@@ -65,6 +65,7 @@
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner.h"
 #include "time_utils.h"
+#include "utils.h"
 #include "uuid.h"
 
 typedef struct CollectQualCtx
@@ -78,16 +79,6 @@ typedef struct CollectQualCtx
 } CollectQualCtx;
 
 static void propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx);
-
-static bool
-is_time_bucket_function(Expr *node)
-{
-	if (IsA(node, FuncExpr) &&
-		strncmp(get_func_name(castNode(FuncExpr, node)->funcid), "time_bucket", NAMEDATALEN) == 0)
-		return true;
-
-	return false;
-}
 
 /*
  * Pre-check to determine if an expression is eligible for constification.
@@ -422,7 +413,7 @@ extract_time_bucket_qual(Expr *node, TimeBucketQual *tbqual)
 		return false;
 	}
 
-	if (!is_time_bucket_function((Expr *) time_bucket) || tbqual->value->constisnull)
+	if (!ts_is_time_bucket_function((Expr *) time_bucket) || tbqual->value->constisnull)
 		return false;
 
 	Const *width = linitial(time_bucket->args);
@@ -1181,7 +1172,8 @@ void
 ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel,
 								 bool include_osm)
 {
-	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
+	Query *parse = root->parse;
+	RangeTblEntry *rte = rt_fetch(rel->relid, parse->rtable);
 	Oid parent_oid = rte->relid;
 	Relation oldrelation;
 	Index rti = rel->relid;
@@ -1271,18 +1263,27 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 										   newrelation,
 										   &childrte,
 										   &child_rtindex);
-		childrte->ctename = NULL;
-
 		/*
-		 * For non-result relations where the parent had no explicit alias,
-		 * clear the alias so EXPLAIN shows the chunk table name rather than
-		 * the parent alias, matching prior behavior.
+		 * For compatibility with the old planner code that didn't create
+		 * per-chunk aliases, use the parent aliases. These aliases have only a
+		 * cosmetic function, and changing them would lead to EXPLAIN changes in
+		 * basically every test.
+		 *
+		 * For DML result relations, keep the alias that
+		 * ts_expand_single_inheritance_child() set (parent name), so
+		 * ruleutils adds _1/_2 suffixes for disambiguation, matching
+		 * the convention PG uses for inherited tables.
 		 */
-		if (!bms_is_member(rti, root->all_result_relids) && rte->alias == NULL)
-			childrte->alias = NULL;
+		if (!bms_is_member(rti, root->all_result_relids))
+		{
+			childrte->alias = copyObject(rte->alias);
+			childrte->eref = copyObject(rte->eref);
+		}
 
+		childrte->ctename = NULL;
 		if (first_chunk_index == 0)
 			first_chunk_index = child_rtindex;
+		Assert(root->simple_rel_array[child_rtindex] == NULL);
 
 		/* Close child relations, but keep locks */
 		if (child_oid != parent_oid)

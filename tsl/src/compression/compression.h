@@ -274,6 +274,8 @@ typedef struct RowCompressor
 	int64 tuples_to_sort;	/* number of tuples to sort with tuplesort */
 	int64 tuple_sort_limit; /* number of tuples to flush the compressor on */
 
+	bool needs_analyze_segmentby;
+
 	List *metadata_builders; /* List of BatchMetadataBuilder */
 } RowCompressor;
 
@@ -381,7 +383,7 @@ extern void row_compressor_init(RowCompressor *row_compressor, const Compression
 								const TupleDesc compressed_tupdesc);
 
 extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort,
-										  int tuple_sort_limit);
+										  int tuple_sort_limit, bool created_compressed_chunk);
 extern void tsl_compressor_set_invalidation(RowCompressor *compressor, Hypertable *ht,
 											Oid chunk_relid);
 extern void tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer,
@@ -449,6 +451,7 @@ struct decompress_batches_stats
 {
 	int64 batches_deleted;
 	int64 batches_decompressed;
+	int64 batches_scanned;
 	int64 batches_checked_by_bloom;
 	int64 batches_pruned_by_bloom;
 	int64 batches_without_bloom;

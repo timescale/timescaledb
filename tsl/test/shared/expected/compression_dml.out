@@ -209,6 +209,7 @@ SELECT count(compress_chunk(c)) FROM show_chunks('lazy_decompress') c;
 BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    ->  Insert on lazy_decompress (actual rows=0.00 loops=1)
          Conflict Resolution: NOTHING
          Tuples Inserted: 1
@@ -219,6 +220,7 @@ BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',r
 BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',random() ON CONFLICT(time,device) DO UPDATE SET value=EXCLUDED.value; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    ->  Insert on lazy_decompress (actual rows=0.00 loops=1)
          Conflict Resolution: UPDATE
          Conflict Arbiter Indexes: lazy_decompress_pkey
@@ -231,6 +233,7 @@ BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',r
 BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:01','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    ->  Insert on lazy_decompress (actual rows=0.00 loops=1)
          Conflict Resolution: NOTHING
          Tuples Inserted: 0
@@ -242,6 +245,7 @@ BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:01','d1',ran
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches filtered after decompression: 6
    ->  Update on lazy_decompress (actual rows=0.00 loops=1)
          Update on _hyper_X_X_chunk lazy_decompress_1
@@ -252,6 +256,7 @@ BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0; ROLLBAC
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches filtered after decompression: 6
    ->  Update on lazy_decompress (actual rows=0.00 loops=1)
          Update on _hyper_X_X_chunk lazy_decompress_1
@@ -263,6 +268,7 @@ BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND devi
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 2300; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches filtered after decompression: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
@@ -276,6 +282,7 @@ BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 2300; ROLL
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value > 3100 AND value < 3200; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches filtered after decompression: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
@@ -289,6 +296,7 @@ BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value > 3100 AND v
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches filtered after decompression: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
@@ -304,6 +312,7 @@ SET timescaledb.enable_dml_decompression_tuple_filtering TO off;
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches decompressed: 6
    Tuples decompressed: 6000
    ->  Update on lazy_decompress (actual rows=0.00 loops=1)
@@ -318,6 +327,7 @@ RESET timescaledb.enable_dml_decompression_tuple_filtering;
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches filtered after decompression: 6
    ->  Delete on lazy_decompress (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk lazy_decompress_1
@@ -327,6 +337,7 @@ BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0; ROLLBACK;
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches filtered after decompression: 6
    ->  Delete on lazy_decompress (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk lazy_decompress_1
@@ -337,6 +348,7 @@ BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROL
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 2300; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches filtered after decompression: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
@@ -349,6 +361,7 @@ BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 2300; ROLLBACK;
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value > 3100 AND value < 3200; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches filtered after decompression: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
@@ -361,6 +374,7 @@ BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value > 3100 AND value < 3200;
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches filtered after decompression: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
@@ -375,6 +389,7 @@ SET timescaledb.enable_dml_decompression_tuple_filtering TO off;
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches decompressed: 6
    Tuples decompressed: 6000
    ->  Delete on lazy_decompress (actual rows=0.00 loops=1)
@@ -419,6 +434,7 @@ BEGIN;
 :ANALYZE DELETE FROM direct_delete WHERE device='d1';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 4
    Batches deleted: 4
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
@@ -437,6 +453,7 @@ BEGIN;
 :ANALYZE DELETE FROM direct_delete WHERE reading='r2';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 2
    Batches deleted: 2
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
@@ -456,6 +473,7 @@ BEGIN;
 :ANALYZE DELETE FROM direct_delete WHERE reading <> 'r2';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 4
    Batches deleted: 4
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
@@ -474,6 +492,7 @@ BEGIN;
 :ANALYZE DELETE FROM direct_delete WHERE reading IS NULL;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 2
    Batches decompressed: 2
    Tuples decompressed: 2
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
@@ -493,6 +512,7 @@ BEGIN;
 :ANALYZE DELETE FROM direct_delete WHERE reading IS NOT NULL;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches decompressed: 6
    Tuples decompressed: 6
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
@@ -512,6 +532,7 @@ BEGIN;
 :ANALYZE DELETE FROM direct_delete WHERE reading IN ('r1','r2');
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 4
    Batches deleted: 4
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
@@ -530,6 +551,7 @@ BEGIN;
 :ANALYZE DELETE FROM direct_delete WHERE reading NOT IN ('r1');
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 4
    Batches deleted: 4
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
@@ -549,6 +571,7 @@ BEGIN;
 :ANALYZE DELETE FROM direct_delete WHERE device='d1' AND reading='r2';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 1
    Batches deleted: 1
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
@@ -566,6 +589,7 @@ ROLLBACK;
 BEGIN; :ANALYZE DELETE FROM direct_delete WHERE value = '1.0'; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 8
    Batches deleted: 8
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
@@ -575,6 +599,7 @@ BEGIN; :ANALYZE DELETE FROM direct_delete WHERE value = '1.0'; ROLLBACK;
 BEGIN; :ANALYZE DELETE FROM direct_delete WHERE device = 'd1' AND value = '1.0'; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 4
    Batches deleted: 4
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
@@ -584,6 +609,7 @@ BEGIN; :ANALYZE DELETE FROM direct_delete WHERE device = 'd1' AND value = '1.0';
 BEGIN; :ANALYZE DELETE FROM direct_delete WHERE reading = 'r1' AND value = '1.0'; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 2
    Batches deleted: 2
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
@@ -593,6 +619,7 @@ BEGIN; :ANALYZE DELETE FROM direct_delete WHERE reading = 'r1' AND value = '1.0'
 BEGIN; :ANALYZE DELETE FROM direct_delete WHERE device = 'd2' AND reading = 'r3' AND value = '1.0'; ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 1
    Batches deleted: 1
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk direct_delete_1
@@ -608,6 +635,7 @@ WARNING:  Trigger fired
 WARNING:  Trigger fired
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 4
    Batches decompressed: 4
    Tuples decompressed: 4
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
@@ -625,6 +653,7 @@ WARNING:  Trigger fired
 WARNING:  Trigger fired
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 4
    Batches decompressed: 4
    Tuples decompressed: 4
    ->  Delete on direct_delete (actual rows=0.00 loops=1)
@@ -665,6 +694,7 @@ BEGIN;
 :ANALYZE DELETE FROM compress_dml WHERE reading = 'r1';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 4
    Batches decompressed: 3
    Tuples decompressed: 7
    Batches deleted: 1
@@ -690,6 +720,7 @@ BEGIN;
 :ANALYZE DELETE FROM compress_dml WHERE reading <> 'r1';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches filtered after decompression: 2
    Batches decompressed: 3
    Tuples decompressed: 7
@@ -716,6 +747,7 @@ BEGIN;
 :ANALYZE DELETE FROM compress_dml WHERE reading IS NULL;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches decompressed: 6
    Tuples decompressed: 11
    ->  Delete on compress_dml (actual rows=0.00 loops=1)
@@ -741,6 +773,7 @@ BEGIN;
 :ANALYZE DELETE FROM compress_dml WHERE reading IS NOT NULL;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches decompressed: 6
    Tuples decompressed: 11
    ->  Delete on compress_dml (actual rows=0.00 loops=1)
@@ -761,6 +794,7 @@ BEGIN;
 :ANALYZE DELETE FROM compress_dml WHERE reading IN ('r2','r3');
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches decompressed: 6
    Tuples decompressed: 11
    ->  Delete on compress_dml (actual rows=0.00 loops=1)
@@ -785,6 +819,7 @@ BEGIN;
 :ANALYZE DELETE FROM compress_dml WHERE reading = ANY('{r2,r3}');
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches decompressed: 6
    Tuples decompressed: 11
    ->  Delete on compress_dml (actual rows=0.00 loops=1)
@@ -809,6 +844,7 @@ BEGIN;
 :ANALYZE DELETE FROM compress_dml WHERE reading NOT IN ('r2','r3');
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches decompressed: 6
    Tuples decompressed: 11
    ->  Delete on compress_dml (actual rows=0.00 loops=1)
@@ -833,6 +869,7 @@ BEGIN;
 :ANALYZE DELETE FROM compress_dml WHERE reading <> ALL('{r2,r3}');
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 6
    Batches decompressed: 6
    Tuples decompressed: 11
    ->  Delete on compress_dml (actual rows=0.00 loops=1)
@@ -937,6 +974,7 @@ RESET plan_cache_mode;
 BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE FROM metrics_compressed where device_id IS NOT NULL AND device_id = 1;ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 14
    Batches decompressed: 14
    Tuples decompressed: 12076
    ->  Delete on metrics_compressed (actual rows=0.00 loops=1)
@@ -954,6 +992,7 @@ BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE
 BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE FROM metrics_compressed where device_id <> 1 AND device_id <> 2;ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 48
    Batches deleted: 48
    ->  Delete on metrics_compressed (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk metrics_compressed_1
@@ -971,6 +1010,7 @@ BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE
 BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE FROM metrics_compressed where device_id > 1 AND device_id < 3;ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 16
    Batches deleted: 16
    ->  Delete on metrics_compressed (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk metrics_compressed_1
@@ -987,6 +1027,7 @@ BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE
 BEGIN; EXPLAIN (analyze, buffers off, costs off, timing off, summary off) DELETE FROM metrics_compressed where v3 IS NOT NULL AND device_id IS NOT NULL AND device_id = 1;ROLLBACK;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 14
    Batches decompressed: 14
    Tuples decompressed: 12076
    ->  Delete on metrics_compressed (actual rows=0.00 loops=1)

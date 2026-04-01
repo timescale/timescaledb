@@ -1,0 +1,311 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Test that ColumnarScan ExprContext resets prevent memory leaks.
+-- Without ResetExprContext before ExecProject or ExecQual, the per-tuple
+-- expression context grows with every tuple processed.
+--
+-- Each test scans increasing row counts and records PortalContext size.
+-- ts_debug_allocated_bytes() runs once per query in the outer Aggregate,
+-- measuring total PortalContext after all tuples are processed. max(h) is
+-- inserted into the log so the planner cannot eliminate the ::text casts.
+-- A positive regr_slope indicates a leak.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+create or replace function ts_debug_allocated_bytes(text = 'PortalContext') returns bigint
+    as :MODULE_PATHNAME, 'ts_debug_allocated_bytes'
+    language c strict volatile;
+create table csm(time timestamptz not null, device int, v1 bigint, v2 bigint,
+    v3 bigint, v4 bigint, v5 bigint, v6 bigint, v7 bigint, v8 bigint);
+select create_hypertable('csm', 'time', chunk_time_interval => interval '3 days');
+ create_hypertable 
+-------------------
+ (1,public,csm,t)
+
+alter table csm set (timescaledb.compress,
+    timescaledb.compress_segmentby = 'device',
+    timescaledb.compress_orderby = 'time');
+-- 500K rows across multiple chunks (~5.8 days at 1 row/sec, 3 day chunks).
+insert into csm select '2020-01-01'::timestamptz + (g || 's')::interval, 1,
+    g, g, g, g, g, g, g, g from generate_series(1, 500000) g;
+select count(compress_chunk(c)) from show_chunks('csm') c;
+ count 
+-------
+     3
+
+create table log(n int, bytes bigint, mh text);
+-- Test 1: Projection on direct chunk scan.
+-- Scan the chunk directly so that ColumnarScan handles projection (no Result
+-- node above).
+select format($$ insert into log
+    select %1$s, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from %2$s limit %1$s) sub $$,
+    x * 25000, c)
+from generate_series(1, 10) x, (select c from show_chunks('csm') c limit 1) c
+\gexec
+ insert into log
+    select 25000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from _timescaledb_internal._hyper_1_1_chunk limit 25000) sub 
+ insert into log
+    select 50000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from _timescaledb_internal._hyper_1_1_chunk limit 50000) sub 
+ insert into log
+    select 75000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from _timescaledb_internal._hyper_1_1_chunk limit 75000) sub 
+ insert into log
+    select 100000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from _timescaledb_internal._hyper_1_1_chunk limit 100000) sub 
+ insert into log
+    select 125000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from _timescaledb_internal._hyper_1_1_chunk limit 125000) sub 
+ insert into log
+    select 150000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from _timescaledb_internal._hyper_1_1_chunk limit 150000) sub 
+ insert into log
+    select 175000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from _timescaledb_internal._hyper_1_1_chunk limit 175000) sub 
+ insert into log
+    select 200000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from _timescaledb_internal._hyper_1_1_chunk limit 200000) sub 
+ insert into log
+    select 225000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from _timescaledb_internal._hyper_1_1_chunk limit 225000) sub 
+ insert into log
+    select 250000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from _timescaledb_internal._hyper_1_1_chunk limit 250000) sub 
+select * from log where (
+    select regr_slope(bytes, n) > 0.01 from log
+);
+ n | bytes | mh 
+---+-------+----
+
+-- Test 2: Qual with allocating expressions, no projection.
+-- SELECT * returns all raw columns so ColumnarScan has no projection
+-- (ps_ProjInfo is NULL). The ::text casts in WHERE go through postgres_qual
+-- (ExecQual) where the only ResetExprContext for this code path lives.
+-- The outer query references all columns via max() to prevent the planner
+-- from eliminating any of them.
+truncate log;
+select format($$ insert into log
+    select %1$s, ts_debug_allocated_bytes(),
+        max(time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text) from (
+        select * from %2$s
+        where v1::text || v2::text || v3::text || v4::text ||
+              v5::text || v6::text || v7::text || v8::text > '0'
+        limit %1$s) sub $$,
+    x * 25000, c)
+from generate_series(1, 10) x, (select c from show_chunks('csm') c limit 1) c
+\gexec
+ insert into log
+    select 25000, ts_debug_allocated_bytes(),
+        max(time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text) from (
+        select * from _timescaledb_internal._hyper_1_1_chunk
+        where v1::text || v2::text || v3::text || v4::text ||
+              v5::text || v6::text || v7::text || v8::text > '0'
+        limit 25000) sub 
+ insert into log
+    select 50000, ts_debug_allocated_bytes(),
+        max(time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text) from (
+        select * from _timescaledb_internal._hyper_1_1_chunk
+        where v1::text || v2::text || v3::text || v4::text ||
+              v5::text || v6::text || v7::text || v8::text > '0'
+        limit 50000) sub 
+ insert into log
+    select 75000, ts_debug_allocated_bytes(),
+        max(time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text) from (
+        select * from _timescaledb_internal._hyper_1_1_chunk
+        where v1::text || v2::text || v3::text || v4::text ||
+              v5::text || v6::text || v7::text || v8::text > '0'
+        limit 75000) sub 
+ insert into log
+    select 100000, ts_debug_allocated_bytes(),
+        max(time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text) from (
+        select * from _timescaledb_internal._hyper_1_1_chunk
+        where v1::text || v2::text || v3::text || v4::text ||
+              v5::text || v6::text || v7::text || v8::text > '0'
+        limit 100000) sub 
+ insert into log
+    select 125000, ts_debug_allocated_bytes(),
+        max(time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text) from (
+        select * from _timescaledb_internal._hyper_1_1_chunk
+        where v1::text || v2::text || v3::text || v4::text ||
+              v5::text || v6::text || v7::text || v8::text > '0'
+        limit 125000) sub 
+ insert into log
+    select 150000, ts_debug_allocated_bytes(),
+        max(time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text) from (
+        select * from _timescaledb_internal._hyper_1_1_chunk
+        where v1::text || v2::text || v3::text || v4::text ||
+              v5::text || v6::text || v7::text || v8::text > '0'
+        limit 150000) sub 
+ insert into log
+    select 175000, ts_debug_allocated_bytes(),
+        max(time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text) from (
+        select * from _timescaledb_internal._hyper_1_1_chunk
+        where v1::text || v2::text || v3::text || v4::text ||
+              v5::text || v6::text || v7::text || v8::text > '0'
+        limit 175000) sub 
+ insert into log
+    select 200000, ts_debug_allocated_bytes(),
+        max(time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text) from (
+        select * from _timescaledb_internal._hyper_1_1_chunk
+        where v1::text || v2::text || v3::text || v4::text ||
+              v5::text || v6::text || v7::text || v8::text > '0'
+        limit 200000) sub 
+ insert into log
+    select 225000, ts_debug_allocated_bytes(),
+        max(time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text) from (
+        select * from _timescaledb_internal._hyper_1_1_chunk
+        where v1::text || v2::text || v3::text || v4::text ||
+              v5::text || v6::text || v7::text || v8::text > '0'
+        limit 225000) sub 
+ insert into log
+    select 250000, ts_debug_allocated_bytes(),
+        max(time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text) from (
+        select * from _timescaledb_internal._hyper_1_1_chunk
+        where v1::text || v2::text || v3::text || v4::text ||
+              v5::text || v6::text || v7::text || v8::text > '0'
+        limit 250000) sub 
+select * from log where (
+    select regr_slope(bytes, n) > 0.01 from log
+);
+ n | bytes | mh 
+---+-------+----
+
+-- Test 3: Projection via hypertable query.
+-- Currently the planner inserts a Result node above ColumnarScan for
+-- hypertable queries, so ColumnarScan does not handle projection directly.
+-- This test guards against future changes that push projection down.
+-- Filter by v1 % 10 < K instead of LIMIT so that all chunks are scanned
+-- from the first iteration (v1 values are spread evenly across chunks).
+-- This avoids discrete per-chunk memory steps that LIMIT would cause.
+truncate log;
+select format($$ insert into log
+    select %1$s * 50000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from csm where v1 %% 10 < %1$s) sub $$,
+    x)
+from generate_series(1, 10) x
+\gexec
+ insert into log
+    select 1 * 50000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from csm where v1 % 10 < 1) sub 
+ insert into log
+    select 2 * 50000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from csm where v1 % 10 < 2) sub 
+ insert into log
+    select 3 * 50000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from csm where v1 % 10 < 3) sub 
+ insert into log
+    select 4 * 50000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from csm where v1 % 10 < 4) sub 
+ insert into log
+    select 5 * 50000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from csm where v1 % 10 < 5) sub 
+ insert into log
+    select 6 * 50000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from csm where v1 % 10 < 6) sub 
+ insert into log
+    select 7 * 50000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from csm where v1 % 10 < 7) sub 
+ insert into log
+    select 8 * 50000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from csm where v1 % 10 < 8) sub 
+ insert into log
+    select 9 * 50000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from csm where v1 % 10 < 9) sub 
+ insert into log
+    select 10 * 50000, ts_debug_allocated_bytes(), max(h) from (
+        select time::text || device::text || v1::text || v2::text ||
+            v3::text || v4::text || v5::text || v6::text ||
+            v7::text || v8::text as h
+        from csm where v1 % 10 < 10) sub 
+select * from log where (
+    select regr_slope(bytes, n) > 0.01 from log
+);
+ n | bytes | mh 
+---+-------+----
+
