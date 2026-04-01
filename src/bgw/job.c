@@ -856,11 +856,11 @@ ts_bgw_job_validate_job_owner(Oid owner)
 
 	if (!rform->rolcanlogin)
 	{
+		char *rolname = pstrdup(NameStr(rform->rolname));
 		ReleaseSysCache(role_tup);
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_AUTHORIZATION_SPECIFICATION),
-				 errmsg("permission denied to start background process as role \"%s\"",
-						NameStr(rform->rolname)),
+				 errmsg("permission denied to start background process as role \"%s\"", rolname),
 				 errhint("Hypertable owner must have LOGIN permission to run background tasks.")));
 	}
 	ReleaseSysCache(role_tup);
