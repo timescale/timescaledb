@@ -1024,9 +1024,9 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
 {
 	if (compressor->sort_state)
 		tuplesort_end(compressor->sort_state);
+	tsl_compressor_flush(compressor, bulk_writer);
 	if (compressor->invalidation)
 		pfree(compressor->invalidation);
-	tsl_compressor_flush(compressor, bulk_writer);
 	row_compressor_close(compressor);
 	bulk_writer_close(bulk_writer);
 	table_close(bulk_writer->out_rel, NoLock);
