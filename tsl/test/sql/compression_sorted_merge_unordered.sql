@@ -15,8 +15,8 @@ CREATE TABLE test1 (
     time timestamptz NOT NULL,
     x1 integer,
     x2 integer,
-    x3 integer,
-    x4 integer,
+    x3 integer NOT NULL,
+    x4 integer NOT NULL,
     x5 integer);
 
 SELECT FROM create_hypertable('test1', 'time');
@@ -47,8 +47,8 @@ CREATE TABLE test2 (
 time timestamptz NOT NULL,
     x1 integer,
     x2 integer,
-    x3 integer,
-    x4 integer,
+    x3 integer NOT NULL,
+    x4 integer NOT NULL,
     x5 integer);
 
 SELECT FROM create_hypertable('test2', 'time');
@@ -171,13 +171,24 @@ SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
 :PREFIX
 SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 NULLS LAST;
 
--- Should be optimized
+-- Should be optimized as we exclude NULLs from x2
 :PREFIX
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
+SELECT * FROM test_with_defined_null WHERE x2 IS NOT NULL ORDER BY x2 ASC NULLS FIRST;
 
--- Should be optimized (backward scan)
+-- Should be optimized as we exclude NULLs from x2, NULL direction does not matter
 :PREFIX
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
+SELECT * FROM test_with_defined_null WHERE x2 IS NOT NULL ORDER BY x2 ASC NULLS LAST;
+
+-- Should be optimized (backward scan) as we exclude NULLs from x2
+:PREFIX
+SELECT * FROM test_with_defined_null  WHERE x2 IS NOT NULL ORDER BY x2 DESC NULLS LAST;
+
+-- Should be optimized as we exlude NULLs from x2 via strict functions
+:PREFIX
+SELECT * FROM test_with_defined_null WHERE x2 > 0  ORDER BY x2;
+
+:PREFIX
+SELECT * FROM test_with_defined_null WHERE x2::float + x1 > 1.0  AND time = '2000-01-01' ORDER BY x2;
 
 set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 
@@ -189,14 +200,15 @@ SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS FIRST, x4 NULLS
 :PREFIX
 SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS LAST, x4 NULLS FIRST;
 
--- Should not be optimized (NULL order wrong)
+-- Should be optimized (NULL order doesn't matter as "time" is not nullable)
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 :PREFIX
 SELECT * FROM test1 ORDER BY time DESC NULLS LAST;
 
--- Should not be optimized (NULL order wrong)
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS FIRST;
 
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 -- Should not be optimized (wrong order for x4)
 :PREFIX
 SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST;
@@ -212,14 +224,26 @@ SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS LAST, x4 DESC;
 -- Should not be optimized (wrong order for x3)
 :PREFIX
 SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS FIRST, x4 DESC;
--- Should not be optimized
+
+-- Should not be optimized as x2 is nullable
+:PREFIX
+SELECT * FROM test_with_defined_null ORDER BY x2 ASC;
+
 :PREFIX
 SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
 
--- Should not be optimized
 :PREFIX
 SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 
+:PREFIX
+SELECT * FROM test_with_defined_null ORDER BY x2 DESC;
+
+-- Should not be optimized as x2 is nullable with non-strict-only predicates over x2
+:PREFIX
+SELECT * FROM test_with_defined_null WHERE x2 IS NOT NULL OR x2 > 1 ORDER BY x2;
+
+:PREFIX
+SELECT * FROM test_with_defined_null WHERE x2 IS NULL OR x2 > 1 ORDER BY x2;
 
 ------
 -- Tests based on attributes
@@ -359,13 +383,14 @@ SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
 
--- Test with null values
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
-
+-- Test with null values in x2
 set timescaledb.debug_require_batch_sorted_merge to 'forbid';
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
+
+SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
+SELECT time, x2 FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
+
+SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
+SELECT time, x2 FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 
 ------
 -- Tests based on compressed chunk state
@@ -446,17 +471,52 @@ SELECT * FROM test2 ORDER BY time ASC;
 :PREFIX
 SELECT * FROM test2 ORDER BY time DESC NULLS FIRST;
 
-set timescaledb.debug_require_batch_sorted_merge to 'forbid';
-
--- Should not be optimized (NULL order wrong)
+-- Should be optimized (NULL order doesn't matter as time is not nullable)
 :PREFIX
 SELECT * FROM test_segby ORDER BY time DESC NULLS LAST;
 
--- Should not be optimized (NULL order wrong)
+-- Should be optimized (NULL order doesn't matter as time is not nullable)
 :PREFIX
 SELECT * FROM test_segby ORDER BY time ASC NULLS FIRST;
+
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 
 -- Should not be optimized (using segmentby)
 :PREFIX
 SELECT * FROM test_segby ORDER BY segby, time;
 
+-- Tests for #9445: forbid BSM on nullable orderby columns
+CREATE TABLE t(time int NOT NULL, device int, val int);
+SELECT create_hypertable('t', 'time', chunk_time_interval => 10000);
+ALTER TABLE t SET (timescaledb.compress,
+    timescaledb.compress_segmentby='device',
+    timescaledb.compress_orderby='val DESC');
+
+-- One batch: 200 NULLs + values 1..300. _ts_meta_max = 300.
+-- In DESC order the first decompressed tuple is NULL, not 300.
+SET timescaledb.enable_direct_compress_insert = false;
+INSERT INTO t SELECT 1, 1, NULL FROM generate_series(1, 200);
+INSERT INTO t SELECT 1, 1, g FROM generate_series(1, 300) g;
+SELECT compress_chunk(show_chunks('t'));
+
+-- Two more batches via direct compress (chunk becomes unordered).
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO t SELECT 1, 1, g FROM generate_series(500, 800) g;
+INSERT INTO t SELECT 1, 1, g FROM generate_series(900, 1000) g;
+
+SET timescaledb.debug_require_batch_sorted_merge = 'forbid';
+
+-- In DESC order NULLs come first; a NULL after a non-NULL is wrong.
+-- Should not use BSM here, should return 0
+SELECT count(*) AS wrong_rows FROM (
+    SELECT val, lag(val) OVER (ORDER BY val DESC) AS prev FROM t
+) t WHERE val IS NULL AND prev IS NOT NULL;
+
+-- Can use BSM if we can exclude NULLs from val
+SET timescaledb.debug_require_batch_sorted_merge = 'force';
+SELECT val, lag(val) OVER (ORDER BY val DESC NULLS FIRST) AS prev FROM t where val > 995;
+SELECT val, lag(val) OVER (ORDER BY val DESC NULLS LAST) AS prev FROM t where val > 995;
+
+drop table t cascade;
+RESET timescaledb.enable_direct_compress_insert;
+RESET timescaledb.debug_require_batch_sorted_merge;

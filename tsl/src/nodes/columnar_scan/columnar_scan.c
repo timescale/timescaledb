@@ -13,6 +13,7 @@
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/clauses.h>
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
@@ -2673,6 +2674,55 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 	return segmentby_columns;
 }
 
+static bool
+is_var_notnull(const CompressionInfo *compression_info, Var *var)
+{
+	bool notnull = false;
+	/* Is it declared NOT NULL? */
+#if PG17_LT
+	notnull = ts_get_attnotnull(compression_info->chunk_rte->relid, var->varattno);
+#else
+	notnull = bms_is_member(var->varattno, compression_info->chunk_rel->notnullattnums);
+#endif
+
+	if (notnull)
+		return true;
+
+	/* even if this column is nullable it may participate in strict predicates which will exclude
+	 * NULL values */
+	RelOptInfo *chunk_rel = compression_info->chunk_rel;
+	ListCell *l;
+	foreach (l, chunk_rel->baserestrictinfo)
+	{
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(l));
+
+		/* If a clause is simple IS NOT NULL over this column it will exclude NULLs */
+		if (IsA(ri->clause, NullTest) && ((NullTest *) ri->clause)->nulltesttype == IS_NOT_NULL)
+		{
+			NullTest *nt = castNode(NullTest, ri->clause);
+			Node *node = strip_implicit_coercions((Node *) nt->arg);
+			if (IsA(node, Var))
+			{
+				Var *ntvar = castNode(Var, node);
+				if (var->varno == ntvar->varno && var->varattno == ntvar->varattno &&
+					var->varlevelsup == ntvar->varlevelsup && var->vartype == ntvar->vartype)
+				{
+					return true;
+				}
+			}
+		}
+
+		Bitmapset *clause_attnos = NULL;
+		pull_varattnos((Node *) ri->clause, chunk_rel->relid, &clause_attnos);
+		if (bms_is_member(var->varattno - FirstLowInvalidHeapAttributeNumber, clause_attnos))
+		{
+			if (!contain_nonstrict_functions((Node *) ri->clause))
+				return true;
+		}
+	}
+	return false;
+}
+
 /*
  * Returns whether the pathkeys starting at the given offset match the compression
  * orderby, and whether the order is reverse.
@@ -2701,6 +2751,12 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 			return false;
 		}
 
+		/* Bail out on BSM if orderby column is nullable */
+		if (!is_var_notnull(compression_info, var))
+		{
+			return false;
+		}
+
 		char *column_name = get_attname(compression_info->chunk_rte->relid, var->varattno, false);
 		int orderby_index = ts_array_position(compression_info->settings->fd.orderby, column_name);
 
@@ -2711,9 +2767,6 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 
 		bool orderby_desc =
 			ts_array_get_element_bool(compression_info->settings->fd.orderby_desc, orderby_index);
-		bool orderby_nullsfirst =
-			ts_array_get_element_bool(compression_info->settings->fd.orderby_nullsfirst,
-									  orderby_index);
 
 		/*
 		 * In PG18+: pk_cmptype is either COMPARE_LT (for ASC) or COMPARE_GT (for DESC)
@@ -2722,33 +2775,11 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 		bool this_pathkey_reverse = false;
 		if (pk->pk_cmptype == COMPARE_LT)
 		{
-			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
-			{
-				this_pathkey_reverse = false;
-			}
-			else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
-			{
-				this_pathkey_reverse = true;
-			}
-			else
-			{
-				return false;
-			}
+			this_pathkey_reverse = orderby_desc;
 		}
 		else if (pk->pk_cmptype == COMPARE_GT)
 		{
-			if (orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
-			{
-				this_pathkey_reverse = false;
-			}
-			else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
-			{
-				this_pathkey_reverse = true;
-			}
-			else
-			{
-				return false;
-			}
+			this_pathkey_reverse = !orderby_desc;
 		}
 
 		/*
