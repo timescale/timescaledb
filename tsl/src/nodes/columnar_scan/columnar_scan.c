@@ -13,6 +13,7 @@
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/clauses.h>
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
@@ -2673,6 +2674,49 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 	return segmentby_columns;
 }
 
+static bool
+is_var_notnull(const CompressionInfo *compression_info, Var *var)
+{
+	bool notnull = false;
+	/* Is it declared NOT NULL? */
+#if PG17_LT
+	notnull = ts_get_attnotnull(compression_info->chunk_rte->relid, var->varattno);
+#else
+	notnull = bms_is_member(var->varattno, compression_info->chunk_rel->notnullattnums);
+#endif
+
+	if (notnull)
+		return true;
+
+	/* even if this column is nullable it may participate in strict predicates which will exclude
+	 * NULL values */
+	RelOptInfo *chunk_rel = compression_info->chunk_rel;
+	ListCell *l;
+	foreach (l, chunk_rel->baserestrictinfo)
+	{
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(l));
+		Bitmapset *clause_attnos = NULL;
+		pull_varattnos((Node *) ri->clause, chunk_rel->relid, &clause_attnos);
+		if (bms_is_member(var->varattno - FirstLowInvalidHeapAttributeNumber, clause_attnos))
+		{
+			/* If a clause is simple IS NOT NULL with a strict argument over this column it will
+			 * exclude NULLs */
+			if (IsA(ri->clause, NullTest) &&
+				((NullTest *) ri->clause)->nulltesttype == IS_NOT_NULL &&
+				bms_num_members(clause_attnos) == 1) /* this column only */
+			{
+				NullTest *nt = castNode(NullTest, ri->clause);
+				if (!contain_nonstrict_functions((Node *) nt->arg))
+					return true;
+			}
+
+			if (!contain_nonstrict_functions((Node *) ri->clause))
+				return true;
+		}
+	}
+	return false;
+}
+
 /*
  * Returns whether the pathkeys starting at the given offset match the compression
  * orderby, and whether the order is reverse.
@@ -2680,7 +2724,8 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 static bool
 match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 									  int starting_pathkey_offset,
-									  const CompressionInfo *compression_info, bool *out_reverse)
+									  const CompressionInfo *compression_info, bool for_bsm,
+									  bool *out_reverse)
 {
 	int compressed_pk_index = 0;
 	for (int i = starting_pathkey_offset; i < list_length(pathkeys); i++)
@@ -2709,45 +2754,60 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 			return false;
 		}
 
+		/* Bail out on BSM if orderby column is nullable */
+		if (for_bsm && !is_var_notnull(compression_info, var))
+		{
+			return false;
+		}
+
 		bool orderby_desc =
 			ts_array_get_element_bool(compression_info->settings->fd.orderby_desc, orderby_index);
 		bool orderby_nullsfirst =
 			ts_array_get_element_bool(compression_info->settings->fd.orderby_nullsfirst,
 									  orderby_index);
-
 		/*
 		 * In PG18+: pk_cmptype is either COMPARE_LT (for ASC) or COMPARE_GT (for DESC)
 		 * For previous PG versions we have compatibility macros to make these new names available.
 		 */
 		bool this_pathkey_reverse = false;
-		if (pk->pk_cmptype == COMPARE_LT)
+
+		/* We allow BSM for not-null orderby columns only, i.e. we don't care about NULL direction
+		 */
+		if (for_bsm)
 		{
-			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
-			{
-				this_pathkey_reverse = false;
-			}
-			else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
-			{
-				this_pathkey_reverse = true;
-			}
-			else
-			{
-				return false;
-			}
+			this_pathkey_reverse = (pk->pk_cmptype == COMPARE_LT ? orderby_desc : !orderby_desc);
 		}
-		else if (pk->pk_cmptype == COMPARE_GT)
+		else
 		{
-			if (orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
+			if (pk->pk_cmptype == COMPARE_LT)
 			{
-				this_pathkey_reverse = false;
+				if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
+				{
+					this_pathkey_reverse = false;
+				}
+				else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
+				{
+					this_pathkey_reverse = true;
+				}
+				else
+				{
+					return false;
+				}
 			}
-			else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
+			else if (pk->pk_cmptype == COMPARE_GT)
 			{
-				this_pathkey_reverse = true;
-			}
-			else
-			{
-				return false;
+				if (orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
+				{
+					this_pathkey_reverse = false;
+				}
+				else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
+				{
+					this_pathkey_reverse = true;
+				}
+				else
+				{
+					return false;
+				}
 			}
 		}
 
@@ -2909,6 +2969,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 														  chunk_em_exprs,
 														  /* starting_pathkey_offset = */ 0,
 														  compression_info,
+														  /* for_bsm = */ true,
 														  &sort_info.reverse);
 			}
 			return sort_info;
@@ -2936,6 +2997,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 																		  chunk_em_exprs,
 																		  i,
 																		  compression_info,
+																		  /* for_bsm = */ false,
 																		  &sort_info.reverse);
 
 	return sort_info;
