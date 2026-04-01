@@ -1,0 +1,1 @@
+Fixes: #9485 Fix use-after-free of invalidation in tsl_compressor_free
