@@ -56,24 +56,6 @@ UPDATE pg_class cl SET relacl = tmpacl
 
 DROP TABLE _timescaledb_internal.saved_privs;
 
--- Create watermark record when required
-DO
-$$
-DECLARE
-  ts_version TEXT;
-BEGIN
-    SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-    IF ts_version >= '2.11.0' THEN
-      INSERT INTO _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark)
-      SELECT a.mat_hypertable_id, _timescaledb_functions.cagg_watermark_materialized(a.mat_hypertable_id)
-      FROM _timescaledb_catalog.continuous_agg a
-      LEFT JOIN _timescaledb_catalog.continuous_aggs_watermark b ON b.mat_hypertable_id = a.mat_hypertable_id
-      WHERE b.mat_hypertable_id IS NULL
-      ORDER BY 1;
-    END IF;
-END;
-$$;
-
 -- Cleanup orphaned compression settings
 WITH orphaned_settings AS (
      SELECT cs.relid, cl.relname
