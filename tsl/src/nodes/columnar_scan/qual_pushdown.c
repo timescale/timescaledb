@@ -25,6 +25,7 @@
 
 typedef struct QualPushdownContext
 {
+	PlannerInfo *root;
 	RelOptInfo *chunk_rel;
 	RelOptInfo *compressed_rel;
 	RangeTblEntry *chunk_rte;
@@ -76,6 +77,10 @@ static Var *extract_var_for_composite_bloom(OpExpr *opexpr, QualPushdownContext 
 											Expr **value_out, Oid *op_oid_out);
 static void pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context);
 
+static Node *make_bloom1_hash_array(PlannerInfo *root, Expr *value_expr, Oid input_collation);
+
+static List *deconstruct_array_const(Const *array_const);
+
 void
 columnar_scan_filter_pushdown(PlannerInfo *root, CompressionSettings *settings,
 							  RelOptInfo *chunk_rel, RelOptInfo *compressed_rel, bool chunk_partial)
@@ -83,6 +88,7 @@ columnar_scan_filter_pushdown(PlannerInfo *root, CompressionSettings *settings,
 	ListCell *lc;
 	List *decompress_clauses = NIL;
 	QualPushdownContext base_context = {
+		.root = root,
 		.chunk_rel = chunk_rel,
 		.compressed_rel = compressed_rel,
 		.chunk_rte = planner_rt_fetch(chunk_rel->relid, root),
@@ -608,6 +614,38 @@ extract_var_for_bloom1(OpExpr *opexpr, QualPushdownContext *context, Expr **valu
 	return chosen_var;
 }
 
+/*
+ * Build ARRAY[bloom1_hash(expr)] and fold via estimate_expression_value.
+ * Returns the folded-or-not expression (Const if foldable, ArrayExpr if not).
+ */
+static Node *
+make_bloom1_hash_array(PlannerInfo *root, Expr *value_expr, Oid input_collation)
+{
+	static Oid bloom1_hash_oid = InvalidOid;
+	if (!OidIsValid(bloom1_hash_oid))
+		bloom1_hash_oid = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+													makeString("bloom1_hash")),
+										 -1,
+										 (void *) -1,
+										 false);
+
+	FuncExpr *hash_call = makeFuncExpr(bloom1_hash_oid,
+									   INT8OID,
+									   list_make1(value_expr),
+									   InvalidOid,
+									   input_collation,
+									   COERCE_EXPLICIT_CALL);
+
+	ArrayExpr *hash_array = makeNode(ArrayExpr);
+	hash_array->array_typeid = INT8ARRAYOID;
+	hash_array->element_typeid = INT8OID;
+	hash_array->elements = list_make1(hash_call);
+	hash_array->multidims = false;
+	hash_array->location = -1;
+
+	return estimate_expression_value(root, (Node *) hash_array);
+}
+
 static void *
 pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_opexpr)
 {
@@ -678,6 +716,29 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 							 -1,
 							 InvalidOid,
 							 0);
+
+	if (ts_guc_enable_bloom1_hash_pushdown)
+	{
+		Node *hash_array =
+			make_bloom1_hash_array(context->root, pushed_down_rightop, orig_opexpr->inputcollid);
+
+		/* Only use bloom1_contains_any_hashes if the folding produced a constant */
+		if (IsA(hash_array, Const))
+		{
+			Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+												 makeString("bloom1_contains_any_hashes")),
+									  -1,
+									  (void *) -1,
+									  false);
+
+			return (Expr *) makeFuncExpr(func,
+										 BOOLOID,
+										 list_make2(bloom_var, hash_array),
+										 InvalidOid,
+										 InvalidOid,
+										 COERCE_EXPLICIT_CALL);
+		}
+	}
 
 	Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
 										 makeString("bloom1_contains")),
@@ -794,6 +855,68 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 							 -1,
 							 InvalidOid,
 							 0);
+
+	if (ts_guc_enable_bloom1_hash_pushdown &&
+		((IsA(pushed_down_rightop, Const) && !castNode(Const, pushed_down_rightop)->constisnull) ||
+		 IsA(pushed_down_rightop, ArrayExpr)))
+	{
+		List *elements;
+		if (IsA(pushed_down_rightop, Const))
+		{
+			elements = deconstruct_array_const(castNode(Const, pushed_down_rightop));
+		}
+		else
+		{
+			elements = castNode(ArrayExpr, pushed_down_rightop)->elements;
+		}
+
+		static Oid bloom1_hash_oid = InvalidOid;
+		if (!OidIsValid(bloom1_hash_oid))
+			bloom1_hash_oid = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+														makeString("bloom1_hash")),
+											 -1,
+											 (void *) -1,
+											 false);
+
+		List *hash_elements = NIL;
+		ListCell *lc;
+		foreach (lc, elements)
+		{
+			FuncExpr *h = makeFuncExpr(bloom1_hash_oid,
+									   INT8OID,
+									   list_make1(lfirst(lc)),
+									   InvalidOid,
+									   orig_saop->inputcollid,
+									   COERCE_EXPLICIT_CALL);
+			hash_elements = lappend(hash_elements, h);
+		}
+
+		ArrayExpr *hash_array = makeNode(ArrayExpr);
+		hash_array->array_typeid = INT8ARRAYOID;
+		hash_array->element_typeid = INT8OID;
+		hash_array->elements = hash_elements;
+		hash_array->multidims = false;
+		hash_array->location = -1;
+
+		Node *folded = estimate_expression_value(context->root, (Node *) hash_array);
+
+		/* Only use bloom1_contains_any_hashes if the folding produced a constant */
+		if (IsA(folded, Const))
+		{
+			Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+												 makeString("bloom1_contains_any_hashes")),
+									  -1,
+									  (void *) -1,
+									  false);
+
+			return (Expr *) makeFuncExpr(func,
+										 BOOLOID,
+										 list_make2(bloom_var, folded),
+										 InvalidOid,
+										 InvalidOid,
+										 COERCE_EXPLICIT_CALL);
+		}
+	}
 
 	Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
 										 makeString("bloom1_contains_any")),
@@ -1163,9 +1286,6 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 								 InvalidOid,
 								 0);
 
-		/* If all pushed-down values are Const, pre-hash at planning time. */
-		FuncExpr *bloom_check = NULL;
-
 		/* Build ROW(val1, val2, ...) expression using pushed-down values */
 		RowExpr *row_expr = makeNode(RowExpr);
 		row_expr->args = pushed_value_exprs;
@@ -1174,18 +1294,44 @@ pushdown_composite_blooms(PlannerInfo *root, QualPushdownContext *context)
 		row_expr->colnames = NIL;
 		row_expr->location = -1;
 
-		Oid func_oid = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
-												 makeString("bloom1_contains")),
-									  -1,
-									  (void *) -1,
-									  false);
+		FuncExpr *bloom_check = NULL;
+		if (ts_guc_enable_bloom1_hash_pushdown)
+		{
+			Node *hash_array = make_bloom1_hash_array(root, (Expr *) row_expr, InvalidOid);
 
-		bloom_check = makeFuncExpr(func_oid,
-								   BOOLOID,
-								   list_make2(bloom_var, row_expr),
-								   InvalidOid,
-								   InvalidOid,
-								   COERCE_EXPLICIT_CALL);
+			/* Only use bloom1_contains_any_hashes if the folding produced a constant */
+			if (IsA(hash_array, Const))
+			{
+				Oid func_oid = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+														 makeString("bloom1_contains_any_hashes")),
+											  -1,
+											  (void *) -1,
+											  false);
+
+				bloom_check = makeFuncExpr(func_oid,
+										   BOOLOID,
+										   list_make2(bloom_var, hash_array),
+										   InvalidOid,
+										   InvalidOid,
+										   COERCE_EXPLICIT_CALL);
+			}
+		}
+
+		if (bloom_check == NULL)
+		{
+			Oid func_oid = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+													 makeString("bloom1_contains")),
+										  -1,
+										  (void *) -1,
+										  false);
+
+			bloom_check = makeFuncExpr(func_oid,
+									   BOOLOID,
+									   list_make2(bloom_var, row_expr),
+									   InvalidOid,
+									   InvalidOid,
+									   COERCE_EXPLICIT_CALL);
+		}
 
 		/* Add to baserestrictinfo. */
 		context->compressed_rel->baserestrictinfo =
