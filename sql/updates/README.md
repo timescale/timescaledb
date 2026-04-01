@@ -2,30 +2,27 @@
 
 1. The `search_path` for these scripts will be locked down to
   `pg_catalog, pg_temp`. Locking down `search_path` happens in
-  `pre-update.sql`. Therefore all object references need to be fully
+  `header.sql`. Therefore all object references need to be fully
   qualified unless they reference objects from `pg_catalog`.
   Use `@extschema@` to refer to the target schema of the installation
   (resolves to `public` by default).
-2. Creating objects must not use IF NOT EXISTS as this will
-  introduce privilege escalation vulnerabilities.
-3. All functions should have explicit `search_path`. Setting explicit
+2. All functions should have explicit `search_path`. Setting explicit
   `search_path` will prevent SQL function inlining for functions and
   transaction control for procedures so for some functions/procedures
   it is acceptable to not have explicit `search_path`. Special care
   needs to be taken with those functions/procedures by either setting
   `search_path` in function body or having only fully qualified object
   references including operators.
-4. When generating the install scripts `CREATE OR REPLACE` will be
+3. When generating the install scripts `CREATE OR REPLACE` will be
   changed to `CREATE` to prevent users from precreating extension
   objects. Since we need `CREATE OR REPLACE` for update scripts and
   we don't want to maintain two versions of the sql files containing
   the function definitions we use `CREATE OR REPLACE` in those.
-5. Any object added in a new version needs to have an equivalent
-  `CREATE` statement in the update script without `OR REPLACE` to
-  prevent precreation of the object.
-6. The creation of new metadata tables need to be part of modfiles,
-   similar to `ALTER`s of such tables. Otherwise, later modfiles
-   cannot rely on those tables being present.
+4. When adding or removing columns from catalog tables the tables
+  need to be completely rebuilt as the C code relies on the physical
+  layout of the tables being the same and must not have dropped
+  columns. The catalog tables are mapped to C structs which would break
+  with dropped columns.
 
 ## Extension updates
 

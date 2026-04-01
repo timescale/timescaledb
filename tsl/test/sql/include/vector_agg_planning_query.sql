@@ -43,3 +43,6 @@ SHOW timescaledb.enable_vectorized_aggregation;
 -- HAVING with segmentby grouping.
 :EXPLAIN SELECT device, sum(value) from metrics GROUP BY device HAVING sum(value) > 10000 ORDER BY device;
 
+-- Correlated Subquery on single chunk
+:EXPLAIN SELECT FROM (SELECT 12 AS c7 FROM pg_class LIMIT 1) AS subq_1 WHERE EXISTS(SELECT FROM _timescaledb_internal._hyper_1_1_chunk WHERE subq_1.c7 = CASE WHEN value = 1 THEN NULL::int2 END);
+
