@@ -8,6 +8,7 @@
 #
 
 setup {
+    SELECT alter_job(id,config:=jsonb_set(config,ARRAY['drop_after'],'"30 days"')) from _timescaledb_config.bgw_job where id = 3;
     INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish)
         SELECT 100 as job_id, 12345 as pid, true as succeeded, ts as execution_start, ts + interval '5 minutes' as execution_finish
         FROM generate_series(now() - interval '60 days', now(), interval '1 week') as ts;
