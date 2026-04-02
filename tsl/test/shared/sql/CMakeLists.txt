@@ -1,4 +1,5 @@
 set(TEST_FILES_SHARED
+    bulk_decompression_limit.sql
     chunk_append_merge_append.sql
     chunkwise_agg_gather_sort.sql
     classify_relation.sql
@@ -33,6 +34,11 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
        with_clause_parser.sql)
   list(APPEND TEST_TEMPLATES_SHARED constify_now.sql.in)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
+  # Dependent on MergeAppend costs which are broken on earlier versions.
+  list(APPEND TEST_FILES bulk_decompression_limit.sql)
+endif()
 
 # Regression tests that vary with PostgreSQL version. Generated test files are
 # put in the original source directory since all tests must be in the same

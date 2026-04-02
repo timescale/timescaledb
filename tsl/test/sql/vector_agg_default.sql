@@ -4,11 +4,13 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-set timescaledb.enable_columnarindexscan = off;
+-- The batch sorted merge has very close costs for one query, and prevents
+-- vectorized aggregation, so we have to get it out of the way.
+-- Same for the sort.
+set timescaledb.enable_decompression_sorted_merge to off;
+set enable_sort to off;
 
--- Uncomment these two settings to run this test with hypercore TAM
---set timescaledb.default_hypercore_use_access_method=true;
---set enable_indexscan=off;
+set timescaledb.enable_columnarindexscan = off;
 
 create function stable_abs(x int4) returns int4 as 'int4abs' language internal stable;
 
@@ -96,3 +98,9 @@ select decompress_chunk(show_chunks('dvagg'));
 select sum(c) from dvagg;
 
 drop table dvagg;
+
+
+reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
+
+reset timescaledb.enable_decompression_sorted_merge;
