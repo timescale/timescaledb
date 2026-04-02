@@ -56,12 +56,3 @@ UPDATE pg_class cl SET relacl = tmpacl
 
 DROP TABLE _timescaledb_internal.saved_privs;
 
--- Cleanup orphaned compression settings
-WITH orphaned_settings AS (
-     SELECT cs.relid, cl.relname
-     FROM _timescaledb_catalog.compression_settings cs
-     LEFT JOIN pg_class cl ON (cs.relid = cl.oid)
-     WHERE cl.relname IS NULL
-)
-DELETE FROM _timescaledb_catalog.compression_settings AS cs
-USING orphaned_settings AS os WHERE cs.relid = os.relid;
