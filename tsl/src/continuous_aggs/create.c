@@ -664,13 +664,13 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 													mattblinfo.matcollist,
 													&mataddress,
 													mat_rel->relname);
-
 	if (!materialized_only)
 		final_selquery = build_union_query(bucket_info,
 										   mattblinfo.matpartcolno,
 										   final_selquery,
 										   panquery,
-										   materialize_hypertable_id);
+										   materialize_hypertable_id,
+										   NULL);
 
 	/* Copy view acl to materialization hypertable. */
 	ObjectAddress view_address = create_view_for_query(final_selquery, stmt->view);
@@ -941,7 +941,8 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 											  mat_part_dimension->column_attno,
 											  user_query,
 											  direct_query,
-											  mat_ht->fd.id);
+											  mat_ht->fd.id,
+											  NULL);
 	}
 
 	SWITCH_TO_TS_USER(NameStr(agg->data.user_view_schema), uid, saved_uid, sec_ctx);
