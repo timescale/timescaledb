@@ -65,6 +65,7 @@ set(TEST_FILES
     compression_uuid.sql
     compression_trigger.sql
     create_table_with.sql
+    create_statistics_tsl.sql
     decompress_index.sql
     move.sql
     plan_skip_scan_notnull.sql

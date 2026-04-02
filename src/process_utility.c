@@ -16,6 +16,7 @@
 #include <catalog/pg_class_d.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_statistic_ext.h>
 #include <catalog/pg_trigger.h>
 #include <commands/alter.h>
 #include <commands/cluster.h>
@@ -59,28 +60,25 @@
 #include "annotations.h"
 #include "chunk.h"
 #include "chunk_index.h"
+#include "chunk_statistics.h"
 #include "copy.h"
 #include "cross_module_fn.h"
 #include "debug_assert.h"
 #include "debug_point.h"
-#include "dimension_vector.h"
 #include "errors.h"
 #include "event_trigger.h"
 #include "export.h"
 #include "extension.h"
 #include "extension_constants.h"
 #include "foreign_key.h"
-#include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "indexing.h"
 #include "license_guc.h"
 #include "partition_chunk.h"
-#include "partitioning.h"
 #include "process_utility.h"
 #include "scan_iterator.h"
 #include "time_utils.h"
-#include "trigger.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_column_stats.h"
@@ -1728,6 +1726,98 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 	ts_cache_release(&hcache);
 }
 
+/*
+ * Add chunk extended statistics to the drop list when dropping a hypertable
+ * extended statistics.
+ *
+ * When dropping an extended statistics object on a hypertable, we need to also
+ * drop the corresponding extended statistics on all chunks. This function finds
+ * matching chunk extended statistics using structural comparison and adds them
+ * to the drop list.
+ *
+ * Similar to process_drop_hypertable_index() for indexes.
+ */
+static void
+process_drop_hypertable_extended_statistics(ProcessUtilityArgs *args, DropStmt *stmt)
+{
+	Cache *hypertable_cache = ts_hypertable_cache_pin();
+	ListCell *object_cell;
+	List *chunk_stats_to_drop = NIL;
+
+	foreach (object_cell, stmt->objects)
+	{
+		List *stat_name_parts = lfirst(object_cell);
+		Oid hypertable_relid, extended_statistics_oid;
+		Hypertable *hypertable;
+
+		/* Get extended statistics OID */
+		extended_statistics_oid = get_statistics_object_oid(stat_name_parts, true);
+		if (!OidIsValid(extended_statistics_oid))
+			continue;
+
+		/* Get the table that this extended statistics object belongs to */
+		hypertable_relid = ts_get_relation_from_extended_statistics(extended_statistics_oid);
+		if (!OidIsValid(hypertable_relid))
+			continue;
+
+		/* Check if it's a hypertable */
+		hypertable = ts_hypertable_cache_get_entry(hypertable_cache,
+												   hypertable_relid,
+												   CACHE_FLAG_MISSING_OK);
+		if (hypertable)
+		{
+			List *chunks = ts_chunk_get_by_hypertable_id(hypertable->fd.id);
+			ListCell *chunk_cell;
+
+			foreach (chunk_cell, chunks)
+			{
+				Chunk *chunk = lfirst(chunk_cell);
+				if (!OidIsValid(chunk->table_id))
+					continue;
+
+				/* Find matching extended statistics on chunk using structural comparison */
+				Oid chunk_extended_statistics_oid =
+					ts_chunk_extended_statistics_get_by_hypertable_relid(chunk->table_id,
+																		 extended_statistics_oid);
+
+				if (OidIsValid(chunk_extended_statistics_oid))
+				{
+					HeapTuple chunk_stat_tuple;
+					Form_pg_statistic_ext chunk_stat_form;
+
+					/* Get chunk extended statistics metadata from pg_statistic_ext */
+					chunk_stat_tuple =
+						SearchSysCache1(STATEXTOID,
+										ObjectIdGetDatum(chunk_extended_statistics_oid));
+					if (!HeapTupleIsValid(chunk_stat_tuple))
+						continue; /* Should not happen, but skip if it does */
+
+					chunk_stat_form = (Form_pg_statistic_ext) GETSTRUCT(chunk_stat_tuple);
+
+					/* Get schema and statistics names */
+					char *schema_name = get_namespace_name(chunk_stat_form->stxnamespace);
+					char *extended_statistics_name = pstrdup(NameStr(chunk_stat_form->stxname));
+
+					/* Add to separate list (avoid modifying list being iterated) */
+					chunk_stats_to_drop = lappend(chunk_stats_to_drop,
+												  list_make2(makeString(schema_name),
+															 makeString(extended_statistics_name)));
+
+					ReleaseSysCache(chunk_stat_tuple);
+				}
+			}
+		}
+	}
+
+	/* Now append all chunk statistics to the drop list */
+	foreach (object_cell, chunk_stats_to_drop)
+	{
+		stmt->objects = lappend(stmt->objects, lfirst(object_cell));
+	}
+
+	ts_cache_release(&hypertable_cache);
+}
+
 /* Note that DROP TABLESPACE does not have a hook in event triggers so cannot go
  * through process_ddl_sql_drop */
 static DDLResult
@@ -2134,6 +2224,9 @@ process_drop_start(ProcessUtilityArgs *args)
 		case OBJECT_INDEX:
 			process_drop_hypertable_index(args, stmt);
 			break;
+		case OBJECT_STATISTIC_EXT:
+			process_drop_hypertable_extended_statistics(args, stmt);
+			break;
 		case OBJECT_MATVIEW:
 			process_drop_continuous_aggregates(args, stmt);
 			break;
@@ -2442,6 +2535,23 @@ process_rename_index(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 	}
 }
 
+static void
+process_rename_extended_statistics(ProcessUtilityArgs *args, Cache *hcache, Oid relid,
+								   RenameStmt *stmt)
+{
+	Oid tablerelid = ts_get_relation_from_extended_statistics(relid);
+	Hypertable *ht;
+
+	if (!OidIsValid(tablerelid))
+		return;
+
+	ht = ts_hypertable_cache_get_entry(hcache, tablerelid, CACHE_FLAG_MISSING_OK);
+	if (ht)
+	{
+		ts_chunk_extended_statistics_rename(ht, relid, stmt->newname);
+	}
+}
+
 /* Visit all internal catalog tables with a schema column to check for applicable rename */
 static void
 process_rename_schema(RenameStmt *stmt)
@@ -2583,8 +2693,14 @@ process_rename(ProcessUtilityArgs *args)
 	Oid relid = InvalidOid;
 	Cache *hcache;
 
-	/* Only get the relid if it exists for this stmt */
-	if (NULL != stmt->relation)
+	/* Get the relid based on object type */
+	if (stmt->renameType == OBJECT_STATISTIC_EXT && stmt->object != NULL)
+	{
+		relid = get_statistics_object_oid(castNode(List, stmt->object), true);
+		if (!OidIsValid(relid))
+			return DDL_CONTINUE;
+	}
+	else if (NULL != stmt->relation)
 	{
 		relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 		if (!OidIsValid(relid))
@@ -2605,6 +2721,9 @@ process_rename(ProcessUtilityArgs *args)
 			break;
 		case OBJECT_INDEX:
 			process_rename_index(args, hcache, relid, stmt);
+			break;
+		case OBJECT_STATISTIC_EXT:
+			process_rename_extended_statistics(args, hcache, relid, stmt);
 			break;
 		case OBJECT_TABCONSTRAINT:
 		case OBJECT_TRIGGER:
@@ -3611,6 +3730,147 @@ process_index_start(ProcessUtilityArgs *args)
 	DEBUG_WAITPOINT("process_index_start_indexing_done");
 
 	return DDL_DONE;
+}
+
+/*
+ * Argument for CREATE STATISTICS (extended statistics) chunk propagation callback
+ */
+typedef struct CreateExtendedStatisticsChunkArg
+{
+	Oid hypertable_relid;
+	const char *extended_statistics_name;
+} CreateExtendedStatisticsChunkArg;
+
+/*
+ * Callback for foreach_chunk to create extended statistics on a single chunk.
+ */
+static void process_create_extended_statistics_chunk(Hypertable *hypertable, Oid chunk_relid,
+													 void *arg);
+
+/*
+ * Handle CREATE STATISTICS (extended statistics) on a hypertable.
+ *
+ * Propagates the extended statistics to all chunks of the hypertable.
+ * Pattern follows process_index_start.
+ */
+static DDLResult
+process_create_extended_statistics_start(ProcessUtilityArgs *args)
+{
+	CreateStatsStmt *stmt = (CreateStatsStmt *) args->parsetree;
+	RangeVar *relation;
+	Cache *hypertable_cache;
+	Hypertable *hypertable;
+	ContinuousAgg *continuous_agg = NULL;
+	CreateExtendedStatisticsChunkArg chunk_arg;
+
+	Assert(IsA(stmt, CreateStatsStmt));
+
+	/* CREATE STATISTICS (extended) supports only single table */
+	if (stmt->relations == NIL || list_length(stmt->relations) != 1)
+		return DDL_CONTINUE;
+
+	/* Skip non-plain-relation FROM clauses (subqueries, VALUES, functions, JOINs,
+	 * TABLESAMPLE, XMLTABLE, JSON_TABLE, etc.) — let PostgreSQL handle them. */
+	if (!IsA(linitial(stmt->relations), RangeVar))
+		return DDL_CONTINUE;
+
+	relation = linitial_node(RangeVar, stmt->relations);
+
+	hypertable_cache = ts_hypertable_cache_pin();
+	hypertable = ts_hypertable_cache_get_entry_rv(hypertable_cache, relation);
+
+	if (!hypertable)
+	{
+		/* Check if the relation is a Continuous Aggregate */
+		continuous_agg = ts_continuous_agg_find_by_rv(relation);
+
+		if (continuous_agg)
+		{
+			hypertable = ts_hypertable_get_by_id(continuous_agg->data.mat_hypertable_id);
+		}
+
+		if (!hypertable)
+		{
+			ts_cache_release(&hypertable_cache);
+			return DDL_CONTINUE;
+		}
+
+		/* Replace relation with materialization hypertable */
+		stmt->relations = list_make1(makeRangeVar(NameStr(hypertable->fd.schema_name),
+												  NameStr(hypertable->fd.table_name),
+												  -1));
+	}
+
+	ts_hypertable_permissions_check_by_id(hypertable->fd.id);
+
+	/* Check if extended statistics already exists (for IF NOT EXISTS handling) */
+#if PG16_LT
+	List *stat_ext_names = stringToQualifiedNameList(NameListToString(stmt->defnames));
+#else
+	List *stat_ext_names = stringToQualifiedNameList(NameListToString(stmt->defnames), NULL);
+#endif
+	Oid stat_ext_oid_before = get_statistics_object_oid(stat_ext_names, true);
+	list_free(stat_ext_names);
+
+	/* Create extended statistics on hypertable (PostgreSQL default handling) */
+	prev_ProcessUtility(args);
+
+	/* Propagate to all existing chunks only if extended statistics was newly created */
+	if (!OidIsValid(stat_ext_oid_before))
+	{
+		chunk_arg.hypertable_relid = hypertable->main_table_relid;
+		chunk_arg.extended_statistics_name = NameListToString(stmt->defnames);
+
+		CatalogSecurityContext security_context;
+		Relation hypertable_rel = table_open(hypertable->main_table_relid, AccessShareLock);
+		Oid hypertable_owner = hypertable_rel->rd_rel->relowner;
+		table_close(hypertable_rel, AccessShareLock);
+
+		GetUserIdAndSecContext(&security_context.saved_uid,
+							   &security_context.saved_security_context);
+		if (security_context.saved_uid != hypertable_owner)
+			SetUserIdAndSecContext(hypertable_owner,
+								   security_context.saved_security_context |
+									   SECURITY_LOCAL_USERID_CHANGE);
+
+		foreach_chunk(hypertable, process_create_extended_statistics_chunk, &chunk_arg);
+
+		/* Restore original user */
+		if (security_context.saved_uid != hypertable_owner)
+			SetUserIdAndSecContext(security_context.saved_uid,
+								   security_context.saved_security_context);
+	}
+
+	ts_cache_release(&hypertable_cache);
+
+	return DDL_DONE;
+}
+
+/*
+ * Callback for foreach_chunk to create extended statistics on a single chunk.
+ */
+static void
+process_create_extended_statistics_chunk(Hypertable *hypertable, Oid chunk_relid, void *arg)
+{
+	CreateExtendedStatisticsChunkArg *chunk_arg = (CreateExtendedStatisticsChunkArg *) arg;
+	Chunk *chunk;
+
+	/* Skip inheritance children that are not TimescaleDB chunks */
+	chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	if (chunk == NULL)
+		return;
+
+	/* OSM (tiered) chunks don't support extended statistics */
+	if (IS_OSM_CHUNK(chunk))
+	{
+		ereport(NOTICE, (errmsg("skipping extended statistics creation for tiered data")));
+		return;
+	}
+
+	/* Create the specific extended statistics on this chunk */
+	ts_chunk_extended_statistics_create_from_stat(chunk_arg->hypertable_relid,
+												  chunk_relid,
+												  chunk_arg->extended_statistics_name);
 }
 
 static int
@@ -5528,6 +5788,9 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 			break;
 		case T_CreateTrigStmt:
 			handler = process_create_trigger_start;
+			break;
+		case T_CreateStatsStmt:
+			handler = process_create_extended_statistics_start;
 			break;
 		case T_RuleStmt:
 			handler = process_create_rule_start;
