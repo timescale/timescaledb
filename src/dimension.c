@@ -1112,6 +1112,11 @@ dimension_interval_to_internal(const char *colname, Oid dimtype,
 						 errhint("Use an interval of type integer.")));
 
 			interval = interval_to_usec(&chunk_interval->interval);
+			if (interval <= 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("invalid interval for %s dimension", format_type_be(dimtype)),
+						 errhint("Use a positive interval.")));
 			break;
 		default:
 			ereport(ERROR,
