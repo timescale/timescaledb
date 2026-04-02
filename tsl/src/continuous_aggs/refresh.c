@@ -872,72 +872,68 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	/* Commit and Start a new transaction */
 	SPI_commit_and_chain();
 
-	/* Set the new invalidation threshold. Note that this only updates the
-	 * threshold if the new value is greater than the old one. Otherwise, the
-	 * existing threshold is returned. */
-	invalidation_threshold = invalidation_threshold_set_or_get(cagg, &refresh_window);
-
-	/* We must also cap the refresh window at the invalidation threshold. If
-	 * we process invalidations after the threshold, the continuous aggregates
-	 * won't be refreshed when the threshold is moved forward in the
-	 * future. The invalidation threshold should already be aligned on bucket
-	 * boundary. */
-	if (refresh_window.end > invalidation_threshold)
-		refresh_window.end = invalidation_threshold;
-
-	/* Capping the end might have made the window 0, or negative, so nothing to refresh in that
-	 * case.
-	 *
-	 * For variable width buckets we use a refresh_window.start value that is lower than the
-	 * -infinity value (ts_time_get_nobegin < ts_time_get_min). Therefore, the first check in the
-	 * following if statement is not enough. If the invalidation_threshold returns the min_value for
-	 * the data type, we end up with [nobegin, min_value] which is an invalid time interval.
-	 * Therefore, we have also to check if the invalidation_threshold is defined. If not, no refresh
-	 * is needed.  */
-	if ((refresh_window.start >= refresh_window.end) ||
-		(IS_TIMESTAMP_TYPE(refresh_window.type) &&
-		 invalidation_threshold == ts_time_get_min(refresh_window.type)))
-	{
-		emit_up_to_date_notice(cagg, context);
-
-		cleanup_before_cagg_refresh_exit(cagg, &cagg_spi_ctx);
-
-		int rc = SPI_finish();
-		if (rc != SPI_OK_FINISH)
-			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
-
-		return;
-	}
-
-	if (process_hypertable_invalidations) //fix this : remove this
-	{
-		invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
-	}
-
-	/* Commit and Start a new transaction */
-	SPI_commit_and_chain();
-
-	/* Debug error injection / waitpoint based on which batch is being processed */
-	DEBUG_WAITPOINT(psprintf("cagg_policy_batch_%d_after_txn_1_wait", context.processing_batch));
-	DEBUG_ERROR_INJECTION(psprintf("cagg_policy_batch_%d_after_txn_1", context.processing_batch));
-
-	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
-
 	volatile bool refreshed = false;
 	PG_TRY();
 	{
-		refreshed = process_cagg_invalidations_and_refresh(cagg,
-														   &refresh_window,
-														   context,
-														   bucketing_refresh_window,
-														   force);
+		/* Set the new invalidation threshold. Note that this only updates the
+		 * threshold if the new value is greater than the old one. Otherwise, the
+		 * existing threshold is returned. */
+		invalidation_threshold = invalidation_threshold_set_or_get(cagg, &refresh_window);
+
+		/* We must also cap the refresh window at the invalidation threshold. If
+		 * we process invalidations after the threshold, the continuous aggregates
+		 * won't be refreshed when the threshold is moved forward in the
+		 * future. The invalidation threshold should already be aligned on bucket
+		 * boundary. */
+		if (refresh_window.end > invalidation_threshold)
+			refresh_window.end = invalidation_threshold;
+
+		/* Capping the end might have made the window 0, or negative, so nothing to refresh in that
+		 * case.
+		 *
+		 * For variable width buckets we use a refresh_window.start value that is lower than the
+		 * -infinity value (ts_time_get_nobegin < ts_time_get_min). Therefore, the first check in the
+		 * following if statement is not enough. If the invalidation_threshold returns the min_value for
+		 * the data type, we end up with [nobegin, min_value] which is an invalid time interval.
+		 * Therefore, we have also to check if the invalidation_threshold is defined. If not, no refresh
+		 * is needed.  */
+		if (refresh_window.start < refresh_window.end &&
+			!(IS_TIMESTAMP_TYPE(refresh_window.type) &&
+			 invalidation_threshold == ts_time_get_min(refresh_window.type)))
+		{
+			if (process_hypertable_invalidations) //fix this : remove this
+			{
+				invalidation_process_hypertable_log(cagg->data.raw_hypertable_id,
+													refresh_window.type);
+			}
+
+			/* Commit and Start a new transaction */
+			SPI_commit_and_chain();
+
+			/* Debug error injection / waitpoint based on which batch is being processed */
+			DEBUG_WAITPOINT(
+				psprintf("cagg_policy_batch_%d_after_txn_1_wait", context.processing_batch));
+			DEBUG_ERROR_INJECTION(
+				psprintf("cagg_policy_batch_%d_after_txn_1", context.processing_batch));
+
+			cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
+
+			refreshed = process_cagg_invalidations_and_refresh(cagg,
+															   &refresh_window,
+															   context,
+															   bucketing_refresh_window,
+															   force);
+
+			DEBUG_WAITPOINT("after_process_cagg_materializations");
+		}
 	}
 	PG_CATCH();
 	{
 		/*
-		 * The current transaction (Txn2 or Txn3) is in an aborted state.
-		 * but the removal of the refresh ranges in jobs_refresh_ranges needs a live transaction.
-		 * Roll it back and start a new transaction so we can perform cleanup.
+		 * The current transaction (Tx1, Tx2, or Tx3) is in an aborted state,
+		 * but the removal of the refresh ranges in jobs_refresh_ranges needs a
+		 * live transaction. Roll it back and start a new transaction so we can
+		 * perform cleanup.
 		 */
 		SPI_rollback_and_chain();
 
@@ -955,7 +951,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	if (!refreshed)
 		emit_up_to_date_notice(cagg, context);
 
-	DEBUG_WAITPOINT("after_process_cagg_materializations");
 	cleanup_before_cagg_refresh_exit(cagg, &cagg_spi_ctx);
 
 	SPI_commit();
