@@ -2419,6 +2419,28 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 	return path;
 }
 
+/*
+ * relation_byte_size, copied from costsize.c, PG 17.
+ *	  Estimate the storage space in bytes for a given number of tuples
+ *	  of a given width (size in bytes).
+ */
+static double
+ts_relation_byte_size(double tuples, int width)
+{
+	return tuples * (MAXALIGN(width) + MAXALIGN(SizeofHeapTupleHeader));
+}
+
+/*
+ * page_size, copied from costsize.c, PG 17.
+ *	  Returns an estimate of the number of pages covered by a given
+ *	  number of tuples of a given width (size in bytes).
+ */
+static double
+ts_page_size(double tuples, int width)
+{
+	return ceil(ts_relation_byte_size(tuples, width) / BLCKSZ);
+}
+
 /* NOTE: this needs to be called strictly after all restrictinfos have been added
  *       to the compressed rel
  */
@@ -2456,8 +2478,19 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	 */
 	if (compressed_rel->consider_parallel && required_outer == NULL)
 	{
+		const double effective_pages = ts_page_size(compression_info->chunk_rel->tuples,
+													compression_info->chunk_rel->reltarget->width);
+		// fprintf(stderr,
+		//		"pathtarget tuples %.2lf width %d effective pages %.2lf\n",
+		//		compression_info->chunk_rel->tuples,
+		//		compression_info->chunk_rel->reltarget->width,
+		//		effective_pages);
+		//		fprintf(stderr, "compressed width %d uncompressed %d\n",
+		//			compressed_rel->reltarget->width,
+		//compression_info->chunk_rel->reltarget->width); 		fprintf(stderr, "compressed pages %d
+		//effective %d\n", compressed_rel->pages, effective_pages);
 		int parallel_workers = compute_parallel_worker(compressed_rel,
-													   compressed_rel->pages,
+													   effective_pages,
 													   -1,
 													   max_parallel_workers_per_gather);
 
