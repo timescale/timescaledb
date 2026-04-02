@@ -422,3 +422,4 @@ ANALYZE test_segmentby_stats;
 -- will have device_id by as configured segmentby for direct compressed chunk;
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ROLLBACK;
+
