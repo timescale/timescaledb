@@ -593,13 +593,13 @@ rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id,
 
 	/* Remember info about rel before closing OldHeap */
 	relpersistence = OldHeap->rd_rel->relpersistence;
+	Oid relam = OldHeap->rd_rel->relam;
 
 	/* Close relcache entry, but keep lock until transaction commit */
 	table_close(OldHeap, NoLock);
 
 	/* Create the transient table that will receive the re-ordered data */
-	OIDNewHeap =
-		make_new_heap(tableOid, tableSpace, OldHeap->rd_rel->relam, relpersistence, ExclusiveLock);
+	OIDNewHeap = make_new_heap(tableOid, tableSpace, relam, relpersistence, ExclusiveLock);
 
 	/* Copy the heap data into the new table in the desired order */
 	copy_heap_data(OIDNewHeap,

@@ -185,9 +185,7 @@ set(CURR_MOD_FILES "${LASTEST_MOD_VERSIONED}")
 
 # Generate the post-update file once (same for all update scripts)
 set(POST_FILES_PROCESSED ${POST_UPDATE_FILES_VERSIONED}.processed)
-cat_files(
-  "${SET_POST_UPDATE_STAGE};${POST_UPDATE_FILES_VERSIONED};${UNSET_UPDATE_STAGE}"
-  ${POST_FILES_PROCESSED})
+cat_files("${POST_UPDATE_FILES_VERSIONED}" ${POST_FILES_PROCESSED})
 
 # Now loop through the modfiles and generate the update files
 foreach(transition_mod_file ${MOD_FILES_LIST})
