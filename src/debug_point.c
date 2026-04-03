@@ -118,11 +118,11 @@ debug_point_release(const DebugPoint *point)
 Datum
 ts_debug_point_enable(PG_FUNCTION_ARGS)
 {
-	text *name = PG_GETARG_TEXT_PP(0);
-	DebugPoint point;
-
 	if (PG_ARGISNULL(0))
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
+
+	text *name = PG_GETARG_TEXT_PP(0);
+	DebugPoint point;
 
 	debug_point_init(&point, text_to_cstring(name));
 	debug_point_enable(&point);
@@ -136,11 +136,11 @@ ts_debug_point_enable(PG_FUNCTION_ARGS)
 Datum
 ts_debug_point_release(PG_FUNCTION_ARGS)
 {
-	text *name = PG_GETARG_TEXT_PP(0);
-	DebugPoint point;
-
 	if (PG_ARGISNULL(0))
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
+
+	text *name = PG_GETARG_TEXT_PP(0);
+	DebugPoint point;
 
 	debug_point_init(&point, text_to_cstring(name));
 	debug_point_release(&point);
@@ -154,10 +154,10 @@ ts_debug_point_release(PG_FUNCTION_ARGS)
 Datum
 ts_debug_point_id(PG_FUNCTION_ARGS)
 {
-	text *name = PG_GETARG_TEXT_PP(0);
-
 	if (PG_ARGISNULL(0))
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
+
+	text *name = PG_GETARG_TEXT_PP(0);
 
 	PG_RETURN_UINT64(debug_point_name_to_id(text_to_cstring(name)));
 }
