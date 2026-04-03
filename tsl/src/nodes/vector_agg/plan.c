@@ -225,6 +225,21 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 			 */
 			return is_vector && is_vector_type(var->vartype);
 		}
+
+		case T_List:
+		{
+			ListCell *lc;
+			foreach (lc, (List *) expr)
+			{
+				if (!is_vector_expr(vqinfo, (Expr *) lfirst(lc)))
+				{
+					return false;
+				}
+			}
+
+			return true;
+		}
+
 		default:
 			return false;
 	}
@@ -477,22 +492,13 @@ has_vector_agg_node(Plan *plan, bool *has_some_agg)
 static bool
 vectoragg_plan_possible(Plan *childplan, VectorQualInfo *vqi)
 {
-	if (!IsA(childplan, CustomScan))
-		return false;
-
-	if (childplan->qual != NIL)
+	if (!ts_is_columnar_scan_plan(childplan))
 	{
-		/* Can't do vectorized aggregation if we have Postgres quals. */
 		return false;
 	}
 
-	if (ts_is_columnar_scan_plan(childplan))
-	{
-		vectoragg_plan_columnar_scan(childplan, vqi);
-		return true;
-	}
-
-	return false;
+	vectoragg_plan_columnar_scan(childplan, vqi);
+	return true;
 }
 
 static Node *
@@ -602,6 +608,7 @@ insert_vector_agg(Plan *plan, void *context)
 		 */
 		return plan;
 	}
+
 	if (agg->plan.lefttree == NULL)
 	{
 		/*
@@ -612,16 +619,27 @@ insert_vector_agg(Plan *plan, void *context)
 	}
 
 	Plan *childplan = agg->plan.lefttree;
-	VectorQualInfo vqi;
-	MemSet(&vqi, 0, sizeof(VectorQualInfo));
+	VectorQualInfo vqinfo;
+	MemSet(&vqinfo, 0, sizeof(VectorQualInfo));
 
 	/*
 	 * Build supplementary info to determine whether we can vectorize the
 	 * aggregate FILTER clauses.
 	 */
-	if (!vectoragg_plan_possible(childplan, &vqi))
+	if (!vectoragg_plan_possible(childplan, &vqinfo))
 	{
 		/* Not a compatible vectoragg child node */
+		return plan;
+	}
+
+	List *resolved_child_qual =
+		(List *) ts_resolve_outer_special_vars((Node *) childplan->qual, childplan);
+	if (!is_vector_expr(&vqinfo, (Expr *) resolved_child_qual))
+	{
+		/*
+		 * Can't do vectorized aggregation if we have Postgres quals that we
+		 * cannot evaluate in the columnar pipeline.
+		 */
 		return plan;
 	}
 
@@ -669,7 +687,7 @@ insert_vector_agg(Plan *plan, void *context)
 		castNode(List, ts_resolve_outer_special_vars((Node *) partial_agg_targetlist, childplan));
 
 	const VectorAggGroupingType grouping_type =
-		get_vectorized_grouping_type(&vqi, agg, resolved_targetlist);
+		get_vectorized_grouping_type(&vqinfo, agg, resolved_targetlist);
 	if (grouping_type == VAGT_Invalid)
 	{
 		/* The grouping is not vectorizable. */
@@ -683,7 +701,7 @@ insert_vector_agg(Plan *plan, void *context)
 	 */
 	if (grouping_type != VAGT_Batch && agg->aggstrategy != AGG_HASHED)
 	{
-		if (vqi.reverse)
+		if (vqinfo.reverse)
 		{
 			return plan;
 		}
@@ -697,7 +715,7 @@ insert_vector_agg(Plan *plan, void *context)
 		if (IsA(target_entry->expr, Aggref))
 		{
 			Aggref *aggref = castNode(Aggref, target_entry->expr);
-			if (!can_vectorize_aggref(&vqi, aggref))
+			if (!can_vectorize_aggref(&vqinfo, aggref))
 			{
 				/* Aggregate function not vectorizable. */
 				return plan;
@@ -712,6 +730,7 @@ insert_vector_agg(Plan *plan, void *context)
 	agg->plan.targetlist = partial_agg_targetlist;
 	Plan *vector_agg_plan =
 		vector_agg_plan_create(childplan, agg, resolved_targetlist, grouping_type);
+	castNode(CustomScan, vector_agg_plan)->custom_exprs = resolved_child_qual;
 
 	if (agg->aggsplit == AGGSPLIT_SIMPLE)
 	{
