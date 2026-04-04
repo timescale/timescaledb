@@ -39,6 +39,33 @@ SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['devi
 
 ALTER TABLE metrics SET (timescaledb.compress = true);
 select count(compress_chunk(x)) from show_chunks('metrics') x;
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
  count 
 -------
     27
@@ -105,6 +132,33 @@ RESET timescaledb.compression_segmentby_default_function;
 SET timescaledb.compression_orderby_default_function = '';
 ALTER TABLE metrics SET (timescaledb.compress = true);
 select count(compress_chunk(x)) from show_chunks('metrics') x;
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
  count 
 -------
     27
@@ -216,6 +270,33 @@ SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::te
 
 ALTER TABLE metrics SET (timescaledb.compress = true);
 select count(compress_chunk(x)) from show_chunks('metrics') x;
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
  count 
 -------
     27
@@ -470,6 +551,44 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 
 ALTER TABLE metrics SET (timescaledb.compress = true);
 select count(compress_chunk(x)) from show_chunks('metrics') x;
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id2" as the default segmentby for columnstore
  count 
 -------
     38
@@ -758,6 +877,16 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.test_exclude_datety
 
 ALTER TABLE test_exclude_datetype SET (timescaledb.compress = true);
 SELECT count(compress_chunk(x)) FROM show_chunks('test_exclude_datetype') x;
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
+NOTICE:  automatically selected "device_id" as the default segmentby for columnstore
  count 
 -------
     10
