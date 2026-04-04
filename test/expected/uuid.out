@@ -57,7 +57,7 @@ FROM uuid_events ORDER BY id;
 \set ON_ERROR_STOP 0
 UPDATE uuid_events SET id = 'ffff0000-0000-4000-8000-000000000000'
 WHERE id = '00000000-0001-4000-8000-000000000000';
-ERROR:  new row for relation "_hyper_1_1_chunk" violates check constraint "constraint_1"
+ERROR:  00000000-0001-4000-8000-000000000000 is not a version 7 UUID
 \set ON_ERROR_STOP 1
 ROLLBACK;
 -- Last value with min time: 00000000-0000-7fff-bfff-ffffffffffff
