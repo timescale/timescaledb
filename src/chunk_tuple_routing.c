@@ -194,10 +194,11 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 			{
 				Hypertable *compressed_ht =
 					ts_hypertable_get_by_id(ctr->hypertable->fd.compressed_hypertable_id);
-				Chunk *compressed_chunk =
-					ts_cm_functions->compression_chunk_create(compressed_ht,
-															  chunk,
-															  true); /* skip_segmentby_default */
+				Chunk *compressed_chunk = ts_cm_functions->compression_chunk_create(
+					compressed_ht,
+					chunk,
+					ts_guc_enable_direct_compress_segmentby); /* skip_segmentby_default
+															   */
 				ts_chunk_set_compressed_chunk(chunk, compressed_chunk->fd.id);
 				chunk->fd.compressed_chunk_id = compressed_chunk->fd.id;
 				created_compressed_chunk = true;
