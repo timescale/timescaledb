@@ -801,7 +801,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		{
 			int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
 			refresh_window.end =
-				ts_time_saturating_add(refresh_window.end, bucket_width - 1, refresh_window.type);
+				ts_time_saturating_add(refresh_window.end, bucket_width, refresh_window.type);
 		}
 	}
 
@@ -829,10 +829,58 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	/* We must also cap the refresh window at the invalidation threshold. If
 	 * we process invalidations after the threshold, the continuous aggregates
 	 * won't be refreshed when the threshold is moved forward in the
-	 * future. The invalidation threshold should already be aligned on bucket
-	 * boundary. */
-	if (refresh_window.end > invalidation_threshold)
-		refresh_window.end = invalidation_threshold;
+	 * future.
+	 *
+	 * However, we cannot just set refresh_window.end to the invalidation_threshold,
+	 * because the invalidation_threshold returned from invalidation_threshold_set_or_get()
+	 * can be one that set by a sibling cagg with a different bucket width and thus
+	 * not aligned to this cagg's bucket boundary.
+	 * For example, assuming the hypertable has two caggs, one with 4 hour bucket
+	 * and the other with 6hour bucket. If the 6 hour cagg had a refresh that advanced
+	 * the threshold, the threshold would be at a 6 hour boundary (e.g, 2000-01-01 06:00:00).
+	 * If we then refresh the 4 hour cagg on the same range, the threshold calculated by
+	 * the 4 hour cagg would be at a 4 hour boundary (e.g., 2000-01-01 04:00:00), which is
+	 * smaller than the 6 hour stored threshold. In that case, invalidation_threshold_set_or_get()
+	 * would return the stored threshold.
+	 *
+	 * Therefore, we need to floor the invalidation_threshold to this cagg's own bucket boundary
+	 * before using it to cap the cagg's refresh window.
+	 *
+	 */
+	/*
+	 * Skip flooring when the threshold is at type min (no data) or type max
+	 * (data inserted near the type's maximum value — we need to cover that
+	 * last bucket).
+	 */
+	int64 computed_invalidation_threshold_for_cagg = invalidation_threshold;
+	if (invalidation_threshold > ts_time_get_min(refresh_window.type) &&
+		invalidation_threshold < ts_time_get_max(refresh_window.type))
+	{
+		if (cagg->bucket_function->bucket_fixed_interval)
+		{
+			NullableDatum offset = INIT_NULL_DATUM;
+			NullableDatum origin = INIT_NULL_DATUM;
+			fill_bucket_offset_origin(cagg->bucket_function, refresh_window.type, &offset, &origin);
+			int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
+			computed_invalidation_threshold_for_cagg =
+				ts_time_bucket_by_type_extended(bucket_width,
+												invalidation_threshold,
+												refresh_window.type,
+												offset,
+												origin);
+		}
+		else
+		{
+			computed_invalidation_threshold_for_cagg =
+				ts_compute_start_of_current_bucket_variable(invalidation_threshold,
+															cagg->bucket_function);
+		}
+	}
+
+	if (refresh_window.end > computed_invalidation_threshold_for_cagg)
+	{
+		refresh_window.end = computed_invalidation_threshold_for_cagg;
+	}
 
 	/* Capping the end might have made the window 0, or negative, so nothing to refresh in that
 	 * case.
