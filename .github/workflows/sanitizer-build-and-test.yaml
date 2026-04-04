@@ -26,7 +26,9 @@ env:
   # CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
   # CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
   # clang CFLAGS
-  CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
+  CFLAGS: >-
+    -g -fsanitize=address,undefined -fno-omit-frame-pointer -Og
+    -fno-inline-functions -DCATCACHE_FORCE_RELEASE -DRELCACHE_FORCE_RELEASE
   CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
 
   # We do not link libasan dynamically to avoid problems with libdl and our libraries.
