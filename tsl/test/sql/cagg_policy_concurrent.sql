@@ -663,3 +663,70 @@ SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, '30 days'::interva
 SELECT add_continuous_aggregate_policy('mat_m1_rollup2', NULL, '30 days'::interval, '12 h'::interval) AS "JOB_ID2" \gset
 SELECT alter_job(:JOB_ID2, next_start => '2000-01-01'::timestamptz);
 
+TRUNCATE mat_m1;
+TRUNCATE mat_m1_rollup;
+DROP MATERIALIZED VIEW mat_m1_rollup2;
+
+/*
+ * Test that concurrent policies on hierarchical CAggs propagate invalidations above correctly
+ */
+
+/* Create two policies on mat_m1 */
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '30 days'::interval, '12 h'::interval, buckets_per_batch => 0) AS agg_m1_job_1 \gset
+SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval,  NULL, '12 h'::interval, buckets_per_batch => 0) AS agg_m1_job_2 \gset
+
+SELECT remove_continuous_aggregate_policy('mat_m1_rollup');
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, NULL, '12 h'::interval) AS m1_rollup_job \gset
+
+/* Refresh both continuous aggs */
+CALL run_job(:agg_m1_job_1);
+CALL run_job(:agg_m1_job_2);
+CALL run_job(:m1_rollup_job);
+
+/* Insert new data to generate invalidations */
+INSERT INTO overlap_test_timestamptz
+SELECT t, (i % 5), random() * 100
+FROM
+generate_series('2024-01-01T01:01:01+00', '2025-06-01T01:01:01+00', INTERVAL '1 day') t,
+generate_series(1, 10) i;
+
+SELECT
+    ht.table_name AS hypertable_name,
+    count(*),
+    _timescaledb_functions.to_timestamp(min(hil.lowest_modified_value)) AS min_lowest_modified,
+    _timescaledb_functions.to_timestamp(max(hil.greatest_modified_value)) AS max_greatest_modified
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log hil
+JOIN _timescaledb_catalog.hypertable ht ON ht.id = hil.hypertable_id
+GROUP BY ht.schema_name, ht.table_name;
+
+/* Run both L1 policies */
+CALL run_job(:agg_m1_job_1);
+CALL run_job(:agg_m1_job_2);
+
+SELECT
+    ht.table_name AS hypertable_name,
+    count(*),
+    _timescaledb_functions.to_timestamp(min(hil.lowest_modified_value)) AS min_lowest_modified,
+    _timescaledb_functions.to_timestamp(max(hil.greatest_modified_value)) AS max_greatest_modified
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log hil
+JOIN _timescaledb_catalog.hypertable ht ON ht.id = hil.hypertable_id
+GROUP BY ht.schema_name, ht.table_name;
+
+/* Run L2 policy */
+CALL run_job(:m1_rollup_job);
+
+/* L2 must be consistent with L1 after both policies run */
+SELECT r.bucket,
+       (r.counta = l.reagg_counta) AS counta_match,
+       (r.sumb = l.reagg_sumb) AS sumb_match
+FROM mat_m1_rollup r
+JOIN (
+    SELECT time_bucket('1 month', bucket) AS month,
+           sum(counta) AS reagg_counta,
+           sum(sumb) AS reagg_sumb
+    FROM mat_m1 GROUP BY 1
+) l ON l.month = r.bucket
+ORDER BY 1;
+
+DROP MATERIALIZED VIEW mat_m1_rollup;
+DROP MATERIALIZED VIEW mat_m1;
