@@ -31,6 +31,7 @@
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "nodes/skip_scan/skip_scan.h"
+#include "utils.h"
 #include <import/planner.h>
 
 #include <math.h>
@@ -778,20 +779,6 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 	}
 }
 
-#if PG17_LT
-static bool
-attr_is_notnull(Oid relid, AttrNumber attno)
-{
-	HeapTuple tp = SearchSysCache2(ATTNUM, ObjectIdGetDatum(relid), Int16GetDatum(attno));
-	if (!HeapTupleIsValid(tp))
-		return false;
-	Form_pg_attribute att_tup = (Form_pg_attribute) GETSTRUCT(tp);
-	bool result = att_tup->attnotnull;
-	ReleaseSysCache(tp);
-	return result;
-}
-#endif
-
 /* Check if skip key is guaranteed not-null */
 static void
 check_notnull_skipkey(SkipKeyInfo *skinfo, Path *child_path, IndexPath *index_path)
@@ -1110,7 +1097,7 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 	 *  as NOT NULL constraint will be propagated to and checked on all chunks
 	 */
 #if PG17_LT
-	skinfo->notnull = attr_is_notnull(ht_rte->relid, var->varattno);
+	skinfo->notnull = ts_get_attnotnull(ht_rte->relid, var->varattno);
 #else
 	RelOptInfo *baserel = ((Index) var->varno == rel->relid ? rel : rel->parent);
 	skinfo->notnull = bms_is_member(var->varattno, baserel->notnullattnums);
