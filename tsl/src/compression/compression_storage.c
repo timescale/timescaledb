@@ -42,7 +42,7 @@
 	do                                                                                             \
 	{                                                                                              \
 		int ret = snprintf(buf, NAMEDATALEN, prefix, hypertable_id);                               \
-		if (ret < 0 || ret > NAMEDATALEN)                                                          \
+		if (ret < 0 || ret >= NAMEDATALEN)                                                          \
 		{                                                                                          \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INTERNAL_ERROR),                                              \

@@ -112,7 +112,7 @@ compression_column_segment_metadata_name(const char *type, int16 column_index)
 	Assert(column_index > 0);
 	int ret =
 		snprintf(buf, NAMEDATALEN, COMPRESSION_COLUMN_METADATA_PATTERN_V1, type, column_index);
-	if (ret < 0 || ret > NAMEDATALEN)
+	if (ret < 0 || ret >= NAMEDATALEN)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("bad segment metadata column name")));
