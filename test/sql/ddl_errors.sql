@@ -113,3 +113,7 @@ SELECT attach_tablespace(NULL,NULL);
 \set ON_ERROR_STOP 0
 select set_number_partitions(NULL,NULL);
 \set ON_ERROR_STOP 1
+
+\set ON_ERROR_STOP 0
+CREATE TABLE t1(time timestamptz) with (tsdb.hypertable,tsdb.chunk_interval='-1 day');
+\set ON_ERROR_STOP 1
