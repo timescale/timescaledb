@@ -336,3 +336,18 @@ INSERT INTO chunk_skipping SELECT '2025-01-01', 'd2', '2026-01-01';
 SELECT compress_chunk(show_chunks('chunk_skipping'));
 
 SELECT * from chunk_skipping where updated_at < '2026-01-01';
+
+-- Check chunk skipping with dropped columns
+CREATE TABLE attno (id int, dropped_col text, start timestamptz) WITH (tsdb.hypertable, tsdb.segmentby='id');
+
+SET timescaledb.enable_chunk_skipping = true;
+SELECT * FROM enable_chunk_skipping('attno', 'start');
+
+ALTER TABLE attno DROP COLUMN dropped_col;
+
+INSERT INTO attno SELECT i % 5, '2026-01-01'::timestamptz + format('%s minutes', i)::interval FROM generate_series(1, 10) i;
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('attno') ch;
+
+SELECT * FROM attno WHERE id = 1 AND start > '2025-02-02T11:53:28Z'::date ORDER BY start;
+
