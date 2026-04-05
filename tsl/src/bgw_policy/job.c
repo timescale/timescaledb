@@ -359,6 +359,17 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 		 */
 		if (IS_UUID_TYPE(boundary_type))
 			boundary_type = TIMESTAMPTZOID;
+
+		/*
+		 * Check if the policy was created with drop_created_before instead of
+		 * drop_after. This can happen for hypertables with an open time dimension
+		 * when the user explicitly chose creation-time-based retention.
+		 */
+		if (ts_jsonb_get_interval_field(config, POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE))
+		{
+			interval_getter = policy_retention_get_drop_created_before_interval;
+			use_creation_time = true;
+		}
 	}
 
 	boundary =
