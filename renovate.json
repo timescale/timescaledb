@@ -8,8 +8,7 @@
       "matchUpdateTypes": ["patch", "minor", "major", "digest"],
       "groupName": "dependencies",
       "schedule": ["on monday"],
-      "minimumReleaseAge": "7 days",
-      "versioning": "semver"
+      "minimumReleaseAge": "7 days"
     }
   ],
   "pinDigests": true
