@@ -553,7 +553,6 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 	ColumnRef *colref;
 	List *compexprs = NIL;
 	Oid col_type;
-	int attno;
 
 	if (info->range_start == PG_INT64_MIN && info->range_end == PG_INT64_MAX)
 		return NULL;
@@ -565,12 +564,9 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 	/*
 	 * Get the column type for later converting the internal format
 	 * to string.
-	 *
-	 * Get the attribute number in the HT for this column, and map to the chunk
 	 */
-	attno = get_attnum(main_table_relid, NameStr(info->column_name));
-	attno = ts_map_attno(main_table_relid, chunk_relid, attno);
-	col_type = get_atttype(main_table_relid, attno);
+	const int ht_attno = get_attnum(main_table_relid, NameStr(info->column_name));
+	col_type = get_atttype(main_table_relid, ht_attno);
 
 	rangedef = (Node *) colref;
 
