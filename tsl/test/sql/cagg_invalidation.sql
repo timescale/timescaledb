@@ -1022,4 +1022,89 @@ WHERE hypertable_id IN (
 
 --clean up
 DROP TABLE test_data CASCADE;
+
+-- Test: threshold misalignment when two caggs with different bucket widths share
+-- a hypertable.
+--
+-- 4h boundaries: 00:00, 04:00, 08:00, 12:00, ...
+-- 6h boundaries: 00:00, 06:00, 12:00, 18:00, ...
+--
+-- With data at 2020-01-01 02:30 UTC:
+--   cagg_4hrs (4h buckets): bucket [00:00, 04:00), computed threshold = 2020-01-01 04:00 UTC
+--   cagg_6hrs (6h buckets): bucket [00:00, 06:00), computed threshold = 2020-01-01 06:00 UTC
+--
+-- After refreshing cagg_6hrs first, the shared threshold advances to
+-- 2020-01-01 06:00 UTC (cagg_6hrs boundary, NOT a cagg_4hrs boundary).
+--
+-- A subsequent NULL,NULL refresh of cagg_4hrs should cap the window end to
+-- cagg_4hrs's own bucket boundary (2020-01-01 04:00 UTC), not use the stored
+-- threshold (2020-01-01 06:00 UTC) which doesn't align with bucket boundaries of cagg_4hrs.
+
+CREATE TABLE test_data  (ts TIMESTAMPTZ, val INT);
+SELECT create_hypertable('test_data', 'ts');
+
+CREATE MATERIALIZED VIEW cagg_4hrs
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('4 hours', ts) AS bucket, max(val)
+FROM test_data
+GROUP BY 1
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW cagg_6hrs
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('6 hours', ts) AS bucket, max(val)
+FROM test_data
+GROUP BY 1
+WITH NO DATA;
+
+-- Insert data whose max timestamp is 2020-01-01 02:30 UTC.
+-- cagg_4hrs bucket: [00:00, 04:00), threshold T4 = 04:00 UTC
+-- cagg_6hrs bucket: [00:00, 06:00), threshold T6 = 06:00 UTC
+INSERT INTO test_data VALUES ('2020-01-01 02:30:00+00', 1);
+
+-- Refresh cagg_6hrs first: sets shared threshold to 2020-01-01 06:00 UTC.
+CALL refresh_continuous_aggregate('cagg_6hrs', NULL, NULL);
+
+-- Stored threshold = 2020-01-01 06:00 UTC (cagg_6hrs boundary, NOT cagg_4hrs boundary).
+SELECT _timescaledb_functions.to_timestamp(watermark) AS threshold
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cagg_4hrs');
+
+-- Now refresh cagg_4hrs with NULL,NULL.
+-- cagg_4hrs computes its own threshold = 04:00, but stored threshold = 06:00 > 04:00,
+-- so the stored (misaligned) value is used but capped to the start of the current bucket of cagg_4hrs,
+-- which is 2020-01-01 04:00 UTC.
+SET client_min_messages TO DEBUG1;
+CALL refresh_continuous_aggregate('cagg_4hrs', NULL, NULL);
+RESET client_min_messages;
+
+-- Show invalidations left in cagg_4hrs's invalidation log,
+-- BUG:   lowest = 2020-01-01 06:00 UTC (stored threshold, not cagg_4hrs-aligned)
+-- FIXED: lowest = 2020-01-01 04:00 UTC (at cagg_4hrs bucket boundary)
+SELECT
+    CASE
+        WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
+            THEN '-infinity'::timestamptz
+        WHEN lowest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype)
+            THEN 'infinity'::timestamptz
+        ELSE _timescaledb_functions.to_timestamp(lowest_modified_value)
+    END AS low,
+    CASE
+        WHEN greatest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
+            THEN '-infinity'::timestamptz
+        WHEN greatest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype)
+            THEN 'infinity'::timestamptz
+        ELSE _timescaledb_functions.to_timestamp(greatest_modified_value)
+    END AS high
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cagg_4hrs'
+)
+ORDER BY 1,2;
+DROP TABLE test_data CASCADE;
+
+
 RESET timezone;
