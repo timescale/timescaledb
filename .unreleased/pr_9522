@@ -1,0 +1,2 @@
+Fixes: #9522 Fix GROUP BY ROLLUP on compressed continuous aggregates
+Thanks: @pcayen for reporting an issue with GROUP BY ROLLUP
