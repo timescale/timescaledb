@@ -130,6 +130,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
     cagg_policy_incremental.sql
+    cagg_refresh_cleanup.sql
     chunk_column_stats.sql
     compress_bgw_reorder_drop_chunks.sql
     compress_bloom_legacy_v1.sql

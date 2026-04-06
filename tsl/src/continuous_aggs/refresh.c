@@ -668,10 +668,12 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	invalidation_process_cagg_log(cagg, refresh_window);
 
 	DEBUG_WAITPOINT("before_process_cagg_invalidations_for_refresh_lock");
+	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn2");
 
 	SPI_commit_and_chain();
 
 	DEBUG_WAITPOINT("after_process_cagg_invalidations_for_refresh_lock");
+	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn3");
 
 	InvalidationStore *invalidations =
 		collect_and_delete_cagg_invalidations_in_window(cagg, refresh_window, force);
@@ -869,6 +871,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 						   ts_internal_to_time_string(refresh_window.start, refresh_window.type),
 						   ts_internal_to_time_string(refresh_window.end, refresh_window.type))));
 
+	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_registration");
+
 	volatile bool refreshed = false;
 	PG_TRY();
 	{
@@ -952,6 +956,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 													refresh_window.type);
 			}
 
+			DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn1");
 			/* Commit and Start a new transaction */
 			SPI_commit_and_chain();
 
