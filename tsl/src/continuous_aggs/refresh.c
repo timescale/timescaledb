@@ -869,12 +869,12 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 						   ts_internal_to_time_string(refresh_window.start, refresh_window.type),
 						   ts_internal_to_time_string(refresh_window.end, refresh_window.type))));
 
+	volatile bool refreshed = false;
 	PG_TRY();
 	{
 		/* Commit and Start a new transaction */
 		SPI_commit_and_chain();
 
-		volatile bool refreshed = false;
 
 		/* Set the new invalidation threshold. Note that this only updates the
 		 * threshold if the new value is greater than the old one. Otherwise, the
