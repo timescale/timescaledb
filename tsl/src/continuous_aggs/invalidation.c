@@ -929,7 +929,7 @@ process_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *sta
 	iterator.ctx.data = (void *) &state;
 	iterator.ctx.snapshot = state->snapshot;
 	ScanTupLock scantuplock = {
-		.waitpolicy = LockWaitBlock,
+		.waitpolicy = LockWaitSkip,
 		.lockmode = LockTupleExclusive,
 		.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
 	};
@@ -940,7 +940,24 @@ process_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *sta
 	 * Concurrent refreshes on the same cagg are safe from deadlock because all
 	 * sessions scan the same index in ascending lowest_modified_value order,
 	 * ensuring exclusive tuple locks are always acquired in a consistent order.
-	 */
+         * However, we have this problem: 
+         * S1:  in txn3 materializing ranges  [ 40, 60 ].
+         *      so it will read rows from mat. inv log.
+         *      delete + insert rows into cagg's mat hypertable
+         *      delete row from mat inv log
+         * S2: in txn2 reading invalidation logs in [ 60 80]
+         *     this will read all the logs starting from the beginning
+         *      and < 80 so that it can process overlaps. 
+         * S1: locks row for tuple 45
+         *                              S2 : acquires ShareUpdateExlcusiveLock
+         *                              S2:  waits for lock for tuple 45
+         * S1: needs to create a new chunk in mat hypertable 
+         *     blocks on S2's ShareUpdateExclusiveLock
+         *     so we have a deadlock
+         * To prevent that in txn2 don't block on locks for mat inv log rows.
+         * it is being concurrently processed by another session.
+         * use waitpolicy = LockWaitSlip
+         */
 
 	MemoryContextReset(state->per_tuple_mctx);
 
