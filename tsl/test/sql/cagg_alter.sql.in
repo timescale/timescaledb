@@ -1,0 +1,452 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- Tests for add_continuous_aggregate_column function (aggregate expressions only)
+
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+-- Create test hypertable
+CREATE TABLE test_ht (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INTEGER NOT NULL,
+    temperature DOUBLE PRECISION,
+    humidity DOUBLE PRECISION,
+    category TEXT
+) WITH (tsdb.hypertable);
+
+-- Insert test data
+INSERT INTO test_ht VALUES
+    ('2020-01-01 00:00:00', 1, 20.0, 50.0, 'indoor'),
+    ('2020-01-01 01:00:00', 1, 22.0, 55.0, 'indoor'),
+    ('2020-01-01 02:00:00', 1, 21.0, 52.0, 'indoor'),
+    ('2020-01-01 00:00:00', 2, 25.0, 60.0, 'outdoor'),
+    ('2020-01-01 01:00:00', 2, 28.0, 65.0, 'outdoor'),
+    ('2020-01-01 02:00:00', 2, 26.0, 62.0, 'outdoor'),
+    ('2020-01-02 00:00:00', 1, 19.0, 48.0, 'indoor'),
+    ('2020-01-02 01:00:00', 2, 30.0, 70.0, 'outdoor');
+
+-- Create a materialized-only CAgg with basic aggregation
+CREATE MATERIALIZED VIEW test_cagg_mat
+    WITH (timescaledb.continuous)
+AS SELECT
+    time_bucket('1 day', time) AS bucket,
+    device_id,
+    avg(temperature) AS avg_temp
+FROM test_ht
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Create a real-time CAgg
+CREATE MATERIALIZED VIEW test_cagg_rt
+    WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS SELECT
+    time_bucket('1 day', time) AS bucket,
+    device_id,
+    avg(temperature) AS avg_temp
+FROM test_ht
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Show initial state
+\d+ test_cagg_mat
+\d+ test_cagg_rt
+
+-- Add SUM aggregate to materialized-only CAgg
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp');
+
+-- Verify column was added
+\d+ test_cagg_mat
+
+-- Add MAX aggregate to materialized-only CAgg
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'max(temperature) AS max_temp');
+
+-- Add MIN aggregate to real-time CAgg
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'min(temperature) AS min_temp');
+
+-- Verify columns were added
+\d+ test_cagg_mat
+\d+ test_cagg_rt
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_mat', NULL, NULL);
+CALL refresh_continuous_aggregate('test_cagg_rt', NULL, NULL);
+
+-- Verify aggregates are computed correctly
+SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
+SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
+
+-- Add aggregate with different column (humidity)
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'avg(humidity) AS avg_humidity');
+
+-- Refresh and check
+CALL refresh_continuous_aggregate('test_cagg_mat', NULL, NULL);
+SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
+
+-- Error tests
+\set ON_ERROR_STOP 0
+-- NULL arguments (STRICT function returns NULL for any NULL input)
+SELECT add_continuous_aggregate_column(NULL, 'sum(temperature) AS sum_temp');
+SELECT add_continuous_aggregate_column('test_cagg_mat', NULL);
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp', NULL);
+
+-- function does not exist
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'missing_func(temperature) AS bad');
+
+-- function is not an aggregate
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'round(temperature)');
+
+-- syntax error in aggregate expression
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature AS bad_syntax');
+
+-- multiple aggregates in single expression
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature), avg(temperature)');
+
+-- multiple SQL statements (SQL injection attempt)
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature); SELECT 1;');
+
+-- aggregate already exists (same alias)
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp');
+
+-- if_not_exists=true should not error
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp', true);
+
+-- column referenced in aggregate doesn't exist
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(nonexistent) AS bad');
+
+-- Error - expression must be an aggregate function (simple column)
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'category');
+
+-- Error - window function is not allowed
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'row_number() OVER () AS rn');
+
+-- not a continuous aggregate
+CREATE TABLE regular_table (id INT, data TEXT);
+SELECT add_continuous_aggregate_column('regular_table', 'sum(id) AS total');
+
+-- permission denied: non-owner cannot alter the continuous aggregate
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) AS sum_temp2');
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 1
+DROP TABLE regular_table;
+
+-- Add COUNT aggregate (no column argument)
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'count(*) AS row_count');
+
+-- Refresh and verify
+CALL refresh_continuous_aggregate('test_cagg_mat', NULL, NULL);
+SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
+
+-- Test adding aggregate without explicit alias (uses function name)
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'sum(humidity)');
+
+-- Test adding schema-qualified aggregate without explicit alias (should use function name, not schema)
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'pg_catalog.count(*)');
+
+-- Verify they were added with auto-generated aliases
+\d+ test_cagg_rt
+
+-- Test adding aggregate with double-quoted alias containing special characters
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'max(humidity) AS "weird and insane column name, but still valid on Postgres!"');
+
+-- Verify it was added with the special alias
+\d+ test_cagg_rt
+
+-- Test adding aggregate with DISTINCT
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'count(DISTINCT device_id) AS distinct_devices');
+
+-- Test adding aggregate with FILTER clause
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'sum(temperature) FILTER (WHERE temperature > 20) AS sum_temp_gt20');
+
+-- Create and test a custom aggregate
+CREATE AGGREGATE custom_sum (float8) (
+    sfunc = float8pl,
+    stype = float8,
+    initcond = '0'
+);
+SELECT add_continuous_aggregate_column('test_cagg_mat', 'custom_sum(temperature) AS custom_sum_temp');
+
+-- Refresh and verify all new aggregates
+CALL refresh_continuous_aggregate('test_cagg_mat', NULL, NULL);
+SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
+
+-- Test adding aggregate with ORDER BY (string_agg)
+SELECT add_continuous_aggregate_column('test_cagg_rt', 'string_agg(category, '','' ORDER BY category) AS categories');
+
+-- Refresh and verify
+CALL refresh_continuous_aggregate('test_cagg_rt', NULL, NULL);
+SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
+
+-- Insert new data and check real-time aggregation works
+INSERT INTO test_ht VALUES
+    ('2020-01-03 00:00:00', 1, 23.0, 56.0, 'indoor'),
+    ('2020-01-03 01:00:00', 2, 32.0, 72.0, 'outdoor');
+
+-- Real-time CAgg should show new data without refresh
+SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
+
+-- =====================================================
+-- Hierarchical continuous aggregate tests
+-- =====================================================
+
+-- Create a second-level materialized-only CAgg on top of test_cagg_mat
+CREATE MATERIALIZED VIEW test_cagg_level2
+    WITH (timescaledb.continuous)
+AS SELECT
+    time_bucket('7 days', bucket) AS bucket,
+    device_id,
+    avg(avg_temp) AS avg_temp
+FROM test_cagg_mat
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Refresh level 2
+CALL refresh_continuous_aggregate('test_cagg_level2', NULL, NULL);
+
+-- Show initial state
+SELECT * FROM test_cagg_level2 ORDER BY bucket, device_id;
+\d+ test_cagg_level2
+
+-- Error - aggregate references column that doesn't exist in parent CAgg
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'sum(nonexistent) AS bad');
+\set ON_ERROR_STOP 1
+
+-- Add aggregate using column from parent CAgg
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'sum(sum_temp) AS total_sum_temp');
+
+-- Verify the column was added
+\d+ test_cagg_level2
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_level2', NULL, NULL);
+SELECT * FROM test_cagg_level2 ORDER BY bucket, device_id;
+
+-- Error - aggregate already exists
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'sum(sum_temp) AS total_sum_temp');
+\set ON_ERROR_STOP 1
+
+-- if_not_exists=true should not error
+SELECT add_continuous_aggregate_column('test_cagg_level2', 'sum(sum_temp) AS total_sum_temp', true);
+
+-- =====================================================
+-- Hierarchical CAgg with real-time mode
+-- =====================================================
+
+-- Create a second-level real-time CAgg on top of test_cagg_rt
+CREATE MATERIALIZED VIEW test_cagg_rt_level2
+    WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS SELECT
+    time_bucket('7 days', bucket) AS bucket,
+    device_id,
+    avg(avg_temp) AS avg_temp
+FROM test_cagg_rt
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Refresh level 2
+CALL refresh_continuous_aggregate('test_cagg_rt_level2', NULL, NULL);
+
+-- Show initial state
+SELECT * FROM test_cagg_rt_level2 ORDER BY bucket, device_id;
+\d+ test_cagg_rt_level2
+
+-- Add aggregate using column from parent CAgg
+SELECT add_continuous_aggregate_column('test_cagg_rt_level2', 'max(min_temp) AS max_of_min');
+
+-- Verify the column was added
+\d+ test_cagg_rt_level2
+
+-- Refresh and check data
+CALL refresh_continuous_aggregate('test_cagg_rt_level2', NULL, NULL);
+SELECT * FROM test_cagg_rt_level2 ORDER BY bucket, device_id;
+
+-- Insert new data to test real-time aggregation in hierarchical CAgg
+INSERT INTO test_ht VALUES
+    ('2020-01-04 00:00:00', 1, 18.0, 45.0, 'indoor'),
+    ('2020-01-04 01:00:00', 2, 35.0, 75.0, 'outdoor');
+
+-- Real-time hierarchical CAgg should show new data without refresh
+SELECT * FROM test_cagg_rt_level2 ORDER BY bucket, device_id;
+
+-- =====================================================
+-- Tests for CAgg with compression enabled
+-- =====================================================
+
+-- Create a new CAgg for compression tests
+CREATE MATERIALIZED VIEW test_cagg_compress
+    WITH (timescaledb.continuous)
+AS SELECT
+    time_bucket('1 day', time) AS bucket,
+    device_id,
+    avg(temperature) AS avg_temp
+FROM test_ht
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Refresh to materialize data
+CALL refresh_continuous_aggregate('test_cagg_compress', NULL, NULL);
+
+-- Enable compression on the CAgg
+ALTER MATERIALIZED VIEW test_cagg_compress SET (timescaledb.compress);
+
+-- Error - cannot add column to CAgg with compression enabled
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_compress', 'sum(temperature) AS sum_temp');
+\set ON_ERROR_STOP 1
+
+-- Compress the chunks
+SELECT compress_chunk(chunk) FROM show_chunks('test_cagg_compress') chunk;
+
+-- Error - still cannot add column after chunks are compressed
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_column('test_cagg_compress', 'sum(temperature) AS sum_temp');
+\set ON_ERROR_STOP 1
+
+-- Decompress all chunks
+SELECT decompress_chunk(chunk) FROM show_chunks('test_cagg_compress') chunk;
+
+-- Disable compression
+ALTER MATERIALIZED VIEW test_cagg_compress SET (timescaledb.compress = false);
+
+-- Now we should be able to add a column
+SELECT add_continuous_aggregate_column('test_cagg_compress', 'sum(temperature) AS sum_temp');
+
+-- Verify the column was added
+\d+ test_cagg_compress
+
+SET client_min_messages TO WARNING;
+
+-- Cleanup compression test CAgg
+DROP MATERIALIZED VIEW test_cagg_compress;
+
+RESET client_min_messages;
+
+-- =====================================================
+-- Tests for drop_continuous_aggregate_column
+-- =====================================================
+
+-- Show current state before drops
+\d+ test_cagg_mat
+\d+ test_cagg_rt
+
+-- Basic drop from materialized-only CAgg
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'sum_temp');
+
+-- Verify column was removed
+\d+ test_cagg_mat
+
+-- Drop another column
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'max_temp');
+
+-- Verify
+\d+ test_cagg_mat
+
+-- Drop from real-time CAgg
+SELECT drop_continuous_aggregate_column('test_cagg_rt', 'min_temp');
+
+-- Verify column was removed
+\d+ test_cagg_rt
+
+-- Refresh after drop should still work
+CALL refresh_continuous_aggregate('test_cagg_mat', NULL, NULL);
+CALL refresh_continuous_aggregate('test_cagg_rt', NULL, NULL);
+
+-- Verify data is correct after drop
+SELECT * FROM test_cagg_mat ORDER BY bucket, device_id;
+SELECT * FROM test_cagg_rt ORDER BY bucket, device_id;
+
+-- Drop from hierarchical CAgg
+SELECT drop_continuous_aggregate_column('test_cagg_level2', 'total_sum_temp');
+
+-- Verify
+\d+ test_cagg_level2
+
+-- Refresh hierarchical CAgg after drop
+CALL refresh_continuous_aggregate('test_cagg_level2', NULL, NULL);
+SELECT * FROM test_cagg_level2 ORDER BY bucket, device_id;
+
+-- Drop from real-time hierarchical CAgg
+SELECT drop_continuous_aggregate_column('test_cagg_rt_level2', 'max_of_min');
+
+-- Verify
+\d+ test_cagg_rt_level2
+
+-- Refresh and verify
+CALL refresh_continuous_aggregate('test_cagg_rt_level2', NULL, NULL);
+SELECT * FROM test_cagg_rt_level2 ORDER BY bucket, device_id;
+
+-- Error tests for drop
+\set ON_ERROR_STOP 0
+-- Column doesn't exist
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'nonexistent');
+
+-- if_exists=true should not error when column doesn't exist
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'nonexistent', true);
+
+-- GROUP BY column cannot be dropped
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'device_id');
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'bucket');
+
+-- NULL arguments (STRICT function returns NULL for any NULL input)
+SELECT drop_continuous_aggregate_column(NULL, 'avg_temp');
+SELECT drop_continuous_aggregate_column('test_cagg_mat', NULL);
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'avg_temp', NULL);
+
+-- Not a continuous aggregate
+SELECT drop_continuous_aggregate_column('regular_table'::regclass, 'id');
+
+-- Permission denied: non-owner cannot alter the continuous aggregate
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT drop_continuous_aggregate_column('test_cagg_mat', 'avg_humidity');
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+\set ON_ERROR_STOP 1
+
+-- Error test for compression
+CREATE MATERIALIZED VIEW test_cagg_compress2
+    WITH (timescaledb.continuous)
+AS SELECT
+    time_bucket('1 day', time) AS bucket,
+    device_id,
+    avg(temperature) AS avg_temp
+FROM test_ht
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Add a column to drop later
+SELECT add_continuous_aggregate_column('test_cagg_compress2', 'sum(temperature) AS sum_temp');
+
+-- Refresh to materialize data
+CALL refresh_continuous_aggregate('test_cagg_compress2', NULL, NULL);
+
+-- Enable compression on the CAgg
+ALTER MATERIALIZED VIEW test_cagg_compress2 SET (timescaledb.compress);
+
+-- Error - cannot drop column from CAgg with compression enabled
+\set ON_ERROR_STOP 0
+SELECT drop_continuous_aggregate_column('test_cagg_compress2', 'sum_temp');
+\set ON_ERROR_STOP 1
+
+-- Decompress and disable compression
+SELECT decompress_chunk(chunk) FROM show_chunks('test_cagg_compress2') chunk;
+ALTER MATERIALIZED VIEW test_cagg_compress2 SET (timescaledb.compress = false);
+
+-- Now we should be able to drop the column
+SELECT drop_continuous_aggregate_column('test_cagg_compress2', 'sum_temp');
+
+-- Verify
+\d+ test_cagg_compress2
+
+SET client_min_messages TO WARNING;
+
+-- Cleanup
+DROP MATERIALIZED VIEW test_cagg_compress2;
+DROP MATERIALIZED VIEW test_cagg_rt_level2;
+DROP MATERIALIZED VIEW test_cagg_level2;
+DROP MATERIALIZED VIEW test_cagg_mat;
+DROP MATERIALIZED VIEW test_cagg_rt;
+DROP TABLE test_ht;
+
+RESET client_min_messages;
