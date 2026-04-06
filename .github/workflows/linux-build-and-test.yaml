@@ -220,7 +220,7 @@ jobs:
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
-      uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
+      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ./build/coverage/timescaledb-coverage.info
