@@ -1,0 +1,2 @@
+Fixes: #9515 Fix now() constification for continuous aggregate queries
+Thanks: @ivaaaan for reporting an issue with cosntraint pushdown in continuous aggregate queries
