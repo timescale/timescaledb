@@ -129,4 +129,11 @@ ALTER MATERIALIZED VIEW conditions_weekly SET (timescaledb.compress_segmentby = 
 CALL refresh_continuous_aggregate('conditions_weekly', NULL, NULL);
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('conditions_weekly') chunk;
 
+-- Test GROUP BY ROLLUP on compressed continuous aggregate (issue #9520)
+SELECT bucket, MAX(max)
+FROM conditions_hourly
+WHERE bucket >= '2025-12-14 00:00:00+00'::timestamptz AND bucket < '2025-12-14 03:00:00+00'::timestamptz
+GROUP BY ROLLUP(bucket)
+ORDER BY bucket ASC NULLS FIRST;
+
 RESET timescaledb.enable_direct_compress_on_cagg_refresh;
