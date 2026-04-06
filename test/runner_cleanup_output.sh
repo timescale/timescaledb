@@ -32,7 +32,8 @@ grep -av 'DEBUG:  done creating and filling new WAL file' | \
 grep -av 'DEBUG:  flushed relation because a checkpoint occurred concurrently' | \
 grep -av 'NOTICE:  cancelling the background worker for job' | \
 if [ "${RUNNER}" = "shared" ]; then \
-    sed -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g'; \
+    sed -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g' \
+        -e 's!_materialized_hypertable_[0-9]\{1,\}!_materialized_hypertable_X!g'; \
 else \
     cat; \
 fi | \
