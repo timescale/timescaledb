@@ -353,6 +353,8 @@ SELECT * FROM truncate_partitioned;
 -------
 
 -- ALTER TABLE tests
+ALTER TABLE :drop_chunks_mat_table_u SET (parallel_workers = 4);
+ALTER TABLE :drop_chunks_mat_table_u RESET (parallel_workers);
 \set ON_ERROR_STOP 0
 -- test a variety of ALTER TABLE statements
 ALTER TABLE :drop_chunks_mat_table_u RENAME time_bucket TO bad_name;
