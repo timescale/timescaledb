@@ -37,6 +37,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_job_duplicate_race.spec
     cagg_concurrent_move.spec
     cagg_concurrent_invalidation.spec
+    cagg_cancel_kill_refresh.spec
     cagg_concurrent_refresh.spec
     cagg_hierarchical_concurrent_refresh.spec
     cagg_incremental_concurrent.spec
