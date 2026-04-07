@@ -2480,15 +2480,6 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	{
 		const double effective_pages = ts_page_size(compression_info->chunk_rel->tuples,
 													compression_info->chunk_rel->reltarget->width);
-		// fprintf(stderr,
-		//		"pathtarget tuples %.2lf width %d effective pages %.2lf\n",
-		//		compression_info->chunk_rel->tuples,
-		//		compression_info->chunk_rel->reltarget->width,
-		//		effective_pages);
-		//		fprintf(stderr, "compressed width %d uncompressed %d\n",
-		//			compressed_rel->reltarget->width,
-		//compression_info->chunk_rel->reltarget->width); 		fprintf(stderr, "compressed pages %d
-		//effective %d\n", compressed_rel->pages, effective_pages);
 		int parallel_workers = compute_parallel_worker(compressed_rel,
 													   effective_pages,
 													   -1,
