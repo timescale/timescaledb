@@ -2,19 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 \set ECHO errors
-                item                
-------------------------------------
- db_util_wizard=a/db_util_wizard
- db_util_wizard=ar/db_util_wizard
- db_util_wizard=a*/db_util_wizard
- db_util_wizard=a*r*/db_util_wizard
- [NULL]
- [NULL]
- [NULL]
- [NULL]
- =a*r*/db_util_wizard
- db_util_wizard=a*r*/0
-
 SELECT _timescaledb_functions.align_to_bucket('5 minutes'::interval, rng::tstzrange) FROM data;
                          align_to_bucket                         
 -----------------------------------------------------------------

@@ -397,6 +397,7 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 {
 	StringInfoData si = { .data = (char *) _data, .len = VARSIZE(_data) };
 	const DictionaryCompressed *bitmap = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+	CheckCompressedData(element_type == bitmap->element_type);
 
 	Simple8bRleSerialized *s8_bitmap;
 	DecompressionIterator *dictionary_iterator;

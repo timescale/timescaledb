@@ -277,7 +277,8 @@ TSCopyMultiInsertBufferInit(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis
 				ts_cm_functions->compressor_init(cis->rel,
 												 &buffer->bulk_writer,
 												 sort,
-												 ts_guc_direct_compress_copy_tuple_sort_limit);
+												 ts_guc_direct_compress_copy_tuple_sort_limit,
+												 cis->created_compressed_chunk);
 
 			if (miinfo->has_continuous_aggregate)
 			{
