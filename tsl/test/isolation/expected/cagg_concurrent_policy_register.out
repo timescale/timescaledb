@@ -1,0 +1,80 @@
+Parsed test spec with 6 sessions
+
+starting permutation: s1_select s3_lock_before_register s1_run_pol7d_3d_refresh s12_run_pol3d_1d_refresh s13_run_pol1d_refresh s4_enable_before_process_cagg_invalidations s3_release_after_register s5_show_running_jobs s4_release_before_process_cagg_invalidations
+step s1_select: 
+   select min(time) at time zone 'UTC' , max(time) at time zone 'UTC'
+   FROM test_3pol_timestamptz; 
+
+timezone                |timezone                
+------------------------+------------------------
+Tue May 20 11:05:00 2025|Tue May 27 12:05:00 2025
+
+step s3_lock_before_register: 
+    -- lock jobs_refresh_ranges table to serialize registration
+    BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+
+step s1_run_pol7d_3d_refresh: 
+   DO $$
+   DECLARE
+     jid integer;
+   BEGIN
+     SELECT job_id INTO jid FROM cagg_policy_jobs WHERE job_name = 'job_7d_3d';
+     CALL run_job(jid);
+   END;
+   $$;
+ <waiting ...>
+step s12_run_pol3d_1d_refresh: 
+   DO $$
+   DECLARE
+     jid integer;
+   BEGIN
+     SELECT job_id INTO jid FROM cagg_policy_jobs WHERE job_name = 'job_3d_1d';
+     CALL run_job(jid);
+   END;
+   $$;
+ <waiting ...>
+step s13_run_pol1d_refresh: 
+   DO $$
+   DECLARE
+     jid integer;
+   BEGIN
+     SELECT job_id INTO jid FROM cagg_policy_jobs WHERE job_name = 'job_1d_1h';
+     CALL run_job(jid);
+   END;
+   $$;
+ <waiting ...>
+step s4_enable_before_process_cagg_invalidations: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step s3_release_after_register: 
+   -- release lock on jobs_refresh_ranges table
+   ROLLBACK;
+
+step s5_show_running_jobs: 
+  SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range,
+         to_timestamp(r.start_range / 1000000) AT TIME ZONE 'UTC' AS start_ts_utc,
+         to_timestamp(r.end_range / 1000000) AT TIME ZONE 'UTC' AS end_ts_utc
+  FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+  JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+  ORDER BY ca.user_view_name, start_range;
+
+cagg_name  |     start_range|       end_range|start_ts_utc            |end_ts_utc              
+-----------+----------------+----------------+------------------------+------------------------
+mat_3pol_m1|1747746000000000|1748091600000000|Tue May 20 13:00:00 2025|Sat May 24 13:00:00 2025
+mat_3pol_m1|1748091600000000|1748264400000000|Sat May 24 13:00:00 2025|Mon May 26 13:00:00 2025
+mat_3pol_m1|1748264400000000|1748343600000000|Mon May 26 13:00:00 2025|Tue May 27 11:00:00 2025
+
+step s4_release_before_process_cagg_invalidations: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_run_pol7d_3d_refresh: <... completed>
+step s12_run_pol3d_1d_refresh: <... completed>
+step s13_run_pol1d_refresh: <... completed>
