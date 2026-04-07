@@ -166,7 +166,11 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 		linitial(range_values.values) = DatumGetPointer(Int64GetDatum(max_val));
 		dimension_restrict_info_open_add(dri, BTLessEqualStrategyNumber, &range_values);
 
-		return true;
+		/*
+		 * This scalar array operation is not true everywhere inside the hypertable
+		 * restrictions, since we've used an approximation.
+		 */
+		return false;
 	}
 
 	foreach (item, dimvalues->values)
@@ -334,7 +338,12 @@ hypertable_restrict_info_get(HypertableRestrictInfo *hri, AttrNumber attno)
 typedef DimensionValues *(*get_dimension_values)(Const *c, bool use_or);
 
 /*
- * Returns true if the restriction was accepted and contributed to HRI bounds.
+ * Returns true if the restriction was accepted exactly. That means it's true
+ * everywhere inside the HRI bounds. This is not the case for the expressions
+ * which we translate into HRI in an approximated way. For example, the scalar
+ * array operations are translated to the enclosing range of the array elements,
+ * and the scalar array expression itself can be false in some points in this
+ * range.
  */
 static bool
 hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root, Var *v,
@@ -465,13 +474,13 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 	/*
 	 * Add restriction based on dimension type.
 	 */
-	bool accepted = false;
+	bool proven_true_by_hri = false;
 	if (IS_CLOSED_DIMENSION(dri->dimension))
 	{
-		accepted = dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,
-													  strategy,
-													  c->constcollid,
-													  dimvalues);
+		proven_true_by_hri = dimension_restrict_info_closed_add((DimensionRestrictInfoClosed *) dri,
+																strategy,
+																c->constcollid,
+																dimvalues);
 	}
 	else
 	{
@@ -505,15 +514,17 @@ hypertable_restrict_info_add_expr(HypertableRestrictInfo *hri, PlannerInfo *root
 		dimvalues->values = int64_values;
 		dimvalues->type = INT8OID;
 
-		accepted = dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
-													strategy,
-													dimvalues);
+		proven_true_by_hri = dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
+															  strategy,
+															  dimvalues);
 	}
 
-	if (accepted)
-		hri->num_base_restrictions++;
+	if (proven_true_by_hri)
+	{
+		hri->num_quals_proven_true_by_hri++;
+	}
 
-	return accepted;
+	return proven_true_by_hri;
 }
 
 static DimensionValues *
