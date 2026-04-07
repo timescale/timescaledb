@@ -109,6 +109,8 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT * FROM hyper WHERE time IN (5, 15) ORDER BY value;
 :PREFIX SELECT * FROM hyper WHERE time = ANY(ARRAY[5, 15, 25]) ORDER BY value;
 :PREFIX SELECT * FROM hyper WHERE time = ANY(ARRAY[25, 15, 5]) ORDER BY value;
+:PREFIX SELECT * FROM hyper WHERE time < 10 AND time = ANY(ARRAY[5, 15, 25]) ORDER BY value;
+:PREFIX SELECT * FROM hyper WHERE time = ANY(ARRAY[5, 15, 25]) AND time < 10 ORDER BY value;
 :PREFIX SELECT * FROM hyper_w_space WHERE time IN (5, 15) ORDER BY value;
 :PREFIX SELECT * FROM metrics_timestamp WHERE time IN ('2000-01-05'::timestamp, '2000-01-15'::timestamp) ORDER BY time;
 :PREFIX SELECT * FROM metrics_timestamptz WHERE time IN ('2000-01-05'::timestamptz, '2000-01-15'::timestamptz) ORDER BY time;

@@ -73,6 +73,7 @@ TSDLLEXPORT bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted = false;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_on_cagg_refresh = false;
+TSDLLEXPORT bool ts_guc_enable_direct_compress_auto_segmentby = true;
 int ts_guc_direct_compress_insert_tuple_sort_limit = 10000;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
@@ -97,6 +98,7 @@ TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
+TSDLLEXPORT bool ts_guc_enable_compressed_merge = false;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
 TSDLLEXPORT bool ts_guc_enable_dml_bloom_filter = true;
@@ -149,7 +151,10 @@ TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 
 bool ts_guc_enable_partitioned_hypertables = false;
-
+#if PG16_GE
+TSDLLEXPORT bool ts_guc_enable_cagg_rewrites = false;
+TSDLLEXPORT bool ts_guc_cagg_rewrites_debug_info = false;
+#endif
 /* default value of ts_guc_max_open_chunks_per_insert and
  * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
  * GUC mechanism starts up */
@@ -587,6 +592,18 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_auto_segmentby"),
+							 "Enable automatic segmentby column selection during compression",
+							 "When enabled, automatically analyzes buffered tuples to pick "
+							 "an optimal segmentby column if none is configured.",
+							 &ts_guc_enable_direct_compress_auto_segmentby,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomIntVariable(MAKE_EXTOPTION("direct_compress_insert_tuple_sort_limit"),
 							"Number of tuples that can be sorted at once in an INSERT operation",
 							"This is mainly used to keep the memory footprint down for "
@@ -739,6 +756,20 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+#ifdef TS_DEBUG
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_merge"),
+							 "Enable MERGE support for compressed hypertables",
+							 "Enable MERGE support for compressed hypertables. This is only "
+							 "available in debug builds and will currently do full decompression",
+							 &ts_guc_enable_compressed_merge,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_dml_decompression"),
 							 "Enable DML decompression",
 							 "Enable DML decompression when modifying compressed hypertable",
@@ -873,7 +904,29 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+#if PG16_GE
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_rewrites"),
+							 "Enable rewriting queries with Caggs",
+							 "Enable rewriting queries with eligible continuous aggregates",
+							 &ts_guc_enable_cagg_rewrites,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("cagg_rewrites_debug_info"),
+							 "Print debug info about whether queries can be rewritten with Caggs",
+							 "Print debug info about whether queries can be rewritten with Caggs",
+							 &ts_guc_cagg_rewrites_debug_info,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_wal_markers"),
 							 "Enable WAL markers for compression ops",
 							 "Enable the generation of markers in the WAL stream which mark the "

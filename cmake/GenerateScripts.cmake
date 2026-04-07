@@ -60,8 +60,7 @@ function(generate_downgrade_script)
     ${CMAKE_BINARY_DIR}/v${_downgrade_TARGET_VERSION}/cmake/ScriptFiles.cmake)
 
   set(_downgrade_PRE_FILES "header.sql;${PRE_DOWNGRADE_FILES}")
-  set(_downgrade_POST_FILES "${PRE_INSTALL_FUNCTION_FILES};${SOURCE_FILES}" ${SET_POST_UPDATE_STAGE}
-                            ${POST_UPDATE_FILES} ${UNSET_UPDATE_STAGE})
+  set(_downgrade_POST_FILES "${PRE_INSTALL_FUNCTION_FILES};${SOURCE_FILES}" ${POST_UPDATE_FILES})
 
   # Fetch epilog from target version.
   git_versioned_get(

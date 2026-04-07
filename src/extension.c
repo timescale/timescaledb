@@ -36,7 +36,6 @@
 #include "guc.h"
 #include "ts_catalog/catalog.h"
 
-#define TS_UPDATE_SCRIPT_CONFIG_VAR MAKE_EXTOPTION("update_script_stage")
 #define POST_UPDATE "post"
 /*
  * The name of the experimental schema.
@@ -309,21 +308,6 @@ ts_extension_is_loaded(void)
 			 * that, for example, the catalog does not go looking for things
 			 * that aren't yet there.
 			 */
-			if (extstate == EXTENSION_STATE_TRANSITIONING)
-			{
-				/* when we are updating the extension, we execute
-				 * scripts in post_update.sql after setting up the
-				 * the dependencies. At this stage, TS
-				 * specific functionality is permitted as we now have
-				 * all catalogs and functions in place
-				 */
-				const char *update_script_stage =
-					GetConfigOption(TS_UPDATE_SCRIPT_CONFIG_VAR, true, false);
-				if (update_script_stage &&
-					(strncmp(update_script_stage, POST_UPDATE, strlen(POST_UPDATE)) == 0) &&
-					(strlen(POST_UPDATE) == strlen(update_script_stage)))
-					return true;
-			}
 			return false;
 		default:
 			elog(ERROR, "unknown state: %d", extstate);

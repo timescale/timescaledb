@@ -849,6 +849,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		int pos = 0;
 		bool is_null_condition = 0;
 		bool seg_col_is_null = false;
+		bool complete_batch_delete;
 		valid = true;
 		/*
 		 * Since the heap scan API does not support SK_SEARCHNULL we have to check
@@ -982,6 +983,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 				continue;
 			}
 		}
+		complete_batch_delete = (delete_only && summary == AllRowsPass);
 
 		row_decompressor_reset(&decompressor);
 
@@ -993,7 +995,11 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			ExecDropSingleTupleTableSlot(slot);
 			return stats;
 		}
-		write_logical_replication_msg_decompression_start();
+
+		if (!complete_batch_delete)
+		{
+			write_logical_replication_msg_decompression_start();
+		}
 
 		TM_FailureData tmfd;
 		result = table_tuple_delete(in_rel,
@@ -1025,7 +1031,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			return stats;
 		}
 		/* If all rows pass, complete batch can be deleted */
-		if (delete_only && summary == AllRowsPass)
+		if (complete_batch_delete)
 		{
 			stats.batches_deleted++;
 			stats.tuples_deleted += DatumGetInt32(
@@ -1054,8 +1060,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 			stats.tuples_decompressed +=
 				row_decompressor_decompress_row_to_table(&decompressor, &writer);
 			stats.batches_decompressed++;
+			write_logical_replication_msg_decompression_end();
 		}
-		write_logical_replication_msg_decompression_end();
 	}
 	ExecDropSingleTupleTableSlot(slot);
 	decompress_batch_endscan(scan);
