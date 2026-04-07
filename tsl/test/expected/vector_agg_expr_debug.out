@@ -1,0 +1,155 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Debug-only tests for CSE (common subexpression elimination) in vectorized
+-- aggregation. Verifies that EXPLAIN VERBOSE shows the correct set of cached
+-- subexpressions. Requires assert-enabled (debug) builds because the
+-- "Cached Subexpressions" EXPLAIN output is guarded by #ifndef NDEBUG.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+set timescaledb.enable_columnarindexscan = off;
+create table cse_explain(ts int, i int, x text, b bool, v float4)
+    with (tsdb.hypertable, tsdb.compress, tsdb.compress_orderby = 'ts',
+        tsdb.compress_segmentby = 'i, x, b',
+        tsdb.partition_column = 'ts', tsdb.chunk_interval = 100000);
+insert into cse_explain
+    select g, g % 5, 'val' || (g % 3)::text, g % 2 = 0, g::float4
+    from generate_series(1, 1000) g;
+select count(compress_chunk(x)) from show_chunks('cse_explain') x;
+ count 
+-------
+     1
+
+set max_parallel_workers_per_gather = 0;
+set timescaledb.debug_require_vector_agg = 'require';
+-- Same expression in two aggregates: one cached subexpression.
+explain (verbose, costs off)
+select sum(abs(v - 500)), count(abs(v - 500)) from cse_explain;
+--- QUERY PLAN ---
+ Finalize Aggregate
+   Output: sum(abs((_hyper_1_1_chunk.v - '500'::double precision))), count(abs((_hyper_1_1_chunk.v - '500'::double precision)))
+   ->  Custom Scan (VectorAgg)
+         Output: (PARTIAL sum(abs((_hyper_1_1_chunk.v - '500'::double precision)))), (PARTIAL count(abs((_hyper_1_1_chunk.v - '500'::double precision))))
+         Grouping Policy: all compressed batches
+         Cached Subexpressions: abs((_hyper_1_1_chunk.v - '500'::double precision))
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
+               Output: _hyper_1_1_chunk.v
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+
+-- Two distinct shared expressions cached simultaneously.
+explain (verbose, costs off)
+select sum(abs(v - 500)), count(abs(v - 500)),
+       sum(length(x)), count(length(x)) from cse_explain;
+--- QUERY PLAN ---
+ Finalize Aggregate
+   Output: sum(abs((_hyper_1_1_chunk.v - '500'::double precision))), count(abs((_hyper_1_1_chunk.v - '500'::double precision))), sum(length(_hyper_1_1_chunk.x)), count(length(_hyper_1_1_chunk.x))
+   ->  Custom Scan (VectorAgg)
+         Output: (PARTIAL sum(abs((_hyper_1_1_chunk.v - '500'::double precision)))), (PARTIAL count(abs((_hyper_1_1_chunk.v - '500'::double precision)))), (PARTIAL sum(length(_hyper_1_1_chunk.x))), (PARTIAL count(length(_hyper_1_1_chunk.x)))
+         Grouping Policy: all compressed batches
+         Cached Subexpressions: abs((_hyper_1_1_chunk.v - '500'::double precision)), length(_hyper_1_1_chunk.x)
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
+               Output: _hyper_1_1_chunk.v, _hyper_1_1_chunk.x
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+
+-- Shared expression with segmentby grouping column.
+explain (verbose, costs off)
+select b, sum(abs(v - 500)), count(abs(v - 500))
+    from cse_explain group by b;
+--- QUERY PLAN ---
+ Finalize GroupAggregate
+   Output: _hyper_1_1_chunk.b, sum(abs((_hyper_1_1_chunk.v - '500'::double precision))), count(abs((_hyper_1_1_chunk.v - '500'::double precision)))
+   Group Key: _hyper_1_1_chunk.b
+   ->  Custom Scan (VectorAgg)
+         Output: _hyper_1_1_chunk.b, (PARTIAL sum(abs((_hyper_1_1_chunk.v - '500'::double precision)))), (PARTIAL count(abs((_hyper_1_1_chunk.v - '500'::double precision))))
+         Grouping Policy: per compressed batch
+         Cached Subexpressions: abs((_hyper_1_1_chunk.v - '500'::double precision))
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
+               Output: _hyper_1_1_chunk.b, _hyper_1_1_chunk.v
+               ->  Sort
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+                     Sort Key: compress_hyper_2_2_chunk.b
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
+                           Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+
+-- FILTER aggregate excluded from CSE, but non-FILTER aggregates still share.
+explain (verbose, costs off)
+select sum(abs(v - 500)) filter (where b),
+       count(abs(v - 500)),
+       sum(abs(v - 500))
+    from cse_explain;
+--- QUERY PLAN ---
+ Finalize Aggregate
+   Output: sum(abs((_hyper_1_1_chunk.v - '500'::double precision))) FILTER (WHERE _hyper_1_1_chunk.b), count(abs((_hyper_1_1_chunk.v - '500'::double precision))), sum(abs((_hyper_1_1_chunk.v - '500'::double precision)))
+   ->  Custom Scan (VectorAgg)
+         Output: (PARTIAL sum(abs((_hyper_1_1_chunk.v - '500'::double precision))) FILTER (WHERE _hyper_1_1_chunk.b)), (PARTIAL count(abs((_hyper_1_1_chunk.v - '500'::double precision)))), (PARTIAL sum(abs((_hyper_1_1_chunk.v - '500'::double precision))))
+         Grouping Policy: all compressed batches
+         Cached Subexpressions: abs((_hyper_1_1_chunk.v - '500'::double precision))
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
+               Output: _hyper_1_1_chunk.v, _hyper_1_1_chunk.b
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+
+-- No common subexpressions: no "Cached Subexpressions" line.
+explain (verbose, costs off)
+select sum(v), count(i) from cse_explain;
+--- QUERY PLAN ---
+ Finalize Aggregate
+   Output: sum(_hyper_1_1_chunk.v), count(_hyper_1_1_chunk.i)
+   ->  Custom Scan (VectorAgg)
+         Output: (PARTIAL sum(_hyper_1_1_chunk.v)), (PARTIAL count(_hyper_1_1_chunk.i))
+         Grouping Policy: all compressed batches
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
+               Output: _hyper_1_1_chunk.v, _hyper_1_1_chunk.i
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+
+-- Two shared sibling subexpressions in a single expression argument.
+explain (verbose, costs off)
+select sum(abs(v - 500) + length(x)), sum(abs(v - 500) - length(x))
+    from cse_explain;
+--- QUERY PLAN ---
+ Finalize Aggregate
+   Output: sum((abs((_hyper_1_1_chunk.v - '500'::double precision)) + (length(_hyper_1_1_chunk.x))::double precision)), sum((abs((_hyper_1_1_chunk.v - '500'::double precision)) - (length(_hyper_1_1_chunk.x))::double precision))
+   ->  Custom Scan (VectorAgg)
+         Output: (PARTIAL sum((abs((_hyper_1_1_chunk.v - '500'::double precision)) + (length(_hyper_1_1_chunk.x))::double precision))), (PARTIAL sum((abs((_hyper_1_1_chunk.v - '500'::double precision)) - (length(_hyper_1_1_chunk.x))::double precision)))
+         Grouping Policy: all compressed batches
+         Cached Subexpressions: abs((_hyper_1_1_chunk.v - '500'::double precision)), length(_hyper_1_1_chunk.x)
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
+               Output: _hyper_1_1_chunk.v, _hyper_1_1_chunk.x
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+
+-- Three aggregates sharing one expression (refcount = 3).
+explain (verbose, costs off)
+select sum(abs(v - 500)), count(abs(v - 500)), min(abs(v - 500))
+    from cse_explain;
+--- QUERY PLAN ---
+ Finalize Aggregate
+   Output: sum(abs((_hyper_1_1_chunk.v - '500'::double precision))), count(abs((_hyper_1_1_chunk.v - '500'::double precision))), min(abs((_hyper_1_1_chunk.v - '500'::double precision)))
+   ->  Custom Scan (VectorAgg)
+         Output: (PARTIAL sum(abs((_hyper_1_1_chunk.v - '500'::double precision)))), (PARTIAL count(abs((_hyper_1_1_chunk.v - '500'::double precision)))), (PARTIAL min(abs((_hyper_1_1_chunk.v - '500'::double precision))))
+         Grouping Policy: all compressed batches
+         Cached Subexpressions: abs((_hyper_1_1_chunk.v - '500'::double precision))
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
+               Output: _hyper_1_1_chunk.v
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+
+-- Cached boolean subexpression consumed as function argument.
+explain (verbose, costs off)
+select sum((b = (i > 0))::int), count(b = (i > 0)) from cse_explain;
+--- QUERY PLAN ---
+ Finalize Aggregate
+   Output: sum(((_hyper_1_1_chunk.b = (_hyper_1_1_chunk.i > 0)))::integer), count((_hyper_1_1_chunk.b = (_hyper_1_1_chunk.i > 0)))
+   ->  Custom Scan (VectorAgg)
+         Output: (PARTIAL sum(((_hyper_1_1_chunk.b = (_hyper_1_1_chunk.i > 0)))::integer)), (PARTIAL count((_hyper_1_1_chunk.b = (_hyper_1_1_chunk.i > 0))))
+         Grouping Policy: all compressed batches
+         Cached Subexpressions: (_hyper_1_1_chunk.b = (_hyper_1_1_chunk.i > 0))
+         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
+               Output: _hyper_1_1_chunk.b, _hyper_1_1_chunk.i
+               ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
+                     Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.i, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.v
+
+reset timescaledb.debug_require_vector_agg;
+drop table cse_explain;

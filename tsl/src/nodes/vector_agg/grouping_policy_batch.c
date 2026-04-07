@@ -116,7 +116,7 @@ gp_batch_reset(GroupingPolicy *obj)
 static void
 compute_single_aggregate(GroupingPolicyBatch *policy, DecompressContext *dcontext,
 						 TupleTableSlot *vector_slot, VectorAggDef *agg_def, void *agg_state,
-						 MemoryContext agg_extra_mctx)
+						 MemoryContext agg_extra_mctx, struct expr_cache_hash *expr_cache)
 {
 	/*
 	 * We have functions with one argument, and one function with no arguments
@@ -128,11 +128,19 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressContext *dcontex
 	bool arg_isnull = true;
 	if (agg_def->argument != NULL)
 	{
+		/*
+		 * FILTER aggregate args are excluded from interning at init time.
+		 * Pass NULL here as defense-in-depth: the assert in
+		 * vector_slot_evaluate_expression rejects filters that differ
+		 * from vector_qual_result.
+		 */
+		struct expr_cache_hash *agg_expr_cache = agg_def->filter_clauses == NIL ? expr_cache : NULL;
 		const CompressedColumnValues values =
 			vector_slot_evaluate_expression(dcontext,
 											vector_slot,
 											agg_def->effective_batch_filter,
-											agg_def->argument);
+											agg_def->argument,
+											agg_expr_cache);
 
 		Assert(values.decompression_type != DT_Invalid);
 		Ensure(values.decompression_type != DT_Iterator, "expected arrow array but got iterator");
@@ -188,7 +196,8 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressContext *dcontex
 }
 
 static void
-gp_batch_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlot *vector_slot)
+gp_batch_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlot *vector_slot,
+				   struct expr_cache_hash *expr_cache)
 {
 	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
 	uint16 total_batch_rows = 0;
@@ -224,7 +233,8 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSl
 								 vector_slot,
 								 agg_def,
 								 agg_state,
-								 policy->agg_extra_mctx);
+								 policy->agg_extra_mctx,
+								 expr_cache);
 	}
 
 	/*
@@ -236,8 +246,11 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSl
 		GroupingColumn *col = &policy->grouping_columns[i];
 		Assert(col->output_offset >= 0);
 
-		const CompressedColumnValues values =
-			vector_slot_evaluate_expression(dcontext, vector_slot, vector_qual_result, col->expr);
+		const CompressedColumnValues values = vector_slot_evaluate_expression(dcontext,
+																			  vector_slot,
+																			  vector_qual_result,
+																			  col->expr,
+																			  expr_cache);
 		Assert(values.decompression_type == DT_Scalar);
 
 		/*

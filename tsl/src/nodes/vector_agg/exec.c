@@ -7,6 +7,7 @@
 #include <postgres.h>
 
 #include <commands/explain.h>
+#include <common/hashfn.h>
 #include <executor/executor.h>
 #include <executor/tuptable.h>
 #include <fmgr.h>
@@ -16,6 +17,7 @@
 #include <nodes/nodeFuncs.h>
 #include <nodes/pg_list.h>
 #include <optimizer/optimizer.h>
+#include <utils/ruleutils.h>
 
 #include "nodes/vector_agg/exec.h"
 
@@ -29,6 +31,33 @@
 #include "nodes/vector_agg/filter_word_iterator.h"
 #include "nodes/vector_agg/plan.h"
 #include "nodes/vector_agg/vector_slot.h"
+
+/*
+ * Cache for common subexpression elimination during vectorized expression
+ * evaluation. At init time, expression subtrees are interned (structurally
+ * equal subtrees replaced with a single canonical pointer), then a separate
+ * refcount pass identifies nodes reachable from multiple expression roots.
+ * Only those nodes get entries here. The values (CompressedColumnValues) are
+ * filled per-batch and reset between batches, since they point into
+ * per-batch memory. Lookup is pointer comparison on the interned keys.
+ */
+typedef struct ExprCacheEntry
+{
+	Expr *key;
+	CompressedColumnValues result; /* DT_Invalid means not yet computed */
+	uint32 status;				   /* required by simplehash */
+} ExprCacheEntry;
+
+#define SH_PREFIX expr_cache
+#define SH_ELEMENT_TYPE ExprCacheEntry
+#define SH_KEY_TYPE Expr *
+#define SH_KEY key
+#define SH_HASH_KEY(tb, key) murmurhash64((uint64) (key))
+#define SH_EQUAL(tb, a, b) ((a) == (b))
+#define SH_SCOPE static inline
+#define SH_DECLARE
+#define SH_DEFINE
+#include <lib/simplehash.h>
 
 #if PG18_GE
 #include "commands/explain_format.h"
@@ -269,7 +298,8 @@ columnar_result_finalize(ColumnarResult *columnar_result, DecompressBatchState c
 
 static pg_noinline CompressedColumnValues
 vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
-							  uint64 const *filter, List *args, Oid funcoid, Oid inputcollid)
+							  uint64 const *filter, List *args, Oid funcoid, Oid inputcollid,
+							  struct expr_cache_hash *expr_cache)
 {
 	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
 
@@ -288,7 +318,7 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	{
 		const int i = foreach_current_index(lc);
 		CompressedColumnValues arg_value =
-			vector_slot_evaluate_expression(dcontext, slot, filter, lfirst(lc));
+			vector_slot_evaluate_expression(dcontext, slot, filter, lfirst(lc), expr_cache);
 		Ensure(arg_value.decompression_type != DT_Invalid, "got DT_Invalid for argument %d", i);
 
 		have_null_bitmap =
@@ -441,23 +471,59 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 
 /*
  * Return the arrow array or the datum (in case of single scalar value) for a
- * given expression as a CompressedColumnValues struct.
+ * given expression as a CompressedColumnValues struct. If expr_cache is not
+ * NULL, evaluation results for common subexpressions are cached and reused
+ * within the current batch.
  */
 CompressedColumnValues
 vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slot,
-								uint64 const *filter, const Expr *argument)
+								uint64 const *filter, const Expr *argument,
+								struct expr_cache_hash *expr_cache)
 {
+	/*
+	 * Check if we already have this expression in the cache.
+	 */
+	ExprCacheEntry *cache_entry = NULL;
+	if (expr_cache != NULL)
+	{
+		/*
+		 * The cache entries are evaluated under the batch-global filter in
+		 * DecompressBatchState.vector_qual_results. When another filter is
+		 * needed, like with the aggregate FILTER clause, the cache cannot be
+		 * used.
+		 *
+		 * The only exception is during the progressive evaluation of additional
+		 * clauses that contribute to the batch-global filter bitmaps. In this
+		 * case, the filter narrows progressively, so a cached result may have
+		 * been computed under a broader filter than the current filter. This
+		 * broader result is safe to cache, because it has the correct values
+		 * for all rows of a narrower result.
+		 */
+		Assert(filter == ((const DecompressBatchState *) slot)->vector_qual_result);
+
+		cache_entry = expr_cache_lookup(expr_cache, (Expr *) argument);
+	}
+
+	if (cache_entry != NULL && cache_entry->result.decompression_type != DT_Invalid)
+	{
+		return cache_entry->result;
+	}
+
+	/*
+	 * No cache hit, so have to actually evaluate the expression.
+	 */
+	CompressedColumnValues result;
 	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
 	switch (((Node *) argument)->type)
 	{
 		case T_Const:
 		{
 			const Const *c = (const Const *) argument;
-			CompressedColumnValues result = { .decompression_type = DT_Scalar,
-											  .buffers[1] = DatumGetPointer(c->constvalue),
-											  .buffers[0] =
-												  DatumGetPointer(BoolGetDatum(c->constisnull)) };
-			return result;
+			result = (CompressedColumnValues){ .decompression_type = DT_Scalar,
+											   .buffers[1] = DatumGetPointer(c->constvalue),
+											   .buffers[0] =
+												   DatumGetPointer(BoolGetDatum(c->constisnull)) };
+			break;
 		}
 		case T_Var:
 		{
@@ -467,33 +533,234 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 			Ensure(values->decompression_type != DT_Invalid,
 				   "got DT_Invalid decompression type at offset %d",
 				   offset);
-			return *values;
+			result = *values;
+			break;
 		}
 		case T_OpExpr:
 		{
 			const OpExpr *o = (const OpExpr *) argument;
-			return vector_slot_evaluate_function(dcontext,
-												 slot,
-												 filter,
-												 o->args,
-												 o->opfuncid,
-												 o->inputcollid);
+			result = vector_slot_evaluate_function(dcontext,
+												   slot,
+												   filter,
+												   o->args,
+												   o->opfuncid,
+												   o->inputcollid,
+												   expr_cache);
+			break;
 		}
 		case T_FuncExpr:
 		{
 			const FuncExpr *f = (const FuncExpr *) argument;
-			return vector_slot_evaluate_function(dcontext,
-												 slot,
-												 filter,
-												 f->args,
-												 f->funcid,
-												 f->inputcollid);
+			result = vector_slot_evaluate_function(dcontext,
+												   slot,
+												   filter,
+												   f->args,
+												   f->funcid,
+												   f->inputcollid,
+												   expr_cache);
+			break;
 		}
 		default:
 			Ensure(false,
 				   "wrong node type %s for vector expression",
 				   ts_get_node_name((Node *) argument));
 			return (CompressedColumnValues){ .decompression_type = DT_Invalid };
+	}
+
+	/*
+	 * Cache the evaluation result.
+	 */
+	if (cache_entry != NULL)
+	{
+		cache_entry->result = result;
+		Assert(cache_entry->result.decompression_type != DT_Invalid);
+	}
+
+	return result;
+}
+
+/*
+ * For common expression elimination, we start with applying a hash table to
+ * deduplicate expression subtrees via interning. Each unique subtree is stored
+ * once, and all structurally equal copies are replaced with a pointer to that
+ * canonical instance. After interning, pointer comparison alone detects
+ * equality. The table compares subtrees by equal(), with the hash produced from
+ * the nodeToString() representation.
+ */
+typedef struct CSEInterningTableEntry
+{
+	Expr *key;
+
+	/* Stored hash for simplehash.h. */
+	uint32 hash;
+
+	/* Internal status field for simplehash.h */
+	uint32 status;
+} CSEInterningTableEntry;
+
+static uint32
+cse_interning_hash_expr(Expr *expr)
+{
+	char *s = nodeToString(expr);
+	uint32 h = hash_bytes((unsigned char const *) s, strlen(s));
+	pfree(s);
+	return h;
+}
+
+#define SH_PREFIX cse_interning
+#define SH_ELEMENT_TYPE CSEInterningTableEntry
+#define SH_KEY_TYPE Expr *
+#define SH_KEY key
+#define SH_HASH_KEY(tb, key) cse_interning_hash_expr(key)
+#define SH_EQUAL(tb, a, b) equal(a, b)
+#define SH_STORE_HASH
+#define SH_GET_HASH(tb, a) (a)->hash
+#define SH_SCOPE static inline
+#define SH_DECLARE
+#define SH_DEFINE
+#include <lib/simplehash.h>
+
+/*
+ * Common subexpression elimination mutator. Walks the expression tree
+ * bottom-up via expression_tree_mutator, interning each subtree. Structurally
+ * equal subtrees end up sharing the same canonical Expr pointer.
+ */
+static Node *
+cse_interning_expression_mutator(Node *node, void *context)
+{
+	if (node == NULL)
+		return NULL;
+
+	/*
+	 * Recurse into children first (bottom-up) so that by the time we intern
+	 * this node, its children are already canonical.
+	 */
+	Node *result = expression_tree_mutator(node, cse_interning_expression_mutator, context);
+
+	struct cse_interning_hash *table = (struct cse_interning_hash *) context;
+	bool found;
+	CSEInterningTableEntry *entry = cse_interning_insert(table, (Expr *) result, &found);
+	if (found)
+	{
+		return (Node *) entry->key;
+	}
+	return result;
+}
+
+/*
+ * Refcount table for post-interning reference counting. Keyed by Expr pointer
+ * identity (not structural equality). Counts how many top-level expression
+ * roots reach each interned node.
+ */
+typedef struct CSERefcountTableEntry
+{
+	Expr *key;
+	int refcount;
+
+	/* Internal status field for simplehash.h. */
+	uint32 status;
+} CSERefcountTableEntry;
+
+#define SH_PREFIX cse_refcount
+#define SH_ELEMENT_TYPE CSERefcountTableEntry
+#define SH_KEY_TYPE Expr *
+#define SH_KEY key
+#define SH_HASH_KEY(tb, key) murmurhash64((uint64) (key))
+#define SH_EQUAL(tb, a, b) ((a) == (b))
+#define SH_SCOPE static inline
+#define SH_DECLARE
+#define SH_DEFINE
+#include <lib/simplehash.h>
+
+/*
+ * Walker callback for counting how many top-level expression roots reach
+ * each non-leaf node. Var and Const are skipped: Var just looks up the
+ * already-decompressed column array, and Const returns a literal.
+ */
+static bool
+count_expr_refs_walker(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+
+	if (IsA(node, Var) || IsA(node, Const))
+	{
+		return false;
+	}
+
+	struct cse_refcount_hash *refcounts = (struct cse_refcount_hash *) context;
+	bool found;
+	CSERefcountTableEntry *entry = cse_refcount_insert(refcounts, (Expr *) node, &found);
+	if (!found)
+	{
+		entry->refcount = 0;
+	}
+	entry->refcount++;
+
+	/*
+	 * On second+ visit, skip recursion into children -- they were already
+	 * counted during the first visit. Return false (not true) so the
+	 * walker continues visiting sibling nodes at the parent level.
+	 */
+	if (entry->refcount > 1)
+	{
+		return false;
+	}
+
+	return expression_tree_walker(node, count_expr_refs_walker, context);
+}
+
+/*
+ * Build the expression cache from the refcount table. Only expressions
+ * reached by more than one top-level root get entries -- their presence
+ * marks them as common subexpressions. The result values start as DT_Invalid
+ * and are filled per-batch during evaluation.
+ */
+static struct expr_cache_hash *
+build_expr_cache(struct cse_refcount_hash *refcounts)
+{
+	struct expr_cache_hash *cache = NULL;
+	struct cse_refcount_iterator iter;
+
+	cse_refcount_start_iterate(refcounts, &iter);
+	for (CSERefcountTableEntry *entry = cse_refcount_iterate(refcounts, &iter); entry != NULL;
+		 entry = cse_refcount_iterate(refcounts, &iter))
+	{
+		if (entry->refcount <= 1)
+			continue;
+
+		if (cache == NULL)
+			cache = expr_cache_create(CurrentMemoryContext, 16, NULL);
+
+		bool found;
+		ExprCacheEntry *ce = expr_cache_insert(cache, entry->key, &found);
+		Assert(!found);
+		memset(&ce->result, 0, sizeof(ce->result));
+		Assert(ce->result.decompression_type == DT_Invalid);
+	}
+
+	return cache;
+}
+
+/*
+ * Reset the cached expression values between batches. The keys (interned
+ * Expr pointers) persist, but the CompressedColumnValues are invalidated
+ * because they point into per-batch memory.
+ */
+static void
+reset_expr_cache(struct expr_cache_hash *cache)
+{
+	if (cache == NULL)
+		return;
+
+	struct expr_cache_iterator iter;
+	expr_cache_start_iterate(cache, &iter);
+	for (ExprCacheEntry *entry = expr_cache_iterate(cache, &iter); entry != NULL;
+		 entry = expr_cache_iterate(cache, &iter))
+	{
+		memset(&entry->result, 0, sizeof(entry->result));
 	}
 }
 
@@ -622,6 +889,58 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			get_typlenbyval(type, &col->value_bytes, &col->by_value);
 		}
 	}
+
+	/*
+	 * Intern the expression subtrees for common subexpression elimination.
+	 * Aggregates with FILTER clauses are excluded because caching would
+	 * require evaluating the expression under the batch filter, which could
+	 * run the function on rows excluded by FILTER that cause runtime errors
+	 * (e.g. division by zero).
+	 */
+	struct cse_interning_hash *interning_table =
+		cse_interning_create(CurrentMemoryContext, 32, NULL);
+	for (int i = 0; i < vector_agg_state->num_agg_defs; i++)
+	{
+		VectorAggDef *def = &vector_agg_state->agg_defs[i];
+		if (def->filter_clauses == NIL && def->argument != NULL)
+		{
+			def->argument =
+				(Expr *) cse_interning_expression_mutator((Node *) def->argument, interning_table);
+		}
+	}
+
+	for (int i = 0; i < vector_agg_state->num_grouping_columns; i++)
+	{
+		GroupingColumn *col = &vector_agg_state->grouping_columns[i];
+		col->expr = (Expr *) cse_interning_expression_mutator((Node *) col->expr, interning_table);
+	}
+
+	cse_interning_destroy(interning_table);
+
+	/*
+	 * Count how many top-level expression roots reach each interned node.
+	 * Only nodes reachable from multiple roots need caching. This correctly
+	 * avoids caching subtrees that are shared only because they appear inside
+	 * a parent that is itself cached.
+	 */
+	struct cse_refcount_hash *refcounts = cse_refcount_create(CurrentMemoryContext, 32, NULL);
+	for (int i = 0; i < vector_agg_state->num_agg_defs; i++)
+	{
+		VectorAggDef *def = &vector_agg_state->agg_defs[i];
+		if (def->filter_clauses == NIL && def->argument != NULL)
+		{
+			count_expr_refs_walker((Node *) def->argument, refcounts);
+		}
+	}
+
+	for (int i = 0; i < vector_agg_state->num_grouping_columns; i++)
+	{
+		count_expr_refs_walker((Node *) vector_agg_state->grouping_columns[i].expr, refcounts);
+	}
+
+	vector_agg_state->expr_cache = build_expr_cache(refcounts);
+
+	cse_refcount_destroy(refcounts);
 
 	/*
 	 * Create the grouping policy chosen at plan time.
@@ -884,9 +1203,11 @@ vector_agg_exec(CustomScanState *node)
 		}
 
 		/*
-		 * Finally, pass the compressed batch to the grouping policy.
+		 * Reset the CSE cache for the new batch, then pass the batch to
+		 * the grouping policy.
 		 */
-		grouping->gp_add_batch(grouping, dcontext, slot);
+		reset_expr_cache(vector_agg_state->expr_cache);
+		grouping->gp_add_batch(grouping, dcontext, slot, vector_agg_state->expr_cache);
 	}
 
 	/*
@@ -920,6 +1241,14 @@ vector_agg_exec(CustomScanState *node)
 	return NULL;
 }
 
+#ifndef NDEBUG
+static int
+cmp_string_cells(const ListCell *a, const ListCell *b)
+{
+	return strcmp(lfirst(a), lfirst(b));
+}
+#endif
+
 static void
 vector_agg_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
@@ -928,6 +1257,25 @@ vector_agg_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 	{
 		ExplainPropertyText("Grouping Policy", state->grouping->gp_explain(state->grouping), es);
 	}
+
+#ifndef NDEBUG
+	if (es->verbose && state->expr_cache != NULL)
+	{
+		List *context = set_deparse_context_plan(es->deparse_cxt, node->ss.ps.plan, ancestors);
+		List *cached_exprs = NIL;
+		struct expr_cache_iterator iter;
+		expr_cache_start_iterate(state->expr_cache, &iter);
+		for (ExprCacheEntry *entry = expr_cache_iterate(state->expr_cache, &iter); entry != NULL;
+			 entry = expr_cache_iterate(state->expr_cache, &iter))
+		{
+			cached_exprs = lappend(cached_exprs,
+								   deparse_expression((Node *) entry->key, context, true, false));
+		}
+		list_sort(cached_exprs, cmp_string_cells);
+		ExplainPropertyList("Cached Subexpressions", cached_exprs, es);
+		list_free_deep(cached_exprs);
+	}
+#endif
 }
 
 static struct CustomExecMethods exec_methods = {
