@@ -1869,8 +1869,8 @@ LOG:  statement: CALL refresh_continuous_aggregate('cagg_4hrs', NULL, NULL);
 DEBUG:  hypertable 31 existing watermark >= new invalidation threshold 1577858400000000 1577851200000000
 DEBUG:  continuous aggregate refresh (individual invalidation) on "cagg_4hrs" in window [ 4714-11-24 00:00:00+00 BC, 2020-01-01 04:00:00+00 ]
 LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_32"
-DEBUG:  building index "_hyper_32_94_chunk__materialized_hypertable_32_bucket_idx" on table "_hyper_32_94_chunk" serially
-DEBUG:  index "_hyper_32_94_chunk__materialized_hypertable_32_bucket_idx" can safely use deduplication
+DEBUG:  building index "_hyper_32_95_chunk__materialized_hypertable_32_bucket_idx" on table "_hyper_32_95_chunk" serially
+DEBUG:  index "_hyper_32_95_chunk__materialized_hypertable_32_bucket_idx" can safely use deduplication
 LOG:  inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_32"
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
@@ -1905,6 +1905,6 @@ ORDER BY 1,2;
 
 DROP TABLE test_data CASCADE;
 NOTICE:  drop cascades to 4 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_32_94_chunk
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_33_93_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_32_95_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_33_94_chunk
 RESET timezone;
