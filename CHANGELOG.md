@@ -9,24 +9,11 @@ commands from accidentally triggering the load of a previous DB version.**
 
 This release contains performance improvements and bug fixes since the 2.26.1 release. We recommend that you upgrade at the next available opportunity.
 
-**Highlighted features in TimescaleDB v2.26.2**
-* 
-
-**Backward-Incompatible Changes**
-
-**Features**
-
 **Bugfixes**
-* [#9460](https://github.com/timescale/timescaledb/pull/9460) Fix WAL record tracking in EXPLAIN for direct compress
-* [#9485](https://github.com/timescale/timescaledb/pull/9485) Fix use-after-free of invalidation in tsl_compressor_free
+* [#9460](https://github.com/timescale/timescaledb/pull/9460) Fix WAL record tracking in `EXPLAIN` for direct compress
+* [#9485](https://github.com/timescale/timescaledb/pull/9485) Fix use-after-free of invalidation in `tsl_compressor_free`
 * [#9486](https://github.com/timescale/timescaledb/pull/9486) Fix use-after-free in job owner validation
-* [#9487](https://github.com/timescale/timescaledb/pull/9487) Fix use-after-free in reorder_chunk
-
-**New Settings**
-
-**GUCs**
-
-**Thanks**
+* [#9487](https://github.com/timescale/timescaledb/pull/9487) Fix use-after-free in `reorder_chunk`
 
 ## 2.26.1 (2026-03-30)
 
