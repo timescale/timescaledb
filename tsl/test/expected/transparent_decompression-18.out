@@ -8971,7 +8971,7 @@ SET min_parallel_table_scan_size TO '0';
 EXPLAIN (buffers off, costs off) SELECT * FROM metrics ORDER BY time, device_id;
 --- QUERY PLAN ---
  Gather Merge
-   Workers Planned: 3
+   Workers Planned: 4
    ->  Sort
          Sort Key: metrics."time", metrics.device_id
          ->  Parallel Append
@@ -9005,16 +9005,16 @@ EXPLAIN (buffers off, costs off) SELECT * FROM metrics_space ORDER BY time, devi
    ->  Sort
          Sort Key: metrics_space."time", metrics_space.device_id
          ->  Parallel Append
+               ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk
+                     ->  Parallel Seq Scan on compress_hyper_6_18_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk
+                     ->  Parallel Seq Scan on compress_hyper_6_21_chunk
                ->  Custom Scan (ColumnarScan) on _hyper_2_4_chunk
                      ->  Parallel Seq Scan on compress_hyper_6_17_chunk
                ->  Custom Scan (ColumnarScan) on _hyper_2_6_chunk
                      ->  Parallel Seq Scan on compress_hyper_6_19_chunk
                ->  Custom Scan (ColumnarScan) on _hyper_2_10_chunk
                      ->  Parallel Seq Scan on compress_hyper_6_20_chunk
-               ->  Custom Scan (ColumnarScan) on _hyper_2_5_chunk
-                     ->  Parallel Seq Scan on compress_hyper_6_18_chunk
-               ->  Custom Scan (ColumnarScan) on _hyper_2_11_chunk
-                     ->  Parallel Seq Scan on compress_hyper_6_21_chunk
                ->  Parallel Seq Scan on _hyper_2_8_chunk
                ->  Parallel Seq Scan on _hyper_2_7_chunk
                ->  Parallel Seq Scan on _hyper_2_9_chunk
