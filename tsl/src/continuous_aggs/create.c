@@ -905,20 +905,14 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	Oid user_view_oid = ts_get_relation_relid(NameStr(agg->data.user_view_schema),
 											  NameStr(agg->data.user_view_name),
 											  false);
-	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
-	Query *user_query = copyObject(get_view_query(user_view_rel));
-	/* Keep lock until end of transaction. */
-	relation_close(user_view_rel, NoLock);
+	Query *user_query = get_view_query_tree(user_view_oid);
 	RemoveRangeTableEntries(user_query);
 
 	/* Direct view query of the original user view definition at CAGG creation. */
 	Oid direct_view_oid = ts_get_relation_relid(NameStr(agg->data.direct_view_schema),
 												NameStr(agg->data.direct_view_name),
 												false);
-	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
-	Query *direct_query = copyObject(get_view_query(direct_view_rel));
-	/* Keep lock until end of transaction. */
-	relation_close(direct_view_rel, NoLock);
+	Query *direct_query = get_view_query_tree(direct_view_oid);
 	RemoveRangeTableEntries(direct_query);
 
 	ContinuousAggTimeBucketInfo timebucket_exprinfo =

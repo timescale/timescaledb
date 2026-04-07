@@ -217,3 +217,12 @@ CREATE OR REPLACE PROCEDURE @extschema@.refresh_continuous_aggregate(
     options                  JSONB = NULL
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh';
 
+-- Add an aggregate expression to a continuous aggregate.
+-- The aggregate will be computed and stored in the materialization hypertable.
+-- Example: add_continuous_aggregate_column('my_cagg', 'sum(value) AS total')
+CREATE OR REPLACE FUNCTION @extschema@.add_continuous_aggregate_column(
+    continuous_aggregate     REGCLASS,
+    column_or_expr           TEXT,
+    if_not_exists            BOOLEAN = FALSE
+) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_continuous_agg_add_column' LANGUAGE C VOLATILE STRICT;
