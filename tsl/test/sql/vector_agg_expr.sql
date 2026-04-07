@@ -140,5 +140,10 @@ reset timescaledb.debug_require_vector_agg;
 -- This form is not vectorized at the moment.
 select count(*), case i when 12 then 1212 else i end from aggexpr group by 2 order by 1, 2 limit 10;
 
+-- Non-vectorizable branches.
+select count(*), case when i = 12 then 1212 else i::numeric end from aggexpr group by 2 order by 1, 2 limit 10;
+
+select count(*), case when i::numeric = 12::numeric then 1212 else i end from aggexpr group by 2 order by 1, 2 limit 10;
+
 
 reset timescaledb.enable_columnarindexscan;

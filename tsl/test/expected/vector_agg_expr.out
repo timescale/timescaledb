@@ -1993,4 +1993,27 @@ select count(*), case i when 12 then 1212 else i end from aggexpr group by 2 ord
   1493 |    2
   4471 |    $
 
+-- Non-vectorizable branches.
+select count(*), case when i = 12 then 1212 else i::numeric end from aggexpr group by 2 order by 1, 2 limit 10;
+ count |  i   
+-------+------
+   320 |    3
+   640 |    0
+   740 |   14
+   741 |   13
+  1487 | 1212
+  1493 |    2
+  4471 |    $
+
+select count(*), case when i::numeric = 12::numeric then 1212 else i end from aggexpr group by 2 order by 1, 2 limit 10;
+ count |  i   
+-------+------
+   320 |    3
+   640 |    0
+   740 |   14
+   741 |   13
+  1487 | 1212
+  1493 |    2
+  4471 |    $
+
 reset timescaledb.enable_columnarindexscan;
