@@ -53,7 +53,7 @@ extern void ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri, Planner
 
 /*
  * Add a single restriction. Returns true if the clause is true everywhere inside
- * the current hypertable restictions.
+ * the current hypertable restrictions.
  */
 extern bool ts_hypertable_restrict_info_add_clause(HypertableRestrictInfo *hri, PlannerInfo *root,
 												   Expr *clause);
