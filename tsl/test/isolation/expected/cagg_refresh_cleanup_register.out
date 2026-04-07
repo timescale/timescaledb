@@ -1,0 +1,242 @@
+Parsed test spec with 7 sessions
+
+starting permutation: WP_mat_enable R2_refresh L1_lock WP_mat_disable R3_refresh R4_refresh check_locks check_jobs L1_unlock check_locks check_jobs
+step WP_mat_enable: SELECT debug_waitpoint_enable('after_process_cagg_materializations');
+debug_waitpoint_enable
+----------------------
+                      
+
+step R2_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15');
+ <waiting ...>
+step L1_lock: 
+    BEGIN;
+    LOCK TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+        IN ACCESS EXCLUSIVE MODE;
+
+step WP_mat_disable: SELECT debug_waitpoint_release('after_process_cagg_materializations');
+debug_waitpoint_release
+-----------------------
+                       
+
+step R3_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
+ <waiting ...>
+step R4_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2026-03-15', '2026-03-30');
+ <waiting ...>
+step check_locks: 
+    SELECT l.mode, l.granted
+    FROM pg_locks l
+    JOIN pg_class c ON c.oid = l.relation
+    WHERE c.relname = 'continuous_aggs_jobs_refresh_ranges'
+    ORDER BY l.mode;
+
+mode                    |granted
+------------------------+-------
+AccessExclusiveLock     |t      
+RowExclusiveLock        |f      
+ShareUpdateExclusiveLock|f      
+ShareUpdateExclusiveLock|f      
+
+step check_jobs: 
+    SELECT ca.user_view_name,
+           _timescaledb_functions.to_timestamp(r.start_range) AS start_time,
+           _timescaledb_functions.to_timestamp(r.end_range) AS end_time
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca
+        ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+user_view_name|start_time                  |end_time                    
+--------------+----------------------------+----------------------------
+cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
+
+step L1_unlock: 
+    COMMIT;
+
+step R2_refresh: <... completed>
+step R3_refresh: <... completed>
+step R4_refresh: <... completed>
+step check_locks: 
+    SELECT l.mode, l.granted
+    FROM pg_locks l
+    JOIN pg_class c ON c.oid = l.relation
+    WHERE c.relname = 'continuous_aggs_jobs_refresh_ranges'
+    ORDER BY l.mode;
+
+mode|granted
+----+-------
+
+step check_jobs: 
+    SELECT ca.user_view_name,
+           _timescaledb_functions.to_timestamp(r.start_range) AS start_time,
+           _timescaledb_functions.to_timestamp(r.end_range) AS end_time
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca
+        ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+user_view_name|start_time|end_time
+--------------+----------+--------
+
+
+starting permutation: WP_mat_enable R2_refresh L1_lock WP_mat_disable R3_refresh R4_overlapping_refresh check_locks check_jobs L1_unlock check_locks check_jobs
+step WP_mat_enable: SELECT debug_waitpoint_enable('after_process_cagg_materializations');
+debug_waitpoint_enable
+----------------------
+                      
+
+step R2_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15');
+ <waiting ...>
+step L1_lock: 
+    BEGIN;
+    LOCK TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+        IN ACCESS EXCLUSIVE MODE;
+
+step WP_mat_disable: SELECT debug_waitpoint_release('after_process_cagg_materializations');
+debug_waitpoint_release
+-----------------------
+                       
+
+step R3_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
+ <waiting ...>
+step R4_overlapping_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-05');
+ <waiting ...>
+step check_locks: 
+    SELECT l.mode, l.granted
+    FROM pg_locks l
+    JOIN pg_class c ON c.oid = l.relation
+    WHERE c.relname = 'continuous_aggs_jobs_refresh_ranges'
+    ORDER BY l.mode;
+
+mode                    |granted
+------------------------+-------
+AccessExclusiveLock     |t      
+RowExclusiveLock        |f      
+ShareUpdateExclusiveLock|f      
+ShareUpdateExclusiveLock|f      
+
+step check_jobs: 
+    SELECT ca.user_view_name,
+           _timescaledb_functions.to_timestamp(r.start_range) AS start_time,
+           _timescaledb_functions.to_timestamp(r.end_range) AS end_time
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca
+        ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+user_view_name|start_time                  |end_time                    
+--------------+----------------------------+----------------------------
+cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Feb 14 16:00:00 2026 PST
+
+step L1_unlock: 
+    COMMIT;
+
+step R2_refresh: <... completed>
+step R3_refresh: <... completed>
+step R4_overlapping_refresh: <... completed>
+ERROR:  could not refresh continuous aggregate "cond_daily" due to a concurrent refresh
+step check_locks: 
+    SELECT l.mode, l.granted
+    FROM pg_locks l
+    JOIN pg_class c ON c.oid = l.relation
+    WHERE c.relname = 'continuous_aggs_jobs_refresh_ranges'
+    ORDER BY l.mode;
+
+mode|granted
+----+-------
+
+step check_jobs: 
+    SELECT ca.user_view_name,
+           _timescaledb_functions.to_timestamp(r.start_range) AS start_time,
+           _timescaledb_functions.to_timestamp(r.end_range) AS end_time
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca
+        ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+user_view_name|start_time|end_time
+--------------+----------+--------
+
+
+starting permutation: WP_before_txn3_enable R1_refresh K1_terminate check_jobs WP_before_txn3_disable L1_lock R2_refresh R3_refresh L1_unlock check_jobs
+step WP_before_txn3_enable: SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+ <waiting ...>
+step K1_terminate: 
+    DO $$
+    DECLARE
+        target_pid int;
+    BEGIN
+        SELECT pid INTO target_pid FROM cancelpid;
+        PERFORM pg_terminate_backend(target_pid);
+        LOOP
+            EXIT WHEN NOT EXISTS (
+                SELECT 1 FROM pg_stat_activity WHERE pid = target_pid
+            );
+            PERFORM pg_sleep(0.05);
+        END LOOP;
+    END;
+    $$;
+
+step R1_refresh: <... completed>
+FATAL:  terminating connection due to administrator command
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+
+step check_jobs: 
+    SELECT ca.user_view_name,
+           _timescaledb_functions.to_timestamp(r.start_range) AS start_time,
+           _timescaledb_functions.to_timestamp(r.end_range) AS end_time
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca
+        ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+user_view_name|start_time                  |end_time                    
+--------------+----------------------------+----------------------------
+cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
+
+step WP_before_txn3_disable: SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step L1_lock: 
+    BEGIN;
+    LOCK TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+        IN ACCESS EXCLUSIVE MODE;
+
+step R2_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15');
+ <waiting ...>
+step R3_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
+ <waiting ...>
+step L1_unlock: 
+    COMMIT;
+
+step R2_refresh: <... completed>
+step R3_refresh: <... completed>
+step check_jobs: 
+    SELECT ca.user_view_name,
+           _timescaledb_functions.to_timestamp(r.start_range) AS start_time,
+           _timescaledb_functions.to_timestamp(r.end_range) AS end_time
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca
+        ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+user_view_name|start_time|end_time
+--------------+----------+--------
+
