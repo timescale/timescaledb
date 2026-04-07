@@ -207,7 +207,7 @@ cagg_6h|Sun Jan 04 00:00:00 2026 UTC|infinity
 step L1b_refresh_jan1_2: 
     CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01 00:00', '2026-01-03 00:00');
 
-ERROR:  could not refresh continuous aggregate "cagg_6h"
+ERROR:  could not refresh continuous aggregate "cagg_6h" due to a concurrent refresh
 step chk_mat_invals: 
     SELECT ca.user_view_name AS cagg,
            _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
@@ -361,7 +361,7 @@ cagg_6h|Sun Jan 04 00:00:00 2026 UTC|infinity
 step L1_refresh_jan1: 
     CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01 00:00', '2026-01-02 00:00');
 
-ERROR:  could not refresh continuous aggregate "cagg_6h"
+ERROR:  could not refresh continuous aggregate "cagg_6h" due to a concurrent refresh
 step chk_mat_invals: 
     SELECT ca.user_view_name AS cagg,
            _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
@@ -540,7 +540,7 @@ step lock_L2_source:
 step L2b_refresh_jan1_2: 
     CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-03');
 
-ERROR:  could not refresh continuous aggregate "cagg_1d"
+ERROR:  could not refresh continuous aggregate "cagg_1d" due to a concurrent refresh
 step WP_before_release: 
     SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
 
@@ -667,7 +667,7 @@ step lock_L2_source:
 step L2_refresh_jan1: 
     CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-02');
 
-ERROR:  could not refresh continuous aggregate "cagg_1d"
+ERROR:  could not refresh continuous aggregate "cagg_1d" due to a concurrent refresh
 step WP_before_release: 
     SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
 
