@@ -11,6 +11,7 @@
 #include <storage/procarray.h>
 #include <utils/snapmgr.h>
 
+#include "debug_point.h"
 #include "scan_iterator.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_aggs_jobs_refresh_ranges.h"
@@ -177,5 +178,6 @@ ts_cagg_jobs_refresh_ranges_lock_and_register(int32 materialization_id, int64 st
 		return false;
 
 	ts_cagg_jobs_refresh_ranges_insert(materialization_id, start_range, end_range, pid);
+        DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_registration");
 	return true;
 }

@@ -153,5 +153,5 @@ debug_waitpoint_release
 -----------------------
                        
 
-step s2_run_cagg2_overlap_refresh: <... completed>
 step s1_run_cagg2_nonoverlap_refresh: <... completed>
+step s2_run_cagg2_overlap_refresh: <... completed>
