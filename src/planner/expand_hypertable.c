@@ -1003,7 +1003,8 @@ get_simplified_restrictions(PlannerInfo *root, List *restrictions)
  */
 static Chunk **
 get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
-		   unsigned int *num_chunks, HypertableRestrictInfo **hri_out)
+		   unsigned int *num_chunks, HypertableRestrictInfo **hri_out,
+		   List **quals_proven_true_by_hri_out)
 {
 	bool reverse;
 	int order_attno;
@@ -1014,17 +1015,30 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 	 * This is where the magic happens: use our HypertableRestrictInfo
 	 * infrastructure to deduce the appropriate chunks using our range
 	 * exclusion.
+	 *
+	 * Also keep track of which quals are true everywhere inside the hypertable
+	 * restrictions.
 	 */
-	ts_hypertable_restrict_info_add(hri, root, rel->baserestrictinfo);
+	List *quals_proven_true_by_hri = NIL;
+	ListCell *lc_ri;
+	foreach (lc_ri, rel->baserestrictinfo)
+	{
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc_ri));
+		if (ts_hypertable_restrict_info_add_clause(hri, root, ri->clause))
+		{
+			quals_proven_true_by_hri = lappend(quals_proven_true_by_hri, ri);
+		}
+	}
 
 	List *simplified_restrictions = get_simplified_restrictions(root, rel->baserestrictinfo);
 	ts_hypertable_restrict_info_add(hri, root, simplified_restrictions);
 
 	/* Limit to hypertables without multiple dimensions for now */
-	if (hri->num_base_restrictions >= 1 && hri->num_dimensions == 1 &&
+	if (hri->num_quals_proven_true_by_hri >= 1 && hri->num_dimensions == 1 &&
 		ht->space->num_dimensions == 1)
 	{
 		*hri_out = hri;
+		*quals_proven_true_by_hri_out = quals_proven_true_by_hri;
 	}
 
 	/*
@@ -1099,49 +1113,19 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 }
 
 /*
- * Build a list of baserestrictinfo with any Var OP Const constraints on the primary
- * dimension removed.
- */
-static List *
-filter_baserestrictions(Hypertable *ht, List *base_restrictions)
-{
-	AttrNumber dim_attno = ht->space->dimensions[0].column_attno;
-	List *filtered_restrictions = NIL;
-	ListCell *lc;
-	foreach (lc, base_restrictions)
-	{
-		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc));
-		Expr *qual = ri->clause;
-		if (IsA(qual, OpExpr))
-		{
-			OpExpr *op = castNode(OpExpr, qual);
-			Node *left = strip_implicit_coercions(linitial(op->args));
-			Node *right = strip_implicit_coercions(lsecond(op->args));
-			if ((IsA(left, Var) && IsA(right, Const) &&
-				 castNode(Var, left)->varattno == dim_attno) ||
-				(IsA(right, Var) && IsA(left, Const) &&
-				 castNode(Var, right)->varattno == dim_attno))
-			{
-				/* only consider simple column to constant comparisons */
-				continue;
-			}
-		}
-
-		filtered_restrictions = lappend(filtered_restrictions, ri);
-	}
-	return filtered_restrictions;
-}
-
-/*
- * Returns true if the given chunk is fully included by the restrictions
- * on the primary dimension.
+ * Returns true if the given chunk is fully included by the computed
+ * restrictions on the primary dimension.
+ * Even when true, the baserestrictinfos on that chunk can still filter some
+ * rows out. The computed restrictions are an approximation, e.g. we simplify
+ * some timestamp comparisons or scalar array operations to a wider dimension
+ * range that includes the original condition.
  */
 static bool
-chunk_fully_covered(HypertableRestrictInfo *hri, Chunk *chunk)
+chunk_fully_covered(HypertableRestrictInfo *hri, Chunk const *chunk)
 {
 	DimensionRestrictInfoOpen *dri = (DimensionRestrictInfoOpen *) hri->dimension_restriction[0];
 	Ensure(dri->base.dimension->type == DIMENSION_TYPE_OPEN, "primary dimension must be open");
-	Ensure(hri->num_base_restrictions > 0, "must have base restrictions");
+	Ensure(hri->num_quals_proven_true_by_hri > 0, "must have base restrictions");
 
 	if (IS_OSM_CHUNK(chunk) ||
 		(dri->lower_strategy == InvalidStrategy && dri->upper_strategy == InvalidStrategy) ||
@@ -1197,18 +1181,18 @@ chunk_fully_covered(HypertableRestrictInfo *hri, Chunk *chunk)
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relation. */
 void
-ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel,
+ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *ht_rel,
 								 bool include_osm)
 {
-	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
-	Oid parent_oid = rte->relid;
+	RangeTblEntry *ht_rte = rt_fetch(ht_rel->relid, root->parse->rtable);
+	Oid parent_oid = ht_rte->relid;
 	Relation oldrelation;
 	Query *parse = root->parse;
-	Index rti = rel->relid;
+	Index ht_relindex = ht_rel->relid;
 	List *appinfos = NIL;
 	CollectQualCtx ctx = {
 		.root = root,
-		.rel = rel,
+		.rel = ht_rel,
 		.restrictions = NIL,
 		.all_quals = NIL,
 		.propagate_conditions = NIL,
@@ -1217,7 +1201,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	Index first_chunk_index = 0;
 
 	/* double check our permissions are valid */
-	Assert(rti != (Index) parse->resultRelation);
+	Assert(ht_relindex != (Index) parse->resultRelation);
 
 	/* Walk the tree and find restrictions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
@@ -1225,13 +1209,15 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	Assert(ctx.join_level == 0);
 
 	if (ctx.propagate_conditions != NIL)
-		propagate_join_quals(root, rel, &ctx);
+		propagate_join_quals(root, ht_rel, &ctx);
 
 	Chunk **chunks = NULL;
 	unsigned int num_chunks = 0;
 
 	HypertableRestrictInfo *hri = NULL;
-	chunks = get_chunks(root, rel, ht, include_osm, &num_chunks, &hri);
+	List *quals_proven_true_by_hri = NIL;
+	chunks =
+		get_chunks(root, ht_rel, ht, include_osm, &num_chunks, &hri, &quals_proven_true_by_hri);
 	/* Can have zero chunks. */
 	Assert(num_chunks == 0 || chunks != NULL);
 
@@ -1243,7 +1229,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * Handle PlanRowMark for FOR UPDATE/SHARE and FK constraint enforcement.
 	 * This replicates expand_inherited_rtentry() in inherit.c.
 	 */
-	PlanRowMark *oldrc = get_plan_rowmark(root->rowMarks, rti);
+	PlanRowMark *oldrc = get_plan_rowmark(root->rowMarks, ht_relindex);
 	bool old_isParent = false;
 	int old_allMarkTypes = 0;
 	if (oldrc)
@@ -1278,7 +1264,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		RangeTblEntry *childrte;
 		Index child_rtindex;
 		AppendRelInfo *appinfo;
-		LOCKMODE chunk_lock = rte->rellockmode;
+		LOCKMODE chunk_lock = ht_rte->rellockmode;
 
 		/* Open rel if needed */
 
@@ -1300,7 +1286,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 * The parent securityQuals will be propagated to children along with
 		 * other base restriction clauses, so we don't need to do it here.
 		 */
-		childrte = copyObject(rte);
+		childrte = copyObject(ht_rte);
 		childrte->relid = child_oid;
 		childrte->relkind = newrelation->rd_rel->relkind;
 		childrte->inh = false;
@@ -1323,7 +1309,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		Assert(root->simple_rel_array[child_rtindex] == NULL);
 
 		appinfo = makeNode(AppendRelInfo);
-		appinfo->parent_relid = rti;
+		appinfo->parent_relid = ht_relindex;
 		appinfo->child_relid = child_rtindex;
 		appinfo->parent_reltype = oldrelation->rd_rel->reltype;
 		appinfo->child_reltype = newrelation->rd_rel->reltype;
@@ -1419,47 +1405,58 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 	ts_add_append_rel_infos(root, appinfos);
 
-	/* PostgreSQL will not set up the child rels for use, due to the games
+	/*
+	 * If applicable, collect the quals that are true everywhere inside the current
+	 * hypertable restriction infos. If every row of a given chunk is fully inside the
+	 * hypertable restrictions, it means we don't have to check these qual on this
+	 * chunk.
+	 */
+	List *orig_ht_baserestrictinfo = ht_rel->baserestrictinfo;
+	List *quals_possibly_false_inside_hri = ht_rel->baserestrictinfo;
+	bool try_remove_quals_proven_true_by_hri =
+		ts_guc_enable_qual_filtering && hri && ht->space->num_dimensions == 1;
+
+	if (try_remove_quals_proven_true_by_hri)
+	{
+		quals_possibly_false_inside_hri =
+			list_difference_ptr(orig_ht_baserestrictinfo, quals_proven_true_by_hri);
+
+		/* Dont try filtering if all restrictions remain after filtering */
+		if (list_length(orig_ht_baserestrictinfo) == list_length(quals_possibly_false_inside_hri))
+			try_remove_quals_proven_true_by_hri = false;
+	}
+
+	/*
+	 * PostgreSQL will not set up the child rels for use, due to the games
 	 * we're playing with inheritance, so we must do it ourselves.
 	 * build_simple_rel will look things up in the append_rel_array, so we can
 	 * only use it after that array has been set up.
 	 */
-	List *base_restrictions = rel->baserestrictinfo;
-	List *filtered_restrictions = NIL;
-	bool try_restriction_filtering =
-		ts_guc_enable_qual_filtering && hri && ht->space->num_dimensions == 1;
-
-	if (try_restriction_filtering)
-	{
-		filtered_restrictions = filter_baserestrictions(ht, base_restrictions);
-		/* Dont try filtering if all restrictions remain after filtering */
-		if (list_length(base_restrictions) == list_length(filtered_restrictions))
-			try_restriction_filtering = false;
-	}
-
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{
-		bool can_clear_restrictinfo = false;
-		Index child_rtindex = first_chunk_index + i;
+		const Index child_rtindex = first_chunk_index + i;
 		Chunk *chunk = chunks[i];
-		if (try_restriction_filtering)
-		{
-			can_clear_restrictinfo = chunk_fully_covered(hri, chunk);
-		}
+
+		const bool can_remove_quals_proven_true_by_hri =
+			try_remove_quals_proven_true_by_hri && chunk_fully_covered(hri, chunk);
 
 		/* build_simple_rel will copy baserestrictinfo to the child rel and
 		 * do the necessary attribute mapping. If we can determine that the chunk
 		 * is fully covered by the primary dimension restriction we can remove
 		 * primary dimension restrictions from baserestrictinfo.
 		 */
-		if (can_clear_restrictinfo)
-			rel->baserestrictinfo = filtered_restrictions;
+		if (can_remove_quals_proven_true_by_hri)
+		{
+			ht_rel->baserestrictinfo = quals_possibly_false_inside_hri;
+		}
 
 		/* build_simple_rel will add the child to the relarray */
-		RelOptInfo *child_rel = build_simple_rel(root, child_rtindex, rel);
+		RelOptInfo *child_rel = build_simple_rel(root, child_rtindex, ht_rel);
 
-		if (can_clear_restrictinfo)
-			rel->baserestrictinfo = base_restrictions;
+		if (can_remove_quals_proven_true_by_hri)
+		{
+			ht_rel->baserestrictinfo = orig_ht_baserestrictinfo;
+		}
 
 		/*
 		 * Can't touch fdw_private for OSM chunks, it might be managed by the

@@ -45,6 +45,7 @@ set(TEST_FILES
     pg_join.sql
     plain.sql
     plan_hypertable_inline.sql
+    qual_filtering.sql
     query.sql
     relocate_extension.sql
     reloptions.sql
