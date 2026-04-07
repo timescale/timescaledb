@@ -13,6 +13,11 @@ create function stable_lower(x text) returns text as 'lower' language internal s
 -- a lower() function that is volatile
 create function volatile_lower(x text) returns text as 'lower' language internal volatile;
 set max_parallel_workers_per_gather = 0;
+-- On PG18 the btree indexes have support for scalar array operations, which
+-- leads to different query plans. We don't care about index scan in particular
+-- in this test, so switch it off to avoid versioned references.
+set enable_indexscan to off;
+set enable_bitmapscan to off;
 create table saop(ts int, segmentby text, with_minmax text, with_bloom text);
 select create_hypertable('saop', 'ts', chunk_time_interval => 50001);
  create_hypertable 
@@ -40,11 +45,13 @@ select * from saop where segmentby = any(array['1', '10']);
 --- QUERY PLAN ---
  Append (actual rows=8696.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=4348.00 loops=1)
-         ->  Index Scan using compress_hyper_2_3_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk (actual rows=6.00 loops=1)
-               Index Cond: (segmentby = ANY ('{1,10}'::text[]))
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=6.00 loops=1)
+               Filter: (segmentby = ANY ('{1,10}'::text[]))
+               Rows Removed by Filter: 63
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=4348.00 loops=1)
-         ->  Index Scan using compress_hyper_2_4_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_4_chunk (actual rows=6.00 loops=1)
-               Index Cond: (segmentby = ANY ('{1,10}'::text[]))
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=6.00 loops=1)
+               Filter: (segmentby = ANY ('{1,10}'::text[]))
+               Rows Removed by Filter: 63
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where '1' = any(array[segmentby, segmentby]);
@@ -65,12 +72,16 @@ select * from saop where with_minmax = any(array['1', '10']);
  Append (actual rows=6897.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3449.00 loops=1)
          Vectorized Filter: (with_minmax = ANY ('{1,10}'::text[]))
-         Rows Removed by Filter: 46552
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 19551
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=23.00 loops=1)
+               Filter: (((_ts_meta_min_1 <= '1'::text) AND (_ts_meta_max_1 >= '1'::text)) OR ((_ts_meta_min_1 <= '10'::text) AND (_ts_meta_max_1 >= '10'::text)))
+               Rows Removed by Filter: 46
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=3448.00 loops=1)
          Vectorized Filter: (with_minmax = ANY ('{1,10}'::text[]))
-         Rows Removed by Filter: 46552
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 19552
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=23.00 loops=1)
+               Filter: (((_ts_meta_min_1 <= '1'::text) AND (_ts_meta_max_1 >= '1'::text)) OR ((_ts_meta_min_1 <= '10'::text) AND (_ts_meta_max_1 >= '10'::text)))
+               Rows Removed by Filter: 46
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array['1', '10']);
@@ -186,12 +197,16 @@ select * from saop where with_minmax < any(array['1', '10']);
  Append (actual rows=6898.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3450.00 loops=1)
          Filter: (with_minmax < ANY ('{1,10}'::text[]))
-         Rows Removed by Filter: 46551
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 19550
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=23.00 loops=1)
+               Filter: ((_ts_meta_min_1 < '1'::text) OR (_ts_meta_min_1 < '10'::text))
+               Rows Removed by Filter: 46
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=3448.00 loops=1)
          Filter: (with_minmax < ANY ('{1,10}'::text[]))
-         Rows Removed by Filter: 46552
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 19552
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=23.00 loops=1)
+               Filter: ((_ts_meta_min_1 < '1'::text) OR (_ts_meta_min_1 < '10'::text))
+               Rows Removed by Filter: 46
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_minmax < all(array['1', '10']);
@@ -199,12 +214,16 @@ select * from saop where with_minmax < all(array['1', '10']);
  Append (actual rows=3449.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1725.00 loops=1)
          Filter: (with_minmax < ALL ('{1,10}'::text[]))
-         Rows Removed by Filter: 48276
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 21275
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=23.00 loops=1)
+               Filter: ((_ts_meta_min_1 < '1'::text) AND (_ts_meta_min_1 < '10'::text))
+               Rows Removed by Filter: 46
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1724.00 loops=1)
          Filter: (with_minmax < ALL ('{1,10}'::text[]))
-         Rows Removed by Filter: 48276
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 21276
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=23.00 loops=1)
+               Filter: ((_ts_meta_min_1 < '1'::text) AND (_ts_meta_min_1 < '10'::text))
+               Rows Removed by Filter: 46
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[segmentby, '10']);
@@ -307,6 +326,19 @@ select * from saop where with_bloom = any(null::text[]);
                Rows Removed by Filter: 69
 
 explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_minmax = any(null::text[]);
+--- QUERY PLAN ---
+ Append (actual rows=0.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+         Vectorized Filter: (with_minmax = ANY (NULL::text[]))
+         Rows Removed by Filter: 50001
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+         Vectorized Filter: (with_minmax = ANY (NULL::text[]))
+         Rows Removed by Filter: 50000
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[null, null]);
 --- QUERY PLAN ---
  Append (actual rows=0.00 loops=1)
@@ -327,12 +359,16 @@ select * from saop where segmentby = any(array[with_bloom, with_minmax]);
  Append (actual rows=3504.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1752.00 loops=1)
          Filter: (segmentby = ANY (ARRAY[with_bloom, with_minmax]))
-         Rows Removed by Filter: 48249
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 31118
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=37.00 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, segmentby) OR ((_ts_meta_min_1 <= segmentby) AND (_ts_meta_max_1 >= segmentby)))
+               Rows Removed by Filter: 32
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1752.00 loops=1)
          Filter: (segmentby = ANY (ARRAY[with_bloom, with_minmax]))
-         Rows Removed by Filter: 48248
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 31944
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=37.00 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, segmentby) OR ((_ts_meta_min_1 <= segmentby) AND (_ts_meta_max_1 >= segmentby)))
+               Rows Removed by Filter: 32
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where segmentby = all(array[with_bloom, with_minmax]);
@@ -340,12 +376,16 @@ select * from saop where segmentby = all(array[with_bloom, with_minmax]);
  Append (actual rows=3.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3.00 loops=1)
          Filter: (segmentby = ALL (ARRAY[with_bloom, with_minmax]))
-         Rows Removed by Filter: 49998
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 11171
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=12.00 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, segmentby) AND (_ts_meta_min_1 <= segmentby) AND (_ts_meta_max_1 >= segmentby))
+               Rows Removed by Filter: 57
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
          Filter: (segmentby = ALL (ARRAY[with_bloom, with_minmax]))
-         Rows Removed by Filter: 50000
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 13000
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=13.00 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, segmentby) AND (_ts_meta_min_1 <= segmentby) AND (_ts_meta_max_1 >= segmentby))
+               Rows Removed by Filter: 56
 
 -- If the arguments of an operator can pushed down but require recheck, combining
 -- them is wrong.
@@ -451,12 +491,16 @@ select * from saop where with_bloom = all(array['1', with_minmax]);
  Append (actual rows=3.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=2.00 loops=1)
          Filter: (with_bloom = ALL (ARRAY['1'::text, with_minmax]))
-         Rows Removed by Filter: 49999
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 29520
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=32.00 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, '1'::text)
+               Rows Removed by Filter: 37
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1.00 loops=1)
          Filter: (with_bloom = ALL (ARRAY['1'::text, with_minmax]))
-         Rows Removed by Filter: 49999
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 29346
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=31.00 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, '1'::text)
+               Rows Removed by Filter: 38
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where segmentby = '1' and with_bloom = all(array['1', with_minmax]);
@@ -464,14 +508,16 @@ select * from saop where segmentby = '1' and with_bloom = all(array['1', with_mi
  Append (actual rows=0.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
          Filter: (with_bloom = ALL (ARRAY['1'::text, with_minmax]))
-         Rows Removed by Filter: 2174
-         ->  Index Scan using compress_hyper_2_3_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk (actual rows=3.00 loops=1)
-               Index Cond: (segmentby = '1'::text)
+         Rows Removed by Filter: 2000
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=2.00 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, '1'::text) AND (segmentby = '1'::text))
+               Rows Removed by Filter: 67
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
          Filter: (with_bloom = ALL (ARRAY['1'::text, with_minmax]))
-         Rows Removed by Filter: 2174
-         ->  Index Scan using compress_hyper_2_4_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
-               Index Cond: (segmentby = '1'::text)
+         Rows Removed by Filter: 1000
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=1.00 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, '1'::text) AND (segmentby = '1'::text))
+               Rows Removed by Filter: 68
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where segmentby = '1' or with_bloom = all(array['1', with_minmax]);
@@ -479,12 +525,93 @@ select * from saop where segmentby = '1' or with_bloom = all(array['1', with_min
  Append (actual rows=4351.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=2176.00 loops=1)
          Filter: ((segmentby = '1'::text) OR (with_bloom = ALL (ARRAY['1'::text, with_minmax])))
-         Rows Removed by Filter: 47825
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 27520
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=33.00 loops=1)
+               Filter: ((segmentby = '1'::text) OR _timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, '1'::text))
+               Rows Removed by Filter: 36
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=2175.00 loops=1)
          Filter: ((segmentby = '1'::text) OR (with_bloom = ALL (ARRAY['1'::text, with_minmax])))
-         Rows Removed by Filter: 47825
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 28346
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=33.00 loops=1)
+               Filter: ((segmentby = '1'::text) OR _timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, '1'::text))
+               Rows Removed by Filter: 36
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = all(array['1', null]);
+--- QUERY PLAN ---
+ Result (actual rows=0.00 loops=1)
+   One-Time Filter: false
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = all(array['1', nullif(with_minmax, with_minmax)]);
+--- QUERY PLAN ---
+ Append (actual rows=0.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+         Filter: (segmentby = ALL (ARRAY['1'::text, NULLIF(with_minmax, with_minmax)]))
+         Rows Removed by Filter: 2174
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=3.00 loops=1)
+               Filter: (segmentby = '1'::text)
+               Rows Removed by Filter: 66
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+         Filter: (segmentby = ALL (ARRAY['1'::text, NULLIF(with_minmax, with_minmax)]))
+         Rows Removed by Filter: 2174
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+               Filter: (segmentby = '1'::text)
+               Rows Removed by Filter: 66
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = all(array[stable_lower('1'), volatile_lower('2')]);
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on saop (actual rows=0.00 loops=1)
+   Chunks excluded during startup: 0
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+         Filter: (segmentby = ALL (ARRAY[stable_lower('1'::text), volatile_lower('2'::text)]))
+         Rows Removed by Filter: 2174
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=3.00 loops=1)
+               Filter: (segmentby = stable_lower('1'::text))
+               Rows Removed by Filter: 66
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+         Filter: (segmentby = ALL (ARRAY[stable_lower('1'::text), volatile_lower('2'::text)]))
+         Rows Removed by Filter: 2174
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+               Filter: (segmentby = stable_lower('1'::text))
+               Rows Removed by Filter: 66
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = stable_lower('1') and segmentby = volatile_lower('2');
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on saop (actual rows=0.00 loops=1)
+   Chunks excluded during startup: 0
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+         Filter: (segmentby = volatile_lower('2'::text))
+         Rows Removed by Filter: 2174
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=3.00 loops=1)
+               Filter: (segmentby = stable_lower('1'::text))
+               Rows Removed by Filter: 66
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+         Filter: (segmentby = volatile_lower('2'::text))
+         Rows Removed by Filter: 2174
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+               Filter: (segmentby = stable_lower('1'::text))
+               Rows Removed by Filter: 66
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = '3' or (segmentby = stable_lower('1') and segmentby = volatile_lower('2'));
+--- QUERY PLAN ---
+ Custom Scan (ChunkAppend) on saop (actual rows=4348.00 loops=1)
+   Chunks excluded during startup: 0
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=2174.00 loops=1)
+         Filter: ((segmentby = '3'::text) OR ((segmentby = stable_lower('1'::text)) AND (segmentby = volatile_lower('2'::text))))
+         Rows Removed by Filter: 2174
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=6.00 loops=1)
+               Filter: ((segmentby = '3'::text) OR (segmentby = stable_lower('1'::text)))
+               Rows Removed by Filter: 63
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=2174.00 loops=1)
+         Filter: ((segmentby = '3'::text) OR ((segmentby = stable_lower('1'::text)) AND (segmentby = volatile_lower('2'::text))))
+         Rows Removed by Filter: 2174
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=6.00 loops=1)
+               Filter: ((segmentby = '3'::text) OR (segmentby = stable_lower('1'::text)))
+               Rows Removed by Filter: 63
 
 -- Partial pushdown with volatile functions.
 explain (analyze, buffers off, costs off, timing off, summary off)
@@ -522,12 +649,16 @@ select * from saop where with_bloom = all(array[stable_lower(segmentby), volatil
    Chunks excluded during startup: 0
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=30.00 loops=1)
          Filter: (with_bloom = ALL (ARRAY[stable_lower(segmentby), volatile_lower(segmentby)]))
-         Rows Removed by Filter: 49971
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 21492
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=24.00 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, stable_lower(segmentby))
+               Rows Removed by Filter: 45
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=27.00 loops=1)
          Filter: (with_bloom = ALL (ARRAY[stable_lower(segmentby), volatile_lower(segmentby)]))
-         Rows Removed by Filter: 49973
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 24147
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=25.00 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, stable_lower(segmentby))
+               Rows Removed by Filter: 44
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where segmentby = '1' or with_bloom = all(array[stable_lower('1'), volatile_lower('1')]);
@@ -536,12 +667,16 @@ select * from saop where segmentby = '1' or with_bloom = all(array[stable_lower(
    Chunks excluded during startup: 0
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=2206.00 loops=1)
          Filter: ((segmentby = '1'::text) OR (with_bloom = ALL (ARRAY[stable_lower('1'::text), volatile_lower('1'::text)])))
-         Rows Removed by Filter: 47795
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 27490
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=33.00 loops=1)
+               Filter: ((segmentby = '1'::text) OR _timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, stable_lower('1'::text)))
+               Rows Removed by Filter: 36
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=2207.00 loops=1)
          Filter: ((segmentby = '1'::text) OR (with_bloom = ALL (ARRAY[stable_lower('1'::text), volatile_lower('1'::text)])))
-         Rows Removed by Filter: 47793
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 28314
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=33.00 loops=1)
+               Filter: ((segmentby = '1'::text) OR _timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, stable_lower('1'::text)))
+               Rows Removed by Filter: 36
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where segmentby = '1' or (with_bloom = stable_lower('1') and with_bloom = volatile_lower('1'));
@@ -550,12 +685,16 @@ select * from saop where segmentby = '1' or (with_bloom = stable_lower('1') and 
    Chunks excluded during startup: 0
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=2206.00 loops=1)
          Filter: ((segmentby = '1'::text) OR ((with_bloom = stable_lower('1'::text)) AND (with_bloom = volatile_lower('1'::text))))
-         Rows Removed by Filter: 47795
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 27490
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=33.00 loops=1)
+               Filter: ((segmentby = '1'::text) OR _timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, stable_lower('1'::text)))
+               Rows Removed by Filter: 36
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=2207.00 loops=1)
          Filter: ((segmentby = '1'::text) OR ((with_bloom = stable_lower('1'::text)) AND (with_bloom = volatile_lower('1'::text))))
-         Rows Removed by Filter: 47793
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+         Rows Removed by Filter: 28314
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=33.00 loops=1)
+               Filter: ((segmentby = '1'::text) OR _timescaledb_functions.bloom1_contains(regress-test-bloom_with_bloom, stable_lower('1'::text)))
+               Rows Removed by Filter: 36
 
 -- Some joins.
 explain (analyze, buffers off, costs off, timing off, summary off)
@@ -563,30 +702,30 @@ with arrays as (select array[segmentby] a from saop group by segmentby order by 
 select * from saop, arrays where segmentby = any(a);
 --- QUERY PLAN ---
  Nested Loop (actual rows=43480.00 loops=1)
-   ->  Limit (actual rows=10.00 loops=1)
-         ->  Sort (actual rows=10.00 loops=1)
-               Sort Key: saop_1.segmentby
-               Sort Method: top-N heapsort 
-               ->  Finalize HashAggregate (actual rows=23.00 loops=1)
-                     Group Key: saop_1.segmentby
-                     ->  Append (actual rows=46.00 loops=1)
-                           ->  Partial HashAggregate (actual rows=23.00 loops=1)
-                                 Group Key: segmentby
-                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk saop (actual rows=69.00 loops=1)
-                                       ->  Seq Scan on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=69.00 loops=1)
-                           ->  Partial HashAggregate (actual rows=23.00 loops=1)
-                                 Group Key: segmentby
-                                 ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk saop (actual rows=69.00 loops=1)
-                                       ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=69.00 loops=1)
-   ->  Append (actual rows=4348.00 loops=10)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=2174.00 loops=10)
-               Filter: (segmentby = ANY ((ARRAY[saop_1.segmentby])))
-               ->  Index Scan using compress_hyper_2_3_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk (actual rows=3.00 loops=10)
-                     Index Cond: (segmentby = ANY ((ARRAY[saop_1.segmentby])))
-         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=2174.00 loops=10)
-               Filter: (segmentby = ANY ((ARRAY[saop_1.segmentby])))
-               ->  Index Scan using compress_hyper_2_4_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_4_chunk (actual rows=3.00 loops=10)
-                     Index Cond: (segmentby = ANY ((ARRAY[saop_1.segmentby])))
+   Join Filter: (saop.segmentby = ANY (arrays.a))
+   Rows Removed by Join Filter: 956530
+   ->  Append (actual rows=100001.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=50001.00 loops=1)
+               ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=50000.00 loops=1)
+               ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+   ->  Materialize (actual rows=10.00 loops=100001)
+         ->  Subquery Scan on arrays (actual rows=10.00 loops=1)
+               ->  Limit (actual rows=10.00 loops=1)
+                     ->  Sort (actual rows=10.00 loops=1)
+                           Sort Key: saop_1.segmentby
+                           Sort Method: top-N heapsort 
+                           ->  Finalize HashAggregate (actual rows=23.00 loops=1)
+                                 Group Key: saop_1.segmentby
+                                 ->  Append (actual rows=46.00 loops=1)
+                                       ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                             Group Key: segmentby
+                                             ->  Custom Scan (ColumnarIndexScan) on _hyper_1_1_chunk saop (actual rows=69.00 loops=1)
+                                                   ->  Seq Scan on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=69.00 loops=1)
+                                       ->  Partial HashAggregate (actual rows=23.00 loops=1)
+                                             Group Key: segmentby
+                                             ->  Custom Scan (ColumnarIndexScan) on _hyper_1_2_chunk saop (actual rows=69.00 loops=1)
+                                                   ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=69.00 loops=1)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)
@@ -741,3 +880,40 @@ execute array_param(null::text[]);
                Rows Removed by Filter: 69
 
 reset timescaledb.enable_chunk_append;
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_minmax = any(array['1'::varchar(10), '10'::varchar(10)]);
+--- QUERY PLAN ---
+ Append (actual rows=6897.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3449.00 loops=1)
+         Vectorized Filter: (with_minmax = ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 19551
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=23.00 loops=1)
+               Filter: (((_ts_meta_min_1 <= '1'::text) AND (_ts_meta_max_1 >= '1'::text)) OR ((_ts_meta_min_1 <= '10'::text) AND (_ts_meta_max_1 >= '10'::text)))
+               Rows Removed by Filter: 46
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=3448.00 loops=1)
+         Vectorized Filter: (with_minmax = ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 19552
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=23.00 loops=1)
+               Filter: (((_ts_meta_min_1 <= '1'::text) AND (_ts_meta_max_1 >= '1'::text)) OR ((_ts_meta_min_1 <= '10'::text) AND (_ts_meta_max_1 >= '10'::text)))
+               Rows Removed by Filter: 46
+
+reset plan_cache_mode;
+-- Debug GUC.
+set timescaledb.enable_columnar_scan_filter_pushdown to off;
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = '3';
+--- QUERY PLAN ---
+ Append (actual rows=4348.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=2174.00 loops=1)
+         Filter: (segmentby = '3'::text)
+         Rows Removed by Filter: 47827
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=2174.00 loops=1)
+         Filter: (segmentby = '3'::text)
+         Rows Removed by Filter: 47826
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
+
+reset timescaledb.enable_columnar_scan_filter_pushdown;
+reset max_parallel_workers_per_gather;
+reset enable_indexscan;
+reset enable_bitmapscan;

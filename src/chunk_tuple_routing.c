@@ -87,6 +87,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 	{
 		bool chunk_created = false;
 		bool needs_partial = false;
+		bool created_compressed_chunk = false;
 		const LOCKMODE lockmode = RowExclusiveLock;
 
 		/*
@@ -153,7 +154,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 		Assert(CheckRelationLockedByMe(chunk_rel, lockmode, true));
 		RelationClose(chunk_rel);
 #endif
-		if (ctr->create_compressed_chunk && !chunk->fd.compressed_chunk_id)
+		if (ctr->create_compressed_chunk && !ts_chunk_is_compressed(chunk))
 		{
 			/*
 			 * When creating a compressed chunk, the operation must be
@@ -197,6 +198,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 					ts_cm_functions->compression_chunk_create(compressed_ht, chunk);
 				ts_chunk_set_compressed_chunk(chunk, compressed_chunk->fd.id);
 				chunk->fd.compressed_chunk_id = compressed_chunk->fd.id;
+				created_compressed_chunk = true;
 
 				/* mark chunk as partial unless completely new chunk */
 				if (!chunk_created)
@@ -206,6 +208,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 
 		cis = ts_chunk_insert_state_create(chunk->table_id, ctr);
 		cis->needs_partial = needs_partial;
+		cis->created_compressed_chunk = created_compressed_chunk;
 		ts_subspace_store_add(ctr->subspace,
 							  chunk->cube,
 							  cis,

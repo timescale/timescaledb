@@ -1,1 +1,0 @@
-Fixes: #9356 Potential crash when using a hypertable with partial compression or space partitioning in a nested loop join

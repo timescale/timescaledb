@@ -208,3 +208,25 @@ select (ts_bloom1_debug_info(f)).* from v;
             1 |            16 |                  |            1024 |       8192 |     4199 |                981
             1 |            16 |                  |            1024 |       8192 |     4210 |                984
 
+-- test NULL handling
+SELECT _timescaledb_functions.bloom1_contains(NULL, 23);
+ bloom1_contains 
+-----------------
+ t
+
+SELECT _timescaledb_functions.bloom1_contains(NULL, NULL::int);
+ bloom1_contains 
+-----------------
+ f
+
+SELECT _timescaledb_functions.bloom1_contains('\xd098c885f08468eb8916751d947f248ed2843a88c02b1dea6228591c588b8068'::_timescaledb_internal.bloom1, NULL::int);
+ bloom1_contains 
+-----------------
+ f
+
+-- both args NULL but second arg obfuscated through record_in
+SELECT _timescaledb_functions.bloom1_contains(NULL, pg_catalog.record_in(null::cstring, 23::oid, 12::int4));
+ bloom1_contains 
+-----------------
+ f
+
