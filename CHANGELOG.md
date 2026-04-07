@@ -7,7 +7,7 @@ commands from accidentally triggering the load of a previous DB version.**
 
 ## 2.26.2 (2026-04-07)
 
-This release contains performance improvements and bug fixes since the 2.26.1 release. We recommend that you upgrade at the next available opportunity.
+This release contains bug fixes since the 2.26.1 release. We recommend that you upgrade at the next available opportunity.
 
 **Bugfixes**
 * [#9460](https://github.com/timescale/timescaledb/pull/9460) Fix WAL record tracking in `EXPLAIN` for direct compress
