@@ -717,14 +717,15 @@ cleanup_before_cagg_refresh_exit(const ContinuousAgg *cagg,
 	AtEOXact_GUC(false, cagg_spi_ctx->save_nestlevel);
 }
 
-static void continuous_agg_refresh_spi_setup_and_connect(CaggRefreshSpiContext *cagg_spi_ctx)
+static void
+continuous_agg_refresh_spi_setup_and_connect(CaggRefreshSpiContext *cagg_spi_ctx)
 {
 	bool nonatomic = ts_process_utility_is_context_nonatomic();
 
 	/* Reset the saved ProcessUtilityContext value promptly before
 	 * calling Prevent* checks so the potential unsupported (atomic)
 	 * value won't linger there in case of ereport exit.
-         * See: https://github.com/timescale/timescaledb/pull/7566
+	 * See: https://github.com/timescale/timescaledb/pull/7566
 	 */
 	ts_process_utility_context_reset();
 
@@ -828,7 +829,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 				 errhint("Align the refresh window with the bucket"
 						 " time zone or use at least two buckets.")));
 
-
 	/*
 	 * Perform the refresh across three transactions.
 	 *
@@ -873,12 +873,12 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_registration");
 
+	MemoryContext savedcontext = CurrentMemoryContext;
 	volatile bool refreshed = false;
 	PG_TRY();
 	{
 		/* Commit and Start a new transaction */
 		SPI_commit_and_chain();
-
 
 		/* Set the new invalidation threshold. Note that this only updates the
 		 * threshold if the new value is greater than the old one. Otherwise, the
@@ -899,8 +899,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		 * the threshold, the threshold would be at a 6 hour boundary (e.g, 2000-01-01 06:00:00).
 		 * If we then refresh the 4 hour cagg on the same range, the threshold calculated by
 		 * the 4 hour cagg would be at a 4 hour boundary (e.g., 2000-01-01 04:00:00), which is
-		 * smaller than the 6 hour stored threshold. In that case, invalidation_threshold_set_or_get()
-		 * would return the stored threshold.
+		 * smaller than the 6 hour stored threshold. In that case,
+		 * invalidation_threshold_set_or_get() would return the stored threshold.
 		 *
 		 * Therefore, we need to floor the invalidation_threshold to this cagg's own bucket boundary
 		 * before using it to cap the cagg's refresh window.
@@ -917,7 +917,10 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 			{
 				NullableDatum offset = INIT_NULL_DATUM;
 				NullableDatum origin = INIT_NULL_DATUM;
-				fill_bucket_offset_origin(cagg->bucket_function, refresh_window.type, &offset, &origin);
+				fill_bucket_offset_origin(cagg->bucket_function,
+										  refresh_window.type,
+										  &offset,
+										  &origin);
 				int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
 				computed_invalidation_threshold_for_cagg =
 					ts_time_bucket_by_type_extended(bucket_width,
@@ -941,16 +944,16 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		 * case.
 		 *
 		 * For variable width buckets we use a refresh_window.start value that is lower than the
-		 * -infinity value (ts_time_get_nobegin < ts_time_get_min). Therefore, the first check in the
-		 * following if statement is not enough. If the invalidation_threshold returns the min_value for
-		 * the data type, we end up with [nobegin, min_value] which is an invalid time interval.
-		 * Therefore, we have also to check if the invalidation_threshold is defined. If not, no refresh
-		 * is needed.  */
+		 * -infinity value (ts_time_get_nobegin < ts_time_get_min). Therefore, the first check in
+		 * the following if statement is not enough. If the invalidation_threshold returns the
+		 * min_value for the data type, we end up with [nobegin, min_value] which is an invalid time
+		 * interval. Therefore, we have also to check if the invalidation_threshold is defined. If
+		 * not, no refresh is needed.  */
 		if (refresh_window.start < refresh_window.end &&
 			!(IS_TIMESTAMP_TYPE(refresh_window.type) &&
-			 invalidation_threshold == ts_time_get_min(refresh_window.type)))
+			  invalidation_threshold == ts_time_get_min(refresh_window.type)))
 		{
-			if (process_hypertable_invalidations) //fix this : remove this
+			if (process_hypertable_invalidations) // fix this : remove this
 			{
 				invalidation_process_hypertable_log(cagg->data.raw_hypertable_id,
 													refresh_window.type);
@@ -980,21 +983,43 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	PG_CATCH();
 	{
 		/*
+		 * Save the original error before any cleanup attempt, so we can
+		 * re-throw it regardless of whether cleanup succeeds or fails.
+		 * Switch to savedcontext (captured before PG_TRY) so the copy
+		 * survives FlushErrorState(), which resets ErrorContext.
+		 */
+		MemoryContextSwitchTo(savedcontext);
+		ErrorData *edata = CopyErrorData();
+		FlushErrorState();
+		/*
 		 * The current transaction (Tx1, Tx2, or Tx3) is in an aborted state,
 		 * but the removal of the refresh ranges in jobs_refresh_ranges needs a
 		 * live transaction. Roll it back and start a new transaction so we can
 		 * perform cleanup.
+		 *
+		 * This may fail if the SPI context is in an atomic state (e.g., due to
+		 * a nested SPI connection opened by a hook during materialization). In
+		 * that case, the job entry will be cleaned up lazily by the next
+		 * refresh's dead-backend scan in
+		 * ts_cagg_jobs_refresh_ranges_lock_and_register().
 		 */
-		SPI_rollback_and_chain();
+		PG_TRY();
+		{
+			SPI_rollback_and_chain();
+			/*
+			 * Clean up, including removing the refresh window registration inserted in Txn1
+			 */
+			cleanup_before_cagg_refresh_exit(cagg, &cagg_spi_ctx);
+			SPI_commit();
+		}
+		PG_CATCH();
+		{
+			MemoryContextSwitchTo(savedcontext);
+			FlushErrorState();
+		}
+		PG_END_TRY();
 
-		/*
-		 * Clean up, including removing the refresh window registration inserted in Txn1
-		 */
-		cleanup_before_cagg_refresh_exit(cagg, &cagg_spi_ctx);
-
-		/* Commit the cleanup transaction, then re-throw the original error. */
-		SPI_commit_and_chain();
-		PG_RE_THROW();
+		ReThrowError(edata);
 	}
 	PG_END_TRY();
 
