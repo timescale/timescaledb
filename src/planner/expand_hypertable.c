@@ -1361,7 +1361,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		const Index child_rtindex = first_chunk_index + i;
 		Chunk *chunk = chunks[i];
 
-		const bool can_remove_quals_proven_try_by_hri =
+		const bool can_remove_quals_proven_true_by_hri =
 			try_remove_quals_proven_true_by_hri && chunk_fully_covered(hri, chunk);
 
 		/* build_simple_rel will copy baserestrictinfo to the child rel and
@@ -1369,7 +1369,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		 * is fully covered by the primary dimension restriction we can remove
 		 * primary dimension restrictions from baserestrictinfo.
 		 */
-		if (can_remove_quals_proven_try_by_hri)
+		if (can_remove_quals_proven_true_by_hri)
 		{
 			ht_rel->baserestrictinfo = quals_possibly_false_inside_hri;
 		}
@@ -1377,7 +1377,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		/* build_simple_rel will add the child to the relarray */
 		RelOptInfo *child_rel = build_simple_rel(root, child_rtindex, ht_rel);
 
-		if (can_remove_quals_proven_try_by_hri)
+		if (can_remove_quals_proven_true_by_hri)
 		{
 			ht_rel->baserestrictinfo = orig_ht_baserestrictinfo;
 		}
