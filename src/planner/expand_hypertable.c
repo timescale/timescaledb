@@ -1084,24 +1084,6 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 }
 
 /*
- * Build a list of baserestrictinfo with the accepted dimension
- * restrictions removed.
- */
-static List *
-filter_baserestrictions(List *quals_proven_true_by_hri, List *base_restrictions)
-{
-	List *filtered_restrictions = NIL;
-	ListCell *lc;
-	foreach (lc, base_restrictions)
-	{
-		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc));
-		if (!list_member_ptr(quals_proven_true_by_hri, ri))
-			filtered_restrictions = lappend(filtered_restrictions, ri);
-	}
-	return filtered_restrictions;
-}
-
-/*
  * Returns true if the given chunk is fully included by the computed
  * restrictions on the primary dimension.
  * Even when true, the baserestrictinfos on that chunk can still filter some
@@ -1361,7 +1343,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	if (try_remove_quals_proven_true_by_hri)
 	{
 		quals_possibly_false_inside_hri =
-			filter_baserestrictions(quals_proven_true_by_hri, orig_ht_baserestrictinfo);
+			list_difference_ptr(orig_ht_baserestrictinfo, quals_proven_true_by_hri);
 
 		/* Dont try filtering if all restrictions remain after filtering */
 		if (list_length(orig_ht_baserestrictinfo) == list_length(quals_possibly_false_inside_hri))
