@@ -128,4 +128,4 @@ permutation "s2_insert_new_data_2020" "s3_lock_before_register" "s1_run_cagg2_ov
 
 # TEST: Check that two non-overlapping refresh on cagg2 will run concurrently
 ## we should see both jobs
-permutation "s2_insert_new_data_2020" "s3_lock_before_register" "s1_run_cagg2_nonoverlap_refresh" "s2_run_cagg2_overlap_refresh" "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations"
+permutation "s2_insert_new_data_2020" "s3_lock_before_register" "s1_run_cagg2_nonoverlap_refresh" "s2_run_cagg2_overlap_refresh"(s1_run_cagg2_nonoverlap_refresh) "s4_enable_before_process_cagg_invalidations" "s3_release_after_register" "s5_show_running_jobs" "s4_release_before_process_cagg_invalidations"
