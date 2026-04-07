@@ -729,10 +729,14 @@ build_expr_cache(struct cse_refcount_hash *refcounts)
 		 entry = cse_refcount_iterate(refcounts, &iter))
 	{
 		if (entry->refcount <= 1)
+		{
 			continue;
+		}
 
 		if (cache == NULL)
+		{
 			cache = expr_cache_create(CurrentMemoryContext, 16, NULL);
+		}
 
 		bool found;
 		ExprCacheEntry *ce = expr_cache_insert(cache, entry->key, &found);
