@@ -173,6 +173,8 @@ dimension_restrict_info_open_add(DimensionRestrictInfoOpen *dri, StrategyNumber 
 		return false;
 	}
 
+	Assert(list_length(dimvalues->values) == 1 || !dimvalues->use_or);
+
 	foreach (item, dimvalues->values)
 	{
 		int64 value = DatumGetInt64(PointerGetDatum(lfirst(item)));
