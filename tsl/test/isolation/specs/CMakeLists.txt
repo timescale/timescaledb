@@ -40,6 +40,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_concurrent_refresh.spec
     cagg_hierarchical_concurrent_refresh.spec
     cagg_incremental_concurrent.spec
+    cagg_refresh_cleanup_register.spec
     compression_chunk_race.spec
     direct_compress_copy.spec
     compression_freeze.spec
