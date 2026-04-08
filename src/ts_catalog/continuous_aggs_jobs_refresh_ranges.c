@@ -58,6 +58,28 @@ ts_cagg_jobs_refresh_ranges_insert(int32 materialization_id, int64 start_range, 
 }
 
 TSDLLEXPORT void
+ts_cagg_jobs_refresh_ranges_delete_by_mat_hypertable_id(int32 materialization_id)
+{
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_JOBS_REFRESH_RANGES,
+													RowExclusiveLock,
+													CurrentMemoryContext);
+
+	init_scan_by_materialization_id(&iterator, materialization_id);
+
+	/*
+	 * We can have multiple entries for the same materialization_id. Find
+	 * them all and delete them.
+	 */
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+	}
+	ts_scan_iterator_close(&iterator);
+}
+
+TSDLLEXPORT void
 ts_cagg_jobs_refresh_ranges_delete_by_pid(int32 materialization_id, int32 pid)
 {
 	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_JOBS_REFRESH_RANGES,
