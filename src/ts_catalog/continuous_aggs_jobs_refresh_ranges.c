@@ -33,7 +33,7 @@ init_scan_by_materialization_id(ScanIterator *iterator, const int32 materializat
 
 static void
 ts_cagg_jobs_refresh_ranges_insert(int32 materialization_id, int64 start_range, int64 end_range,
-								   int32 pid)
+								   int32 pid, int32 job_id)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_JOBS_REFRESH_RANGES),
@@ -52,7 +52,7 @@ ts_cagg_jobs_refresh_ranges_insert(int32 materialization_id, int64 start_range, 
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_jobs_refresh_ranges_pid)] =
 		Int32GetDatum(pid);
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_jobs_refresh_ranges_job_id)] =
-		Int32GetDatum(0);
+		Int32GetDatum(job_id);
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_jobs_refresh_ranges_created_at)] =
 		TimestampTzGetDatum(GetCurrentTimestamp());
 
@@ -102,7 +102,7 @@ ts_cagg_jobs_refresh_ranges_delete_by_pid(int32 materialization_id, int32 pid)
  */
 TSDLLEXPORT bool
 ts_cagg_jobs_refresh_ranges_lock_and_register(int32 materialization_id, int64 start_range,
-											  int64 end_range, int32 pid)
+											  int64 end_range, int32 pid, int32 job_id)
 {
 	Catalog *catalog = ts_catalog_get();
 	Oid relid = catalog_get_table_id(catalog, CONTINUOUS_AGGS_JOBS_REFRESH_RANGES);
@@ -182,7 +182,7 @@ ts_cagg_jobs_refresh_ranges_lock_and_register(int32 materialization_id, int64 st
 	if (overlap_found)
 		return false;
 
-	ts_cagg_jobs_refresh_ranges_insert(materialization_id, start_range, end_range, pid);
+	ts_cagg_jobs_refresh_ranges_insert(materialization_id, start_range, end_range, pid, job_id);
         DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_registration");
 	return true;
 }

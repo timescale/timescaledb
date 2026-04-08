@@ -862,7 +862,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	if (!ts_cagg_jobs_refresh_ranges_lock_and_register(mat_id,
 													   refresh_window.start,
 													   refresh_window.end,
-													   MyProcPid))
+													   MyProcPid,
+													   context.job_id))
 		ereport(ERROR,
 				(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 				 errmsg("could not refresh continuous aggregate \"%s\" due to a concurrent refresh",
