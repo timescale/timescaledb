@@ -142,11 +142,13 @@ jobs:
         make -C build install
 
     - name: LLM Fuzzing
+      id: llm-fuzzing
       uses: anthropics/claude-code-action@6e2bd52842c65e914eba5c8badd17560bd26b5de # v1
       with:
         anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
         github_token: ${{ github.token }}
-        claude_args: '--dangerously-skip-permissions'
+        claude_args: '--dangerously-skip-permissions --model opus --effort high'
+        display_report: true
         prompt: |
           Read the workflow at .github/workflows/llm-fuzzer.yaml. You are
           running in this workflow. Inspect the GitHub environment and gather
@@ -161,7 +163,7 @@ jobs:
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: Claude execution log
-        path: $RUNNER_TEMP/claude-execution-output.json
+        path: ${{ steps.llm-fuzzing.outputs.execution_file }}
         if-no-files-found: ignore
 
     - name: initdb
