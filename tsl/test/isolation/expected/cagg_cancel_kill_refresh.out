@@ -1,0 +1,509 @@
+Parsed test spec with 14 sessions
+
+starting permutation: wp0_enable r1_register_pid r1_refresh s1_registered_ranges k1_cancel wp0_release s1_registered_ranges
+step wp0_enable: 
+    SELECT debug_waitpoint_enable('cagg_refresh_after_register');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step r1_register_pid: 
+    INSERT INTO cancelpid VALUES (pg_backend_pid()) ON CONFLICT (pid) DO NOTHING;
+
+step r1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 50);
+ <waiting ...>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step k1_cancel: 
+    CALL cancelpids();
+ <waiting ...>
+step r1_refresh: <... completed>
+ERROR:  canceling statement due to user request
+step wp0_release: 
+    SELECT debug_waitpoint_release('cagg_refresh_after_register');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step k1_cancel: <... completed>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+
+
+starting permutation: wp1_enable r1_register_pid r1_refresh s1_registered_ranges k1_cancel wp1_release s1_registered_ranges
+step wp1_enable: 
+    SELECT debug_waitpoint_enable('cagg_policy_batch_0_after_txn_1_wait');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step r1_register_pid: 
+    INSERT INTO cancelpid VALUES (pg_backend_pid()) ON CONFLICT (pid) DO NOTHING;
+
+step r1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 50);
+ <waiting ...>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step k1_cancel: 
+    CALL cancelpids();
+ <waiting ...>
+step r1_refresh: <... completed>
+ERROR:  canceling statement due to user request
+step wp1_release: 
+    SELECT debug_waitpoint_release('cagg_policy_batch_0_after_txn_1_wait');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step k1_cancel: <... completed>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+
+
+starting permutation: wp2_enable r1_register_pid r1_refresh s1_registered_ranges k1_cancel wp2_release s1_registered_ranges
+step wp2_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step r1_register_pid: 
+    INSERT INTO cancelpid VALUES (pg_backend_pid()) ON CONFLICT (pid) DO NOTHING;
+
+step r1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 50);
+ <waiting ...>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step k1_cancel: 
+    CALL cancelpids();
+ <waiting ...>
+step r1_refresh: <... completed>
+ERROR:  canceling statement due to user request
+step wp2_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step k1_cancel: <... completed>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+
+
+starting permutation: wp3_enable r1_register_pid r1_refresh s1_registered_ranges k1_cancel wp3_release s1_registered_ranges
+step wp3_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_materializations');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step r1_register_pid: 
+    INSERT INTO cancelpid VALUES (pg_backend_pid()) ON CONFLICT (pid) DO NOTHING;
+
+step r1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 50);
+ <waiting ...>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step k1_cancel: 
+    CALL cancelpids();
+ <waiting ...>
+step r1_refresh: <... completed>
+ERROR:  canceling statement due to user request
+step wp3_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_materializations');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step k1_cancel: <... completed>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+
+
+starting permutation: wp0_enable tr1_register_pid tr1_refresh s1_registered_ranges t1_terminate wp0_release s1_registered_ranges r2_refresh s1_registered_ranges
+step wp0_enable: 
+    SELECT debug_waitpoint_enable('cagg_refresh_after_register');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step tr1_register_pid: 
+    INSERT INTO cancelpid VALUES (pg_backend_pid()) ON CONFLICT (pid) DO NOTHING;
+
+step tr1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 50);
+ <waiting ...>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step t1_terminate: 
+    CALL terminatepids();
+ <waiting ...>
+step tr1_refresh: <... completed>
+FATAL:  terminating connection due to administrator command
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+
+step wp0_release: 
+    SELECT debug_waitpoint_release('cagg_refresh_after_register');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step t1_terminate: <... completed>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step r2_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 50);
+
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+
+
+starting permutation: wp1_enable tr2_register_pid tr2_refresh s1_registered_ranges t1_terminate wp1_release s1_registered_ranges r2_refresh s1_registered_ranges
+step wp1_enable: 
+    SELECT debug_waitpoint_enable('cagg_policy_batch_0_after_txn_1_wait');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step tr2_register_pid: 
+    INSERT INTO cancelpid VALUES (pg_backend_pid()) ON CONFLICT (pid) DO NOTHING;
+
+step tr2_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 50);
+ <waiting ...>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step t1_terminate: 
+    CALL terminatepids();
+ <waiting ...>
+step tr2_refresh: <... completed>
+FATAL:  terminating connection due to administrator command
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+
+step wp1_release: 
+    SELECT debug_waitpoint_release('cagg_policy_batch_0_after_txn_1_wait');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step t1_terminate: <... completed>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step r2_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 50);
+
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+
+
+starting permutation: wp2_enable tr3_register_pid tr3_refresh s1_registered_ranges t1_terminate wp2_release s1_registered_ranges r2_refresh s1_registered_ranges
+step wp2_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step tr3_register_pid: 
+    INSERT INTO cancelpid VALUES (pg_backend_pid()) ON CONFLICT (pid) DO NOTHING;
+
+step tr3_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 50);
+ <waiting ...>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step t1_terminate: 
+    CALL terminatepids();
+ <waiting ...>
+step tr3_refresh: <... completed>
+FATAL:  terminating connection due to administrator command
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+
+step wp2_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step t1_terminate: <... completed>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step r2_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 50);
+
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+
+
+starting permutation: wp3_enable tr4_register_pid tr4_refresh s1_registered_ranges t1_terminate wp3_release s1_registered_ranges r2_refresh s1_registered_ranges
+step wp3_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_materializations');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step tr4_register_pid: 
+    INSERT INTO cancelpid VALUES (pg_backend_pid()) ON CONFLICT (pid) DO NOTHING;
+
+step tr4_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 50);
+ <waiting ...>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step t1_terminate: 
+    CALL terminatepids();
+ <waiting ...>
+step tr4_refresh: <... completed>
+FATAL:  terminating connection due to administrator command
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+
+step wp3_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_materializations');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step t1_terminate: <... completed>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step r2_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 50);
+
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+
+
+starting permutation: wp2_enable tr5_register_pid tr5_refresh s1_registered_ranges t1_terminate wp2_release s1_registered_ranges r2_refresh_nonoverlap s1_registered_ranges
+step wp2_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step tr5_register_pid: 
+    INSERT INTO cancelpid VALUES (pg_backend_pid()) ON CONFLICT (pid) DO NOTHING;
+
+step tr5_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 50);
+ <waiting ...>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step t1_terminate: 
+    CALL terminatepids();
+ <waiting ...>
+step tr5_refresh: <... completed>
+FATAL:  terminating connection due to administrator command
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+
+step wp2_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step t1_terminate: <... completed>
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+cond_10  |          0|       50
+
+step r2_refresh_nonoverlap: 
+    CALL refresh_continuous_aggregate('cond_10', 50, 100);
+
+step s1_registered_ranges: 
+    SELECT ca.user_view_name AS cagg_name, r.start_range, r.end_range
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+cagg_name|start_range|end_range
+---------+-----------+---------
+
