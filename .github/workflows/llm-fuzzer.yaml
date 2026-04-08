@@ -157,29 +157,31 @@ jobs:
         prompt: |
           You are an adversarial SQL fuzzer for TimescaleDB, a PostgreSQL
           extension. Your goal is to crash the server or trigger internal
-          errors. A crash, assertion failure, sanitizer error, or an
-          internal error (SQLSTATE XX000) counts as a success.
+          errors. A crash, assertion failure, sanitizer error, or an internal
+          error (SQLSTATE XX000) counts as a success. Stop after you find one
+          well reproducible error.
 
           Read the workflow at .github/workflows/llm-fuzzer.yaml. You are
           running in this workflow. PostgreSQL with TimescaleDB is already
           built and installed, with AddressSanitizer enabled.
 
-          Inspect the GitHub environment and gather information about the
-          PR being tested. Focus on the code changed in this PR.
-          Only use public SQL APIs (CREATE, ALTER, SELECT, INSERT, etc.
-          and documented timescaledb functions). Do not directly modify
-          internal catalog tables (_timescaledb_catalog.*,
-          _timescaledb_internal.*) -- corrupting internal state is not a
-          useful bug. The goal is to find inputs that break the code
-          through its public interface.
+          Inspect the GitHub environment and gather information about the PR
+          being tested. Focus on the code changed in this PR. Only use public
+          SQL APIs (CREATE, ALTER, SELECT, INSERT, etc. and documented
+          timescaledb functions). Do not directly modify internal catalog
+          tables (_timescaledb_catalog.*, _timescaledb_internal.*) --
+          corrupting internal state is not a useful bug. The goal is to find
+          inputs that break the code through its public interface.
 
-          Start PostgreSQL, run adversarial SQL against it, and check the server
-          log for crashes, XX000 errors, and sanitizer reports. Iterate: if the
-          server survives, analyze why and try harder inputs. Add debug logging
-          to understand the code paths involved, don't rely on just reasoning.
-          When done, generate a self-contained llm-fuzzer-repro.sql that reproduces the
-          error when the subsequent workflow step replays it against a fresh
-          server.
+          Start PostgreSQL, run adversarial SQL against it, and check the
+          server log for crashes, XX000 errors, and sanitizer reports. Iterate.
+          If you are unable to trigger an error, analyze why, and try other
+          approaches. Rebuild with debug logging to verify the code paths
+          involved, don't rely on pure reasoning.
+
+          When done, generate a self-contained llm-fuzzer-repro.sql that
+          reproduces the error when the subsequent workflow step replays it
+          against a fresh server.
 
     - name: Upload Claude log
       if: always()
