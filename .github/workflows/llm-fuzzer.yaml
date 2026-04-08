@@ -40,7 +40,7 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      pg_latest: ${{ steps.setter.outputs.PG18_LATEST }}
+      pg_latest: ${{ fromJson(steps.setter.outputs.PG18_LATEST) }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -49,7 +49,7 @@ jobs:
       run: python .github/gh_config_reader.py
 
   fuzzer:
-    name: LLM fuzzer PG${{ fromJson(needs.config.outputs.pg_latest) }}
+    name: LLM fuzzer PG${{ needs.config.outputs.pg_latest }}
     runs-on: ubuntu-22.04
     needs: config
     permissions:
@@ -154,6 +154,15 @@ jobs:
           trigger an internal error. Generate self-contained repro.sql that
           would demonstrate the error in the later stage of this workflow.
           Focus on the changes made in this PR, not on pre-existing bugs.
+
+
+    - name: Upload Claude log
+      if: always()
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      with:
+        name: Claude execution log
+        path: $RUNNER_TEMP/claude-execution-output.json
+        if-no-files-found: ignore
 
     - name: initdb
       run: |
