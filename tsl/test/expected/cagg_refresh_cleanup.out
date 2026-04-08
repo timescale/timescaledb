@@ -8,7 +8,7 @@
 CREATE TABLE conditions (
     time TIMESTAMPTZ NOT NULL,
     value FLOAT);
-SELECT create_hypertable('conditions', 'time', chunk_time_interval => INTERVAL '6 hours');
+SELECT create_hypertable('conditions', 'time', chunk_time_interval => INTERVAL '1 week');
     create_hypertable    
 -------------------------
  (1,public,conditions,t)
@@ -158,4 +158,4 @@ FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
 
 DROP TABLE conditions CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 36 other objects
+NOTICE:  drop cascades to 2 other objects
