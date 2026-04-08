@@ -138,7 +138,7 @@ jobs:
           patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation-PG18GE.patch
         fi
         cd ~/$PG_SRC_DIR
-        export CFLAGS=${CFLAGS} ${CFLAGS_EXTRA}
+        export CFLAGS="${CFLAGS} ${CFLAGS_EXTRA}"
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
           --with-openssl --without-readline --without-zlib --without-libxml
         make -j$(getconf _NPROCESSORS_ONLN)
