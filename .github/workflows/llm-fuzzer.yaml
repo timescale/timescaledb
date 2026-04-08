@@ -172,7 +172,9 @@ jobs:
           on crashes, assertion failures, sanitizer errors, and internal errors
           (SQLSTATE XX000) -- these are detected automatically from server
           logs. Do not chase wrong-result bugs that need manual verification.
-          Stop after one reproducible bug.
+          That is, if you see a bug, but it manifests in a way that is not
+          going to be caught by the reproduction step of this workflow, choose
+          another bug. Stop after one reproducible bug.
 
           Read the workflow at .github/workflows/llm-fuzzer.yaml. You are
           running in that workflow. PostgreSQL with TimescaleDB is already
