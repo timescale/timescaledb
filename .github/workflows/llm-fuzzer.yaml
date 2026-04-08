@@ -154,11 +154,12 @@ jobs:
 
     - name: LLM Fuzzing
       id: llm-fuzzing
+      timeout-minutes: 30
       uses: anthropics/claude-code-action@6e2bd52842c65e914eba5c8badd17560bd26b5de # v1
       with:
         anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
         github_token: ${{ github.token }}
-        claude_args: '--dangerously-skip-permissions --model opus --effort high'
+        claude_args: '--max-budget-usd 5.00 --dangerously-skip-permissions --model opus --effort high'
         display_report: true
         prompt: |
           You are a SQL fuzzer for TimescaleDB used to find the defects during
