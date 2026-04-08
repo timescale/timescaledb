@@ -2339,29 +2339,40 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
 
-	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
+	int64 max_value;
 
-	if (res < 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 (errmsg("could not find the maximum time value for hypertable \"%s\"",
-						 get_rel_name(ht->main_table_relid)))));
+	PG_TRY();
+	{
+		res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
-	/* In most cases the result type is the same as the time type. However, with UUIDs we first
-	 * extract the timestamptz so the result type is timestamptz instead. */
-	Oid result_type = timetype == UUIDOID ? TIMESTAMPTZOID : timetype;
+		if (res < 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 (errmsg("could not find the maximum time value for hypertable \"%s\"",
+							 get_rel_name(ht->main_table_relid)))));
 
-	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == result_type,
-		   "partition types for result (%d) and dimension (%d) do not match",
-		   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
-		   ts_dimension_get_partition_type(dim));
-	maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &max_isnull);
+		/* In most cases the result type is the same as the time type. However, with UUIDs we
+		 * first extract the timestamptz so the result type is timestamptz instead. */
+		Oid result_type = timetype == UUIDOID ? TIMESTAMPTZOID : timetype;
 
-	if (isnull)
-		*isnull = max_isnull;
+		Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == result_type,
+			   "partition types for result (%d) and dimension (%d) do not match",
+			   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
+			   ts_dimension_get_partition_type(dim));
+		maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &max_isnull);
 
-	int64 max_value =
-		max_isnull ? ts_time_get_min(result_type) : ts_time_value_to_internal(maxdat, result_type);
+		if (isnull)
+			*isnull = max_isnull;
+
+		max_value = max_isnull ? ts_time_get_min(result_type) :
+								 ts_time_value_to_internal(maxdat, result_type);
+	}
+	PG_CATCH();
+	{
+		SPI_finish();
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
