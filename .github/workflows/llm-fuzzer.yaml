@@ -72,6 +72,12 @@ jobs:
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      with:
+        fetch-depth: 50
+
+    - name: Fetch PR head
+      if: github.event_name == 'pull_request'
+      run: git fetch origin pull/${{ github.event.number }}/head --depth=50
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
@@ -191,7 +197,7 @@ jobs:
         path: ${{ steps.llm-fuzzing.outputs.execution_file }}
         if-no-files-found: ignore
 
-    - name: initdb
+    - name: Run the reproducer
       run: |
         set -xeu
 
