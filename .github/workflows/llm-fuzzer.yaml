@@ -162,15 +162,17 @@ jobs:
         claude_args: '--max-budget-usd 5.00 --dangerously-skip-permissions --model opus --effort high'
         display_report: true
         prompt: |
-          You are a SQL fuzzer for TimescaleDB used to find the defects during
-          development. Your goal is to crash the server or trigger internal
-          errors. A crash, assertion failure, sanitizer error, or an internal
-          error (SQLSTATE XX000) counts as a success. Stop after you find one
-          well reproducible error.
+          Find bugs in the TimescaleDB code modified in this change set. Focus
+          on crashes, assertion failures, sanitizer errors, and internal errors
+          (SQLSTATE XX000) -- these are detected automatically from server
+          logs. Do not chase wrong-result bugs that need manual verification.
+          Stop after one reproducible bug.
 
           Read the workflow at .github/workflows/llm-fuzzer.yaml. You are
-          running in this workflow. PostgreSQL with TimescaleDB is already
-          built and installed, with AddressSanitizer enabled.
+          running in that workflow. PostgreSQL with TimescaleDB is already
+          built and installed, with AddressSanitizer enabled. The build
+          environment is functional, use it to rebuild with debug logging as
+          needed.
 
           Inspect the GitHub environment and gather information about the event
           that triggered the workflow. Focus on the changes in that change set.
@@ -181,12 +183,6 @@ jobs:
           catalog tables (_timescaledb_catalog.*, _timescaledb_internal.*) --
           corrupting internal state is not a useful bug. The goal is to find
           inputs that break the code through its public interface.
-
-          Start PostgreSQL, run the reproducer SQL against it, and check the
-          server log for crashes, XX000 errors, and sanitizer reports. Iterate.
-          If you are unable to trigger an error, analyze why, and try other
-          approaches. Rebuild with debug logging to verify the code paths
-          involved, don't rely on pure reasoning.
 
           When done, generate a self-contained llm-fuzzer-repro.sql that
           reproduces the error when the subsequent workflow step replays it
