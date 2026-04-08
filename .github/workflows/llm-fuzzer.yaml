@@ -168,12 +168,12 @@ jobs:
           PR being tested. Focus on the code changed in this PR.
 
           Start PostgreSQL, run adversarial SQL against it, and check the server
-		  log for crashes, XX000 errors, and sanitizer reports. Iterate: if the
+          log for crashes, XX000 errors, and sanitizer reports. Iterate: if the
           server survives, analyze why and try harder inputs. Add debug logging
-		  to understand the code paths involved, don't rely on just reasoning.
+          to understand the code paths involved, don't rely on just reasoning.
           When done, generate a self-contained repro.sql that reproduces the
-		  error when the subsequent workflow step replays it against a fresh
-		  server.
+          error when the subsequent workflow step replays it against a fresh
+          server.
 
     - name: Upload Claude log
       if: always()
