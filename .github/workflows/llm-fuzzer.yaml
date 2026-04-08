@@ -49,7 +49,7 @@ jobs:
       run: python .github/gh_config_reader.py
 
   fuzzer:
-    name: LLM fuzzer PG${{ needs.config.outputs.pg_latest }}
+    name: LLM fuzzer PG${{ fromJson(needs.config.outputs.pg_latest) }}
     runs-on: ubuntu-22.04
     needs: config
     permissions:
@@ -89,8 +89,11 @@ jobs:
       uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
+        # FIXME
+        # key: "${{ env.name }}-postgresql-${{ needs.config.outputs.pg_latest }}-${{ env.CC }}\
+        # -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
         key: "${{ env.name }}-postgresql-${{ needs.config.outputs.pg_latest }}-${{ env.CC }}\
-          -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
+          -${{ steps.get-date.outputs.date }}"
 
     - name: Build PostgreSQL ${{ needs.config.outputs.pg_latest }} if not in cache
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
@@ -142,6 +145,7 @@ jobs:
       uses: anthropics/claude-code-action@6e2bd52842c65e914eba5c8badd17560bd26b5de # v1
       with:
         anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+        github_token: ${{ github.token }}
         claude_args: '--dangerously-skip-permissions'
         prompt: |
           Read the workflow at .github/workflows/llm-fuzzer.yaml. You are
