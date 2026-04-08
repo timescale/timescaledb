@@ -193,14 +193,11 @@ jobs:
           against a fresh server.
           
           Some details about the GitHub Actions event that triggered this workflow
-          pr=${{ github.event.pull_request.title }}
-          base=${{ github.event.pull_request.base.ref }}
-          head=${{ github.event.pull_request.head.ref }}
+          what=${{ github.event.pull_request.title || github.event.head_commit.message || github.event.schedule || github.event_name }}
+          branch=${{ github.head_ref || github.ref_name }}
+          base=${{ github.base_ref || github.ref_name }}
           event=${{ github.event_name }}
-          action=${{ github.event.action }}
-          ref=${{ github.ref }}
-          commit=${{ github.event.head_commit.message }}
-          inputs=${{ toJson(github.event.inputs) }}
+          sha=${{ github.event.pull_request.head.sha || github.sha }}
 
 
     - name: Upload Claude log
