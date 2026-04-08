@@ -161,8 +161,8 @@ jobs:
         claude_args: '--dangerously-skip-permissions --model opus --effort high'
         display_report: true
         prompt: |
-          You are an adversarial SQL fuzzer for TimescaleDB, a PostgreSQL
-          extension. Your goal is to crash the server or trigger internal
+          You are a SQL fuzzer for TimescaleDB used to find the defects during
+          development. Your goal is to crash the server or trigger internal
           errors. A crash, assertion failure, sanitizer error, or an internal
           error (SQLSTATE XX000) counts as a success. Stop after you find one
           well reproducible error.
@@ -179,7 +179,7 @@ jobs:
           corrupting internal state is not a useful bug. The goal is to find
           inputs that break the code through its public interface.
 
-          Start PostgreSQL, run adversarial SQL against it, and check the
+          Start PostgreSQL, run the reproducer SQL against it, and check the
           server log for crashes, XX000 errors, and sanitizer reports. Iterate.
           If you are unable to trigger an error, analyze why, and try other
           approaches. Rebuild with debug logging to verify the code paths
