@@ -22,6 +22,12 @@ env:
   CLANG: "clang-15"
   CC: "clang-15"
   CXX: "clang-15"
+  # gcc CFLAGS, disable inlining for function name pattern matching to work for suppressions
+  # CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
+  # CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
+  # clang CFLAGS
+  CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
+  CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
 
   # We do not link libasan dynamically to avoid problems with libdl and our libraries.
   # clang does this by default, but we need to explicitly state that for gcc.
@@ -111,15 +117,14 @@ jobs:
     - name: Build PostgreSQL ${{ matrix.pg }} if not in cache
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
       env:
-          # gcc CFLAGS, disable inlining for function name pattern matching to work for suppressions
-          # CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
-          # CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
-          # clang CFLAGS
-          CFLAGS: >-
-            -g -fsanitize=address,undefined -fno-omit-frame-pointer -Og
-            -fno-inline-functions
-            ${{ github.event_name == 'FIXME schedule' && startsWith(matrix.pg, '18.') && '-DCATCACHE_FORCE_RELEASE -DRELCACHE_FORCE_RELEASE' || '' }}
+          CFLAGS_EXTRA: >-
+            ${{ github.event_name == 'pull_request' && startsWith(matrix.pg, '18.')
+                && '-DCATCACHE_FORCE_RELEASE -DRELCACHE_FORCE_RELEASE' || ''
+             }}
+
       run: |
+        set -xeu
+
         wget -q -O postgresql.tar.bz2 \
           https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
         mkdir -p ~/$PG_SRC_DIR
@@ -133,6 +138,7 @@ jobs:
           patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation-PG18GE.patch
         fi
         cd ~/$PG_SRC_DIR
+        export CFLAGS=${CFLAGS} ${CFLAGS_EXTRA}
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
           --with-openssl --without-readline --without-zlib --without-libxml
         make -j$(getconf _NPROCESSORS_ONLN)
