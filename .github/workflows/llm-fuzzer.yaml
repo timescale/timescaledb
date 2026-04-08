@@ -161,7 +161,6 @@ jobs:
 
     - name: LLM Fuzzing
       id: llm-fuzzing
-      timeout-minutes: 30
       uses: anthropics/claude-code-action@6e2bd52842c65e914eba5c8badd17560bd26b5de # v1
       with:
         anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
