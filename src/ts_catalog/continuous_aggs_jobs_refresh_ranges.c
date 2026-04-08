@@ -10,6 +10,7 @@
 #include <storage/lmgr.h>
 #include <storage/procarray.h>
 #include <utils/snapmgr.h>
+#include <utils/timestamp.h>
 
 #include "debug_point.h"
 #include "scan_iterator.h"
@@ -50,6 +51,10 @@ ts_cagg_jobs_refresh_ranges_insert(int32 materialization_id, int64 start_range, 
 		Int64GetDatum(end_range);
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_jobs_refresh_ranges_pid)] =
 		Int32GetDatum(pid);
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_jobs_refresh_ranges_job_id)] =
+		Int32GetDatum(0);
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_jobs_refresh_ranges_created_at)] =
+		TimestampTzGetDatum(GetCurrentTimestamp());
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
