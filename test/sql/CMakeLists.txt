@@ -110,6 +110,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
     TEST_FILES
+    alter_table_memory.sql
     bgw_launcher.sql
     c_unit_tests.sql
     copy_memory_usage.sql
