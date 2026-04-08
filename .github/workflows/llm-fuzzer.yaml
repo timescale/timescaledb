@@ -166,12 +166,18 @@ jobs:
 
           Inspect the GitHub environment and gather information about the
           PR being tested. Focus on the code changed in this PR.
+          Only use public SQL APIs (CREATE, ALTER, SELECT, INSERT, etc.
+          and documented timescaledb functions). Do not directly modify
+          internal catalog tables (_timescaledb_catalog.*,
+          _timescaledb_internal.*) -- corrupting internal state is not a
+          useful bug. The goal is to find inputs that break the code
+          through its public interface.
 
           Start PostgreSQL, run adversarial SQL against it, and check the server
           log for crashes, XX000 errors, and sanitizer reports. Iterate: if the
           server survives, analyze why and try harder inputs. Add debug logging
           to understand the code paths involved, don't rely on just reasoning.
-          When done, generate a self-contained repro.sql that reproduces the
+          When done, generate a self-contained llm-fuzzer-repro.sql that reproduces the
           error when the subsequent workflow step replays it against a fresh
           server.
 
@@ -202,7 +208,7 @@ jobs:
             -o "-clog_error_verbosity=verbose" -o "-cport=5433" start
 
         psql -c "create extension timescaledb;"
-        psql -v ON_ERROR_STOP=0 -f repro.sql
+        psql -v ON_ERROR_STOP=0 -f llm-fuzzer-repro.sql
         psql -c "select 1"
 
         pg_ctl stop
@@ -210,7 +216,7 @@ jobs:
     # The jq --exit-code option is broken with select() on jq-1.6 which we see
     # on some machines, so we use grep instead (see https://github.com/jqlang/jq/issues/1139).
     - name: Check for internal program errors
-      if: always() && hashFiles('repro.sql') != ''
+      if: always() && hashFiles('llm-fuzzer-repro.sql') != ''
       run: |
         ! jq 'select(
                 (.state_code == "XX000" and .error_severity != "LOG" and (.message | test("TestFailure") | not))
@@ -275,10 +281,32 @@ jobs:
         name: PostgreSQL log
         path: postmaster.*
 
-    - name: Upload repro.sql
+    - name: Upload llm-fuzzer-repro.sql
       if: always()
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
-        name: repro.sql
-        path: repro.sql
+        name: llm-fuzzer-repro.sql
+        path: llm-fuzzer-repro.sql
         if-no-files-found: ignore
+
+    - name: Upload results to the database
+      if: always()
+      env:
+        JOB_NAME: LLM fuzzer PG${{ needs.config.outputs.pg_latest }}
+        CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        JOB_STATUS: ${{ job.status }}
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]] ;
+        then
+            GITHUB_PR_NUMBER="${{ github.event.number }}"
+        else
+            GITHUB_PR_NUMBER=0
+        fi
+        export GITHUB_PR_NUMBER
+        scripts/upload_ci_stats.sh
