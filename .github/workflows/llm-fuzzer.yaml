@@ -174,9 +174,9 @@ jobs:
           environment is functional, use it to rebuild with debug logging as
           needed.
 
-          Inspect the GitHub environment and gather information about the event
-          that triggered the workflow. Focus on the changes in that change set.
-          Do not explore unrelated git history or old commits.
+          Determine whether we are testing a PR or a commit on a branch. Focus
+          on the changes in that change set. Do not explore unrelated git
+          history or old commits.
           
           Only use public SQL APIs (CREATE, ALTER, SELECT, INSERT, etc. and
           documented timescaledb functions). Do not directly modify internal
