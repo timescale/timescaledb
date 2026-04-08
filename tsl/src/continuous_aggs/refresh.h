@@ -14,7 +14,7 @@
 
 extern Datum continuous_agg_refresh(PG_FUNCTION_ARGS);
 extern void
-continuous_agg_refresh_internal(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
+continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg, const InternalTimeRange *refresh_window,
 								const ContinuousAggRefreshContext context, const bool start_isnull,
 								const bool end_isnull, bool bucketing_refresh_window, bool force,
 								bool process_hypertable_invalidations, bool extend_last_bucket);

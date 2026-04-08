@@ -761,12 +761,13 @@ static void continuous_agg_refresh_spi_setup_and_connect(CaggRefreshSpiContext *
 }
 
 void
-continuous_agg_refresh_internal(const ContinuousAgg *cagg,
+continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 								const InternalTimeRange *refresh_window_arg,
 								const ContinuousAggRefreshContext context, const bool start_isnull,
 								const bool end_isnull, bool bucketing_refresh_window, bool force,
 								bool process_hypertable_invalidations, bool extend_last_bucket)
 {
+	const ContinuousAgg *volatile cagg = cagg_arg;
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
 	int64 invalidation_threshold;
