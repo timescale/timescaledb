@@ -36,6 +36,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES
     bgw_job_duplicate_race.spec
+    cagg_concurrent_create_and_refresh.spec
     cagg_concurrent_move.spec
     cagg_concurrent_invalidation.spec
     cagg_concurrent_refresh.spec
