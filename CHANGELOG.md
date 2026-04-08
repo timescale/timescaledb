@@ -16,12 +16,11 @@ This release contains bug fixes since the 2.26.1 release. We recommend that you 
 * [#9487](https://github.com/timescale/timescaledb/pull/9487) Fix use-after-free in `reorder_chunk`
 * [#9392](https://github.com/timescale/timescaledb/pull/9392) Fix wrong result when performing chunk exclusion by a mutable expression
 * [#9510](https://github.com/timescale/timescaledb/pull/9510) Fix chunk skipping with dropped columns
-* [#9522](https://github.com/timescale/timescaledb/pull/9522) Fix GROUP BY ROLLUP on compressed continuous aggregates
+* [#9522](https://github.com/timescale/timescaledb/pull/9522) Fix `GROUP BY ROLLUP` on compressed continuous aggregates
 
 **Thanks**
 * @pcayen for reporting an issue with GROUP BY ROLLUP
 * @PiotrCiechomski for reporting the wrong result with chunk exclusion by a mutable expression
-
 
 ## 2.26.1 (2026-03-30)
 
