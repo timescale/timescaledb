@@ -880,6 +880,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		/* Commit and Start a new transaction */
 		SPI_commit_and_chain();
 
+		DEBUG_WAITPOINT("cagg_refresh_after_register");
 
 		/* Set the new invalidation threshold. Note that this only updates the
 		 * threshold if the new value is greater than the old one. Otherwise, the
