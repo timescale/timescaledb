@@ -13,7 +13,6 @@ set(TEST_FILES
     cagg_invalidation_variable_bucket.sql
     cagg_policy.sql
     cagg_policy_move.sql
-    cagg_policy_concurrent.sql
     cagg_refresh_using_trigger.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
@@ -129,6 +128,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_scheduler_restart.sql
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
+    cagg_policy_concurrent.sql
     cagg_policy_incremental.sql
     chunk_column_stats.sql
     compress_bgw_reorder_drop_chunks.sql
