@@ -188,7 +188,7 @@ jq 'select(
 # Note that the sanitizer setting log_path means "write logs to 'log_path.pid'".
 for x in sanitizer* sanitizer/* {sqlsmith/sqlsmith,sanitizer,stacktrace,postgres-failure}.log *.diff llm-fuzzer-repro.sql
 do
-    if ! [ -e "$x" ]; then continue ; fi
+    if ! [ -f "$x" ]; then continue ; fi
     "${PSQL[@]}" <<<"
         \set contents \`cat $x\`
         insert into log values ('$JOB_DATE', '$(basename "$x" .diff)', :'contents');
