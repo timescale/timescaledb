@@ -1,0 +1,73 @@
+Parsed test spec with 4 sessions
+
+starting permutation: WP_pre_enable C1_create_cagg R1_refresh WP_pre_release
+set_integer_now_func
+--------------------
+                    
+
+step WP_pre_enable: 
+    SELECT debug_waitpoint_enable('cagg_refresh_before_first_txn_commit');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step C1_create_cagg: 
+    CREATE MATERIALIZED VIEW cond_10
+    WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+    AS
+      SELECT time_bucket(10, time) AS bucket, avg(temp) AS avg_temp
+      FROM conditions
+      GROUP BY 1;
+ <waiting ...>
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 100);
+
+ERROR:  relation "cond_10" does not exist
+step WP_pre_release: 
+    SELECT debug_waitpoint_release('cagg_refresh_before_first_txn_commit');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+C1: NOTICE:  refreshing continuous aggregate "cond_10"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+step C1_create_cagg: <... completed>
+
+starting permutation: WP_post_enable C1_create_cagg R1_refresh WP_post_release
+set_integer_now_func
+--------------------
+                    
+
+step WP_post_enable: 
+    SELECT debug_waitpoint_enable('invalidation_threshold_scan_update_enter');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step C1_create_cagg: 
+    CREATE MATERIALIZED VIEW cond_10
+    WITH (timescaledb.continuous,
+      timescaledb.materialized_only=true)
+    AS
+      SELECT time_bucket(10, time) AS bucket, avg(temp) AS avg_temp
+      FROM conditions
+      GROUP BY 1;
+ <waiting ...>
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 0, 100);
+
+ERROR:  could not refresh continuous aggregate "cond_10" due to a concurrent refresh
+step WP_post_release: 
+    SELECT debug_waitpoint_release('invalidation_threshold_scan_update_enter');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+C1: NOTICE:  refreshing continuous aggregate "cond_10"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+step C1_create_cagg: <... completed>
