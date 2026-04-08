@@ -667,13 +667,13 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	LockRelationOid(hyper_relid, ShareUpdateExclusiveLock);
 	invalidation_process_cagg_log(cagg, refresh_window);
 
-	DEBUG_WAITPOINT("before_process_cagg_invalidations_for_refresh_lock");
 	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn2");
+	DEBUG_WAITPOINT("before_process_cagg_invalidations_for_refresh_lock");
 
 	SPI_commit_and_chain();
 
-	DEBUG_WAITPOINT("after_process_cagg_invalidations_for_refresh_lock");
 	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn3");
+	DEBUG_WAITPOINT("after_process_cagg_invalidations_for_refresh_lock");
 
 	InvalidationStore *invalidations =
 		collect_and_delete_cagg_invalidations_in_window(cagg, refresh_window, force);
@@ -962,10 +962,10 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 			SPI_commit_and_chain();
 
 			/* Debug error injection / waitpoint based on which batch is being processed */
-			DEBUG_WAITPOINT(
-				psprintf("cagg_policy_batch_%d_after_txn_1_wait", context.processing_batch));
 			DEBUG_ERROR_INJECTION(
 				psprintf("cagg_policy_batch_%d_after_txn_1", context.processing_batch));
+			DEBUG_WAITPOINT(
+				psprintf("cagg_policy_batch_%d_after_txn_1_wait", context.processing_batch));
 
 			cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
 
