@@ -171,11 +171,13 @@ jobs:
           running in this workflow. PostgreSQL with TimescaleDB is already
           built and installed, with AddressSanitizer enabled.
 
-          Inspect the GitHub environment and gather information about the PR
-          being tested. Focus on the code changed in this PR. Only use public
-          SQL APIs (CREATE, ALTER, SELECT, INSERT, etc. and documented
-          timescaledb functions). Do not directly modify internal catalog
-          tables (_timescaledb_catalog.*, _timescaledb_internal.*) --
+          Inspect the GitHub environment and gather information about the event
+          that triggered the workflow. Focus on the changes in that change set.
+          Do not explore unrelated git history or old commits.
+          
+          Only use public SQL APIs (CREATE, ALTER, SELECT, INSERT, etc. and
+          documented timescaledb functions). Do not directly modify internal
+          catalog tables (_timescaledb_catalog.*, _timescaledb_internal.*) --
           corrupting internal state is not a useful bug. The goal is to find
           inputs that break the code through its public interface.
 
@@ -188,6 +190,17 @@ jobs:
           When done, generate a self-contained llm-fuzzer-repro.sql that
           reproduces the error when the subsequent workflow step replays it
           against a fresh server.
+          
+          Some details about the GitHub Actions event that triggered this workflow
+          pr=${{ github.event.pull_request.title }}
+          base=${{ github.event.pull_request.base.ref }}
+          head=${{ github.event.pull_request.head.ref }}
+          event=${{ github.event_name }}
+          action=${{ github.event.action }}
+          ref=${{ github.ref }}
+          commit=${{ github.event.head_commit.message }}
+          inputs=${{ toJson(github.event.inputs) }}
+
 
     - name: Upload Claude log
       if: always()
