@@ -95,9 +95,9 @@ jobs:
     # we cache the build directory instead of the install directory here
     # because extension installation will write files to install directory
     # leading to a tainted cache
-    - name: Cache PostgreSQL ${{ needs.config.outputs.pg_latest }}
+    - name: Restore PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
       id: cache-postgresql
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         # FIXME
@@ -128,6 +128,13 @@ jobs:
         for ext in ${EXTENSIONS}; do
           make -j$(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
         done
+
+    - name: Save PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
+      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+      with:
+        path: ~/${{ env.PG_SRC_DIR }}
+        key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
@@ -204,7 +211,32 @@ jobs:
         path: ${{ steps.llm-fuzzing.outputs.execution_file }}
         if-no-files-found: ignore
 
+    - name: Rebuild after fuzzing
+      if: always() && hashFiles('llm-fuzzer-repro.sql') != ''
+      run: |
+        set -xeu
+        pkill -U "$(id -u)" postgres || true
+        sleep 2
+
+    - name: Restore clean PostgreSQL build
+      if: always() && hashFiles('llm-fuzzer-repro.sql') != ''
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+      with:
+        path: ~/${{ env.PG_SRC_DIR }}
+        key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
+
+    - name: Reinstall PostgreSQL and TimescaleDB
+      if: always() && hashFiles('llm-fuzzer-repro.sql') != ''
+      run: |
+        set -xeu
+        cd ~/$PG_SRC_DIR && make install
+        cd $GITHUB_WORKSPACE
+        git checkout -f ${{ github.sha }}
+        git clean -fd
+        make -j$(getconf _NPROCESSORS_ONLN) -C build install
+
     - name: Run the reproducer
+      if: always() && hashFiles('llm-fuzzer-repro.sql') != ''
       run: |
         set -xeu
 
@@ -216,11 +248,19 @@ jobs:
 
         initdb
 
-        echo "shared_preload_libraries = 'timescaledb'" >> $PGDATA/postgresql.conf
+        cat >> $PGDATA/postgresql.conf <<CONF
+        shared_preload_libraries = 'timescaledb'
+        statement_timeout = '30s'
+        listen_addresses = ''
+        unix_socket_directories = '$PGHOST'
+        logging_collector = on
+        log_destination = 'jsonlog,stderr'
+        log_directory = '$(readlink -f .)'
+        log_filename = 'postmaster.log'
+        log_error_verbosity = verbose
+        CONF
 
-        pg_ctl -o "-clogging_collector=true" -o "-clog_destination=jsonlog,stderr" \
-            -o "-clog_directory=$(readlink -f .)" -o "-clog_filename=postmaster.log" \
-            -o "-clog_error_verbosity=verbose" -o "-cport=5433" start
+        pg_ctl start
 
         psql -c "create extension timescaledb;"
         psql -v ON_ERROR_STOP=0 -f llm-fuzzer-repro.sql
