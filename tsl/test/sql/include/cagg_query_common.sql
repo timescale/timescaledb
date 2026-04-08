@@ -757,6 +757,11 @@ INSERT INTO temperature
     FROM generate_series('2020-02-01 01:00:00 PST'::timestamptz,
                          '2020-02-01 23:59:59 PST','1m') time;
 
+--Note that the duplicate entries are expected, as the result of the truncate table
+--(which add -infinity, infinity) to the invalidation log, and the fact the the invalidation
+-- cutting during refresh won't merge entries which are not overlapping with its refresh window.
+-- The duplicates will be merged when there is a refresh that overlaps with them.
+
 SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
 
 CREATE MATERIALIZED VIEW cagg_1_year
@@ -766,6 +771,22 @@ CREATE MATERIALIZED VIEW cagg_1_year
     GROUP BY 1 ORDER BY 1;
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log ORDER BY 1, 2, 3;
+
+--try a refresh that overlaps with the invalidation log entries to check that they are merged properly
+--in this case, the duplicates at the +infinity end should be merged.
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id IN (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+                             WHERE user_view_name = 'cagg_4_hours')
+ORDER BY 1, 2, 3;
+
+CALL refresh_continuous_aggregate('cagg_4_hours', '2000-01-01 00:00:00'::timestamptz, '2020-12-31 23:59:59'::timestamptz);
+
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id IN (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+                             WHERE user_view_name = 'cagg_4_hours')
+ORDER BY 1, 2, 3;
+
 
 ---
 -- Tests with integer based hypertables
