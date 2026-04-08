@@ -872,6 +872,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 						   ts_internal_to_time_string(refresh_window.end, refresh_window.type))));
 
 	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_registration");
+	DEBUG_WAITPOINT("cagg_refresh_before_first_txn_commit");
 
 	volatile bool refreshed = false;
 	PG_TRY();
