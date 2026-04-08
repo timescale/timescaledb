@@ -186,7 +186,7 @@ jq 'select(
 
 # Upload the logs.
 # Note that the sanitizer setting log_path means "write logs to 'log_path.pid'".
-for x in sanitizer* sanitizer/* {sqlsmith/sqlsmith,sanitizer,stacktrace,postgres-failure}.log *.diff llm-fuzzer-repro.sql
+for x in sanitizer* sanitizer/* {sqlsmith/sqlsmith,sanitizer,stacktrace,postgres-failure}.log *.diff ~/llm-fuzzer-repro.sql
 do
     if ! [ -f "$x" ]; then continue ; fi
     "${PSQL[@]}" <<<"

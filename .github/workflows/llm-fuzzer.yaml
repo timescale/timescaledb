@@ -192,7 +192,7 @@ jobs:
           corrupting internal state is not a useful bug. The goal is to find
           inputs that break the code through its public interface.
 
-          When done, generate a self-contained llm-fuzzer-repro.sql that
+          When done, generate a self-contained ~/llm-fuzzer-repro.sql that
           reproduces the error when the subsequent workflow step replays it
           against a fresh server.
           
@@ -212,22 +212,27 @@ jobs:
         path: ${{ steps.llm-fuzzing.outputs.execution_file }}
         if-no-files-found: ignore
 
+    - name: Check for reproducer
+      if: always()
+      id: repro
+      run: test -f ~/llm-fuzzer-repro.sql && echo "found=true" >> $GITHUB_OUTPUT || true
+
     - name: Rebuild after fuzzing
-      if: always() && hashFiles('llm-fuzzer-repro.sql') != ''
+      if: always() && steps.repro.outputs.found == 'true'
       run: |
         set -xeu
         pkill -U "$(id -u)" postgres || true
         sleep 2
 
     - name: Restore clean PostgreSQL build
-      if: always() && hashFiles('llm-fuzzer-repro.sql') != ''
+      if: always() && steps.repro.outputs.found == 'true'
       uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
 
     - name: Reinstall PostgreSQL and TimescaleDB
-      if: always() && hashFiles('llm-fuzzer-repro.sql') != ''
+      if: always() && steps.repro.outputs.found == 'true'
       run: |
         set -xeu
         cd ~/$PG_SRC_DIR && make install
@@ -237,7 +242,7 @@ jobs:
         make -j$(getconf _NPROCESSORS_ONLN) -C build install
 
     - name: Run the reproducer
-      if: always() && hashFiles('llm-fuzzer-repro.sql') != ''
+      if: always() && steps.repro.outputs.found == 'true'
       run: |
         set -xeu
 
@@ -264,7 +269,7 @@ jobs:
         pg_ctl start
 
         psql -c "create extension timescaledb;"
-        psql -v ON_ERROR_STOP=0 -f llm-fuzzer-repro.sql
+        psql -v ON_ERROR_STOP=0 -f ~/llm-fuzzer-repro.sql
         psql -c "select 1"
 
         pg_ctl stop
@@ -272,7 +277,7 @@ jobs:
     # The jq --exit-code option is broken with select() on jq-1.6 which we see
     # on some machines, so we use grep instead (see https://github.com/jqlang/jq/issues/1139).
     - name: Check for internal program errors
-      if: always() && hashFiles('llm-fuzzer-repro.sql') != ''
+      if: always() && steps.repro.outputs.found == 'true'
       run: |
         ! jq 'select(
                 (.state_code == "XX000" and .error_severity != "LOG" and (.message | test("TestFailure") | not))
@@ -342,11 +347,11 @@ jobs:
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: llm-fuzzer-repro.sql
-        path: llm-fuzzer-repro.sql
+        path: ~/llm-fuzzer-repro.sql
         if-no-files-found: ignore
 
     - name: Upload results to the database
-      if: always()
+      if: always() && steps.repro.outputs.found == 'true'
       env:
         JOB_NAME: LLM fuzzer PG${{ needs.config.outputs.pg_latest }}
         CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
