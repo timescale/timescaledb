@@ -116,6 +116,16 @@ step "WP_before_release"
     SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
 }
 
+session "WP_after"
+step "WP_after_enable"
+{
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+}
+step "WP_after_release"
+{
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+}
+
 # Session to refresh L1 (6-hour)
 session "L1"
 setup
@@ -180,10 +190,11 @@ step "L2b_refresh_jan3"
     CALL refresh_continuous_aggregate('cagg_1d', '2026-01-03', '2026-01-04');
 }
 
-# Session to block L2 refreshes by locking cagg_1d's mat hypertable.
+# Session to handle locks.
+# It can block L2 refreshes by locking cagg_1d's mat hypertable.
 # Unlike waitpoints (which block all refreshes), locking L2's materialization
 # table only blocks L2 refreshes while L1 refreshes can run freely.
-session "LOCK_L2"
+session "LOCK"
 setup
 {
     SET timezone TO 'UTC';
@@ -203,7 +214,13 @@ step "lock_L2_source"
     END;
     $$;
 }
-step "unlock_L2_source"
+step "lock_mat_invals"
+{
+    BEGIN;
+    LOCK _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+    IN ACCESS EXCLUSIVE MODE;
+}
+step "unlock"
 {
     ROLLBACK;
 }
@@ -304,10 +321,10 @@ permutation "WP_before_enable" "chk_hyper_invals" "L1b_refresh_jan1_2" "insert_h
 
 # Two concurrent refreshes on L2 CAgg with overlapping ranges. One should fail due to overlap.
 # L1 is refreshed between the two L2 refreshes so that the second L2 refresh encounters an overlapping materialization range and fails.
-permutation "L1_refresh_full" "chk_1d_consistency" "WP_before_enable" "chk_hyper_invals" "L2_refresh_jan1" "insert_ht" "L1_refresh_full" "lock_L2_source" "L2b_refresh_jan1_2" "WP_before_release" "unlock_L2_source" "chk_cagg_1d" "chk_1d_consistency"
+permutation "L1_refresh_full" "chk_1d_consistency" "WP_before_enable" "chk_hyper_invals" "L2_refresh_jan1" "insert_ht" "L1_refresh_full" "lock_L2_source" "L2b_refresh_jan1_2" "WP_before_release" "unlock" "chk_cagg_1d" "chk_1d_consistency"
 
 # Same as above, reverse refresh order.
-permutation "L1_refresh_full" "chk_1d_consistency" "WP_before_enable" "chk_hyper_invals" "L2b_refresh_jan1_2" "insert_ht" "L1_refresh_full" "lock_L2_source" "L2_refresh_jan1" "WP_before_release" "unlock_L2_source" "chk_cagg_1d" "chk_1d_consistency"
+permutation "L1_refresh_full" "chk_1d_consistency" "WP_before_enable" "chk_hyper_invals" "L2b_refresh_jan1_2" "insert_ht" "L1_refresh_full" "lock_L2_source" "L2_refresh_jan1" "WP_before_release" "unlock" "chk_cagg_1d" "chk_1d_consistency"
 
 # Non-overlapping concurrent refreshes on L1. Both refreshes should succeed. Both are blocked before Txn 3.
 # Refreshing Jan 3 adds cagg invalidations that are partially overlapping with the one created by refreshing Jan 1.
@@ -317,4 +334,8 @@ permutation "WP_before_enable" "chk_hyper_invals" "L1_refresh_jan1" "insert_ht" 
 # Non-overlapping concurrent refresh on L2. Both refreshes should succeed. Both are blocked before Txn 3.
 # Refreshing Jan 3 adds cagg invalidations that are partially overlapping with the one created by refreshing Jan 1.
 # Those invalidations are left behind, but both Jan 1 and Jan 3 are refreshed successfully.
-permutation "L1_refresh_full" "chk_1d_consistency" "WP_before_enable" "chk_hyper_invals" "L2_refresh_jan1" "insert_ht" "L1_refresh_full" "lock_L2_source" "L2b_refresh_jan3" "WP_before_release" "unlock_L2_source" "chk_cagg_1d" "chk_1d_consistency"
+permutation "L1_refresh_full" "chk_1d_consistency" "WP_before_enable" "chk_hyper_invals" "L2_refresh_jan1" "insert_ht" "L1_refresh_full" "lock_L2_source" "L2b_refresh_jan3" "WP_before_release" "unlock" "chk_cagg_1d" "chk_1d_consistency"
+
+# L1 (txn3, deleting/inserting mat_inval entries) and L2 (txn2, processing mat_inval entries) should not block each other.
+# Lock materialization invalidation table to make both refreshes wait before processing entries, then release simultaneously.
+permutation "insert_ht" "WP_after_enable"  "chk_6h_consistency" "L1_refresh_jan1" "lock_mat_invals" "WP_after_release" "L2_refresh_full" "unlock" "chk_mat_invals" "chk_6h_consistency" "chk_1d_consistency"
