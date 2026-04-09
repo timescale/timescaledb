@@ -936,6 +936,7 @@ SET max_parallel_workers_per_gather = 0;
 -- test different compression configurations
 -- compressed index on "segmentby='dev'" has default "dev ASC, NULLS LAST" sort order
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+psql:include/skip_scan_dagg_comp_query.sql:14: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -- SkipScan used when sort order on distinct column "dev" matches "segmentby" sort order
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
@@ -949,6 +950,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -- multicolumn "segmentby = 'dev, dev_name'"
 SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev,dev_name');
+psql:include/skip_scan_dagg_comp_query.sql:30: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -- multicolumn compressed index with dev as leading column
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
@@ -968,6 +970,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -----------------------------------------
 SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+psql:include/skip_scan_dagg_comp_query.sql:54: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 \qecho basic DISTINCT queries on :TABLE
 -- Various distint aggs over same column is OK
@@ -1014,6 +1017,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ------------------------------------------------------
 SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev_name');
+psql:include/skip_scan_dagg_comp_query.sql:110: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -- Various distint aggs over same column is OK
 :PREFIX SELECT count(DISTINCT dev_name), max(DISTINCT dev_name), 'q1_2' FROM :TABLE;
@@ -1044,6 +1048,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ---------------------------------------
 SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='dev');
+psql:include/skip_scan_dagg_comp_query.sql:147: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 \qecho SUBSELECTS on :TABLE
 :PREFIX SELECT c1, c2, 'q4_1' FROM (SELECT count(DISTINCT dev) as c1, sum(DISTINCT dev) as c2 FROM :TABLE) a;
@@ -1110,6 +1115,7 @@ DEALLOCATE prep;
 ---------------------------------------
 SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='dev, val');
+psql:include/skip_scan_dagg_comp_query.sql:228: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE UNION ALL SELECT count(DISTINCT val) FROM :TABLE WHERE dev = 1;
 :PREFIX SELECT *, 'q9_2' FROM (SELECT count(DISTINCT dev) cd, dev FROM :TABLE GROUP BY dev) a, LATERAL (SELECT count(DISTINCT val) ct FROM :TABLE WHERE dev = a.dev) b;
@@ -1140,6 +1146,7 @@ SET max_parallel_workers_per_gather = 0;
 -- test different compression configurations
 -- compressed index on "segmentby='dev'" has default "dev ASC, NULLS LAST" sort order
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+psql:include/skip_scan_dagg_comp_query.sql:14: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -- SkipScan used when sort order on distinct column "dev" matches "segmentby" sort order
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
@@ -1153,6 +1160,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -- multicolumn "segmentby = 'dev, dev_name'"
 SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev,dev_name');
+psql:include/skip_scan_dagg_comp_query.sql:30: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -- multicolumn compressed index with dev as leading column
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
@@ -1172,6 +1180,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -----------------------------------------
 SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+psql:include/skip_scan_dagg_comp_query.sql:54: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 \qecho basic DISTINCT queries on :TABLE
 -- Various distint aggs over same column is OK
@@ -1218,6 +1227,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ------------------------------------------------------
 SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev_name');
+psql:include/skip_scan_dagg_comp_query.sql:110: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -- Various distint aggs over same column is OK
 :PREFIX SELECT count(DISTINCT dev_name), max(DISTINCT dev_name), 'q1_2' FROM :TABLE;
@@ -1248,6 +1258,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ---------------------------------------
 SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='dev');
+psql:include/skip_scan_dagg_comp_query.sql:147: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 \qecho SUBSELECTS on :TABLE
 :PREFIX SELECT c1, c2, 'q4_1' FROM (SELECT count(DISTINCT dev) as c1, sum(DISTINCT dev) as c2 FROM :TABLE) a;
@@ -1314,6 +1325,7 @@ DEALLOCATE prep;
 ---------------------------------------
 SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='dev, val');
+psql:include/skip_scan_dagg_comp_query.sql:228: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE UNION ALL SELECT count(DISTINCT val) FROM :TABLE WHERE dev = 1;
 :PREFIX SELECT *, 'q9_2' FROM (SELECT count(DISTINCT dev) cd, dev FROM :TABLE GROUP BY dev) a, LATERAL (SELECT count(DISTINCT val) ct FROM :TABLE WHERE dev = a.dev) b;

@@ -71,6 +71,7 @@ select count(decompress_chunk(x)) from show_chunks('groupagg') x;
 
 alter table groupagg set (timescaledb.compress, timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 's nulls first');
+NOTICE:  updated compression settings will only apply to future compressions
 select count(compress_chunk(x)) from show_chunks('groupagg') x;
  count 
 -------
@@ -114,6 +115,7 @@ insert into text_table select 4, case when x % 2 = 0 then null else 'samewithnul
 insert into text_table select 5, case when x % 2 = 0 then null else 'differentwithnulls' || x end from generate_series(1, 1000) x;
 alter table text_table set (timescaledb.compress,
     timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'a');
+NOTICE:  updated compression settings will only apply to future compressions
 select count(compress_chunk(x)) from show_chunks('text_table') x;
 NOTICE:  chunk "_hyper_3_7_chunk" is already converted to columnstore
  count 
@@ -163,6 +165,7 @@ select count(decompress_chunk(x)) from show_chunks('text_table') x;
 
 alter table text_table set (timescaledb.compress,
     timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'a nulls first');
+NOTICE:  updated compression settings will only apply to future compressions
 select count(compress_chunk(x)) from show_chunks('text_table') x;
  count 
 -------
