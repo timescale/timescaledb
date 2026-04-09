@@ -760,6 +760,37 @@ static void continuous_agg_refresh_spi_setup_and_connect(CaggRefreshSpiContext *
 	RestrictSearchPath();
 }
 
+/* rollback and cleanup after the failed refresh transaction */
+static void rollback_and_error( const ContinuousAgg *cagg, CaggRefreshSpiContext *cagg_spi_ctx, ErrorData *edata)
+{
+	/*
+	 * Every spi_execute pushes a snapshot on the stack (unless a snapshot
+	 * is explicitly passed to it). This is usually cleaned up after a
+	 * successful execute. However, if this fails, the longjmp skips the
+	 * cleanup step.
+	 * As a result, when SPI_rollback_and_chain is called after the longjmp, it
+	 * can find snapshots that were left behind (resulting in
+	 * "portal snapshots did not account for all active snapshots" error).
+	 * The rollback cleans up the snapshot stack and then throws an error.
+	 * So we use a try-catch block around SPI_rollback_and_chain to ignore this
+	 * error.
+	 */
+	PG_TRY();
+	{
+		SPI_rollback_and_chain();
+	}
+	PG_CATCH();
+	{
+		FlushErrorState();
+	}
+	PG_END_TRY();
+
+	/* Commit the cleanup transaction, then throw the original error. */
+	cleanup_before_cagg_refresh_exit(cagg, cagg_spi_ctx);
+	SPI_commit();
+	elog(ERROR, "%s", edata->message);
+}
+
 void
 continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 								const InternalTimeRange *refresh_window_arg,
@@ -873,12 +904,13 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 						   ts_internal_to_time_string(refresh_window.end, refresh_window.type))));
 
 	DEBUG_WAITPOINT("cagg_refresh_before_first_txn_commit");
+	SPI_commit_and_chain();
 
 	volatile bool refreshed = false;
+        volatile ErrorData *edata = NULL;
 	PG_TRY();
 	{
 		/* Commit and Start a new transaction */
-		SPI_commit_and_chain();
 
 		DEBUG_WAITPOINT("cagg_refresh_after_register");
 
@@ -982,24 +1014,22 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 	PG_CATCH();
 	{
 		/*
-		 * The current transaction (Tx1, Tx2, or Tx3) is in an aborted state,
-		 * but the removal of the refresh ranges in jobs_refresh_ranges needs a
-		 * live transaction. Roll it back and start a new transaction so we can
-		 * perform cleanup.
+		 * Save the error and clear the error state so that
+		 * We must switch out of ErrorContext first 
+                 * and use a long-lived context because the current transaction 
+                 * context is about to be destroyed by the rollback.
 		 */
-		SPI_rollback_and_chain();
+		MemoryContextSwitchTo(TopMemoryContext);
+		edata = CopyErrorData();
+		FlushErrorState();
 
-		/*
-		 * Clean up, including removing the refresh window registration inserted in Txn1
-		 */
-		cleanup_before_cagg_refresh_exit(cagg, &cagg_spi_ctx);
-
-		/* Commit the cleanup transaction, then re-throw the original error. */
-		SPI_commit_and_chain();
-		PG_RE_THROW();
 	}
 	PG_END_TRY();
-
+	if (edata)
+        {
+                rollback_and_error( cagg, &cagg_spi_ctx, (ErrorData *) edata );
+                return;
+        }
 	if (!refreshed)
 		emit_up_to_date_notice(cagg, context);
 
