@@ -166,7 +166,6 @@ jobs:
         anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
         github_token: ${{ github.token }}
         claude_args: '--max-budget-usd 5.00 --dangerously-skip-permissions --model opus --effort high'
-        display_report: true
         prompt: |
           Find bugs in the TimescaleDB code modified in this change set. Focus
           on crashes, assertion failures, sanitizer errors, and internal errors
@@ -203,6 +202,15 @@ jobs:
           event=${{ github.event_name }}
           sha=${{ github.event.pull_request.head.sha || github.sha }}
 
+
+    - name: Write job summary
+      if: always()
+      run: |
+        jq -r 'last | "## LLM Fuzzer Result\n\n"
+          + (.result // "No result produced.")
+          + "\n\n**Cost:** $\(.total_cost_usd // 0 | tostring) | **Duration:** \((.duration_ms // 0) / 1000 | tostring)s | **Turns:** \(.num_turns // 0)"' \
+          ${{ runner.temp }}/claude-execution-output.json \
+          >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
     - name: Upload Claude log
       if: always()
