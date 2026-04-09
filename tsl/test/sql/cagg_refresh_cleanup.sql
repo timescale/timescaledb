@@ -118,4 +118,32 @@ CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
 SELECT count(*) AS jobs_after_dead_pid_cleanup
 FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
 
+-- Test 6: dropping a CAgg cleans up its refresh range entries
+CREATE MATERIALIZED VIEW cond_daily_drop_test
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('1 day', time) AS bucket, avg(value) AS avg_val
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+
+-- Insert dummy refresh range entries for the new CAgg
+INSERT INTO _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+    (materialization_id, start_range, end_range, pid)
+SELECT mat_hypertable_id,
+       _timescaledb_functions.to_unix_microseconds(s),
+       _timescaledb_functions.to_unix_microseconds(s + interval '1 month'),
+       0
+FROM _timescaledb_catalog.continuous_agg,
+     generate_series('2026-01-01'::timestamptz, '2026-05-01'::timestamptz, interval '1 month') AS s
+WHERE user_view_name = 'cond_daily_drop_test';
+
+SELECT count(*) AS refresh_ranges_before_drop
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+
+DROP MATERIALIZED VIEW cond_daily_drop_test;
+
+-- Refresh ranges for the dropped CAgg should be gone
+SELECT count(*) AS refresh_ranges_after_drop
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+
 DROP TABLE conditions CASCADE;
