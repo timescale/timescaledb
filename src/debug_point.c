@@ -20,6 +20,8 @@
 #include "annotations.h"
 #include "export.h"
 
+#include "compat/compat.h"
+
 TS_FUNCTION_INFO_V1(ts_debug_point_enable);
 TS_FUNCTION_INFO_V1(ts_debug_point_release);
 TS_FUNCTION_INFO_V1(ts_debug_point_id);
@@ -270,7 +272,8 @@ ts_debug_point_raise_error_if_enabled(const char *name)
 			 * But we still need to check whether this session itself enabled
 			 * the injection. */
 			LockRelease(&point.tag, ShareLock, true);
-			if (LockHeldByMe(&point.tag, ExclusiveLock, false)) {
+			if (LockHeldByMeCompat(&point.tag, ExclusiveLock, false))
+			{
 				break;
 			}
 			return;
