@@ -43,6 +43,7 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_jobs_refresh_ranges.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
@@ -887,6 +888,9 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 
 		/* Delete watermark */
 		ts_cagg_watermark_delete_by_mat_hypertable_id(form.mat_hypertable_id);
+
+		/* Delete any refresh ranges registered for this CAgg */
+		ts_cagg_jobs_refresh_ranges_delete_by_mat_hypertable_id(form.mat_hypertable_id);
 	}
 
 	cagg_bucket_function_delete(cadata->mat_hypertable_id);
