@@ -1,4 +1,4 @@
-Parsed test spec with 7 sessions
+Parsed test spec with 8 sessions
 
 starting permutation: WP_mat_enable R2_refresh L1_lock WP_mat_disable R3_refresh R4_refresh check_locks check_jobs L1_unlock check_locks check_jobs
 step WP_mat_enable: SELECT debug_waitpoint_enable('after_process_cagg_materializations');
@@ -163,8 +163,109 @@ user_view_name|start_time|end_time
 --------------+----------+--------
 
 
-starting permutation: WP_before_txn3_enable R1_refresh check_jobs K1_terminate WP_before_txn3_disable L1_lock R2_refresh R3_refresh L1_unlock check_jobs
-step WP_before_txn3_enable: SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+starting permutation: WP_before_txn2_start_enable R3_refresh check_jobs A1_revoke_perm WP_before_txn2_start_disable check_jobs
+step WP_before_txn2_start_enable: SELECT debug_waitpoint_enable('cagg_refresh_after_register');
+debug_waitpoint_enable
+----------------------
+                      
+
+step R3_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
+ <waiting ...>
+step check_jobs: 
+    SELECT ca.user_view_name,
+           _timescaledb_functions.to_timestamp(r.start_range) AS start_time,
+           _timescaledb_functions.to_timestamp(r.end_range) AS end_time
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca
+        ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+user_view_name|start_time                  |end_time                    
+--------------+----------------------------+----------------------------
+cond_daily    |Sun Feb 15 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
+
+step A1_revoke_perm: 
+  REVOKE SELECT on conditions FROM cagg_user;
+
+step WP_before_txn2_start_disable: SELECT debug_waitpoint_release('cagg_refresh_after_register');
+debug_waitpoint_release
+-----------------------
+                       
+
+step R3_refresh: <... completed>
+ERROR:  permission denied for table conditions
+step check_jobs: 
+    SELECT ca.user_view_name,
+           _timescaledb_functions.to_timestamp(r.start_range) AS start_time,
+           _timescaledb_functions.to_timestamp(r.end_range) AS end_time
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca
+        ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+user_view_name|start_time|end_time
+--------------+----------+--------
+
+
+starting permutation: WP_before_txn3_start_enable R3_refresh check_jobs A1_revoke_mat_perm WP_before_txn3_start_disable check_jobs
+step WP_before_txn3_start_enable: SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step R3_refresh: 
+    CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
+ <waiting ...>
+step check_jobs: 
+    SELECT ca.user_view_name,
+           _timescaledb_functions.to_timestamp(r.start_range) AS start_time,
+           _timescaledb_functions.to_timestamp(r.end_range) AS end_time
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca
+        ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+user_view_name|start_time                  |end_time                    
+--------------+----------------------------+----------------------------
+cond_daily    |Sun Feb 15 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
+
+step A1_revoke_mat_perm: 
+  DO $$
+  DECLARE
+      mat_ht text;
+  BEGIN
+      SELECT format('%I.%I', h.schema_name, h.table_name)
+        INTO mat_ht
+        FROM _timescaledb_catalog.continuous_agg ca
+        JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
+       WHERE ca.user_view_name = 'cond_daily';
+      EXECUTE format('REVOKE SELECT ON %s FROM cagg_user', mat_ht);
+  END;
+  $$;
+
+step WP_before_txn3_start_disable: SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step R3_refresh: <... completed>
+ERROR:  permission denied for table _materialized_hypertable_X
+step check_jobs: 
+    SELECT ca.user_view_name,
+           _timescaledb_functions.to_timestamp(r.start_range) AS start_time,
+           _timescaledb_functions.to_timestamp(r.end_range) AS end_time
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca
+        ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+user_view_name|start_time|end_time
+--------------+----------+--------
+
+
+starting permutation: WP_before_txn2_commit_enable R1_refresh check_jobs K1_terminate WP_before_txn2_commit_disable L1_lock R2_refresh R3_refresh L1_unlock check_jobs
+step WP_before_txn2_commit_enable: SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
 debug_waitpoint_enable
 ----------------------
                       
@@ -207,7 +308,7 @@ server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
 
-step WP_before_txn3_disable: SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+step WP_before_txn2_commit_disable: SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
 debug_waitpoint_release
 -----------------------
                        
