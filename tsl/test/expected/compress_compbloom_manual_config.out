@@ -126,6 +126,7 @@ ORDER BY 1,2,3,4;
 ALTER TABLE mixed_avail_manual SET (
     timescaledb.compress_index = 'bloom(a,c)'
 );
+NOTICE:  updated compression settings will only apply to future compressions
 -- Compress second chunk with bloom(a,c)
 SELECT compress_chunk(c) FROM show_chunks('mixed_avail_manual') c OFFSET 1 LIMIT 1;
 NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
@@ -137,6 +138,7 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
 ALTER TABLE mixed_avail_manual SET (
     timescaledb.compress_index = 'bloom(b,c)'
 );
+NOTICE:  updated compression settings will only apply to future compressions
 -- Compress third chunk with bloom(b,c)
 SELECT compress_chunk(c) FROM show_chunks('mixed_avail_manual') c OFFSET 2;
 NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore

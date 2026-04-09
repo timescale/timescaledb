@@ -130,6 +130,7 @@ CREATE INDEX skip_scan_dev_devname_idx ON skip_scan(dev,dev_name);
 CREATE INDEX skip_scan_ht_dev_devname_idx ON skip_scan_ht(dev,dev_name);
 -- skip_scan_htc table
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev,dev_name');
+psql:include/skip_scan_notnull_setup.sql:15: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
              compress_chunk             
 ----------------------------------------

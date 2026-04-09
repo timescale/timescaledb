@@ -1274,6 +1274,20 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 
 	compression_settings_set_manually_for_alter(ht, settings, with_clause_options);
 
+	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	{
+		bool settings_changed = !with_clause_options[AlterTableFlagSegmentBy].is_default ||
+								!with_clause_options[AlterTableFlagOrderBy].is_default ||
+								!with_clause_options[AlterTableFlagIndex].is_default;
+		if (settings_changed)
+		{
+			ereport(NOTICE,
+					(errmsg("updated compression settings will only apply to future compressions"),
+					 errdetail("Existing compressed chunks will not be recompressed."),
+					 errhint("Use compress_chunk(chunk, recompress => true) to recompress.")));
+		}
+	}
+
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		/* take explicit locks on catalog tables and keep them till end of txn */

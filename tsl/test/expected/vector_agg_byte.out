@@ -18,6 +18,7 @@ select count(compress_chunk(x)) from show_chunks('groupbyte') x;
      1
 
 alter table groupbyte set (tsdb.compress_segmentby = '');
+NOTICE:  updated compression settings will only apply to future compressions
 insert into groupbyte select 11,
     case when x % 11 = 0 then null else x % 3 = 0 end,
     case when x % 13 = 0 then null else 'tag' || (x % 7) end,
