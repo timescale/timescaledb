@@ -163,7 +163,7 @@ user_view_name|start_time|end_time
 --------------+----------+--------
 
 
-starting permutation: WP_before_txn3_enable R1_refresh K1_terminate check_jobs WP_before_txn3_disable L1_lock R2_refresh R3_refresh L1_unlock check_jobs
+starting permutation: WP_before_txn3_enable R1_refresh check_jobs K1_terminate WP_before_txn3_disable L1_lock R2_refresh R3_refresh L1_unlock check_jobs
 step WP_before_txn3_enable: SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
 debug_waitpoint_enable
 ----------------------
@@ -172,6 +172,19 @@ debug_waitpoint_enable
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
  <waiting ...>
+step check_jobs: 
+    SELECT ca.user_view_name,
+           _timescaledb_functions.to_timestamp(r.start_range) AS start_time,
+           _timescaledb_functions.to_timestamp(r.end_range) AS end_time
+    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
+    JOIN _timescaledb_catalog.continuous_agg ca
+        ON r.materialization_id = ca.mat_hypertable_id
+    ORDER BY ca.user_view_name, r.start_range;
+
+user_view_name|start_time                  |end_time                    
+--------------+----------------------------+----------------------------
+cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
+
 step K1_terminate: 
     DO $$
     DECLARE
@@ -193,19 +206,6 @@ FATAL:  terminating connection due to administrator command
 server closed the connection unexpectedly
 	This probably means the server terminated abnormally
 	before or while processing the request.
-
-step check_jobs: 
-    SELECT ca.user_view_name,
-           _timescaledb_functions.to_timestamp(r.start_range) AS start_time,
-           _timescaledb_functions.to_timestamp(r.end_range) AS end_time
-    FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
-    JOIN _timescaledb_catalog.continuous_agg ca
-        ON r.materialization_id = ca.mat_hypertable_id
-    ORDER BY ca.user_view_name, r.start_range;
-
-user_view_name|start_time                  |end_time                    
---------------+----------------------------+----------------------------
-cond_daily    |Mon Jan 05 16:00:00 2026 PST|Sat Mar 14 17:00:00 2026 PDT
 
 step WP_before_txn3_disable: SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
 debug_waitpoint_release

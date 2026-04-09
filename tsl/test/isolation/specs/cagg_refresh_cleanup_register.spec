@@ -151,4 +151,4 @@ permutation "WP_mat_enable" "R2_refresh" "L1_lock" "WP_mat_disable" "R3_refresh"
 
 # Stale registration cleanup by concurrent refreshes.
 # Kill a backend during refresh to end up with a pid left behind. Later two concurrent refreshes run, only one removes the stale pid.
-permutation "WP_before_txn3_enable" "R1_refresh" "K1_terminate" "check_jobs" "WP_before_txn3_disable" "L1_lock" "R2_refresh" "R3_refresh" "L1_unlock" "check_jobs"
+permutation "WP_before_txn3_enable" "R1_refresh" "check_jobs" "K1_terminate"("check_jobs") "WP_before_txn3_disable" "L1_lock" "R2_refresh"("L1_lock") "R3_refresh"("R2_refresh") "L1_unlock" "check_jobs"
