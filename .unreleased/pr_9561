@@ -1,0 +1,1 @@
+Fixes: #9561 Simplify job history retention by replacing binary search and temp table

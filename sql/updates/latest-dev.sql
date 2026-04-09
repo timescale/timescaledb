@@ -80,3 +80,5 @@ USING orphaned_settings AS os WHERE cs.relid = os.relid;
 ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT IF EXISTS hypertable_compressed_hypertable_id_fkey;
 ALTER TABLE _timescaledb_catalog.chunk DROP CONSTRAINT IF EXISTS chunk_compressed_chunk_id_fkey;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.job_history_bsearch;
+
