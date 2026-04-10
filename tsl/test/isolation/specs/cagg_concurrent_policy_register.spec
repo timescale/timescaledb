@@ -1,6 +1,7 @@
 # This file and its contents are licensed under the Timescale License.
 # Please see the included NOTICE for copyright information and
 # LICENSE-TIMESCALE for a copy of the license.
+
 #
 # Test concurrent CAgg refresh policies are executed
 #
@@ -59,7 +60,7 @@ setup
 }
 step "s1_select" {
    select min(time) at time zone 'UTC' , max(time) at time zone 'UTC'
-   FROM test_3pol_timestamptz; 
+   FROM test_3pol_timestamptz;
 }
 step "s1_run_pol7d_3d_refresh" {
    DO $$
