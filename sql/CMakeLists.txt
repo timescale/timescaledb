@@ -61,7 +61,8 @@ set(MOD_FILES
     updates/2.25.0--2.25.1.sql
     updates/2.25.1--2.25.2.sql
     updates/2.25.2--2.26.0.sql
-    updates/2.26.0--2.26.1.sql)
+    updates/2.26.0--2.26.1.sql
+    updates/2.26.1--2.26.2.sql)
 
 # The downgrade file to generate a downgrade script for the current version, as
 # specified in version.config
@@ -185,9 +186,7 @@ set(CURR_MOD_FILES "${LASTEST_MOD_VERSIONED}")
 
 # Generate the post-update file once (same for all update scripts)
 set(POST_FILES_PROCESSED ${POST_UPDATE_FILES_VERSIONED}.processed)
-cat_files(
-  "${SET_POST_UPDATE_STAGE};${POST_UPDATE_FILES_VERSIONED};${UNSET_UPDATE_STAGE}"
-  ${POST_FILES_PROCESSED})
+cat_files("${POST_UPDATE_FILES_VERSIONED}" ${POST_FILES_PROCESSED})
 
 # Now loop through the modfiles and generate the update files
 foreach(transition_mod_file ${MOD_FILES_LIST})

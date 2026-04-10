@@ -154,4 +154,17 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 -------------------
  {COMPRESSED}
 
+-- Test GROUP BY ROLLUP on compressed continuous aggregate (issue #9520)
+SELECT bucket, MAX(max)
+FROM conditions_hourly
+WHERE bucket >= '2025-12-14 00:00:00+00'::timestamptz AND bucket < '2025-12-14 03:00:00+00'::timestamptz
+GROUP BY ROLLUP(bucket)
+ORDER BY bucket ASC NULLS FIRST;
+            bucket            | max 
+------------------------------+-----
+                              |   1
+ Sat Dec 13 16:00:00 2025 PST |   1
+ Sat Dec 13 17:00:00 2025 PST |   1
+ Sat Dec 13 18:00:00 2025 PST |   1
+
 RESET timescaledb.enable_direct_compress_on_cagg_refresh;

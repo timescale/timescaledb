@@ -13,7 +13,6 @@ set(TEST_FILES
     cagg_invalidation_variable_bucket.sql
     cagg_policy.sql
     cagg_policy_move.sql
-    cagg_policy_concurrent.sql
     cagg_refresh_using_trigger.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
@@ -28,6 +27,7 @@ set(TEST_FILES
     compress_bloom_hash.sql
     compress_compbloom_basics.sql
     compress_compbloom_config.sql
+    compress_compbloom_hash_pushdown.sql
     compress_compbloom_index_add.sql
     compress_compbloom_index_drop.sql
     compress_compbloom_manual_config.sql
@@ -101,6 +101,11 @@ set(TEST_TEMPLATES
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
 
+# WAL numbers will differ on 32-bit platform so we only run on 64-bit
+if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
+  list(APPEND TEST_FILES explain_wal.sql)
+endif()
+
 if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
 endif()
@@ -124,6 +129,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_scheduler_restart.sql
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
+    cagg_policy_concurrent.sql
     cagg_policy_incremental.sql
     chunk_column_stats.sql
     compress_bgw_reorder_drop_chunks.sql
@@ -229,6 +235,7 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_policy_incremental
+    explain_wal
     move
     reorder
     split_chunk

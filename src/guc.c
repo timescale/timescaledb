@@ -73,6 +73,7 @@ TSDLLEXPORT bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted = false;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_on_cagg_refresh = false;
+TSDLLEXPORT bool ts_guc_enable_direct_compress_auto_segmentby = true;
 int ts_guc_direct_compress_insert_tuple_sort_limit = 10000;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
@@ -585,6 +586,18 @@ _guc_init(void)
 							 "Aggregate refresh",
 							 &ts_guc_enable_direct_compress_on_cagg_refresh,
 							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_auto_segmentby"),
+							 "Enable automatic segmentby column selection during compression",
+							 "When enabled, automatically analyzes buffered tuples to pick "
+							 "an optimal segmentby column if none is configured.",
+							 &ts_guc_enable_direct_compress_auto_segmentby,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,

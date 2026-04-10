@@ -566,6 +566,9 @@ replace_compressed_vars(Node *node, const CompressionInfo *info)
 						  var->vartypmod,
 						  var->varcollid,
 						  var->varlevelsup);
+#if PG16_GE
+		new_var->varnullingrels = var->varnullingrels;
+#endif
 
 		if (!AttributeNumberIsValid(new_var->varattno))
 			elog(ERROR, "cannot find column %s on decompressed chunk", colname);
@@ -573,9 +576,6 @@ replace_compressed_vars(Node *node, const CompressionInfo *info)
 		/* And return the replacement var */
 		return (Node *) new_var;
 	}
-	if (IsA(node, PlaceHolderVar))
-		elog(ERROR, "ignoring placeholders");
-
 	return expression_tree_mutator(node, replace_compressed_vars, (void *) info);
 }
 
