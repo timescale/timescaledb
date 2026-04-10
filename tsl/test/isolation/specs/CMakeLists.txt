@@ -18,8 +18,6 @@ list(
   compression_conflicts_iso.spec
   cagg_insert.spec
   cagg_multi_iso.spec
-  cagg_concurrent_register.spec
-  cagg_concurrent_policy_register.spec
   deadlock_drop_chunks_compress.spec
   deadlock_drop_index_vacuum.spec
   fk_hypertable_lock.spec
@@ -41,6 +39,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_concurrent_invalidation.spec
     cagg_cancel_kill_refresh.spec
     cagg_concurrent_refresh.spec
+    cagg_concurrent_register.spec
+    cagg_concurrent_policy_register.spec
     cagg_hierarchical_concurrent_refresh.spec
     cagg_incremental_concurrent.spec
     cagg_refresh_cleanup_register.spec
