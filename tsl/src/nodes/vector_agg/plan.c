@@ -50,7 +50,7 @@ ts_is_vector_agg_plan(Plan *plan)
  */
 static Plan *
 vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
-					   VectorAggGroupingType grouping_type)
+					   List *resolved_postgres_quals, VectorAggGroupingType grouping_type)
 {
 	CustomScan *vector_agg = (CustomScan *) makeNode(CustomScan);
 	vector_agg->custom_plans = list_make1(childplan);
@@ -93,6 +93,7 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 	vector_agg->custom_private = ts_new_list(T_List, VASI_Count);
 	lfirst(list_nth_cell(vector_agg->custom_private, VASI_GroupingType)) =
 		makeInteger(grouping_type);
+	lfirst(list_nth_cell(vector_agg->custom_private, VASI_PostgresQuals)) = resolved_postgres_quals;
 
 	return (Plan *) vector_agg;
 }
@@ -638,9 +639,9 @@ insert_vector_agg(Plan *plan, void *context)
 		return plan;
 	}
 
-	List *resolved_child_qual =
+	List *resolved_postgres_quals =
 		(List *) ts_resolve_outer_special_vars((Node *) childplan->qual, childplan);
-	if (!is_vector_expr(&vqinfo, (Expr *) resolved_child_qual))
+	if (!is_vector_expr(&vqinfo, (Expr *) resolved_postgres_quals))
 	{
 		/*
 		 * Can't do vectorized aggregation if we have Postgres quals that we
@@ -739,10 +740,11 @@ insert_vector_agg(Plan *plan, void *context)
 	 * so these quals are not double-evaluated.
 	 */
 	agg->plan.targetlist = partial_agg_targetlist;
-	Plan *vector_agg_plan =
-		vector_agg_plan_create(childplan, agg, resolved_targetlist, grouping_type);
-	lfirst(list_nth_cell(castNode(CustomScan, vector_agg_plan)->custom_private,
-						VASI_PostgresQuals)) = resolved_child_qual;
+	Plan *vector_agg_plan = vector_agg_plan_create(childplan,
+												   agg,
+												   resolved_targetlist,
+												   resolved_postgres_quals,
+												   grouping_type);
 
 	if (agg->aggsplit == AGGSPLIT_SIMPLE)
 	{
