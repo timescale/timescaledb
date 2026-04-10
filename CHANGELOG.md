@@ -5,6 +5,30 @@ This page lists all the latest features and updates to TimescaleDB. When
 you use psql to update your database, use the -X flag and prevent any .psqlrc
 commands from accidentally triggering the load of a previous DB version.**
 
+## 2.26.2 (2026-04-07)
+
+This release contains bug fixes since the 2.26.1 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#9460](https://github.com/timescale/timescaledb/pull/9460) Fix WAL record tracking in `EXPLAIN` for direct compress
+* [#9485](https://github.com/timescale/timescaledb/pull/9485) Fix use-after-free of invalidation in `tsl_compressor_free`
+* [#9486](https://github.com/timescale/timescaledb/pull/9486) Fix use-after-free in job owner validation
+* [#9487](https://github.com/timescale/timescaledb/pull/9487) Fix use-after-free in `reorder_chunk`
+* [#9392](https://github.com/timescale/timescaledb/pull/9392) Fix wrong result when performing chunk exclusion by a mutable expression
+* [#9510](https://github.com/timescale/timescaledb/pull/9510) Fix chunk skipping with dropped columns
+* [#9522](https://github.com/timescale/timescaledb/pull/9522) Fix `GROUP BY ROLLUP` on compressed continuous aggregates
+
+**Thanks**
+* @pcayen for reporting an issue with GROUP BY ROLLUP
+* @PiotrCiechomski for reporting the wrong result with chunk exclusion by a mutable expression
+
+## 2.26.1 (2026-03-30)
+
+This release contains bug fixes since the 2.26.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#9455](https://github.com/timescale/timescaledb/pull/9455) Fix memory leak in ColumnarScan
+
 ## 2.26.0 (2026-03-24)
 
 This release contains performance improvements and bug fixes since the 2.25.2 release. We recommend that you upgrade at the next available opportunity.

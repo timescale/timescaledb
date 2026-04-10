@@ -4,7 +4,7 @@
 
 -- Test various corner cases of sorting.
 
-create table t(x int, time timestamp, timetz timestamptz, int32 int4, int64 int8, s text);
+create table t(x int, time timestamp NOT NULL, timetz timestamptz NOT NULL, int32 int4 NOT NULL, int64 int8 NOT NULL, s text NOT NULL);
 select create_hypertable('t', 'x');
 
 insert into t values

@@ -1320,3 +1320,97 @@ SELECT alter_job(:JOB_ID2, next_start => '2000-01-01'::timestamptz);
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  (1106,"@ 12 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 30 days"", ""start_offset"": null, ""mat_hypertable_id"": 12}","Sat Jan 01 00:00:00 2000 PST",_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1106]")
 
+TRUNCATE mat_m1;
+TRUNCATE mat_m1_rollup;
+DROP MATERIALIZED VIEW mat_m1_rollup2;
+/*
+ * Test that concurrent policies on hierarchical CAggs propagate invalidations above correctly
+ */
+SET timezone TO 'UTC';
+/* Create two policies on mat_m1 */
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '30 days'::interval, '12 h'::interval, buckets_per_batch => 0) AS agg_m1_job_1 \gset
+SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval,  NULL, '12 h'::interval, buckets_per_batch => 0) AS agg_m1_job_2 \gset
+SELECT remove_continuous_aggregate_policy('mat_m1_rollup');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, NULL, '12 h'::interval) AS m1_rollup_job \gset
+/* Refresh both continuous aggs */
+CALL run_job(:agg_m1_job_1);
+CALL run_job(:agg_m1_job_2);
+CALL run_job(:m1_rollup_job);
+/* Insert new data to generate invalidations */
+INSERT INTO overlap_test_timestamptz
+SELECT t, (i % 5), random() * 100
+FROM
+generate_series('2024-01-01T01:01:01+00', '2025-06-01T01:01:01+00', INTERVAL '1 day') t,
+generate_series(1, 10) i;
+SELECT
+    ht.table_name AS hypertable_name,
+    count(*),
+    _timescaledb_functions.to_timestamp(min(hil.lowest_modified_value)) AS min_lowest_modified,
+    _timescaledb_functions.to_timestamp(max(hil.greatest_modified_value)) AS max_greatest_modified
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log hil
+JOIN _timescaledb_catalog.hypertable ht ON ht.id = hil.hypertable_id
+GROUP BY ht.schema_name, ht.table_name;
+     hypertable_name      | count |     min_lowest_modified      |    max_greatest_modified     
+--------------------------+-------+------------------------------+------------------------------
+ overlap_test_timestamptz |   518 | Mon Jan 01 01:01:01 2024 UTC | Sun Jun 01 01:01:01 2025 UTC
+
+/* Run both L1 policies */
+CALL run_job(:agg_m1_job_1);
+CALL run_job(:agg_m1_job_2);
+SELECT
+    ht.table_name AS hypertable_name,
+    count(*),
+    _timescaledb_functions.to_timestamp(min(hil.lowest_modified_value)) AS min_lowest_modified,
+    _timescaledb_functions.to_timestamp(max(hil.greatest_modified_value)) AS max_greatest_modified
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log hil
+JOIN _timescaledb_catalog.hypertable ht ON ht.id = hil.hypertable_id
+GROUP BY ht.schema_name, ht.table_name;
+       hypertable_name       | count |     min_lowest_modified      |    max_greatest_modified     
+-----------------------------+-------+------------------------------+------------------------------
+ _materialized_hypertable_10 |    54 | Mon Jan 01 00:00:00 2024 UTC | Sun Jun 01 00:00:00 2025 UTC
+
+/* Run L2 policy */
+CALL run_job(:m1_rollup_job);
+/* L2 must be consistent with L1 after both policies run */
+SELECT r.bucket,
+       (r.counta = l.reagg_counta) AS counta_match,
+       (r.sumb = l.reagg_sumb) AS sumb_match
+FROM mat_m1_rollup r
+JOIN (
+    SELECT time_bucket('1 month', bucket) AS month,
+           sum(counta) AS reagg_counta,
+           sum(sumb) AS reagg_sumb
+    FROM mat_m1 GROUP BY 1
+) l ON l.month = r.bucket
+ORDER BY 1;
+            bucket            | counta_match | sumb_match 
+------------------------------+--------------+------------
+ Mon Jan 01 00:00:00 2024 UTC | t            | t
+ Thu Feb 01 00:00:00 2024 UTC | t            | t
+ Fri Mar 01 00:00:00 2024 UTC | t            | t
+ Mon Apr 01 00:00:00 2024 UTC | t            | t
+ Wed May 01 00:00:00 2024 UTC | t            | t
+ Sat Jun 01 00:00:00 2024 UTC | t            | t
+ Mon Jul 01 00:00:00 2024 UTC | t            | t
+ Thu Aug 01 00:00:00 2024 UTC | t            | t
+ Sun Sep 01 00:00:00 2024 UTC | t            | t
+ Tue Oct 01 00:00:00 2024 UTC | t            | t
+ Fri Nov 01 00:00:00 2024 UTC | t            | t
+ Sun Dec 01 00:00:00 2024 UTC | t            | t
+ Wed Jan 01 00:00:00 2025 UTC | t            | t
+ Sat Feb 01 00:00:00 2025 UTC | t            | t
+ Sat Mar 01 00:00:00 2025 UTC | t            | t
+ Tue Apr 01 00:00:00 2025 UTC | t            | t
+ Thu May 01 00:00:00 2025 UTC | t            | t
+ Sun Jun 01 00:00:00 2025 UTC | t            | t
+
+/* Restore timezone */
+SET timezone TO PST8PDT;
+DROP MATERIALIZED VIEW mat_m1_rollup;
+NOTICE:  drop cascades to 18 other objects
+DROP MATERIALIZED VIEW mat_m1;
+NOTICE:  drop cascades to 53 other objects

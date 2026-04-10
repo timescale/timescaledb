@@ -23,6 +23,7 @@
 #include <commands/defrem.h>
 #include <commands/event_trigger.h>
 #include <commands/prepare.h>
+#include <commands/progress.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <commands/trigger.h>
@@ -43,6 +44,7 @@
 #include <storage/lockdefs.h>
 #include <tcop/utility.h>
 #include <utils/acl.h>
+#include <utils/backend_progress.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/guc.h>
@@ -250,6 +252,7 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 			case AT_AddIndex:
 			case AT_ReAddIndex:
 			case AT_SetRelOptions:
+			case AT_ResetRelOptions:
 			case AT_ReplicaIdentity:
 				/* allowed on materialization tables */
 				continue;
@@ -976,6 +979,7 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	CommitTransactionCommand();
 
 	num_chunks = list_length(chunks);
+	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_TOTAL, num_chunks);
 	foreach (lc, chunks)
 	{
 		process_chunk(hypertable_id, lfirst_oid(lc), arg);
@@ -3202,6 +3206,7 @@ typedef struct CreateIndexInfo
 	Oid main_table_relid;
 	HypertableIndexOptions extended_options;
 	MemoryContext mctx;
+	int64 partitions_done; /* for tracking chunk progress on PG15 */
 } CreateIndexInfo;
 
 /*
@@ -3243,6 +3248,14 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 
 	index_close(hypertable_index_rel, NoLock);
 	table_close(chunk_rel, NoLock);
+
+#if PG16_GE
+	pgstat_progress_incr_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, 1);
+#else
+	/* pgstat_progress_incr_param is not available before PG16 */
+	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, ++info->partitions_done);
+#endif
+	DEBUG_WAITPOINT("process_index_chunk_done");
 }
 
 static void
@@ -3342,6 +3355,14 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	table_close(chunk_rel, NoLock);
 
 	ts_catalog_restore_user(&sec_ctx);
+
+#if PG16_GE
+	pgstat_progress_incr_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, 1);
+#else
+	/* pgstat_progress_incr_param is not available before PG16 */
+	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, ++info->partitions_done);
+#endif
+	DEBUG_WAITPOINT("process_index_chunk_multitransaction_done");
 
 	PopActiveSnapshot();
 	CommitTransactionCommand();
@@ -3534,22 +3555,38 @@ process_index_start(ProcessUtilityArgs *args)
 	index_close(main_table_index_relation, NoLock);
 	table_close(main_table_relation, NoLock);
 
+	/*
+	 * Start progress reporting for chunk index creation. The root table's
+	 * DefineIndex already started and ended its own progress command, so we
+	 * start a new one to track progress across chunks.
+	 */
+	pgstat_progress_start_command(PROGRESS_COMMAND_CREATE_INDEX, ht->main_table_relid);
+	pgstat_progress_update_param(PROGRESS_CREATEIDX_COMMAND, PROGRESS_CREATEIDX_COMMAND_CREATE);
+	pgstat_progress_update_param(PROGRESS_CREATEIDX_INDEX_OID, info.obj.objectId);
+
 	/* create chunk indexes using the same transaction for all the chunks */
 	if (!info.extended_options.multitransaction)
 	{
 		CatalogSecurityContext sec_ctx;
+		List *chunks;
 		/*
 		 * Change user since chunk's are typically located in an internal
 		 * schema and chunk indexes require metadata changes. In the
 		 * multi-transaction case, we do this once per chunk.
 		 */
 		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+
+		chunks = find_inheritance_children(ht->main_table_relid, NoLock);
+		pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_TOTAL, list_length(chunks));
+		list_free(chunks);
+
 		/* Recurse to each chunk and create a corresponding index. */
 		foreach_chunk(ht, process_index_chunk, &info);
 
 		ts_catalog_restore_user(&sec_ctx);
 		ts_cache_release(&hcache);
 
+		pgstat_progress_end_command();
 		return DDL_DONE;
 	}
 
@@ -3588,6 +3625,8 @@ process_index_start(ProcessUtilityArgs *args)
 								   info.mctx,
 								   process_index_chunk_multitransaction,
 								   &info);
+
+	pgstat_progress_end_command();
 
 	StartTransactionCommand();
 	PushActiveSnapshot(GetTransactionSnapshot());

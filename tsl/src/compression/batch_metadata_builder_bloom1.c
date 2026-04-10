@@ -784,6 +784,123 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(false);
 }
 
+/*
+ * Checks whether any hashes of the given array can be present in the given
+ * bloom filter. This is used for predicate pushdown where the values are
+ * pre-hashed at planning time.
+ *
+ * The SQL signature is:
+ * _timescaledb_functions.bloom1_contains_any_hashes(bloom1, int8[])
+ *
+ * If the `bloom1` parameter is NULL, it returns true, because it means
+ * we can't decide if the hash values are present or not. It matters in
+ * the filtering contexts, where this functions is called from. For this
+ * reason, this function cannot be strict.
+ */
+Datum
+bloom1_contains_any_hashes(PG_FUNCTION_ARGS)
+{
+	if (PG_ARGISNULL(0))
+		PG_RETURN_BOOL(true);
+	if (PG_ARGISNULL(1))
+		PG_RETURN_BOOL(false);
+
+	struct varlena *bloom = PG_GETARG_VARLENA_P(0);
+
+	int num_hashes;
+	Datum *hash_datums;
+	bool *hash_nulls;
+	ArrayType *arr = PG_GETARG_ARRAYTYPE_P(1);
+	Oid elem_type = ARR_ELEMTYPE(arr);
+	Assert(elem_type == INT8OID);
+
+	int16 typlen;
+	bool typbyval;
+	char typalign;
+	get_typlenbyvalalign(elem_type, &typlen, &typbyval, &typalign);
+
+	deconstruct_array(arr,
+					  elem_type,
+					  typlen,
+					  typbyval,
+					  typalign,
+					  &hash_datums,
+					  &hash_nulls,
+					  &num_hashes);
+
+	if (num_hashes == 0)
+		PG_RETURN_BOOL(false);
+
+	const char *words_buf = bloom1_words_buf(bloom);
+	const uint32 num_bits = bloom1_num_bits(bloom);
+
+	for (int i = 0; i < num_hashes; i++)
+	{
+		if (hash_nulls[i])
+			continue;
+		uint64 hash = (uint64) DatumGetInt64(hash_datums[i]);
+		if (bloom1_contains_hash_internal(words_buf, num_bits, hash))
+			PG_RETURN_BOOL(true);
+	}
+
+	PG_RETURN_BOOL(false);
+}
+
+Datum
+bloom1_hash(PG_FUNCTION_ARGS)
+{
+	if (PG_ARGISNULL(0))
+		PG_RETURN_NULL();
+
+	Oid type = get_fn_expr_argtype(fcinfo->flinfo, 0);
+
+	Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
+	NullableDatum values[MAX_BLOOM_FILTER_COLUMNS];
+	int num_columns;
+
+	if (type == RECORDOID)
+	{
+		/* Composite: extract per-column types and values from the record */
+		HeapTupleHeader tuple = DatumGetHeapTupleHeader(PG_GETARG_DATUM(0));
+		Oid tupType = HeapTupleHeaderGetTypeId(tuple);
+		int32 tupTypmod = HeapTupleHeaderGetTypMod(tuple);
+		TupleDesc tupdesc = lookup_rowtype_tupdesc(tupType, tupTypmod);
+
+		num_columns = tupdesc->natts;
+		Ensure(num_columns <= MAX_BLOOM_FILTER_COLUMNS,
+			   "composite bloom filter supports at most %d columns, got %d",
+			   MAX_BLOOM_FILTER_COLUMNS,
+			   num_columns);
+
+		for (int i = 0; i < num_columns; i++)
+		{
+			type_oids[i] = TupleDescAttr(tupdesc, i)->atttypid;
+			values[i].value = GetAttributeByNum(tuple, i + 1, &values[i].isnull);
+		}
+		ReleaseTupleDesc(tupdesc);
+
+		/* NULL in any column means equality can't match — return NULL
+		 * so the caller falls back to bloom1_contains. */
+		for (int i = 0; i < num_columns; i++)
+		{
+			if (values[i].isnull)
+				PG_RETURN_NULL();
+		}
+	}
+	else
+	{
+		/* Scalar: single column */
+		type_oids[0] = type;
+		values[0].value = PG_GETARG_DATUM(0);
+		values[0].isnull = false;
+		num_columns = 1;
+	}
+
+	Bloom1Hasher *hasher = bloom1_hasher_create(type_oids, num_columns);
+	uint64 hash = hasher->hash_values(hasher, values);
+	PG_RETURN_INT64((int64) hash);
+}
+
 static int
 bloom1_varlena_alloc_size(uint32 num_bits)
 {
