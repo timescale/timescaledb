@@ -83,7 +83,19 @@ select count(*) from qualdef where bool_identity(l);
 select count(*) from qualdef where bool_identity(ln);
 select count(*) from qualdef where bool_identity(lf);
 
+-- Multiple Postgres quals (implicit AND)
+select count(*) from qualdef where bool_identity(l) and bool_identity(l);
+-- Second qual filters everything after first already did
+select count(*) from qualdef where bool_identity(ln) and bool_identity(l);
+-- Both quals produce arrow results on a column with mixed values
+select count(*) from qualdef where bool_identity(i2 = 7) and bool_identity(i4 = 8);
+
+
+-- Postgres qual with GROUP BY
+select b, count(*) from qualdef where bool_identity(l) group by b order by b;
+
 reset timescaledb.debug_require_vector_agg;
+reset timescaledb.debug_require_vector_qual;
 
 
 -- Some expressions are not supported at the moment.

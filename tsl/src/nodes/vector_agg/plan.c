@@ -228,6 +228,12 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 
 		case T_List:
 		{
+			/*
+			 * A plan qual List is an implicit AND of its elements.
+			 * BoolExpr nodes (AND/OR/NOT) are not supported by
+			 * vector_slot_evaluate_expression and fall through to
+			 * the default case.
+			 */
 			ListCell *lc;
 			foreach (lc, (List *) expr)
 			{
@@ -726,11 +732,17 @@ insert_vector_agg(Plan *plan, void *context)
 	/*
 	 * Finally, all requirements are satisfied and we can vectorize this
 	 * aggregation node.
+	 *
+	 * The Postgres quals stay on childplan->qual for EXPLAIN display.
+	 * VectorAgg does not run the underlying ColumnarScan in the usual
+	 * Postgres way, working with compressed batches directly instead,
+	 * so these quals are not double-evaluated.
 	 */
 	agg->plan.targetlist = partial_agg_targetlist;
 	Plan *vector_agg_plan =
 		vector_agg_plan_create(childplan, agg, resolved_targetlist, grouping_type);
-	castNode(CustomScan, vector_agg_plan)->custom_exprs = resolved_child_qual;
+	lfirst(list_nth_cell(castNode(CustomScan, vector_agg_plan)->custom_private,
+						VASI_PostgresQuals)) = resolved_child_qual;
 
 	if (agg->aggsplit == AGGSPLIT_SIMPLE)
 	{

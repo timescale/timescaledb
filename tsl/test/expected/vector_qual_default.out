@@ -155,7 +155,36 @@ select count(*) from qualdef where bool_identity(lf);
 -------
      0
 
+-- Multiple Postgres quals (implicit AND)
+select count(*) from qualdef where bool_identity(l) and bool_identity(l);
+ count 
+-------
+  1998
+
+-- Second qual filters everything after first already did
+select count(*) from qualdef where bool_identity(ln) and bool_identity(l);
+ count 
+-------
+     0
+
+-- Both quals produce arrow results on a column with mixed values
+select count(*) from qualdef where bool_identity(i2 = 7) and bool_identity(i4 = 8);
+ count 
+-------
+   999
+
+-- Postgres qual with GROUP BY
+select b, count(*) from qualdef where bool_identity(l) group by b order by b;
+ b | count 
+---+-------
+ 0 |   398
+ 1 |   400
+ 2 |   400
+ 3 |   400
+ 4 |   400
+
 reset timescaledb.debug_require_vector_agg;
+reset timescaledb.debug_require_vector_qual;
 -- Some expressions are not supported at the moment.
 set timescaledb.debug_require_vector_agg to forbid;
 select count(*) from qualdef where bool_identity(ln) or bool_identity(lf);
