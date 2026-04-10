@@ -96,14 +96,14 @@ ORDER BY 1 DESC, 2;
 SELECT * FROM measure_10
 ORDER BY 1 DESC, 2;
 
-CREATE VIEW hyper_invals AS 
+CREATE VIEW hyper_invals AS
 SELECT hypertable_id as "hyper_id",
        lowest_modified_value as "start",
        greatest_modified_value as "end"
        FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
        ORDER BY 1,2,3;
 
-CREATE VIEW hyper_invals_view AS 
+CREATE VIEW hyper_invals_view AS
 SELECT hypertable_id as "hyper_id",
        ht.table_name as "hypertable_name",
        lowest_modified_value as "start",
@@ -114,15 +114,15 @@ SELECT hypertable_id as "hyper_id",
 
 CREATE VIEW cagg_invals_view AS
   SELECT il.materialization_id AS "cagg_id",
-         ca.user_view_name AS "cagg_name",                       
+         ca.user_view_name AS "cagg_name",
          il.lowest_modified_value AS "start",
          il.greatest_modified_value AS "end"
-  FROM 
+  FROM
   _timescaledb_catalog.continuous_aggs_materialization_invalidation_log il,
   _timescaledb_catalog.continuous_agg ca
   WHERE ca.mat_hypertable_id = il.materialization_id;
 
-CREATE VIEW cagg_invals AS 
+CREATE VIEW cagg_invals AS
 SELECT materialization_id AS "cagg_id",
        lowest_modified_value AS "start",
        greatest_modified_value AS "end"
@@ -298,7 +298,7 @@ CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
 SELECT * FROM cagg_invals;
 SELECT * FROM hyper_invals;
 
--- Test cutting logic after the per chunk invalidation entry change. 
+-- Test cutting logic after the per chunk invalidation entry change.
 -- Case 1: Left-cut only.
 -- Values in chunks [10,20) and [20,30) merge after bucket expansion
 -- to [10, 29]. Against window [20, 60): lower [10,19], inner [20,29].
@@ -327,7 +327,7 @@ SELECT * FROM cagg_invals;
 \set QUERY 'SELECT time_bucket( 10, time) AS bucket, device, avg(temp) FROM conditions WHERE time>= 20 and time < 60 GROUP BY 1, 2'
 \set VIEW_QUERY 'SELECT * FROM cond_10 WHERE bucket>= 20 and bucket < 60'
 \ir include/cont_agg_test_equal_query.sql
- 
+
 -- Clean up the remaining invalidations
 --CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
 --CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
@@ -416,7 +416,7 @@ CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
 \set QUERY 'SELECT time_bucket( 10, time) AS bucket, device, avg(temp) FROM conditions GROUP BY 1, 2'
 \set VIEW_QUERY 'SELECT * FROM cond_10 '
 \ir include/cont_agg_test_equal_query.sql
- 
+
 -- Should now hold data again
 SELECT * FROM cond_10
 ORDER BY 1,2;

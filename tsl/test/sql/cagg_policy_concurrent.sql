@@ -737,8 +737,8 @@ DROP MATERIALIZED VIEW mat_m1_rollup;
 DROP MATERIALIZED VIEW mat_m1;
 -- Test: Variable-width bucket correctness with extend_last_bucket
 -- mat_m1: two adjacent policies split at '6 months'
---   - Policy 1: [NULL, '6 months') -> will extend_last_bucket 
---   - Policy 2: ['6 months', NULL) 
+--   - Policy 1: [NULL, '6 months') -> will extend_last_bucket
+--   - Policy 2: ['6 months', NULL)
 -- compare with results from mat_m2 for correctness
 
 CREATE MATERIALIZED VIEW mat_varwidth_m1
@@ -764,8 +764,8 @@ GROUP BY 1
 WITH NO DATA;
 
 SET timezone TO 'UTC';
-SELECT time_bucket('1 month' , time) FROM overlap_test_timestamptz_var 
-GROUP BY 1  
+SELECT time_bucket('1 month' , time) FROM overlap_test_timestamptz_var
+GROUP BY 1
 ORDER BY 1;
 
 /* Create two adjacent policies on mat_varwidth_m1 */
@@ -790,7 +790,7 @@ SELECT
 FROM overlap_test_timestamptz_var
 WHERE time_bucket('1 month', time)  >= '2024-12-01 00:00:00+00' and time_bucket('1 month', time) < '2025-01-01 00:00:00+00'
 GROUP BY 1;
- 
+
 CALL run_job(:varwidth_m1_job_2);
 CALL run_job(:varwidth_m2_job);
 
@@ -810,9 +810,9 @@ DROP MATERIALIZED VIEW mat_varwidth_m2;
  * With 3 adjacent policies, both the first and middle should have
  * extend_last_bucket = true, and only the last should not.
  *
- *   - Policy 1: ['7 days', '3 days')  
- *   - Policy 2: ['3 days', '1 day')   
- *   - Policy 3: ['1 day',  '1 hour')  
+ *   - Policy 1: ['7 days', '3 days')
+ *   - Policy 2: ['3 days', '1 day')
+ *   - Policy 3: ['1 day',  '1 hour')
  */
 
 CREATE TABLE test_3pol_timestamptz (
