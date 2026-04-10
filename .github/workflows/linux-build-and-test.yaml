@@ -122,7 +122,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       id: cache-postgresql
-      if: matrix.snapshot != 'snapshot' && runner.os == 'Linux'
+      if: matrix.snapshot != 'snapshot'
       uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
