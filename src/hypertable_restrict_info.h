@@ -32,11 +32,17 @@ typedef struct DimensionRestrictInfoClosed
  * range exclusion logic to figure out which chunks can match the description */
 typedef struct HypertableRestrictInfo
 {
-	int num_base_restrictions; /* number of base restrictions
-								* successfully added */
+	/*
+	 * number of base restrictions
+	 * that are true everywhere inside the HRI. */
+	int num_quals_proven_true_by_hri;
+
 	int num_dimensions;
-	DimensionRestrictInfo *dimension_restriction[FLEXIBLE_ARRAY_MEMBER]; /* array of dimension
-																		  * restrictions */
+
+	/*
+	 * Array of dimension restrictions.
+	 */
+	DimensionRestrictInfo *dimension_restriction[FLEXIBLE_ARRAY_MEMBER];
 } HypertableRestrictInfo;
 
 extern HypertableRestrictInfo *ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht);
@@ -44,6 +50,13 @@ extern HypertableRestrictInfo *ts_hypertable_restrict_info_create(RelOptInfo *re
 /* Add restrictions based on a List of RestrictInfo */
 extern void ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri, PlannerInfo *root,
 											List *base_restrict_infos);
+
+/*
+ * Add a single restriction. Returns true if the clause is true everywhere inside
+ * the current hypertable restrictions.
+ */
+extern bool ts_hypertable_restrict_info_add_clause(HypertableRestrictInfo *hri, PlannerInfo *root,
+												   Expr *clause);
 
 /* Get a list of chunk oids for chunks whose constraints match the restriction clauses */
 extern Chunk **ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *ht,

@@ -281,10 +281,19 @@ invalidation_threshold_set_or_get(const ContinuousAgg *cagg,
 				F_INT4EQ,
 				Int32GetDatum(cagg->data.raw_hypertable_id));
 
-	found = ts_scanner_scan_one(&scanctx, false, CAGG_INVALIDATION_THRESHOLD_NAME);
-	Ensure(found,
-		   "invalidation threshold for hypertable %d not found",
-		   cagg->data.raw_hypertable_id);
+	PG_TRY();
+	{
+		found = ts_scanner_scan_one(&scanctx, false, CAGG_INVALIDATION_THRESHOLD_NAME);
+		Ensure(found,
+			   "invalidation threshold for hypertable %d not found",
+			   cagg->data.raw_hypertable_id);
+	}
+	PG_CATCH();
+	{
+		PopActiveSnapshot();
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 	PopActiveSnapshot();
 
 	return updatectx.computed_invalidation_threshold;

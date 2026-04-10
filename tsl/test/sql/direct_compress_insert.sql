@@ -401,7 +401,7 @@ SELECT t, (i % 5), random()
 FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 minute') t,
      generate_series(1, 5) i;
 ANALYZE test_segmentby_stats;
--- will have no segment by as default segmentby for direct compressed chunk;
+-- will have default segmentby set for a newly created direct compressed chunk (should observe a skipped chunk id);
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ROLLBACK;
 
@@ -419,6 +419,23 @@ SELECT t, (i % 5), random()
 FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 minute') t,
      generate_series(1, 5) i;
 ANALYZE test_segmentby_stats;
--- will have device_id by as configured segmentby for direct compressed chunk;
+-- will have device_id by as configured segmentby for direct compressed chunk (should not observe skipped chunk id);
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ROLLBACK;
+
+-- Test orderby columns are not selected by DC segmentby default
+BEGIN;
+RESET timescaledb.enable_direct_compress_insert;
+CREATE TABLE test_orderby_not_segmentby(time timestamptz NOT NULL, device_id int NOT NULL,
+    value float) WITH (tsdb.hypertable);
+CREATE INDEX ON test_orderby_not_segmentby(device_id);
+INSERT INTO test_orderby_not_segmentby SELECT '2024-01-01'::timestamptz + (i||' min')::interval,
+    (i%5)+1, random() FROM generate_series(1,500) i;
+ANALYZE test_orderby_not_segmentby;
+ALTER TABLE test_orderby_not_segmentby SET (timescaledb.compress);
+SET timescaledb.enable_direct_compress_insert = on;
+INSERT INTO test_orderby_not_segmentby SELECT '2024-06-01'::timestamptz + (i||' min')::interval,
+    (i%5)+1, random() FROM generate_series(1,2000) i;
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+

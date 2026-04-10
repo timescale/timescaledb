@@ -172,8 +172,63 @@ ALTER TABLE :CHUNK1 SET (parallel_workers=2);
 ALTER TABLE :CHUNK2 SET (parallel_workers=0);
 :PREFIX SELECT count(*) FROM "test" WHERE i < 600000 AND length(version()) > 0;
 
+-- Verify result correctness with mixed partial/non-partial subplans.
+-- chunk1 is partial (parallel_workers=2), chunk2 is non-partial (parallel_workers=0).
+SET max_parallel_workers_per_gather TO 0;
+SELECT count(*) FROM test WHERE i < 600000;
+
+SET max_parallel_workers_per_gather TO 2;
+SELECT count(*) FROM test WHERE i < 600000 AND length(version()) > 0;
+
+-- Same with leader not participating, so only workers execute subplans.
+SET parallel_leader_participation = off;
+SELECT count(*) FROM test WHERE i < 600000 AND length(version()) > 0;
+RESET parallel_leader_participation;
+
+-- Test startup exclusion with mixed partial/non-partial subplans.
+-- Use a 3-chunk table so that after excluding one non-partial chunk,
+-- the remaining plan still has both partial and non-partial subplans.
+CREATE TABLE test3 (i int, j double precision, ts timestamp);
+SELECT create_hypertable('test3', 'i', chunk_time_interval => 200000);
+INSERT INTO test3 SELECT x, x+0.1, _timescaledb_functions.to_timestamp(x*1000)
+  FROM generate_series(0, 599999, 10) AS x;
+ANALYZE test3;
+
+SELECT show_chunks('test3') AS chunk3_1 LIMIT 1 OFFSET 0 \gset
+SELECT show_chunks('test3') AS chunk3_2 LIMIT 1 OFFSET 1 \gset
+SELECT show_chunks('test3') AS chunk3_3 LIMIT 1 OFFSET 2 \gset
+
+-- Make chunks 1 and 2 non-partial, chunk 3 partial.
+-- Subplan order: chunk1(non-partial), chunk2(non-partial), chunk3(partial)
+-- first_partial_plan = 2.
+ALTER TABLE :chunk3_1 SET (parallel_workers=0);
+ALTER TABLE :chunk3_2 SET (parallel_workers=0);
+ALTER TABLE :chunk3_3 SET (parallel_workers=2);
+
+-- Startup-exclude chunk1 (non-partial). length(version()) is stable, so
+-- the expression is not constant-folded and triggers startup exclusion.
+-- After excluding chunk1, filtered_first_partial_plan should be 1
+-- (decremented from 2 because one non-partial was removed).
+-- Remaining: chunk2(non-partial), chunk3(partial).
+SET max_parallel_workers_per_gather TO 0;
+SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000;
+
+SET max_parallel_workers_per_gather TO 2;
+SET enable_indexscan to OFF;
+:PREFIX SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
+SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
+
+SET parallel_leader_participation = off;
+SELECT count(j) FROM test3 WHERE i >= length(version()) * 0 + 200000 AND length(version()) > 0;
+RESET parallel_leader_participation;
+
+DROP TABLE test3;
+RESET max_parallel_workers_per_gather;
+RESET enable_indexscan;
+
 ALTER TABLE :CHUNK1 RESET (parallel_workers);
 ALTER TABLE :CHUNK2 RESET (parallel_workers);
+RESET max_parallel_workers_per_gather;
 
 -- now() is not marked parallel safe in PostgreSQL < 12 so using now()
 -- in a query will prevent parallelism but CURRENT_TIMESTAMP and

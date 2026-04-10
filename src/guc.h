@@ -37,6 +37,7 @@ extern TSDLLEXPORT bool ts_guc_enable_osm_reads;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
 #endif
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
+extern TSDLLEXPORT bool ts_guc_enable_compressed_merge;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
 extern TSDLLEXPORT bool ts_guc_enable_dml_bloom_filter;
@@ -48,6 +49,7 @@ extern TSDLLEXPORT bool ts_guc_enable_direct_compress_insert;
 extern bool ts_guc_enable_direct_compress_insert_sort_batches;
 extern TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted;
 extern TSDLLEXPORT bool ts_guc_enable_direct_compress_on_cagg_refresh;
+extern TSDLLEXPORT bool ts_guc_enable_direct_compress_auto_segmentby;
 extern int ts_guc_direct_compress_insert_tuple_sort_limit;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
