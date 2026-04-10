@@ -1,0 +1,2 @@
+Implements: #9320 Enable on-demand real-time continuous aggregates settings
+Setting: Control session CAgg behaviour with `realtime_cagg_settings`: (`cagg_view` (default), `materialized_only`, `realtime`, `realtime_with_backfills`).
