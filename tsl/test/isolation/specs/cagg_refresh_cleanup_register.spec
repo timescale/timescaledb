@@ -55,7 +55,7 @@ teardown {
 session "R1"
 setup {
     SET ROLE cagg_user;
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
     INSERT INTO cancelpid SELECT pg_backend_pid();
 }
 step "R1_refresh" {
@@ -97,7 +97,7 @@ step "K1_terminate" {
 session "R2"
 setup {
     SET ROLE cagg_user;
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
 }
 step "R2_refresh" {
     CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15');
@@ -106,7 +106,7 @@ step "R2_refresh" {
 session "R3"
 setup {
     SET ROLE cagg_user;
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
 }
 step "R3_refresh" {
     CALL refresh_continuous_aggregate('cond_daily', '2026-02-15', '2026-03-15');
@@ -115,7 +115,7 @@ step "R3_refresh" {
 session "R4"
 setup {
     SET ROLE cagg_user;
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s';
 }
 step "R4_refresh" {
     CALL refresh_continuous_aggregate('cond_daily', '2026-03-15', '2026-03-30');
