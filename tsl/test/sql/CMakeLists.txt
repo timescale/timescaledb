@@ -72,6 +72,7 @@ set(TEST_FILES
     rebuild_columnstore_tests.sql
     recompression_integrity_tests.sql
     recompression_integrity_unordered.sql
+    recompression_nullable_orderby.sql
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql
