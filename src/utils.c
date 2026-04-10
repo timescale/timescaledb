@@ -2006,3 +2006,17 @@ ts_is_time_bucket_function(Expr *node)
 
 	return false;
 }
+
+#if PG17_LT
+bool
+ts_get_attnotnull(Oid relid, AttrNumber attno)
+{
+	HeapTuple tp = SearchSysCache2(ATTNUM, ObjectIdGetDatum(relid), Int16GetDatum(attno));
+	if (!HeapTupleIsValid(tp))
+		return false;
+	Form_pg_attribute att_tup = (Form_pg_attribute) GETSTRUCT(tp);
+	bool result = att_tup->attnotnull;
+	ReleaseSysCache(tp);
+	return result;
+}
+#endif

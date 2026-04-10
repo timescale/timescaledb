@@ -108,7 +108,7 @@ static void
 makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
 {
 	int ret = snprintf(buf, NAMEDATALEN, prefix, hypertable_id);
-	if (ret < 0 || ret > NAMEDATALEN)
+	if (ret < 0 || ret >= NAMEDATALEN)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("bad materialization internal name")));

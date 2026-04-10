@@ -39,14 +39,6 @@ select compress_chunk(show_chunks('null_dump'));
 --quote-all-identifiers --no-tablespaces --no-owner --no-privileges --exclude-schema=test
 --quote-all-identifiers --no-tablespaces --no-owner --no-privileges --exclude-schema=test
 pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump: detail: hypertable
-pg_dump: hint: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: hint: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: warning: there are circular foreign-key constraints on this table:
-pg_dump: detail: chunk
-pg_dump: hint: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
-pg_dump: hint: Consider using a full dump instead of a --data-only dump to avoid this problem.
-pg_dump: warning: there are circular foreign-key constraints on this table:
 pg_dump: detail: continuous_agg
 pg_dump: hint: You might not be able to restore the dump without using --disable-triggers or temporarily dropping the constraints.
 pg_dump: hint: Consider using a full dump instead of a --data-only dump to avoid this problem.

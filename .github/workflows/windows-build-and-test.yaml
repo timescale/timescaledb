@@ -86,6 +86,7 @@ jobs:
         chunk_adaptive
         compress_bloom_sparse_compat
         compress_bloom_sparse_debug
+        compress_compbloom_hash_pushdown
         compress_composite_bloom_debug
         compress_qualpushdown_saop
         compress_sort_transform

@@ -13,8 +13,8 @@ CREATE TABLE test1 (
 time timestamptz NOT NULL,
     x1 integer,
     x2 integer,
-    x3 integer,
-    x4 integer,
+    x3 integer NOT NULL,
+    x4 integer NOT NULL,
     x5 integer);
 
 SELECT FROM create_hypertable('test1', 'time');
@@ -33,8 +33,8 @@ CREATE TABLE test2 (
 time timestamptz NOT NULL,
     x1 integer,
     x2 integer,
-    x3 integer,
-    x4 integer,
+    x3 integer NOT NULL,
+    x4 integer NOT NULL,
     x5 integer);
 
 SELECT FROM create_hypertable('test2', 'time');
@@ -139,11 +139,11 @@ SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 NULLS 
 
 -- Should be optimized
 :PREFIX
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
+SELECT * FROM test_with_defined_null WHERE x2 IS NOT NULL ORDER BY x2 ASC NULLS FIRST;
 
 -- Should be optimized (backward scan)
 :PREFIX
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
+SELECT * FROM test_with_defined_null WHERE x2 IS NOT NULL ORDER BY x2 DESC NULLS LAST;
 
 set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 
@@ -331,13 +331,13 @@ SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
 
--- Test with null values
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
-
+-- Test with null values: should not optimize
 set timescaledb.debug_require_batch_sorted_merge to 'forbid';
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
+SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
+SELECT time, x2 FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
+
+SELECT time, x2 FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
+SELECT time, x2 FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 
 ------
 -- Tests based on compressed chunk state
@@ -558,7 +558,7 @@ SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"sign
 -- Condition that filter the first tuple of a batch - Issue 5797
 CREATE TABLE test (
     id      bigint,
-    dttm    timestamp,
+    dttm    timestamp NOT NULL,
     otherId    int,
     valueFk int,
     otherFk int,
