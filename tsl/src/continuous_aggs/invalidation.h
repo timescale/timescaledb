@@ -47,9 +47,8 @@ extern void invalidation_process_hypertable_log(int32 hypertable_id, Oid dimtype
 extern void invalidation_process_cagg_log(const ContinuousAgg *cagg,
 										  const InternalTimeRange *refresh_window);
 
-extern InvalidationStore *collect_and_delete_cagg_invalidations_in_window(const ContinuousAgg *cagg,
-																		  const InternalTimeRange *refresh_window,
-																		  bool force);
+extern InvalidationStore *collect_and_delete_cagg_invalidations_in_window(
+	const ContinuousAgg *cagg, const InternalTimeRange *refresh_window, bool force);
 
 extern void invalidation_store_free(InvalidationStore *store);
 extern void
