@@ -1118,6 +1118,8 @@ typedef enum Anum_continuous_aggs_jobs_refresh_ranges
 	Anum_continuous_aggs_jobs_refresh_ranges_start_range,
 	Anum_continuous_aggs_jobs_refresh_ranges_end_range,
 	Anum_continuous_aggs_jobs_refresh_ranges_pid,
+	Anum_continuous_aggs_jobs_refresh_ranges_job_id,
+	Anum_continuous_aggs_jobs_refresh_ranges_created_at,
 	_Anum_continuous_aggs_jobs_refresh_ranges_max,
 } Anum_continuous_aggs_jobs_refresh_ranges;
 
@@ -1130,6 +1132,8 @@ typedef struct FormData_continuous_aggs_jobs_refresh_ranges
 	int64 start_range;
 	int64 end_range;
 	int32 pid;
+	int32 job_id;
+	TimestampTz created_at;
 } FormData_continuous_aggs_jobs_refresh_ranges;
 
 typedef FormData_continuous_aggs_jobs_refresh_ranges *Form_continuous_aggs_jobs_refresh_ranges;
