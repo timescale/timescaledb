@@ -112,7 +112,7 @@ compression_column_segment_metadata_name(const char *type, int16 column_index)
 	Assert(column_index > 0);
 	int ret =
 		snprintf(buf, NAMEDATALEN, COMPRESSION_COLUMN_METADATA_PATTERN_V1, type, column_index);
-	if (ret < 0 || ret > NAMEDATALEN)
+	if (ret < 0 || ret >= NAMEDATALEN)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("bad segment metadata column name")));
@@ -682,6 +682,69 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
 						COMPRESSION_COLUMN_METADATA_PREFIX)));
 
 	return makeColumnDef(colname, compresseddata_oid, -1 /*typmod*/, 0 /*collation*/);
+}
+
+/*
+ * Create compress chunk with specific settings.
+ *
+ * Same as create_compress_chunk but with an extra CompressionSettings parameter
+ *
+ */
+Chunk *
+create_compress_chunk_with_settings(Hypertable *compress_ht, Chunk *src_chunk,
+									CompressionSettings *settings)
+{
+	Catalog *catalog = ts_catalog_get();
+	CatalogSecurityContext sec_ctx;
+	Chunk *compress_chunk;
+	int namelen;
+	Oid tablespace_oid;
+
+	Assert(compress_ht->space->num_dimensions == 0);
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	compress_chunk =
+		ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK), 0, RELKIND_RELATION);
+	ts_catalog_restore_user(&sec_ctx);
+
+	compress_chunk->fd.hypertable_id = compress_ht->fd.id;
+	compress_chunk->hypertable_relid = compress_ht->main_table_relid;
+	namestrcpy(&compress_chunk->fd.schema_name, INTERNAL_SCHEMA_NAME);
+
+	namelen = snprintf(NameStr(compress_chunk->fd.table_name),
+					   NAMEDATALEN,
+					   "compress%s_%d_chunk",
+					   NameStr(compress_ht->fd.associated_table_prefix),
+					   compress_chunk->fd.id);
+
+	if (namelen >= NAMEDATALEN)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("invalid name \"%s\" for compressed chunk",
+						NameStr(compress_chunk->fd.table_name)),
+				 errdetail("The associated table prefix is too long.")));
+
+	ts_chunk_insert_lock(compress_chunk, RowExclusiveLock);
+
+	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
+
+	List *column_defs = build_columndefs(settings, src_chunk->table_id);
+	compress_chunk->table_id =
+		compression_chunk_create(src_chunk, compress_chunk, column_defs, tablespace_oid, settings);
+
+	if (!OidIsValid(compress_chunk->table_id))
+		elog(ERROR, "could not create columnstore chunk table");
+
+	settings->fd.compress_relid = compress_chunk->table_id;
+	ts_compression_settings_update(settings);
+
+	ts_chunk_index_create_all(compress_chunk->fd.hypertable_id,
+							  compress_chunk->hypertable_relid,
+							  compress_chunk->fd.id,
+							  compress_chunk->table_id,
+							  tablespace_oid);
+
+	return compress_chunk;
 }
 
 /*
@@ -1352,8 +1415,8 @@ validate_hypertable_for_compression(Hypertable *ht)
 /*
  * Get the default segment by value for a hypertable
  */
-static ArrayType *
-compression_setting_segmentby_get_default(const Hypertable *ht)
+ArrayType *
+tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 {
 	StringInfoData command;
 	StringInfoData result;
@@ -1815,7 +1878,7 @@ compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 		if (!skip_segmentby_default && !settings->fd.segmentby &&
 			with_clause_options[AlterTableFlagSegmentBy].is_default)
 		{
-			settings->fd.segmentby = compression_setting_segmentby_get_default(ht);
+			settings->fd.segmentby = tsl_compression_setting_segmentby_get_default(ht);
 		}
 		settings->fd.index = ts_remove_orderby_sparse_index(settings);
 		OrderBySettings obs = compression_setting_orderby_get_default(ht, settings->fd.segmentby);

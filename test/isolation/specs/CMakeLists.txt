@@ -13,9 +13,14 @@ file(REMOVE ${ISOLATION_TEST_SCHEDULE})
 set(TEST_TEMPLATES)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_FILES concurrent_add_dimension.spec
-       concurrent_query_and_drop_chunks.spec dropchunks_race.spec
-       multi_transaction_indexing.spec)
+  list(
+    APPEND
+    TEST_FILES
+    concurrent_add_dimension.spec
+    concurrent_query_and_drop_chunks.spec
+    create_index_progress.spec
+    dropchunks_race.spec
+    multi_transaction_indexing.spec)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 foreach(TEST_FILE ${TEST_FILES})

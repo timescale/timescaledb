@@ -494,7 +494,7 @@ DROP MATERIALIZED VIEW cagg_4_hours_date_origin2;
 
 CREATE MATERIALIZED VIEW cagg_4_hours_date_offset
   WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
-  SELECT time_bucket('4 days', time, "offset"=>'30m'::interval), max(value)
+  SELECT time_bucket('4 days', time, "offset"=>'1 day'::interval), max(value)
     FROM temperature_date
     GROUP BY 1 ORDER BY 1;
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_4_hours_date_offset';

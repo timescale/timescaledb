@@ -575,10 +575,12 @@ uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 
 	MemoryContext old_context;
 	ArrowArray *timestamp_array = NULL;
-	CheckCompressedData(DatumGetPointer(compressed) != NULL);
 
-	void *detoasted = PG_DETOAST_DATUM(compressed);
-	StringInfoData si = { .data = detoasted, .len = VARSIZE_ANY(compressed) };
+	CheckCompressedData(DatumGetPointer(compressed) != NULL);
+	/* detoasting is caller responsibility */
+	CheckCompressedData(!VARATT_IS_EXTERNAL(compressed));
+
+	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE_ANY(compressed) };
 	UuidCompressed *header = consumeCompressedData(&si, sizeof(UuidCompressed));
 	char *timestamp_compressed_data = NULL;
 	char *rand_b_and_variant_compressed_data;

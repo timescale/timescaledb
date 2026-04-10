@@ -1,0 +1,65 @@
+Parsed test spec with 3 sessions
+
+starting permutation: WPE CI check WPR
+step WPE: SELECT debug_waitpoint_enable('process_index_chunk_done');
+debug_waitpoint_enable
+----------------------
+                      
+
+step CI: CREATE INDEX progress_test_idx ON progress_test(location); <waiting ...>
+step check: 
+    SELECT
+        relid::regclass AS relation,
+        CASE WHEN index_relid::text = index_relid::regclass::text
+             THEN 'not yet visible'
+             ELSE index_relid::regclass::text
+        END AS index,
+        command,
+        phase,
+        partitions_total,
+        partitions_done
+    FROM pg_stat_progress_create_index
+    WHERE relid = 'progress_test'::regclass;
+
+relation     |index          |command     |phase         |partitions_total|partitions_done
+-------------+---------------+------------+--------------+----------------+---------------
+progress_test|not yet visible|CREATE INDEX|building index|               3|              1
+
+step WPR: SELECT debug_waitpoint_release('process_index_chunk_done');
+debug_waitpoint_release
+-----------------------
+                       
+
+step CI: <... completed>
+
+starting permutation: WPE_MT CI_MT check WPR_MT
+step WPE_MT: SELECT debug_waitpoint_enable('process_index_chunk_multitransaction_done');
+debug_waitpoint_enable
+----------------------
+                      
+
+step CI_MT: CREATE INDEX progress_test_mt_idx ON progress_test(location) WITH (timescaledb.transaction_per_chunk); <waiting ...>
+step check: 
+    SELECT
+        relid::regclass AS relation,
+        CASE WHEN index_relid::text = index_relid::regclass::text
+             THEN 'not yet visible'
+             ELSE index_relid::regclass::text
+        END AS index,
+        command,
+        phase,
+        partitions_total,
+        partitions_done
+    FROM pg_stat_progress_create_index
+    WHERE relid = 'progress_test'::regclass;
+
+relation     |index               |command     |phase         |partitions_total|partitions_done
+-------------+--------------------+------------+--------------+----------------+---------------
+progress_test|progress_test_mt_idx|CREATE INDEX|building index|               3|              1
+
+step WPR_MT: SELECT debug_waitpoint_release('process_index_chunk_multitransaction_done');
+debug_waitpoint_release
+-----------------------
+                       
+
+step CI_MT: <... completed>
