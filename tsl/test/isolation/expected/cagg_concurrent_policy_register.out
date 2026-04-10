@@ -3,7 +3,7 @@ Parsed test spec with 6 sessions
 starting permutation: s1_select s3_lock_before_register s1_run_pol7d_3d_refresh s12_run_pol3d_1d_refresh s13_run_pol1d_refresh s4_enable_before_process_cagg_invalidations s3_release_after_register s5_show_running_jobs s4_release_before_process_cagg_invalidations
 step s1_select: 
    select min(time) at time zone 'UTC' , max(time) at time zone 'UTC'
-   FROM test_3pol_timestamptz; 
+   FROM test_3pol_timestamptz;
 
 timezone                |timezone                
 ------------------------+------------------------
