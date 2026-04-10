@@ -41,6 +41,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_concurrent_refresh.spec
     cagg_concurrent_register.spec
     cagg_concurrent_policy_register.spec
+    cagg_concurrent_refresh_invalidation_cutting.spec
     cagg_hierarchical_concurrent_refresh.spec
     cagg_incremental_concurrent.spec
     cagg_refresh_cleanup_register.spec
