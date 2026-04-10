@@ -111,7 +111,16 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 							"compression with no "
 							"order by")));
 		}
-		uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
+		bool nullable_orderby = !is_chunk_orderby_nonnullable(settings);
+		if (nullable_orderby && ts_guc_debug_compression_path_info)
+		{
+			elog(NOTICE,
+				 "in-memory recompression is disabled due to nullable order by, "
+				 "performing segmentwise decompress/compress on chunk \"%s.%s\"",
+				 NameStr(chunk->fd.schema_name),
+				 NameStr(chunk->fd.table_name));
+		}
+		uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk, nullable_orderby);
 	}
 
 	PG_RETURN_OID(uncompressed_chunk_id);
@@ -219,7 +228,8 @@ free_chunk_recompress_ctx(RecompressContext *recompress_ctx)
 }
 
 Oid
-recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
+recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
+								  bool fullrecompress /* do full decompress/compress segmentwise */)
 {
 	Oid uncompressed_chunk_id = uncompressed_chunk->table_id;
 
@@ -418,12 +428,16 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 								  recompress_ctx->num_segmentby,
 								  recompress_ctx->index_scankeys);
 
-		update_orderby_scankeys(values,
-								isnulls,
-								recompress_ctx->num_segmentby,
-								recompress_ctx->num_orderby,
-								recompress_ctx->orderby_scankeys);
-
+		/* We do not match orderby boundaries for full recompress,
+		 * so do not need orderby scankeys */
+		if (!fullrecompress)
+		{
+			update_orderby_scankeys(values,
+									isnulls,
+									recompress_ctx->num_segmentby,
+									recompress_ctx->num_orderby,
+									recompress_ctx->orderby_scankeys);
+		}
 		index_rescan(index_scan,
 					 recompress_ctx->index_scankeys,
 					 recompress_ctx->num_segmentby,
@@ -437,10 +451,15 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 		while (index_getnext_slot(index_scan, ForwardScanDirection, compressed_slot))
 		{
 			/* Check if the uncompressed tuple is before, inside, or after the compressed batch */
-			result = match_tuple_batch(compressed_slot,
-									   recompress_ctx->num_orderby,
-									   recompress_ctx->orderby_scankeys,
-									   &recompress_ctx->nulls_first[recompress_ctx->num_segmentby]);
+			result = (fullrecompress ?
+						  /* For full segmentwise decompress/compress we decompress all batches in
+						   * the current segment (i.e. treat each batch as a match) */
+						  Tuple_match :
+						  match_tuple_batch(compressed_slot,
+											recompress_ctx->num_orderby,
+											recompress_ctx->orderby_scankeys,
+											&recompress_ctx
+												 ->nulls_first[recompress_ctx->num_segmentby]));
 
 			/* If the tuple is before the batch, add it for recompression
 			 * also keep adding uncompressed tuples while they are:

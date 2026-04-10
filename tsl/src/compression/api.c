@@ -55,7 +55,6 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_chunk_size.h"
-#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "utils.h"
 #include "wal_utils.h"
@@ -662,6 +661,24 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	write_logical_replication_msg_decompression_end();
 }
 
+bool
+is_chunk_orderby_nonnullable(CompressionSettings *settings)
+{
+	int num_orderby = ts_array_length(settings->fd.orderby);
+	const char *attname;
+	int attnum;
+	for (int i = 1; i <= num_orderby; i++)
+	{
+		attname = ts_array_get_element_text(settings->fd.orderby, i);
+		attnum = get_attnum(settings->fd.relid, attname);
+		if (!AttributeNumberIsValid(attnum) || !ts_get_attnotnull(settings->fd.relid, attnum))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
 static bool
 recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
 {
@@ -705,7 +722,21 @@ recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
 			return false;
 		}
 
-		*uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
+		/* #9444: do not recompress when order by columns are nullable, do segmentwise
+		 * decompress/compress instead. It is due to compression min/max metadata not handling
+		 * NULLs. When we implement chunks with min/max NULL-handling metadata, this restriction can
+		 * be lifted.
+		 */
+		bool nullable_orderby = !is_chunk_orderby_nonnullable(chunk_settings);
+		if (nullable_orderby && ts_guc_debug_compression_path_info)
+		{
+			elog(NOTICE,
+				 "in-memory recompression is disabled due to nullable order by, "
+				 "performing segmentwise decompress/compress on chunk \"%s.%s\"",
+				 NameStr(chunk->fd.schema_name),
+				 NameStr(chunk->fd.table_name));
+		}
+		*uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk, nullable_orderby);
 		recompressed = true;
 	}
 	else
