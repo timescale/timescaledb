@@ -194,7 +194,7 @@ step "check_jobs_metadata_policy" {
 # Session P1: runs a policy refresh via run_job
 session "P1"
 setup {
-    SET SESSION lock_timeout = '500ms';
+    SET SESSION lock_timeout = '2s'
     SET SESSION deadlock_timeout = '500ms';
 }
 step "P1_add_policy" {
