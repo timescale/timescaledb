@@ -65,6 +65,11 @@ ALTER TABLE _timescaledb_catalog.chunk ADD CONSTRAINT chunk_hypertable_id_fkey F
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', '');
 
+-- clean orphaned entries
+DELETE FROM _timescaledb_catalog.compression_chunk_size ccs WHERE
+  NOT EXISTS (SELECT FROM _timescaledb_catalog.chunk c WHERE c.id = ccs.chunk_id)
+  OR NOT EXISTS (SELECT FROM _timescaledb_catalog.chunk c WHERE c.id = ccs.compressed_chunk_id);
+
 --add the foreign key constraints
 ALTER TABLE _timescaledb_catalog.chunk_constraint ADD CONSTRAINT chunk_constraint_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id);
 ALTER TABLE _timescaledb_catalog.chunk_column_stats ADD CONSTRAINT chunk_column_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id);
