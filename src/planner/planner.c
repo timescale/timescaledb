@@ -446,7 +446,8 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 							 * INSERT actions requiring chunk routing, which
 							 * uses a separate planner path (ModifyHypertable).
 							 */
-							if (IS_UPDL_CMD(context->rootquery))
+							if (IS_UPDL_CMD(context->rootquery) &&
+								ts_guc_enable_hypertable_expansion_for_dml)
 							{
 								if (rti == (Index) query->resultRelation)
 									rte_mark_for_expansion(rte);
@@ -1469,7 +1470,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 				 * actions requiring chunk routing, which uses a separate
 				 * planner path (ModifyHypertable).
 				 */
-				if (IS_UPDL_CMD(query))
+				if (IS_UPDL_CMD(query) && ts_guc_enable_hypertable_expansion_for_dml)
 				{
 					if (rel->relid == (Index) query->resultRelation)
 						rte_mark_for_expansion(rte);

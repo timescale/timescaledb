@@ -626,25 +626,6 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 		/*
 		 * Constraint exclusion failed, so copy the parent's join quals and
 		 * targetlist to the child, with appropriate variable substitutions.
-		 */
-#if PG16_GE
-		childrinfos = NIL;
-		foreach (lc, rel->joininfo)
-		{
-			RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
-
-			if (!bms_overlap(rinfo->clause_relids, rel->nulling_relids))
-				childrinfos =
-					lappend(childrinfos, adjust_appendrel_attrs(root, (Node *) rinfo, 1, &appinfo));
-		}
-		childrel->joininfo = childrinfos;
-#else
-		childrel->joininfo =
-			(List *) adjust_appendrel_attrs(root, (Node *) rel->joininfo, 1, &appinfo);
-#endif
-
-		/*
-		 * Now for the child's targetlist.
 		 *
 		 * We skip join quals that came from above outer joins that can null
 		 * this rel, since they would be of no value while generating paths

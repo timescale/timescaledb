@@ -27,6 +27,7 @@ extern TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown;
 extern bool ts_guc_enable_qual_filtering;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
+extern bool ts_guc_enable_hypertable_expansion_for_dml;
 extern bool ts_guc_enable_cagg_reorder_groupby;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_window_functions;
 extern TSDLLEXPORT int ts_guc_cagg_max_individual_materializations;
