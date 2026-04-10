@@ -762,7 +762,8 @@ continuous_agg_refresh_spi_setup_and_connect(CaggRefreshSpiContext *cagg_spi_ctx
 }
 
 /* rollback and cleanup after the failed refresh transaction */
-static void rollback_and_error( const ContinuousAgg *cagg, CaggRefreshSpiContext *cagg_spi_ctx, ErrorData *edata)
+static void
+rollback_and_error(const ContinuousAgg *cagg, CaggRefreshSpiContext *cagg_spi_ctx, ErrorData *edata)
 {
 	/*
 	 * Every spi_execute pushes a snapshot on the stack (unless a snapshot
@@ -908,7 +909,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 	SPI_commit_and_chain();
 
 	volatile bool refreshed = false;
-        volatile ErrorData *edata = NULL;
+	volatile ErrorData *edata = NULL;
 	PG_TRY();
 	{
 		/* Commit and Start a new transaction */
@@ -1019,21 +1020,20 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 	{
 		/*
 		 * Save the error and clear the error state so that
-		 * We must switch out of ErrorContext first 
-                 * and use a long-lived context because the current transaction 
-                 * context is about to be destroyed by the rollback.
+		 * We must switch out of ErrorContext first
+		 * and use a long-lived context because the current transaction
+		 * context is about to be destroyed by the rollback.
 		 */
 		MemoryContextSwitchTo(TopMemoryContext);
 		edata = CopyErrorData();
 		FlushErrorState();
-
 	}
 	PG_END_TRY();
 	if (edata)
-        {
-                rollback_and_error( cagg, &cagg_spi_ctx, (ErrorData *) edata );
-                return;
-        }
+	{
+		rollback_and_error(cagg, &cagg_spi_ctx, (ErrorData *) edata);
+		return;
+	}
 	if (!refreshed)
 		emit_up_to_date_notice(cagg, context);
 
