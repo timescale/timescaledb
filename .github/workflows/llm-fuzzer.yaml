@@ -278,7 +278,6 @@ jobs:
         shared_preload_libraries = 'timescaledb'
         statement_timeout = '30s'
         listen_addresses = ''
-        unix_socket_directories = '$PGHOST'
         logging_collector = on
         log_destination = 'jsonlog,stderr'
         log_directory = '$(readlink -f .)'
