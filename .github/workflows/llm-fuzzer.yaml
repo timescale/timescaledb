@@ -5,8 +5,12 @@
 # avoid false positives.
 name: LLM fuzzer
 "on":
-  pull_request:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths: .github/workflows/llm-fuzzer.yaml
 
 env:
   PG_SRC_DIR: "pgbuild"
