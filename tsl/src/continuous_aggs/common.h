@@ -86,6 +86,7 @@ typedef enum ContinuousAggRefreshCallContext
 typedef struct ContinuousAggRefreshContext
 {
 	ContinuousAggRefreshCallContext callctx;
+	int32 job_id;
 	int32 processing_batch;
 	int32 number_of_batches;
 } ContinuousAggRefreshContext;
