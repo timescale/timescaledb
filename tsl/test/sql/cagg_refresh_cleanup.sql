@@ -128,11 +128,11 @@ WITH NO DATA;
 
 -- Insert dummy refresh range entries for the new CAgg
 INSERT INTO _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
-    (materialization_id, start_range, end_range, pid)
+    (materialization_id, start_range, end_range, pid, job_id, created_at)
 SELECT mat_hypertable_id,
        _timescaledb_functions.to_unix_microseconds(s),
        _timescaledb_functions.to_unix_microseconds(s + interval '1 month'),
-       0
+       0, 0, now()
 FROM _timescaledb_catalog.continuous_agg,
      generate_series('2026-01-01'::timestamptz, '2026-05-01'::timestamptz, interval '1 month') AS s
 WHERE user_view_name = 'cond_daily_drop_test';

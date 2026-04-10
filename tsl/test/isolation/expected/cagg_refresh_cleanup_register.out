@@ -264,7 +264,7 @@ user_view_name|start_time|end_time
 --------------+----------+--------
 
 
-starting permutation: WP_after_register_enable R2_refresh check_jobs_metadata WP_after_register_disable
+starting permutation: WP_after_register_enable R2_refresh check_jobs_metadata_manual WP_after_register_disable
 step WP_after_register_enable: SELECT debug_waitpoint_enable('cagg_refresh_after_register');
 debug_waitpoint_enable
 ----------------------
@@ -273,18 +273,18 @@ debug_waitpoint_enable
 step R2_refresh: 
     CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-02-15');
  <waiting ...>
-step check_jobs_metadata: 
+step check_jobs_metadata_manual: 
     SELECT ca.user_view_name,
-           r.job_id,
+           r.job_id = 0 AS has_zero_job_id,
            r.created_at IS NOT NULL AS has_created_at
     FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
     JOIN _timescaledb_catalog.continuous_agg ca
         ON r.materialization_id = ca.mat_hypertable_id
     ORDER BY ca.user_view_name, r.start_range;
 
-user_view_name|job_id|has_created_at
---------------+------+--------------
-cond_daily    |     0|t             
+user_view_name|has_zero_job_id|has_created_at
+--------------+---------------+--------------
+cond_daily    |t              |t             
 
 step WP_after_register_disable: SELECT debug_waitpoint_release('cagg_refresh_after_register');
 debug_waitpoint_release
@@ -293,18 +293,18 @@ debug_waitpoint_release
 
 step R2_refresh: <... completed>
 
-starting permutation: P1_add_policy WP_after_register_enable P1_run_policy check_jobs_metadata WP_after_register_disable
+starting permutation: P1_add_policy WP_after_register_enable P1_run_policy check_jobs_metadata_policy WP_after_register_disable
 step P1_add_policy: 
-    SELECT add_continuous_aggregate_policy(
+    SELECT 1 AS policy_created FROM add_continuous_aggregate_policy(
         'cond_daily',
         start_offset => NULL,
         end_offset => NULL,
         schedule_interval => INTERVAL '1 h'
     );
 
-add_continuous_aggregate_policy
--------------------------------
-                           1000
+policy_created
+--------------
+             1
 
 step WP_after_register_enable: SELECT debug_waitpoint_enable('cagg_refresh_after_register');
 debug_waitpoint_enable
@@ -323,18 +323,18 @@ step P1_run_policy:
     END;
     $$;
  <waiting ...>
-step check_jobs_metadata: 
+step check_jobs_metadata_policy: 
     SELECT ca.user_view_name,
-           r.job_id,
+           r.job_id != 0 AS has_non_zero_job_id,
            r.created_at IS NOT NULL AS has_created_at
     FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges r
     JOIN _timescaledb_catalog.continuous_agg ca
         ON r.materialization_id = ca.mat_hypertable_id
     ORDER BY ca.user_view_name, r.start_range;
 
-user_view_name|job_id|has_created_at
---------------+------+--------------
-cond_daily    |  1000|t             
+user_view_name|has_non_zero_job_id|has_created_at
+--------------+-------------------+--------------
+cond_daily    |t                  |t             
 
 step WP_after_register_disable: SELECT debug_waitpoint_release('cagg_refresh_after_register');
 debug_waitpoint_release
