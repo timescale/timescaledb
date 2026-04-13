@@ -463,7 +463,7 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 	 * This is the intermediate space for materializing the individual branch
 	 * values in Postgres Datum format.
 	 */
-	Datum *branch_data = palloc0(sizeof(*branch_values) * num_total_branches);
+	Datum *branch_data = palloc0(sizeof(*branch_data) * num_total_branches);
 	bool *branch_isnull = palloc0(sizeof(*branch_isnull) * num_total_branches);
 
 	/*
