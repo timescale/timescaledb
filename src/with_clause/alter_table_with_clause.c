@@ -68,6 +68,10 @@ static const WithClauseDefinition sparse_index_with_clause_def[] = {
 		.arg_names = {"compress_minmax", "minmax", "compress_min_max", "min_max", NULL},
 		.type_id = TEXTOID,
 	},
+	[_SparseIndexTypeEnumFirstLast] = {
+		.arg_names = {"compress_firstlast", "firstlast", "first_last", NULL},
+		.type_id = TEXTOID,
+	},
 };
 
 WithClauseResult *
@@ -535,6 +539,7 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 {
 	TypeCacheEntry *type_cache;
 	MinmaxIndexColumnConfig minmax_config;
+	FirstLastIndexColumnConfig firstlast_config;
 	BloomFilterConfig bloom_config;
 	SparseIndexConfigBase config;
 	SparseIndexConfigBase *config_ptr = &config;
@@ -573,7 +578,7 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("minmax index can only have one column")));
+					 errmsg("only bloom indexes can have multiple columns")));
 		}
 	}
 
@@ -680,6 +685,22 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 			minmax_config.base = config;
 			config_ptr = (SparseIndexConfigBase *) &minmax_config;
 			minmax_config.col = first_column.name;
+			break;
+
+		case _SparseIndexTypeEnumFirstLast:
+			if (ts_bmslist_contains_set(*sparse_index_columns, attnums_bitmap))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("duplicate column name \"%s\"", first_column.name),
+						 errhint("The sparse index option must reference distinct "
+								 "column.")));
+			}
+			*sparse_index_columns = ts_bmslist_add_set(*sparse_index_columns, attnums_bitmap);
+
+			firstlast_config.base = config;
+			config_ptr = (SparseIndexConfigBase *) &firstlast_config;
+			firstlast_config.col = first_column.name;
 			break;
 
 		default:

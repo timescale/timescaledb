@@ -20,6 +20,7 @@ typedef enum SparseIndexTypeEnum
 {
 	_SparseIndexTypeEnumBloom = 0,
 	_SparseIndexTypeEnumMinmax,
+	_SparseIndexTypeEnumFirstLast,
 	_SparseIndexTypeEnumMax
 } SparseIndexTypeEnum;
 
@@ -54,6 +55,12 @@ typedef struct MinmaxIndexColumnConfig
 	SparseIndexConfigBase base;
 	const char *col;
 } MinmaxIndexColumnConfig;
+
+typedef struct FirstLastIndexColumnConfig
+{
+	SparseIndexConfigBase base;
+	const char *col;
+} FirstLastIndexColumnConfig;
 
 typedef struct SparseIndexColumn
 {
@@ -115,6 +122,9 @@ typedef struct PerColumnCompressionSettings
 
 	/* the index of the minmax index object that the column participates in, -1 if not present */
 	int minmax_obj_id;
+
+	/* the index of the firstlast index object that the column participates in, -1 if not present */
+	int firstlast_obj_id;
 
 	/* the index of the single bloom index object that the column participates in, -1 if not present
 	 */
