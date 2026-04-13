@@ -679,49 +679,49 @@ static void
 vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchState *batch_state,
 								   List *quals)
 {
-	if (list_length(quals) == 0)
-	{
-		/* The remaining code counts on the quals list being non-empty. */
-		return;
-	}
-
 	Assert(batch_state->next_batch_row == 0);
 
 	const int num_words = (batch_state->total_batch_rows + 63) / 64;
-	int passing_rows = 0;
+
+	uint64 *restrict combined_qual_result = NULL;
+
 	ListCell *lc;
 	foreach (lc, quals)
 	{
 		const CompressedColumnValues single_qual_result =
 			vector_slot_evaluate_expression(dcontext,
 											&batch_state->decompressed_scan_slot_data.base,
-											batch_state->vector_qual_result,
+											combined_qual_result != NULL ?
+												combined_qual_result :
+												batch_state->vector_qual_result,
 											lfirst(lc));
 
+		/*
+		 * The result is a nullable bool. We are checking a qualifier, so both
+		 * false and null mean "doesn't pass".
+		 *
+		 * Typically we expect to get the standard DT_ArrowBits representation
+		 * of bools there, but we can also get a DT_Scalar. In this case, the
+		 * entire batch is either passes or is filtered out.
+		 *
+		 * First, determine if the qual filtered something out.
+		 */
+		bool some_rows_are_filtered_out_by_this_qual = false;
 		if (single_qual_result.decompression_type == DT_ArrowBits)
 		{
-			uint64 *storage =
-				MemoryContextAlloc(batch_state->per_batch_context, num_words * sizeof(*storage));
-			batch_state->vector_qual_result =
-				arrow_combine_validity(num_words,
-									   storage,
-									   batch_state->vector_qual_result,
-									   single_qual_result.buffers[0],
-									   single_qual_result.buffers[1]);
+			some_rows_are_filtered_out_by_this_qual |=
+				(get_vector_qual_summary(single_qual_result.buffers[0],
+										 batch_state->total_batch_rows) != NoRowsPass);
+			some_rows_are_filtered_out_by_this_qual |=
+				(get_vector_qual_summary(single_qual_result.buffers[1],
+										 batch_state->total_batch_rows) != AllRowsPass);
 		}
 		else if (single_qual_result.decompression_type == DT_Scalar)
 		{
-			/*
-			 * The entire batch is either filtered out or passes.
-			 */
-			const bool isnull = single_qual_result.buffers[0];
+			const bool isnull = DatumGetBool(PointerGetDatum(single_qual_result.buffers[0]));
 			const bool value = DatumGetBool(PointerGetDatum(single_qual_result.buffers[1]));
-			if (isnull || !value)
-			{
-				batch_state->vector_qual_result =
-					MemoryContextAllocZero(batch_state->per_batch_context,
-										   num_words * sizeof(*batch_state->vector_qual_result));
-			}
+			some_rows_are_filtered_out_by_this_qual |= isnull;
+			some_rows_are_filtered_out_by_this_qual |= !value;
 		}
 		else
 		{
@@ -730,19 +730,61 @@ vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchS
 				   single_qual_result.decompression_type);
 		}
 
-		passing_rows =
-			arrow_num_valid(batch_state->vector_qual_result, batch_state->total_batch_rows);
-
-		if (passing_rows == 0)
+		if (!some_rows_are_filtered_out_by_this_qual)
 		{
-			/* Early exit when all rows are already filtered out. */
+			continue;
+		}
+
+		/*
+		 * Some rows were filtered out by this qual, we might need to allocate
+		 * the qual result storage.
+		 */
+		const int bitmap_bytes = num_words * sizeof(*combined_qual_result);
+		if (combined_qual_result == NULL)
+		{
+			combined_qual_result = MemoryContextAlloc(batch_state->per_batch_context, bitmap_bytes);
+			memset(combined_qual_result, 0xFF, bitmap_bytes);
+		}
+
+		/*
+		 * Integrate the results of this qual into the current results for the
+		 * batch using bool AND.
+		 */
+		if (single_qual_result.decompression_type == DT_ArrowBits)
+		{
+			arrow_validity_and(num_words, combined_qual_result, single_qual_result.buffers[0]);
+			arrow_validity_and(num_words, combined_qual_result, single_qual_result.buffers[1]);
+		}
+		else
+		{
+			/* The other option is scalar bool as we have checked above. */
+			Assert(single_qual_result.decompression_type == DT_Scalar);
+			const bool isnull = DatumGetBool(PointerGetDatum(single_qual_result.buffers[0]));
+			const bool value = DatumGetBool(PointerGetDatum(single_qual_result.buffers[1]));
+			if (isnull || !value)
+			{
+				memset(combined_qual_result, 0x0, bitmap_bytes);
+			}
+		}
+
+		/* Early exit when all rows are already filtered out. */
+		if (get_vector_qual_summary(combined_qual_result, batch_state->total_batch_rows) ==
+			NoRowsPass)
+		{
 			break;
 		}
 	}
 
-	if (passing_rows == 0)
+	if (combined_qual_result != NULL)
 	{
-		batch_state->next_batch_row = batch_state->total_batch_rows;
+		batch_state->vector_qual_result = combined_qual_result;
+
+		/* If no rows pass, mark the batch as fully consumed. */
+		if (get_vector_qual_summary(batch_state->vector_qual_result,
+									batch_state->total_batch_rows) == NoRowsPass)
+		{
+			batch_state->next_batch_row = batch_state->total_batch_rows;
+		}
 	}
 }
 
@@ -804,6 +846,10 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 
 		compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
 
+		/*
+		 * If we have PG quals and there are some rows that passed the vectorized
+		 * quals, run the PG quals next.
+		 */
 		if (pg_quals && batch_state->next_batch_row < batch_state->total_batch_rows)
 		{
 			vector_agg_evaluate_postgres_quals(dcontext, batch_state, pg_quals);

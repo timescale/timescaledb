@@ -227,26 +227,6 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 			return is_vector && is_vector_type(var->vartype);
 		}
 
-		case T_List:
-		{
-			/*
-			 * A plan qual List is an implicit AND of its elements.
-			 * BoolExpr nodes (AND/OR/NOT) are not supported by
-			 * vector_slot_evaluate_expression and fall through to
-			 * the default case.
-			 */
-			ListCell *lc;
-			foreach (lc, (List *) expr)
-			{
-				if (!is_vector_expr(vqinfo, (Expr *) lfirst(lc)))
-				{
-					return false;
-				}
-			}
-
-			return true;
-		}
-
 		default:
 			return false;
 	}
@@ -256,7 +236,7 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
  * Whether we can vectorize this particular aggregate.
  */
 static bool
-can_vectorize_aggref(const VectorQualInfo *vqi, Aggref *aggref)
+can_vectorize_aggref(const VectorQualInfo *vqinfo, Aggref *aggref)
 {
 	if (aggref->aggdirectargs != NIL)
 	{
@@ -279,7 +259,7 @@ can_vectorize_aggref(const VectorQualInfo *vqi, Aggref *aggref)
 	if (aggref->aggfilter != NULL)
 	{
 		/* Can process aggregates with filter clause if it's vectorizable. */
-		Node *aggfilter_vectorized = vector_qual_make((Node *) aggref->aggfilter, vqi);
+		Node *aggfilter_vectorized = vector_qual_make((Node *) aggref->aggfilter, vqinfo);
 		if (aggfilter_vectorized == NULL)
 		{
 			return false;
@@ -306,7 +286,7 @@ can_vectorize_aggref(const VectorQualInfo *vqi, Aggref *aggref)
 	Assert(list_length(aggref->args) == 1);
 	TargetEntry *argument = castNode(TargetEntry, linitial(aggref->args));
 
-	return is_vector_expr(vqi, argument->expr);
+	return is_vector_expr(vqinfo, argument->expr);
 }
 
 /*
@@ -497,14 +477,14 @@ has_vector_agg_node(Plan *plan, bool *has_some_agg)
  * Returns true if the scan node is a supported child, otherwise false.
  */
 static bool
-vectoragg_plan_possible(Plan *childplan, VectorQualInfo *vqi)
+vectoragg_plan_possible(Plan *childplan, VectorQualInfo *vqinfo)
 {
 	if (!ts_is_columnar_scan_plan(childplan))
 	{
 		return false;
 	}
 
-	vectoragg_plan_columnar_scan(childplan, vqi);
+	vectoragg_plan_columnar_scan(childplan, vqinfo);
 	return true;
 }
 
@@ -639,15 +619,19 @@ insert_vector_agg(Plan *plan, void *context)
 		return plan;
 	}
 
+	/*
+	 * Can't do vectorized aggregation if we have Postgres quals that we
+	 * cannot evaluate in the columnar pipeline.
+	 */
 	List *resolved_postgres_quals =
 		(List *) ts_resolve_outer_special_vars((Node *) childplan->qual, childplan);
-	if (!is_vector_expr(&vqinfo, (Expr *) resolved_postgres_quals))
+	ListCell *lc;
+	foreach (lc, resolved_postgres_quals)
 	{
-		/*
-		 * Can't do vectorized aggregation if we have Postgres quals that we
-		 * cannot evaluate in the columnar pipeline.
-		 */
-		return plan;
+		if (!is_vector_expr(&vqinfo, (Expr *) lfirst(lc)))
+		{
+			return plan;
+		}
 	}
 
 	/*
@@ -715,7 +699,6 @@ insert_vector_agg(Plan *plan, void *context)
 	}
 
 	/* Now check the output targetlist. */
-	ListCell *lc;
 	foreach (lc, resolved_targetlist)
 	{
 		TargetEntry *target_entry = lfirst_node(TargetEntry, lc);
