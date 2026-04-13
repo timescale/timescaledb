@@ -60,7 +60,7 @@
 
 #include "bgw_policy/compression_api.h"
 
-static const char *sparse_index_types[] = { "min", "max" };
+static const char *sparse_index_types[] = { "min", "max", "first", "last" };
 
 #ifdef USE_ASSERT_CHECKING
 static bool
@@ -393,20 +393,26 @@ create_sparse_index_column_def(List *attributes, const char *metadata_type)
 			column_def->storage = TYPSTORAGE_MAIN;
 		}
 	}
-	else /* either min or max */
+	else /* min, max, first, or last */
 	{
 		Form_pg_attribute attr = (Form_pg_attribute) lfirst(list_head(attributes));
-		TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
+		const bool is_minmax =
+			strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0;
 
-		/*
-		 * a comparison operator if required for min max operations
-		 */
-		if (!OidIsValid(type->lt_opr))
+		if (is_minmax)
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_FUNCTION),
-					 errmsg("invalid minmax column type %s", format_type_be(attr->atttypid)),
-					 errdetail("Could not identify a less-than operator for the type.")));
+			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
+
+			/*
+			 * a comparison operator is required for min max operations
+			 */
+			if (!OidIsValid(type->lt_opr))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_FUNCTION),
+						 errmsg("invalid minmax column type %s", format_type_be(attr->atttypid)),
+						 errdetail("Could not identify a less-than operator for the type.")));
+			}
 		}
 
 		column_def =
@@ -505,6 +511,16 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 					lappend(composite_attr_lists[per_column_setting->minmax_obj_id], attr);
 			}
 
+			if (per_column_setting->firstlast_obj_id != -1 &&
+				per_column_setting->firstlast_obj_id < num_sparse_index_objects)
+			{
+				/* Firstlast index configuration objects will have a single element list */
+				Assert(list_length(composite_attr_lists[per_column_setting->firstlast_obj_id]) ==
+					   0);
+				composite_attr_lists[per_column_setting->firstlast_obj_id] =
+					lappend(composite_attr_lists[per_column_setting->firstlast_obj_id], attr);
+			}
+
 			if (per_column_setting->single_bloom_obj_id != -1 &&
 				per_column_setting->single_bloom_obj_id < num_sparse_index_objects)
 			{
@@ -577,6 +593,7 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 			/* check sparse index columndefs is applicable */
 			bool is_bloom = per_column_setting->single_bloom_obj_id != -1;
 			bool is_minmax = per_column_setting->minmax_obj_id != -1;
+			bool is_firstlast = per_column_setting->firstlast_obj_id != -1;
 
 			/*
 			 * We allow only one sparse index per column. Columns used in the ORDER BY
@@ -626,6 +643,24 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 				def = create_sparse_index_column_def(composite_attr_lists[per_column_setting
 																			  ->minmax_obj_id],
 													 "max");
+				compressed_column_defs = lappend(compressed_column_defs, def);
+			}
+
+			if (is_firstlast)
+			{
+				/*
+				 * Add firstlast sparse index for this column.
+				 * Uses the source column's type, like minmax.
+				 */
+				ColumnDef *def =
+					create_sparse_index_column_def(composite_attr_lists[per_column_setting
+																			->firstlast_obj_id],
+												   "first");
+				compressed_column_defs = lappend(compressed_column_defs, def);
+
+				def = create_sparse_index_column_def(composite_attr_lists[per_column_setting
+																			  ->firstlast_obj_id],
+													 "last");
 				compressed_column_defs = lappend(compressed_column_defs, def);
 			}
 		}
