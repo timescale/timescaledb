@@ -80,3 +80,58 @@ USING orphaned_settings AS os WHERE cs.relid = os.relid;
 ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT IF EXISTS hypertable_compressed_hypertable_id_fkey;
 ALTER TABLE _timescaledb_catalog.chunk DROP CONSTRAINT IF EXISTS chunk_compressed_chunk_id_fkey;
 
+-- Block upgrade if bloom filter sparse indexes exist on smallint (int2)
+-- columns. These bloom filters used PostgreSQL's hashint2extended while
+-- the new code uses bloom1_hash_2. Existing bloom data must be dropped
+-- before upgrading; recompress afterwards to rebuild with the new hash.
+DO $$
+DECLARE
+  drop_commands text;
+BEGIN
+  WITH bloom_cols AS (
+    SELECT
+      attrelid AS compress_oid,
+      attname AS bloom_attname,
+      regexp_replace(attname, '^_ts_meta_v2_bloom[hg]', '') AS suffix
+    FROM pg_attribute
+    WHERE attname ~ '^_ts_meta_v2_bloom[hg]_'
+      AND attnum > 0
+  ),
+  bloom_cols_with_chunk AS (
+    SELECT compress_oid, bloom_attname, suffix,
+           src.schema_name || '.' || src.table_name AS chunk_rel
+    FROM bloom_cols
+    JOIN _timescaledb_catalog.chunk comp
+      ON (comp.schema_name || '.' || comp.table_name)::regclass
+         = compress_oid
+    JOIN _timescaledb_catalog.chunk src
+      ON src.compressed_chunk_id = comp.id
+  )
+  SELECT string_agg(DISTINCT
+           format('ALTER TABLE %s DROP COLUMN %I;',
+                  compress_oid::regclass, bloom_attname),
+           E'\n' ORDER BY
+           format('ALTER TABLE %s DROP COLUMN %I;',
+                  compress_oid::regclass, bloom_attname))
+  INTO drop_commands
+  FROM bloom_cols_with_chunk
+  JOIN pg_attribute chunk_attr
+    ON attrelid = chunk_rel::regclass
+   AND atttypid = 'int2'::regtype
+   AND attnum > 0
+   AND suffix || '_' LIKE '%\_' || attname || '\_%';
+
+  IF drop_commands IS NOT NULL THEN
+    RAISE EXCEPTION
+      'existing bloom filter sparse indexes on smallint columns are incompatible '
+      'with this version of TimescaleDB'
+      USING
+        DETAIL = E'These indexes must be dropped before upgrading. To do so, run the following commands:\n\n'
+                 || E'SET timescaledb.restoring = on;\n'
+                 || drop_commands || E'\n'
+                 || 'SET timescaledb.restoring = off;',
+        HINT = 'To rebuild the bloom filter indexes after upgrading, decompress and compress the affected chunks.';
+  END IF;
+END
+$$;
+
