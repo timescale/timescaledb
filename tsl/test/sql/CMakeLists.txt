@@ -13,8 +13,8 @@ set(TEST_FILES
     cagg_invalidation_variable_bucket.sql
     cagg_policy.sql
     cagg_policy_move.sql
-    cagg_refresh_using_trigger.sql
     cagg_refresh_using_merge.sql
+    cagg_refresh_using_trigger.sql
     cagg_utils.sql
     cagg_watermark.sql
     chunk_publication_compression.sql
@@ -25,6 +25,7 @@ set(TEST_FILES
     compress_bitmap_scan.sql
     compress_bloom_dml.sql
     compress_bloom_hash.sql
+    compress_bloom_int2.sql
     compress_compbloom_basics.sql
     compress_compbloom_config.sql
     compress_compbloom_hash_pushdown.sql
@@ -32,18 +33,17 @@ set(TEST_FILES
     compress_compbloom_index_drop.sql
     compress_compbloom_manual_config.sql
     compress_compbloom_upsert.sql
-    compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
     compress_explain.sql
     compress_float8_corrupt.sql
-    compress_unordered_sort.sql
-    compress_qualpushdown_saop.sql
     compress_qualpushdown_complex.sql
+    compress_qualpushdown_saop.sql
     compress_sort_transform.sql
+    compress_sparse_config.sql
+    compress_unordered_sort.sql
     compressed_collation.sql
     compressed_detoaster.sql
-    direct_compress_insert.sql
     compression.sql
     compression_allocation.sql
     compression_conflicts.sql
@@ -62,10 +62,11 @@ set(TEST_FILES
     compression_sorted_merge.sql
     compression_sorted_merge_distinct.sql
     compression_sorted_merge_unordered.sql
-    compression_uuid.sql
     compression_trigger.sql
+    compression_uuid.sql
     create_table_with.sql
     decompress_index.sql
+    direct_compress_insert.sql
     move.sql
     plan_skip_scan_notnull.sql
     policy_generalization.sql
@@ -77,12 +78,12 @@ set(TEST_FILES
     skip_scan.sql
     split_chunk.sql
     transparent_decompression_join_index.sql
-    unlogged.sql
     uncompressed_size.sql
+    unlogged.sql
+    vector_agg_expr.sql
     vector_agg_functions.sql
     vector_agg_groupagg.sql
     vector_agg_param.sql
-    vector_agg_expr.sql
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES
