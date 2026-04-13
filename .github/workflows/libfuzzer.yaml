@@ -30,7 +30,7 @@ jobs:
           libtest-most-perl tree jq
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     - name: Read configuration
       id: config
@@ -48,7 +48,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL
       id: cache-postgresql
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "postgresql-libfuzzer-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
@@ -149,10 +149,10 @@ jobs:
         sudo apt install 7zip systemd-coredump gdb
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     - name: Download the installation directory
-      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
         name: fuzzing-install-dir
 
@@ -180,7 +180,7 @@ jobs:
 
     - name: Restore the cached fuzzing corpus (bulk)
       id: restore-corpus-cache-bulk
-      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: db/corpus-bulk
         key: "${{ steps.config.outputs.cache_prefix }}-bulk"
@@ -189,7 +189,7 @@ jobs:
     # they don't overwrite each other. Now we are going to combine them.
     - name: Restore the cached fuzzing corpus (rowbyrow)
       id: restore-corpus-cache-rowbyrow
-      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: db/corpus-rowbyrow
         key: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
@@ -334,7 +334,7 @@ jobs:
 
     - name: Save fuzzer corpus
       if: always()
-      uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+      uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: db/corpus-${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
         key: "${{ format('{0}-{1}-{2}-{3}',
