@@ -702,7 +702,7 @@ vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchS
 		 *
 		 * Typically we expect to get the standard DT_ArrowBits representation
 		 * of bools there, but we can also get a DT_Scalar. In this case, the
-		 * entire batch is either passes or is filtered out.
+		 * entire batch either passes or is filtered out.
 		 *
 		 * First, determine if the qual filtered something out.
 		 */
@@ -711,7 +711,7 @@ vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchS
 		{
 			some_rows_are_filtered_out_by_this_qual |=
 				(get_vector_qual_summary(single_qual_result.buffers[0],
-										 batch_state->total_batch_rows) != NoRowsPass);
+										 batch_state->total_batch_rows) != AllRowsPass);
 			some_rows_are_filtered_out_by_this_qual |=
 				(get_vector_qual_summary(single_qual_result.buffers[1],
 										 batch_state->total_batch_rows) != AllRowsPass);
