@@ -1,4 +1,0 @@
--- Drop continuous_aggs_jobs_refresh_ranges table
-ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
-DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
-
