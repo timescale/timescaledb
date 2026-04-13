@@ -100,7 +100,7 @@ BEGIN
   bloom_column_names AS (
     SELECT chunk_oid, compress_oid, bloom_column.colname
     FROM bloom_entries,
-    LATERAL jsonb_array_elements_text(
+    jsonb_array_elements_text(
       CASE jsonb_typeof(elem->'column')
         WHEN 'array' THEN elem->'column'
         ELSE jsonb_build_array(elem->'column')
