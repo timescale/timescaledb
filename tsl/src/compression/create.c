@@ -60,9 +60,9 @@
 
 #include "bgw_policy/compression_api.h"
 
-#ifdef USE_ASSERT_CHECKING
 static const char *sparse_index_types[] = { "min", "max" };
 
+#ifdef USE_ASSERT_CHECKING
 static bool
 is_sparse_index_type(const char *type)
 {
@@ -1078,6 +1078,21 @@ drop_column_from_compression_table(CompressionSettings *comp_settings, char *nam
 	cmd->missing_ok = true;
 	cmds = list_make1(cmd);
 
+	/* always try to drop sparse index metadata columns */
+	for (size_t i = 0; i < sizeof(sparse_index_types) / sizeof(sparse_index_types[0]); i++)
+	{
+		char *meta_name =
+			compressed_column_metadata_name_v2(sparse_index_types[i], (const char **) &name, 1);
+		if (get_attnum(relid, meta_name) != InvalidAttrNumber)
+		{
+			cmd = makeNode(AlterTableCmd);
+			cmd->subtype = AT_DropColumn;
+			cmd->name = meta_name;
+			cmd->missing_ok = true;
+			cmds = lappend(cmds, cmd);
+		}
+	}
+
 	if (jb)
 	{
 		SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(jb);
@@ -1108,6 +1123,9 @@ drop_column_from_compression_table(CompressionSettings *comp_settings, char *nam
 								compressed_column_metadata_name_list_v2(bloom1_column_prefix,
 																		pair->values);
 							Assert(bloom_column_name != NULL);
+							/* No need to remove if its not there */
+							if (get_attnum(relid, bloom_column_name) == InvalidAttrNumber)
+								bloom_column_name = NULL;
 							break;
 						}
 					}
