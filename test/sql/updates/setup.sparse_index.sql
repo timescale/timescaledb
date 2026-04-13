@@ -36,7 +36,7 @@ ALTER TABLE bloom SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'v1',
     timescaledb.compress_orderby = 'x',
-	timescaledb.compress_sparse_index = 'minmax(si)'
+    timescaledb.sparse_index = 'minmax(si)'
 );
 
 SELECT COUNT(compress_chunk(x)) FROM show_chunks('bloom') x;
