@@ -88,24 +88,40 @@ DO $$
 DECLARE
   drop_commands text;
 BEGIN
-  WITH bloom_cols AS (
-    SELECT
-      attrelid AS compress_oid,
-      attname AS bloom_attname,
-      regexp_replace(attname, '^_ts_meta_v2_bloom[hg]', '') AS suffix
-    FROM pg_attribute
-    WHERE attname ~ '^_ts_meta_v2_bloom[hg]_'
-      AND attnum > 0
+  WITH bloom_entries AS (
+    SELECT compression_settings.relid AS chunk_oid,
+           compression_settings.compress_relid AS compress_oid,
+           elem
+    FROM _timescaledb_catalog.compression_settings,
+         jsonb_array_elements(compression_settings.index) elem
+    WHERE elem->>'type' = 'bloom'
+      AND compression_settings.compress_relid IS NOT NULL
   ),
-  bloom_cols_with_chunk AS (
-    SELECT compress_oid, bloom_attname, suffix,
-           src.schema_name || '.' || src.table_name AS chunk_rel
-    FROM bloom_cols
-    JOIN _timescaledb_catalog.chunk comp
-      ON (comp.schema_name || '.' || comp.table_name)::regclass
-         = compress_oid
-    JOIN _timescaledb_catalog.chunk src
-      ON src.compressed_chunk_id = comp.id
+  bloom_column_names AS (
+    SELECT chunk_oid, compress_oid, bloom_column.colname
+    FROM bloom_entries,
+    LATERAL jsonb_array_elements_text(
+      CASE jsonb_typeof(elem->'column')
+        WHEN 'array' THEN elem->'column'
+        ELSE jsonb_build_array(elem->'column')
+      END
+    ) AS bloom_column(colname)
+  ),
+  int2_bloom_compressed_chunks AS (
+    SELECT DISTINCT compress_oid
+    FROM bloom_column_names
+    JOIN pg_attribute ON pg_attribute.attrelid = chunk_oid
+     AND pg_attribute.attname = colname
+     AND pg_attribute.atttypid = 'int2'::regtype
+     AND pg_attribute.attnum > 0
+  ),
+  bloom_cols_to_drop AS (
+    SELECT pg_attribute.attrelid AS compress_oid,
+           pg_attribute.attname AS bloom_attname
+    FROM int2_bloom_compressed_chunks
+    JOIN pg_attribute ON pg_attribute.attrelid = compress_oid
+     AND pg_attribute.attname ~ '^_ts_meta_v2_bloom[hg]_'
+     AND pg_attribute.attnum > 0
   )
   SELECT string_agg(DISTINCT
            format('ALTER TABLE %s DROP COLUMN %I;',
@@ -114,12 +130,7 @@ BEGIN
            format('ALTER TABLE %s DROP COLUMN %I;',
                   compress_oid::regclass, bloom_attname))
   INTO drop_commands
-  FROM bloom_cols_with_chunk
-  JOIN pg_attribute chunk_attr
-    ON attrelid = chunk_rel::regclass
-   AND atttypid = 'int2'::regtype
-   AND attnum > 0
-   AND suffix || '_' LIKE '%\_' || attname || '\_%';
+  FROM bloom_cols_to_drop;
 
   IF drop_commands IS NOT NULL THEN
     RAISE EXCEPTION
