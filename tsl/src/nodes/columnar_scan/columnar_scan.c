@@ -13,6 +13,7 @@
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/clauses.h>
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
@@ -25,7 +26,9 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
-
+#if PG16_GE
+#include <nodes/multibitmapset.h>
+#endif
 #include <planner.h>
 
 #include "compat/compat.h"
@@ -2697,6 +2700,54 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 	return segmentby_columns;
 }
 
+static bool
+is_var_notnull(const CompressionInfo *compression_info, Var *var)
+{
+	bool notnull = false;
+	/* Is it declared NOT NULL? */
+#if PG17_LT
+	notnull = ts_get_attnotnull(compression_info->chunk_rte->relid, var->varattno);
+#else
+	notnull = bms_is_member(var->varattno, compression_info->chunk_rel->notnullattnums);
+#endif
+
+	if (notnull)
+		return true;
+
+	/* even if this column is nullable it may participate in strict predicates which will exclude
+	 * NULL values */
+	RelOptInfo *chunk_rel = compression_info->chunk_rel;
+	ListCell *l;
+	foreach (l, chunk_rel->baserestrictinfo)
+	{
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(l));
+		Bitmapset *clause_attnos = NULL;
+		pull_varattnos((Node *) ri->clause, chunk_rel->relid, &clause_attnos);
+		if (bms_is_member(var->varattno - FirstLowInvalidHeapAttributeNumber, clause_attnos))
+		{
+			/* Is this column made non-nullable by the query predicates? */
+			List *nonnullable_vars = find_nonnullable_vars((Node *) ri->clause);
+#if PG16_GE
+			if (mbms_is_member(var->varno,
+							   var->varattno - FirstLowInvalidHeapAttributeNumber,
+							   nonnullable_vars))
+			{
+				return true;
+			}
+#else
+			ListCell *lv;
+			foreach (lv, nonnullable_vars)
+			{
+				Var *v = castNode(Var, lfirst(lv));
+				if (v->varno == var->varno && v->varattno == var->varattno)
+					return true;
+			}
+#endif
+		}
+	}
+	return false;
+}
+
 /*
  * Returns whether the pathkeys starting at the given offset match the compression
  * orderby, and whether the order is reverse.
@@ -2704,7 +2755,8 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 static bool
 match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 									  int starting_pathkey_offset,
-									  const CompressionInfo *compression_info, bool *out_reverse)
+									  const CompressionInfo *compression_info, bool for_bsm,
+									  bool *out_reverse)
 {
 	int compressed_pk_index = 0;
 	for (int i = starting_pathkey_offset; i < list_length(pathkeys); i++)
@@ -2733,17 +2785,28 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 			return false;
 		}
 
+		/* Bail out on BSM if orderby column is nullable,
+		 * as at the moment the minmax metadata we have doesn't include NULLs,
+		 * so it's difficult to use it for null-sensitive ordering.
+		 * But this restriction can be lifted in the future on new type of chunks
+		 * with NULL-handling metadata.
+		 */
+		if (for_bsm && !is_var_notnull(compression_info, var))
+		{
+			return false;
+		}
+
 		bool orderby_desc =
 			ts_array_get_element_bool(compression_info->settings->fd.orderby_desc, orderby_index);
 		bool orderby_nullsfirst =
 			ts_array_get_element_bool(compression_info->settings->fd.orderby_nullsfirst,
 									  orderby_index);
-
 		/*
 		 * In PG18+: pk_cmptype is either COMPARE_LT (for ASC) or COMPARE_GT (for DESC)
 		 * For previous PG versions we have compatibility macros to make these new names available.
 		 */
 		bool this_pathkey_reverse = false;
+
 		if (pk->pk_cmptype == COMPARE_LT)
 		{
 			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
@@ -2933,6 +2996,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 														  chunk_em_exprs,
 														  /* starting_pathkey_offset = */ 0,
 														  compression_info,
+														  /* for_bsm = */ true,
 														  &sort_info.reverse);
 			}
 			return sort_info;
@@ -2960,6 +3024,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 																		  chunk_em_exprs,
 																		  i,
 																		  compression_info,
+																		  /* for_bsm = */ false,
 																		  &sort_info.reverse);
 
 	return sort_info;

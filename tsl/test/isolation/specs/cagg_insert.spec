@@ -148,7 +148,7 @@ step "CreateMatView2_Begin" {
 step "CreateMatView2_Commit" { COMMIT; }
 
 #only one refresh
-permutation "LockInvalThrEx" "Refresh" "Refresh2" (Refresh) "Refresh3" (Refresh, Refresh2) "UnlockInvalThrEx"
+permutation "LockInvalThrEx" "Refresh" "Refresh3" (Refresh) "UnlockInvalThrEx"
 
 #refresh and insert do not block each other once refresh is out of the
 #first transaction where it moves the invalidation threshold

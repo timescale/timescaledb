@@ -49,6 +49,7 @@
 #include "telemetry/telemetry.h"
 #endif
 
+#include "debug_point.h"
 #include "tsl/src/chunk.h"
 
 #include "chunk.h"
@@ -359,6 +360,17 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 		 */
 		if (IS_UUID_TYPE(boundary_type))
 			boundary_type = TIMESTAMPTZOID;
+
+		/*
+		 * Check if the policy was created with drop_created_before instead of
+		 * drop_after. This can happen for hypertables with an open time dimension
+		 * when the user explicitly chose creation-time-based retention.
+		 */
+		if (ts_jsonb_get_interval_field(config, POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE))
+		{
+			interval_getter = policy_retention_get_drop_created_before_interval;
+			use_creation_time = true;
+		}
 	}
 
 	boundary =
@@ -408,7 +420,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 						PGC_S_SESSION);
 	}
 
-	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY };
+	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY, .job_id = job_id };
 
 	/* Try to split window range into a list of ranges */
 	List *refresh_window_list =
@@ -444,6 +456,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 										false, /* force */
 										policy_data.process_hypertable_invalidations,
 										extend_last_bucket);
+		DEBUG_ERROR_INJECTION(psprintf("cagg_policy_batch_%d_after_refresh", processing_batch));
 		if (processing_batch >= policy_data.max_batches_per_execution &&
 			processing_batch < context.number_of_batches &&
 			policy_data.max_batches_per_execution > 0)

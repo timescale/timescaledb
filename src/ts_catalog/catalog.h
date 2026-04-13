@@ -49,6 +49,7 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
 	CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 	CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
+	CONTINUOUS_AGGS_JOBS_REFRESH_RANGES,
 	COMPRESSION_SETTINGS,
 	COMPRESSION_CHUNK_SIZE,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
@@ -1107,6 +1108,50 @@ typedef enum Anum_continuous_aggs_materialization_ranges_idx
 
 #define Natts_continuous_aggs_materialization_ranges_idx                                           \
 	(_Anum_continuous_aggs_materialization_ranges_idx_max - 1)
+
+/****** CONTINUOUS_AGGS_JOBS_REFRESH_RANGES definitions */
+#define CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_TABLE_NAME "continuous_aggs_jobs_refresh_ranges"
+
+typedef enum Anum_continuous_aggs_jobs_refresh_ranges
+{
+	Anum_continuous_aggs_jobs_refresh_ranges_materialization_id = 1,
+	Anum_continuous_aggs_jobs_refresh_ranges_start_range,
+	Anum_continuous_aggs_jobs_refresh_ranges_end_range,
+	Anum_continuous_aggs_jobs_refresh_ranges_pid,
+	Anum_continuous_aggs_jobs_refresh_ranges_job_id,
+	Anum_continuous_aggs_jobs_refresh_ranges_created_at,
+	_Anum_continuous_aggs_jobs_refresh_ranges_max,
+} Anum_continuous_aggs_jobs_refresh_ranges;
+
+#define Natts_continuous_aggs_jobs_refresh_ranges                                                  \
+	(_Anum_continuous_aggs_jobs_refresh_ranges_max - 1)
+
+typedef struct FormData_continuous_aggs_jobs_refresh_ranges
+{
+	int32 materialization_id;
+	int64 start_range;
+	int64 end_range;
+	int32 pid;
+	int32 job_id;
+	TimestampTz created_at;
+} FormData_continuous_aggs_jobs_refresh_ranges;
+
+typedef FormData_continuous_aggs_jobs_refresh_ranges *Form_continuous_aggs_jobs_refresh_ranges;
+
+enum
+{
+	CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_IDX = 0,
+	_MAX_CONTINUOUS_AGGS_JOBS_REFRESH_RANGES_INDEX,
+};
+
+typedef enum Anum_continuous_aggs_jobs_refresh_ranges_idx
+{
+	Anum_continuous_aggs_jobs_refresh_ranges_idx_materialization_id = 1,
+	_Anum_continuous_aggs_jobs_refresh_ranges_idx_max,
+} Anum_continuous_aggs_jobs_refresh_ranges_idx;
+
+#define Natts_continuous_aggs_jobs_refresh_ranges_idx                                              \
+	(_Anum_continuous_aggs_jobs_refresh_ranges_idx_max - 1)
 
 /****** CONTINUOUS_AGGS_WATERMARK_TABLE definitions*/
 #define CONTINUOUS_AGGS_WATERMARK_TABLE_NAME "continuous_aggs_watermark"

@@ -6,6 +6,12 @@ on:
     types: [published]
   push:
     branches: [trigger/label-released-prs]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to label PRs for (e.g. 2.19.0). Defaults to the latest release."
+        required: false
+        type: string
 
 jobs:
   label-release:
@@ -15,15 +21,19 @@ jobs:
       GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install Python Dependencies
         run: |
           pip install PyGithub requests
 
-      - name: Get latest release tag
+      - name: Get release tag
         run: |
-          echo "LATEST_TAG=$(gh release view --json tagName --jq '.tagName')" >> $GITHUB_ENV
+          if [ -n "${{ inputs.tag }}" ]; then
+            echo "LATEST_TAG=${{ inputs.tag }}" >> $GITHUB_ENV
+          else
+            echo "LATEST_TAG=$(gh release view --json tagName --jq '.tagName')" >> $GITHUB_ENV
+          fi
 
       - name: Run label-released script
         run: |
