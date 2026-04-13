@@ -33,6 +33,7 @@ set(TEST_FILES
     compress_compbloom_manual_config.sql
     compress_compbloom_upsert.sql
     compress_sparse_config.sql
+    compress_firstlast_sparse.sql
     compress_default.sql
     compress_dml_copy.sql
     compress_explain.sql
