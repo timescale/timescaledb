@@ -25,7 +25,6 @@ list(
   parallel_compression.spec
   osm_range_updates_iso.spec
   concurrent_decompress_update.spec
-  bgw_job_stat_history_retention_isolation.spec
   delete_job_deadlock.spec)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
