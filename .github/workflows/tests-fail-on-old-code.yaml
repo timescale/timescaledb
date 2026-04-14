@@ -41,8 +41,14 @@ jobs:
 
         echo "Looking at PR event ref $(git rev-parse @) vs base $(git rev-parse base)"
 
+        # Use merge-base to only see changes introduced by the PR.
+        # Main can advance after the PR merge ref was created, so
+        # diffing against the fetched main directly would pick up
+        # unrelated changes.
+        MERGE_BASE=$(git merge-base base HEAD)
+
         # Code changes: anything under src/ directories
-        readarray -t CODE_CHANGES < <(git diff --name-only base HEAD -- $CODE_PATHS)
+        readarray -t CODE_CHANGES < <(git diff --name-only "$MERGE_BASE" HEAD -- $CODE_PATHS)
 
         if ! ((${#CODE_CHANGES[@]}))
         then
@@ -55,7 +61,7 @@ jobs:
         # For versioned test outputs, we should only check the version that
         # matches the Postgers version we build.
         readarray -t CHANGED_TESTS < <( \
-            git diff --name-only base HEAD -- test/expected test/isolation/expected \
+            git diff --name-only "$MERGE_BASE" HEAD -- test/expected test/isolation/expected \
                 tsl/test/expected tsl/test/isolation/expected tsl/test/shared/expected \
             | sed -n 's!^.*expected/\([^/ -]\+\(-${{ steps.pg.outputs.major }}\)\?\)\.out$!\1!gp')
 
