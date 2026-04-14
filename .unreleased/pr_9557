@@ -1,1 +1,0 @@
-Fixes: #9557 Clean up orphaned compression_chunk_size entries during upgrade
