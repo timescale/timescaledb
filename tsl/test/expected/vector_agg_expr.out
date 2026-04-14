@@ -1993,6 +1993,13 @@ select count(*), case i when 12 then 1212 else i end from aggexpr group by 2 ord
   1493 |    2
   4471 |    $
 
+select sum(case i when ts then 1 else 0 end) from aggexpr group by b order by 1;
+ sum  
+------
+    0
+  494
+ 4287
+
 -- Non-vectorizable branches.
 select count(*), case when i = 12 then 1212 else i::numeric end from aggexpr group by 2 order by 1, 2 limit 10;
  count |  i   

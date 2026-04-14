@@ -235,6 +235,7 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 				 * We don't handle the "CASE testexpr WHEN comexpr ..." form at
 				 * the moment.
 				 */
+				return false;
 			}
 
 			ListCell *lc;
