@@ -5,14 +5,14 @@ This page lists all the latest features and updates to TimescaleDB. When
 you use psql to update your database, use the -X flag and prevent any .psqlrc
 commands from accidentally triggering the load of a previous DB version.**
 
-## 2.26.3 (2026-04-13)
+## 2.26.3 (2026-04-14)
 
-This release contains performance improvements and bug fixes since the 2.26.2 release. We recommend that you upgrade at the next available opportunity.
+This release contains bug fixes since the 2.26.2 release. We recommend that you upgrade at the next available opportunity.
 
 **Bugfixes**
-* [#9511](https://github.com/timescale/timescaledb/pull/9511) Fix `alter_job` failing for retention policy with drop_created_before
-* [#9557](https://github.com/timescale/timescaledb/pull/9557) Clean up orphaned compression_chunk_size entries during upgrade
-* [#9551](https://github.com/timescale/timescaledb/pull/9551) Fix resource leaks on error paths for cagg refresh
+* [#9511](https://github.com/timescale/timescaledb/pull/9511) Fix `alter_job` failing for retention policy with `drop_created_before` argument
+* [#9557](https://github.com/timescale/timescaledb/pull/9557) Clean up orphaned `compression_chunk_size` entries during the extension upgrade
+* [#9551](https://github.com/timescale/timescaledb/pull/9551) Fix resource leaks on error paths for during a continuous aggregate refresh
 * [#9563](https://github.com/timescale/timescaledb/pull/9563) Fix gapfill out-of-order bucket creation during DST shift
 * [#9571](https://github.com/timescale/timescaledb/pull/9571) Fix concurrent refreshes of continuous aggregates
 
