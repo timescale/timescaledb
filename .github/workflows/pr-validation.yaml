@@ -26,6 +26,7 @@ jobs:
         ref: ${{ github.event.pull_request.head.sha }}
         fetch-depth: 0
     - name: Check number of commits
+      if: github.event.pull_request.auto_merge.merge_method != 'squash'
       shell: bash --norc --noprofile {0}
       env:
         BODY: ${{ github.event.pull_request.body }}
@@ -47,7 +48,7 @@ jobs:
         fi
 
         echo "$BODY" | egrep -qsi '^disable-check:.*\<commit-count\>'
-        if [[ $? -ne 0 ]] && [[ "${{ github.event.pull_request.auto_merge.merge_method }}" != "squash" ]]
+        if [[ $? -ne 0 ]]
         then
           if [[ "$count" -ne 1 ]]; then
             echo "Found $count commits in pull request (there should be only one):"
