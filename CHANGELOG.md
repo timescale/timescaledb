@@ -9,23 +9,17 @@ commands from accidentally triggering the load of a previous DB version.**
 
 This release contains performance improvements and bug fixes since the 2.26.2 release. We recommend that you upgrade at the next available opportunity.
 
-**Highlighted features in TimescaleDB v2.26.3**
-* 
-
-**Backward-Incompatible Changes**
-
-**Features**
-
 **Bugfixes**
-* [#9511](https://github.com/timescale/timescaledb/pull/9511) Fix alter_job failing for retention policy with drop_created_before
+* [#9511](https://github.com/timescale/timescaledb/pull/9511) Fix `alter_job` failing for retention policy with drop_created_before
 * [#9557](https://github.com/timescale/timescaledb/pull/9557) Clean up orphaned compression_chunk_size entries during upgrade
-
-**New Settings**
-
-**GUCs**
+* [#9551](https://github.com/timescale/timescaledb/pull/9551) Fix resource leaks on error paths for cagg refresh
+* [#9563](https://github.com/timescale/timescaledb/pull/9563) Fix gapfill out-of-order bucket creation during DST shift
+* [#9571](https://github.com/timescale/timescaledb/pull/9571) Fix concurrent refreshes of continuous aggregates
 
 **Thanks**
 * @sebastian-ederer for reporting an issue with alter_job and drop_created_before
+* @petergledhillinclusive for reporting the DST shift issue with time_bucket_gapfill
+* @GTan615 for reporting the data duplicate issues observed during overlapping cagg refreshes
 
 ## 2.26.2 (2026-04-07)
 
