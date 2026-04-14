@@ -94,7 +94,7 @@ select count(*) from qualdef where bool_identity(i2 = 7) and bool_identity(i4 = 
 select b, count(*) from qualdef where bool_identity(l) group by b order by b;
 
 -- Combined vectorized and Postgres quals
-set timescaledb.debug_require_vector_qual to 'allow';
+set timescaledb.debug_require_vector_qual to allow;
 
 select count(*) from qualdef where b = 0 and bool_identity(l);
 
@@ -105,6 +105,32 @@ select count(*) from qualdef where b = 3 and bool_identity(ln);
 select count(*) from qualdef where b = 3 and bool_identity(lf);
 select count(*) from qualdef where b = 3 and bool_identity(i2 = 7);
 select b, count(*) from qualdef where b in (0, 1) and bool_identity(l) group by b order by b;
+reset timescaledb.debug_require_vector_agg;
+reset timescaledb.debug_require_vector_qual;
+
+
+-- Check the counts in EXPLAIN ANALYZE.
+set timescaledb.debug_require_vector_agg to require;
+set timescaledb.debug_require_vector_qual to allow;
+
+explain (analyze, verbose, costs off, buffers off, summary off, timing off)
+select count(*) from qualdef where b % 2 = 1 and b = 3;
+
+explain (analyze, verbose, costs off, buffers off, summary off, timing off)
+select count(*) from qualdef where b % 2 = 1 and bool_identity(b = 3);
+
+explain (analyze, verbose, costs off, buffers off, summary off, timing off)
+select count(*) from qualdef where b % 2 = 1;
+
+explain (analyze, verbose, costs off, buffers off, summary off, timing off)
+select count(*) from qualdef where b / 1000 > 1;
+
+explain (analyze, verbose, costs off, buffers off, summary off, timing off)
+select count(*) from qualdef where b > 1000;
+
+explain (analyze, verbose, costs off, buffers off, summary off, timing off)
+select count(*) from qualdef where b % 2 = 1 and b not in (1, 3, 5);
+
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.debug_require_vector_qual;
 

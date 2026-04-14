@@ -783,7 +783,10 @@ vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchS
 		if (get_vector_qual_summary(batch_state->vector_qual_result,
 									batch_state->total_batch_rows) == NoRowsPass)
 		{
-			batch_state->next_batch_row = batch_state->total_batch_rows;
+			compressed_batch_discard_tuples(batch_state);
+
+			InstrCountTuples2(dcontext->ps, 1);
+			InstrCountFiltered1(dcontext->ps, batch_state->total_batch_rows);
 		}
 	}
 }
