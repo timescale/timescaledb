@@ -37,15 +37,17 @@ jobs:
     - name: Check for code and test changes
       id: check
       run: |
-        git fetch origin ${{ github.base_ref }}:base
+        set -euo pipefail
 
-        echo "Looking at PR event ref $(git rev-parse @) vs base $(git rev-parse base)"
+        git fetch origin ${{ github.base_ref }}:base
 
         # Use merge-base to only see changes introduced by the PR.
         # Main can advance after the PR merge ref was created, so
         # diffing against the fetched main directly would pick up
         # unrelated changes.
         MERGE_BASE=$(git merge-base base HEAD)
+
+        echo "Looking at PR event ref $(git rev-parse @), base $(git rev-parse base), merge base ${MERGE_BASE}"
 
         # Code changes: anything under src/ directories
         readarray -t CODE_CHANGES < <(git diff --name-only "$MERGE_BASE" HEAD -- $CODE_PATHS)
