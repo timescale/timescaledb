@@ -1250,7 +1250,7 @@ GROUP BY bucket
 ORDER BY 1, 2
 LIMIT 3;
 psql:include/cagg_rewrites_materialize.sql:71: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
-Caggs with pending materialization ranges: "public.cagg2"
+Invalidated caggs: "public.cagg2"
 Buckets do not match: "public.cagg1" "public.cagg1_tz" "public.cagg1_origin" "public.cagg3" "public.cagg_join" "public.cagg_more_conds" "public.cagg_view" "public.cagg_lateral"
 
             bucket            | count 

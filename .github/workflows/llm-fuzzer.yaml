@@ -52,7 +52,7 @@ jobs:
       pg_latest: ${{ fromJson(steps.setter.outputs.PG18_LATEST) }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -75,7 +75,7 @@ jobs:
           jq ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         fetch-depth: 50
 
@@ -101,7 +101,7 @@ jobs:
     # leading to a tainted cache
     - name: Restore PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
       id: cache-postgresql
-      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         # FIXME
@@ -135,7 +135,7 @@ jobs:
 
     - name: Save PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+      uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
@@ -246,7 +246,7 @@ jobs:
 
     - name: Restore clean PostgreSQL build
       if: always() && steps.repro.outputs.found == 'true'
-      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
