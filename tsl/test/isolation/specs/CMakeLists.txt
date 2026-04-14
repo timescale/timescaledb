@@ -33,9 +33,17 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES
     bgw_job_duplicate_race.spec
+    cagg_concurrent_create_and_refresh.spec
     cagg_concurrent_move.spec
     cagg_concurrent_invalidation.spec
+    cagg_cancel_kill_refresh.spec
     cagg_concurrent_refresh.spec
+    cagg_concurrent_register.spec
+    cagg_concurrent_policy_register.spec
+    cagg_concurrent_refresh_invalidation_cutting.spec
+    cagg_hierarchical_concurrent_refresh.spec
+    cagg_incremental_concurrent.spec
+    cagg_refresh_cleanup_register.spec
     compression_chunk_race.spec
     direct_compress_copy.spec
     compression_freeze.spec

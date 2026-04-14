@@ -870,7 +870,7 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 	ts_compression_settings_delete(uncompressed_chunk->table_id);
 	Hypertable *compressed_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 	Chunk *new_compressed_chunk =
-		create_compress_chunk(compressed_ht, uncompressed_chunk, InvalidOid, false);
+		create_compress_chunk(compressed_ht, uncompressed_chunk, InvalidOid, false, NULL);
 	/* The old compression settings were deleted above to avoid catalog conflicts. */
 	CompressionSettings *new_settings = ts_compression_settings_get(uncompressed_chunk->table_id);
 	Relation new_compressed_chunk_rel = table_open(new_compressed_chunk->table_id, lockmode);

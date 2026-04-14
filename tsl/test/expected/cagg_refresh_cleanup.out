@@ -1,0 +1,192 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Tests for job registration cleanup in the continuous aggregate refresh
+-- procedure. Verifies that the entry in continuous_aggs_jobs_refresh_ranges
+-- is correctly cleaned up when a refresh fails at each transaction phase.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE conditions (
+    time TIMESTAMPTZ NOT NULL,
+    value FLOAT);
+SELECT create_hypertable('conditions', 'time', chunk_time_interval => INTERVAL '1 week');
+    create_hypertable    
+-------------------------
+ (1,public,conditions,t)
+
+INSERT INTO conditions
+SELECT ts, extract(epoch from ts)::int % 10
+FROM generate_series('2026-01-01'::timestamptz, '2026-04-10'::timestamptz, INTERVAL '1 day') ts;
+CREATE MATERIALIZED VIEW cond_daily
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('1 day', time) AS bucket, avg(value) AS avg_val
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+-- Set the invalidation threshold via an initial refresh
+CALL refresh_continuous_aggregate('cond_daily', '2026-01-01', '2026-04-01');
+-- Add invalidations inside the threshold range so future refreshes have real work
+BEGIN; INSERT INTO conditions VALUES ('2026-01-10', 999), ('2026-01-20', 999), ('2026-01-30', 999); COMMIT;
+BEGIN; INSERT INTO conditions VALUES ('2026-02-10', 999), ('2026-02-20', 999); COMMIT;
+SELECT count(*) AS jobs_count
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+ jobs_count 
+------------
+          0
+
+-- Test 1: refresh fails in Txn1 (invalidation processing)
+SELECT debug_waitpoint_enable('cagg_refresh_fail_in_txn1');
+ debug_waitpoint_enable 
+------------------------
+ 
+
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+ERROR:  error injected at debug point 'cagg_refresh_fail_in_txn1'
+\set ON_ERROR_STOP 1
+-- Job should be cleaned up after the failed refresh
+SELECT count(*) AS jobs_after_txn1_fail
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+ jobs_after_txn1_fail 
+----------------------
+                    0
+
+SELECT debug_waitpoint_release('cagg_refresh_fail_in_txn1');
+ debug_waitpoint_release 
+-------------------------
+ 
+
+-- Next refresh should succeed
+BEGIN; INSERT INTO conditions VALUES ('2026-01-10', 777), ('2026-01-20', 777); COMMIT;
+CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+-- No job should be left behind after the successful refresh
+SELECT count(*) AS jobs_after_next_refresh
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+ jobs_after_next_refresh 
+-------------------------
+                       0
+
+-- Test 2: refresh fails in Txn2 (cagg invalidation log cutting)
+BEGIN; INSERT INTO conditions VALUES ('2026-01-10', 666), ('2026-01-20', 666); COMMIT;
+SELECT debug_waitpoint_enable('cagg_refresh_fail_in_txn2');
+ debug_waitpoint_enable 
+------------------------
+ 
+
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+ERROR:  error injected at debug point 'cagg_refresh_fail_in_txn2'
+\set ON_ERROR_STOP 1
+SELECT count(*) AS jobs_after_txn2_fail
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+ jobs_after_txn2_fail 
+----------------------
+                    0
+
+SELECT debug_waitpoint_release('cagg_refresh_fail_in_txn2');
+ debug_waitpoint_release 
+-------------------------
+ 
+
+-- Test 3: refresh fails in Txn3 (materialization)
+BEGIN; INSERT INTO conditions VALUES ('2026-01-30', 555), ('2026-02-10', 555); COMMIT;
+SELECT debug_waitpoint_enable('cagg_refresh_fail_in_txn3');
+ debug_waitpoint_enable 
+------------------------
+ 
+
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+ERROR:  error injected at debug point 'cagg_refresh_fail_in_txn3'
+\set ON_ERROR_STOP 1
+SELECT count(*) AS jobs_after_txn3_fail
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+ jobs_after_txn3_fail 
+----------------------
+                    0
+
+SELECT debug_waitpoint_release('cagg_refresh_fail_in_txn3');
+ debug_waitpoint_release 
+-------------------------
+ 
+
+-- Test 4: refresh fails in registration before Txn1
+BEGIN; INSERT INTO conditions VALUES ('2026-02-20', 888), ('2026-03-01', 888); COMMIT;
+SELECT debug_waitpoint_enable('cagg_refresh_fail_in_registration');
+ debug_waitpoint_enable 
+------------------------
+ 
+
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+ERROR:  error injected at debug point 'cagg_refresh_fail_in_registration'
+\set ON_ERROR_STOP 1
+SELECT count(*) AS jobs_after_registration_fail
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+ jobs_after_registration_fail 
+------------------------------
+                            0
+
+SELECT debug_waitpoint_release('cagg_refresh_fail_in_registration');
+ debug_waitpoint_release 
+-------------------------
+ 
+
+-- Test 5: stale entry with a dead PID is cleaned up by the next refresh.
+-- Inserting a row with PID 0 as a dummy job.
+INSERT INTO _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+    (materialization_id, start_range, end_range, pid, job_id, created_at)
+SELECT mat_hypertable_id,
+       _timescaledb_functions.to_unix_microseconds('2026-01-05'::timestamptz),
+       _timescaledb_functions.to_unix_microseconds('2026-03-15'::timestamptz),
+       0, 0, now()
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'cond_daily';
+SELECT count(*) AS stale_jobs_before_refresh
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+ stale_jobs_before_refresh 
+---------------------------
+                         1
+
+-- Refresh detects BackendPidGetProc(0) == NULL, removes the stale row, and succeeds
+BEGIN; INSERT INTO conditions VALUES ('2026-01-10', 444), ('2026-01-20', 444); COMMIT;
+CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+SELECT count(*) AS jobs_after_dead_pid_cleanup
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+ jobs_after_dead_pid_cleanup 
+-----------------------------
+                           0
+
+-- Test 6: dropping a CAgg cleans up its refresh range entries
+CREATE MATERIALIZED VIEW cond_daily_drop_test
+WITH (timescaledb.continuous, timescaledb.materialized_only = true) AS
+SELECT time_bucket('1 day', time) AS bucket, avg(value) AS avg_val
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+-- Insert dummy refresh range entries for the new CAgg
+INSERT INTO _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges
+    (materialization_id, start_range, end_range, pid, job_id, created_at)
+SELECT mat_hypertable_id,
+       _timescaledb_functions.to_unix_microseconds(s),
+       _timescaledb_functions.to_unix_microseconds(s + interval '1 month'),
+       0, 0, now()
+FROM _timescaledb_catalog.continuous_agg,
+     generate_series('2026-01-01'::timestamptz, '2026-05-01'::timestamptz, interval '1 month') AS s
+WHERE user_view_name = 'cond_daily_drop_test';
+SELECT count(*) AS refresh_ranges_before_drop
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+ refresh_ranges_before_drop 
+----------------------------
+                          5
+
+DROP MATERIALIZED VIEW cond_daily_drop_test;
+-- Refresh ranges for the dropped CAgg should be gone
+SELECT count(*) AS refresh_ranges_after_drop
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+ refresh_ranges_after_drop 
+---------------------------
+                         0
+
+DROP TABLE conditions CASCADE;
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 2 other objects

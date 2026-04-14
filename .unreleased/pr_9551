@@ -1,1 +1,0 @@
-Fixes: #9551 Fix resource leaks on error paths for cagg refresh

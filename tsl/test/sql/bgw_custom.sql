@@ -629,6 +629,56 @@ SELECT count(*) = 0
 -- cleanup
 SELECT _timescaledb_functions.stop_background_workers();
 DROP TABLE sensor_data;
+
+SELECT _timescaledb_functions.restart_background_workers();
+
+-- Test that uncompressed chunks (status=0) are compressed even when
+-- recompress is explicitly disabled.
+CREATE TABLE sensor_data_recompress
+(
+    time timestamptz not null,
+    sensor_id integer not null,
+    cpu double precision null,
+    temperature double precision null
+);
+
+SELECT FROM create_hypertable('sensor_data_recompress', 'time');
+
+INSERT INTO sensor_data_recompress
+	SELECT
+		time,
+		sensor_id,
+		random() AS cpu,
+		random() * 100 AS temperature
+	FROM
+		generate_series('2022-08-01'::timestamptz, '2022-09-01'::timestamptz, INTERVAL '30 minute') AS g1(time),
+		generate_series(1, 10, 1) AS g2(sensor_id)
+	ORDER BY time;
+
+-- enable compression
+ALTER TABLE sensor_data_recompress SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+
+-- verify we have uncompressed chunks
+SELECT count(*) > 0 AS has_uncompressed_chunks
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data_recompress' AND NOT is_compressed;
+
+-- add compression policy with recompress explicitly set to false
+SELECT add_compression_policy('sensor_data_recompress', INTERVAL '1 minute') AS compressjob_recompress_id \gset
+SELECT alter_job(id, config := jsonb_set(config, '{recompress}', 'false')) FROM _timescaledb_catalog.bgw_job WHERE id = :compressjob_recompress_id;
+
+-- run the compression policy
+CALL run_job(:compressjob_recompress_id);
+
+-- all chunks should be compressed even with recompress=false
+SELECT count(*) = 0 AS all_chunks_compressed
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data_recompress' AND NOT is_compressed;
+
+-- cleanup
+SELECT _timescaledb_functions.stop_background_workers();
+DROP TABLE sensor_data_recompress;
+
 SELECT _timescaledb_functions.restart_background_workers();
 
 -- Github issue #5537

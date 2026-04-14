@@ -1,0 +1,2 @@
+Fixes: #9550 Fix out of memory when propagating ALTER TABLE to many chunks
+Thanks: @patstrom for reporting an out of memory error when dropping constraints

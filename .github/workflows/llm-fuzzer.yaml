@@ -69,6 +69,7 @@ jobs:
 
     steps:
     - name: Install Linux Dependencies
+      timeout-minutes: 3
       run: |
         sudo apt-get update
         sudo apt-get install cmake flex bison systemd-coredump gdb \

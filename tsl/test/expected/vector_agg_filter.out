@@ -2763,6 +2763,7 @@ select count(compress_chunk(x)) from show_chunks('uuid_default') x;
 
 alter table uuid_default add column id uuid default '842ab294-923a-4f50-be7d-af6c51903a5f';
 alter table uuid_default set (tsdb.compress_segmentby = 'id');
+NOTICE:  updated compression settings will only apply to future compressions
 insert into uuid_default select generate_series(1000, 1999), 2, '5dd0565f-1ddf-4a6c-9e96-9b2b8c8c3993';
 select count(compress_chunk(x)) from show_chunks('uuid_default') x;
 NOTICE:  chunk "_hyper_3_5_chunk" is already converted to columnstore

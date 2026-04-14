@@ -43,6 +43,7 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_jobs_refresh_ranges.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
@@ -137,21 +138,6 @@ init_materialization_invalidation_log_scan_by_materialization_id(ScanIterator *i
 		Int32GetDatum(materialization_id));
 }
 
-static void
-init_materialization_ranges_scan_by_materialization_id(ScanIterator *iterator,
-													   const int32 materialization_id)
-{
-	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
-											CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
-											CONTINUOUS_AGGS_MATERIALIZATION_RANGES_IDX);
-
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_continuous_aggs_materialization_ranges_materialization_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(materialization_id));
-}
-
 static int32
 number_of_continuous_aggs_attached(int32 raw_hypertable_id)
 {
@@ -228,23 +214,6 @@ ts_materialization_invalidation_log_delete(int32 mat_hypertable_id)
 
 	elog(DEBUG1, "materialization log delete for hypertable %d", mat_hypertable_id);
 	init_materialization_invalidation_log_scan_by_materialization_id(&iterator, mat_hypertable_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	}
-}
-
-static void
-ts_materialization_ranges_delete(int32 mat_hypertable_id)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
-													RowExclusiveLock,
-													CurrentMemoryContext);
-
-	elog(DEBUG1, "materialization log delete for hypertable %d", mat_hypertable_id);
-	init_materialization_ranges_scan_by_materialization_id(&iterator, mat_hypertable_id);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -911,7 +880,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		}
 
 		ts_materialization_invalidation_log_delete(form.mat_hypertable_id);
-		ts_materialization_ranges_delete(form.mat_hypertable_id);
 
 		if (!raw_hypertable_has_other_caggs)
 		{
@@ -920,6 +888,9 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 
 		/* Delete watermark */
 		ts_cagg_watermark_delete_by_mat_hypertable_id(form.mat_hypertable_id);
+
+		/* Delete any refresh ranges registered for this CAgg */
+		ts_cagg_jobs_refresh_ranges_delete_by_mat_hypertable_id(form.mat_hypertable_id);
 	}
 
 	cagg_bucket_function_delete(cadata->mat_hypertable_id);
