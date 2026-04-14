@@ -35,9 +35,16 @@ CREATE INDEX ON bloom USING brin(ts timestamp_minmax_ops);
 ALTER TABLE bloom SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'v1',
-    timescaledb.compress_orderby = 'x',
-    timescaledb.sparse_index = 'minmax(si)'
+    timescaledb.compress_orderby = 'x'
 );
+
+SELECT (split_part(extversion, '.', 1)::int,
+      split_part(extversion, '.', 2)::int) >= (2, 22) AS has_configurable_sparse_index
+FROM pg_extension WHERE extname = 'timescaledb' \gset
+
+\if :has_configurable_sparse_index
+ALTER TABLE bloom SET (timescaledb.sparse_index = 'minmax(si)');
+\endif
 
 SELECT COUNT(compress_chunk(x)) FROM show_chunks('bloom') x;
 
