@@ -72,6 +72,7 @@ jobs:
 
     - name: Install Linux Dependencies
       if: steps.check.outputs.should_run == 'true'
+      timeout-minutes: 3
       run: |
         sudo apt-get update
         sudo apt-get install flex bison cmake
