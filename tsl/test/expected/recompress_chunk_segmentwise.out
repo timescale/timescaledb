@@ -751,12 +751,12 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 
 -- Output would be incorrectly ordered if the flag was cleared
 -- We have to see a sort on top of the ColumnarScan node due to UNORDERED flag
-EXPLAIN SELECT a, time FROM segwise_unordered WHERE a = 2 ORDER BY a, time;
+EXPLAIN (COSTS OFF) SELECT a, time FROM segwise_unordered WHERE a = 2 ORDER BY a, time;
 --- QUERY PLAN ---
- Sort  (cost=284.54..294.54 rows=4000 width=12)
+ Sort
    Sort Key: _hyper_25_27_chunk."time"
-   ->  Custom Scan (ColumnarScan) on _hyper_25_27_chunk  (cost=1.42..45.22 rows=4000 width=12)
-         ->  Index Scan using compress_hyper_26_28_chunk_a__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_26_28_chunk  (cost=0.15..5.22 rows=4 width=56)
+   ->  Custom Scan (ColumnarScan) on _hyper_25_27_chunk
+         ->  Index Scan using compress_hyper_26_28_chunk_a__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_26_28_chunk
                Index Cond: (a = 2)
 
 DROP TABLE segwise_unordered;

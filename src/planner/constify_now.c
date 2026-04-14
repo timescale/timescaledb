@@ -81,8 +81,12 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 	 * If this query on a view we might have a subquery here
 	 * and need to peek into the subquery range table to check
 	 * if the constraints are on a hypertable.
+	 *
+	 * We use a loop to handle multiple levels of subquery nesting,
+	 * such as continuous aggregate views which have the structure:
+	 * outer query -> UNION subquery -> materialization/raw subqueries.
 	 */
-	if (rte->rtekind == RTE_SUBQUERY)
+	while (rte->rtekind == RTE_SUBQUERY)
 	{
 		/*
 		 * Unfortunately the mechanism used to warm up the
