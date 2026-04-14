@@ -454,6 +454,22 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 
 CREATE INDEX continuous_aggs_materialization_ranges_idx ON _timescaledb_catalog.continuous_aggs_materialization_ranges (materialization_id, lowest_modified_value ASC);
 
+-- cagg jobs refresh ranges
+CREATE TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (
+  materialization_id integer NOT NULL,
+  start_range bigint NOT NULL,
+  end_range bigint NOT NULL,
+  pid integer NOT NULL,
+  job_id integer NOT NULL,
+  created_at timestamptz NOT NULL,
+  -- table constraints
+  CONSTRAINT continuous_aggs_jobs_refresh_ranges_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_jobs_refresh_ranges', '');
+
+CREATE INDEX continuous_aggs_jobs_refresh_ranges_idx ON _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (materialization_id);
+
 /* the source of this data is the enum from the source code that lists
  *  the algorithms. This table is NOT dumped.
  */

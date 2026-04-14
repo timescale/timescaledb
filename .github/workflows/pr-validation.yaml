@@ -30,12 +30,25 @@ jobs:
       env:
         BODY: ${{ github.event.pull_request.body }}
       run: |
+        base=${{ github.event.pull_request.base.sha }}
+        head=${{ github.event.pull_request.head.sha }}
+        count=`git rev-list --no-merges --count $base..$head`
+
+        # Hard limit of 5 commits per pull request. This check cannot
+        # be disabled via the Disable-check trailer or by using squash
+        # merge.
+        if [[ "$count" -gt 5 ]]; then
+          echo "Found $count commits in pull request (there must be no more than 5):"
+          git log --format=format:'- %h %s' $base..$head
+          echo
+          echo "This limit cannot be overridden. Please rebase and reduce"
+          echo "the number of commits to 5 or fewer."
+          exit 1
+        fi
+
         echo "$BODY" | egrep -qsi '^disable-check:.*\<commit-count\>'
         if [[ $? -ne 0 ]] && [[ "${{ github.event.pull_request.auto_merge.merge_method }}" != "squash" ]]
         then
-          base=${{ github.event.pull_request.base.sha }}
-          head=${{ github.event.pull_request.head.sha }}
-          count=`git rev-list --no-merges --count $base..$head`
           if [[ "$count" -ne 1 ]]; then
             echo "Found $count commits in pull request (there should be only one):"
             git log --format=format:'- %h %s' $base..$head
