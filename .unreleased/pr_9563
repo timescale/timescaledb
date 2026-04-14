@@ -1,0 +1,2 @@
+Fixes: #9563 Fix gapfill out-of-order bucket creation during DST shift
+Thanks: @petergledhillinclusive for reporting the DST shift issue with time_bucket_gapfill

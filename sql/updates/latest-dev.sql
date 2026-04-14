@@ -65,6 +65,22 @@ BEGIN
     END LOOP;
 END;
 $$;
+-- Add continuous_aggs_jobs_refresh_ranges table
+CREATE TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (
+  materialization_id integer NOT NULL,
+  start_range bigint NOT NULL,
+  end_range bigint NOT NULL,
+  pid integer NOT NULL,
+  job_id integer NOT NULL,
+  created_at timestamptz NOT NULL,
+  CONSTRAINT continuous_aggs_jobs_refresh_ranges_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_jobs_refresh_ranges', '');
+
+CREATE INDEX continuous_aggs_jobs_refresh_ranges_idx ON _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (materialization_id);
+
+GRANT SELECT ON _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges TO PUBLIC;
 
 -- Cleanup orphaned compression settings
 WITH orphaned_settings AS (
@@ -79,4 +95,6 @@ USING orphaned_settings AS os WHERE cs.relid = os.relid;
 -- Remove self-referential foreign keys to eliminate pg_dump circular dependency warnings
 ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT IF EXISTS hypertable_compressed_hypertable_id_fkey;
 ALTER TABLE _timescaledb_catalog.chunk DROP CONSTRAINT IF EXISTS chunk_compressed_chunk_id_fkey;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.job_history_bsearch;
 

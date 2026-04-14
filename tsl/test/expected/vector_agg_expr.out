@@ -45,6 +45,9 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
      2
 
 vacuum full analyze aggexpr;
+-- The batch sorted merge has very close costs for one query, and prevents
+-- vectorized aggregation, so we have to get it out of the way.
+set timescaledb.enable_decompression_sorted_merge to off;
 -- Some functions we are not able to vectorize at the moment.
 set timescaledb.debug_require_vector_agg = 'forbid';
 -- Volatile expression
@@ -2024,3 +2027,4 @@ select count(*), case when i::numeric = 12::numeric then 1212 else i end from ag
   4471 |    $
 
 reset timescaledb.enable_columnarindexscan;
+reset timescaledb.enable_decompression_sorted_merge;

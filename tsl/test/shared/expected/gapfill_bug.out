@@ -423,3 +423,69 @@ ORDER BY id, mins;
 
 DROP TABLE i4693;
 DROP TYPE i4693_type;
+-- check gapfill bucket boundaries match time_bucket with timezone across DST
+-- fall-back transitions for fixed-size intervals #8844
+SET timezone TO 'Europe/London';
+-- 3-hour gapfill across fall-back DST (Europe/London, Oct 2025)
+-- Clocks go back at 02:00 BST -> 01:00 GMT on Oct 26.
+SELECT time_bucket_gapfill('3 hours', time, 'Europe/London', '2025-10-25 23:00+00', '2025-10-26 08:00+00')
+FROM (SELECT NULL::timestamptz AS time LIMIT 0) s GROUP BY 1;
+     time_bucket_gapfill      
+------------------------------
+ Sun Oct 26 00:00:00 2025 BST
+ Sun Oct 26 03:00:00 2025 GMT
+ Sun Oct 26 06:00:00 2025 GMT
+
+-- 2-hour gapfill across fall-back DST
+SELECT time_bucket_gapfill('2 hours', time, 'Europe/London', '2025-10-25 23:00+00', '2025-10-26 08:00+00')
+FROM (SELECT NULL::timestamptz AS time LIMIT 0) s GROUP BY 1;
+     time_bucket_gapfill      
+------------------------------
+ Sun Oct 26 00:00:00 2025 BST
+ Sun Oct 26 02:00:00 2025 GMT
+ Sun Oct 26 04:00:00 2025 GMT
+ Sun Oct 26 06:00:00 2025 GMT
+
+-- 1-hour gapfill across fall-back DST (regression check)
+SELECT time_bucket_gapfill('1 hour', time, 'Europe/London', '2025-10-25 23:00+00', '2025-10-26 04:00+00')
+FROM (SELECT NULL::timestamptz AS time LIMIT 0) s GROUP BY 1;
+     time_bucket_gapfill      
+------------------------------
+ Sun Oct 26 00:00:00 2025 BST
+ Sun Oct 26 01:00:00 2025 BST
+ Sun Oct 26 01:00:00 2025 GMT
+ Sun Oct 26 02:00:00 2025 GMT
+ Sun Oct 26 03:00:00 2025 GMT
+
+-- Join of two gapfilled CTEs across DST should not produce
+-- "mergejoin input data is out of order" error #8844
+CREATE TABLE gf8844_table1 (device_id int, ts timestamptz, flow int);
+INSERT INTO gf8844_table1 VALUES (1234, '2025-10-26 03:20:00+00', 10);
+CREATE TABLE gf8844_table2 (device_id int, ts timestamptz, volume_delta bigint);
+INSERT INTO gf8844_table2 VALUES (1234, '2025-10-26 03:20:00+00', 5);
+WITH
+	STATS AS (
+		SELECT time_bucket_gapfill('3 hours', ts, 'Europe/London') AS bucket,
+			avg(flow) AS "flowAvg"
+		FROM gf8844_table1
+		WHERE ts > '2025-10-25 23:00:00' AND ts < '2025-10-26 08:00:00+00'
+		GROUP BY bucket ORDER BY bucket ASC
+	),
+	VOLUME AS (
+		SELECT time_bucket_gapfill('3 hours', ts, 'Europe/London') AS bucket,
+			sum(volume_delta) AS "volumeSum"
+		FROM gf8844_table2
+		WHERE ts > '2025-10-25 23:00:00' AND ts < '2025-10-26 08:00:00+00'
+		GROUP BY bucket ORDER BY bucket ASC
+	)
+SELECT * FROM STATS LEFT JOIN VOLUME USING (bucket);
+            bucket            |       flowAvg       | volumeSum 
+------------------------------+---------------------+-----------
+ Sat Oct 25 21:00:00 2025 BST |                     |          
+ Sun Oct 26 00:00:00 2025 BST |                     |          
+ Sun Oct 26 03:00:00 2025 GMT | 10.0000000000000000 |         5
+ Sun Oct 26 06:00:00 2025 GMT |                     |          
+
+DROP TABLE gf8844_table1;
+DROP TABLE gf8844_table2;
+RESET timezone;
