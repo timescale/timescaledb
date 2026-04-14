@@ -66,6 +66,7 @@ set(TEST_FILES
     compression_uuid.sql
     create_table_with.sql
     decompress_index.sql
+    direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
     move.sql
     plan_skip_scan_notnull.sql
