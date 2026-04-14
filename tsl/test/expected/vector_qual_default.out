@@ -183,6 +183,40 @@ select b, count(*) from qualdef where bool_identity(l) group by b order by b;
  3 |   400
  4 |   400
 
+-- Combined vectorized and Postgres quals
+set timescaledb.debug_require_vector_qual to 'allow';
+select count(*) from qualdef where b = 0 and bool_identity(l);
+ count 
+-------
+   398
+
+-- Vectorized qual filters everything, PG qual is not evaluated
+select count(*) from qualdef where b > 10 and bool_identity(l);
+ count 
+-------
+     0
+
+select count(*) from qualdef where b = 3 and bool_identity(ln);
+ count 
+-------
+     0
+
+select count(*) from qualdef where b = 3 and bool_identity(lf);
+ count 
+-------
+     0
+
+select count(*) from qualdef where b = 3 and bool_identity(i2 = 7);
+ count 
+-------
+   200
+
+select b, count(*) from qualdef where b in (0, 1) and bool_identity(l) group by b order by b;
+ b | count 
+---+-------
+ 0 |   398
+ 1 |   400
+
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.debug_require_vector_qual;
 -- Some expressions are not supported at the moment.

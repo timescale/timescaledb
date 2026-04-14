@@ -90,10 +90,21 @@ select count(*) from qualdef where bool_identity(ln) and bool_identity(l);
 -- Both quals produce arrow results on a column with mixed values
 select count(*) from qualdef where bool_identity(i2 = 7) and bool_identity(i4 = 8);
 
-
 -- Postgres qual with GROUP BY
 select b, count(*) from qualdef where bool_identity(l) group by b order by b;
 
+-- Combined vectorized and Postgres quals
+set timescaledb.debug_require_vector_qual to 'allow';
+
+select count(*) from qualdef where b = 0 and bool_identity(l);
+
+-- Vectorized qual filters everything, PG qual is not evaluated
+select count(*) from qualdef where b > 10 and bool_identity(l);
+
+select count(*) from qualdef where b = 3 and bool_identity(ln);
+select count(*) from qualdef where b = 3 and bool_identity(lf);
+select count(*) from qualdef where b = 3 and bool_identity(i2 = 7);
+select b, count(*) from qualdef where b in (0, 1) and bool_identity(l) group by b order by b;
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.debug_require_vector_qual;
 
