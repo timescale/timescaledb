@@ -130,7 +130,8 @@ gp_hash_reset(GroupingPolicy *obj)
 
 static void
 compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext,
-						 TupleTableSlot *vector_slot, const VectorAggDef *agg_def, void *agg_states)
+						 TupleTableSlot *vector_slot, const VectorAggDef *agg_def, void *agg_states,
+						 struct expr_cache_hash *expr_cache)
 {
 	const uint32 *offsets = policy->key_index_for_row;
 	MemoryContext agg_extra_mctx = policy->agg_extra_mctx;
@@ -145,11 +146,19 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 	bool arg_isnull = true;
 	if (agg_def->argument != NULL)
 	{
+		/*
+		 * FILTER aggregate args are excluded from interning at init time.
+		 * Pass NULL here as defense-in-depth: the assert in
+		 * vector_slot_evaluate_expression rejects filters that differ
+		 * from vector_qual_result.
+		 */
+		struct expr_cache_hash *agg_expr_cache = agg_def->filter_clauses == NIL ? expr_cache : NULL;
 		const CompressedColumnValues values =
 			vector_slot_evaluate_expression(dcontext,
 											vector_slot,
 											agg_def->effective_batch_filter,
-											agg_def->argument);
+											agg_def->argument,
+											agg_expr_cache);
 
 		Assert(values.decompression_type != DT_Invalid);
 		Ensure(values.decompression_type != DT_Iterator, "expected arrow array but got iterator");
@@ -233,7 +242,8 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 }
 
 static void
-gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlot *vector_slot)
+gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlot *vector_slot,
+				  struct expr_cache_hash *expr_cache)
 {
 	GroupingPolicyHash *policy = (GroupingPolicyHash *) gp;
 	uint16 nrows;
@@ -277,7 +287,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlo
 		const GroupingColumn *def = &policy->grouping_columns[i];
 
 		policy->current_batch_grouping_column_values[i] =
-			vector_slot_evaluate_expression(dcontext, vector_slot, filter, def->expr);
+			vector_slot_evaluate_expression(dcontext, vector_slot, filter, def->expr, expr_cache);
 	}
 
 	/*
@@ -355,7 +365,8 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlo
 								 dcontext,
 								 vector_slot,
 								 agg_def,
-								 policy->per_agg_per_key_states[agg_index]);
+								 policy->per_agg_per_key_states[agg_index],
+								 expr_cache);
 	}
 
 	/*
