@@ -164,9 +164,7 @@ jobs:
         make -C build install
 
     - name: Install Claude Code
-      run: |
-        curl -fsSL https://claude.ai/install.sh | bash
-        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      run: npm install -g @anthropic-ai/claude-code@2.1.104
 
     - name: LLM Fuzzing
       id: llm-fuzzing
