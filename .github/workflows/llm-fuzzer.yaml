@@ -1,0 +1,386 @@
+# This workflow uses an LLM agent to find bugs not covered by the existing
+# tests. The LLM finds the possible bugs and generates a test script that
+# triggers some kind of internal program error. The workflow then
+# deterministically checks if the script actually reproduces the error, to
+# avoid false positives.
+name: LLM fuzzer
+"on":
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths: .github/workflows/llm-fuzzer.yaml
+
+env:
+  PG_SRC_DIR: "pgbuild"
+  PG_INSTALL_DIR: "postgresql"
+  extra_packages: "clang-15 llvm-15 llvm-15-dev llvm-15-tools"
+  CC: "clang-15"
+  # gcc CFLAGS, disable inlining for function name pattern matching to work for suppressions
+  # CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
+  # CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
+  # clang CFLAGS
+  CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
+  CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -Og -fno-inline-functions"
+
+  # We do not link libasan dynamically to avoid problems with libdl and our libraries.
+  # clang does this by default, but we need to explicitly state that for gcc.
+  # static gcc LDFLAGS
+  # LDFLAGS: "-fsanitize=address,undefined -static-libasan -static-liblsan -static-libubsan"
+  # static sanitizer clang LDFLAGS or dynamic sanitizer gcc LDFLAGS
+  LDFLAGS: "-fsanitize=address,undefined"
+  ASAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_asan.txt
+    detect_odr_violation=0 log_path=${{ github.workspace }}/sanitizer_logs/sanitizer
+    log_exe_name=true print_suppressions=false exitcode=27
+    detect_leaks=0 abort_on_error=1
+
+  LSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_leak.txt
+    print_suppressions=0 log_path=${{ github.workspace }}/sanitizer_logs/sanitizer
+    log_exe_name=true print_suppressions=false exitcode=27
+
+  UBSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_ub.txt
+    print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer_logs/sanitizer
+    log_exe_name=true print_suppressions=false exitcode=27
+
+  EXTENSIONS: "postgres_fdw test_decoding"
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg_latest: ${{ fromJson(steps.setter.outputs.PG18_LATEST) }}
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - name: Read configuration
+      id: setter
+      run: python .github/gh_config_reader.py
+
+  fuzzer:
+    name: LLM fuzzer PG${{ needs.config.outputs.pg_latest }}
+    runs-on: ubuntu-22.04
+    needs: config
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+
+    steps:
+    - name: Install Linux Dependencies
+      timeout-minutes: 3
+      run: |
+        sudo apt-get update
+        sudo apt-get install cmake flex bison systemd-coredump gdb \
+          jq ${{ env.extra_packages }}
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        fetch-depth: 50
+
+    - name: Fetch base branch
+      if: github.event_name == 'pull_request'
+      run: git fetch origin ${{ github.event.pull_request.base.ref }} --depth=50
+
+    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # ages after the original problem.
+    - name: Get date for build caching
+      id: get-date
+      run: |
+        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+
+    # Create a directory for sanitizer logs. This directory is referenced by
+    # ASAN_OPTIONS, LSAN_OPTIONS, and UBSAN_OPTIONS
+    - name: Create sanitizer log directory
+      run: |
+        mkdir ${{ github.workspace }}/sanitizer_logs
+
+    # we cache the build directory instead of the install directory here
+    # because extension installation will write files to install directory
+    # leading to a tainted cache
+    - name: Restore PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
+      id: cache-postgresql
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: ~/${{ env.PG_SRC_DIR }}
+        # FIXME
+        # key: "${{ env.name }}-postgresql-${{ needs.config.outputs.pg_latest }}-${{ env.CC }}\
+        # -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
+        key: "${{ env.name }}-postgresql-${{ needs.config.outputs.pg_latest }}-${{ env.CC }}\
+          -${{ steps.get-date.outputs.date }}"
+
+    - name: Build PostgreSQL ${{ needs.config.outputs.pg_latest }} if not in cache
+      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      run: |
+        wget -q -O postgresql.tar.bz2 \
+          https://ftp.postgresql.org/pub/source/v${{ needs.config.outputs.pg_latest }}/postgresql-${{ needs.config.outputs.pg_latest }}.tar.bz2
+        mkdir -p ~/$PG_SRC_DIR
+        tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
+        # Add instrumentation to the Postgres memory contexts. For more details, see
+        # https://github.com/timescale/eng-database/wiki/Using-Address-Sanitizer#adding-more-instrumentation
+        PG_MAJOR=$(echo "${{ needs.config.outputs.pg_latest }}" | sed -e 's![.].*!!')
+        if [ ${PG_MAJOR} -lt 18 ]; then
+          patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation.patch
+        else
+          patch -F5 -p1 -d ~/$PG_SRC_DIR < test/postgres-asan-instrumentation-PG18GE.patch
+        fi
+        cd ~/$PG_SRC_DIR
+        ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
+          --with-openssl --without-readline --without-zlib --without-libxml
+        make -j$(getconf _NPROCESSORS_ONLN)
+        for ext in ${EXTENSIONS}; do
+          make -j$(getconf _NPROCESSORS_ONLN) -C contrib/${ext}
+        done
+
+    - name: Save PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
+      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: ~/${{ env.PG_SRC_DIR }}
+        key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
+
+    - name: Upload config.log
+      if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      with:
+        name: config.log for PostgreSQL
+        path: ~/${{ env.PG_SRC_DIR }}/config.log
+
+    - name: Install PostgreSQL ${{ needs.config.outputs.pg_latest }}
+      run: |
+        cd ~/$PG_SRC_DIR
+        make install
+        for ext in ${EXTENSIONS}; do
+          make -C contrib/${ext} install
+        done
+        ~/$PG_INSTALL_DIR/bin/pg_config --version
+
+    - name: Build TimescaleDB
+      run: |
+        ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
+          -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF
+        make -j$(getconf _NPROCESSORS_ONLN) -C build
+        make -C build install
+
+    - name: LLM Fuzzing
+      id: llm-fuzzing
+      uses: anthropics/claude-code-action@6e2bd52842c65e914eba5c8badd17560bd26b5de # v1.0.89
+      with:
+        anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+        github_token: ${{ github.token }}
+        claude_args: '--max-budget-usd 5.00 --dangerously-skip-permissions --model opus --effort high'
+        prompt: |
+          Find bugs in the TimescaleDB code modified in this change set. Focus
+          on crashes, assertion failures, sanitizer errors, and internal errors
+          (SQLSTATE XX000) -- these are detected automatically from server
+          logs. Do not chase wrong-result bugs that need manual verification.
+          That is, if you see a bug, but it manifests in a way that is not
+          going to be caught by the reproduction step of this workflow, choose
+          another bug. Stop after one reproducible bug.
+
+          Read the workflow at .github/workflows/llm-fuzzer.yaml. You are
+          running in that workflow. PostgreSQL with TimescaleDB is already
+          built and installed, with AddressSanitizer enabled. The build
+          environment is functional, use it to rebuild with debug logging as
+          needed.
+
+          Determine whether we are testing a PR or a commit on a branch. Focus
+          on the changes in that change set. Do not explore unrelated git
+          history or old commits.
+          
+          Only use public SQL APIs (CREATE, ALTER, SELECT, INSERT, etc. and
+          documented timescaledb functions). Do not directly modify internal
+          catalog tables (_timescaledb_catalog.*, _timescaledb_internal.*) --
+          corrupting internal state is not a useful bug. The goal is to find
+          inputs that break the code through its public interface.
+
+          When done, generate a self-contained ~/llm-fuzzer-repro.sql that
+          reproduces the error when the subsequent workflow step replays it
+          against a fresh server.
+          
+          Some details about the GitHub Actions event that triggered this workflow
+          what=${{ github.event.pull_request.title || github.event.head_commit.message || github.event.schedule || github.event_name }}
+          branch=${{ github.head_ref || github.ref_name }}
+          base=${{ github.base_ref || github.ref_name }}
+          event=${{ github.event_name }}
+          sha=${{ github.event.pull_request.head.sha || github.sha }}
+
+
+    - name: Write job summary
+      if: always()
+      run: |
+        jq -r 'last | "## LLM Fuzzer Result\n\n"
+          + (.result // "No result produced.")
+          + "\n\n**Cost:** $\(.total_cost_usd // 0 | tostring) | **Duration:** \((.duration_ms // 0) / 1000 | tostring)s | **Turns:** \(.num_turns // 0)"' \
+          ${{ runner.temp }}/claude-execution-output.json \
+          >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+    - name: Upload Claude log
+      if: always()
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      with:
+        name: Claude execution log
+        path: ${{ steps.llm-fuzzing.outputs.execution_file }}
+        if-no-files-found: ignore
+
+    - name: Check for reproducer
+      if: always()
+      id: repro
+      run: test -f ~/llm-fuzzer-repro.sql && echo "found=true" >> $GITHUB_OUTPUT || true
+
+    - name: Rebuild after fuzzing
+      if: always() && steps.repro.outputs.found == 'true'
+      run: |
+        set -xeu
+        pkill -U "$(id -u)" postgres || true
+        sleep 2
+
+    - name: Restore clean PostgreSQL build
+      if: always() && steps.repro.outputs.found == 'true'
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: ~/${{ env.PG_SRC_DIR }}
+        key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
+
+    - name: Reinstall PostgreSQL and TimescaleDB
+      if: always() && steps.repro.outputs.found == 'true'
+      run: |
+        set -xeu
+        cd ~/$PG_SRC_DIR && make install
+        cd $GITHUB_WORKSPACE
+        git checkout -f ${{ github.sha }}
+        git clean -fd
+        make -j$(getconf _NPROCESSORS_ONLN) -C build install
+
+    - name: Run the reproducer
+      if: always() && steps.repro.outputs.found == 'true'
+      run: |
+        set -xeu
+
+        export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
+
+        export PGDATA=verify_db
+        export PGPORT=5433
+        export PGDATABASE=postgres
+
+        initdb
+
+        cat >> $PGDATA/postgresql.conf <<CONF
+        shared_preload_libraries = 'timescaledb'
+        statement_timeout = '30s'
+        listen_addresses = ''
+        unix_socket_directories = '$PGHOST'
+        logging_collector = on
+        log_destination = 'jsonlog,stderr'
+        log_directory = '$(readlink -f .)'
+        log_filename = 'postmaster.log'
+        log_error_verbosity = verbose
+        CONF
+
+        pg_ctl start
+
+        psql -c "create extension timescaledb;"
+        psql -v ON_ERROR_STOP=0 -f ~/llm-fuzzer-repro.sql
+        psql -c "select 1"
+
+        pg_ctl stop
+
+    # The jq --exit-code option is broken with select() on jq-1.6 which we see
+    # on some machines, so we use grep instead (see https://github.com/jqlang/jq/issues/1139).
+    - name: Check for internal program errors
+      if: always() && steps.repro.outputs.found == 'true'
+      run: |
+        ! jq 'select(
+                (.state_code == "XX000" and .error_severity != "LOG" and (.message | test("TestFailure") | not))
+                or (.message | test("resource was not closed|could not close|leak"))
+            ) | [.message, .func_name,  .statement] | @tsv
+        ' -r postmaster.json | grep .
+
+    - name: Collect the logs
+      if: always()
+      id: collectlogs
+      run: |
+        # wait in case there are in-progress coredumps
+        sleep 10
+        if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
+        # print OOM killer information
+        sudo journalctl --system -q --facility=kern --grep "Killed process" || true
+
+    - name: Stack trace
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      run: |
+        sudo coredumpctl gdb <<<"
+          set verbose on
+          set trace-commands on
+          show debug-file-directory
+          printf "'"'"query = '%s'\n\n"'"'", debug_query_string
+          frame function ExceptionalCondition
+          printf "'"'"condition = '%s'\n"'"'", conditionName
+          up 1
+          l
+          info args
+          info locals
+          bt full
+        " 2>&1 | tee stacktrace.log
+        ./scripts/bundle_coredumps.sh
+        exit 1 # Fail the job if we have core dumps.
+
+    - name: Show sanitizer logs
+      if: always()
+      run: |
+        tail -vn +1 ${{ github.workspace }}/sanitizer_logs/sanitizer* || :
+
+    - name: Upload sanitizer logs
+      if: always()
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      with:
+        name: sanitizer logs
+        # The log_path sanitizer option means "Write logs to 'log_path.pid'".
+        # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
+        path: ${{ github.workspace }}/sanitizer_logs/*
+
+    - name: Upload core dumps
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      with:
+        name: Coredumps
+        path: coredumps
+
+    - name: Save PostgreSQL log
+      if: always()
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      with:
+        name: PostgreSQL log
+        path: postmaster.*
+
+    - name: Upload llm-fuzzer-repro.sql
+      if: always()
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      with:
+        name: llm-fuzzer-repro.sql
+        path: ~/llm-fuzzer-repro.sql
+        if-no-files-found: ignore
+
+    - name: Upload results to the database
+      if: always() && steps.repro.outputs.found == 'true'
+      env:
+        JOB_NAME: LLM fuzzer PG${{ needs.config.outputs.pg_latest }}
+        CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        JOB_STATUS: ${{ job.status }}
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]] ;
+        then
+            GITHUB_PR_NUMBER="${{ github.event.number }}"
+        else
+            GITHUB_PR_NUMBER=0
+        fi
+        export GITHUB_PR_NUMBER
+        scripts/upload_ci_stats.sh

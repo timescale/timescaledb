@@ -52,6 +52,8 @@ extern TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted;
 extern TSDLLEXPORT bool ts_guc_enable_direct_compress_on_cagg_refresh;
 extern TSDLLEXPORT bool ts_guc_enable_direct_compress_auto_segmentby;
 extern int ts_guc_direct_compress_insert_tuple_sort_limit;
+extern TSDLLEXPORT int ts_guc_direct_compress_segmentby_min_rows;
+extern TSDLLEXPORT int ts_guc_direct_compress_segmentby_batch_size_limit;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
 extern TSDLLEXPORT bool ts_guc_enable_compression_wal_markers;

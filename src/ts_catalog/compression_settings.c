@@ -5,8 +5,10 @@
  */
 #include <postgres.h>
 #include <catalog/pg_inherits.h>
+#include <catalog/pg_type.h>
 #include <parser/parse_func.h>
 #include <utils/builtins.h>
+#include <utils/lsyscache.h>
 
 #include "foreach_ptr.h"
 #include "jsonb_utils.h"
@@ -654,6 +656,73 @@ ts_contains_sparse_index_config(CompressionSettings *settings, const char *attna
 
 	ts_free_sparse_index_settings(parsed);
 	return result;
+}
+
+bool
+ts_column_has_sparse_index(CompressionSettings *settings, const char *attname)
+{
+	if (!settings->fd.index)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < _SparseIndexTypeEnumMax; i++)
+	{
+		if (ts_contains_sparse_index_config(settings,
+											attname,
+											ts_sparse_index_type_names[i],
+											false))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool
+ts_accept_for_segmentby(CompressionSettings *settings, Form_pg_attribute attr)
+{
+	if (attr->attisdropped || attr->attgenerated)
+	{
+		return false;
+	}
+
+	const char *attname = NameStr(attr->attname);
+
+	if (ts_array_is_member(settings->fd.orderby, attname))
+	{
+		return false;
+	}
+
+	if (ts_column_has_sparse_index(settings, attname))
+	{
+		return false;
+	}
+
+	switch (attr->atttypid)
+	{
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+		case OIDOID:
+		case NAMEOID:
+		case REGTYPEOID:
+		case REGCLASSOID:
+		case TEXTOID:
+		case VARCHAROID:
+		case BPCHAROID:
+			return true;
+
+		default:
+			break;
+	}
+
+	if (get_typtype(attr->atttypid) == TYPTYPE_ENUM)
+	{
+		return true;
+	}
+
+	return false;
 }
 
 /* adds orderby sparse index settings into fd.index */

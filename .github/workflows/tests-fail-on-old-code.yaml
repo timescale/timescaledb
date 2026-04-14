@@ -17,7 +17,7 @@ jobs:
 
     steps:
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         fetch-depth: 0
 
@@ -72,6 +72,7 @@ jobs:
 
     - name: Install Linux Dependencies
       if: steps.check.outputs.should_run == 'true'
+      timeout-minutes: 3
       run: |
         sudo apt-get update
         sudo apt-get install flex bison cmake
@@ -90,7 +91,7 @@ jobs:
     - name: Cache PostgreSQL ${{ steps.pg.outputs.version }}
       if: steps.check.outputs.should_run == 'true'
       id: cache-postgresql
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "pg-${{ steps.pg.outputs.version }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"

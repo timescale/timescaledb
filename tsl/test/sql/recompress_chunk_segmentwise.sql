@@ -442,6 +442,6 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
 
 -- Output would be incorrectly ordered if the flag was cleared
 -- We have to see a sort on top of the ColumnarScan node due to UNORDERED flag
-EXPLAIN SELECT a, time FROM segwise_unordered WHERE a = 2 ORDER BY a, time;
+EXPLAIN (COSTS OFF) SELECT a, time FROM segwise_unordered WHERE a = 2 ORDER BY a, time;
 
 DROP TABLE segwise_unordered;

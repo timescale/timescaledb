@@ -26,7 +26,7 @@ jobs:
 
     steps:
     - name: Checkout source code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -60,6 +60,7 @@ jobs:
     steps:
 
     - name: Install Linux Dependencies
+      timeout-minutes: 3
       run: |
         # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
         # If needed, install them before opening the core dump.
@@ -68,7 +69,7 @@ jobs:
           libtest-most-perl pkgconf icu-devtools clang-14 llvm-14 llvm-14-dev llvm-14-tools cmake
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     - name: Download Postgres ${{ matrix.pg }}
       run: |

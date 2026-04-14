@@ -1,0 +1,103 @@
+Parsed test spec with 5 sessions
+
+starting permutation: i1_insert_inval_100 wp_enable r1_refresh r2_refresh s1_check_inval_log wp_release s1_check_inval_log
+step i1_insert_inval_100: 
+    INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+        (materialization_id, lowest_modified_value, greatest_modified_value)
+    SELECT mat_hypertable_id, -100, 100
+    FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name IN ('cond_5', 'cond_5_seq');
+
+step wp_enable: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step r1_refresh: 
+    CALL refresh_continuous_aggregate('cond_5', 20, 40);
+ <waiting ...>
+step r2_refresh: 
+    CALL refresh_continuous_aggregate('cond_5', 0, 15);
+ <waiting ...>
+step s1_check_inval_log: 
+    SELECT * FROM cagg_inval_log;
+
+lowest_modified_value|greatest_modified_value
+---------------------+-----------------------
+ -9223372036854775808|                   -201
+                 -100|                    100
+                  200|    9223372036854775807
+
+step wp_release: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step r1_refresh: <... completed>
+step r2_refresh: <... completed>
+step s1_check_inval_log: 
+    SELECT * FROM cagg_inval_log;
+
+lowest_modified_value|greatest_modified_value
+---------------------+-----------------------
+ -9223372036854775808|                   -201
+                 -100|                     -1
+                   15|                     19
+                   40|                    104
+                  200|    9223372036854775807
+
+
+starting permutation: i1_insert_inval_99 wp_enable r2_refresh r1_refresh s1_check_inval_log wp_release s1_check_inval_log
+step i1_insert_inval_99: 
+    INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+        (materialization_id, lowest_modified_value, greatest_modified_value)
+    SELECT mat_hypertable_id, -100, 99
+    FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name IN ('cond_5', 'cond_5_seq');
+
+step wp_enable: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step r2_refresh: 
+    CALL refresh_continuous_aggregate('cond_5', 0, 15);
+ <waiting ...>
+step r1_refresh: 
+    CALL refresh_continuous_aggregate('cond_5', 20, 40);
+ <waiting ...>
+step s1_check_inval_log: 
+    SELECT * FROM cagg_inval_log;
+
+lowest_modified_value|greatest_modified_value
+---------------------+-----------------------
+ -9223372036854775808|                   -201
+                 -100|                     99
+                  200|    9223372036854775807
+
+step wp_release: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step r2_refresh: <... completed>
+step r1_refresh: <... completed>
+step s1_check_inval_log: 
+    SELECT * FROM cagg_inval_log;
+
+lowest_modified_value|greatest_modified_value
+---------------------+-----------------------
+ -9223372036854775808|                   -201
+                 -100|                     -1
+                   15|                     19
+                   40|                     99
+                  200|    9223372036854775807
+

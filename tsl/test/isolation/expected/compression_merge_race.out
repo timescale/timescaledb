@@ -100,8 +100,8 @@ starting permutation: s1_compress_single_chunk s1_compress_all_chunks_single_tra
 step s1_compress_single_chunk: 
     select compress_chunk(c, true) from show_chunks('sensor_data') c limit 1;
 
-compress_chunk                            
-------------------------------------------
+compress_chunk                             
+-------------------------------------------
 _timescaledb_internal._hyper_X_X_chunk
 
 step s1_compress_all_chunks_single_transaction: 

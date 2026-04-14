@@ -735,3 +735,166 @@ SET timezone TO PST8PDT;
 
 DROP MATERIALIZED VIEW mat_m1_rollup;
 DROP MATERIALIZED VIEW mat_m1;
+-- Test: Variable-width bucket correctness with extend_last_bucket
+-- mat_m1: two adjacent policies split at '6 months'
+--   - Policy 1: [NULL, '6 months') -> will extend_last_bucket
+--   - Policy 2: ['6 months', NULL)
+-- compare with results from mat_m2 for correctness
+
+CREATE MATERIALIZED VIEW mat_varwidth_m1
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket('1 month', time) AS bucket,
+    count(a),
+    sum(b)
+FROM overlap_test_timestamptz_var
+GROUP BY 1
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW mat_varwidth_m2
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket('1 month', time) AS bucket,
+    count(a),
+    sum(b)
+FROM overlap_test_timestamptz_var
+GROUP BY 1
+WITH NO DATA;
+
+SET timezone TO 'UTC';
+SELECT time_bucket('1 month' , time) FROM overlap_test_timestamptz_var
+GROUP BY 1
+ORDER BY 1;
+
+/* Create two adjacent policies on mat_varwidth_m1 */
+SELECT add_continuous_aggregate_policy('mat_varwidth_m1', NULL, '6 months'::interval, '12 h'::interval, buckets_per_batch => 0) AS varwidth_m1_job_1 \gset
+SELECT add_continuous_aggregate_policy('mat_varwidth_m1', '6 months'::interval, NULL, '12 h'::interval, buckets_per_batch => 0) AS varwidth_m1_job_2 \gset
+
+/* Create single policy on mat_varwidth_m2 */
+SELECT add_continuous_aggregate_policy('mat_varwidth_m2', NULL, NULL, '12 h'::interval, buckets_per_batch => 0) AS varwidth_m2_job \gset
+
+/* Set mock time so policy windows are deterministic */
+/* Expect varwidth_m1_job_1 will refresh all the way upto Jan 1 */
+SET timescaledb.current_timestamp_mock TO '2025-06-01 05:30:00+00';
+
+/* Refresh both continuous aggs immediately */
+CALL run_job(:varwidth_m1_job_1);
+SELECT * FROM mat_varwidth_m1 ORDER BY 1;
+-- data for dec 01 2024 should be identical for the cagg query and the raw query below
+SELECT
+    time_bucket('1 month', time) AS bucket,
+    count(a),
+    sum(b)
+FROM overlap_test_timestamptz_var
+WHERE time_bucket('1 month', time)  >= '2024-12-01 00:00:00+00' and time_bucket('1 month', time) < '2025-01-01 00:00:00+00'
+GROUP BY 1;
+
+CALL run_job(:varwidth_m1_job_2);
+CALL run_job(:varwidth_m2_job);
+
+--verify that all the data has been materialized now
+SELECT min(bucket), max(bucket) FROM mat_varwidth_m1;
+
+/* Compare both outputs */
+SELECT * from mat_varwidth_m2 EXCEPT SELECT * from mat_varwidth_m1;
+SELECT * from mat_varwidth_m1 EXCEPT SELECT * from mat_varwidth_m2;
+
+
+DROP MATERIALIZED VIEW mat_varwidth_m1;
+DROP MATERIALIZED VIEW mat_varwidth_m2;
+
+/* Test 3: Three concurrent policies — middle policy also extends correctly
+ *
+ * With 3 adjacent policies, both the first and middle should have
+ * extend_last_bucket = true, and only the last should not.
+ *
+ *   - Policy 1: ['7 days', '3 days')
+ *   - Policy 2: ['3 days', '1 day')
+ *   - Policy 3: ['1 day',  '1 hour')
+ */
+
+CREATE TABLE test_3pol_timestamptz (
+    time timestamptz NOT NULL,
+    a INTEGER,
+    b INTEGER
+);
+
+SELECT create_hypertable('test_3pol_timestamptz', 'time', chunk_time_interval => '1 day'::interval);
+
+INSERT INTO test_3pol_timestamptz
+SELECT t, 1, (random() * 100)::int
+FROM
+generate_series('2025-05-20T11:05:00+00', '2025-05-27T12:05:00+00', INTERVAL '1 hour') t;
+
+CREATE MATERIALIZED VIEW mat_3pol_m1
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket('1 hour', time) AS bucket,
+    count(a),
+    sum(b)
+FROM test_3pol_timestamptz
+GROUP BY 1
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW mat_3pol_m2
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket('1 hour', time) AS bucket,
+    count(a),
+    sum(b)
+FROM test_3pol_timestamptz
+GROUP BY 1
+WITH NO DATA;
+
+/* Three adjacent policies on mat_3pol_m1 */
+SELECT add_continuous_aggregate_policy('mat_3pol_m1', '7 days'::interval, '3 days'::interval, '12 h'::interval, buckets_per_batch => 0) AS pol3_m1_job_1 \gset
+SELECT add_continuous_aggregate_policy('mat_3pol_m1', '3 days'::interval, '1 day'::interval, '12 h'::interval, buckets_per_batch => 0) AS pol3_m1_job_2 \gset
+SELECT add_continuous_aggregate_policy('mat_3pol_m1', '1 day'::interval, '1 hour'::interval, '12 h'::interval, buckets_per_batch => 0) AS pol3_m1_job_3 \gset
+
+/* Single policy on mat_3pol_m2 */
+SELECT add_continuous_aggregate_policy('mat_3pol_m2', '7 days'::interval, '1 hour'::interval, '12 h'::interval, buckets_per_batch => 0) AS pol3_m2_job \gset
+
+/* Run all jobs */
+SET timescaledb.current_timestamp_mock TO '2025-05-27 12:30:00+00';
+
+-- Policy 1 (not last): extend_last_bucket applies.
+-- Raw window [May 20 12:30, May 24 12:30) inscribes to [May 20 13:00, May 24 12:00),
+-- then extension pushes end to May 24 13:00). So Max bucket = May 24 12:00.
+SELECT ts_now_mock(),
+ ts_now_mock() - '7 days'::interval, ts_now_mock() - '3 days'::interval;
+CALL run_job(:pol3_m1_job_1);
+SELECT min(bucket), max(bucket) FROM mat_3pol_m1;
+
+-- Policy 2 (not last): extend_last_bucket applies.
+-- Raw window [May 24 12:30, May 26 12:30) inscribes to [May 24 13:00, May 26 12:00),
+-- then extension pushes end to May 26 13:00). Max bucket = May 26 12:00.
+SELECT ts_now_mock(),
+ ts_now_mock() - '3 days'::interval, ts_now_mock() - '1 day'::interval;
+CALL run_job(:pol3_m1_job_2);
+SELECT min(bucket), max(bucket) FROM mat_3pol_m1;
+
+-- Policy 3 (last): no extension.
+-- Raw window [May 26 12:30, May 27 11:30) inscribes to [May 26 13:00, May 27 11:00).
+-- End is exclusive, so last complete bucket is [10:00, 11:00). Max bucket = May 27 10:00.
+SELECT ts_now_mock(),
+ ts_now_mock() - '1 day'::interval, ts_now_mock() - '1 hour'::interval;
+CALL run_job(:pol3_m1_job_3);
+SELECT min(bucket), max(bucket) FROM mat_3pol_m1;
+
+
+CALL run_job(:pol3_m2_job);
+
+/* Output should be the same */
+SELECT * from mat_3pol_m2 EXCEPT SELECT * from mat_3pol_m1;
+SELECT * from mat_3pol_m1 EXCEPT SELECT * from mat_3pol_m2;
+
+DROP MATERIALIZED VIEW mat_3pol_m1;
+DROP MATERIALIZED VIEW mat_3pol_m2;
+DROP TABLE test_3pol_timestamptz CASCADE;
+
+--restore time zone settings
+SET timezone TO PST8PDT;
