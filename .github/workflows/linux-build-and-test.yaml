@@ -85,13 +85,17 @@ jobs:
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
           libtest-most-perl pkgconf icu-devtools faketime jq ${{ matrix.extra_packages }}
 
-    - name: Install macOS Dependencies
+    - name: Install macOS Build Dependencies
       if: runner.os == 'macOS'
+      run: |
+        brew --prefix openssl@3
+
+    - name: Install macOS Test Dependencies
+      if: runner.os == 'macOS' && matrix.installcheck
       run: |
         # Disable the automatic dependency upgrade executed by `brew install`
         # https://docs.brew.sh/Manpage#install-options-formulacask-
         HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gawk
-        brew --prefix openssl@3
         # Install perl modules after last Homebew call, since Homebrew can change the perl version
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
