@@ -26,7 +26,7 @@ jobs:
         ref: ${{ github.event.pull_request.head.sha }}
         fetch-depth: 0
     - name: Check number of commits
-      if: ${{ github.event.pull_request.auto_merge.merge_method }} != 'squash'
+      if: github.event.pull_request.auto_merge.merge_method != 'squash'
       shell: bash --norc --noprofile {0}
       env:
         BODY: ${{ github.event.pull_request.body }}
