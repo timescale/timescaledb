@@ -1236,8 +1236,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	};
 	Index first_chunk_index = 0;
 
-	/* double check our permissions are valid */
-
 	/* Walk the tree and find restrictions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
 	/* check join_level bookkeeping is balanced */
