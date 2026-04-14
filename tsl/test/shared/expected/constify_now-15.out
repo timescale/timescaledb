@@ -572,6 +572,172 @@ CREATE VIEW now_view AS SELECT time, device, avg(value) from now_view_test GROUP
 
 DROP TABLE now_view_test CASCADE;
 NOTICE:  drop cascades to view now_view
+-- test now constification with real time continuous aggregates (#7651)
+-- now() constraints on cagg queries should enable chunk exclusion
+-- in the UNION subqueries
+SET timescaledb.current_timestamp_mock TO '2003-01-01 0:30:00+00';
+CREATE TABLE cagg_now_test(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+-- create 5 chunks (1 per year)
+INSERT INTO cagg_now_test SELECT generate_series('2000-01-01'::timestamptz,'2004-01-01'::timestamptz,'1year'::interval), 'a', 0.5;
+CREATE MATERIALIZED VIEW cagg_now_view WITH (tsdb.continuous, tsdb.materialized_only=false)
+AS SELECT time_bucket('1 day', time) AS bucket, device FROM cagg_now_test GROUP BY 1, 2 WITH NO DATA;
+CALL refresh_continuous_aggregate('cagg_now_view', NULL, '2004-01-01');
+-- should have all chunks in EXPLAIN (no filter)
+:PREFIX SELECT * FROM cagg_now_view;
+--- QUERY PLAN ---
+ Append
+   ->  Append
+         ->  Seq Scan on _hyper_X_X_chunk
+         ->  Seq Scan on _hyper_X_X_chunk
+         ->  Seq Scan on _hyper_X_X_chunk
+         ->  Index Scan using _hyper_X_X_chunk__materialized_hypertable_X_bucket_idx on _hyper_X_X_chunk
+               Index Cond: (bucket < 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone)
+   ->  Finalize HashAggregate
+         Group Key: (time_bucket('@ 1 day'::interval, cagg_now_test."time")), cagg_now_test.device
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"), _hyper_X_X_chunk.device
+                     ->  Index Scan using _hyper_X_X_chunk_cagg_now_test_time_idx on _hyper_X_X_chunk
+                           Index Cond: ("time" >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone)
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"), _hyper_X_X_chunk.device
+                     ->  Seq Scan on _hyper_X_X_chunk
+
+-- with now() filter, should show chunk exclusion (fewer chunks)
+:PREFIX SELECT * FROM cagg_now_view WHERE bucket > now() - '168h'::interval;
+--- QUERY PLAN ---
+ Append
+   ->  Index Scan using _hyper_X_X_chunk__materialized_hypertable_X_bucket_idx on _hyper_X_X_chunk
+         Index Cond: ((bucket < 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone) AND (bucket > (ts_now_mock() - '@ 168 hours'::interval)))
+   ->  Finalize HashAggregate
+         Group Key: (time_bucket('@ 1 day'::interval, cagg_now_test."time")), cagg_now_test.device
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"), _hyper_X_X_chunk.device
+                     ->  Index Scan using _hyper_X_X_chunk_cagg_now_test_time_idx on _hyper_X_X_chunk
+                           Index Cond: ("time" >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone)
+                           Filter: (time_bucket('@ 1 day'::interval, "time") > (ts_now_mock() - '@ 168 hours'::interval))
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"), _hyper_X_X_chunk.device
+                     ->  Index Scan using _hyper_X_X_chunk_cagg_now_test_time_idx on _hyper_X_X_chunk
+                           Filter: (time_bucket('@ 1 day'::interval, "time") > (ts_now_mock() - '@ 168 hours'::interval))
+
+-- with now() and interval arithmetic
+:PREFIX SELECT * FROM cagg_now_view WHERE bucket >= now() - '1 year'::interval;
+--- QUERY PLAN ---
+ Append
+   ->  Append
+         ->  Index Scan using _hyper_X_X_chunk__materialized_hypertable_X_bucket_idx on _hyper_X_X_chunk
+               Index Cond: ((bucket < 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone) AND (bucket >= (ts_now_mock() - '@ 1 year'::interval)))
+         ->  Index Scan using _hyper_X_X_chunk__materialized_hypertable_X_bucket_idx on _hyper_X_X_chunk
+               Index Cond: ((bucket < 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone) AND (bucket >= (ts_now_mock() - '@ 1 year'::interval)))
+   ->  Finalize HashAggregate
+         Group Key: (time_bucket('@ 1 day'::interval, cagg_now_test."time")), cagg_now_test.device
+         ->  Append
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"), _hyper_X_X_chunk.device
+                     ->  Index Scan using _hyper_X_X_chunk_cagg_now_test_time_idx on _hyper_X_X_chunk
+                           Index Cond: ("time" >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone)
+                           Filter: (time_bucket('@ 1 day'::interval, "time") >= (ts_now_mock() - '@ 1 year'::interval))
+               ->  Partial HashAggregate
+                     Group Key: time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"), _hyper_X_X_chunk.device
+                     ->  Index Scan using _hyper_X_X_chunk_cagg_now_test_time_idx on _hyper_X_X_chunk
+                           Filter: (time_bucket('@ 1 day'::interval, "time") >= (ts_now_mock() - '@ 1 year'::interval))
+
+DROP TABLE cagg_now_test CASCADE;
+NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 4 other objects
+-- test now constification with hierarchical continuous aggregates (CAGG on CAGG)
+SET timescaledb.current_timestamp_mock TO '2003-01-01 0:30:00+00';
+CREATE TABLE cagg_hierarch_test(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+-- create 5 chunks (1 per year)
+INSERT INTO cagg_hierarch_test SELECT generate_series('2000-01-01'::timestamptz,'2004-01-01'::timestamptz,'1year'::interval), 'a', 0.5;
+-- 1st level CAGG on the hypertable
+CREATE MATERIALIZED VIEW cagg_hierarch_l1 WITH (tsdb.continuous, tsdb.materialized_only=false)
+AS SELECT time_bucket('1 day', time) AS bucket, device, avg(value) AS avg_val FROM cagg_hierarch_test GROUP BY 1, 2 WITH NO DATA;
+-- 2nd level CAGG on the 1st level CAGG (hierarchical)
+CREATE MATERIALIZED VIEW cagg_hierarch_l2 WITH (tsdb.continuous, tsdb.materialized_only=false)
+AS SELECT time_bucket('1 month', bucket) AS bucket, device, avg(avg_val) AS avg_val FROM cagg_hierarch_l1 GROUP BY 1, 2 WITH NO DATA;
+CALL refresh_continuous_aggregate('cagg_hierarch_l1', NULL, '2004-01-01');
+CALL refresh_continuous_aggregate('cagg_hierarch_l2', NULL, '2004-01-01');
+-- should have all chunks in EXPLAIN (no filter)
+:PREFIX SELECT * FROM cagg_hierarch_l2;
+--- QUERY PLAN ---
+ Append
+   ->  Append
+         ->  Seq Scan on _hyper_X_X_chunk
+         ->  Seq Scan on _hyper_X_X_chunk
+         ->  Seq Scan on _hyper_X_X_chunk
+         ->  Seq Scan on _hyper_X_X_chunk
+   ->  HashAggregate
+         Group Key: time_bucket('@ 1 mon'::interval, (time_bucket('@ 1 day'::interval, cagg_hierarch_test."time"))), cagg_hierarch_test.device
+         ->  Result
+               ->  Finalize HashAggregate
+                     Group Key: (time_bucket('@ 1 day'::interval, cagg_hierarch_test."time")), cagg_hierarch_test.device
+                     ->  Append
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"), _hyper_X_X_chunk.device
+                                 ->  Index Scan using _hyper_X_X_chunk_cagg_hierarch_test_time_idx on _hyper_X_X_chunk
+                                       Index Cond: (("time" >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone) AND ("time" >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone))
+                                       Filter: (time_bucket('@ 1 day'::interval, "time") >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone)
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"), _hyper_X_X_chunk.device
+                                 ->  Index Scan using _hyper_X_X_chunk_cagg_hierarch_test_time_idx on _hyper_X_X_chunk
+                                       Index Cond: ("time" >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone)
+                                       Filter: (time_bucket('@ 1 day'::interval, "time") >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone)
+
+-- with now() filter, should show chunk exclusion (fewer chunks)
+:PREFIX SELECT * FROM cagg_hierarch_l2 WHERE bucket > now() - '168h'::interval;
+--- QUERY PLAN ---
+ HashAggregate
+   Group Key: time_bucket('@ 1 mon'::interval, (time_bucket('@ 1 day'::interval, cagg_hierarch_test."time"))), cagg_hierarch_test.device
+   ->  Result
+         ->  Finalize HashAggregate
+               Group Key: (time_bucket('@ 1 day'::interval, cagg_hierarch_test."time")), cagg_hierarch_test.device
+               ->  Append
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"), _hyper_X_X_chunk.device
+                           ->  Index Scan using _hyper_X_X_chunk_cagg_hierarch_test_time_idx on _hyper_X_X_chunk
+                                 Index Cond: (("time" >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone) AND ("time" >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone))
+                                 Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone) AND (time_bucket('@ 1 mon'::interval, time_bucket('@ 1 day'::interval, "time")) > (ts_now_mock() - '@ 168 hours'::interval)))
+                     ->  Partial HashAggregate
+                           Group Key: time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"), _hyper_X_X_chunk.device
+                           ->  Index Scan using _hyper_X_X_chunk_cagg_hierarch_test_time_idx on _hyper_X_X_chunk
+                                 Index Cond: ("time" >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone)
+                                 Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone) AND (time_bucket('@ 1 mon'::interval, time_bucket('@ 1 day'::interval, "time")) > (ts_now_mock() - '@ 168 hours'::interval)))
+
+-- with now() and interval arithmetic
+:PREFIX SELECT * FROM cagg_hierarch_l2 WHERE bucket >= now() - '1 year'::interval;
+--- QUERY PLAN ---
+ Append
+   ->  Append
+         ->  Index Scan using _hyper_X_X_chunk__materialized_hypertable_X_bucket_idx on _hyper_X_X_chunk
+               Index Cond: ((bucket < 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone) AND (bucket >= (ts_now_mock() - '@ 1 year'::interval)))
+         ->  Index Scan using _hyper_X_X_chunk__materialized_hypertable_X_bucket_idx on _hyper_X_X_chunk
+               Index Cond: (bucket >= (ts_now_mock() - '@ 1 year'::interval))
+   ->  HashAggregate
+         Group Key: time_bucket('@ 1 mon'::interval, (time_bucket('@ 1 day'::interval, cagg_hierarch_test."time"))), cagg_hierarch_test.device
+         ->  Result
+               ->  Finalize HashAggregate
+                     Group Key: (time_bucket('@ 1 day'::interval, cagg_hierarch_test."time")), cagg_hierarch_test.device
+                     ->  Append
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"), _hyper_X_X_chunk.device
+                                 ->  Index Scan using _hyper_X_X_chunk_cagg_hierarch_test_time_idx on _hyper_X_X_chunk
+                                       Index Cond: (("time" >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone) AND ("time" >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone))
+                                       Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone) AND (time_bucket('@ 1 mon'::interval, time_bucket('@ 1 day'::interval, "time")) >= (ts_now_mock() - '@ 1 year'::interval)))
+                           ->  Partial HashAggregate
+                                 Group Key: time_bucket('@ 1 day'::interval, _hyper_X_X_chunk."time"), _hyper_X_X_chunk.device
+                                 ->  Index Scan using _hyper_X_X_chunk_cagg_hierarch_test_time_idx on _hyper_X_X_chunk
+                                       Index Cond: ("time" >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone)
+                                       Filter: ((time_bucket('@ 1 day'::interval, "time") >= 'Wed Jan 01 01:00:00 2003 UTC'::timestamp with time zone) AND (time_bucket('@ 1 mon'::interval, time_bucket('@ 1 day'::interval, "time")) >= (ts_now_mock() - '@ 1 year'::interval)))
+
+DROP TABLE cagg_hierarch_test CASCADE;
+NOTICE:  drop cascades to 6 other objects
+NOTICE:  drop cascades to 4 other objects
+NOTICE:  drop cascades to 4 other objects
 -- #4709
 -- test queries with constraints involving columns from different nesting levels
 SELECT * FROM

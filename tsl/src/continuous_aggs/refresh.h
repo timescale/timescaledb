@@ -13,11 +13,13 @@
 #include "ts_catalog/continuous_agg.h"
 
 extern Datum continuous_agg_refresh(PG_FUNCTION_ARGS);
-extern void
-continuous_agg_refresh_internal(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
-								const ContinuousAggRefreshContext context, const bool start_isnull,
-								const bool end_isnull, bool bucketing_refresh_window, bool force,
-								bool process_hypertable_invalidations, bool extend_last_bucket);
+extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
+											const InternalTimeRange *refresh_window,
+											const ContinuousAggRefreshContext context,
+											const bool start_isnull, const bool end_isnull,
+											bool bucketing_refresh_window, bool force,
+											bool process_hypertable_invalidations,
+											bool extend_last_bucket);
 extern List *continuous_agg_split_refresh_window(ContinuousAgg *cagg,
 												 InternalTimeRange *original_refresh_window,
 												 int32 buckets_per_batch,
