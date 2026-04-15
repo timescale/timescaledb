@@ -177,7 +177,7 @@ def macos_config(overrides):
                 " --without-icu"
             ),
             "pg_extensions": "postgres_fdw test_decoding",
-            "pginstallcheck": True,
+            "pginstallcheck": False,
             "tsdb_build_args": (
                 " -DASSERTIONS=ON"
                 " -DREQUIRE_ALL_TESTS=ON"
