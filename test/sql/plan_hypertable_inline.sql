@@ -32,8 +32,7 @@ as $f$
 $f$;
 
 
--- pruning should not be done by TimescaleDb in this case
--- specifically, the parent hypertable must exist in the output plan
+-- pruning can be done by TimescaleDb in this case since it now properly supports row marks
 :PREFIX SELECT * FROM test_f(5);
 
 :PREFIX SELECT * FROM test WHERE b >= 5 AND b <= 5 + 2 FOR UPDATE;
