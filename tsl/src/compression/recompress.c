@@ -1001,7 +1001,7 @@ recompress_segment(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel
 				   RowCompressor *row_compressor, BulkWriter *writer)
 {
 	tuplesort_performsort(tuplesortstate);
-	row_compressor_reset(row_compressor);
+	row_compressor_begin_segment(row_compressor);
 	row_compressor_append_sorted_rows(row_compressor, tuplesortstate, compressed_chunk_rel, writer);
 	tuplesort_reset(tuplesortstate);
 	CommandCounterIncrement();
