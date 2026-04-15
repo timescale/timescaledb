@@ -20,7 +20,7 @@
 #include <common/md5.h>
 #include <utils/palloc.h>
 
-TSDLLEXPORT const char *ts_sparse_index_type_names[] = { "bloom", "minmax" };
+TSDLLEXPORT const char *ts_sparse_index_type_names[] = { "bloom", "minmax", "firstlast" };
 TSDLLEXPORT const char *ts_sparse_index_source_names[] = { "config", "default", "orderby" };
 TSDLLEXPORT const char *ts_sparse_index_common_keys[] = { "type", "column", "source", NULL };
 static ScanTupleResult compression_settings_tuple_update(TupleInfo *ti, void *data);
@@ -562,6 +562,14 @@ ts_convert_sparse_index_config_to_jsonb(JsonbParseState *parse_state, SparseInde
 							 ts_sparse_index_common_keys[SparseIndexKeyCol],
 							 minmax_config->col); /* column */
 			break;
+		case _SparseIndexTypeEnumFirstLast:
+		{
+			FirstLastIndexColumnConfig *firstlast_config = (FirstLastIndexColumnConfig *) config;
+			ts_jsonb_add_str(parse_state,
+							 ts_sparse_index_common_keys[SparseIndexKeyCol],
+							 firstlast_config->col); /* column */
+			break;
+		}
 		case _SparseIndexTypeEnumBloom:
 			bloom_config = (BloomFilterConfig *) config;
 
@@ -1299,6 +1307,7 @@ ts_get_per_column_compression_settings(const SparseIndexSettings *settings)
 					per_column_setting = palloc0(sizeof(PerColumnCompressionSettings));
 					per_column_setting->column_name = column_name;
 					per_column_setting->minmax_obj_id = -1;
+					per_column_setting->firstlast_obj_id = -1;
 					per_column_setting->single_bloom_obj_id = -1;
 					per_column_setting->composite_bloom_index_obj_ids = NULL;
 					result_settings = lappend(result_settings, per_column_setting);
@@ -1308,6 +1317,12 @@ ts_get_per_column_compression_settings(const SparseIndexSettings *settings)
 				{
 					Assert(num_columns == 1);
 					per_column_setting->minmax_obj_id = obj_id;
+				}
+				else if (strcmp(index_type,
+								ts_sparse_index_type_names[_SparseIndexTypeEnumFirstLast]) == 0)
+				{
+					Assert(num_columns == 1);
+					per_column_setting->firstlast_obj_id = obj_id;
 				}
 				else if (strcmp(index_type,
 								ts_sparse_index_type_names[_SparseIndexTypeEnumBloom]) == 0)
