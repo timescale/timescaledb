@@ -437,24 +437,26 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 							rte->inh)
 						{
 							/*
-							 * UPDATE/DELETE: only mark the DML target.
+							 * UPDATE/DELETE DML target: expand with GUC guard.
 							 * Check rootquery (not `query`) because this walker
 							 * recurses into subqueries before PG inlines them —
-							 * a subquery has resultRelation == 0, so the SELECT
-							 * branch below would incorrectly mark it.
+							 * a subquery has resultRelation == 0, so the
+							 * non-target branch below would incorrectly mark it.
 							 * MERGE: not implemented because it can contain
 							 * INSERT actions requiring chunk routing, which
 							 * uses a separate planner path (ModifyHypertable).
 							 */
-							if (IS_UPDL_CMD(context->rootquery) &&
+							if (rti == (Index) query->resultRelation &&
+								IS_UPDL_CMD(context->rootquery) &&
 								ts_guc_enable_hypertable_expansion_for_dml)
 							{
-								if (rti == (Index) query->resultRelation)
-									rte_mark_for_expansion(rte);
-							}
-							/* SELECT: mark all hypertables */
-							else if (query->resultRelation == 0)
 								rte_mark_for_expansion(rte);
+							}
+							/* Non-target table: always expand. */
+							else if (query->resultRelation == 0)
+							{
+								rte_mark_for_expansion(rte);
+							}
 						}
 
 						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
@@ -1439,49 +1441,34 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	Query *query = root->parse;
 	Hypertable *ht;
 	const TsRelType type = ts_classify_relation(root, rel, &ht);
-	AclMode requiredPerms = 0;
-
-#if PG16_LT
-	requiredPerms = rte->requiredPerms;
-#else
-	if (rte->perminfoindex > 0)
-	{
-		RTEPermissionInfo *perminfo = getRTEPermissionInfo(query->rteperminfos, rte);
-		requiredPerms = perminfo->requiredPerms;
-	}
-#endif
 
 	switch (type)
 	{
 		case TS_REL_HYPERTABLE:
 		{
 			/* Mark hypertable RTEs we'd like to expand ourselves.
-			 * Hypertables inside inlineable functions don't get marked during the query
-			 * preprocessing step. Therefore we do an extra try here.
-			 * requiredPerms is checked on the SELECT branch as a defensive guard
-			 * to avoid marking a DML target we don't handle.
+			 * Hypertables inside inlineable functions don't get marked during
+			 * the query preprocessing step. Therefore we do an extra try here.
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
 				rte->ctename == NULL)
 			{
 				/*
-				 * UPDATE/DELETE: only mark the DML target.
+				 * UPDATE/DELETE DML target: expand with GUC guard.
 				 * MERGE: not implemented because it can contain INSERT
 				 * actions requiring chunk routing, which uses a separate
 				 * planner path (ModifyHypertable).
 				 */
-				if (IS_UPDL_CMD(query) && ts_guc_enable_hypertable_expansion_for_dml)
+				if (rel->relid == (Index) query->resultRelation &&
+					IS_UPDL_CMD(query) && ts_guc_enable_hypertable_expansion_for_dml)
 				{
-					if (rel->relid == (Index) query->resultRelation)
-						rte_mark_for_expansion(rte);
-				}
-				/*
-				 * SELECT: mark all. requiredPerms is a defensive guard
-				 * against marking a DML target that bypassed IS_UPDL_CMD.
-				 */
-				else if (query->resultRelation == 0 &&
-						 (requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
 					rte_mark_for_expansion(rte);
+				}
+				/* Non-target table: always expand. */
+				else if (rel->relid != (Index) query->resultRelation)
+				{
+					rte_mark_for_expansion(rte);
+				}
 			}
 			ts_create_private_reloptinfo(rel);
 			ts_plan_expand_timebucket_annotate(root, rel);
