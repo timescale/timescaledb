@@ -996,16 +996,14 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 				tsl_compressor_apply_segmentby_and_rebuild(compressor, bulk_writer);
 				compressor->needs_analyze_segmentby = false;
 			}
-
 			TupleTableSlot *slot = MakeTupleTableSlot(compressor->in_desc, &TTSOpsMinimalTuple);
+
 			while (tuplesort_gettupleslot(compressor->sort_state,
 										  true /*=forward*/,
 										  false /*=copy*/,
 										  slot,
 										  NULL /*=abbrev*/))
-			{
 				row_compressor_process_ordered_slot(compressor, slot, bulk_writer);
-			}
 
 			if (compressor->rows_compressed_into_current_value > 0)
 			{
