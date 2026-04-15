@@ -1008,6 +1008,8 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 			if (compressor->rows_compressed_into_current_value > 0)
 				row_compressor_flush(compressor, bulk_writer, true);
 
+			row_compressor_reset(compressor);
+
 			ExecDropSingleTupleTableSlot(slot);
 			tuplesort_reset(compressor->sort_state);
 			compressor->tuples_to_sort = 0;
