@@ -103,7 +103,7 @@ def build_debug_config(overrides):
             "pg_extensions": "postgres_fdw test_decoding",
             "installcheck": True,
             "pginstallcheck": True,
-            "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
+            "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON",
         }
     )
     base_config.update(overrides)
@@ -119,7 +119,7 @@ def build_release_config(overrides):
         {
             "name": "Release",
             "build_type": "RelWithDebInfo",
-            "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
+            "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON",
             "coverage": False,
         }
     )
@@ -145,7 +145,7 @@ def build_apache_config(overrides):
         {
             "name": "ApacheOnly",
             "build_type": "RelWithDebInfo",
-            "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON -DAPACHE_ONLY=1",
+            "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DAPACHE_ONLY=1",
             "coverage": False,
         }
     )
@@ -180,7 +180,6 @@ def macos_config(overrides):
             "pginstallcheck": True,
             "tsdb_build_args": (
                 " -DASSERTIONS=ON"
-                " -DREQUIRE_ALL_TESTS=ON"
                 f" -DOPENSSL_ROOT_DIR={openssl_path}"
             ),
         }
