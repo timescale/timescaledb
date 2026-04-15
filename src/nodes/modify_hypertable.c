@@ -170,7 +170,25 @@ static TupleTableSlot *
 modify_hypertable_exec(CustomScanState *node)
 {
 	ModifyTableState *mtstate = linitial_node(ModifyTableState, node->custom_ps);
-	return ExecModifyTable(node, &mtstate->ps);
+	TupleTableSlot *result;
+
+	/*
+	 * The wrapped ModifyTable is not reached through ExecProcNode, so its
+	 * instrumentation is not ticked automatically. Bracket the call manually
+	 * so the node accumulates its own timings/row counts. Keeping a separate
+	 * Instrumentation struct here (instead of aliasing the CustomScan's) is
+	 * what makes it safe for extensions that call ExplainPrintPlan at
+	 * arbitrary points (see issues #7583 and #8531).
+	 */
+	if (mtstate->ps.instrument)
+		InstrStartNode(mtstate->ps.instrument);
+
+	result = ExecModifyTable(node, &mtstate->ps);
+
+	if (mtstate->ps.instrument)
+		InstrStopNode(mtstate->ps.instrument, TupIsNull(result) ? 0.0 : 1.0);
+
+	return result;
 }
 
 static void
@@ -257,19 +275,21 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 	}
 
 	/*
-	 * Since we hijack the ModifyTable node, instrumentation on ModifyTable will
-	 * be missing so we set it to instrumentation of ModifyHypertable node.
+	 * INSERT .. ON CONFLICT statements record a couple of metrics on the
+	 * wrapped ModifyTable node. Surface them on the ModifyHypertable
+	 * CustomScan so they show up in EXPLAIN output for this node too.
+	 *
+	 * We intentionally do NOT alias mtstate->ps.instrument to the CustomScan's
+	 * instrument: sharing the Instrumentation struct caused InstrStartNode to
+	 * be invoked twice on the same struct when an extension calls
+	 * ExplainPrintPlan before execution finishes (issues #7583 and #8531).
+	 * mtstate's own instrument is ticked by modify_hypertable_exec.
 	 */
-	if (mtstate->ps.instrument)
+	if (mtstate->ps.instrument && node->ss.ps.instrument)
 	{
-		/*
-		 * INSERT .. ON CONFLICT statements record few metrics in the ModifyTable node.
-		 * So, copy them into ModifyHypertable node before replacing them.
-		 */
 		node->ss.ps.instrument->ntuples2 = mtstate->ps.instrument->ntuples2;
 		node->ss.ps.instrument->nfiltered1 = mtstate->ps.instrument->nfiltered1;
 	}
-	mtstate->ps.instrument = node->ss.ps.instrument;
 
 	/*
 	 * For INSERT we have to read the number of decompressed batches and
