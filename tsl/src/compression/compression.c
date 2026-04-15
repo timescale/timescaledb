@@ -1229,7 +1229,7 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 		.rows_compressed_into_current_value = 0,
 		.rowcnt_pre_compression = 0,
 		.num_compressed_rows = 0,
-		.first_iteration_in_segment = true,
+		.first_iteration = true,
 		.sort_state = NULL,
 	};
 
@@ -1325,10 +1325,10 @@ row_compressor_append_ordered_slot(RowCompressor *row_compressor, TupleTableSlot
 	MemoryContext old_ctx;
 	slot_getallattrs(slot);
 	old_ctx = MemoryContextSwitchTo(row_compressor->per_row_ctx);
-	if (row_compressor->first_iteration_in_segment)
+	if (row_compressor->first_iteration)
 	{
 		row_compressor_update_group(row_compressor, slot);
-		row_compressor->first_iteration_in_segment = false;
+		row_compressor->first_iteration = false;
 	}
 	bool changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
 	bool compressed_row_is_full = row_compressor_is_full(row_compressor, slot);
@@ -1346,10 +1346,10 @@ row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlo
 	MemoryContext old_ctx;
 	slot_getallattrs(slot);
 	old_ctx = MemoryContextSwitchTo(row_compressor->per_row_ctx);
-	if (row_compressor->first_iteration_in_segment)
+	if (row_compressor->first_iteration)
 	{
 		row_compressor_update_group(row_compressor, slot);
-		row_compressor->first_iteration_in_segment = false;
+		row_compressor->first_iteration = false;
 	}
 	bool changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
 	bool compressed_row_is_full = row_compressor_is_full(row_compressor, slot);
@@ -1619,9 +1619,9 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 }
 
 void
-row_compressor_begin_segment(RowCompressor *row_compressor)
+row_compressor_reset(RowCompressor *row_compressor)
 {
-	row_compressor->first_iteration_in_segment = true;
+	row_compressor->first_iteration = true;
 }
 
 void

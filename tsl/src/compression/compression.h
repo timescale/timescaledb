@@ -289,11 +289,8 @@ typedef struct RowCompressor
 	bool *compressed_is_null;
 	int64 rowcnt_pre_compression;
 	int64 num_compressed_rows;
-
-	/*
-	 * Whether we are working on the first tuple of the given segment.
-	 */
-	bool first_iteration_in_segment;
+	/* flag for checking if we are working on the first tuple */
+	bool first_iteration;
 
 	/* Callback called on every flush. The ntuples argument is the number of
 	 * tuples flushed. Typically used for progress reporting. */
@@ -415,7 +412,7 @@ extern void tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_
 extern void tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer);
 extern void tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer);
 
-extern void row_compressor_begin_segment(RowCompressor *row_compressor);
+extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
 extern HeapTuple row_compressor_build_tuple(RowCompressor *row_compressor);
 extern void row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups);
