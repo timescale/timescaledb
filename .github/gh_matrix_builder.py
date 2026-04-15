@@ -227,7 +227,7 @@ m["include"].append(
         macos_config(
             {
                 "pg": PG18_LATEST,
-                "installcheck": True,
+                "installcheck": not pull_request,
                 "pginstallcheck": not pull_request,
             }
         )
