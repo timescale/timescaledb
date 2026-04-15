@@ -211,3 +211,19 @@ ALTER TABLE test_column_limit_alter SET (
 
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+
+
+-- Test NOTICE when changing compression settings on a table that already has compression enabled
+SET timescaledb.enable_direct_compress_insert = true;
+CREATE TABLE notice_test(time timestamptz not null, device text, temp float, created_at timestamptz not null default now()) WITH (tsdb.hypertable);
+ALTER TABLE notice_test SET (timescaledb.compress_segmentby='device');
+INSERT INTO notice_test SELECT t, 'dev1', 1.0, t + interval '1 hour' FROM generate_series('2000-01-01'::timestamptz, '2000-01-02', '1 minute') t;
+ALTER TABLE notice_test SET (timescaledb.compress_segmentby='');
+INSERT INTO notice_test SELECT t, 'dev1', 1.0, t + interval '1 hour' FROM generate_series('2000-02-01'::timestamptz, '2000-02-02', '1 minute') t;
+ALTER TABLE notice_test SET (timescaledb.compress_orderby='created_at');
+INSERT INTO notice_test SELECT t, 'dev1', 1.0, t + interval '1 hour' FROM generate_series('2000-02-10'::timestamptz, '2000-02-11', '1 minute') t;
+ALTER TABLE notice_test SET (timescaledb.index='bloom(temp)');
+INSERT INTO notice_test SELECT t, 'dev1', 1.0, t + interval '1 hour' FROM generate_series('2000-04-01'::timestamptz, '2000-04-02', '1 minute') t;
+SELECT * FROM settings;
+RESET timescaledb.enable_direct_compress_insert;
+DROP TABLE notice_test;

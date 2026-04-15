@@ -162,6 +162,7 @@ SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd2', i::float
 FROM generate_series(101,105) i;
 WARNING:  disabling direct compress because of too small batch size
 ALTER TABLE vacuum_settings_test SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+NOTICE:  updated compression settings will only apply to future compressions
 ALTER TABLE vacuum_settings_test ADD COLUMN c2 int DEFAULT 20;
 SELECT chunk FROM show_chunks('vacuum_settings_test') AS chunk LIMIT 1 \gset
 SELECT _timescaledb_functions.chunk_status_text(:'chunk'::regclass) AS status_before;

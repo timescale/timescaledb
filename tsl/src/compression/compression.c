@@ -1127,7 +1127,7 @@ tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *compressor, BulkWriter
 
 	/* Create before drop. We must update settings first to point to the new chunk. */
 	Chunk *new_compressed_chunk =
-		create_compress_chunk_with_settings(compress_ht, src_chunk, settings);
+		create_compress_chunk(compress_ht, src_chunk, InvalidOid, false, settings);
 	ts_chunk_set_compressed_chunk(src_chunk, new_compressed_chunk->fd.id);
 	ts_chunk_drop(old_compressed_chunk, DROP_RESTRICT, -1);
 

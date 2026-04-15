@@ -27,6 +27,7 @@ ERROR:  bloom index has too many columns: 9 > max 8
 \set ON_ERROR_STOP 1
 -- The ordering of bloom columns in the composite bloom index should be determined by the order of the columns in the CREATE TABLE statement
 ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'b', timescaledb.compress_index = 'bloom("h","g","f","e","d","c","b")');
+NOTICE:  updated compression settings will only apply to future compressions
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings
 where relid = 't'::regclass and index is not null order by 1,2;
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                 index                                                                                                  
@@ -92,6 +93,7 @@ select relname,attname from compressedcols order by 1,2;
  compress_hyper_4_2_chunk | xmin
 
 ALTER TABLE u SET (timescaledb.compress_index = 'bloom("a","b","c")');
+NOTICE:  updated compression settings will only apply to future compressions
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
                  relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                    
 ----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -100,6 +102,7 @@ select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,in
 
 -- Also in a different order
 ALTER TABLE u SET (timescaledb.compress_index = 'bloom("c","b","a")');
+NOTICE:  updated compression settings will only apply to future compressions
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
                  relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                    
 ----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
