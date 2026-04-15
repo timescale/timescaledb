@@ -177,7 +177,7 @@ def macos_config(overrides):
                 " --without-icu"
             ),
             "pg_extensions": "postgres_fdw test_decoding",
-            "pginstallcheck": False,
+            "pginstallcheck": True,
             "tsdb_build_args": (
                 " -DASSERTIONS=ON"
                 " -DREQUIRE_ALL_TESTS=ON"
@@ -227,7 +227,7 @@ m["include"].append(
         macos_config(
             {
                 "pg": PG18_LATEST,
-                "installcheck": not pull_request,
+                "installcheck": True,
                 "pginstallcheck": not pull_request,
             }
         )
