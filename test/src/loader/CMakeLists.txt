@@ -14,22 +14,20 @@ add_library(${PROJECT_NAME}-mock-broken MODULE ${SOURCES} config.h)
 add_library(${PROJECT_NAME}-mock-6 MODULE ${SOURCES} config.h)
 
 target_compile_definitions(${PROJECT_NAME}-mock-1
-                           PRIVATE TIMESCALEDB_VERSION_MOD="mock-1" BROKEN=0)
+                           PRIVATE TIMESCALEDB_VERSION_MOD="mock-1")
 target_compile_definitions(${PROJECT_NAME}-mock-2
-                           PRIVATE TIMESCALEDB_VERSION_MOD="mock-2" BROKEN=0)
+                           PRIVATE TIMESCALEDB_VERSION_MOD="mock-2")
 target_compile_definitions(${PROJECT_NAME}-mock-3
-                           PRIVATE TIMESCALEDB_VERSION_MOD="mock-3" BROKEN=0)
+                           PRIVATE TIMESCALEDB_VERSION_MOD="mock-3")
 # mock 4 is intentionally incorrect version mod
-target_compile_definitions(
-  ${PROJECT_NAME}-mock-4 PRIVATE TIMESCALEDB_VERSION_MOD="mock-4-mismatch"
-                                 BROKEN=0)
+target_compile_definitions(${PROJECT_NAME}-mock-4
+                           PRIVATE TIMESCALEDB_VERSION_MOD="mock-4-mismatch")
 target_compile_definitions(${PROJECT_NAME}-mock-5
-                           PRIVATE TIMESCALEDB_VERSION_MOD="mock-5" BROKEN=0)
-target_compile_definitions(
-  ${PROJECT_NAME}-mock-broken PRIVATE TIMESCALEDB_VERSION_MOD="mock-broken"
-                                      BROKEN=1)
+                           PRIVATE TIMESCALEDB_VERSION_MOD="mock-5")
+target_compile_definitions(${PROJECT_NAME}-mock-broken
+                           PRIVATE TIMESCALEDB_VERSION_MOD="mock-broken")
 target_compile_definitions(${PROJECT_NAME}-mock-6
-                           PRIVATE TIMESCALEDB_VERSION_MOD="mock-6" BROKEN=0)
+                           PRIVATE TIMESCALEDB_VERSION_MOD="mock-6")
 
 foreach(
   MOCK_VERSION
