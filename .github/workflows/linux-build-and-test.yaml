@@ -85,9 +85,10 @@ jobs:
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
           libtest-most-perl pkgconf icu-devtools faketime jq ${{ matrix.extra_packages }}
 
-    - name: Install macOS Build Dependencies
+    - name: Check macOS Build Dependencies
       if: runner.os == 'macOS'
       run: |
+        # OpenSSL is supposed to be preinstalled, so just check its path here
         brew --prefix openssl@3
 
     - name: Install macOS Test Dependencies
@@ -187,6 +188,7 @@ jobs:
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
           -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
+          ${{ !matrix.installcheck && '-DREQUIRE_ALL_TESTS=OFF' || '' }} \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
