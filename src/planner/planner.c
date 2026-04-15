@@ -432,11 +432,15 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 
 					if (ht)
 					{
-						/* Mark hypertable RTEs we'd like to expand ourselves */
+						/* Mark hypertable RTEs we'd like to expand ourselves.
+						 * We skip the DML target relation (resultRelation != 0
+						 * in the current query) but allow non-target hypertables
+						 * in subqueries of UPDATE/DELETE to use TSDB expansion. */
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-							!IS_UPDL_CMD(context->rootquery) && query->resultRelation == 0 &&
-							rte->inh)
+							query->resultRelation == 0 && rte->inh)
+						{
 							rte_mark_for_expansion(rte);
+						}
 
 						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 						{
@@ -1420,38 +1424,18 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	Query *query = root->parse;
 	Hypertable *ht;
 	const TsRelType type = ts_classify_relation(root, rel, &ht);
-	AclMode requiredPerms = 0;
-
-#if PG16_LT
-	requiredPerms = rte->requiredPerms;
-#else
-	if (rte->perminfoindex > 0)
-	{
-		RTEPermissionInfo *perminfo = getRTEPermissionInfo(query->rteperminfos, rte);
-		requiredPerms = perminfo->requiredPerms;
-	}
-#endif
 
 	switch (type)
 	{
 		case TS_REL_HYPERTABLE:
 		{
 			/* Mark hypertable RTEs we'd like to expand ourselves.
-			 * Hypertables inside inlineable functions don't get marked during the query
-			 * preprocessing step. Therefore we do an extra try here. However, we need to
-			 * be careful for UPDATE/DELETE as Postgres (in at least version 12) plans them
-			 * in a complicated way (see planner.c:inheritance_planner). First, it runs the
-			 * UPDATE/DELETE through the planner as a simulated SELECT. It uses the results
-			 * of this fake planning to adapt its own UPDATE/DELETE plan. Then it's planned
-			 * a second time as a real UPDATE/DELETE, but with requiredPerms set to 0, as it
-			 * assumes permission checking has been done already during the first planner call.
-			 * We don't want to touch the UPDATE/DELETEs, so we need to check all the regular
-			 * conditions here that are checked during preprocess_query, as well as the
-			 * condition that requiredPerms is not requiring UPDATE/DELETE on this rel.
+			 * Hypertables inside inlineable functions don't get marked during
+			 * the query preprocessing step. Therefore we do an extra try here.
+			 * We skip the DML target relation identified by resultRelation.
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
-				rte->ctename == NULL && !IS_UPDL_CMD(query) && query->resultRelation == 0 &&
-				(requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
+				rte->ctename == NULL && rel->relid != (Index) query->resultRelation)
 			{
 				rte_mark_for_expansion(rte);
 			}

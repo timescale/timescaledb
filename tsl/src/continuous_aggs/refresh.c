@@ -18,7 +18,6 @@
 #include <utils/lsyscache.h>
 #include <utils/snapmgr.h>
 
-#include "bgw_policy/policies_v2.h"
 #include "debug_point.h"
 #include "dimension.h"
 #include "dimension_slice.h"
@@ -581,23 +580,12 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 {
 	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool force = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
-	Jsonb *options = PG_ARGISNULL(4) ? NULL : PG_GETARG_JSONB_P(4);
-	bool process_hypertable_invalidations = true;
 	ContinuousAgg *cagg;
 	InternalTimeRange refresh_window = {
 		.type = InvalidOid,
 	};
 
 	ts_feature_flag_check(FEATURE_CAGG);
-
-	if (options)
-	{
-		bool found;
-		bool value = ts_jsonb_get_bool_field(options,
-											 POL_REFRESH_CONF_KEY_PROCESS_HYPERTABLE_INVALIDATIONS,
-											 &found);
-		process_hypertable_invalidations = !found || value;
-	}
 
 	cagg = cagg_get_by_relid_or_fail(cagg_relid);
 	refresh_window.type = cagg->partition_type;
@@ -627,7 +615,6 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 									PG_ARGISNULL(2),
 									true,
 									force,
-									process_hypertable_invalidations,
 									false /*extend_last_bucket*/);
 
 	PG_RETURN_VOID();
@@ -798,7 +785,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 								const InternalTimeRange *refresh_window_arg,
 								const ContinuousAggRefreshContext context, const bool start_isnull,
 								const bool end_isnull, bool bucketing_refresh_window, bool force,
-								bool process_hypertable_invalidations, bool extend_last_bucket)
+								bool extend_last_bucket)
 {
 	const ContinuousAgg *volatile cagg = cagg_arg;
 	int32 mat_id = cagg->data.mat_hypertable_id;
@@ -989,11 +976,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 			!(IS_TIMESTAMP_TYPE(refresh_window.type) &&
 			  invalidation_threshold == ts_time_get_min(refresh_window.type)))
 		{
-			if (process_hypertable_invalidations) // fix this : remove this
-			{
-				invalidation_process_hypertable_log(cagg->data.raw_hypertable_id,
-													refresh_window.type);
-			}
+			invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
 
 			DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn1");
 			/* Commit and Start a new transaction */

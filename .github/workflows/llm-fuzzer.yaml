@@ -69,6 +69,7 @@ jobs:
 
     steps:
     - name: Install Linux Dependencies
+      timeout-minutes: 3
       run: |
         sudo apt-get update
         sudo apt-get install cmake flex bison systemd-coredump gdb \
@@ -163,54 +164,60 @@ jobs:
         make -j$(getconf _NPROCESSORS_ONLN) -C build
         make -C build install
 
+    - name: Install Claude Code
+      run: npm install -g @anthropic-ai/claude-code@2.1.104
+
     - name: LLM Fuzzing
       id: llm-fuzzing
-      uses: anthropics/claude-code-action@6e2bd52842c65e914eba5c8badd17560bd26b5de # v1.0.89
-      with:
-        anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-        github_token: ${{ github.token }}
-        claude_args: '--max-budget-usd 5.00 --dangerously-skip-permissions --model opus --effort high'
-        prompt: |
-          Find bugs in the TimescaleDB code modified in this change set. Focus
-          on crashes, assertion failures, sanitizer errors, and internal errors
-          (SQLSTATE XX000) -- these are detected automatically from server
-          logs. Do not chase wrong-result bugs that need manual verification.
-          That is, if you see a bug, but it manifests in a way that is not
-          going to be caught by the reproduction step of this workflow, choose
-          another bug. Stop after one reproducible bug.
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      run: |
+        claude -p --output-format json \
+          --max-budget-usd 5.00 --dangerously-skip-permissions \
+          --model opus --effort high \
+          "$(cat <<'PROMPT'
+        Find bugs in the TimescaleDB code modified in this change set. Focus
+        on crashes, assertion failures, sanitizer errors, and internal errors
+        (SQLSTATE XX000) -- these are detected automatically from server
+        logs. Do not chase wrong-result bugs that need manual verification.
+        That is, if you see a bug, but it manifests in a way that is not
+        going to be caught by the reproduction step of this workflow, choose
+        another bug. Stop after one reproducible bug.
 
-          Read the workflow at .github/workflows/llm-fuzzer.yaml. You are
-          running in that workflow. PostgreSQL with TimescaleDB is already
-          built and installed, with AddressSanitizer enabled. The build
-          environment is functional, use it to rebuild with debug logging as
-          needed.
+        Read the workflow at .github/workflows/llm-fuzzer.yaml. You are
+        running in that workflow. PostgreSQL with TimescaleDB is already
+        built and installed, with AddressSanitizer enabled. The build
+        environment is functional, use it to rebuild with debug logging as
+        needed.
 
-          Determine whether we are testing a PR or a commit on a branch. Focus
-          on the changes in that change set. Do not explore unrelated git
-          history or old commits.
-          
-          Only use public SQL APIs (CREATE, ALTER, SELECT, INSERT, etc. and
-          documented timescaledb functions). Do not directly modify internal
-          catalog tables (_timescaledb_catalog.*, _timescaledb_internal.*) --
-          corrupting internal state is not a useful bug. The goal is to find
-          inputs that break the code through its public interface.
+        Determine whether we are testing a PR or a commit on a branch. Focus
+        on the changes in that change set. Do not explore unrelated git
+        history or old commits.
 
-          When done, generate a self-contained ~/llm-fuzzer-repro.sql that
-          reproduces the error when the subsequent workflow step replays it
-          against a fresh server.
-          
-          Some details about the GitHub Actions event that triggered this workflow
-          what=${{ github.event.pull_request.title || github.event.head_commit.message || github.event.schedule || github.event_name }}
-          branch=${{ github.head_ref || github.ref_name }}
-          base=${{ github.base_ref || github.ref_name }}
-          event=${{ github.event_name }}
-          sha=${{ github.event.pull_request.head.sha || github.sha }}
+        Only use public SQL APIs (CREATE, ALTER, SELECT, INSERT, etc. and
+        documented timescaledb functions). Do not directly modify internal
+        catalog tables (_timescaledb_catalog.*, _timescaledb_internal.*) --
+        corrupting internal state is not a useful bug. The goal is to find
+        inputs that break the code through its public interface.
+
+        When done, generate a self-contained ~/llm-fuzzer-repro.sql that
+        reproduces the error when the subsequent workflow step replays it
+        against a fresh server.
+
+        Some details about the GitHub Actions event that triggered this workflow
+        what=${{ github.event.pull_request.title || github.event.head_commit.message || github.event.schedule || github.event_name }}
+        branch=${{ github.head_ref || github.ref_name }}
+        base=${{ github.base_ref || github.ref_name }}
+        event=${{ github.event_name }}
+        sha=${{ github.event.pull_request.head.sha || github.sha }}
+        PROMPT
+        )" > ${{ runner.temp }}/claude-execution-output.json
 
 
     - name: Write job summary
       if: always()
       run: |
-        jq -r 'last | "## LLM Fuzzer Result\n\n"
+        jq -r '"## LLM Fuzzer Result\n\n"
           + (.result // "No result produced.")
           + "\n\n**Cost:** $\(.total_cost_usd // 0 | tostring) | **Duration:** \((.duration_ms // 0) / 1000 | tostring)s | **Turns:** \(.num_turns // 0)"' \
           ${{ runner.temp }}/claude-execution-output.json \
@@ -221,7 +228,7 @@ jobs:
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: Claude execution log
-        path: ${{ steps.llm-fuzzing.outputs.execution_file }}
+        path: ${{ runner.temp }}/claude-execution-output.json
         if-no-files-found: ignore
 
     - name: Check for reproducer
@@ -270,7 +277,6 @@ jobs:
         shared_preload_libraries = 'timescaledb'
         statement_timeout = '30s'
         listen_addresses = ''
-        unix_socket_directories = '$PGHOST'
         logging_collector = on
         log_destination = 'jsonlog,stderr'
         log_directory = '$(readlink -f .)'

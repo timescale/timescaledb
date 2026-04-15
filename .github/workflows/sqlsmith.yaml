@@ -30,7 +30,8 @@ jobs:
       JOB_NAME: SQLsmith PG${{ matrix.pg }}
 
     steps:
-    - name: Install Dependencies
+    - name: Install Linux Dependencies
+      timeout-minutes: 3
       run: |
         sudo apt-get update
         sudo apt-get install gnupg systemd-coredump gdb postgresql-common \

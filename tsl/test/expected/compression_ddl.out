@@ -1254,6 +1254,7 @@ ALTER MATERIALIZED VIEW test1_cont_view2 SET (
   timescaledb.compress_segmentby = '"iDeA"'
 );
 NOTICE:  defaulting compress_orderby to t
+NOTICE:  updated compression settings will only apply to future compressions
 \set ON_ERROR_STOP 0
 ALTER MATERIALIZED VIEW test1_cont_view2 SET (
   timescaledb.compress = true,
@@ -2347,6 +2348,7 @@ FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-03 23:55:00+0'
 SELECT compress_chunk(ch, true) AS "CHUNK_NAME" FROM show_chunks('compression_drop') ch ORDER BY ch DESC \gset
 -- change segmentby column
 ALTER TABLE compression_drop SET (timescaledb.compress_segmentby='v1');
+NOTICE:  updated compression settings will only apply to future compressions
 -- insert more data and compress next chunk
 INSERT INTO compression_drop(time, v0, v1)
 SELECT time, v0, v0+1

@@ -639,6 +639,7 @@ SELECT create_hypertable('exclusive_test', by_range('time', INTERVAL '1 day'));
  (24,t)
 
 ALTER TABLE guc_test set (timescaledb.compress, timescaledb.compress_segmentby = 'a, b');
+NOTICE:  updated compression settings will only apply to future compressions
 INSERT INTO guc_test VALUES ('2024-10-30 14:04:00.501519-06'::timestamptz, 1, 1, 1);
 SELECT show_chunks as chunk_to_compress FROM show_chunks('guc_test') LIMIT 1 \gset
 SELECT compress_chunk(:'chunk_to_compress');

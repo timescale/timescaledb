@@ -1,2 +1,0 @@
-Fixes: #9571 Fix concurrent refreshes of continuous aggregates
-Thanks: @GTan615 for reporting the data duplicate issues observed during overlapping cagg refreshes
