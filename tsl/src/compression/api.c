@@ -824,6 +824,17 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 {
 	Oid uncompressed_chunk_id = chunk->table_id;
 
+	if (ts_chunk_is_frozen(chunk))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("chunk \"%s.%s\" is frozen, skipping compression",
+						NameStr(chunk->fd.schema_name),
+						NameStr(chunk->fd.table_name)),
+				 errhint("Use _timescaledb_functions.unfreeze_chunk to unfreeze.")));
+		return uncompressed_chunk_id;
+	}
+
 	write_logical_replication_msg_compression_start();
 
 	if (ts_chunk_needs_compression(chunk))
