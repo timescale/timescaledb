@@ -777,7 +777,7 @@ rollback_and_error(const ContinuousAgg *cagg, CaggRefreshSpiContext *cagg_spi_ct
 	/* Commit the cleanup transaction, then throw the original error. */
 	cleanup_before_cagg_refresh_exit(cagg, cagg_spi_ctx);
 	SPI_commit();
-	elog(ERROR, "%s", edata->message);
+	ThrowErrorData(edata);
 }
 
 void
