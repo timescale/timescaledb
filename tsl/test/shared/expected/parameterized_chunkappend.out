@@ -46,3 +46,21 @@ ORDER BY devices.device_id, win.id
 RESET enable_hashjoin;
 RESET enable_mergejoin;
 RESET enable_material;
+-- #9607: PlaceHolderVar in runtime chunk exclusion clauses used to trip
+-- pull_var_clause with flag 0. GROUP BY ROLLUP on a view over a hypertable
+-- combined with a join and a generic plan can produce such PlaceHolderVars.
+PREPARE p9607(int, timestamptz, timestamptz) AS
+SELECT h.device_name, COUNT(*)
+FROM hourly_device_metrics h
+JOIN devices d ON h.device_name = d.name
+WHERE h.device_id = $1 AND h.hour >= $2 AND h.hour < $3
+GROUP BY ROLLUP(h.device_name);
+SET plan_cache_mode = force_generic_plan;
+EXECUTE p9607(1, '2000-01-01'::timestamptz, '2000-01-20'::timestamptz);
+ device_name | count 
+-------------+-------
+             |   448
+ Device 1    |   448
+
+RESET plan_cache_mode;
+DEALLOCATE p9607;
