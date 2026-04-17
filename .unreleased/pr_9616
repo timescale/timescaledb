@@ -1,0 +1,1 @@
+Fixes: #9616 Use DROP CASCADE for trigger removal
