@@ -172,7 +172,7 @@ jobs:
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: |
-        claude -p --output-format stream-json \
+        claude -p --output-format stream-json --verbose \
           --max-budget-usd 5.00 --dangerously-skip-permissions \
           --model opus --effort high \
           "$(cat <<'PROMPT'
