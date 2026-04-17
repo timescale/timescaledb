@@ -501,17 +501,11 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 
 		branch_filters[i] = branch_filter;
 
-		if (value_expression != NULL)
-		{
-			branch_values[i] =
-				vector_slot_evaluate_expression(dcontext, slot, branch_filter, value_expression);
-		}
-		else
-		{
-			branch_values[i] =
-				(CompressedColumnValues){ .decompression_type = DT_Scalar,
-										  .buffers[0] = DatumGetPointer(BoolGetDatum(true)) };
-		}
+		Ensure(value_expression != NULL,
+			   "CASE branch %d has NULL value expression",
+			   i);
+		branch_values[i] =
+			vector_slot_evaluate_expression(dcontext, slot, branch_filter, value_expression);
 
 		branch_values[i].output_value = &branch_data[i];
 		branch_values[i].output_isnull = &branch_isnull[i];

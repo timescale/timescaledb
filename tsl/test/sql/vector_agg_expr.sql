@@ -152,6 +152,9 @@ select count(*), case when i = 12 then 1212 else i::numeric end from aggexpr gro
 
 select count(*), case when i::numeric = 12::numeric then 1212 else i end from aggexpr group by 2 order by 1, 2 limit 10;
 
+-- Vectorizable WHEN branches but non-vectorizable ELSE (volatile function).
+select sum(case when i > 10 then i else (random() * 0)::int end) from aggexpr group by b order by 1;
+
 
 reset timescaledb.enable_columnarindexscan;
 reset timescaledb.enable_decompression_sorted_merge;
