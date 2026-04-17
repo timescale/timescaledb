@@ -1,0 +1,57 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- Test the observability functions.
+-- Smoke tests, the results should be empty
+SELECT * FROM _timescaledb_functions.observ_reset();
+ observ_reset 
+--------------
+ 
+
+SELECT * FROM _timescaledb_functions.observ_keys();
+ key_id |           key_name            |                   description                   | total_count | first_seen | last_seen 
+--------+-------------------------------+-------------------------------------------------+-------------+------------+-----------
+      0 | unused                        | Unused key                                      |           0 |            | 
+      1 | event_type                    | Type of event                                   |           0 |            | 
+      2 | relid                         | Relation ID                                     |           0 |            | 
+      3 | compress_relid                | Compressed Relation ID                          |           0 |            | 
+      4 | agg_count                     | Number of aggregated observations               |           0 |            | 
+      5 | agg_start                     | Aggregation start time                          |           0 |            | 
+      6 | agg_end                       | Aggregation end time                            |           0 |            | 
+      7 | batch_rows_sum                | Sum of rows per batch                           |           0 |            | 
+      8 | batch_rows_min                | Min rows per batch                              |           0 |            | 
+      9 | batch_rows_max                | Max rows per batch                              |           0 |            | 
+     10 | batch_rows_avg                | Average rows per batch                          |           0 |            | 
+     11 | batch_rows_stddev             | Standard deviation of rows per batch            |           0 |            | 
+     12 | batch_bytes_sum               | Sum of bytes per batch                          |           0 |            | 
+     13 | batch_bytes_min               | Min bytes per batch                             |           0 |            | 
+     14 | batch_bytes_max               | Max bytes per batch                             |           0 |            | 
+     15 | batch_bytes_avg               | Average bytes per batch                         |           0 |            | 
+     16 | batch_bytes_stddev            | Standard deviation of bytes per batch           |           0 |            | 
+     17 | hypertable_id                 | Hypertable ID                                   |           0 |            | 
+     18 | is_columnar_scan              | Whether the event is from a columnar scan       |           0 |            | 
+     19 | cmd_type                      | Command type (the value of the CmdType enum)    |           0 |            | 
+     20 | batches_deleted               | Number of batches deleted without decompression |           0 |            | 
+     21 | batches_decompressed          | Number of batches decompressed                  |           0 |            | 
+     22 | batches_scanned               | Number of batches scanned                       |           0 |            | 
+     23 | batches_checked_by_bloom      | Number of batches checked by bloom filter       |           0 |            | 
+     24 | batches_pruned_by_bloom       | Number of batches pruned by bloom filter        |           0 |            | 
+     25 | batches_without_bloom         | Number of batches without bloom filter          |           0 |            | 
+     26 | bloom_false_positives         | Number of bloom filter false positives          |           0 |            | 
+     27 | decompressed_tuples           | Number of tuples decompressed                   |           0 |            | 
+     28 | deleted_tuples                | Number of tuples deleted by direct batch delete |           0 |            | 
+     29 | batches_filtered_compressed   | Number of batches filtered by compression       |           0 |            | 
+     30 | batches_filtered_decompressed | Number of batches filtered by decompression     |           0 |            | 
+
+SELECT * FROM _timescaledb_functions.observ_log();
+ event_id | event_time | key_name | value 
+----------+------------+----------+-------
+
+SELECT * FROM _timescaledb_functions.observ_key_values('event_type');
+ event_time | value 
+------------+-------
+
+SELECT * FROM _timescaledb_functions.observ_log_events();
+ event_id | event_time | event_type | payload 
+----------+------------+------------+---------
+

@@ -214,6 +214,8 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		return;
 	}
 
+	ts_observ_agg_add(dcontext->batch_size_observ_id, (double) (VARSIZE_ANY_EXHDR(value)));
+
 	/* Detoast the compressed datum. */
 	value = PointerGetDatum(detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(value),
 														&dcontext->detoaster,
@@ -1028,6 +1030,8 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				break;
 		}
 	}
+
+	ts_observ_agg_add(dcontext->rows_per_batch_observ_id, (double) batch_state->total_batch_rows);
 
 	CompressedBatchVectorQualState cbvqstate = {
 		.vqstate = {

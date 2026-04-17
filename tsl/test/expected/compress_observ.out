@@ -1,0 +1,286 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Test the integration of the compression and observability features
+CREATE TABLE t(ts timestamptz, a int, b int, c int, seg int);
+SELECT create_hypertable('t', by_range('ts', interval '1 day'));
+ create_hypertable 
+-------------------
+ (1,t)
+
+-- Initial config: bloom(a,b)
+ALTER TABLE t SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'seg',
+    timescaledb.compress_orderby = 'ts',
+    timescaledb.compress_index = 'bloom(a,b)'
+);
+INSERT INTO t
+SELECT ts, (i % 10), (i % 5), (i % 3), 1
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-03', interval '1 hour') ts,
+     generate_series(1, 100) i;
+SELECT compress_chunk(c) FROM show_chunks('t') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+
+-- omit timing information from the output
+SELECT key_id,key_name,description,total_count FROM _timescaledb_functions.observ_keys();
+ key_id |           key_name            |                   description                   | total_count 
+--------+-------------------------------+-------------------------------------------------+-------------
+      0 | unused                        | Unused key                                      |           0
+      1 | event_type                    | Type of event                                   |           6
+      2 | relid                         | Relation ID                                     |           6
+      3 | compress_relid                | Compressed Relation ID                          |           6
+      4 | agg_count                     | Number of aggregated observations               |           6
+      5 | agg_start                     | Aggregation start time                          |           6
+      6 | agg_end                       | Aggregation end time                            |           6
+      7 | batch_rows_sum                | Sum of rows per batch                           |           3
+      8 | batch_rows_min                | Min rows per batch                              |           3
+      9 | batch_rows_max                | Max rows per batch                              |           3
+     10 | batch_rows_avg                | Average rows per batch                          |           3
+     11 | batch_rows_stddev             | Standard deviation of rows per batch            |           3
+     12 | batch_bytes_sum               | Sum of bytes per batch                          |           3
+     13 | batch_bytes_min               | Min bytes per batch                             |           3
+     14 | batch_bytes_max               | Max bytes per batch                             |           3
+     15 | batch_bytes_avg               | Average bytes per batch                         |           3
+     16 | batch_bytes_stddev            | Standard deviation of bytes per batch           |           3
+     17 | hypertable_id                 | Hypertable ID                                   |           0
+     18 | is_columnar_scan              | Whether the event is from a columnar scan       |           0
+     19 | cmd_type                      | Command type (the value of the CmdType enum)    |           0
+     20 | batches_deleted               | Number of batches deleted without decompression |           0
+     21 | batches_decompressed          | Number of batches decompressed                  |           0
+     22 | batches_scanned               | Number of batches scanned                       |           0
+     23 | batches_checked_by_bloom      | Number of batches checked by bloom filter       |           0
+     24 | batches_pruned_by_bloom       | Number of batches pruned by bloom filter        |           0
+     25 | batches_without_bloom         | Number of batches without bloom filter          |           0
+     26 | bloom_false_positives         | Number of bloom filter false positives          |           0
+     27 | decompressed_tuples           | Number of tuples decompressed                   |           0
+     28 | deleted_tuples                | Number of tuples deleted by direct batch delete |           0
+     29 | batches_filtered_compressed   | Number of batches filtered by compression       |           0
+     30 | batches_filtered_decompressed | Number of batches filtered by decompression     |           0
+
+-- remove the timing information so that the test is not flaky and replace event_id with a dense rank because it is also timing based
+SELECT dense_rank() OVER (ORDER BY event_id) AS event_num,
+      key_name, value
+FROM _timescaledb_functions.observ_log(filter => '{"event_type": 1}')
+WHERE key_name NOT IN ('agg_start', 'agg_end', 'relid', 'compress_relid');
+ event_num |      key_name      |      value       
+-----------+--------------------+------------------
+         1 | event_type         |                1
+         1 | agg_count          |                2
+         1 | batch_rows_min     |              600
+         1 | batch_rows_max     |             1000
+         1 | batch_rows_sum     |             1600
+         1 | batch_rows_stddev  |              200
+         1 | batch_rows_avg     |              800
+         2 | event_type         |                1
+         2 | agg_count          |                8
+         2 | batch_bytes_min    |              188
+         2 | batch_bytes_max    |              748
+         2 | batch_bytes_sum    |             3312
+         2 | batch_bytes_stddev | 168.463645929916
+         2 | batch_bytes_avg    |              414
+         3 | event_type         |                1
+         3 | agg_count          |                3
+         3 | batch_rows_min     |              400
+         3 | batch_rows_max     |             1000
+         3 | batch_rows_sum     |             2400
+         3 | batch_rows_stddev  | 282.842712474619
+         3 | batch_rows_avg     |              800
+         4 | event_type         |                1
+         4 | agg_count          |               12
+         4 | batch_bytes_min    |              132
+         4 | batch_bytes_max    |              748
+         4 | batch_bytes_sum    |             4968
+         4 | batch_bytes_stddev | 196.533288104925
+         4 | batch_bytes_avg    |              414
+         5 | event_type         |                1
+         5 | agg_count          |                1
+         5 | batch_rows_min     |              900
+         5 | batch_rows_max     |              900
+         5 | batch_rows_sum     |              900
+         5 | batch_rows_stddev  |                0
+         5 | batch_rows_avg     |              900
+         6 | event_type         |                1
+         6 | agg_count          |                4
+         6 | batch_bytes_min    |              260
+         6 | batch_bytes_max    |              668
+         6 | batch_bytes_sum    |             1840
+         6 | batch_bytes_stddev | 150.412765415705
+         6 | batch_bytes_avg    |              460
+
+SELECT dense_rank() OVER (ORDER BY event_id) AS event_num,
+       payload - ARRAY['agg_start', 'agg_end', 'relid', 'compress_relid'] AS filtered_payload
+FROM _timescaledb_functions.observ_log_events(filter => '{"event_type": 1}');
+ event_num |                                                                              filtered_payload                                                                               
+-----------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+         1 | {"agg_count": 2, "event_type": 1, "batch_rows_avg": 800, "batch_rows_max": 1000, "batch_rows_min": 600, "batch_rows_sum": 1600, "batch_rows_stddev": 200}
+         2 | {"agg_count": 8, "event_type": 1, "batch_bytes_avg": 414, "batch_bytes_max": 748, "batch_bytes_min": 188, "batch_bytes_sum": 3312, "batch_bytes_stddev": 168.463645929916}
+         3 | {"agg_count": 3, "event_type": 1, "batch_rows_avg": 800, "batch_rows_max": 1000, "batch_rows_min": 400, "batch_rows_sum": 2400, "batch_rows_stddev": 282.842712474619}
+         4 | {"agg_count": 12, "event_type": 1, "batch_bytes_avg": 414, "batch_bytes_max": 748, "batch_bytes_min": 132, "batch_bytes_sum": 4968, "batch_bytes_stddev": 196.533288104925}
+         5 | {"agg_count": 1, "event_type": 1, "batch_rows_avg": 900, "batch_rows_max": 900, "batch_rows_min": 900, "batch_rows_sum": 900, "batch_rows_stddev": 0}
+         6 | {"agg_count": 4, "event_type": 1, "batch_bytes_avg": 460, "batch_bytes_max": 668, "batch_bytes_min": 260, "batch_bytes_sum": 1840, "batch_bytes_stddev": 150.412765415705}
+
+SELECT COUNT(*) FROM t;
+ count 
+-------
+  4900
+
+SELECT sum(value) FROM _timescaledb_functions.observ_log(filter => '{"event_type": 1}') where key_name = 'batch_rows_sum';
+ sum  
+------
+ 4900
+
+SELECT value FROM _timescaledb_functions.observ_key_values('batch_rows_sum');
+ value 
+-------
+  1600
+  2400
+   900
+
+SELECT value FROM _timescaledb_functions.observ_log(filter => '{"event_type": 1}') where key_name = 'batch_rows_sum';
+ value 
+-------
+  1600
+  2400
+   900
+
+SELECT count(*),min(ts),max(ts) from t where a % 19 = 9 or b % 19 = 9 or c % 19 = 2 or seg % 19 = 2;
+ count |             min              |             max              
+-------+------------------------------+------------------------------
+  1960 | Mon Jan 01 00:00:00 2024 PST | Wed Jan 03 00:00:00 2024 PST
+
+-- remove the timing information so that the test is not flaky and replace event_id with a dense rank because it is also timing based
+SELECT dense_rank() OVER (ORDER BY event_id) AS event_num,
+      key_name, value
+FROM _timescaledb_functions.observ_log(filter => '{"event_type": 2, "cmd_type": 1}')
+WHERE key_name NOT IN ('agg_start', 'agg_end', 'relid', 'compress_relid');
+ event_num |      key_name      |      value       
+-----------+--------------------+------------------
+         1 | event_type         |                2
+         1 | hypertable_id      |                1
+         1 | is_columnar_scan   |                1
+         1 | cmd_type           |                1
+         1 | agg_count          |                2
+         1 | batch_rows_min     |              600
+         1 | batch_rows_max     |             1000
+         1 | batch_rows_sum     |             1600
+         1 | batch_rows_stddev  |              200
+         1 | batch_rows_avg     |              800
+         2 | event_type         |                2
+         2 | hypertable_id      |                1
+         2 | is_columnar_scan   |                1
+         2 | cmd_type           |                1
+         2 | agg_count          |                8
+         2 | batch_bytes_min    |               16
+         2 | batch_bytes_max    |              460
+         2 | batch_bytes_sum    |             1344
+         2 | batch_bytes_stddev | 167.737890770094
+         2 | batch_bytes_avg    |              168
+         3 | event_type         |                2
+         3 | hypertable_id      |                1
+         3 | is_columnar_scan   |                1
+         3 | cmd_type           |                1
+         3 | agg_count          |                3
+         3 | batch_rows_min     |              400
+         3 | batch_rows_max     |             1000
+         3 | batch_rows_sum     |             2400
+         3 | batch_rows_stddev  | 282.842712474619
+         3 | batch_rows_avg     |              800
+         4 | event_type         |                2
+         4 | hypertable_id      |                1
+         4 | is_columnar_scan   |                1
+         4 | cmd_type           |                1
+         4 | agg_count          |               12
+         4 | batch_bytes_min    |               16
+         4 | batch_bytes_max    |              324
+         4 | batch_bytes_sum    |             1032
+         4 | batch_bytes_stddev |   106.7895125937
+         4 | batch_bytes_avg    |               86
+         5 | event_type         |                2
+         5 | hypertable_id      |                1
+         5 | is_columnar_scan   |                1
+         5 | cmd_type           |                1
+         5 | agg_count          |                1
+         5 | batch_rows_min     |              900
+         5 | batch_rows_max     |              900
+         5 | batch_rows_sum     |              900
+         5 | batch_rows_stddev  |                0
+         5 | batch_rows_avg     |              900
+         6 | event_type         |                2
+         6 | hypertable_id      |                1
+         6 | is_columnar_scan   |                1
+         6 | cmd_type           |                1
+         6 | agg_count          |                4
+         6 | batch_bytes_min    |              260
+         6 | batch_bytes_max    |              668
+         6 | batch_bytes_sum    |             1840
+         6 | batch_bytes_stddev | 150.412765415705
+         6 | batch_bytes_avg    |              460
+
+SELECT dense_rank() OVER (ORDER BY event_id) AS event_num,
+       payload - ARRAY['agg_start', 'agg_end', 'relid', 'compress_relid'] AS filtered_payload
+FROM _timescaledb_functions.observ_log_events(filter => '{"event_type": 2, "cmd_type": 1}');
+ event_num |                                                                                                           filtered_payload                                                                                                           
+-----------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+         1 | {"cmd_type": 1, "agg_count": 2, "event_type": 2, "hypertable_id": 1, "batch_rows_avg": 800, "batch_rows_max": 1000, "batch_rows_min": 600, "batch_rows_sum": 1600, "is_columnar_scan": 1, "batch_rows_stddev": 200}
+         2 | {"cmd_type": 1, "agg_count": 8, "event_type": 2, "hypertable_id": 1, "batch_bytes_avg": 168, "batch_bytes_max": 460, "batch_bytes_min": 16, "batch_bytes_sum": 1344, "is_columnar_scan": 1, "batch_bytes_stddev": 167.737890770094}
+         3 | {"cmd_type": 1, "agg_count": 3, "event_type": 2, "hypertable_id": 1, "batch_rows_avg": 800, "batch_rows_max": 1000, "batch_rows_min": 400, "batch_rows_sum": 2400, "is_columnar_scan": 1, "batch_rows_stddev": 282.842712474619}
+         4 | {"cmd_type": 1, "agg_count": 12, "event_type": 2, "hypertable_id": 1, "batch_bytes_avg": 86, "batch_bytes_max": 324, "batch_bytes_min": 16, "batch_bytes_sum": 1032, "is_columnar_scan": 1, "batch_bytes_stddev": 106.7895125937}
+         5 | {"cmd_type": 1, "agg_count": 1, "event_type": 2, "hypertable_id": 1, "batch_rows_avg": 900, "batch_rows_max": 900, "batch_rows_min": 900, "batch_rows_sum": 900, "is_columnar_scan": 1, "batch_rows_stddev": 0}
+         6 | {"cmd_type": 1, "agg_count": 4, "event_type": 2, "hypertable_id": 1, "batch_bytes_avg": 460, "batch_bytes_max": 668, "batch_bytes_min": 260, "batch_bytes_sum": 1840, "is_columnar_scan": 1, "batch_bytes_stddev": 150.412765415705}
+
+-- Test DELETE stats
+BEGIN;
+DELETE FROM t WHERE a % 19 = 2;
+ROLLBACK;
+SELECT dense_rank() OVER (ORDER BY event_id) AS event_num,
+       payload - ARRAY['agg_start', 'agg_end', 'relid', 'compress_relid'] AS filtered_payload
+FROM _timescaledb_functions.observ_log_events(filter => '{"event_type": 2, "cmd_type": 4}');
+ event_num |                                                                                      filtered_payload                                                                                      
+-----------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+         1 | {"cmd_type": 4, "agg_count": 2, "event_type": 2, "batch_rows_avg": 800, "batch_rows_max": 1000, "batch_rows_min": 600, "batch_rows_sum": 1600, "batch_rows_stddev": 200}
+         2 | {"cmd_type": 4, "agg_count": 8, "event_type": 2, "batch_bytes_avg": 414, "batch_bytes_max": 748, "batch_bytes_min": 188, "batch_bytes_sum": 3312, "batch_bytes_stddev": 168.463645929916}
+         3 | {"cmd_type": 4, "agg_count": 3, "event_type": 2, "batch_rows_avg": 800, "batch_rows_max": 1000, "batch_rows_min": 400, "batch_rows_sum": 2400, "batch_rows_stddev": 282.842712474619}
+         4 | {"cmd_type": 4, "agg_count": 12, "event_type": 2, "batch_bytes_avg": 414, "batch_bytes_max": 748, "batch_bytes_min": 132, "batch_bytes_sum": 4968, "batch_bytes_stddev": 196.533288104925}
+         5 | {"cmd_type": 4, "agg_count": 1, "event_type": 2, "batch_rows_avg": 900, "batch_rows_max": 900, "batch_rows_min": 900, "batch_rows_sum": 900, "batch_rows_stddev": 0}
+         6 | {"cmd_type": 4, "agg_count": 4, "event_type": 2, "batch_bytes_avg": 460, "batch_bytes_max": 668, "batch_bytes_min": 260, "batch_bytes_sum": 1840, "batch_bytes_stddev": 150.412765415705}
+
+SELECT dense_rank() OVER (ORDER BY event_id) AS event_num,
+       payload - ARRAY['agg_start', 'agg_end', 'relid', 'compress_relid'] AS filtered_payload
+FROM _timescaledb_functions.observ_log_events(filter => '{"event_type": 3, "cmd_type": 4}');
+ event_num |                                                          filtered_payload                                                          
+-----------+------------------------------------------------------------------------------------------------------------------------------------
+         1 | {"cmd_type": 4, "event_type": 3, "hypertable_id": 1, "batches_scanned": 2, "decompressed_tuples": 1600, "batches_decompressed": 2}
+         2 | {"cmd_type": 4, "event_type": 3, "hypertable_id": 1, "batches_scanned": 3, "decompressed_tuples": 2400, "batches_decompressed": 3}
+         3 | {"cmd_type": 4, "event_type": 3, "hypertable_id": 1, "batches_scanned": 1, "decompressed_tuples": 900, "batches_decompressed": 1}
+
+-- Test UPDATE stats
+BEGIN;
+UPDATE t SET a = 42 WHERE a % 19 = 2;
+ROLLBACK;
+SELECT dense_rank() OVER (ORDER BY event_id) AS event_num,
+       payload - ARRAY['agg_start', 'agg_end', 'relid', 'compress_relid'] AS filtered_payload
+FROM _timescaledb_functions.observ_log_events(filter => '{"event_type": 2, "cmd_type": 2}');
+ event_num |                                                                                      filtered_payload                                                                                      
+-----------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+         1 | {"cmd_type": 2, "agg_count": 2, "event_type": 2, "batch_rows_avg": 800, "batch_rows_max": 1000, "batch_rows_min": 600, "batch_rows_sum": 1600, "batch_rows_stddev": 200}
+         2 | {"cmd_type": 2, "agg_count": 8, "event_type": 2, "batch_bytes_avg": 414, "batch_bytes_max": 748, "batch_bytes_min": 188, "batch_bytes_sum": 3312, "batch_bytes_stddev": 168.463645929916}
+         3 | {"cmd_type": 2, "agg_count": 3, "event_type": 2, "batch_rows_avg": 800, "batch_rows_max": 1000, "batch_rows_min": 400, "batch_rows_sum": 2400, "batch_rows_stddev": 282.842712474619}
+         4 | {"cmd_type": 2, "agg_count": 12, "event_type": 2, "batch_bytes_avg": 414, "batch_bytes_max": 748, "batch_bytes_min": 132, "batch_bytes_sum": 4968, "batch_bytes_stddev": 196.533288104925}
+         5 | {"cmd_type": 2, "agg_count": 1, "event_type": 2, "batch_rows_avg": 900, "batch_rows_max": 900, "batch_rows_min": 900, "batch_rows_sum": 900, "batch_rows_stddev": 0}
+         6 | {"cmd_type": 2, "agg_count": 4, "event_type": 2, "batch_bytes_avg": 460, "batch_bytes_max": 668, "batch_bytes_min": 260, "batch_bytes_sum": 1840, "batch_bytes_stddev": 150.412765415705}
+
+    
+SELECT dense_rank() OVER (ORDER BY event_id) AS event_num,
+       payload - ARRAY['agg_start', 'agg_end', 'relid', 'compress_relid'] AS filtered_payload
+FROM _timescaledb_functions.observ_log_events(filter => '{"event_type": 3, "cmd_type": 2}');
+ event_num |                                                          filtered_payload                                                          
+-----------+------------------------------------------------------------------------------------------------------------------------------------
+         1 | {"cmd_type": 2, "event_type": 3, "hypertable_id": 1, "batches_scanned": 2, "decompressed_tuples": 1600, "batches_decompressed": 2}
+         2 | {"cmd_type": 2, "event_type": 3, "hypertable_id": 1, "batches_scanned": 3, "decompressed_tuples": 2400, "batches_decompressed": 3}
+         3 | {"cmd_type": 2, "event_type": 3, "hypertable_id": 1, "batches_scanned": 1, "decompressed_tuples": 900, "batches_decompressed": 1}
+
