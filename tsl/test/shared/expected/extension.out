@@ -40,6 +40,8 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.chunk_constraint_add_table_constraint(_timescaledb_catalog.chunk_constraint)
  _timescaledb_functions.chunk_id_from_relid(oid)
  _timescaledb_functions.chunk_rewrite_cleanup()
+ _timescaledb_functions.chunk_statistics(regclass,regclass,timestamp with time zone)
+ _timescaledb_functions.chunk_statistics_reset()
  _timescaledb_functions.chunk_status(regclass)
  _timescaledb_functions.chunk_status_text(integer)
  _timescaledb_functions.chunk_status_text(regclass)

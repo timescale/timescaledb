@@ -10,6 +10,11 @@ JOIN pg_constraint con
 WHERE c.osm_chunk
 ON CONFLICT DO NOTHING;
 
+-- Drop chunk stats related objects
+DROP VIEW IF EXISTS timescaledb_information.stat_chunk_activity;
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_statistics(regclass, regclass, timestamptz);
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_statistics_reset();
+
 -- Restore chunk_constraint rows for outbound FKs by matching chunk-side
 -- FKs to their hypertable-side counterpart by name.
 INSERT INTO _timescaledb_catalog.chunk_constraint

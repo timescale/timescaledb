@@ -40,6 +40,7 @@
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <tcop/tcopprot.h>
+#include <ts_stats/ts_stats_record.h>
 #include <utils/acl.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
@@ -4074,6 +4075,9 @@ ts_chunk_drop(const Chunk *chunk, DropBehavior behavior, int32 log_level)
 
 	/* Drop the table */
 	performDeletion(&objaddr, behavior, 0);
+
+	/* Evict the chunk stats from the shared memory */
+	ts_stats_chunk_evict(chunk->table_id);
 }
 
 static void
