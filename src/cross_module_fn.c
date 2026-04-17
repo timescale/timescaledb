@@ -30,10 +30,6 @@ CROSSMODULE_WRAPPER(policy_compression_check);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_add);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_proc);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_check);
-CROSSMODULE_WRAPPER(policy_process_hyper_inval_remove);
-CROSSMODULE_WRAPPER(policy_process_hyper_inval_add);
-CROSSMODULE_WRAPPER(policy_process_hyper_inval_proc);
-CROSSMODULE_WRAPPER(policy_process_hyper_inval_check);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_remove);
 CROSSMODULE_WRAPPER(policy_reorder_add);
 CROSSMODULE_WRAPPER(policy_reorder_proc);
@@ -305,10 +301,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.policy_refresh_cagg_proc = error_no_default_fn_pg_community,
 	.policy_refresh_cagg_check = error_no_default_fn_pg_community,
 	.policy_refresh_cagg_remove = error_no_default_fn_pg_community,
-	.policy_process_hyper_inval_add = error_no_default_fn_pg_community,
-	.policy_process_hyper_inval_proc = error_no_default_fn_pg_community,
-	.policy_process_hyper_inval_check = error_no_default_fn_pg_community,
-	.policy_process_hyper_inval_remove = error_no_default_fn_pg_community,
 	.policy_reorder_add = error_no_default_fn_pg_community,
 	.policy_reorder_proc = error_no_default_fn_pg_community,
 	.policy_reorder_check = error_no_default_fn_pg_community,

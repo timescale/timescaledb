@@ -95,11 +95,11 @@ WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_
                      ->  HashAggregate
                            Group Key: "one_Partition_1".series_1
                            ->  Append
-                                 ->  Index Scan using "_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_1_chunk "one_Partition_5"
+                                 ->  Index Scan using "_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_1_chunk
                                        Index Cond: (series_1 > (series_val())::double precision)
-                                 ->  Index Scan using "_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_2_chunk "one_Partition_6"
+                                 ->  Index Scan using "_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_2_chunk
                                        Index Cond: (series_1 > (series_val())::double precision)
-                                 ->  Index Scan using "_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_3_chunk "one_Partition_7"
+                                 ->  Index Scan using "_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_3_chunk
                                        Index Cond: (series_1 > (series_val())::double precision)
 
 SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series_1, series_2;

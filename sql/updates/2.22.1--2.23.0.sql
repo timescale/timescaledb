@@ -31,8 +31,8 @@ BEGIN
 END
 $$;
 
-DROP FUNCTION IF EXISTS _timescaledb_internal.continuous_agg_invalidation_trigger();
-DROP FUNCTION IF EXISTS _timescaledb_functions.continuous_agg_invalidation_trigger();
+DROP FUNCTION IF EXISTS _timescaledb_internal.continuous_agg_invalidation_trigger() CASCADE;
+DROP FUNCTION IF EXISTS _timescaledb_functions.continuous_agg_invalidation_trigger() CASCADE;
 DROP FUNCTION IF EXISTS _timescaledb_functions.has_invalidation_trigger(regclass);
 
 -- remove ts_insert_blocker trigger from all hypertables
@@ -48,5 +48,5 @@ BEGIN
 END
 $$;
 
-DROP FUNCTION IF EXISTS _timescaledb_internal.insert_blocker();
-DROP FUNCTION IF EXISTS _timescaledb_functions.insert_blocker();
+DROP FUNCTION IF EXISTS _timescaledb_internal.insert_blocker() CASCADE;
+DROP FUNCTION IF EXISTS _timescaledb_functions.insert_blocker() CASCADE;
