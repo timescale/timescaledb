@@ -619,6 +619,17 @@ ExecPrepareTupleRouting(ModifyTableState *mtstate,
 						ResultRelInfo **partRelInfo)
 {
 	ChunkInsertState *cis = ctr->cis;
+
+	/*
+	 * If we're capturing transition tuples, save the original tuple in
+	 * hypertable format before converting to chunk format. This is needed
+	 * because chunks created after a column drop have a different TupleDesc,
+	 * and the transition table must store tuples in the hypertable's format.
+	 * See PostgreSQL's ExecPrepareTupleRouting in nodeModifyTable.c.
+	 */
+	if (mtstate->mt_transition_capture != NULL)
+		mtstate->mt_transition_capture->tcs_original_insert_tuple = slot;
+
 	/* Convert the tuple to the chunk's rowtype, if necessary */
 	if (cis->hyper_to_chunk_map != NULL && ctr->has_dropped_attrs == false)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
