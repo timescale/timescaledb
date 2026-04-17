@@ -250,6 +250,7 @@ SELECT hypertable_name, compression_enabled FROM timescaledb_information.hyperta
  t13             | t
 
 ALTER TABLE t13 SET (tsdb.compress_segmentby='device',tsdb.compress_orderby='time DESC');
+NOTICE:  updated compression settings will only apply to future compressions
 INSERT INTO t13 SELECT '2025-01-01','d1',0.1;
 SELECT compress_chunk(show_chunks('t13'));
              compress_chunk              

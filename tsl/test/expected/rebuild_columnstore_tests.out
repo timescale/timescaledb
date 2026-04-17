@@ -186,6 +186,7 @@ SELECT _ts_meta_count, device, _ts_meta_min_1, _ts_meta_max_1 FROM :COMPRESSED_C
 ALTER TABLE rebuild_settings SET (
     timescaledb.compress_segmentby = ''
 );
+NOTICE:  updated compression settings will only apply to future compressions
 -- settings changed, decompress/compress fallback
 SELECT * FROM chunk_status_view WHERE hypertable_name = 'rebuild_settings';
  hypertable_name  |                  chunk                  |                 compressed_chunk                 |             status             

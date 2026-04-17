@@ -53,6 +53,7 @@ ALTER TABLE test
 SET (timescaledb.compress,
      timescaledb.compress_orderby = 'time',
      timescaledb.compress_segmentby = 'device');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
              compress_chunk             
 ----------------------------------------

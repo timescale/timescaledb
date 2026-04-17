@@ -182,7 +182,6 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid_locked(Oid relid, LOCKMODE lockm
 													   bool fail_if_not_found);
 extern TSDLLEXPORT Chunk *ts_chunk_get_by_relid(Oid relid, bool fail_if_not_found);
 extern TSDLLEXPORT void ts_chunk_free(Chunk *chunk);
-extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
 extern TSDLLEXPORT int32 ts_chunk_get_hypertable_id_by_reloid(Oid reloid);
 extern TSDLLEXPORT FormData_chunk ts_chunk_get_formdata(int32 chunk_id);
 extern TSDLLEXPORT bool ts_chunk_simple_scan_by_reloid(Oid reloid, FormData_chunk *form,
@@ -313,4 +312,3 @@ extern TSDLLEXPORT void ts_chunk_detach_by_relid(Oid relid);
 
 extern TSDLLEXPORT bool ts_chunk_clear_status(Chunk *chunk, int32 status);
 extern bool ts_osm_chunk_range_is_invalid(int64 range_start, int64 range_end);
-extern int32 ts_chunk_get_osm_slice_id(int32 chunk_id, int32 time_dim_id);

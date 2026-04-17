@@ -164,7 +164,6 @@ extern void caggtimebucketinfo_init(ContinuousAggTimeBucketInfo *src, int32 hype
 									Oid hypertable_partition_coltype,
 									int64 hypertable_partition_col_interval,
 									int32 parent_mat_hypertable_id);
-extern ContinuousAggBucketFunction *cagg_get_bucket_function_info(Oid view_oid);
 extern bool time_bucket_info_has_fixed_width(const ContinuousAggBucketFunction *bf);
 
 extern bool cagg_timebucket_equal(ContinuousAggBucketFunction *bf1,

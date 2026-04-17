@@ -131,11 +131,13 @@ jobs:
         }
 
     - name: Setup WSL
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       uses: Vampire/setup-wsl@6a8db447be7ed35f2f499c02c6e60ff77ef11278 # v6.0.0
       with:
         distribution: Debian
 
     - name: Configure apt retries and timeout in WSL
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       run: |
         echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
@@ -143,6 +145,7 @@ jobs:
         echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
 
     - name: Install additional packages in WSL
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       run: |
         # Workaround for https://github.com/Vampire/setup-wsl/issues/76
@@ -165,11 +168,9 @@ jobs:
     # ages after the original problem.
     - name: Get date for build caching
       id: get-date
-      env:
-        WSLENV: GITHUB_OUTPUT/p
-      shell: wsl-bash {0}
+      shell: powershell
       run: |
-        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+        echo "date=$(Get-Date -Format 'dd')" >> $env:GITHUB_OUTPUT
 
       # Use a cache for the PostgreSQL installation to speed things up
       # and avoid unnecessary package downloads. Since we only save
@@ -303,7 +304,7 @@ jobs:
 
     - name: Show regression diffs
       id: collectlogs
-      if: always()
+      if: always() && needs.check_paths.outputs.run_installcheck == 'true'
       env:
         WSLENV: GITHUB_OUTPUT/p
       shell: wsl-bash {0}
@@ -375,7 +376,7 @@ jobs:
             build_wsl/compile_commands.json
 
     - name: Upload test results to the database
-      if: always()
+      if: always() && needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       env:
         # Update when adding new variables.

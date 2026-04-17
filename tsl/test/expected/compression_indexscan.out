@@ -69,6 +69,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
 
 --Test Set 1.2 [Index(ASC, Null_First), Compression(ASC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -98,6 +99,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
 
 --Test Set 1.3 [Index(ASC, Null_First), Compression(DESC,Null_First)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -128,6 +130,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
 --DROP INDEX idx_asc_null_last
 --Test Set 1.4 [Index(ASC, Null_First), Compression(DESC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC NULLS LAST');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -159,6 +162,7 @@ DROP INDEX idx_asc_null_first;
 --Test Set 2.1 [Index(ASC, Null_Last), Compression(ASC,Null_First)]
 CREATE INDEX idx_asc_null_last ON tab1(id, time);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -188,6 +192,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
 
 --Test Set 2.2 [Index(ASC, Null_Last), Compression(ASC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -217,6 +222,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
 
 --Test Set 2.3 [Index(ASC, Null_Last), Compression(DESC,Null_First)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -247,6 +253,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
 --DROP INDEX idx_asc_null_last
 --Test Set 2.4 [Index(ASC, Null_Last), Compression(DESC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC NULLS LAST');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -278,6 +285,7 @@ DROP INDEX idx_asc_null_last;
 --Test Set 3.1 [Index(DESC, Null_First), Compression(ASC,Null_First)]
 CREATE INDEX idx_desc_null_first ON tab1(id, time DESC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -307,6 +315,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
 
 --Test Set 3.2 [Index(DESC, Null_First), Compression(ASC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -336,6 +345,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
 
 --Test Set 3.3 [Index(DESC, Null_First), Compression(DESC,Null_First)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -366,6 +376,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
 --DROP INDEX idx_asc_null_last
 --Test Set 3.4 [Index(DESC, Null_First), Compression(DESC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC NULLS LAST');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -397,6 +408,7 @@ DROP INDEX idx_desc_null_first;
 --Test Set 4.1 [Index(DESC, Null_Last), Compression(ASC,Null_First)]
 CREATE INDEX idx_desc_null_last ON tab1(id, time DESC);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -426,6 +438,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
 
 --Test Set 4.2 [Index(DESC, Null_Last), Compression(ASC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -455,6 +468,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
 
 --Test Set 4.3 [Index(DESC, Null_Last), Compression(DESC,Null_First)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -484,6 +498,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
 
 --Test Set 4.4 [Index(DESC, Null_Last), Compression(DESC,Null_Last)]
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time DESC NULLS LAST');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
@@ -511,6 +526,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_4_chunk
 
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'time');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using index "_hyper_1_1_chunk_tab1_time_idx" to scan rows for converting to columnstore
 INFO:  using index "_hyper_1_2_chunk_tab1_time_idx" to scan rows for converting to columnstore
@@ -588,6 +604,7 @@ INSERT into tab2 SELECT * from tab1;
 CREATE INDEX idx_asc_null_first ON tab1(id, time ASC NULLS FIRST);
 CREATE INDEX idx2_asc_null_first ON tab2(id, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
+NOTICE:  updated compression settings will only apply to future compressions
 ALTER TABLE tab2 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
 RESET timescaledb.enable_compression_indexscan;
 SELECT compress_chunk(show_chunks('tab1'));
@@ -704,6 +721,7 @@ DROP INDEX idxcol_asc_null_first;
 --Test Set 7.1 with Collation segment_by
 CREATE INDEX idx_asc_null_first ON tab3(name COLLATE "ucs_basic", time ASC NULLS FIRST);
 ALTER TABLE tab3 SET(timescaledb.compress, timescaledb.compress_segmentby = 'name', timescaledb.compress_orderby = 'time NULLS FIRST');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(show_chunks('tab3'));
 INFO:  using tuplesort to scan rows from "_hyper_5_93_chunk" for converting to columnstore
 INFO:  using tuplesort to scan rows from "_hyper_5_94_chunk" for converting to columnstore
@@ -750,6 +768,7 @@ DROP INDEX idxcol_asc_null_first;
 --Test Set 8 with multiple segment_by
 CREATE INDEX idx_asc_null_first ON tab1(id, c1, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id, c1', timescaledb.compress_orderby = 'time NULLS FIRST');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using index "_hyper_1_1_chunk_idx_asc_null_first" to scan rows for converting to columnstore
 INFO:  using index "_hyper_1_2_chunk_idx_asc_null_first" to scan rows for converting to columnstore
@@ -773,6 +792,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
 DROP INDEX idx_asc_null_first;
 CREATE INDEX idx_asc_null_first ON tab1(id, c1 DESC, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id, c1', timescaledb.compress_orderby = 'time NULLS FIRST');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
 INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for converting to columnstore
@@ -798,6 +818,7 @@ DROP INDEX idx_asc_null_first;
 --Last Column mismatch
 CREATE INDEX idx_asc_null_first ON tab1(id, c1, c2);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id, c1', timescaledb.compress_orderby = 'time NULLS FIRST');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
 INFO:  using tuplesort to scan rows from "_hyper_1_2_chunk" for converting to columnstore
