@@ -69,6 +69,7 @@ select count(decompress_chunk(c, true)) from show_chunks('ht_metrics_compressed'
 
 alter table ht_metrics_compressed set (timescaledb.compress,
     timescaledb.compress_segmentby='time', timescaledb.compress_orderby='value');
+NOTICE:  updated compression settings will only apply to future compressions
 select count(compress_chunk(c, true)) from show_chunks('ht_metrics_compressed') c;
  count 
 -------

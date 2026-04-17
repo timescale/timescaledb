@@ -126,6 +126,9 @@ ROLLBACK;
 -- Compression is set to merge those 24 chunks into 3 chunks, two 10 hour chunks and a single 4 hour chunk.
 \set VERBOSITY default
 ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='loc,"Time"', timescaledb.compress_chunk_time_interval='10 hours');
+NOTICE:  updated compression settings will only apply to future compressions
+DETAIL:  Existing compressed chunks will not be recompressed.
+HINT:  Use compress_chunk(chunk, recompress => true) to recompress.
 WARNING:  compress_chunk_time_interval configured and primary dimension not first column in compress_orderby
 HINT:  consider setting "Time" as first compress_orderby column
 \set VERBOSITY terse
@@ -693,6 +696,7 @@ SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chun
  test9           | Wed Jan 01 02:00:00 2020 PST | Wed Jan 01 03:00:00 2020 PST
 
 ALTER TABLE test9 SET (timescaledb.compress_segmentby = '');
+NOTICE:  updated compression settings will only apply to future compressions
 BEGIN;
   SELECT compress_chunk(show_chunks('test9'), true);
 NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
@@ -710,6 +714,7 @@ NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
 
 ROLLBACK;
 ALTER TABLE test9 SET (timescaledb.compress_segmentby = 'series_id', timescaledb.compress_orderby = 'time DESC');
+NOTICE:  updated compression settings will only apply to future compressions
 BEGIN;
   SELECT compress_chunk(show_chunks('test9'), true);
 NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
@@ -727,6 +732,7 @@ NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
 
 ROLLBACK;
 ALTER TABLE test9 SET (timescaledb.compress_segmentby = 'series_id', timescaledb.compress_orderby = 'time NULLS FIRST');
+NOTICE:  updated compression settings will only apply to future compressions
 BEGIN;
   SELECT compress_chunk(show_chunks('test9'), true);
 NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
@@ -745,6 +751,7 @@ NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
 ROLLBACK;
 -- reset back to original settings
 ALTER TABLE test9 SET (timescaledb.compress_segmentby = 'series_id', timescaledb.compress_orderby = 'time');
+NOTICE:  updated compression settings will only apply to future compressions
 BEGIN;
   SELECT compress_chunk(show_chunks('test9'), true);
 NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore

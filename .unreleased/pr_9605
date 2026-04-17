@@ -1,0 +1,2 @@
+Fixes: #9605 Fix InstrStartNode called twice in a row
+Thanks: @GetsuDer and @WeiJie-JL for reporting an error with timescaledb and extensions using Explain

@@ -1,2 +1,0 @@
-Fixes: #9511 Fix alter_job failing for retention policy with drop_created_before
-Thanks: @sebastian-ederer for reporting an issue with alter_job and drop_created_before

@@ -32,6 +32,7 @@ select count(compress_chunk(x)) from show_chunks('aggexpr') x;
      1
 
 alter table aggexpr set (tsdb.compress_segmentby = '');
+NOTICE:  updated compression settings will only apply to future compressions
 insert into aggexpr select 11, null, null, null, generate_series(1, 1489);
 insert into aggexpr select 12, 12, '12', false, generate_series(1, 1487);
 insert into aggexpr select 13, case when x % 2 = 0 then 13 else null end,
