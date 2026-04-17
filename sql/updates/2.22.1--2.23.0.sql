@@ -13,6 +13,14 @@ $$;
 DROP VIEW IF EXISTS timescaledb_information.job_stats;
 DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
 
+-- remove stale hypertable entries
+DELETE FROM _timescaledb_catalog.hypertable ht
+WHERE NOT EXISTS(
+  SELECT FROM pg_class c
+    JOIN pg_namespace ns ON ns.oid=c.relnamespace AND ns.nspname=ht.schema_name
+    WHERE c.relname=ht.table_name
+);
+
 -- remove cagg trigger from all hypertables and chunks
 DO $$
 DECLARE
