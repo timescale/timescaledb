@@ -92,14 +92,22 @@ BEGIN
   WITH bloom_entries AS (
     SELECT compression_settings.relid AS chunk_oid,
            compression_settings.compress_relid AS compress_oid,
-           elem
+           elem,
+           CASE jsonb_typeof(elem->'column')
+             WHEN 'array' THEN (
+               SELECT string_agg(col, '_' ORDER BY ordinality)
+               FROM jsonb_array_elements_text(elem->'column')
+                    WITH ORDINALITY AS t(col, ordinality)
+             )
+             ELSE elem->>'column'
+           END AS col_suffix
     FROM _timescaledb_catalog.compression_settings,
          jsonb_array_elements(compression_settings.index) elem
     WHERE elem->>'type' = 'bloom'
       AND compression_settings.compress_relid IS NOT NULL
   ),
   bloom_column_names AS (
-    SELECT chunk_oid, compress_oid, bloom_column.colname
+    SELECT chunk_oid, compress_oid, col_suffix, bloom_column.colname
     FROM bloom_entries,
     jsonb_array_elements_text(
       CASE jsonb_typeof(elem->'column')
@@ -108,8 +116,8 @@ BEGIN
       END
     ) AS bloom_column(colname)
   ),
-  int2_bloom_compressed_chunks AS (
-    SELECT DISTINCT compress_oid
+  int2_bloom_suffixes AS (
+    SELECT DISTINCT compress_oid, col_suffix
     FROM bloom_column_names
     JOIN pg_attribute ON pg_attribute.attrelid = chunk_oid
      AND pg_attribute.attname = colname
@@ -119,9 +127,12 @@ BEGIN
   bloom_cols_to_drop AS (
     SELECT pg_attribute.attrelid AS compress_oid,
            pg_attribute.attname AS bloom_attname
-    FROM int2_bloom_compressed_chunks
-    JOIN pg_attribute ON pg_attribute.attrelid = compress_oid
-     AND pg_attribute.attname ~ '^_ts_meta_v2_bloom[hg]_'
+    FROM int2_bloom_suffixes ibs
+    JOIN pg_attribute ON pg_attribute.attrelid = ibs.compress_oid
+     AND pg_attribute.attname IN (
+       '_ts_meta_v2_bloomh_' || ibs.col_suffix,
+       '_ts_meta_v2_bloomg_' || ibs.col_suffix
+     )
      AND pg_attribute.attnum > 0
   )
   SELECT string_agg(DISTINCT
