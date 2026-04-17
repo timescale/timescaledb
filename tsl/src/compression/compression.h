@@ -384,16 +384,9 @@ extern void decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot 
 extern void init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot);
 typedef struct ModifyHypertableState ModifyHypertableState;
 extern bool decompress_target_segments(ModifyHypertableState *ht_state);
-/* CompressSingleRowState methods */
-struct CompressSingleRowState;
-typedef struct CompressSingleRowState CompressSingleRowState;
 
-extern CompressSingleRowState *compress_row_init(int srcht_id, Relation in_rel, Relation out_rel);
 extern SegmentInfo *segment_info_new(Form_pg_attribute column_attr);
 extern bool segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_null);
-extern TupleTableSlot *compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot);
-extern void compress_row_end(CompressSingleRowState *cr);
-extern void compress_row_destroy(CompressSingleRowState *cr);
 extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor,
 													BulkWriter *writer);
 extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
@@ -439,7 +432,6 @@ extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDe
 
 extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);
-extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
 extern int decompress_batch(RowDecompressor *decompressor);
 extern bool decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos,
 									  int num_attnos);

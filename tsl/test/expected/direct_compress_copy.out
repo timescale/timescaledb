@@ -142,6 +142,7 @@ ROLLBACK;
 -- test with segmentby
 BEGIN;
 ALTER TABLE metrics SET (tsdb.segmentby = 'device');
+NOTICE:  updated compression settings will only apply to future compressions
 SET timescaledb.enable_direct_compress_copy = true;
 SET timescaledb.enable_direct_compress_copy_client_sorted = true;
 COPY metrics FROM PROGRAM 'seq 0 0.2 9.8 | sed -e ''s!.[0-9]$!!'' | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,dI,0.I"' WITH (FORMAT CSV);

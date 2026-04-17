@@ -296,6 +296,7 @@ ROLLBACK;
 -- test with segmentby
 BEGIN;
 ALTER TABLE metrics SET (tsdb.segmentby = 'device');
+NOTICE:  updated compression settings will only apply to future compressions
 SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = true;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz - (i || ' minute')::interval, floor(i), i::float FROM generate_series(0.0,9.8,0.2) i;
@@ -321,6 +322,7 @@ ROLLBACK;
 -- segmentby with overlapping batches
 BEGIN;
 ALTER TABLE metrics SET (tsdb.segmentby = 'device');
+NOTICE:  updated compression settings will only apply to future compressions
 SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd'||i%2, i::float FROM generate_series(0,3000) i;
@@ -357,6 +359,7 @@ ROLLBACK;
 -- multikey orderby
 BEGIN;
 ALTER TABLE metrics SET (tsdb.orderby = 'device desc,time');
+NOTICE:  updated compression settings will only apply to future compressions
 SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd'||i%3, i::float FROM generate_series(0,3000) i;

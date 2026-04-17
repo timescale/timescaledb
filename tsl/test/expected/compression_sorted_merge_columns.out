@@ -58,6 +58,7 @@ select time + interval '1 second' from t order by time + interval '1 second';
 
 select decompress_chunk(show_chunks('t')) \gset
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby='x', timescaledb.compress_orderby='timetz,time');
+NOTICE:  updated compression settings will only apply to future compressions
 select compress_chunk(show_chunks('t')) \gset
 select * from t order by timetz, time;
  x |           time           |            timetz            | int32 | int64 | s 
@@ -91,6 +92,7 @@ select timetz + interval '1 second' from t order by timetz + interval '1 second'
 
 select decompress_chunk(show_chunks('t')) \gset
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby='x', timescaledb.compress_orderby='int32,timetz,time');
+NOTICE:  updated compression settings will only apply to future compressions
 select compress_chunk(show_chunks('t')) \gset
 select * from t order by int32, timetz, time;
  x |           time           |            timetz            | int32 | int64 | s 
@@ -119,6 +121,7 @@ ERROR:  debug: batch sorted merge is required but not possible at planning time
 \set ON_ERROR_STOP 1
 select decompress_chunk(show_chunks('t')) \gset
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby='x', timescaledb.compress_orderby='int64,int32,timetz,time');
+NOTICE:  updated compression settings will only apply to future compressions
 select compress_chunk(show_chunks('t')) \gset
 select * from t order by int64, int32, timetz, time;
  x |           time           |            timetz            | int32 | int64 | s 
@@ -148,6 +151,7 @@ ERROR:  debug: batch sorted merge is required but not possible at planning time
 \set ON_ERROR_STOP 1
 select decompress_chunk(show_chunks('t')) \gset
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby='x', timescaledb.compress_orderby='s,int32,time desc');
+NOTICE:  updated compression settings will only apply to future compressions
 select compress_chunk(show_chunks('t')) \gset
 select * from t order by s, int32, time desc;
  x |           time           |            timetz            | int32 | int64 | s 

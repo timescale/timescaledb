@@ -2983,6 +2983,7 @@ SET max_parallel_workers_per_gather = 0;
 -- test different compression configurations
 -- compressed index on "segmentby='dev'" has default "dev ASC, NULLS LAST" sort order
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+psql:include/skip_scan_dagg_comp_query.sql:14: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
              compress_chunk             
 ----------------------------------------
@@ -3133,6 +3134,7 @@ SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
  _timescaledb_internal._hyper_3_8_chunk
 
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev,dev_name');
+psql:include/skip_scan_dagg_comp_query.sql:30: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
              compress_chunk             
 ----------------------------------------
@@ -3300,6 +3302,7 @@ SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
  _timescaledb_internal._hyper_3_8_chunk
 
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+psql:include/skip_scan_dagg_comp_query.sql:54: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
              compress_chunk             
 ----------------------------------------
@@ -3828,6 +3831,7 @@ SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
  _timescaledb_internal._hyper_3_8_chunk
 
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev_name');
+psql:include/skip_scan_dagg_comp_query.sql:110: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
              compress_chunk             
 ----------------------------------------
@@ -4188,6 +4192,7 @@ SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
  _timescaledb_internal._hyper_3_8_chunk
 
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='dev');
+psql:include/skip_scan_dagg_comp_query.sql:147: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
              compress_chunk             
 ----------------------------------------
@@ -4870,6 +4875,7 @@ SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
  _timescaledb_internal._hyper_3_8_chunk
 
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='dev, val');
+psql:include/skip_scan_dagg_comp_query.sql:228: NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
              compress_chunk             
 ----------------------------------------
