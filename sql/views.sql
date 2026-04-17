@@ -431,5 +431,74 @@ SELECT * FROM timescaledb_information.chunk_compression_settings;
 CREATE OR REPLACE VIEW _timescaledb_config.bgw_job AS
 SELECT * from _timescaledb_catalog.bgw_job;
 
+-- chunk statistics view
+CREATE OR REPLACE VIEW timescaledb_information.stat_chunk_activity AS
+SELECT
+    o.uncompressed_relid::regclass  AS chunk,
+    o.compressed_relid::regclass    AS compressed_chunk,
+    c.id                            AS chunk_id,
+    c.hypertable_id,
+    h.table_name                    AS hypertable,
+    -- Compression
+    o.compressed_batch_count,
+    o.compressed_block_count,
+    o.compressed_batch_rows_min,
+    o.compressed_batch_rows_max,
+    o.compressed_batch_rows_sum / NULLIF(o.compressed_batch_count, 0)
+        AS compressed_batch_rows_avg,
+    sqrt(o.compressed_batch_rows_sqsum / NULLIF(o.compressed_batch_count, 0)
+         - power(o.compressed_batch_rows_sum::double precision
+                 / NULLIF(o.compressed_batch_count, 0), 2))
+        AS compressed_batch_rows_stddev,
+    o.compressed_batch_bytes_min,
+    o.compressed_batch_bytes_max,
+    o.compressed_batch_bytes_sum / NULLIF(o.compressed_batch_count, 0)
+        AS compressed_batch_bytes_avg,
+    sqrt(o.compressed_batch_bytes_sqsum / NULLIF(o.compressed_batch_count, 0)
+         - power(o.compressed_batch_bytes_sum::double precision
+                 / NULLIF(o.compressed_batch_count, 0), 2))
+        AS compressed_batch_bytes_stddev,
+    o.compressed_block_bytes_min,
+    o.compressed_block_bytes_max,
+    o.compressed_block_bytes_sum / NULLIF(o.compressed_block_count, 0)
+        AS compressed_block_bytes_avg,
+    sqrt(o.compressed_block_bytes_sqsum / NULLIF(o.compressed_block_count, 0)
+         - power(o.compressed_block_bytes_sum::double precision
+                 / NULLIF(o.compressed_block_count, 0), 2))
+        AS compressed_block_bytes_stddev,
+    -- CMD totals
+    o.total_batches_deleted,
+    o.total_batches_decompressed,
+    o.total_tuples_decompressed,
+    o.total_batches_scanned,
+    o.total_batches_checked_by_bloom,
+    o.total_batches_pruned_by_bloom,
+    o.total_batches_without_bloom,
+    o.total_batches_bloom_false_positives,
+    o.total_batches_filtered_compressed,
+    o.total_batches_filtered_decompressed,
+    -- last CMD operation
+    o.last_op_batches_deleted,
+    o.last_op_batches_decompressed,
+    o.last_op_tuples_decompressed,
+    o.last_op_batches_scanned,
+    o.last_op_batches_checked_by_bloom,
+    o.last_op_batches_pruned_by_bloom,
+    o.last_op_batches_without_bloom,
+    o.last_op_batches_bloom_false_positives,
+    o.last_op_batches_filtered_compressed,
+    o.last_op_batches_filtered_decompressed,
+    o.n_selects,
+    o.n_inserts,
+    o.n_updates,
+    o.n_deletes,
+    o.first_update,
+    o.last_update
+FROM _timescaledb_functions.chunk_statistics() o
+LEFT JOIN _timescaledb_catalog.chunk c
+       ON format('%I.%I', c.schema_name, c.table_name)::regclass = o.uncompressed_relid
+LEFT JOIN _timescaledb_catalog.hypertable h ON h.id = c.hypertable_id;
+
+
 GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_config TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;

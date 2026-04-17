@@ -48,6 +48,7 @@
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
+#include "ts_stats/ts_stats_record.h"
 #include <nodes/columnar_scan/vector_quals.h>
 
 /*
@@ -1331,6 +1332,10 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 	row_compressor->needs_fullness_check =
 		check_for_limited_size_compressors(row_compressor->per_column,
 										   row_compressor->n_input_columns);
+
+	row_compressor->observ_compressed_relid = settings->fd.compress_relid;
+	row_compressor->observ_uncompressed_relid = settings->fd.relid;
+	ts_stats_compression_acc_init(&row_compressor->observ_acc);
 }
 
 void
@@ -1608,6 +1613,9 @@ row_compressor_build_tuple(RowCompressor *row_compressor)
 			{
 				row_compressor->compressed_values[compressed_col] =
 					PointerGetDatum(compressed_data);
+
+				ts_stats_compression_acc_column(&row_compressor->observ_acc,
+												VARSIZE_ANY_EXHDR(compressed_data));
 			}
 		}
 		else if (column->segment_info != NULL)
@@ -1766,6 +1774,9 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 								 row_compressor->rows_compressed_into_current_value);
 	}
 
+	ts_stats_compression_acc_batch(&row_compressor->observ_acc,
+								   row_compressor->rows_compressed_into_current_value);
+
 	MemoryContextSwitchTo(old_cxt);
 	row_compressor_clear_batch(row_compressor, changed_groups);
 }
@@ -1779,6 +1790,11 @@ row_compressor_reset(RowCompressor *row_compressor)
 void
 row_compressor_close(RowCompressor *row_compressor)
 {
+	/* Flush the observability data */
+	ts_stats_chunk_record_compression(row_compressor->observ_compressed_relid,
+									  row_compressor->observ_uncompressed_relid,
+									  &row_compressor->observ_acc);
+
 	pfree(row_compressor->compressed_is_null);
 	pfree(row_compressor->compressed_values);
 	pfree(row_compressor->per_column);
@@ -1988,7 +2004,7 @@ bulk_writer_close(BulkWriter *writer)
  **********************/
 
 RowDecompressor
-build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc)
+build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc, Oid in_oid, Oid out_oid)
 {
 	AttrNumber count_meta_attnum = InvalidAttrNumber;
 	AttrMap *attrmap = build_decompress_attrmap(out_desc, in_desc, &count_meta_attnum);
@@ -2031,6 +2047,10 @@ build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc)
 
 	detoaster_init(&decompressor.detoaster, CurrentMemoryContext);
 
+	decompressor.observ_compressed_relid = in_oid;
+	decompressor.observ_uncompressed_relid = out_oid;
+	decompressor.cmd_type = CMD_SELECT;
+
 	return decompressor;
 }
 
@@ -2046,6 +2066,12 @@ row_decompressor_reset(RowDecompressor *decompressor)
 void
 row_decompressor_close(RowDecompressor *decompressor)
 {
+	/* Flush the observability data */
+	ts_stats_chunk_record_cmd(decompressor->observ_compressed_relid,
+							  decompressor->observ_uncompressed_relid,
+							  decompressor->cmd_type,
+							  &decompressor->observ_counters);
+
 	MemoryContextDelete(decompressor->per_compressed_row_ctx);
 	detoaster_close(&decompressor->detoaster);
 	free_attrmap(decompressor->attrmap);
@@ -2080,8 +2106,10 @@ decompress_chunk(Oid in_table, Oid out_table)
 
 	PushActiveSnapshot(GetLatestSnapshot());
 	BulkWriter writer = bulk_writer_build(out_rel, 0);
-	RowDecompressor decompressor =
-		build_decompressor(RelationGetDescr(in_rel), RelationGetDescr(out_rel));
+	RowDecompressor decompressor = build_decompressor(RelationGetDescr(in_rel),
+													  RelationGetDescr(out_rel),
+													  RelationGetRelid(in_rel),
+													  RelationGetRelid(out_rel));
 	TupleTableSlot *slot = table_slot_create(in_rel, NULL);
 	TableScanDesc scan = table_beginscan(in_rel, GetActiveSnapshot(), 0, (ScanKey) NULL);
 	int64 report_reltuples = calculate_reltuples_to_report(in_rel->rd_rel->reltuples);

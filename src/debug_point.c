@@ -325,7 +325,9 @@ ts_debug_point_raise_error_oneshot(const char *name)
 		case LOCKACQUIRE_OK:
 			LockRelease(&point.tag, ShareLock, true);
 			if (LockHeldByMeCompat(&point.tag, ExclusiveLock, false))
+			{
 				break;
+			}
 			return;
 		case LOCKACQUIRE_ALREADY_HELD:
 		case LOCKACQUIRE_ALREADY_CLEAR:

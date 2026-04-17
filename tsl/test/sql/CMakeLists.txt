@@ -96,6 +96,7 @@ set(TEST_TEMPLATES
     cagg_permissions.sql.in
     columnar_index_scan.sql.in
     compress_bloom_sparse.sql.in
+    compress_observ.sql.in
     compression_permissions.sql.in
     foreign_keys_test.sql.in
     modify_exclusion.sql.in

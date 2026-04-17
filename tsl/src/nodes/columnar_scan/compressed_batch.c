@@ -195,6 +195,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 
 	bool isnull;
 	Datum value = slot_getattr(compressed_slot, column_description->compressed_scan_attno, &isnull);
+	dcontext->compressed_relid = compressed_slot->tts_tableOid;
 
 	if (isnull)
 	{
@@ -227,6 +228,11 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		decompress_scalar_column(column_values, (Datum) NULL, /* isnull = */ true);
 		return;
 	}
+
+	dcontext->batches_decompressed++;
+	/* to backfill the column's compressed bytes. */
+	ts_stats_compression_acc_column(&dcontext->observ_acc,
+									VARSIZE_ANY_EXHDR(DatumGetPointer(value)));
 
 	/* Decompress the entire batch if it is supported. */
 	ArrowArray *arrow = NULL;
@@ -1030,6 +1036,9 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				break;
 		}
 	}
+
+	dcontext->tuples_decompressed += batch_state->total_batch_rows;
+	ts_stats_compression_acc_batch(&dcontext->observ_acc, batch_state->total_batch_rows);
 
 	CompressedBatchVectorQualState cbvqstate = {
 		.vqstate = {

@@ -20,6 +20,7 @@ typedef struct BulkInsertStateData *BulkInsertState;
 #include "hypertable.h"
 #include "nodes/columnar_scan/detoaster.h"
 #include "ts_catalog/compression_settings.h"
+#include "ts_stats/ts_stats_record.h"
 
 /*
  * Compressed data starts with a specialized varlen type starting with the usual
@@ -179,6 +180,12 @@ typedef struct RowDecompressor
 	AttrMap *attrmap;
 
 	Detoaster detoaster;
+
+	/* Cached for observability */
+	Oid observ_compressed_relid;
+	Oid observ_uncompressed_relid;
+	CmdType cmd_type;
+	SharedCounters observ_counters;
 } RowDecompressor;
 
 /*
@@ -303,6 +310,12 @@ typedef struct RowCompressor
 	bool needs_analyze_segmentby;
 
 	List *metadata_builders; /* List of BatchMetadataBuilder */
+
+	/* Compressed chunk relid, cached for observability */
+	Oid observ_compressed_relid;
+	Oid observ_uncompressed_relid;
+	CompressionStatsAccumulator observ_acc;
+
 } RowCompressor;
 
 /*
@@ -428,7 +441,8 @@ extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_nu
 extern BulkWriter bulk_writer_build(Relation out_rel, int insert_options);
 extern BulkWriter *bulk_writer_alloc(Relation out_rel, int insert_options);
 extern void bulk_writer_close(BulkWriter *writer);
-extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc);
+extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc,
+										  Oid in_oid, Oid out_oid);
 
 extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);

@@ -126,6 +126,7 @@ add_subdirectory(ts_catalog)
 add_subdirectory(nodes)
 add_subdirectory(planner)
 add_subdirectory(with_clause)
+add_subdirectory(ts_stats)
 
 # Don't run clang-tidy on the files we copied from Postgres. We don't want to
 # introduce changes there unless absolutely necessary. CMake can only access the

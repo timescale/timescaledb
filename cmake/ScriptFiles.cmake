@@ -42,6 +42,7 @@ set(SOURCE_FILES
     bgw_scheduler.sql
     metadata.sql
     uuidv7.sql
+    ts_stats.sql
     views.sql
     views_experimental.sql
     gapfill.sql
