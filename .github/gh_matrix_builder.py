@@ -179,8 +179,7 @@ def macos_config(overrides):
             "pg_extensions": "postgres_fdw test_decoding",
             "pginstallcheck": True,
             "tsdb_build_args": (
-                " -DASSERTIONS=ON"
-                f" -DOPENSSL_ROOT_DIR={openssl_path}"
+                " -DASSERTIONS=ON" f" -DOPENSSL_ROOT_DIR={openssl_path}"
             ),
         }
     )
