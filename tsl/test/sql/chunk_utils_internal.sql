@@ -1010,3 +1010,16 @@ DROP TABLE ht_pub_test CASCADE;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- clean up databases created
 DROP DATABASE postgres_fdw_db WITH (FORCE);
+
+-- Test recompression for partial chunks blocked for frozen chunks
+\set ON_ERROR_STOP 0
+BEGIN;
+SET timescaledb.enable_direct_compress_insert = true;
+CREATE TABLE metrics (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.orderby='time');
+INSERT INTO metrics SELECT '2025-01-01'::timestamptz, 'd1', 0;
+INSERT INTO metrics SELECT '2025-01-01'::timestamptz - (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
+SELECT _timescaledb_functions.freeze_chunk(chunk) FROM show_chunks('metrics') chunk;
+SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
+ROLLBACK;
+\set ON_ERROR_STOP 1
