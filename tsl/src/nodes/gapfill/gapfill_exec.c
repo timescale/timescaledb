@@ -857,14 +857,13 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 }
 
 /*
- * This is the main loop of the node it is called whenever the upper node
- * wants to consume a new tuple. Returning NULL signals that the tuples
- * are exhausted. All gapfill state transitions happen in this function.
+ * Produce the next candidate tuple from the gapfill state machine without
+ * applying the HAVING qual. Returning NULL signals that the tuples are
+ * exhausted. All gapfill state transitions happen in this function.
  */
 static TupleTableSlot *
-gapfill_exec(CustomScanState *node)
+gapfill_next_candidate(GapFillState *state)
 {
-	GapFillState *state = (GapFillState *) node;
 	TupleTableSlot *slot = NULL;
 
 	while (true)
@@ -941,6 +940,31 @@ gapfill_exec(CustomScanState *node)
 		}
 
 		return NULL;
+	}
+}
+
+/*
+ * Return the next tuple that passes the HAVING qual (if any). The qual is
+ * evaluated on top of the GapFill node so that it does not prevent gap rows
+ * from being generated.
+ */
+static TupleTableSlot *
+gapfill_exec(CustomScanState *node)
+{
+	GapFillState *state = (GapFillState *) node;
+	ExprState *qual = node->ss.ps.qual;
+	ExprContext *econtext = node->ss.ps.ps_ExprContext;
+
+	while (true)
+	{
+		TupleTableSlot *slot = gapfill_next_candidate(state);
+
+		if (TupIsNull(slot) || qual == NULL)
+			return slot;
+
+		econtext->ecxt_scantuple = slot;
+		if (ExecQual(qual, econtext))
+			return slot;
 	}
 }
 

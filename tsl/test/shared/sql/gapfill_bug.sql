@@ -279,3 +279,62 @@ DROP TABLE gf8844_table1;
 DROP TABLE gf8844_table2;
 
 RESET timezone;
+
+-- Fix for #5202: time_bucket_gapfill with HAVING clause returning incorrect rows
+-- HAVING quals must be evaluated on top of the GapFill node so they do not
+-- remove groups before gap rows have been generated.
+SET timezone TO 'UTC';
+
+CREATE TABLE gf5202(time timestamptz, device_id int, value float);
+INSERT INTO gf5202 VALUES
+    ('2023-01-03T00:00:00Z', 1, 4),
+    ('2023-01-03T01:00:00Z', 1, 4),
+    ('2023-01-03T02:00:00Z', 1, 4),
+    ('2023-01-05T00:00:00Z', 1, 6);
+
+-- Filter should appear on the Custom Scan (GapFill) node, not on the GroupAggregate.
+EXPLAIN (COSTS OFF)
+SELECT time_bucket_gapfill('1 day', time) AS day, device_id, count(*)
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day, device_id
+HAVING count(*) < 2;
+
+-- HAVING count(*) < 2: real group with count=3 (2023-01-03) is dropped.
+-- Real group with count=1 (2023-01-05) is kept. Gap rows (NULL count) are
+-- rejected by <2 (NULL<2 is UNKNOWN -> false) under SQL semantics.
+SELECT time_bucket_gapfill('1 day', time) AS day, device_id, count(*)
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day, device_id
+HAVING count(*) < 2
+ORDER BY day, device_id;
+
+-- HAVING count(*) IS NULL keeps only the gap rows.
+SELECT time_bucket_gapfill('1 day', time) AS day, device_id, count(*)
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day, device_id
+HAVING count(*) IS NULL
+ORDER BY day, device_id;
+
+-- HAVING predicate combining agg and group column.
+SELECT time_bucket_gapfill('1 day', time) AS day, device_id, count(*)
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day, device_id
+HAVING count(*) IS NULL OR count(*) < 2
+ORDER BY day, device_id;
+
+-- HAVING that rejects every real group must still produce the gap rows when
+-- the predicate leaves room for them via IS NULL. Before the fix this
+-- returned zero rows because HAVING ran below the gapfill node.
+SELECT time_bucket_gapfill('1 day', time) AS day, device_id, count(*)
+FROM gf5202
+WHERE time >= '2023-01-01T00:00:00Z' AND time < '2023-01-08T00:00:00Z'
+GROUP BY day, device_id
+HAVING count(*) > 1000 OR count(*) IS NULL
+ORDER BY day, device_id;
+
+DROP TABLE gf5202;
+RESET timezone;
