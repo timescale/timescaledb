@@ -172,7 +172,7 @@ jobs:
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: |
-        claude -p --output-format json \
+        claude -p --output-format stream-json --verbose \
           --max-budget-usd 5.00 --dangerously-skip-permissions \
           --model opus --effort high \
           "$(cat <<'PROMPT'
@@ -217,7 +217,7 @@ jobs:
     - name: Write job summary
       if: always()
       run: |
-        jq -r '"## LLM Fuzzer Result\n\n"
+        jq -r 'select(.type == "result") | "## LLM Fuzzer Result\n\n"
           + (.result // "No result produced.")
           + "\n\n**Cost:** $\(.total_cost_usd // 0 | tostring) | **Duration:** \((.duration_ms // 0) / 1000 | tostring)s | **Turns:** \(.num_turns // 0)"' \
           ${{ runner.temp }}/claude-execution-output.json \

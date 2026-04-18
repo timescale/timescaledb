@@ -405,9 +405,10 @@ step R3_refresh:
  <waiting ...>
 step L1_unlock: 
     COMMIT;
-
+ <waiting ...>
 step R2_refresh: <... completed>
 step R3_refresh: <... completed>
+step L1_unlock: <... completed>
 step check_jobs: 
     SELECT ca.user_view_name,
            _timescaledb_functions.to_timestamp(r.start_range) AS start_time,

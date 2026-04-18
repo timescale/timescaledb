@@ -1,0 +1,1 @@
+Fixes: #9614 Remove stale hypertable entries during upgrade
