@@ -275,6 +275,8 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *
 	cscan->flags = path->flags;
 	cscan->methods = &gapfill_plan_methods;
 
+	cscan->scan.plan.qual = gfpath->having_quals;
+
 	cscan->custom_private = ts_new_list(T_List, GFP_Count);
 	lfirst(list_nth_cell(cscan->custom_private, GFP_GapfillFunc)) = gfpath->func;
 	lfirst(list_nth_cell(cscan->custom_private, GFP_GroupClause)) = root->parse->groupClause;
@@ -414,6 +416,34 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
 }
 
 /*
+ * Lifting a qual onto the CustomScan plan only works when every Aggref it
+ * references is also a top-level expression of the pathtarget, because
+ * set_customscan_references resolves quals against custom_scan_tlist and
+ * cannot match a bare Aggref against a wrapped expression like locf(agg).
+ */
+static bool
+gapfill_quals_reference_only_pathtarget_aggs(List *quals, PathTarget *pt)
+{
+	List *aggs = pull_var_clause((Node *) quals, PVC_INCLUDE_AGGREGATES | PVC_RECURSE_PLACEHOLDERS);
+	ListCell *lc;
+	bool ok = true;
+
+	foreach (lc, aggs)
+	{
+		Node *agg = lfirst(lc);
+
+		if (IsA(agg, Aggref) && !list_member(pt->exprs, agg))
+		{
+			ok = false;
+			break;
+		}
+	}
+
+	list_free(aggs);
+	return ok;
+}
+
+/*
  * Create a Gapfill Path node.
  *
  * The gap fill node needs rows to be sorted by time ASC
@@ -445,6 +475,37 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 	gapfill_build_pathtarget(root->upper_targets[UPPERREL_FINAL],
 							 path->cpath.path.pathtarget,
 							 subpath->pathtarget);
+
+	/*
+	 * Move HAVING quals from the aggregate subpath onto the GapFill node so
+	 * they run after gap rows are generated; otherwise filtered-out groups
+	 * disappear before gapfill can extend them (#5202). Skipped when an
+	 * Aggref is not a top-level pathtarget expression (locf/interpolate
+	 * wraps it), since setrefs cannot resolve it then.
+	 */
+	List **subpath_qual_slot = NULL;
+	switch (nodeTag(subpath))
+	{
+		case T_AggPath:
+			subpath_qual_slot = &((AggPath *) subpath)->qual;
+			break;
+		case T_GroupPath:
+			subpath_qual_slot = &((GroupPath *) subpath)->qual;
+			break;
+		case T_GroupingSetsPath:
+			subpath_qual_slot = &((GroupingSetsPath *) subpath)->qual;
+			break;
+		default:
+			break;
+	}
+
+	if (subpath_qual_slot != NULL && *subpath_qual_slot != NIL &&
+		gapfill_quals_reference_only_pathtarget_aggs(*subpath_qual_slot,
+													 path->cpath.path.pathtarget))
+	{
+		path->having_quals = *subpath_qual_slot;
+		*subpath_qual_slot = NIL;
+	}
 
 	if (!gapfill_correct_order(root, subpath, func))
 	{
