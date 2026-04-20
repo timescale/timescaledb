@@ -1459,8 +1459,8 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 				 * actions requiring chunk routing, which uses a separate
 				 * planner path (ModifyHypertable).
 				 */
-				if (rel->relid == (Index) query->resultRelation &&
-					IS_UPDL_CMD(query) && ts_guc_enable_hypertable_expansion_for_dml)
+				if (rel->relid == (Index) query->resultRelation && IS_UPDL_CMD(query) &&
+					ts_guc_enable_hypertable_expansion_for_dml)
 				{
 					rte_mark_for_expansion(rte);
 				}
