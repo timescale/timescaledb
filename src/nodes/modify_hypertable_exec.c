@@ -958,7 +958,8 @@ ExecInsert(ModifyTableContext *context,
 			ts_cm_functions->continuous_agg_backfill_check(context->ht_state->ht->fd.id,
 														   ctr->cis->chunk_range_end,
 														   slot,
-														   context->ht_state->ht);
+														   context->ht_state->ht,
+														   NULL);
 	}
 
 	if (canSetTag)

@@ -520,7 +520,8 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 			ts_cm_functions->continuous_agg_backfill_check(miinfo->ht->fd.id,
 														   cis->chunk_range_end,
 														   slots[i],
-														   miinfo->ht);
+														   miinfo->ht,
+														   NULL);
 			if (should_free)
 			{
 				heap_freetuple(tuple);
