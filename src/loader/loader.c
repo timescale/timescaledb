@@ -51,15 +51,11 @@
  *   2. When a command is run with timescale not loaded, post_analyze_hook:
  *        a. Gets the extension version.
  *        b. Loads the versioned extension.
- *        c. Grabs the post_parse_analyze_hook from the versioned extension
- *           (src/init.c:post_analyze_hook) and stores it in
- *           extension_post_parse_analyze_hook.
- *        d. Sets the post_parse_analyze_hook back to what it was before we
+ *        c. Sets the post_parse_analyze_hook back to what it was before we
  *           loaded the versioned extension (this hook eventually called our
  *           post_analyze_hook, but may not be our function, for instance, if
  *           another extension is loaded).
- *        e. Calls extension_post_parse_analyze_hook.
- *        f. Calls the prev_post_parse_analyze_hook.
+ *        d. Calls the prev_post_parse_analyze_hook.
  *
  * Some notes on design:
  *
@@ -137,10 +133,6 @@ typedef struct TsExtension
 
 	/* Shared object library version loaded; empty if none. */
 	char soversion[MAX_VERSION_LEN];
-
-	/* TODO Remove.  Neither timescaledb nor OSM actually have this hook,
-	 * never have, and we don't plan to add them. */
-	post_parse_analyze_hook_type post_parse_analyze_hook;
 } TsExtension;
 
 TsExtension extensions[] = {
@@ -153,7 +145,6 @@ TsExtension extensions[] = {
 		.guc_disable_load_name = MAKE_EXTOPTION("disable_load"),
 		.guc_disable_load = false,
 		.soversion = "",
-		.post_parse_analyze_hook = NULL,
 	},
 	{
 		.name = "timescaledb_osm",
@@ -162,7 +153,6 @@ TsExtension extensions[] = {
 		.guc_disable_load_name = "timescaledb_osm.disable_load",
 		.guc_disable_load = false,
 		.soversion = "",
-		.post_parse_analyze_hook = NULL,
 	},
 	{
 		.name = "timescaledb_lake",
@@ -171,14 +161,10 @@ TsExtension extensions[] = {
 		.guc_disable_load_name = "timescaledb_lake.disable_load",
 		.guc_disable_load = false,
 		.soversion = "",
-		.post_parse_analyze_hook = NULL,
 	},
 };
 
 inline static void extension_check(TsExtension * /*ext*/);
-static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
-												   TsExtension const * /*ext*/,
-												   JumbleState *jstate);
 
 static bool
 extension_is_loaded(TsExtension const *const ext)
@@ -590,16 +576,6 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 		{
 			extension_check(ext);
 		}
-
-		/*
-		 * Call the extension's hook. This is necessary since the extension is
-		 * installed during the hook. If we did not do this the extension's hook
-		 * would not be called during the first command because the extension
-		 * would not have yet been installed. Thus the loader captures the
-		 * extension hook and calls it explicitly after the check for installing
-		 * the extension.
-		 */
-		call_extension_post_parse_analyze_hook(pstate, query, ext, jstate);
 	}
 
 	if (prev_post_parse_analyze_hook != NULL)
@@ -754,18 +730,12 @@ do_load(TsExtension *const ext)
 	}
 
 	/*
-	 * we need to capture the loaded extension's post analyze hook, giving it
-	 * a NULL as previous
+	 * Save and restore post_parse_analyze_hook around the load so that
+	 * loading the versioned extension cannot modify our hook chain.
 	 */
 	old_hook = post_parse_analyze_hook;
 	post_parse_analyze_hook = NULL;
 
-	/*
-	 * We want to call the post_parse_analyze_hook from the versioned
-	 * extension after we've loaded the versioned so. When the file is loaded
-	 * it sets post_parse_analyze_hook, which we capture and store in
-	 * extension_post_parse_analyze_hook to call at the end _PG_init
-	 */
 	PG_TRY();
 	{
 		PGFunction ts_post_load_init =
@@ -777,13 +747,14 @@ do_load(TsExtension *const ext)
 	}
 	PG_CATCH();
 	{
-		ext->post_parse_analyze_hook = post_parse_analyze_hook;
 		post_parse_analyze_hook = old_hook;
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
 
-	ext->post_parse_analyze_hook = post_parse_analyze_hook;
+	/* The versioned extension must not install a post_parse_analyze_hook:
+	 * the loader would silently drop it when restoring old_hook below. */
+	Assert(post_parse_analyze_hook == NULL);
 	post_parse_analyze_hook = old_hook;
 }
 
@@ -795,9 +766,8 @@ extension_check(TsExtension *const ext)
 		case EXTENSION_STATE_TRANSITIONING:
 			/*
 			 * Always load as soon as the extension is transitioning. This is
-			 * necessary so that the extension load before any CREATE FUNCTION
-			 * calls. Otherwise, the CREATE FUNCTION calls will load the .so
-			 * without capturing the post_parse_analyze_hook.
+			 * necessary so that the extension is loaded before any CREATE
+			 * FUNCTION calls trigger an uncontrolled load of the .so.
 			 */
 		case EXTENSION_STATE_CREATED:
 			do_load(ext);
@@ -814,15 +784,5 @@ ts_loader_extension_check(void)
 	for (size_t i = 0; i < sizeof(extensions) / sizeof(TsExtension); ++i)
 	{
 		extension_check(&extensions[i]);
-	}
-}
-
-static void
-call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
-									   TsExtension const *const ext, JumbleState *jstate)
-{
-	if (extension_is_loaded(ext) && ext->post_parse_analyze_hook != NULL)
-	{
-		ext->post_parse_analyze_hook(pstate, query, jstate);
 	}
 }
