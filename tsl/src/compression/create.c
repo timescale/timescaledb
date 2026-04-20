@@ -36,7 +36,9 @@
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
+#include "bgw/job.h"
 #include "bgw_policy/policies_v2.h"
+#include "extension_constants.h"
 #include "chunk.h"
 #include "chunk_index.h"
 #include "compression.h"
@@ -1039,6 +1041,16 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 	}
 
 	ts_compression_settings_delete(ht->main_table_relid);
+
+	/* If a columnstore policy is attached, drop it so it does not continue
+	 * running against a hypertable that no longer has columnstore enabled.
+	 * Check first to avoid emitting a "policy not found" NOTICE in the common
+	 * case where no policy is attached. */
+	List *compression_jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_COMPRESSION_PROC_NAME,
+																	   FUNCTIONS_SCHEMA_NAME,
+																	   ht->fd.id);
+	if (compression_jobs != NIL)
+		policy_compression_remove_internal(ht->main_table_relid, true);
 
 	return true;
 }

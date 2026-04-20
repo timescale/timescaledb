@@ -391,7 +391,9 @@ select add_compression_policy('test1', interval '1 day');
 ALTER table test1 set (timescaledb.compress='f');
 \set ON_ERROR_STOP 1
 
-select remove_compression_policy('test1');
+-- Disabling columnstore removes any attached columnstore policy, so the
+-- explicit remove call below is a no-op and must use if_exists => true.
+select remove_compression_policy('test1', if_exists => true);
 ALTER table test1 set (timescaledb.compress='f');
 
 --only one hypertable left
