@@ -42,6 +42,8 @@ TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_main);
 TS_FUNCTION_INFO_V1(ts_bgw_job_execute_test);
 /* function for testing the correctness of the next_scheduled_slot calculation */
 TS_FUNCTION_INFO_V1(ts_test_next_scheduled_execution_slot);
+/* function for directly observing ts_bgw_job_stat_next_start's return value */
+TS_FUNCTION_INFO_V1(ts_test_bgw_job_stat_next_start);
 
 typedef enum TestJobType
 {
@@ -152,6 +154,33 @@ ts_test_next_scheduled_execution_slot(PG_FUNCTION_ARGS)
 		result = DirectFunctionCall2(timestamptz_pl_interval, result, schedint_datum);
 	}
 	return result;
+}
+
+/*
+ * Expose ts_bgw_job_stat_next_start to SQL so tests can assert on its return
+ * value directly. This is needed to verify fixes to that function that would
+ * otherwise be masked by downstream paths (e.g. mark_end) overwriting the
+ * next_start before any assertion against the persisted row is visible.
+ *
+ * Takes a job_id and the consecutive_failed_launches parameter (to mirror the
+ * scheduler's call site at scheduler.c:301) and returns the computed next
+ * start timestamp.
+ */
+extern Datum
+ts_test_bgw_job_stat_next_start(PG_FUNCTION_ARGS)
+{
+	int32 job_id = PG_GETARG_INT32(0);
+	int32 consecutive_failed_launches = PG_ARGISNULL(1) ? 0 : PG_GETARG_INT32(1);
+
+	BgwJob *job = ts_bgw_job_find(job_id, CurrentMemoryContext, true);
+	if (job == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("job %d not found", job_id)));
+
+	BgwJobStat *jobstat = ts_bgw_job_stat_find(job_id);
+
+	PG_RETURN_TIMESTAMPTZ(
+		ts_bgw_job_stat_next_start(jobstat, job, consecutive_failed_launches));
 }
 
 extern Datum

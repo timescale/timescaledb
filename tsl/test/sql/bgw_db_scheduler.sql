@@ -408,6 +408,31 @@ SELECT job_id, last_finish, next_start, last_run_success, total_runs, total_succ
 FROM _timescaledb_internal.bgw_job_stat;
 SELECT * FROM sorted_bgw_log;
 
+-- Simulate a failover-inherited sentinel (next_start = -infinity) with no
+-- crash counter. ts_bgw_job_stat_next_start must sanitize DT_NOBEGIN rather
+-- than propagate it, otherwise on_failure_to_start_job's
+-- `sjob->next_start != DT_NOBEGIN` guard (scheduler.c) would skip the
+-- set_next_start call and leave the job's DB row stuck at -infinity.
+CREATE FUNCTION ts_test_bgw_job_stat_next_start(
+    job_id INT4,
+    consecutive_failed_launches INT4 DEFAULT 0)
+RETURNS TIMESTAMPTZ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
+
+UPDATE _timescaledb_internal.bgw_job_stat
+SET next_start = '-infinity', consecutive_crashes = 0
+WHERE job_id = 1005;
+
+SELECT job_id,
+       (next_start = '-infinity'::timestamptz) AS next_start_is_infinity
+FROM _timescaledb_internal.bgw_job_stat
+WHERE job_id = 1005;
+
+-- Directly observe the function's return value: must not be -infinity.
+SELECT (ts_test_bgw_job_stat_next_start(1005) = '-infinity'::timestamptz)
+         AS returns_infinity;
+
+DROP FUNCTION ts_test_bgw_job_stat_next_start(INT4, INT4);
+
 
 CREATE FUNCTION wait_for_timer_to_run(started_at INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
