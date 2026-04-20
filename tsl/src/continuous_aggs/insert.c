@@ -572,6 +572,9 @@ continuous_agg_backfill_check(int32 hypertable_id, int64 chunk_range_end, TupleT
 	if (!is_backfill_chunk(chunk_range_end, ht))
 		return;
 
+	if (tenant_column_name == NULL)
+		return;
+
 	/* Get the tenant column attribute number from the hypertable relation.
 	 * We use the hypertable's tuple descriptor since slot is in hypertable format. */
 	AttrNumber device_attno = get_attnum(ht->main_table_relid, tenant_column_name);

@@ -106,7 +106,8 @@ typedef struct CrossModuleFunctions
 										  HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
 										  bool update);
 	void (*continuous_agg_backfill_check)(int32 hypertable_id, int64 chunk_range_end,
-										  TupleTableSlot *slot, const Hypertable *ht);
+										  TupleTableSlot *slot, const Hypertable *ht,
+										  const char *tenant_column_name);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
 	Query *(*continuous_agg_apply_rewrites_tsl)(Query *parse);

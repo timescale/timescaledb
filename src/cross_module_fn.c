@@ -250,7 +250,8 @@ continuous_agg_dml_invalidate_default(int32 hypertable_id, Relation chunk_rel,
 
 static void
 continuous_agg_backfill_check_default(int32 hypertable_id, int64 chunk_range_end,
-									  TupleTableSlot *slot, const Hypertable *ht)
+									  TupleTableSlot *slot, const Hypertable *ht,
+									  const char *tenant_column_name)
 {
 	/* no-op when TSL is not loaded */
 }
