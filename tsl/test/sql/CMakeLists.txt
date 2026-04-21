@@ -44,6 +44,7 @@ set(TEST_FILES
     compressed_detoaster.sql
     direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
+    direct_compress_memory.sql
     compression.sql
     compression_allocation.sql
     compression_conflicts.sql
