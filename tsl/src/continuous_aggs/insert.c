@@ -660,6 +660,14 @@ backfill_tracker_flush(void)
 	TupleDesc tupdesc = RelationGetDescr(rel);
 	CatalogSecurityContext sec_ctx;
 
+	/*
+	 * AssertHasSnapshotForToast() fires inside
+	 * heap_insert() whenever the target relation has a TOAST table. The
+	 * continuous_aggs_backfill_tracker has a text column (device_value), so
+	 * reltoastrelid is set and the assert is active. We explicitly Push and Pop
+         * the snapshot.
+	 */
+	PushActiveSnapshot(GetTransactionSnapshot());
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 	hash_seq_init(&hash_seq, backfill_tracker_htab);
@@ -684,6 +692,7 @@ backfill_tracker_flush(void)
 
 	ts_catalog_restore_user(&sec_ctx);
 	table_close(rel, NoLock);
+	PopActiveSnapshot();
 
 	elog(DEBUG1,
 		 "backfill tracker: flushed %ld entries",
