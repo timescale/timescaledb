@@ -724,6 +724,16 @@ ts_accept_for_segmentby(CompressionSettings *settings, Form_pg_attribute attr)
 
 	return false;
 }
+/* Sparse indexes are only set by default when no user configuration exists */
+bool
+ts_can_set_default_sparse_index(CompressionSettings *settings)
+{
+	return (settings->fd.index == NULL) ||
+		   !ts_jsonb_has_key_value_str_field(settings->fd.index,
+											 ts_sparse_index_common_keys[SparseIndexKeySource],
+											 ts_sparse_index_source_names
+												 [_SparseIndexSourceEnumConfig]);
+}
 
 /* adds orderby sparse index settings into fd.index */
 Jsonb *

@@ -371,6 +371,85 @@ SELECT * FROM _timescaledb_catalog.compression_settings;
  _timescaledb_internal._hyper_27_39_chunk | _timescaledb_internal.compress_hyper_28_40_chunk |           | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
 
 ROLLBACK;
+-- Test recompress preserves auto-discovered segmentby
+BEGIN;
+CREATE TABLE test_recompress_segmentby (
+    time TIMESTAMPTZ NOT NULL,
+    time2 TIMESTAMPTZ NOT NULL,
+    device_id INT NOT NULL,
+    value FLOAT
+) WITH (tsdb.hypertable, tsdb.partition_column='time');
+-- Large insert triggers direct compress and auto-segmentby analysis
+INSERT INTO test_recompress_segmentby
+SELECT t, t, (i % 5), random()
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 minute') t,
+     generate_series(1, 5) i;
+-- device_id should be auto-selected as segmentby
+SELECT * FROM _timescaledb_catalog.compression_settings;
+                  relid                   |                  compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                            index                            
+------------------------------------------+--------------------------------------------------+-------------+---------+--------------+--------------------+-------------------------------------------------------------
+ test_recompress_segmentby                |                                                  |             |         |              |                    | 
+ _timescaledb_internal._hyper_29_41_chunk | _timescaledb_internal.compress_hyper_30_43_chunk | {device_id} | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+
+-- Small insert into the same chunk range makes it partial
+INSERT INTO test_recompress_segmentby VALUES
+    ('2024-01-01 12:00:00', '2024-01-01 12:00:00', 1, 99.9),
+    ('2024-01-01 12:01:00', '2024-01-01 12:01:00', 2, 88.8),
+    ('2024-01-01 12:02:00', '2024-01-01 12:02:00', 3, 77.7);
+WARNING:  disabling direct compress because of too small batch size
+-- Recompress should preserve the auto-discovered segmentby
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('test_recompress_segmentby') chunk; -- unordered, partial
+       chunk_status_text        
+--------------------------------
+ {COMPRESSED,UNORDERED,PARTIAL}
+
+SELECT compress_chunk(ch, recompress := true) FROM show_chunks('test_recompress_segmentby') ch;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_29_41_chunk
+
+SELECT * FROM _timescaledb_catalog.compression_settings;
+                  relid                   |                  compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                            index                            
+------------------------------------------+--------------------------------------------------+-------------+---------+--------------+--------------------+-------------------------------------------------------------
+ test_recompress_segmentby                |                                                  |             |         |              |                    | 
+ _timescaledb_internal._hyper_29_41_chunk | _timescaledb_internal.compress_hyper_30_43_chunk | {device_id} | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('test_recompress_segmentby') chunk; -- unordered
+   chunk_status_text    
+------------------------
+ {COMPRESSED,UNORDERED}
+
+SELECT compress_chunk(ch, recompress := true) FROM show_chunks('test_recompress_segmentby') ch;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_29_41_chunk
+
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('test_recompress_segmentby') chunk; -- compressed
+ chunk_status_text 
+-------------------
+ {COMPRESSED}
+
+SELECT * FROM _timescaledb_catalog.compression_settings;
+                  relid                   |                  compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                            index                            
+------------------------------------------+--------------------------------------------------+-------------+---------+--------------+--------------------+-------------------------------------------------------------
+ test_recompress_segmentby                |                                                  |             |         |              |                    | 
+ _timescaledb_internal._hyper_29_41_chunk | _timescaledb_internal.compress_hyper_30_44_chunk | {device_id} | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+
+-- Recompress should overwrite settings
+ALTER TABLE test_recompress_segmentby SET (tsdb.segment_by = '', tsdb.order_by = 'time2');
+NOTICE:  updated compression settings will only apply to future compressions
+SELECT compress_chunk(ch, recompress := true) FROM show_chunks('test_recompress_segmentby') ch;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_29_41_chunk
+
+SELECT * FROM _timescaledb_catalog.compression_settings;
+                  relid                   |                  compress_relid                  | segmentby |   orderby    | orderby_desc | orderby_nullsfirst |                                                          index                                                          
+------------------------------------------+--------------------------------------------------+-----------+--------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
+ test_recompress_segmentby                |                                                  | {}        | {time2,time} | {f,t}        | {f,t}              | [{"type": "minmax", "column": "time2", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_29_41_chunk | _timescaledb_internal.compress_hyper_30_45_chunk | {}        | {time2,time} | {f,t}        | {f,t}              | [{"type": "minmax", "column": "time2", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+
+ROLLBACK;
 -- Test default segmentby gets set via COPY path
 BEGIN;
 SET timescaledb.enable_direct_compress_insert = false;
@@ -389,14 +468,14 @@ ANALYZE test_copy_segmentby;
 SELECT compress_chunk(c) FROM show_chunks('test_copy_segmentby') c;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_29_41_chunk
+ _timescaledb_internal._hyper_31_46_chunk
 
 -- should have device_id as default segmentby
 SELECT * FROM _timescaledb_catalog.compression_settings;
                   relid                   |                  compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                            index                            
 ------------------------------------------+--------------------------------------------------+-------------+---------+--------------+--------------------+-------------------------------------------------------------
  test_copy_segmentby                      |                                                  |             |         |              |                    | 
- _timescaledb_internal._hyper_29_41_chunk | _timescaledb_internal.compress_hyper_30_42_chunk | {device_id} | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_31_46_chunk | _timescaledb_internal.compress_hyper_32_47_chunk | {device_id} | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
 
 SET timescaledb.enable_direct_compress_copy = true;
 -- 7205 rows with 5 device_ids into a new chunk range via COPY
@@ -407,8 +486,8 @@ SELECT * FROM _timescaledb_catalog.compression_settings;
                   relid                   |                  compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                            index                            
 ------------------------------------------+--------------------------------------------------+-------------+---------+--------------+--------------------+-------------------------------------------------------------
  test_copy_segmentby                      |                                                  |             |         |              |                    | 
- _timescaledb_internal._hyper_29_41_chunk | _timescaledb_internal.compress_hyper_30_42_chunk | {device_id} | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_29_43_chunk | _timescaledb_internal.compress_hyper_30_45_chunk | {device_id} | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_31_46_chunk | _timescaledb_internal.compress_hyper_32_47_chunk | {device_id} | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_31_48_chunk | _timescaledb_internal.compress_hyper_32_50_chunk | {device_id} | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
 
 ROLLBACK;
 -- Test NULL values in pass-by-reference column during auto segmentby analysis
@@ -417,7 +496,7 @@ CREATE TABLE test_null_text(time timestamptz NOT NULL, tag text, val float);
 SELECT create_hypertable('test_null_text', 'time', chunk_time_interval => '7 days'::interval);
       create_hypertable       
 ------------------------------
- (31,public,test_null_text,t)
+ (33,public,test_null_text,t)
 
 ALTER TABLE test_null_text SET (timescaledb.compress, timescaledb.compress_orderby = 'time');
 SET timescaledb.direct_compress_insert_tuple_sort_limit = 500;

@@ -1610,17 +1610,6 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	return ts_compress_parse_order_collist(orderby, ht);
 }
 
-/* sparse indexes will only be set by default if there was no configuration */
-static bool
-can_set_default_sparse_index(CompressionSettings *settings)
-{
-	return (settings->fd.index == NULL) ||
-		   !ts_jsonb_has_key_value_str_field(settings->fd.index,
-											 ts_sparse_index_common_keys[SparseIndexKeySource],
-											 ts_sparse_index_source_names
-												 [_SparseIndexSourceEnumConfig]);
-}
-
 static void
 create_default_composite_bloom(IndexInfo *index_info, Hypertable *ht, CompressionSettings *settings,
 							   JsonbParseState *parse_state, TsBmsList *sparse_index_columns,
@@ -1736,7 +1725,7 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 	/*
 	 * Sparse indexes are only created automatically if they are not set in compression settings
 	 */
-	if (!ts_guc_auto_sparse_indexes || !can_set_default_sparse_index(settings))
+	if (!ts_guc_auto_sparse_indexes || !ts_can_set_default_sparse_index(settings))
 		return NULL;
 
 	/*
@@ -1870,7 +1859,7 @@ compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 		add_orderby_sparse_index = true;
 	}
 
-	if (ts_guc_auto_sparse_indexes && can_set_default_sparse_index(settings))
+	if (ts_guc_auto_sparse_indexes && ts_can_set_default_sparse_index(settings))
 	{
 		settings->fd.index = compression_setting_sparse_index_get_default(ht, settings);
 		settings->fd.index = ts_add_orderby_sparse_index(settings);
