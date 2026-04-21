@@ -594,38 +594,38 @@ is_backfill_chunk(int64 chunk_range_end, const Hypertable *ht)
  *
  * TODO: Cache attno/type info per hypertable to avoid repeated syscache access.
  */
-void
+bool
 continuous_agg_backfill_check(int32 hypertable_id, int64 chunk_range_end, TupleTableSlot *slot,
 							  const Hypertable *ht, const char *tenant_column_name)
 {
 	if (!is_backfill_chunk(chunk_range_end, ht))
-		return;
+		return false;
 
 	if (tenant_column_name == NULL)
-		return;
+		return false;
 
 	/* Get the tenant column attribute number from the hypertable relation.
 	 * We use the hypertable's tuple descriptor since slot is in hypertable format. */
 	AttrNumber device_attno = get_attnum(ht->main_table_relid, tenant_column_name);
 	if (device_attno == InvalidAttrNumber)
-		return; /* device column not found — skip tracking */
+		return false; /* device column not found — skip tracking */
 
 	/* Extract the device value from the tuple */
 	bool isnull;
 	Datum device_datum = slot_getattr(slot, device_attno, &isnull);
 	if (isnull)
-		return;
+		return false;
 
 	/* Get the time dimension value for this row */
 	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
 	if (!open_dim)
-		return;
+		return false;
 
 	AttrNumber time_attno = get_attnum(ht->main_table_relid, NameStr(open_dim->fd.column_name));
 	bool time_isnull;
 	Datum time_datum = slot_getattr(slot, time_attno, &time_isnull);
 	if (time_isnull)
-		return;
+		return false;
 
 	Oid time_type = ts_dimension_get_partition_type(open_dim);
 	int64 timeval = ts_time_value_to_internal(time_datum, time_type);
@@ -668,6 +668,7 @@ continuous_agg_backfill_check(int32 hypertable_id, int64 chunk_range_end, TupleT
 	}
 
 	pfree(device_str);
+	return true;
 }
 
 /*
@@ -694,7 +695,7 @@ backfill_tracker_flush(void)
 	 * heap_insert() whenever the target relation has a TOAST table. The
 	 * continuous_aggs_backfill_tracker has a text column (device_value), so
 	 * reltoastrelid is set and the assert is active. We explicitly Push and Pop
-         * the snapshot.
+	 * the snapshot.
 	 */
 	PushActiveSnapshot(GetTransactionSnapshot());
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);

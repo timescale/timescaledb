@@ -252,12 +252,13 @@ continuous_agg_dml_invalidate_default(int32 hypertable_id, Relation chunk_rel,
 	pg_unreachable();
 }
 
-static void
+static bool
 continuous_agg_backfill_check_default(int32 hypertable_id, int64 chunk_range_end,
 									  TupleTableSlot *slot, const Hypertable *ht,
 									  const char *tenant_column_name)
 {
-	/* no-op when TSL is not loaded */
+	/* no-op when TSL is not loaded — nothing tracked, caller must run cache_inval */
+	return false;
 }
 
 TS_FUNCTION_INFO_V1(ts_tsl_loaded);

@@ -947,20 +947,33 @@ ExecInsert(ModifyTableContext *context,
 
 	if (context->ht_state->has_continuous_aggregate)
 	{
-		bool should_free;
-		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
-		ts_cm_functions->continuous_agg_dml_invalidate(context->ht_state->ht->fd.id, resultRelationDesc, tuple, NULL, false);
-		if (should_free)
-			heap_freetuple(tuple);
-
-		/* Check for backfill and track device if inserting into an old chunk */
+		/*
+		 * If the row lands in a backfill chunk and the cagg has a tenant column,
+		 * the tracker takes ownership of this row's invalidation and we skip
+		 * the coarse cache_inval write. Otherwise (recent chunk or no tenant
+		 * column) fall back to cache_inval as before.
+		 */
+		bool tracked = false;
 		if (ctr && ctr->cis)
-			ts_cm_functions->continuous_agg_backfill_check(context->ht_state->ht->fd.id,
-														   ctr->cis->chunk_range_end,
-														   slot,
-														   context->ht_state->ht,
-														   context->ht_state
-															   ->tenant_column_name);
+			tracked = ts_cm_functions->continuous_agg_backfill_check(context->ht_state->ht->fd.id,
+																	 ctr->cis->chunk_range_end,
+																	 slot,
+																	 context->ht_state->ht,
+																	 context->ht_state
+																		 ->tenant_column_name);
+
+		if (!tracked)
+		{
+			bool should_free;
+			HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
+			ts_cm_functions->continuous_agg_dml_invalidate(context->ht_state->ht->fd.id,
+														   resultRelationDesc,
+														   tuple,
+														   NULL,
+														   false);
+			if (should_free)
+				heap_freetuple(tuple);
+		}
 	}
 
 	if (canSetTag)

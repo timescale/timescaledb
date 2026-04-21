@@ -16,6 +16,6 @@ extern void continuous_agg_invalidate_range(int32 hypertable_id, Oid chunk_relid
 extern void continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel,
 										  HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
 										  bool update);
-extern void continuous_agg_backfill_check(int32 hypertable_id, int64 chunk_range_end,
+extern bool continuous_agg_backfill_check(int32 hypertable_id, int64 chunk_range_end,
 										  TupleTableSlot *slot, const Hypertable *ht,
 										  const char *tenant_column_name);
