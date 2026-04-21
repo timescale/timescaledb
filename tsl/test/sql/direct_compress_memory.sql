@@ -13,11 +13,7 @@ create or replace function ts_debug_allocated_bytes(text = 'PortalContext') retu
     as :MODULE_PATHNAME, 'ts_debug_allocated_bytes'
     language c strict volatile;
 
-set max_parallel_workers_per_gather = 0;
 set timescaledb.enable_direct_compress_insert = true;
-set timescaledb.enable_direct_compress_insert_sort_batches = true;
-set timescaledb.enable_direct_compress_insert_client_sorted = false;
-set timescaledb.direct_compress_insert_tuple_sort_limit = 1000000;
 
 create table dc_mem(time timestamptz not null, device text, value float8);
 select create_hypertable('dc_mem', 'time', chunk_time_interval => interval '1 day');
