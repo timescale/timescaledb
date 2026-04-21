@@ -529,7 +529,7 @@ alter table test_sparse_index set (timescaledb.compress,
     timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 'x');
 NOTICE:  updated compression settings will only apply to future compressions
-select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
+select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
  count 
 -------
      1
@@ -596,7 +596,7 @@ set timescaledb.enable_sparse_index_bloom to false;
 alter table test_sparse_index reset (timescaledb.compress_segmentby,
     timescaledb.compress_orderby,
     timescaledb.compress_index);
-select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
+select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
  count 
 -------
      1
