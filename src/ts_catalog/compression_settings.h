@@ -153,6 +153,7 @@ bool ts_contains_sparse_index_config(CompressionSettings *settings, const char *
 									 const char *sparse_index_type, bool skip_column_arrays);
 TSDLLEXPORT bool ts_column_has_sparse_index(CompressionSettings *settings, const char *attname);
 TSDLLEXPORT bool ts_accept_for_segmentby(CompressionSettings *settings, Form_pg_attribute attr);
+TSDLLEXPORT bool ts_can_set_default_sparse_index(CompressionSettings *settings);
 TSDLLEXPORT Jsonb *ts_add_orderby_sparse_index(CompressionSettings *settings);
 
 TSDLLEXPORT Jsonb *ts_remove_orderby_sparse_index(CompressionSettings *settings);
@@ -176,3 +177,5 @@ ts_resolve_columns_to_attnos_from_parsed_settings(SparseIndexSettings *settings,
 
 extern TSDLLEXPORT List *ts_get_values_by_key_from_parsed_object(SparseIndexSettingsObject *obj,
 																 const char *key);
+extern TSDLLEXPORT bool ts_compression_settings_add_from_chunk(CompressionSettings *chunk_settings,
+															   CompressionSettings *new_settings);
