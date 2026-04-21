@@ -144,9 +144,9 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 												  CACHE_FLAG_NONE);
 	}
 	state->has_continuous_aggregate = ts_hypertable_has_continuous_aggregates(state->ht->fd.id);
-	state->tenant_column_name = state->has_continuous_aggregate
-									? ts_continuous_agg_get_tenant_column_name(state->ht->fd.id)
-									: NULL;
+	state->tenant_column_name = state->has_continuous_aggregate ?
+									ts_continuous_agg_get_tenant_column_name(state->ht->fd.id) :
+									NULL;
 
 	if (mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE)
 	{

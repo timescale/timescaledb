@@ -105,7 +105,7 @@ typedef struct CrossModuleFunctions
 	void (*continuous_agg_dml_invalidate)(int32 hypertable_id, Relation chunk_rel,
 										  HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
 										  bool update);
-	void (*continuous_agg_backfill_check)(int32 hypertable_id, int64 chunk_range_end,
+	bool (*continuous_agg_backfill_check)(int32 hypertable_id, int64 chunk_range_end,
 										  TupleTableSlot *slot, const Hypertable *ht,
 										  const char *tenant_column_name);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,

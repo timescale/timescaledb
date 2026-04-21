@@ -369,9 +369,9 @@ TSCopyMultiInsertInfoInit(TSCopyMultiInsertInfo *miinfo, ResultRelInfo *rri,
 	miinfo->ti_options = ti_options;
 	miinfo->ht = ht;
 	miinfo->has_continuous_aggregate = ts_hypertable_has_continuous_aggregates(ht->fd.id);
-	miinfo->tenant_column_name = miinfo->has_continuous_aggregate
-									 ? ts_continuous_agg_get_tenant_column_name(ht->fd.id)
-									 : NULL;
+	miinfo->tenant_column_name = miinfo->has_continuous_aggregate ?
+									 ts_continuous_agg_get_tenant_column_name(ht->fd.id) :
+									 NULL;
 }
 
 /*
@@ -501,22 +501,29 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 
 		if (miinfo->has_continuous_aggregate)
 		{
-			bool should_free;
-			HeapTuple tuple = ExecFetchSlotHeapTuple(slots[i], false, &should_free);
-			ts_cm_functions->continuous_agg_dml_invalidate(miinfo->ht->fd.id,
-														   resultRelInfo->ri_RelationDesc,
-														   tuple,
-														   NULL,
-														   false);
-			if (should_free)
-				heap_freetuple(tuple);
+			/*
+			 * Backfill-chunk + tenant rows go into the tracker and bypass
+			 * cache_inval; everything else falls through to cache_inval.
+			 */
+			bool tracked =
+				ts_cm_functions->continuous_agg_backfill_check(miinfo->ht->fd.id,
+															   cis->chunk_range_end,
+															   slots[i],
+															   miinfo->ht,
+															   miinfo->tenant_column_name);
 
-			/* Check for backfill and track device if inserting into an old chunk */
-			ts_cm_functions->continuous_agg_backfill_check(miinfo->ht->fd.id,
-														   cis->chunk_range_end,
-														   slots[i],
-														   miinfo->ht,
-														   miinfo->tenant_column_name);
+			if (!tracked)
+			{
+				bool should_free;
+				HeapTuple tuple = ExecFetchSlotHeapTuple(slots[i], false, &should_free);
+				ts_cm_functions->continuous_agg_dml_invalidate(miinfo->ht->fd.id,
+															   resultRelInfo->ri_RelationDesc,
+															   tuple,
+															   NULL,
+															   false);
+				if (should_free)
+					heap_freetuple(tuple);
+			}
 		}
 
 		ExecClearTuple(slots[i]);
