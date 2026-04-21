@@ -501,9 +501,7 @@ vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
 
 		branch_filters[i] = branch_filter;
 
-		Ensure(value_expression != NULL,
-			   "CASE branch %d has NULL value expression",
-			   i);
+		Ensure(value_expression != NULL, "CASE branch %d has NULL value expression", i);
 		branch_values[i] =
 			vector_slot_evaluate_expression(dcontext, slot, branch_filter, value_expression);
 
