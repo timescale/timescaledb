@@ -87,3 +87,64 @@ DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_process_hypertable_invali
 DROP PROCEDURE IF EXISTS @extschema@.add_process_hypertable_invalidations_policy(REGCLASS, INTERVAL, BOOL, TIMESTAMPTZ, TEXT);
 DROP PROCEDURE IF EXISTS @extschema@.remove_process_hypertable_invalidations_policy(REGCLASS, BOOL);
 
+-- #9578: rename composite bloom metadata columns that were created with the
+-- pre-fix naming scheme ("_ts_meta_v2_bloomh_<col1>_<col2>") to the post-fix
+-- collision-safe scheme ("_ts_meta_v2_bloomh_<hash4>_<col1>_<col2>").  The
+-- pre-fix scheme joined column names with '_', which collided whenever two
+-- composite specs flattened to the same string (e.g. bloom(a_b, c) vs
+-- bloom(a, b_c) both produced "_ts_meta_v2_bloomh_a_b_c").  Renaming existing
+-- columns in place preserves bloom-filter pushdown on already-compressed data.
+DO $$
+DECLARE
+  cs_rec RECORD;
+  spec JSONB;
+  col_names TEXT[];
+  old_name TEXT;
+  new_name TEXT;
+BEGIN
+  FOR cs_rec IN
+    SELECT compress_relid, index
+    FROM _timescaledb_catalog.compression_settings
+    WHERE compress_relid IS NOT NULL
+      AND index IS NOT NULL
+  LOOP
+    FOR spec IN SELECT * FROM jsonb_array_elements(cs_rec.index)
+    LOOP
+      -- Only composite bloom specs need migration. Single-column bloom,
+      -- min, and max metadata names are unchanged by the fix.
+      IF spec->>'type' <> 'bloom' OR jsonb_typeof(spec->'column') <> 'array' THEN
+        CONTINUE;
+      END IF;
+
+      col_names := ARRAY(SELECT jsonb_array_elements_text(spec->'column'));
+      IF array_length(col_names, 1) < 2 THEN
+        CONTINUE;
+      END IF;
+
+      -- Pre-fix name: literal '_' join, no hash. Post-fix: C-computed name
+      -- (with 4-char md5 hash prefix computed from NUL-separated columns).
+      old_name := '_ts_meta_v2_bloomh_' || array_to_string(col_names, '_');
+      new_name := _timescaledb_functions.compressed_column_metadata_name('bloomh', col_names);
+
+      IF old_name = new_name THEN
+        CONTINUE;
+      END IF;
+
+      -- Rename the column if it still uses the pre-fix name. Quietly skip
+      -- if the column doesn't exist under the old name (e.g. chunk was
+      -- compressed after the fix, or name was previously migrated). Uses a
+      -- C helper that bypasses the normal chunk-rename block.
+      IF EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = cs_rec.compress_relid
+          AND attname = old_name
+          AND NOT attisdropped
+      ) THEN
+        PERFORM _timescaledb_functions.rename_compressed_column(
+          cs_rec.compress_relid, old_name, new_name);
+      END IF;
+    END LOOP;
+  END LOOP;
+END;
+$$;
+

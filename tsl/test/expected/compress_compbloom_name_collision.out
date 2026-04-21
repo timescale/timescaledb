@@ -1,0 +1,161 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Regression test for #9578: composite bloom metadata column names must not
+-- collide when the joined column list produces the same string after
+-- flattening with the '_' separator.
+-- Suppress the "poor compression ratio" WARNING that fires on the tiny test
+-- data so the expected output is stable.
+SET client_min_messages TO ERROR;
+SET
+-- Helper view: list the bloom metadata columns on each compressed chunk so
+-- tests can assert on what the generator actually emits.  The runner's
+-- output cleaner (test/runner_cleanup_output.sh) replaces the
+-- "_ts_meta_v2_bloomh_..." prefix with "regress-test-bloom_..." in the
+-- captured output, so the hash prefix stays visible in the stable form.
+CREATE VIEW bloom_cols AS
+SELECT c.relname, a.attname
+FROM pg_attribute a
+JOIN pg_class c ON c.oid = a.attrelid
+WHERE c.relname LIKE 'compress_hyper_%'
+  AND a.attname LIKE '\_ts\_meta\_v2\_bloomh\_%' ESCAPE '\'
+  AND NOT a.attisdropped
+ORDER BY c.relname COLLATE "C", a.attname COLLATE "C";
+CREATE VIEW
+-- Case 1: reporter's exact repro. bloom(a_b, c) and bloom(a, b_c) both join
+-- to "a_b_c". Before the fix, compress_chunk would fail with
+-- "column ... specified more than once".
+CREATE TABLE t_9578 (
+    ts  timestamptz NOT NULL,
+    a_b int,
+    c   int,
+    a   int,
+    b_c int
+);
+CREATE TABLE
+SELECT create_hypertable('t_9578', 'ts');
+  create_hypertable  
+---------------------
+ (1,public,t_9578,t)
+(1 row)
+
+ALTER TABLE t_9578 SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'ts',
+    timescaledb.compress_index = 'bloom(a_b, c), bloom(a, b_c)'
+);
+ALTER TABLE
+INSERT INTO t_9578 VALUES ('2024-01-01', 1, 2, 3, 4);
+INSERT 0 1
+SELECT compress_chunk(c) FROM show_chunks('t_9578') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+-- Both composite bloom columns must exist with distinct names.  Display
+-- them so a reader can see the hash prefix disambiguates the two specs.
+SELECT * FROM bloom_cols;
+         relname          |            attname            
+--------------------------+-------------------------------
+ compress_hyper_2_2_chunk | _ts_meta_v2_bloomh_10d6_a_b_c
+ compress_hyper_2_2_chunk | _ts_meta_v2_bloomh_be8c_a_b_c
+(2 rows)
+
+DROP TABLE t_9578;
+DROP TABLE
+-- Case 2: three-column composites that collide under '_' flattening.
+-- [a_b, c, d] vs [a, b_c, d] both flatten to "a_b_c_d".
+CREATE TABLE t_9578_3col (
+    ts  timestamptz NOT NULL,
+    a_b int,
+    c   int,
+    a   int,
+    b_c int,
+    d   int
+);
+CREATE TABLE
+SELECT create_hypertable('t_9578_3col', 'ts');
+    create_hypertable     
+--------------------------
+ (3,public,t_9578_3col,t)
+(1 row)
+
+ALTER TABLE t_9578_3col SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'ts',
+    timescaledb.compress_index = 'bloom(a_b, c, d), bloom(a, b_c, d)'
+);
+ALTER TABLE
+INSERT INTO t_9578_3col VALUES ('2024-01-01', 1, 2, 3, 4, 5);
+INSERT 0 1
+SELECT compress_chunk(c) FROM show_chunks('t_9578_3col') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_3_3_chunk
+(1 row)
+
+SELECT * FROM bloom_cols;
+         relname          |             attname             
+--------------------------+---------------------------------
+ compress_hyper_4_4_chunk | _ts_meta_v2_bloomh_1655_a_b_c_d
+ compress_hyper_4_4_chunk | _ts_meta_v2_bloomh_c3e6_a_b_c_d
+(2 rows)
+
+DROP TABLE t_9578_3col;
+DROP TABLE
+-- Case 3: single-column bloom names are unchanged by the fix -- no hash
+-- prefix needed because there is no collision risk with a single column.
+CREATE TABLE t_9578_single (
+    ts  timestamptz NOT NULL,
+    x   int
+);
+CREATE TABLE
+SELECT create_hypertable('t_9578_single', 'ts');
+     create_hypertable      
+----------------------------
+ (5,public,t_9578_single,t)
+(1 row)
+
+ALTER TABLE t_9578_single SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'ts',
+    timescaledb.compress_index = 'bloom(x)'
+);
+ALTER TABLE
+INSERT INTO t_9578_single VALUES ('2024-01-01', 42);
+INSERT 0 1
+SELECT compress_chunk(c) FROM show_chunks('t_9578_single') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_5_5_chunk
+(1 row)
+
+SELECT * FROM bloom_cols;
+         relname          |       attname        
+--------------------------+----------------------
+ compress_hyper_6_6_chunk | _ts_meta_v2_bloomh_x
+(1 row)
+
+DROP TABLE t_9578_single;
+DROP TABLE
+-- Case 4: verify the _timescaledb_functions.compressed_column_metadata_name
+-- helper that the upgrade script uses is accessible and deterministic.
+-- The post-fix name for a 2-column bloom includes a 4-char hex hash prefix
+-- between the metadata type and the joined column names.
+SELECT _timescaledb_functions.compressed_column_metadata_name('bloomh', ARRAY['a_b', 'c']) AS new_name_case1,
+       _timescaledb_functions.compressed_column_metadata_name('bloomh', ARRAY['a', 'b_c']) AS new_name_case1_alt;
+        new_name_case1         |      new_name_case1_alt       
+-------------------------------+-------------------------------
+ _ts_meta_v2_bloomh_be8c_a_b_c | _ts_meta_v2_bloomh_10d6_a_b_c
+(1 row)
+
+-- Single-column is unchanged (no hash prefix).
+SELECT _timescaledb_functions.compressed_column_metadata_name('bloomh', ARRAY['x']) AS single_name;
+     single_name      
+----------------------
+ _ts_meta_v2_bloomh_x
+(1 row)
+
+DROP VIEW bloom_cols;
+DROP VIEW

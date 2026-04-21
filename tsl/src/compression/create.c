@@ -175,6 +175,16 @@ compressed_column_metadata_name_v2(const char *metadata_type, const char **colum
 	StringInfoData buf = { 0 };
 	initStringInfo(&buf);
 
+	/*
+	 * Hash input must use a separator that cannot appear inside a PostgreSQL
+	 * identifier.  Joining with '_' here (as we do for the human-readable name
+	 * below) is ambiguous: [a_b, c] and [a, b_c] both flatten to "a_b_c", so
+	 * hashing that string would not disambiguate them.  Use '\0' as the
+	 * separator in the hash input only -- '\0' cannot appear in an identifier.
+	 */
+	StringInfoData hash_input = { 0 };
+	initStringInfo(&hash_input);
+
 	for (int i = 0; i < num_columns; i++)
 	{
 		Assert(column_names[i] != NULL);
@@ -185,6 +195,9 @@ compressed_column_metadata_name_v2(const char *metadata_type, const char **colum
 		if (i > 0)
 			appendStringInfoChar(&buf, '_');
 		appendStringInfo(&buf, "%s", column_names[i]);
+
+		appendBinaryStringInfo(&hash_input, column_names[i], strlen(column_names[i]));
+		appendStringInfoChar(&hash_input, '\0');
 	}
 
 	len = buf.len;
@@ -193,14 +206,19 @@ compressed_column_metadata_name_v2(const char *metadata_type, const char **colum
 	 * We have to fit the name into NAMEDATALEN - 1 which is 63 bytes:
 	 * 12 (_ts_meta_v2_) + 6 (metadata_type) + [1 (_) + x (column_name)]x num_columns  + 1 (_) + 4
 	 * (hash) = 63; x = 63 - 24 = 39.
+	 *
+	 * Composite metadata (num_columns > 1) always gets a hash prefix even when
+	 * short, because the '_' join is not injective on identifier lists (see
+	 * issue #9578: bloom(a_b, c) and bloom(a, b_c) otherwise collide).
 	 */
 
 	char *result;
-	if (len > 39)
+	if (num_columns > 1 || len > 39)
 	{
 		const char *errstr = NULL;
 		char hash[33];
-		Ensure(pg_md5_hash(buf.data, len, hash, &errstr), "md5 computation failure");
+		Ensure(pg_md5_hash(hash_input.data, hash_input.len, hash, &errstr),
+			   "md5 computation failure");
 		result = psprintf("_ts_meta_v2_%.6s_%.4s_%.39s", metadata_type, hash, buf.data);
 	}
 	else
@@ -231,6 +249,97 @@ compressed_column_metadata_name_list_v2(const char *metadata_type, List *column_
 	}
 
 	return compressed_column_metadata_name_v2(metadata_type, column_names, num_column_names);
+}
+
+/*
+ * SQL-callable wrapper exposing the generated metadata column name for a
+ * given metadata type + column list.  Used by the latest-dev upgrade script
+ * (#9578) to compute the post-fix composite bloom column name so it can
+ * rename pre-fix columns.  Kept as a _timescaledb_functions.* helper for
+ * potential future migrations; not part of the public API surface.
+ *
+ * Exposed via the cross-module function-pointer pattern because the SQL
+ * registration happens in core (timescaledb.dylib) but the implementation
+ * lives in TSL.
+ */
+Datum
+tsl_compressed_column_metadata_name(PG_FUNCTION_ARGS)
+{
+	text *metadata_type_text = PG_GETARG_TEXT_PP(0);
+	ArrayType *column_names_arr = PG_GETARG_ARRAYTYPE_P(1);
+
+	if (ARR_HASNULL(column_names_arr))
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+				 errmsg("column_names array must not contain NULL elements")));
+
+	if (ARR_NDIM(column_names_arr) != 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_ARRAY_SUBSCRIPT_ERROR),
+				 errmsg("column_names must be a 1-dimensional array")));
+
+	int num_columns = ArrayGetNItems(ARR_NDIM(column_names_arr), ARR_DIMS(column_names_arr));
+	if (num_columns < 1 || num_columns > MAX_BLOOM_FILTER_COLUMNS)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("column_names must have between 1 and %d elements, got %d",
+						MAX_BLOOM_FILTER_COLUMNS,
+						num_columns)));
+
+	Datum *column_datums;
+	bool *nulls;
+	int nelems;
+	deconstruct_array(column_names_arr,
+					  TEXTOID,
+					  -1,
+					  false,
+					  TYPALIGN_INT,
+					  &column_datums,
+					  &nulls,
+					  &nelems);
+
+	const char *column_names[MAX_BLOOM_FILTER_COLUMNS];
+	for (int i = 0; i < nelems; i++)
+		column_names[i] = TextDatumGetCString(column_datums[i]);
+
+	char *metadata_type = text_to_cstring(metadata_type_text);
+	char *result = compressed_column_metadata_name_v2(metadata_type, column_names, nelems);
+
+	PG_RETURN_TEXT_P(cstring_to_text(result));
+}
+
+/*
+ * Rename a column on a compressed chunk, bypassing the ProcessUtility hook
+ * that normally blocks direct chunk renames (#9578).  Used exclusively by
+ * the latest-dev upgrade script to migrate pre-fix composite bloom columns
+ * to the post-fix collision-safe naming scheme.
+ */
+Datum
+tsl_rename_compressed_column(PG_FUNCTION_ARGS)
+{
+	Oid relid = PG_GETARG_OID(0);
+	text *old_name_text = PG_GETARG_TEXT_PP(1);
+	text *new_name_text = PG_GETARG_TEXT_PP(2);
+
+	RenameStmt *stmt = makeNode(RenameStmt);
+	stmt->renameType = OBJECT_COLUMN;
+	stmt->relationType = OBJECT_TABLE;
+	stmt->relation = makeRangeVar(get_namespace_name(get_rel_namespace(relid)),
+								  get_rel_name(relid),
+								  -1);
+	stmt->subname = text_to_cstring(old_name_text);
+	stmt->newname = text_to_cstring(new_name_text);
+	stmt->behavior = DROP_RESTRICT;
+	stmt->missing_ok = false;
+
+	/*
+	 * renameatt() is PG's internal rename entry point.  Calling it directly
+	 * does not re-enter ProcessUtility_hook, so the chunk-rename block at
+	 * process_utility.c does not fire.
+	 */
+	renameatt(stmt);
+
+	PG_RETURN_VOID();
 }
 
 int
