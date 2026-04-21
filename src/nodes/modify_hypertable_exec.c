@@ -959,7 +959,8 @@ ExecInsert(ModifyTableContext *context,
 														   ctr->cis->chunk_range_end,
 														   slot,
 														   context->ht_state->ht,
-														   NULL);
+														   context->ht_state
+															   ->tenant_column_name);
 	}
 
 	if (canSetTag)

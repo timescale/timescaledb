@@ -36,6 +36,7 @@ typedef struct ModifyHypertableState
 	Hypertable *ht;
 	Cache *ht_cache;
 	bool has_continuous_aggregate;
+	char *tenant_column_name;
 
 	RowCompressor *compressor;
 	BulkWriter *bulk_writer;
