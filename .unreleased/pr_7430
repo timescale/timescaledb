@@ -1,0 +1,1 @@
+Implements: #7430 Include the database name in BGW launch logs and job worker bgw_name

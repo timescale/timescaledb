@@ -35,7 +35,16 @@ CREATE TABLE public.bgw_log(
 
 CREATE VIEW cleaned_bgw_log AS
     SELECT msg_no, application_name,
-    	   regexp_replace(regexp_replace(msg, '(Wait until|started at|execution time|database) [0-9]+(\.[0-9]+)?', '\1 (RANDOM)', 'g'), 'background worker "[^"]+"','connection') AS msg
+    	   regexp_replace(
+    	     regexp_replace(
+    	       regexp_replace(msg,
+    	                      '(Wait until|started at|execution time|database) [0-9]+(\.[0-9]+)?',
+    	                      '\1 (RANDOM)',
+    	                      'g'),
+    	       'background worker "[^"]+"',
+    	       'connection'),
+    	     'in database "[^"]+"',
+    	     'in database "(RANDOM)"') AS msg
       FROM bgw_log ORDER BY mock_time, application_name COLLATE "C", msg_no;
 
 -- Remove all default jobs

@@ -23,6 +23,7 @@
 #include <storage/proc.h>
 #include <storage/shmem.h>
 #include <tcop/tcopprot.h>
+#include <commands/dbcommands.h>
 #include <utils/acl.h>
 #include <utils/inval.h>
 #include <utils/jsonb.h>
@@ -60,6 +61,17 @@ static bool jobs_list_needs_update;
 
 /* has to be global to shutdown jobs on exit */
 static List *scheduled_jobs = NIL;
+
+/*
+ * Cached name of the database this scheduler process is attached to.  Used in
+ * log messages and in the BGW name of job workers (#7430) so that centralised
+ * logs and ps output can distinguish which database a job belongs to.
+ *
+ * Populated once at scheduler startup from inside a transaction
+ * (ts_bgw_scheduler_process).  get_database_name() requires transaction
+ * context; the scheduler's inner loop runs outside one, so we cache here.
+ */
+static char scheduler_database_name[NAMEDATALEN] = { 0 };
 
 static MemoryContext scheduler_mctx;
 static MemoryContext scratch_mctx;
@@ -125,7 +137,21 @@ ts_bgw_start_worker(const char *name, const BgwParams *bgw_params)
 	};
 	BackgroundWorkerHandle *handle = NULL;
 
-	strlcpy(worker.bgw_name, name, BGW_MAXLEN);
+	/*
+	 * Include the database name in bgw_name so logs from the worker (and ps
+	 * output, and pg_stat_activity.backend_type) identify which database this
+	 * job belongs to (#7430).  snprintf's truncation preserves the
+	 * application_name prefix if the combined string overflows BGW_MAXLEN;
+	 * the database name suffix is lost first in that case, but the common
+	 * case (NAMEDATALEN is 64, BGW_MAXLEN is 96) fits comfortably.  The
+	 * database name is cached by ts_bgw_scheduler_process; fall back to the
+	 * old format if the cache has not been populated yet (e.g. the scheduler
+	 * process never entered the main loop).
+	 */
+	if (scheduler_database_name[0] != '\0')
+		snprintf(worker.bgw_name, BGW_MAXLEN, "%s [%s]", name, scheduler_database_name);
+	else
+		strlcpy(worker.bgw_name, name, BGW_MAXLEN);
 	strlcpy(worker.bgw_library_name, ts_extension_get_so_name(), BGW_MAXLEN);
 	strlcpy(worker.bgw_function_name, bgw_params->bgw_main, BGW_MAXLEN);
 
@@ -324,9 +350,10 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			if (!sjob->reserved_worker)
 			{
 				elog(WARNING,
-					 "failed to launch job %d \"%s\": out of background workers",
+					 "failed to launch job %d \"%s\" in database \"%s\": out of background workers",
 					 sjob->job.fd.id,
-					 NameStr(sjob->job.fd.application_name));
+					 NameStr(sjob->job.fd.application_name),
+					 scheduler_database_name);
 				sjob->consecutive_failed_launches++;
 				scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
 				PopActiveSnapshot();
@@ -351,17 +378,19 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			MemoryContextSwitchTo(scratch_mctx);
 
 			elog(DEBUG1,
-				 "launching job %d \"%s\"",
+				 "launching job %d \"%s\" in database \"%s\"",
 				 sjob->job.fd.id,
-				 NameStr(sjob->job.fd.application_name));
+				 NameStr(sjob->job.fd.application_name),
+				 scheduler_database_name);
 
 			sjob->handle = ts_bgw_job_start(&sjob->job, sjob->job.fd.owner);
 			if (sjob->handle == NULL)
 			{
 				elog(WARNING,
-					 "failed to launch job %d \"%s\": failed to start a background worker",
+					 "failed to launch job %d \"%s\" in database \"%s\": failed to start a background worker",
 					 sjob->job.fd.id,
-					 NameStr(sjob->job.fd.application_name));
+					 NameStr(sjob->job.fd.application_name),
+					 scheduler_database_name);
 				on_failure_to_start_job(sjob);
 				return;
 			}
@@ -841,6 +870,22 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 	/* txn to read the list of jobs from the DB */
 	StartTransactionCommand();
 	PushActiveSnapshot(GetTransactionSnapshot());
+
+	/*
+	 * Cache the database name once, while we have transaction context.  Used
+	 * by log lines and job worker bgw_name downstream, where we are no longer
+	 * in a transaction (get_database_name calls SearchSysCache, which needs
+	 * one).  Safe to call only on first entry; on subsequent calls into
+	 * ts_bgw_scheduler_process we already have the value.
+	 */
+	if (scheduler_database_name[0] == '\0')
+	{
+		const char *dbname = get_database_name(MyDatabaseId);
+		strlcpy(scheduler_database_name,
+				dbname != NULL ? dbname : "unknown",
+				sizeof(scheduler_database_name));
+	}
+
 	scheduled_jobs = ts_update_scheduled_jobs_list(scheduled_jobs, scheduler_mctx);
 	PopActiveSnapshot();
 	CommitTransactionCommand();
