@@ -76,13 +76,13 @@ select * from dc_mem_log where (
     select regr_slope(bytes, nchunks) / regr_intercept(bytes, nchunks)::float > 0.01
     from dc_mem_log)
 ;
- nchunks |  bytes   
----------+----------
-      50 |  1615040
-     100 |  3073216
-     200 |  5989568
-     400 | 11822272
-     800 | 23487680
+ nchunks |  bytes  
+---------+---------
+      50 |  419008
+     100 |  681152
+     200 | 1205440
+     400 | 2254016
+     800 | 4351168
 
 truncate dc_mem_log;
 -- Insert into different chunks to test direct compress with chunk count growth.
@@ -143,10 +143,10 @@ select * from dc_mem_log where (
 ;
  nchunks |  bytes   
 ---------+----------
-      50 |  2008256
-     100 |  3876032
-     200 |  7611584
-     400 | 15082688
-     800 | 30024896
+      50 |  1074368
+     100 |  1483968
+     200 |  2827456
+     400 |  5514432
+     800 | 10888384
 
 truncate dc_mem_log;

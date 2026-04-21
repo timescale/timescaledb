@@ -254,6 +254,9 @@ typedef struct InvalidationSettings
 
 typedef struct RowCompressor
 {
+	/* memory context for row compressor parts */
+	MemoryContext row_compressor_context;
+
 	/* memory context reset per-row is stored */
 	MemoryContext per_row_ctx;
 

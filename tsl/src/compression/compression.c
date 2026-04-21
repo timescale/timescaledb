@@ -1036,9 +1036,12 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
 	tsl_compressor_flush(compressor, bulk_writer);
 	if (compressor->invalidation)
 		pfree(compressor->invalidation);
-	row_compressor_close(compressor);
+
 	bulk_writer_close(bulk_writer);
+
 	table_close(bulk_writer->out_rel, NoLock);
+
+	row_compressor_close(compressor);
 }
 
 /*
@@ -1214,16 +1217,24 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 			 "missing metadata column '%s' in columnstore table",
 			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 
+	MemoryContext row_compressor_context = AllocSetContextCreate(CurrentMemoryContext,
+																 "row compressor context",
+																 ALLOCSET_DEFAULT_SIZES);
+	MemoryContext old_context = MemoryContextSwitchTo(row_compressor_context);
+
 	*row_compressor = (RowCompressor){
-		.per_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
+		.row_compressor_context = row_compressor_context,
+		.per_row_ctx = AllocSetContextCreate(row_compressor_context,
 											 "compress chunk per-row",
 											 ALLOCSET_DEFAULT_SIZES),
 		.in_desc = CreateTupleDescCopyConstr(noncompressed_tupdesc),
 		.out_desc = CreateTupleDescCopyConstr(compressed_tupdesc),
 		.n_input_columns = noncompressed_tupdesc->natts,
 		.count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num),
-		.compressed_values = palloc(sizeof(Datum) * compressed_tupdesc->natts),
-		.compressed_is_null = palloc(sizeof(bool) * compressed_tupdesc->natts),
+		.compressed_values =
+			MemoryContextAlloc(row_compressor_context, sizeof(Datum) * compressed_tupdesc->natts),
+		.compressed_is_null =
+			MemoryContextAlloc(row_compressor_context, sizeof(bool) * compressed_tupdesc->natts),
 		.rows_compressed_into_current_value = 0,
 		.rowcnt_pre_compression = 0,
 		.num_compressed_rows = 0,
@@ -1245,6 +1256,8 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 	row_compressor->needs_fullness_check =
 		check_for_limited_size_compressors(row_compressor->per_column,
 										   row_compressor->n_input_columns);
+
+	MemoryContextSwitchTo(old_context);
 }
 
 void
@@ -1630,6 +1643,8 @@ row_compressor_close(RowCompressor *row_compressor)
 	pfree(row_compressor->per_column);
 	pfree(row_compressor->uncompressed_col_to_compressed_col);
 	FreeTupleDesc(row_compressor->out_desc);
+
+	MemoryContextDelete(row_compressor->row_compressor_context);
 }
 
 /******************
