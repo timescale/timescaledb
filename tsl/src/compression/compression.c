@@ -1000,6 +1000,7 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 														   &new_compressor,
 														   &new_bulk_writer);
 				compressor = new_compressor;
+				compressor->needs_analyze_segmentby = false;
 				bulk_writer = new_bulk_writer;
 			}
 			TupleTableSlot *slot = MakeTupleTableSlot(compressor->in_desc, &TTSOpsMinimalTuple);
@@ -1210,8 +1211,8 @@ tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int so
 		compressor->sort_state =
 			compression_create_tuplesort_state(settings,
 											   in_rel,
-											   compressor
-												   ->needs_analyze_segmentby); /* random_access */
+											   /* random_access = */
+											   compressor->needs_analyze_segmentby);
 		compressor->tuple_sort_limit = sort_limit;
 	}
 
