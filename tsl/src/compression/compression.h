@@ -407,7 +407,9 @@ extern void row_compressor_init(RowCompressor *row_compressor, const Compression
 extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort,
 										  int tuple_sort_limit, bool created_compressed_chunk);
 extern void tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *compressor,
-													   BulkWriter *bulk_writer);
+													   BulkWriter *bulk_writer,
+													   RowCompressor **new_compressor,
+													   BulkWriter **new_bulk_writer);
 extern void tsl_compressor_set_invalidation(RowCompressor *compressor, Hypertable *ht,
 											Oid chunk_relid);
 extern void tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer,
