@@ -483,5 +483,6 @@ alter table sparse set (
     timescaledb.order_by='o',
     timescaledb.segment_by='sby',
     timescaledb.compress_index = 'bloom(big1),bloom(value),bloom(boo,big1),bloom(o,boo)');
+NOTICE:  updated compression settings will only apply to future compressions
 DROP TABLE IF EXISTS sparse CASCADE;
 DROP TABLE IF EXISTS sparse_sister CASCADE;

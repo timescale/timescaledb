@@ -18,7 +18,6 @@
 #include <utils/lsyscache.h>
 #include <utils/snapmgr.h>
 
-#include "bgw_policy/policies_v2.h"
 #include "debug_point.h"
 #include "dimension.h"
 #include "dimension_slice.h"
@@ -34,6 +33,7 @@
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_jobs_refresh_ranges.h"
 
 #define CAGG_REFRESH_LOG_LEVEL                                                                     \
 	(context.callctx == CAGG_REFRESH_POLICY || context.callctx == CAGG_REFRESH_POLICY_BATCHED ?    \
@@ -48,6 +48,12 @@ typedef struct ContinuousAggRefreshState
 	SchemaAndName partial_view;
 	bool bucketing_refresh_window;
 } ContinuousAggRefreshState;
+
+typedef struct CaggRefreshSpiContext
+{
+	const char *old_decompression_limit;
+	int save_nestlevel;
+} CaggRefreshSpiContext;
 
 static Hypertable *cagg_get_hypertable_or_fail(int32 hypertable_id);
 static InternalTimeRange get_largest_bucketed_window(Oid timetype, int64 bucket_width);
@@ -70,7 +76,6 @@ static void continuous_agg_refresh_execute_wrapper(const InternalTimeRange *buck
 static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   const InternalTimeRange *refresh_window,
 											   const InvalidationStore *invalidations,
-
 											   const ContinuousAggRefreshContext context,
 											   bool bucketing_refresh_window);
 static void emit_up_to_date_notice(const ContinuousAgg *cagg,
@@ -575,23 +580,12 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 {
 	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool force = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
-	Jsonb *options = PG_ARGISNULL(4) ? NULL : PG_GETARG_JSONB_P(4);
-	bool process_hypertable_invalidations = true;
 	ContinuousAgg *cagg;
 	InternalTimeRange refresh_window = {
 		.type = InvalidOid,
 	};
 
 	ts_feature_flag_check(FEATURE_CAGG);
-
-	if (options)
-	{
-		bool found;
-		bool value = ts_jsonb_get_bool_field(options,
-											 POL_REFRESH_CONF_KEY_PROCESS_HYPERTABLE_INVALIDATIONS,
-											 &found);
-		process_hypertable_invalidations = !found || value;
-	}
 
 	cagg = cagg_get_by_relid_or_fail(cagg_relid);
 	refresh_window.type = cagg->partition_type;
@@ -621,7 +615,6 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 									PG_ARGISNULL(2),
 									true,
 									force,
-									process_hypertable_invalidations,
 									false /*extend_last_bucket*/);
 
 	PG_RETURN_VOID();
@@ -650,31 +643,27 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 									   const ContinuousAggRefreshContext context,
 									   bool bucketing_refresh_window, bool force)
 {
-	InvalidationStore *invalidations;
 	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id, false);
 
 	/* Lock the continuous aggregate's materialized hypertable to protect against
 	 * concurrent invalidation log processing.
 	 *
-	 * It will produce rows in the `continuous_aggs_materialization_ranges` table
-	 * to be materialized later either serially or in parallel for non-overlap
-	 * refresh ranges.
-	 *
 	 * This is supposed to be a short transaction and in the future we can consider
 	 * relaxing this lock.
 	 */
 	LockRelationOid(hyper_relid, ShareUpdateExclusiveLock);
-	invalidations = invalidation_process_cagg_log(cagg,
-												  refresh_window,
-												  ts_guc_cagg_max_individual_materializations,
-												  context,
-												  force);
+	invalidation_process_cagg_log(cagg, refresh_window);
 
+	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn2");
 	DEBUG_WAITPOINT("before_process_cagg_invalidations_for_refresh_lock");
 
 	SPI_commit_and_chain();
 
+	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn3");
 	DEBUG_WAITPOINT("after_process_cagg_invalidations_for_refresh_lock");
+
+	InvalidationStore *invalidations =
+		collect_and_delete_cagg_invalidations_in_window(cagg, refresh_window, force);
 
 	if (invalidations != NULL)
 	{
@@ -692,29 +681,38 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 										   invalidations,
 										   context,
 										   bucketing_refresh_window);
-		if (invalidations)
-			invalidation_store_free(invalidations);
-		return true;
+		invalidation_store_free(invalidations);
 	}
 
-	return false;
+	return invalidations != NULL;
 }
 
-void
-continuous_agg_refresh_internal(const ContinuousAgg *cagg,
-								const InternalTimeRange *refresh_window_arg,
-								const ContinuousAggRefreshContext context, const bool start_isnull,
-								const bool end_isnull, bool bucketing_refresh_window, bool force,
-								bool process_hypertable_invalidations, bool extend_last_bucket)
+static void
+cleanup_before_cagg_refresh_exit(const ContinuousAgg *cagg,
+								 const CaggRefreshSpiContext *cagg_spi_ctx)
 {
-	int32 mat_id = cagg->data.mat_hypertable_id;
-	InternalTimeRange refresh_window = *refresh_window_arg;
-	int64 invalidation_threshold;
+	/* Remove the refresh window registration inserted above so it does
+	 * not block future refreshes from the same backend. */
+	ts_cagg_jobs_refresh_ranges_delete_by_pid(cagg->data.mat_hypertable_id, MyProcPid);
+
+	SetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction",
+					cagg_spi_ctx->old_decompression_limit,
+					PGC_USERSET,
+					PGC_S_SESSION);
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, cagg_spi_ctx->save_nestlevel);
+}
+
+static void
+continuous_agg_refresh_spi_setup_and_connect(CaggRefreshSpiContext *cagg_spi_ctx)
+{
 	bool nonatomic = ts_process_utility_is_context_nonatomic();
 
 	/* Reset the saved ProcessUtilityContext value promptly before
 	 * calling Prevent* checks so the potential unsupported (atomic)
 	 * value won't linger there in case of ereport exit.
+	 * See: https://github.com/timescale/timescaledb/pull/7566
 	 */
 	ts_process_utility_context_reset();
 
@@ -733,7 +731,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * We don't cagg refresh to fail because of decompression limit. So disable
 	 * the decompression limit for the duration of the refresh.
 	 */
-	const char *old_decompression_limit =
+	cagg_spi_ctx->old_decompression_limit =
 		GetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction", false, false);
 	SetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction",
 					"0",
@@ -746,15 +744,61 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
 
 	/* Lock down search_path */
-	int save_nestlevel = NewGUCNestLevel();
+	cagg_spi_ctx->save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
+}
 
+/* rollback and cleanup after the failed refresh transaction */
+static void
+rollback_and_error(const ContinuousAgg *cagg, CaggRefreshSpiContext *cagg_spi_ctx, ErrorData *edata)
+{
+	/*
+	 * Every spi_execute pushes a snapshot on the stack (unless a snapshot
+	 * is explicitly passed to it). This is usually cleaned up after a
+	 * successful execute. However, if this fails, the longjmp skips the
+	 * cleanup step.
+	 * As a result, when SPI_rollback_and_chain is called after the longjmp, it
+	 * can find snapshots that were left behind (resulting in
+	 * "portal snapshots did not account for all active snapshots" error).
+	 * The rollback cleans up the snapshot stack and then throws an error.
+	 * So we use a try-catch block around SPI_rollback_and_chain to ignore this
+	 * error.
+	 */
+	PG_TRY();
+	{
+		SPI_rollback_and_chain();
+	}
+	PG_CATCH();
+	{
+		FlushErrorState();
+	}
+	PG_END_TRY();
+
+	/* Commit the cleanup transaction, then throw the original error. */
+	cleanup_before_cagg_refresh_exit(cagg, cagg_spi_ctx);
+	SPI_commit();
+	ThrowErrorData(edata);
+}
+
+void
+continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
+								const InternalTimeRange *refresh_window_arg,
+								const ContinuousAggRefreshContext context, const bool start_isnull,
+								const bool end_isnull, bool bucketing_refresh_window, bool force,
+								bool extend_last_bucket)
+{
+	const ContinuousAgg *volatile cagg = cagg_arg;
+	int32 mat_id = cagg->data.mat_hypertable_id;
+	InternalTimeRange refresh_window = *refresh_window_arg;
+	int64 invalidation_threshold;
+	CaggRefreshSpiContext cagg_spi_ctx = {};
 	/* Like regular materialized views, require owner to refresh. */
 	if (!object_ownercheck(RelationRelationId, cagg->relid, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER,
 					   get_relkind_objtype(get_rel_relkind(cagg->relid)),
 					   get_rel_name(cagg->relid));
 
+	continuous_agg_refresh_spi_setup_and_connect(&cagg_spi_ctx);
 	/* No bucketing when open ended */
 	if (bucketing_refresh_window && !(start_isnull && end_isnull))
 	{
@@ -773,14 +817,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 				compute_inscribed_bucketed_refresh_window(cagg, refresh_window_arg, bucket_width);
 		}
 	}
-
-	if (refresh_window.start >= refresh_window.end)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("refresh window too small"),
-				 errdetail("The refresh window must cover at least one bucket of data."),
-				 errhint("Align the refresh window with the bucket"
-						 " time zone or use at least two buckets.")));
 
 	/* If there is no other policy defined after this, the inscribed bucket calculated above
 	 * is correct. However, in the case of concurrent policies, if this isn't the last
@@ -805,203 +841,189 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		}
 	}
 
+	if (refresh_window.start >= refresh_window.end)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("refresh window too small"),
+				 errdetail("The refresh window must cover at least one bucket of data."),
+				 errhint("Align the refresh window with the bucket"
+						 " time zone or use at least two buckets.")));
+
 	/*
-	 * Perform the refresh across two transactions.
+	 * Perform the refresh across three transactions.
 	 *
-	 * The first transaction moves the invalidation threshold (if needed) and
-	 * copies over invalidations from the hypertable log to the cagg
-	 * invalidation log. Doing the threshold and copying as part of the first
-	 * transaction ensures that the threshold and new invalidations will be
-	 * visible as soon as possible to concurrent refreshes and that we keep
-	 * locks for only a short period.
+	 * The first transaction registers the refresh window in the concurrent-
+	 * refresh tracking table to detect overlapping concurrent refreshes, then
+	 * moves the invalidation threshold (if needed) and copies invalidations
+	 * from the hypertable log to the cagg invalidation log.
 	 *
-	 * The second transaction processes the cagg invalidation log and then
-	 * performs the actual refresh (materialization of data). This transaction
-	 * serializes around a lock on the materialized hypertable for the
-	 * continuous aggregate that gets refreshed.
+	 * The second transaction cuts the cagg invalidation log entries so that
+	 * they either fit entirely within the refresh window or are disjoint from
+	 * it. It serializes around a lock on the materialized hypertable to prevent
+	 * concurrent refreshes of the same cagg from cutting the log simultaneously.
+	 *
+	 * The third transaction performs the actual materialization, then removes
+	 * the processed invalidation log entries and the refresh window registration.
+	 * No additional range locking is needed here because the refresh window was
+	 * already registered in the tracking table in the first transaction, which
+	 * prevents any concurrent refresh with an overlapping window from running.
 	 */
 
-	/* Set the new invalidation threshold. Note that this only updates the
-	 * threshold if the new value is greater than the old one. Otherwise, the
-	 * existing threshold is returned. */
-	invalidation_threshold = invalidation_threshold_set_or_get(cagg, &refresh_window);
-
-	/* We must also cap the refresh window at the invalidation threshold. If
-	 * we process invalidations after the threshold, the continuous aggregates
-	 * won't be refreshed when the threshold is moved forward in the
-	 * future.
-	 *
-	 * However, we cannot just set refresh_window.end to the invalidation_threshold,
-	 * because the invalidation_threshold returned from invalidation_threshold_set_or_get()
-	 * can be one that set by a sibling cagg with a different bucket width and thus
-	 * not aligned to this cagg's bucket boundary.
-	 * For example, assuming the hypertable has two caggs, one with 4 hour bucket
-	 * and the other with 6hour bucket. If the 6 hour cagg had a refresh that advanced
-	 * the threshold, the threshold would be at a 6 hour boundary (e.g, 2000-01-01 06:00:00).
-	 * If we then refresh the 4 hour cagg on the same range, the threshold calculated by
-	 * the 4 hour cagg would be at a 4 hour boundary (e.g., 2000-01-01 04:00:00), which is
-	 * smaller than the 6 hour stored threshold. In that case, invalidation_threshold_set_or_get()
-	 * would return the stored threshold.
-	 *
-	 * Therefore, we need to floor the invalidation_threshold to this cagg's own bucket boundary
-	 * before using it to cap the cagg's refresh window.
-	 *
-	 */
 	/*
-	 * Skip flooring when the threshold is at type min (no data) or type max
-	 * (data inserted near the type's maximum value — we need to cover that
-	 * last bucket).
-	 */
-	int64 computed_invalidation_threshold_for_cagg = invalidation_threshold;
-	if (invalidation_threshold > ts_time_get_min(refresh_window.type) &&
-		invalidation_threshold < ts_time_get_max(refresh_window.type))
-	{
-		if (cagg->bucket_function->bucket_fixed_interval)
-		{
-			NullableDatum offset = INIT_NULL_DATUM;
-			NullableDatum origin = INIT_NULL_DATUM;
-			fill_bucket_offset_origin(cagg->bucket_function, refresh_window.type, &offset, &origin);
-			int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
-			computed_invalidation_threshold_for_cagg =
-				ts_time_bucket_by_type_extended(bucket_width,
-												invalidation_threshold,
-												refresh_window.type,
-												offset,
-												origin);
-		}
-		else
-		{
-			computed_invalidation_threshold_for_cagg =
-				ts_compute_start_of_current_bucket_variable(invalidation_threshold,
-															cagg->bucket_function);
-		}
-	}
-
-	if (refresh_window.end > computed_invalidation_threshold_for_cagg)
-	{
-		refresh_window.end = computed_invalidation_threshold_for_cagg;
-	}
-
-	/* Capping the end might have made the window 0, or negative, so nothing to refresh in that
-	 * case.
+	 * Register this refresh's window in the concurrent-refresh tracking table
+	 * (continuous_aggs_jobs_refresh_ranges).  The function acquires
+	 * ShareUpdateExclusiveLock on that table, which conflicts with itself,
+	 * serializing the overlap check and insert so no two sessions can race past
+	 * it.  During the scan it also removes entries whose backend is dead.
 	 *
-	 * For variable width buckets we use a refresh_window.start value that is lower than the
-	 * -infinity value (ts_time_get_nobegin < ts_time_get_min). Therefore, the first check in the
-	 * following if statement is not enough. If the invalidation_threshold returns the min_value for
-	 * the data type, we end up with [nobegin, min_value] which is an invalid time interval.
-	 * Therefore, we have also to check if the invalidation_threshold is defined. If not, no refresh
-	 * is needed.  */
-	if ((refresh_window.start >= refresh_window.end) ||
-		(IS_TIMESTAMP_TYPE(refresh_window.type) &&
-		 invalidation_threshold == ts_time_get_min(refresh_window.type)))
-	{
-		emit_up_to_date_notice(cagg, context);
+	 * If a live entry with an overlapping window already exists, we raise an
+	 * error.
+	 */
+	if (!ts_cagg_jobs_refresh_ranges_lock_and_register(mat_id,
+													   refresh_window.start,
+													   refresh_window.end,
+													   MyProcPid,
+													   context.job_id))
+		ereport(ERROR,
+				(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
+				 errmsg("could not refresh continuous aggregate \"%s\" due to a concurrent refresh",
+						NameStr(cagg->data.user_view_name)),
+				 errdetail("A concurrent refresh on window [%s, %s) is already in progress.",
+						   ts_internal_to_time_string(refresh_window.start, refresh_window.type),
+						   ts_internal_to_time_string(refresh_window.end, refresh_window.type))));
 
-		/* Restore search_path */
-		AtEOXact_GUC(false, save_nestlevel);
-
-		rc = SPI_finish();
-		if (rc != SPI_OK_FINISH)
-			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
-
-		return;
-	}
-
-	if (process_hypertable_invalidations)
-	{
-		/*
-		 * If we are using trigger-based invalidations, we can process the
-		 * invalidations for the associated hypertable only and later read the
-		 * invalidations for other hypertables, but when using WAL-based
-		 * invalidation we need to process all of the hypertables that are
-		 * currently using WAL.
-		 *
-		 * We want to prevent any changes to how invalidations are collected
-		 * in the meantime since changing the invalidation collection method
-		 * while this is running might cause problems and miss invalidations.
-		 *
-		 * Concurrency on the replication slot is controlled using some
-		 * special sauce in ReplicationSlotAcquire(), which is called inside
-		 * pg_logical_slot_get_changes_guts().
-		 *
-		 * This will currently generate an error rather than blocking on the
-		 * lock, so we need to add a separate lock to ensure a blocking
-		 * behaviour.
-		 */
-		invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
-	}
-
-	/* Commit and Start a new transaction */
+	DEBUG_WAITPOINT("cagg_refresh_before_first_txn_commit");
 	SPI_commit_and_chain();
 
-	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
-
-	bool refreshed = process_cagg_invalidations_and_refresh(cagg,
-															&refresh_window,
-															context,
-															bucketing_refresh_window,
-															force);
-
-	/* check if we have any pending materializations in our refresh window range,
-	 * if so, we need to process them
-	 * Note that we use the original refresh window range here, not the one that has been processed
-	 * by the refresh function*/
-	refresh_window = *refresh_window_arg;
-	bool has_pending_materializations =
-		continuous_agg_has_pending_materializations(cagg, refresh_window);
-
-	if (has_pending_materializations)
+	volatile bool refreshed = false;
+	volatile ErrorData *edata = NULL;
+	PG_TRY();
 	{
-		ContinuousAggRefreshState refresh;
-		continuous_agg_refresh_init(&refresh, cagg, &refresh_window, bucketing_refresh_window);
+		/* Commit and Start a new transaction */
 
-#ifdef TS_DEBUG
-		elog(NOTICE,
-			 "continuous aggregate \"%s\" has pending materializations in window [ %s, %s ]",
-			 NameStr(cagg->data.user_view_name),
-			 ts_internal_to_time_string(refresh_window.start, refresh_window.type),
-			 ts_internal_to_time_string(refresh_window.end, refresh_window.type));
-#endif
+		DEBUG_WAITPOINT("cagg_refresh_after_register");
 
-		InternalTimeRange invalidation = {
-			.type = refresh_window.type,
-			.start = refresh_window.start,
-			/* Invalidations are inclusive at the end, while refresh windows
-			 * aren't, so add one to the end of the invalidated region */
-			.end = ts_time_saturating_add(refresh_window.end, 1, refresh_window.type),
-		};
+		/* Set the new invalidation threshold. Note that this only updates the
+		 * threshold if the new value is greater than the old one. Otherwise, the
+		 * existing threshold is returned. */
+		invalidation_threshold = invalidation_threshold_set_or_get(cagg, &refresh_window);
 
-		InternalTimeRange bucketed_refresh_window = {
-			.type = invalidation.type,
-			.start = invalidation.start,
-			.end = invalidation.end,
-		};
-
-		if (bucketing_refresh_window)
+		/* We must also cap the refresh window at the invalidation threshold. If
+		 * we process invalidations after the threshold, the continuous aggregates
+		 * won't be refreshed when the threshold is moved forward in the
+		 * future.
+		 *
+		 * However, we cannot just set refresh_window.end to the invalidation_threshold,
+		 * because the invalidation_threshold returned from invalidation_threshold_set_or_get()
+		 * can be one that set by a sibling cagg with a different bucket width and thus
+		 * not aligned to this cagg's bucket boundary.
+		 * For example, assuming the hypertable has two caggs, one with 4 hour bucket
+		 * and the other with 6hour bucket. If the 6 hour cagg had a refresh that advanced
+		 * the threshold, the threshold would be at a 6 hour boundary (e.g, 2000-01-01 06:00:00).
+		 * If we then refresh the 4 hour cagg on the same range, the threshold calculated by
+		 * the 4 hour cagg would be at a 4 hour boundary (e.g., 2000-01-01 04:00:00), which is
+		 * smaller than the 6 hour stored threshold. In that case,
+		 * invalidation_threshold_set_or_get() would return the stored threshold.
+		 *
+		 * Therefore, we need to floor the invalidation_threshold to this cagg's own bucket boundary
+		 * before using it to cap the cagg's refresh window.
+		 *
+		 * Skip flooring when the threshold is at type min (no data) or type max
+		 * (data inserted near the type's maximum value — we need to cover that
+		 * last bucket).
+		 */
+		int64 computed_invalidation_threshold_for_cagg = invalidation_threshold;
+		if (invalidation_threshold > ts_time_get_min(refresh_window.type) &&
+			invalidation_threshold < ts_time_get_max(refresh_window.type))
 		{
-			bucketed_refresh_window =
-				compute_circumscribed_bucketed_refresh_window(cagg,
-															  &invalidation,
-															  cagg->bucket_function);
+			if (cagg->bucket_function->bucket_fixed_interval)
+			{
+				NullableDatum offset = INIT_NULL_DATUM;
+				NullableDatum origin = INIT_NULL_DATUM;
+				fill_bucket_offset_origin(cagg->bucket_function,
+										  refresh_window.type,
+										  &offset,
+										  &origin);
+				int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
+				computed_invalidation_threshold_for_cagg =
+					ts_time_bucket_by_type_extended(bucket_width,
+													invalidation_threshold,
+													refresh_window.type,
+													offset,
+													origin);
+			}
+			else
+			{
+				computed_invalidation_threshold_for_cagg =
+					ts_compute_start_of_current_bucket_variable(invalidation_threshold,
+																cagg->bucket_function);
+			}
 		}
 
-		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window);
-	}
+		if (refresh_window.end > computed_invalidation_threshold_for_cagg)
+			refresh_window.end = computed_invalidation_threshold_for_cagg;
 
-	if (!refreshed && !has_pending_materializations)
+		/* Capping the end might have made the window 0, or negative, so nothing to refresh in that
+		 * case.
+		 *
+		 * For variable width buckets we use a refresh_window.start value that is lower than the
+		 * -infinity value (ts_time_get_nobegin < ts_time_get_min). Therefore, the first check in
+		 * the following if statement is not enough. If the invalidation_threshold returns the
+		 * min_value for the data type, we end up with [nobegin, min_value] which is an invalid time
+		 * interval. Therefore, we have also to check if the invalidation_threshold is defined. If
+		 * not, no refresh is needed.  */
+		if (refresh_window.start < refresh_window.end &&
+			!(IS_TIMESTAMP_TYPE(refresh_window.type) &&
+			  invalidation_threshold == ts_time_get_min(refresh_window.type)))
+		{
+			invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
+
+			DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn1");
+			/* Commit and Start a new transaction */
+			SPI_commit_and_chain();
+
+			/* Debug error injection / waitpoint based on which batch is being processed */
+			DEBUG_ERROR_INJECTION(
+				psprintf("cagg_policy_batch_%d_after_txn_1", context.processing_batch));
+			DEBUG_WAITPOINT(
+				psprintf("cagg_policy_batch_%d_after_txn_1_wait", context.processing_batch));
+
+			cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
+
+			refreshed = process_cagg_invalidations_and_refresh(cagg,
+															   &refresh_window,
+															   context,
+															   bucketing_refresh_window,
+															   force);
+
+			DEBUG_WAITPOINT("after_process_cagg_materializations");
+		}
+	}
+	PG_CATCH();
+	{
+		/*
+		 * Save the error and clear the error state so that
+		 * We must switch out of ErrorContext first
+		 * and use a long-lived context because the current transaction
+		 * context is about to be destroyed by the rollback.
+		 */
+		MemoryContextSwitchTo(TopMemoryContext);
+		edata = CopyErrorData();
+		FlushErrorState();
+	}
+	PG_END_TRY();
+	if (edata)
+	{
+		rollback_and_error(cagg, &cagg_spi_ctx, (ErrorData *) edata);
+		return;
+	}
+	if (!refreshed)
 		emit_up_to_date_notice(cagg, context);
 
-	DEBUG_WAITPOINT("after_process_cagg_materializations");
+	cleanup_before_cagg_refresh_exit(cagg, &cagg_spi_ctx);
 
-	/* Restore search_path */
-	AtEOXact_GUC(false, save_nestlevel);
-
-	SetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction",
-					old_decompression_limit,
-					PGC_USERSET,
-					PGC_S_SESSION);
-
-	rc = SPI_finish();
+	SPI_commit();
+	int rc = SPI_finish();
 	if (rc != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 }

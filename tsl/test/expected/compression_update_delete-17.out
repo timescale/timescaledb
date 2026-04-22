@@ -3136,6 +3136,9 @@ SELECT decompress_chunk(show_chunks('update_trigger_test'));
  _timescaledb_internal._hyper_41_78_chunk
 
 ALTER TABLE update_trigger_test SET (timescaledb.compress, timescaledb.compress_segmentby='entity_id');
+NOTICE:  updated compression settings will only apply to future compressions
+DETAIL:  Existing compressed chunks will not be recompressed.
+HINT:  Use compress_chunk(chunk, recompress => true) to recompress.
 SELECT compress_chunk(show_chunks('update_trigger_test'));
               compress_chunk              
 ------------------------------------------
@@ -3151,6 +3154,9 @@ INSERT INTO delete_counter SELECT '2020-01-01'::timestamptz, 'a' from generate_s
 INSERT INTO delete_counter SELECT '2020-01-01'::timestamptz, 'b' from generate_series(1,123);
 INSERT INTO delete_counter SELECT '2020-02-01'::timestamptz, 'c' from generate_series(1,123);
 ALTER TABLE delete_counter SET (timescaledb.compress_segmentby='device');
+NOTICE:  updated compression settings will only apply to future compressions
+DETAIL:  Existing compressed chunks will not be recompressed.
+HINT:  Use compress_chunk(chunk, recompress => true) to recompress.
 SELECT count(compress_chunk(ch)) FROM show_chunks('delete_counter') ch;
  count 
 -------

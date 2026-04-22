@@ -23,6 +23,7 @@ select count(compress_chunk(x)) from show_chunks('aggexpr') x;
      1
 
 alter table aggexpr set (tsdb.compress_segmentby = '');
+NOTICE:  updated compression settings will only apply to future compressions
 insert into aggexpr select 11, null, null, null, generate_series(1, 1489);
 insert into aggexpr select 12, 12, '12', false, generate_series(1, 1487);
 insert into aggexpr select 13, case when x % 2 = 0 then 13 else null end,
@@ -36,6 +37,9 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
      2
 
 vacuum full analyze aggexpr;
+-- The batch sorted merge has very close costs for one query, and prevents
+-- vectorized aggregation, so we have to get it out of the way.
+set timescaledb.enable_decompression_sorted_merge to off;
 -- Some functions we are not able to vectorize at the moment.
 set timescaledb.debug_require_vector_agg = 'forbid';
 -- Volatile expression
@@ -1914,3 +1918,4 @@ select v - 501 > 0, sum(abs(v - 500)) from aggexpr where i % 2 = 0 group by v - 
 
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
+reset timescaledb.enable_decompression_sorted_merge;

@@ -475,7 +475,12 @@ add_chunk_oid(Hypertable *ht, Oid chunk_relid, void *vargs)
 {
 	ProcessUtilityArgs *args = vargs;
 	GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	Chunk *chunk;
+
+	/* Switch to the parent context for persistent allocations */
+	MemoryContext per_chunk_mcxt = MemoryContextSwitchTo(GetMemoryChunkContext(stmt));
+
+	chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	/*
 	 * If chunk is in the same schema as the hypertable it could already be part of
 	 * the objects list in the case of "GRANT ALL IN SCHEMA" for example
@@ -486,6 +491,7 @@ add_chunk_oid(Hypertable *ht, Oid chunk_relid, void *vargs)
 			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
 		stmt->objects = lappend(stmt->objects, rv);
 	}
+	MemoryContextSwitchTo(per_chunk_mcxt);
 }
 
 static DDLResult
@@ -906,17 +912,31 @@ foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
 	List *chunks;
 	ListCell *lc;
 	int n = 0;
+	MemoryContext orig_mcxt = CurrentMemoryContext;
+	MemoryContext chunk_mcxt;
 
 	if (NULL == ht)
 		return -1;
 
 	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 
+	/*
+	 * Use a per-iteration temporary memory context to avoid accumulating
+	 * allocations when processing hypertables with many chunks. Callbacks
+	 * that need persistent allocations should switch to the parent context.
+	 */
+	chunk_mcxt = AllocSetContextCreate(orig_mcxt, "foreach_chunk", ALLOCSET_DEFAULT_SIZES);
 	foreach (lc, chunks)
 	{
+		MemoryContextSwitchTo(chunk_mcxt);
 		process_chunk(ht, lfirst_oid(lc), arg);
+		MemoryContextSwitchTo(orig_mcxt);
+		MemoryContextReset(chunk_mcxt);
 		n++;
 	}
+
+	MemoryContextDelete(chunk_mcxt);
+	list_free(chunks);
 
 	return n;
 }
@@ -933,18 +953,27 @@ foreach_compressed_chunk(Hypertable *ht, process_chunk_t process_chunk, void *ar
 	List *chunks;
 	ListCell *lc;
 	int n = 0;
+	MemoryContext orig_mcxt = CurrentMemoryContext;
+	MemoryContext chunk_mcxt;
 
 	if (!ht || !ht->fd.compressed_hypertable_id)
 		return -1;
 
 	chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
 
+	chunk_mcxt = AllocSetContextCreate(orig_mcxt, "foreach_chunk", ALLOCSET_DEFAULT_SIZES);
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
+		MemoryContextSwitchTo(chunk_mcxt);
 		process_chunk(ht, chunk->table_id, arg);
+		MemoryContextReset(chunk_mcxt);
 		n++;
 	}
+
+	MemoryContextSwitchTo(orig_mcxt);
+	MemoryContextDelete(chunk_mcxt);
+	list_free(chunks);
 
 	return n;
 }
@@ -1056,9 +1085,14 @@ static void
 add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	VacuumCtx *ctx = (VacuumCtx *) arg;
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	Chunk *chunk;
 	VacuumRelation *chunk_vacuum_rel;
 	RangeVar *chunk_range_var;
+
+	/* Switch to the parent context for persistent allocations */
+	MemoryContext per_chunk_mcxt = MemoryContextSwitchTo(GetMemoryChunkContext(ctx->ht_vacuum_rel));
+
+	chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
 	chunk_range_var = copyObject(ctx->ht_vacuum_rel->relation);
 	chunk_range_var->relname = NameStr(chunk->fd.table_name);
@@ -1080,6 +1114,7 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	}
 
 	register_chunk_for_rebuild_if_needed(chunk_relid, ctx);
+	MemoryContextSwitchTo(per_chunk_mcxt);
 }
 
 /*

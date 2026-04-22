@@ -1040,6 +1040,7 @@ SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
 -- Listing all fields of the compound key should succeed:
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM timescaledb_information.compression_settings ORDER BY hypertable_name;
  hypertable_schema | hypertable_name |   attname   | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+-------------+------------------------+----------------------+-------------+--------------------
@@ -2439,6 +2440,7 @@ SELECT compress_chunk(:'CHUNK', false);
 ERROR:  chunk "_hyper_47_102_chunk" is already converted to columnstore
 \set ON_ERROR_STOP 1
 ALTER TABLE compress_chunk_test SET (timescaledb.compress_segmentby='device');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
  compressed_chunk_id 
 ---------------------
@@ -2483,6 +2485,7 @@ SELECT * FROM ONLY :CHUNK;
 ------+--------+-------
 
 ALTER TABLE compress_chunk_test SET (timescaledb.compress_segmentby='');
+NOTICE:  updated compression settings will only apply to future compressions
 -- create another chunk
 INSERT INTO compress_chunk_test SELECT '2021-01-01', 'c3po', 3.14;
 SELECT show_chunks('compress_chunk_test') AS "CHUNK2" LIMIT 1 OFFSET 1 \gset
