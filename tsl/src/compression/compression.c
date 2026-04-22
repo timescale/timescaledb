@@ -974,7 +974,9 @@ tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer, Tupl
 
 		if (compressor->tuple_sort_limit &&
 			compressor->tuples_to_sort >= compressor->tuple_sort_limit)
+		{
 			tsl_compressor_flush(compressor, bulk_writer);
+		}
 	}
 	else
 	{
@@ -999,18 +1001,20 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 														   bulk_writer,
 														   &new_compressor,
 														   &new_bulk_writer);
-				compressor = new_compressor;
+				*compressor = *new_compressor;
 				compressor->needs_analyze_segmentby = false;
-				bulk_writer = new_bulk_writer;
+				*bulk_writer = *new_bulk_writer;
 			}
-			TupleTableSlot *slot = MakeTupleTableSlot(compressor->in_desc, &TTSOpsMinimalTuple);
 
+			TupleTableSlot *slot = MakeTupleTableSlot(compressor->in_desc, &TTSOpsMinimalTuple);
 			while (tuplesort_gettupleslot(compressor->sort_state,
 										  true /*=forward*/,
 										  false /*=copy*/,
 										  slot,
 										  NULL /*=abbrev*/))
+			{
 				row_compressor_process_ordered_slot(compressor, slot, bulk_writer);
+			}
 
 			if (compressor->rows_compressed_into_current_value > 0)
 			{
@@ -1040,7 +1044,7 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
 {
 	if (compressor->sort_state)
 		tuplesort_end(compressor->sort_state);
-	tsl_compressor_flush(compressor, bulk_writer);
+
 	if (compressor->invalidation)
 		pfree(compressor->invalidation);
 
@@ -1137,7 +1141,6 @@ tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor,
 	Chunk *new_compressed_chunk =
 		create_compress_chunk(compress_ht, src_chunk, InvalidOid, false, settings);
 	ts_chunk_set_compressed_chunk(src_chunk, new_compressed_chunk->fd.id);
-	ts_chunk_drop(old_compressed_chunk, DROP_RESTRICT, -1);
 
 	/* Initialize the new bulk writer and compressor against the new compressed relation */
 	Relation out_rel = table_open(new_compressed_chunk->table_id, RowExclusiveLock);
@@ -1172,6 +1175,8 @@ tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor,
 
 	tsl_compressor_free(old_compressor, old_bulk_writer);
 
+	ts_chunk_drop(old_compressed_chunk, DROP_RESTRICT, -1);
+
 	tuplesort_performsort(new_compressor->sort_state);
 
 	table_close(in_rel, NoLock);
@@ -1195,9 +1200,9 @@ tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int so
 	RowCompressor *compressor = palloc0(sizeof(RowCompressor));
 	row_compressor_init(compressor, settings, RelationGetDescr(in_rel), RelationGetDescr(out_rel));
 
-	MemoryContext old_context = MemoryContextSwitchTo(compressor->row_compressor_context);
-
 	*bulk_writer = bulk_writer_alloc(out_rel, 0);
+
+	MemoryContext old_context = MemoryContextSwitchTo(compressor->row_compressor_context);
 
 	if (sort)
 	{
