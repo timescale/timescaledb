@@ -47,13 +47,15 @@ env:
 jobs:
   config:
     runs-on: ubuntu-latest
+    env:
+        key: ${{ secrets.ANTHROPIC_API_KEY }}
     outputs:
       pg_latest: ${{ fromJson(steps.setter.outputs.PG18_LATEST) }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Read configuration
-      if: secrets.ANTHROPIC_API_KEY
+      if: env.key
       id: setter
       run: python .github/gh_config_reader.py
 
