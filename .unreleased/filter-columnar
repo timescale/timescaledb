@@ -1,1 +1,1 @@
-Implements: #9443 Enable vectorized aggregation in some cases when Postgres functions like time_bucket() are used in the WHERE clause.
+Implements: #9443 Enable vectorized aggregation in some cases when the WHERE clause contains filters not handled through the "Vectorized Filters" facility. This includes e.g. filters on time_bucket().
