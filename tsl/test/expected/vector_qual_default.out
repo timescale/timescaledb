@@ -2,9 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
--- Uncomment these two settings to run this test with hypercore TAM
---set timescaledb.default_hypercore_use_access_method=true;
---set enable_indexscan=off;
 create function stable_abs(x int4) returns int4 as 'int4abs' language internal stable;
 create table qualdef(a int, b int);
 select create_hypertable('qualdef', 'a', chunk_time_interval => 1000);
@@ -42,6 +39,8 @@ alter table qualdef add column ts timestamp default timestamp '2021-01-01 00:00:
 alter table qualdef add column d date default '2021-01-01';
 alter table qualdef add column u uuid default 'b1af1cc0-c96c-4bbc-9b96-d25e5ff277cd';
 alter table qualdef add column l bool default true;
+alter table qualdef add column ln bool default null;
+alter table qualdef add column lf bool default false;
 alter table qualdef add column t text default 'x';
 insert into qualdef select x, x % 5, 11 from generate_series(1001, 1999) x;
 select compress_chunk(show_chunks('qualdef'));
@@ -52,7 +51,8 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_1_3_chunk
 
 vacuum analyze qualdef;
-set timescaledb.debug_require_vector_qual to 'require';
+set timescaledb.debug_require_vector_qual to require;
+--/* Uncomment to generate reference. */ set timescaledb.enable_bulk_decompression to off; set timescaledb.debug_require_vector_qual to forbid;
 select count(*) from qualdef where i2 = 7;
  count 
 -------
@@ -103,9 +103,293 @@ select count(*) from qualdef where l;
 -------
   1998
 
+select count(*) from qualdef where ln;
+ count 
+-------
+     0
+
+select count(*) from qualdef where lf;
+ count 
+-------
+     0
+
 select count(*) from qualdef where t = 'x';
  count 
 -------
   1998
 
 reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_bulk_decompression;
+-- Also test some scalar handling in Postgres qual evaluation in columnar aggregation node
+create or replace function bool_identity(a bool) returns bool
+language plpgsql immutable strict parallel safe as $$
+begin
+return a;
+end;
+$$;
+set timescaledb.debug_require_vector_agg to require;
+set timescaledb.debug_require_vector_qual to forbid;
+--/* Uncomment to generate reference. */ set timescaledb.enable_bulk_decompression to off; set timescaledb.debug_require_vector_agg to forbid;
+select count(*) from qualdef where l = (i2 = 7)::bool;
+ count 
+-------
+   999
+
+select count(*) from qualdef where ln = (i2 = 7)::bool;
+ count 
+-------
+     0
+
+select count(*) from qualdef where bool_identity(l);
+ count 
+-------
+  1998
+
+select count(*) from qualdef where bool_identity(ln);
+ count 
+-------
+     0
+
+select count(*) from qualdef where bool_identity(lf);
+ count 
+-------
+     0
+
+-- Multiple Postgres quals (implicit AND)
+select count(*) from qualdef where bool_identity(l) and bool_identity(l);
+ count 
+-------
+  1998
+
+-- Second qual filters everything after first already did
+select count(*) from qualdef where bool_identity(ln) and bool_identity(l);
+ count 
+-------
+     0
+
+-- Both quals produce arrow results on a column with mixed values
+select count(*) from qualdef where bool_identity(i2 = 7) and bool_identity(i4 = 8);
+ count 
+-------
+   999
+
+-- Postgres qual with GROUP BY
+select b, count(*) from qualdef where bool_identity(l) group by b order by b;
+ b | count 
+---+-------
+ 0 |   398
+ 1 |   400
+ 2 |   400
+ 3 |   400
+ 4 |   400
+
+-- Combined vectorized and Postgres quals
+set timescaledb.debug_require_vector_qual to allow;
+select count(*) from qualdef where b = 0 and bool_identity(l);
+ count 
+-------
+   398
+
+-- Vectorized qual filters everything, PG qual is not evaluated
+select count(*) from qualdef where b > 10 and bool_identity(l);
+ count 
+-------
+     0
+
+select count(*) from qualdef where b = 3 and bool_identity(ln);
+ count 
+-------
+     0
+
+select count(*) from qualdef where b = 3 and bool_identity(lf);
+ count 
+-------
+     0
+
+select count(*) from qualdef where b = 3 and bool_identity(i2 = 7);
+ count 
+-------
+   200
+
+select b, count(*) from qualdef where b in (0, 1) and bool_identity(l) group by b order by b;
+ b | count 
+---+-------
+ 0 |   398
+ 1 |   400
+
+reset timescaledb.debug_require_vector_agg;
+reset timescaledb.debug_require_vector_qual;
+-- Check the counts in EXPLAIN ANALYZE.
+set timescaledb.debug_require_vector_agg to require;
+set timescaledb.debug_require_vector_qual to allow;
+explain (analyze, verbose, costs off, buffers off, summary off, timing off)
+select count(*) from qualdef where b % 2 = 1 and b = 3;
+--- QUERY PLAN ---
+ Finalize Aggregate (actual rows=1.00 loops=1)
+   Output: count(*)
+   ->  Append (actual rows=2.00 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1.00 loops=1)
+               Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=200.00 loops=1)
+                     Filter: ((_hyper_1_1_chunk.b % 2) = 1)
+                     Rows Removed by Filter: 799
+                     Vectorized Filter: (_hyper_1_1_chunk.b = 3)
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+                           Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.a, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk.i2, compress_hyper_2_2_chunk.i4, compress_hyper_2_2_chunk.i8, compress_hyper_2_2_chunk.f4, compress_hyper_2_2_chunk.f8, compress_hyper_2_2_chunk.tstz, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.d, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk.l, compress_hyper_2_2_chunk.ln, compress_hyper_2_2_chunk.lf, compress_hyper_2_2_chunk.t
+         ->  Custom Scan (VectorAgg) (actual rows=1.00 loops=1)
+               Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk (actual rows=200.00 loops=1)
+                     Filter: ((_hyper_1_3_chunk.b % 2) = 1)
+                     Rows Removed by Filter: 799
+                     Vectorized Filter: (_hyper_1_3_chunk.b = 3)
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=1.00 loops=1)
+                           Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.a, compress_hyper_2_4_chunk.b, compress_hyper_2_4_chunk.i2, compress_hyper_2_4_chunk.i4, compress_hyper_2_4_chunk.i8, compress_hyper_2_4_chunk.f4, compress_hyper_2_4_chunk.f8, compress_hyper_2_4_chunk.tstz, compress_hyper_2_4_chunk.ts, compress_hyper_2_4_chunk.d, compress_hyper_2_4_chunk.u, compress_hyper_2_4_chunk.l, compress_hyper_2_4_chunk.ln, compress_hyper_2_4_chunk.lf, compress_hyper_2_4_chunk.t
+
+explain (analyze, verbose, costs off, buffers off, summary off, timing off)
+select count(*) from qualdef where b % 2 = 1 and bool_identity(b = 3);
+--- QUERY PLAN ---
+ Finalize Aggregate (actual rows=1.00 loops=1)
+   Output: count(*)
+   ->  Append (actual rows=2.00 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1.00 loops=1)
+               Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=200.00 loops=1)
+                     Filter: (((_hyper_1_1_chunk.b % 2) = 1) AND bool_identity((_hyper_1_1_chunk.b = 3)))
+                     Rows Removed by Filter: 799
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+                           Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.a, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk.i2, compress_hyper_2_2_chunk.i4, compress_hyper_2_2_chunk.i8, compress_hyper_2_2_chunk.f4, compress_hyper_2_2_chunk.f8, compress_hyper_2_2_chunk.tstz, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.d, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk.l, compress_hyper_2_2_chunk.ln, compress_hyper_2_2_chunk.lf, compress_hyper_2_2_chunk.t
+         ->  Custom Scan (VectorAgg) (actual rows=1.00 loops=1)
+               Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk (actual rows=200.00 loops=1)
+                     Filter: (((_hyper_1_3_chunk.b % 2) = 1) AND bool_identity((_hyper_1_3_chunk.b = 3)))
+                     Rows Removed by Filter: 799
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=1.00 loops=1)
+                           Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.a, compress_hyper_2_4_chunk.b, compress_hyper_2_4_chunk.i2, compress_hyper_2_4_chunk.i4, compress_hyper_2_4_chunk.i8, compress_hyper_2_4_chunk.f4, compress_hyper_2_4_chunk.f8, compress_hyper_2_4_chunk.tstz, compress_hyper_2_4_chunk.ts, compress_hyper_2_4_chunk.d, compress_hyper_2_4_chunk.u, compress_hyper_2_4_chunk.l, compress_hyper_2_4_chunk.ln, compress_hyper_2_4_chunk.lf, compress_hyper_2_4_chunk.t
+
+explain (analyze, verbose, costs off, buffers off, summary off, timing off)
+select count(*) from qualdef where b % 2 = 1;
+--- QUERY PLAN ---
+ Finalize Aggregate (actual rows=1.00 loops=1)
+   Output: count(*)
+   ->  Append (actual rows=2.00 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1.00 loops=1)
+               Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=400.00 loops=1)
+                     Filter: ((_hyper_1_1_chunk.b % 2) = 1)
+                     Rows Removed by Filter: 599
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+                           Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.a, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk.i2, compress_hyper_2_2_chunk.i4, compress_hyper_2_2_chunk.i8, compress_hyper_2_2_chunk.f4, compress_hyper_2_2_chunk.f8, compress_hyper_2_2_chunk.tstz, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.d, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk.l, compress_hyper_2_2_chunk.ln, compress_hyper_2_2_chunk.lf, compress_hyper_2_2_chunk.t
+         ->  Custom Scan (VectorAgg) (actual rows=1.00 loops=1)
+               Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk (actual rows=400.00 loops=1)
+                     Filter: ((_hyper_1_3_chunk.b % 2) = 1)
+                     Rows Removed by Filter: 599
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=1.00 loops=1)
+                           Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.a, compress_hyper_2_4_chunk.b, compress_hyper_2_4_chunk.i2, compress_hyper_2_4_chunk.i4, compress_hyper_2_4_chunk.i8, compress_hyper_2_4_chunk.f4, compress_hyper_2_4_chunk.f8, compress_hyper_2_4_chunk.tstz, compress_hyper_2_4_chunk.ts, compress_hyper_2_4_chunk.d, compress_hyper_2_4_chunk.u, compress_hyper_2_4_chunk.l, compress_hyper_2_4_chunk.ln, compress_hyper_2_4_chunk.lf, compress_hyper_2_4_chunk.t
+
+explain (analyze, verbose, costs off, buffers off, summary off, timing off)
+select count(*) from qualdef where b / 1000 > 1;
+--- QUERY PLAN ---
+ Finalize Aggregate (actual rows=1.00 loops=1)
+   Output: count(*)
+   ->  Append (actual rows=0.00 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=0.00 loops=1)
+               Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=0.00 loops=1)
+                     Filter: ((_hyper_1_1_chunk.b / 1000) > 1)
+                     Rows Removed by Filter: 999
+                     Batches Removed by Filter: 1
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+                           Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.a, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk.i2, compress_hyper_2_2_chunk.i4, compress_hyper_2_2_chunk.i8, compress_hyper_2_2_chunk.f4, compress_hyper_2_2_chunk.f8, compress_hyper_2_2_chunk.tstz, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.d, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk.l, compress_hyper_2_2_chunk.ln, compress_hyper_2_2_chunk.lf, compress_hyper_2_2_chunk.t
+         ->  Custom Scan (VectorAgg) (actual rows=0.00 loops=1)
+               Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk (actual rows=0.00 loops=1)
+                     Filter: ((_hyper_1_3_chunk.b / 1000) > 1)
+                     Rows Removed by Filter: 999
+                     Batches Removed by Filter: 1
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=1.00 loops=1)
+                           Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.a, compress_hyper_2_4_chunk.b, compress_hyper_2_4_chunk.i2, compress_hyper_2_4_chunk.i4, compress_hyper_2_4_chunk.i8, compress_hyper_2_4_chunk.f4, compress_hyper_2_4_chunk.f8, compress_hyper_2_4_chunk.tstz, compress_hyper_2_4_chunk.ts, compress_hyper_2_4_chunk.d, compress_hyper_2_4_chunk.u, compress_hyper_2_4_chunk.l, compress_hyper_2_4_chunk.ln, compress_hyper_2_4_chunk.lf, compress_hyper_2_4_chunk.t
+
+explain (analyze, verbose, costs off, buffers off, summary off, timing off)
+select count(*) from qualdef where b > 1000;
+--- QUERY PLAN ---
+ Finalize Aggregate (actual rows=1.00 loops=1)
+   Output: count(*)
+   ->  Append (actual rows=0.00 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=0.00 loops=1)
+               Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=0.00 loops=1)
+                     Vectorized Filter: (_hyper_1_1_chunk.b > 1000)
+                     Rows Removed by Filter: 999
+                     Batches Removed by Filter: 1
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+                           Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.a, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk.i2, compress_hyper_2_2_chunk.i4, compress_hyper_2_2_chunk.i8, compress_hyper_2_2_chunk.f4, compress_hyper_2_2_chunk.f8, compress_hyper_2_2_chunk.tstz, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.d, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk.l, compress_hyper_2_2_chunk.ln, compress_hyper_2_2_chunk.lf, compress_hyper_2_2_chunk.t
+         ->  Custom Scan (VectorAgg) (actual rows=0.00 loops=1)
+               Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk (actual rows=0.00 loops=1)
+                     Vectorized Filter: (_hyper_1_3_chunk.b > 1000)
+                     Rows Removed by Filter: 999
+                     Batches Removed by Filter: 1
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=1.00 loops=1)
+                           Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.a, compress_hyper_2_4_chunk.b, compress_hyper_2_4_chunk.i2, compress_hyper_2_4_chunk.i4, compress_hyper_2_4_chunk.i8, compress_hyper_2_4_chunk.f4, compress_hyper_2_4_chunk.f8, compress_hyper_2_4_chunk.tstz, compress_hyper_2_4_chunk.ts, compress_hyper_2_4_chunk.d, compress_hyper_2_4_chunk.u, compress_hyper_2_4_chunk.l, compress_hyper_2_4_chunk.ln, compress_hyper_2_4_chunk.lf, compress_hyper_2_4_chunk.t
+
+explain (analyze, verbose, costs off, buffers off, summary off, timing off)
+select count(*) from qualdef where b % 2 = 1 and b not in (1, 3, 5);
+--- QUERY PLAN ---
+ Finalize Aggregate (actual rows=1.00 loops=1)
+   Output: count(*)
+   ->  Append (actual rows=0.00 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=0.00 loops=1)
+               Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=0.00 loops=1)
+                     Filter: ((_hyper_1_1_chunk.b % 2) = 1)
+                     Rows Removed by Filter: 999
+                     Vectorized Filter: (_hyper_1_1_chunk.b <> ALL ('{1,3,5}'::integer[]))
+                     Batches Removed by Filter: 1
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1.00 loops=1)
+                           Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.a, compress_hyper_2_2_chunk.b, compress_hyper_2_2_chunk.i2, compress_hyper_2_2_chunk.i4, compress_hyper_2_2_chunk.i8, compress_hyper_2_2_chunk.f4, compress_hyper_2_2_chunk.f8, compress_hyper_2_2_chunk.tstz, compress_hyper_2_2_chunk.ts, compress_hyper_2_2_chunk.d, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk.l, compress_hyper_2_2_chunk.ln, compress_hyper_2_2_chunk.lf, compress_hyper_2_2_chunk.t
+         ->  Custom Scan (VectorAgg) (actual rows=0.00 loops=1)
+               Output: (PARTIAL count(*))
+               Grouping Policy: all compressed batches
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk (actual rows=0.00 loops=1)
+                     Filter: ((_hyper_1_3_chunk.b % 2) = 1)
+                     Rows Removed by Filter: 999
+                     Vectorized Filter: (_hyper_1_3_chunk.b <> ALL ('{1,3,5}'::integer[]))
+                     Batches Removed by Filter: 1
+                     Bulk Decompression: true
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=1.00 loops=1)
+                           Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.a, compress_hyper_2_4_chunk.b, compress_hyper_2_4_chunk.i2, compress_hyper_2_4_chunk.i4, compress_hyper_2_4_chunk.i8, compress_hyper_2_4_chunk.f4, compress_hyper_2_4_chunk.f8, compress_hyper_2_4_chunk.tstz, compress_hyper_2_4_chunk.ts, compress_hyper_2_4_chunk.d, compress_hyper_2_4_chunk.u, compress_hyper_2_4_chunk.l, compress_hyper_2_4_chunk.ln, compress_hyper_2_4_chunk.lf, compress_hyper_2_4_chunk.t
+
+reset timescaledb.debug_require_vector_agg;
+reset timescaledb.debug_require_vector_qual;
+-- Some expressions are not supported at the moment.
+set timescaledb.debug_require_vector_agg to forbid;
+select count(*) from qualdef where bool_identity(ln) or bool_identity(lf);
+ count 
+-------
+     0
+
+reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_bulk_decompression;
