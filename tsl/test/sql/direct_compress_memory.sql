@@ -56,9 +56,14 @@ insert into dc_mem_log select n, b from mem;
 ;
 
 -- Check if we have memory usage growth with the number of chunks processed.
-select * from dc_mem_log where (
-    select regr_slope(bytes, nchunks) / regr_intercept(bytes, nchunks)::float > 0.01
-    from dc_mem_log)
+-- Here we actually expect growth, because the number of chunks increases, and
+-- each chunk and its indexes and attributes get the respective catalog cache
+-- entries. On PG 17 it is about 11kB per chunk.
+
+select regr_slope(bytes, nchunks), regr_intercept(bytes, nchunks) from dc_mem_log
+having regr_slope(bytes, nchunks) > 15000
 ;
+
+select * from dc_mem_log where (select regr_slope(bytes, nchunks) from dc_mem_log) > 15000;
 
 truncate dc_mem_log;
