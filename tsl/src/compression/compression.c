@@ -1062,11 +1062,11 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
 void
 tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor,
 										   BulkWriter *old_bulk_writer,
-										   RowCompressor **out_compressor,
-										   BulkWriter **out_bulk_writer)
+										   RowCompressor **output_compressor,
+										   BulkWriter **output_bulk_writer)
 {
-	*out_bulk_writer = old_bulk_writer;
-	*out_compressor = old_compressor;
+	*output_bulk_writer = old_bulk_writer;
+	*output_compressor = old_compressor;
 	if (old_compressor->sort_state == NULL || old_compressor->tuples_to_sort == 0)
 	{
 		return;
@@ -1181,8 +1181,8 @@ tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor,
 
 	table_close(in_rel, NoLock);
 
-	*out_bulk_writer = new_bulk_writer;
-	*out_compressor = new_compressor;
+	*output_bulk_writer = new_bulk_writer;
+	*output_compressor = new_compressor;
 }
 
 /*
