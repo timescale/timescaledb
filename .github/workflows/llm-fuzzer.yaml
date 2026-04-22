@@ -10,7 +10,6 @@ name: LLM fuzzer
     branches:
       - main
   pull_request:
-    paths: .github/workflows/llm-fuzzer.yaml
 
 env:
   PG_SRC_DIR: "pgbuild"
@@ -47,6 +46,7 @@ env:
 
 jobs:
   config:
+    if: secrets.ANTHROPIC_API_KEY
     runs-on: ubuntu-latest
     outputs:
       pg_latest: ${{ fromJson(steps.setter.outputs.PG18_LATEST) }}
@@ -58,6 +58,7 @@ jobs:
       run: python .github/gh_config_reader.py
 
   fuzzer:
+    if: secrets.ANTHROPIC_API_KEY
     name: LLM fuzzer PG${{ needs.config.outputs.pg_latest }}
     runs-on: ubuntu-22.04
     needs: config
@@ -65,7 +66,6 @@ jobs:
       contents: read
       pull-requests: read
       issues: read
-      id-token: write
 
     steps:
     - name: Install Linux Dependencies
