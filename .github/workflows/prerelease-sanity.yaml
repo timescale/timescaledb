@@ -29,6 +29,7 @@ jobs:
     # The combined changelog must reference all changes, and the respective
     # change files in the .unreleased folder must be deleted.
     - name: No .unreleased files are left behind
+      if: ${{ startsWith(github.head_ref, 'release/') && endsWith(github.head_ref, '-changelog') }}
       run: |
         ! compgen -G .unreleased/*
 
