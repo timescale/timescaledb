@@ -176,6 +176,7 @@ jobs:
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: |
+        rc=0
         claude -p --output-format stream-json --verbose \
           --max-budget-usd 5.00 --dangerously-skip-permissions \
           --model opus --effort high \
@@ -215,8 +216,20 @@ jobs:
         event=${{ github.event_name }}
         sha=${{ github.event.pull_request.head.sha || github.sha }}
         PROMPT
-        )" > ${{ runner.temp }}/claude-execution-output.json
+        )" > ${{ runner.temp }}/claude-execution-output.json || rc=$?
 
+        # When it goes over the budget, mostly it terminates gracefully because
+        # the agent is aware of the remaining budget, but sometimes there's a
+        # forceful termination which we detect here so that it doesn't lead to
+        # job failure.
+        subtype=$(jq -r 'select(.type == "result") | .subtype // ""' \
+          ${{ runner.temp }}/claude-execution-output.json 2>/dev/null | head -1)
+        if [ "$subtype" = "error_max_budget_usd" ]; then
+          echo "The agent was forcefully terminated because of going over the budget"
+          rc=0
+        fi
+
+        exit $rc
 
     - name: Write job summary
       if: always()
@@ -226,6 +239,12 @@ jobs:
           + "\n\n**Cost:** $\(.total_cost_usd // 0 | tostring) | **Duration:** \((.duration_ms // 0) / 1000 | tostring)s | **Turns:** \(.num_turns // 0)"' \
           ${{ runner.temp }}/claude-execution-output.json \
           >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+        if [ -f ~/llm-fuzzer-repro.sql ]; then
+          printf '\n## Reproducer\n\n```sql\n' >> "$GITHUB_STEP_SUMMARY"
+          cat ~/llm-fuzzer-repro.sql >> "$GITHUB_STEP_SUMMARY"
+          printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+        fi
 
     - name: Upload Claude log
       if: always()
