@@ -2989,7 +2989,8 @@ process_segmentby_candidate_value(ColumnAnalysis *ca, Datum val, bool is_null)
 	if (ca->n_distinct < MAX_SEGMENTBY_DISTINCT)
 	{
 		DistinctEntry *entry = &ca->entries[ca->n_distinct];
-		entry->value = datumCopy(val, ca->seg_info->typ_by_val, ca->seg_info->typlen);
+		entry->value =
+			is_null ? (Datum) 0 : datumCopy(val, ca->seg_info->typ_by_val, ca->seg_info->typlen);
 		entry->is_null = is_null;
 		entry->count = 1;
 		ca->n_distinct++;
