@@ -87,3 +87,24 @@ DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_process_hypertable_invali
 DROP PROCEDURE IF EXISTS @extschema@.add_process_hypertable_invalidations_policy(REGCLASS, INTERVAL, BOOL, TIMESTAMPTZ, TEXT);
 DROP PROCEDURE IF EXISTS @extschema@.remove_process_hypertable_invalidations_policy(REGCLASS, BOOL);
 
+-- Migration: refresh orderby sparse index entries in compression_settings
+UPDATE _timescaledb_catalog.compression_settings
+SET index = (
+    SELECT COALESCE(jsonb_agg(elem), '[]'::jsonb)
+    FROM jsonb_array_elements(index) AS elem
+    WHERE elem->>'source' != 'orderby'
+)
+WHERE index IS NOT NULL
+AND index @> '[{"source": "orderby"}]';
+
+UPDATE _timescaledb_catalog.compression_settings cs
+SET index = COALESCE(index, '[]'::jsonb) ||
+            (
+            SELECT jsonb_agg(jsonb_build_object(
+                                'type', 'minmax',
+                                'source', 'orderby',
+                                'column', elem))
+            FROM unnest(cs.orderby) AS elem
+            )
+WHERE cs.orderby IS NOT NULL;
+

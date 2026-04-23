@@ -2,6 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\ir cleanup.v9.sql
-\ir cleanup.sparse_index.sql
-\ir cleanup.fix_sparse_index_migration.sql
+DROP TABLE IF EXISTS fix_sparse_default;
+DROP TABLE IF EXISTS fix_sparse_create;
+DROP TABLE IF EXISTS fix_sparse_alter;

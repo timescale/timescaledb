@@ -104,7 +104,7 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
 SELECT * FROM _timescaledb_catalog.compression_settings;
                   relid                  |                 compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
 -----------------------------------------+-------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
- test_no_candidates                      |                                                 |           | {time}  | {f}          | {f}                | 
+ test_no_candidates                      |                                                 |           | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  _timescaledb_internal._hyper_7_10_chunk | _timescaledb_internal.compress_hyper_8_11_chunk |           | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
 
 ROLLBACK;
