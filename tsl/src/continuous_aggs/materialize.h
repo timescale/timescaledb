@@ -42,3 +42,11 @@ void continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousA
 										   SchemaAndName materialization_table,
 										   const NameData *time_column_name,
 										   InternalTimeRange materialization_range);
+
+void continuous_agg_update_materialization_for_tenant(Hypertable *mat_ht, const ContinuousAgg *cagg,
+													  SchemaAndName partial_view,
+													  SchemaAndName materialization_table,
+													  const NameData *time_column_name,
+													  InternalTimeRange materialization_range,
+													  const NameData *tenant_column_name,
+													  Datum tenant_value, Oid tenant_type);

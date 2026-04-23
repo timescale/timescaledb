@@ -50,6 +50,8 @@ typedef enum MaterializationPlanType
 	PLAN_TYPE_EXISTS,
 	PLAN_TYPE_MERGE,
 	PLAN_TYPE_MERGE_DELETE,
+	PLAN_TYPE_INSERT_BY_TENANT,
+	PLAN_TYPE_DELETE_BY_TENANT,
 	_MAX_MATERIALIZATION_PLAN_TYPES
 } MaterializationPlanType;
 
@@ -63,6 +65,11 @@ typedef struct MaterializationContext
 	TimeRange materialization_range;
 	InternalTimeRange internal_materialization_range;
 	int nargs;
+
+	/* Optional per-tenant filter. NULL tenant_column_name => time-only path. */
+	const NameData *tenant_column_name;
+	Oid tenant_type;
+	Datum tenant_value;
 } MaterializationContext;
 
 typedef char *(*MaterializationCreateStatement)(MaterializationContext *context);
@@ -76,6 +83,13 @@ typedef struct MaterializationPlan
 	MaterializationCreateStatement create_statement;
 	const char *error_message;
 	const char *progress_message;
+	/*
+	 * Type of $3 (tenant value) recorded at SPI_prepare time. Only meaningful
+	 * for *_BY_TENANT slots; left InvalidOid otherwise. Used to detect when a
+	 * cached plan was compiled for a different tenant column type and must
+	 * be freed before recompiling.
+	 */
+	Oid last_tenant_type;
 } MaterializationPlan;
 
 static char *build_order_by_clause(MaterializationContext *context);
@@ -84,6 +98,8 @@ static char *create_materialization_delete_statement(MaterializationContext *con
 static char *create_materialization_exists_statement(MaterializationContext *context);
 static char *create_materialization_merge_statement(MaterializationContext *context);
 static char *create_materialization_merge_delete_statement(MaterializationContext *context);
+static char *create_materialization_insert_by_tenant_statement(MaterializationContext *context);
+static char *create_materialization_delete_by_tenant_statement(MaterializationContext *context);
 static MaterializationPlan materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPES + 1] = {
 	[PLAN_TYPE_INSERT] = { .nargs = 2,
 						   .create_statement = create_materialization_insert_statement,
@@ -114,6 +130,22 @@ static MaterializationPlan materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPES
 								 .progress_message =
 									 "deleted " UINT64_FORMAT
 									 " row(s) from materialization table \"%s.%s\"" },
+	[PLAN_TYPE_INSERT_BY_TENANT] = { .nargs = 3,
+									 .create_statement =
+										 create_materialization_insert_by_tenant_statement,
+									 .error_message = "could not insert old values into "
+													  "materialization table \"%s.%s\"",
+									 .progress_message =
+										 "inserted " UINT64_FORMAT
+										 " row(s) into materialization table \"%s.%s\"" },
+	[PLAN_TYPE_DELETE_BY_TENANT] = { .nargs = 3,
+									 .create_statement =
+										 create_materialization_delete_by_tenant_statement,
+									 .error_message = "could not delete old values from "
+													  "materialization table \"%s.%s\"",
+									 .progress_message =
+										 "deleted " UINT64_FORMAT
+										 " row(s) from materialization table \"%s.%s\"" },
 };
 
 static Oid *create_materialization_plan_argtypes(MaterializationContext *context,
@@ -131,6 +163,7 @@ static void free_materialization_plans(MaterializationContext *context);
 
 static void update_watermark(MaterializationContext *context);
 static void execute_materializations(MaterializationContext *context);
+static void execute_materializations_by_tenant(MaterializationContext *context);
 
 /* API to update materializations from refresh code */
 void
@@ -165,6 +198,50 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 	execute_materializations(&context);
 
 	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
+}
+
+/*
+ * Per-tenant variant of continuous_agg_update_materialization. Re-materializes
+ * a single (tenant_value, time-range) rectangle by issuing a DELETE then
+ * INSERT both narrowed by AND <tenant_column_name> = <tenant_value>.
+ *
+ * Caller must ensure tenant_column_name names a real column on mat_ht and
+ * the partial view (i.e. it is a GROUP BY column of the cagg defining query),
+ * tenant_type matches that column's atttypid, and tenant_value is a Datum
+ * of tenant_type.
+ */
+void
+continuous_agg_update_materialization_for_tenant(Hypertable *mat_ht, const ContinuousAgg *cagg,
+												 SchemaAndName partial_view,
+												 SchemaAndName materialization_table,
+												 const NameData *time_column_name,
+												 InternalTimeRange materialization_range,
+												 const NameData *tenant_column_name,
+												 Datum tenant_value, Oid tenant_type)
+{
+	MaterializationContext context = {
+		.mat_ht = mat_ht,
+		.cagg = cagg,
+		.partial_view = partial_view,
+		.materialization_table = materialization_table,
+		.time_column_name = (NameData *) time_column_name,
+		.materialization_range = internal_time_range_to_time_range(materialization_range),
+		.internal_materialization_range = materialization_range,
+		.tenant_column_name = tenant_column_name,
+		.tenant_value = tenant_value,
+		.tenant_type = tenant_type,
+	};
+
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
+
+	if (materialization_range.start > materialization_range.end)
+		materialization_range.start = materialization_range.end;
+
+	context.materialization_range = internal_time_range_to_time_range(materialization_range);
+	execute_materializations_by_tenant(&context);
+
 	AtEOXact_GUC(false, save_nestlevel);
 }
 
@@ -434,6 +511,50 @@ create_materialization_delete_statement(MaterializationContext *context)
 	return query.data;
 }
 
+/* Create INSERT statement scoped to a single tenant value (bound to $3). */
+static char *
+create_materialization_insert_by_tenant_statement(MaterializationContext *context)
+{
+	char *orderby =
+		has_direct_compress_on_cagg_refresh_enabled(context) ? build_order_by_clause(context) : "";
+
+	Assert(context->tenant_column_name != NULL);
+
+	StringInfoData query;
+	initStringInfo(&query);
+	appendStringInfo(&query,
+					 "INSERT INTO %s.%s SELECT * FROM %s.%s AS I "
+					 "WHERE I.%s >= $1 AND I.%s < $2 AND I.%s = $3 %s;",
+					 quote_identifier(NameStr(*context->materialization_table.schema)),
+					 quote_identifier(NameStr(*context->materialization_table.name)),
+					 quote_identifier(NameStr(*context->partial_view.schema)),
+					 quote_identifier(NameStr(*context->partial_view.name)),
+					 quote_identifier(NameStr(*context->time_column_name)),
+					 quote_identifier(NameStr(*context->time_column_name)),
+					 quote_identifier(NameStr(*context->tenant_column_name)),
+					 orderby);
+	return query.data;
+}
+
+/* Create DELETE statement scoped to a single tenant value (bound to $3). */
+static char *
+create_materialization_delete_by_tenant_statement(MaterializationContext *context)
+{
+	Assert(context->tenant_column_name != NULL);
+
+	StringInfoData query;
+	initStringInfo(&query);
+	appendStringInfo(&query,
+					 "DELETE FROM %s.%s AS D "
+					 "WHERE D.%s >= $1 AND D.%s < $2 AND D.%s = $3;",
+					 quote_identifier(NameStr(*context->materialization_table.schema)),
+					 quote_identifier(NameStr(*context->materialization_table.name)),
+					 quote_identifier(NameStr(*context->time_column_name)),
+					 quote_identifier(NameStr(*context->time_column_name)),
+					 quote_identifier(NameStr(*context->tenant_column_name)));
+	return query.data;
+}
+
 /* Create SELECT EXISTS statement */
 static char *
 create_materialization_exists_statement(MaterializationContext *context)
@@ -559,6 +680,12 @@ create_materialization_merge_delete_statement(MaterializationContext *context)
 	return query.data;
 }
 
+static inline bool
+is_by_tenant_plan_type(MaterializationPlanType plan_type)
+{
+	return plan_type == PLAN_TYPE_INSERT_BY_TENANT || plan_type == PLAN_TYPE_DELETE_BY_TENANT;
+}
+
 static Oid *
 create_materialization_plan_argtypes(MaterializationContext *context,
 									 MaterializationPlanType plan_type, int nargs)
@@ -567,6 +694,13 @@ create_materialization_plan_argtypes(MaterializationContext *context,
 
 	argtypes[0] = context->materialization_range.type;
 	argtypes[1] = context->materialization_range.type;
+
+	if (is_by_tenant_plan_type(plan_type))
+	{
+		Assert(nargs == 3);
+		Assert(OidIsValid(context->tenant_type));
+		argtypes[2] = context->tenant_type;
+	}
 
 	return argtypes;
 }
@@ -578,6 +712,19 @@ create_materialization_plan(MaterializationContext *context, MaterializationPlan
 	Assert(plan_type < _MAX_MATERIALIZATION_PLAN_TYPES);
 
 	MaterializationPlan *materialization = &materialization_plans[plan_type];
+	bool is_by_tenant = is_by_tenant_plan_type(plan_type);
+
+	/*
+	 * If a by-tenant plan was cached for a different tenant column type, the
+	 * compiled argtypes[2] no longer matches the value we'd bind. Free the
+	 * stale plan so the block below recompiles it.
+	 */
+	if (is_by_tenant && materialization->plan != NULL &&
+		materialization->last_tenant_type != context->tenant_type)
+	{
+		SPI_freeplan(materialization->plan);
+		materialization->plan = NULL;
+	}
 
 	if (materialization->plan == NULL)
 	{
@@ -591,6 +738,9 @@ create_materialization_plan(MaterializationContext *context, MaterializationPlan
 			elog(ERROR, "%s: SPI_prepare failed: %s", __func__, query);
 
 		SPI_keepplan(materialization->plan);
+		if (is_by_tenant)
+			materialization->last_tenant_type = context->tenant_type;
+
 		pfree(query);
 		pfree(argtypes);
 	}
@@ -606,6 +756,12 @@ create_materialization_plan_args(MaterializationContext *context, Materializatio
 	(*values)[1] = context->materialization_range.end;
 	(*nulls)[0] = false;
 	(*nulls)[1] = false;
+
+	if (is_by_tenant_plan_type(plan_type))
+	{
+		(*values)[2] = context->tenant_value;
+		(*nulls)[2] = false;
+	}
 }
 
 static uint64
@@ -799,4 +955,35 @@ execute_materializations(MaterializationContext *context)
 					prev_enable_direct_compress_insert_client_sorted ? "on" : "off",
 					PGC_USERSET,
 					PGC_S_SESSION);
+}
+
+/*
+ * Per-tenant materialization: DELETE then INSERT, both filtered by the bound
+ * tenant_value. No MERGE / EXISTS path — backfill refreshes always do the
+ * straightforward delete-then-insert pair.
+ */
+static void
+execute_materializations_by_tenant(MaterializationContext *context)
+{
+	volatile uint64 rows_processed = 0;
+
+	Assert(context->tenant_column_name != NULL);
+	Assert(OidIsValid(context->tenant_type));
+
+	PG_TRY();
+	{
+		rows_processed += execute_materialization_plan(context, PLAN_TYPE_DELETE_BY_TENANT);
+		rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT_BY_TENANT);
+
+		free_materialization_plans(context);
+	}
+	PG_CATCH();
+	{
+		free_materialization_plans(context);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	if (rows_processed > 0)
+		update_watermark(context);
 }
