@@ -352,6 +352,8 @@ jobs:
           info locals
           bt full
         " 2>&1 | tee stacktrace.log
+        pwd
+        ls
         ./scripts/bundle_coredumps.sh
         exit 1 # Fail the job if we have core dumps.
 
