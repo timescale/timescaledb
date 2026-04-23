@@ -101,10 +101,13 @@ jobs:
     if: github.event_name == 'issue_comment' && !github.event.issue.pull_request
     steps:
       - name: Install Linux Dependencies
-        timeout-minutes: 3
-        run: |
-          sudo apt-get update
-          sudo apt-get install jq
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+        with:
+          timeout_minutes: 3
+          max_attempts: 3
+          command: |
+            sudo apt-get update
+            sudo apt-get install jq
       - name: Get board column of issue
         id: extract_board_column
         continue-on-error: true

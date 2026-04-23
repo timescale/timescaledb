@@ -80,10 +80,13 @@ jobs:
 
     - name: Install Linux Dependencies
       if: steps.check.outputs.should_run == 'true'
-      timeout-minutes: 3
-      run: |
-        sudo apt-get update
-        sudo apt-get install flex bison cmake
+      uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+      with:
+        timeout_minutes: 3
+        max_attempts: 3
+        command: |
+          sudo apt-get update
+          sudo apt-get install flex bison cmake
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.

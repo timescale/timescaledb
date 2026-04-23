@@ -78,13 +78,16 @@ jobs:
     steps:
     - name: Install Linux Dependencies
       if: runner.os == 'Linux'
-      timeout-minutes: 3
-      run: |
-        # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
-        # If needed, install them before opening the core dump.
-        sudo apt-get update
-        sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
-          libtest-most-perl pkgconf icu-devtools faketime jq ${{ matrix.extra_packages }}
+      uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+      with:
+        timeout_minutes: 3
+        max_attempts: 3
+        command: |
+          # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
+          # If needed, install them before opening the core dump.
+          sudo apt-get update
+          sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
+            libtest-most-perl pkgconf icu-devtools faketime jq ${{ matrix.extra_packages }}
 
     - name: Check macOS Build Dependencies
       if: runner.os == 'macOS'
@@ -94,13 +97,17 @@ jobs:
 
     - name: Install macOS Test Dependencies
       if: runner.os == 'macOS' && matrix.installcheck
-      run: |
-        # Disable the automatic dependency upgrade executed by `brew install`
-        # https://docs.brew.sh/Manpage#install-options-formulacask-
-        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gawk
-        # Install perl modules after last Homebew call, since Homebrew can change the perl version
-        sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
-        sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
+      uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+      with:
+        timeout_minutes: 3
+        max_attempts: 3
+        command: |
+          # Disable the automatic dependency upgrade executed by `brew install`
+          # https://docs.brew.sh/Manpage#install-options-formulacask-
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gawk
+          # Install perl modules after last Homebew call, since Homebrew can change the perl version
+          sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
+          sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
 
     - name: Setup macOS coredump directory
       if: runner.os == 'macOS'

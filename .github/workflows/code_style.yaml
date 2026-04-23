@@ -78,8 +78,11 @@ jobs:
       LLVM_VER: 17
     steps:
     - name: Install Linux Dependencies
-      timeout-minutes: 3
-      run: |
+      uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+      with:
+        timeout_minutes: 3
+        max_attempts: 3
+        command: |
           gpg --batch --keyserver hkp://keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
           gpg --batch --export --export-options export-minimal --armor 15CF4D18AF4F7421 | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
 
