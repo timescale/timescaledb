@@ -109,11 +109,8 @@ jobs:
       uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        # FIXME
-        # key: "${{ env.name }}-postgresql-${{ needs.config.outputs.pg_latest }}-${{ env.CC }}\
-        # -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
-        key: "${{ env.name }}-postgresql-${{ needs.config.outputs.pg_latest }}-${{ env.CC }}\
-          -${{ steps.get-date.outputs.date }}"
+        key: "$llm-fuzzer-postgresql-${{ needs.config.outputs.pg_latest }}-${{ env.CC }}\
+         -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Build PostgreSQL ${{ needs.config.outputs.pg_latest }} if not in cache
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
