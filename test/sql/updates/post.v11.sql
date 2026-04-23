@@ -2,5 +2,4 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\ir setup.v9.sql
-\ir setup.sparse_index.sql
+\ir post.v10.sql
