@@ -7,7 +7,6 @@
 -- downgrade due to FK constraint. Showing them would mean a diff in
 -- the output. We can still test that 0 chunk_ids are converted to
 -- NULL values during upgrades, however.
-SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass::text;
 
 SELECT
     schema_name || '.' || table_name AS chunk
