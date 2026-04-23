@@ -296,6 +296,7 @@ ROLLBACK;
 -- test with segmentby
 BEGIN;
 ALTER TABLE metrics SET (tsdb.segmentby = 'device');
+NOTICE:  updated compression settings will only apply to future compressions
 SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = true;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz - (i || ' minute')::interval, floor(i), i::float FROM generate_series(0.0,9.8,0.2) i;
@@ -321,6 +322,7 @@ ROLLBACK;
 -- segmentby with overlapping batches
 BEGIN;
 ALTER TABLE metrics SET (tsdb.segmentby = 'device');
+NOTICE:  updated compression settings will only apply to future compressions
 SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd'||i%2, i::float FROM generate_series(0,3000) i;
@@ -357,6 +359,7 @@ ROLLBACK;
 -- multikey orderby
 BEGIN;
 ALTER TABLE metrics SET (tsdb.orderby = 'device desc,time');
+NOTICE:  updated compression settings will only apply to future compressions
 SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd'||i%3, i::float FROM generate_series(0,3000) i;
@@ -580,6 +583,7 @@ SELECT count(*) FROM :CHUNK;
 EXPLAIN (analyze,buffers off,costs off,summary off,timing off) DELETE FROM :CHUNK WHERE time > '2025-01-01'::timestamptz;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 1
    Batches decompressed: 1
    Tuples decompressed: 101
    ->  Delete on _hyper_6_56_chunk (actual rows=0.00 loops=1)
@@ -673,3 +677,103 @@ RESET timescaledb.enable_direct_compress_insert;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
 DROP TABLE compress_src;
 DROP TABLE compress_tgt;
+-- simple test to check default segmentby does not get set for direct compress
+BEGIN;
+RESET timescaledb.enable_direct_compress_insert;
+CREATE TABLE test_segmentby_stats (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INT NOT NULL,
+    value FLOAT
+) WITH (tsdb.hypertable, tsdb.compress);
+NOTICE:  using column "time" as partitioning column
+INSERT INTO test_segmentby_stats
+SELECT t, (i % 5), random()
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 second') t,
+     generate_series(1, 5) i;
+ANALYZE test_segmentby_stats;
+SELECT compress_chunk(c) FROM show_chunks('test_segmentby_stats') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_12_89_chunk
+
+-- will have devide_id as default segmentby for compressed chunk;
+SELECT * FROM _timescaledb_catalog.compression_settings;
+                  relid                   |                  compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                            index                            
+------------------------------------------+--------------------------------------------------+-------------+---------+--------------+--------------------+-------------------------------------------------------------
+ metrics                                  |                                                  |             | {time}  | {f}          | {f}                | 
+ metrics_status                           |                                                  |             |         |              |                    | 
+ _timescaledb_internal._hyper_4_54_chunk  | _timescaledb_internal.compress_hyper_5_55_chunk  |             | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ metrics_chunk                            |                                                  |             |         |              |                    | 
+ test_segmentby_stats                     |                                                  |             |         |              |                    | 
+ _timescaledb_internal._hyper_12_89_chunk | _timescaledb_internal.compress_hyper_13_90_chunk | {device_id} | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO test_segmentby_stats
+SELECT t, (i % 5), random()
+FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 second') t,
+     generate_series(1, 5) i;
+ANALYZE test_segmentby_stats;
+-- will have default segmentby set for a newly created direct compressed chunk (should observe a skipped chunk id);
+SELECT * FROM _timescaledb_catalog.compression_settings;
+                  relid                   |                  compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                            index                            
+------------------------------------------+--------------------------------------------------+-------------+---------+--------------+--------------------+-------------------------------------------------------------
+ metrics                                  |                                                  |             | {time}  | {f}          | {f}                | 
+ metrics_status                           |                                                  |             |         |              |                    | 
+ _timescaledb_internal._hyper_4_54_chunk  | _timescaledb_internal.compress_hyper_5_55_chunk  |             | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ metrics_chunk                            |                                                  |             |         |              |                    | 
+ test_segmentby_stats                     |                                                  |             |         |              |                    | 
+ _timescaledb_internal._hyper_12_89_chunk | _timescaledb_internal.compress_hyper_13_90_chunk | {device_id} | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_12_91_chunk | _timescaledb_internal.compress_hyper_13_93_chunk | {device_id} | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+
+ROLLBACK;
+BEGIN;
+RESET timescaledb.enable_direct_compress_insert;
+CREATE TABLE test_segmentby_stats (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INT NOT NULL,
+    value FLOAT
+) WITH (tsdb.hypertable, tsdb.compress, tsdb.segmentby='device_id');
+NOTICE:  using column "time" as partitioning column
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO test_segmentby_stats
+SELECT t, (i % 5), random()
+FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 second') t,
+     generate_series(1, 5) i;
+ANALYZE test_segmentby_stats;
+-- will have device_id by as configured segmentby for direct compressed chunk (should not observe skipped chunk id);
+SELECT * FROM _timescaledb_catalog.compression_settings;
+                  relid                   |                  compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                            index                            
+------------------------------------------+--------------------------------------------------+-------------+---------+--------------+--------------------+-------------------------------------------------------------
+ metrics                                  |                                                  |             | {time}  | {f}          | {f}                | 
+ metrics_status                           |                                                  |             |         |              |                    | 
+ _timescaledb_internal._hyper_4_54_chunk  | _timescaledb_internal.compress_hyper_5_55_chunk  |             | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ metrics_chunk                            |                                                  |             |         |              |                    | 
+ test_segmentby_stats                     |                                                  | {device_id} |         |              |                    | 
+ _timescaledb_internal._hyper_14_94_chunk | _timescaledb_internal.compress_hyper_15_95_chunk | {device_id} | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+
+ROLLBACK;
+-- Test orderby columns are not selected by DC segmentby default
+BEGIN;
+RESET timescaledb.enable_direct_compress_insert;
+CREATE TABLE test_orderby_not_segmentby(time timestamptz NOT NULL, device_id int NOT NULL,
+    value float) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+CREATE INDEX ON test_orderby_not_segmentby(device_id);
+INSERT INTO test_orderby_not_segmentby SELECT '2024-01-01'::timestamptz + (i||' min')::interval,
+    (i%5)+1, random() FROM generate_series(1,500) i;
+ANALYZE test_orderby_not_segmentby;
+ALTER TABLE test_orderby_not_segmentby SET (timescaledb.compress);
+SET timescaledb.enable_direct_compress_insert = on;
+INSERT INTO test_orderby_not_segmentby SELECT '2024-06-01'::timestamptz + (i||' min')::interval,
+    (i%5)+1, random() FROM generate_series(1,2000) i;
+SELECT * FROM _timescaledb_catalog.compression_settings;
+                  relid                   |                  compress_relid                  | segmentby |     orderby      | orderby_desc | orderby_nullsfirst |                                                            index                                                            
+------------------------------------------+--------------------------------------------------+-----------+------------------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------------
+ metrics                                  |                                                  |           | {time}           | {f}          | {f}                | 
+ metrics_status                           |                                                  |           |                  |              |                    | 
+ _timescaledb_internal._hyper_4_54_chunk  | _timescaledb_internal.compress_hyper_5_55_chunk  |           | {time}           | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ metrics_chunk                            |                                                  |           |                  |              |                    | 
+ test_orderby_not_segmentby               |                                                  |           |                  |              |                    | 
+ _timescaledb_internal._hyper_16_97_chunk | _timescaledb_internal.compress_hyper_17_98_chunk |           | {time,device_id} | {t,f}        | {t,f}              | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "minmax", "column": "device_id", "source": "orderby"}]
+
+ROLLBACK;

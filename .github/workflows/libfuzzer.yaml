@@ -22,15 +22,19 @@ jobs:
 
     steps:
     - name: Install Linux Dependencies
-      run: |
-        # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
-        # If needed, install them before opening the core dump.
-        sudo apt-get update
-        sudo apt-get install 7zip clang lld llvm flex bison libipc-run-perl \
-          libtest-most-perl tree jq
+      uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+      with:
+        timeout_minutes: 3
+        max_attempts: 3
+        command: |
+          # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
+          # If needed, install them before opening the core dump.
+          sudo apt-get update
+          sudo apt-get install 7zip clang lld llvm flex bison libipc-run-perl \
+            libtest-most-perl tree jq
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     - name: Read configuration
       id: config
@@ -48,7 +52,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL
       id: cache-postgresql
-      uses: actions/cache@v4
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "postgresql-libfuzzer-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
@@ -74,7 +78,7 @@ jobs:
 
     - name: Upload config.log
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: config.log for PostgreSQL
         path: ~/${{ env.PG_SRC_DIR }}/config.log
@@ -103,7 +107,7 @@ jobs:
       run: 7z a install.7z $HOME/$PG_INSTALL_DIR
 
     - name: Save the installation directory
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: fuzzing-install-dir
         path: install.7z
@@ -144,15 +148,19 @@ jobs:
 
     steps:
     - name: Install Linux dependencies
-      run: |
-        sudo apt update
-        sudo apt install 7zip systemd-coredump gdb
+      uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+      with:
+        timeout_minutes: 3
+        max_attempts: 3
+        command: |
+          sudo apt-get update
+          sudo apt-get install 7zip systemd-coredump gdb
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     - name: Download the installation directory
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
         name: fuzzing-install-dir
 
@@ -180,7 +188,7 @@ jobs:
 
     - name: Restore the cached fuzzing corpus (bulk)
       id: restore-corpus-cache-bulk
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: db/corpus-bulk
         key: "${{ steps.config.outputs.cache_prefix }}-bulk"
@@ -189,7 +197,7 @@ jobs:
     # they don't overwrite each other. Now we are going to combine them.
     - name: Restore the cached fuzzing corpus (rowbyrow)
       id: restore-corpus-cache-rowbyrow
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: db/corpus-rowbyrow
         key: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
@@ -291,14 +299,14 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: PostgreSQL log for ${{ steps.config.outputs.name }}
         path: postgres.*
 
     - name: Save fuzzer-generated crash cases
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: Crash cases for ${{ steps.config.outputs.name }}
         path: db/crash-*
@@ -306,7 +314,7 @@ jobs:
 
     - name: Save interesting cases
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: Interesting cases for ${{ steps.config.outputs.name }}
         path: interesting/
@@ -334,7 +342,7 @@ jobs:
 
     - name: Save fuzzer corpus
       if: always()
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: db/corpus-${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
         key: "${{ format('{0}-{1}-{2}-{3}',
@@ -363,7 +371,7 @@ jobs:
 
     - name: Upload core dumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: Coredumps for ${{ steps.config.outputs.name }}
         path: coredumps

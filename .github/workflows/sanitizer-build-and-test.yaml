@@ -63,7 +63,7 @@ jobs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -82,13 +82,17 @@ jobs:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
     steps:
     - name: Install Linux Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
-          libtest-most-perl jq ${{ env.extra_packages }}
+      uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+      with:
+        timeout_minutes: 3
+        max_attempts: 3
+        command: |
+          sudo apt-get update
+          sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
+            libtest-most-perl jq ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
@@ -108,7 +112,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }}
       id: cache-postgresql
-      uses: actions/cache@v4
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}\
@@ -139,7 +143,7 @@ jobs:
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: config.log for PostgreSQL ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: ~/${{ env.PG_SRC_DIR }}/config.log
@@ -186,7 +190,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: Regression diff ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: |
@@ -195,7 +199,7 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: PostgreSQL log ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: postmaster.*
@@ -225,14 +229,14 @@ jobs:
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: Coredumps ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: coredumps
 
     - name: Upload sanitizer logs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
       with:
         name: sanitizer logs ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         # The log_path sanitizer option means "Write logs to 'log_path.pid'".

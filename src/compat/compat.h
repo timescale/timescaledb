@@ -879,3 +879,29 @@ ItemPointerGetDatum(const ItemPointerData *X)
 	return PointerGetDatum(X);
 }
 #endif
+
+#if PG17_LT
+/*
+ * PG17 added the 'orstronger' parameter to LockHeldByMe.  On older versions
+ * we use LockOrStrongerHeldByMe when orstronger is true.
+ */
+static inline bool
+LockHeldByMeCompat(const LOCKTAG *locktag, LOCKMODE lockmode, bool orstronger)
+{
+	if (orstronger)
+		return LockOrStrongerHeldByMe(locktag, lockmode);
+	return LockHeldByMe(locktag, lockmode);
+}
+#else
+#define LockHeldByMeCompat(locktag, lockmode, orstronger)                                          \
+	LockHeldByMe(locktag, lockmode, orstronger)
+#endif
+
+/* PG18 introduced PG_MODULE_MAGIC_EXT macro
+   https://github.com/postgres/postgres/commit/9324c8c580655800331b0582b770e88c01b7a5c4 */
+#ifdef PG_MODULE_MAGIC_EXT
+#define TS_MODULE_MAGIC(extname)                                                                   \
+	PG_MODULE_MAGIC_EXT(.name = extname, .version = TIMESCALEDB_VERSION_MOD)
+#else
+#define TS_MODULE_MAGIC(extname) PG_MODULE_MAGIC
+#endif

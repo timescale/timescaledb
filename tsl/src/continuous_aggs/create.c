@@ -108,7 +108,7 @@ static void
 makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
 {
 	int ret = snprintf(buf, NAMEDATALEN, prefix, hypertable_id);
-	if (ret < 0 || ret > NAMEDATALEN)
+	if (ret < 0 || ret >= NAMEDATALEN)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("bad materialization internal name")));
@@ -883,7 +883,6 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 										true,  /* end_isnull */
 										true,  /* bucketing_refresh_window */
 										false, /* force */
-										true,  /* process_hypertable_invalidations */
 										false /*extend_last_bucket*/);
 	}
 

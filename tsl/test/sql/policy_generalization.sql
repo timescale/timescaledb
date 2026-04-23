@@ -81,3 +81,13 @@ SELECT add_compression_policy('test', compress_created_before => INTERVAL '20 se
 SELECT remove_compression_policy('test');
 
 DROP TABLE test;
+
+-- Test that alter_job works with drop_created_before on a TIMESTAMPTZ hypertable
+-- Regression test for https://github.com/timescale/timescaledb/issues/9446
+CREATE TABLE test_retention_ts(time TIMESTAMPTZ NOT NULL, value DOUBLE PRECISION);
+SELECT create_hypertable('test_retention_ts', 'time');
+SELECT add_retention_policy('test_retention_ts', drop_created_before => INTERVAL '30 days') AS ret_job_id \gset
+-- This should succeed without "could not find drop_after in config for job" error
+SELECT alter_job(:ret_job_id, max_retries => 5);
+SELECT remove_retention_policy('test_retention_ts');
+DROP TABLE test_retention_ts;

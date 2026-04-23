@@ -23,6 +23,7 @@ extern bool ts_guc_enable_ordered_append;
 extern bool ts_guc_enable_chunk_append;
 extern bool ts_guc_enable_parallel_chunk_append;
 extern bool ts_guc_enable_qual_propagation;
+extern TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown;
 extern bool ts_guc_enable_qual_filtering;
 extern bool ts_guc_enable_runtime_exclusion;
 extern bool ts_guc_enable_constraint_exclusion;
@@ -36,8 +37,10 @@ extern TSDLLEXPORT bool ts_guc_enable_osm_reads;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
 #endif
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
+extern TSDLLEXPORT bool ts_guc_enable_compressed_merge;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
+extern TSDLLEXPORT bool ts_guc_enable_dml_bloom_filter;
 extern bool ts_guc_enable_direct_compress_copy;
 extern bool ts_guc_enable_direct_compress_copy_sort_batches;
 extern bool ts_guc_enable_direct_compress_copy_client_sorted;
@@ -46,7 +49,10 @@ extern TSDLLEXPORT bool ts_guc_enable_direct_compress_insert;
 extern bool ts_guc_enable_direct_compress_insert_sort_batches;
 extern TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted;
 extern TSDLLEXPORT bool ts_guc_enable_direct_compress_on_cagg_refresh;
+extern TSDLLEXPORT bool ts_guc_enable_direct_compress_auto_segmentby;
 extern int ts_guc_direct_compress_insert_tuple_sort_limit;
+extern TSDLLEXPORT int ts_guc_direct_compress_segmentby_min_rows;
+extern TSDLLEXPORT int ts_guc_direct_compress_segmentby_batch_size_limit;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
 extern TSDLLEXPORT bool ts_guc_enable_compression_wal_markers;
@@ -78,6 +84,10 @@ extern TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan;
 extern TSDLLEXPORT bool ts_guc_enable_multikey_skip_scan;
 extern TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier;
 extern TSDLLEXPORT bool ts_guc_debug_skip_scan_info;
+#if PG16_GE
+extern TSDLLEXPORT bool ts_guc_enable_cagg_rewrites;
+extern TSDLLEXPORT bool ts_guc_cagg_rewrites_debug_info;
+#endif
 
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;

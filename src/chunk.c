@@ -5119,15 +5119,6 @@ ts_osm_chunk_range_is_invalid(int64 range_start, int64 range_end)
 	return ((range_end == PG_INT64_MAX) && (range_start == range_end - 1));
 }
 
-int32
-ts_chunk_get_osm_slice_id(int32 chunk_id, int32 time_dim_id)
-{
-	Chunk *chunk = ts_chunk_get_by_id(chunk_id, true);
-	const DimensionSlice *ds = ts_hypercube_get_slice_by_dimension_id(chunk->cube, time_dim_id);
-	const int slice_id = ds->fd.id;
-	return slice_id;
-}
-
 /*
  * Initialization and access method for ChunkVec. This needs to be extended to support additional
  * operations.

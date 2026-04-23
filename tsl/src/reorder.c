@@ -66,6 +66,7 @@
 #include "import/heapswap.h"
 #include "indexing.h"
 #include "reorder.h"
+#include "ts_catalog/compression_settings.h"
 
 static void reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id,
 						Oid destination_tablespace, Oid index_tablespace);
@@ -159,9 +160,9 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 	}
 
 	/* If chunk is compressed move it by altering tablespace on both chunks */
-	if (OidIsValid(chunk->fd.compressed_chunk_id))
+	if (ts_chunk_is_compressed(chunk))
 	{
-		Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+		CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
 		AlterTableCmd cmd = { .type = T_AlterTableCmd,
 							  .subtype = AT_SetTableSpace,
 							  .name = get_tablespace_name(destination_tablespace) };
@@ -173,13 +174,13 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 					 errdetail("Chunk will not be reordered as it has columnstore data.")));
 
 		ts_alter_table_with_event_trigger(chunk_id, fcinfo->context, list_make1(&cmd), false);
-		ts_alter_table_with_event_trigger(compressed_chunk->table_id,
+		ts_alter_table_with_event_trigger(settings->fd.compress_relid,
 										  fcinfo->context,
 										  list_make1(&cmd),
 										  false);
 		/* move indexes on original and compressed chunk */
 		ts_chunk_index_move_all(chunk_id, index_destination_tablespace);
-		ts_chunk_index_move_all(compressed_chunk->table_id, index_destination_tablespace);
+		ts_chunk_index_move_all(settings->fd.compress_relid, index_destination_tablespace);
 	}
 	else
 	{
@@ -592,13 +593,13 @@ rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id,
 
 	/* Remember info about rel before closing OldHeap */
 	relpersistence = OldHeap->rd_rel->relpersistence;
+	Oid relam = OldHeap->rd_rel->relam;
 
 	/* Close relcache entry, but keep lock until transaction commit */
 	table_close(OldHeap, NoLock);
 
 	/* Create the transient table that will receive the re-ordered data */
-	OIDNewHeap =
-		make_new_heap(tableOid, tableSpace, OldHeap->rd_rel->relam, relpersistence, ExclusiveLock);
+	OIDNewHeap = make_new_heap(tableOid, tableSpace, relam, relpersistence, ExclusiveLock);
 
 	/* Copy the heap data into the new table in the desired order */
 	copy_heap_data(OIDNewHeap,

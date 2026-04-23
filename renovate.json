@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigestsToSemver"
+
+  ],
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["patch", "minor", "major", "digest"],
+      "groupName": "dependencies",
+      "schedule": ["on monday"],
+      "minimumReleaseAge": "7 days"
+    }
+  ],
+  "pinDigests": true
+}

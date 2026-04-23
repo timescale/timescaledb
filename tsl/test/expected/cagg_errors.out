@@ -516,6 +516,7 @@ timescaledb.compress_orderby = 'bucket');
 --enable compression and test re-enabling compression
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress);
 NOTICE:  defaulting compress_orderby to bucket
+NOTICE:  updated compression settings will only apply to future compressions
 insert into i2980 select now();
 call refresh_continuous_aggregate('i2980_cagg2', NULL, NULL);
 SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
@@ -527,6 +528,7 @@ ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'false');
 ERROR:  cannot disable columnstore on hypertable with columnstore chunks
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'true');
 NOTICE:  defaulting compress_orderby to bucket
+NOTICE:  updated compression settings will only apply to future compressions
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress, timescaledb.compress_segmentby = 'bucket');
 NOTICE:  defaulting compress_orderby to bucket
 ERROR:  cannot use column "bucket" for both ordering and segmenting

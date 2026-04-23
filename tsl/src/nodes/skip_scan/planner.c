@@ -31,6 +31,7 @@
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "nodes/skip_scan/skip_scan.h"
+#include "utils.h"
 #include <import/planner.h>
 
 #include <math.h>
@@ -285,28 +286,6 @@ static CustomPathMethods skip_scan_path_methods = {
 	.PlanCustomPath = skip_scan_plan_create,
 };
 
-#if PG16_GE
-typedef struct FindAggrefsContext
-{
-	List *aggrefs; /* all non-nested Aggrefs found in a node */
-} FindAggrefsContext;
-
-static bool
-find_aggrefs_walker(Node *node, FindAggrefsContext *context)
-{
-	if (node == NULL)
-		return false;
-	if (IsA(node, Aggref))
-	{
-		context->aggrefs = lappend(context->aggrefs, node);
-		/* don't recurse inside Aggrefs */
-		return false;
-	}
-
-	return expression_tree_walker(node, find_aggrefs_walker, context);
-}
-#endif
-
 static Expr *
 get_distint_clause_expr(PlannerInfo *root, SortGroupClause *distinct_clause)
 {
@@ -410,11 +389,9 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 #if PG16_GE
 	else if (stage == UPPERREL_GROUP_AGG)
 	{
-		/* Find all non-nested Aggrefs in the query target list */
-		FindAggrefsContext agg_ctx = { .aggrefs = NULL };
-		find_aggrefs_walker((Node *) root->parse->targetList, &agg_ctx);
-
-		foreach (lc, agg_ctx.aggrefs)
+		/* Find all non-nested Aggref in the query target list */
+		List *aggrefs = ts_find_aggrefs((Node *) root->parse->targetList);
+		foreach (lc, aggrefs)
 		{
 			Aggref *agg = lfirst_node(Aggref, lc);
 			/* Only distinct aggs with 1 sorted argument are eligible*/
@@ -802,20 +779,6 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 	}
 }
 
-#if PG17_LT
-static bool
-attr_is_notnull(Oid relid, AttrNumber attno)
-{
-	HeapTuple tp = SearchSysCache2(ATTNUM, ObjectIdGetDatum(relid), Int16GetDatum(attno));
-	if (!HeapTupleIsValid(tp))
-		return false;
-	Form_pg_attribute att_tup = (Form_pg_attribute) GETSTRUCT(tp);
-	bool result = att_tup->attnotnull;
-	ReleaseSysCache(tp);
-	return result;
-}
-#endif
-
 /* Check if skip key is guaranteed not-null */
 static void
 check_notnull_skipkey(SkipKeyInfo *skinfo, Path *child_path, IndexPath *index_path)
@@ -1134,7 +1097,7 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 	 *  as NOT NULL constraint will be propagated to and checked on all chunks
 	 */
 #if PG17_LT
-	skinfo->notnull = attr_is_notnull(ht_rte->relid, var->varattno);
+	skinfo->notnull = ts_get_attnotnull(ht_rte->relid, var->varattno);
 #else
 	RelOptInfo *baserel = ((Index) var->varno == rel->relid ? rel : rel->parent);
 	skinfo->notnull = bms_is_member(var->varattno, baserel->notnullattnums);

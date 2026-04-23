@@ -19,6 +19,12 @@ create function volatile_lower(x text) returns text as 'lower' language internal
 
 set max_parallel_workers_per_gather = 0;
 
+-- On PG18 the btree indexes have support for scalar array operations, which
+-- leads to different query plans. We don't care about index scan in particular
+-- in this test, so switch it off to avoid versioned references.
+set enable_indexscan to off;
+set enable_bitmapscan to off;
+
 create table saop(ts int, segmentby text, with_minmax text, with_bloom text);
 
 select create_hypertable('saop', 'ts', chunk_time_interval => 50001);
@@ -110,6 +116,9 @@ explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = any(null::text[]);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_minmax = any(null::text[]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[null, null]);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
@@ -152,6 +161,21 @@ select * from saop where segmentby = '1' and with_bloom = all(array['1', with_mi
 
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where segmentby = '1' or with_bloom = all(array['1', with_minmax]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = all(array['1', null]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = all(array['1', nullif(with_minmax, with_minmax)]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = all(array[stable_lower('1'), volatile_lower('2')]);
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = stable_lower('1') and segmentby = volatile_lower('2');
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = '3' or (segmentby = stable_lower('1') and segmentby = volatile_lower('2'));
 
 
 -- Partial pushdown with volatile functions.
@@ -214,3 +238,24 @@ explain (analyze, buffers off, costs off, timing off, summary off)
 execute array_param(null::text[]);
 
 reset timescaledb.enable_chunk_append;
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_minmax = any(array['1'::varchar(10), '10'::varchar(10)]);
+
+reset plan_cache_mode;
+
+
+-- Debug GUC.
+set timescaledb.enable_columnar_scan_filter_pushdown to off;
+
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where segmentby = '3';
+
+reset timescaledb.enable_columnar_scan_filter_pushdown;
+
+
+reset max_parallel_workers_per_gather;
+
+reset enable_indexscan;
+
+reset enable_bitmapscan;

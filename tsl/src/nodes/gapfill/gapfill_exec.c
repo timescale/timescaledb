@@ -654,11 +654,9 @@ gapfill_advance_timestamp(GapFillState *state)
 		case TIMESTAMPTZOID:
 			/*
 			 * To be consistent with time_bucket we do UTC bucketing unless
-			 * a different timezone got explicitly passed to the function
-			 * and we are bucketing by non-fixed intervals.
+			 * a different timezone got explicitly passed to the function.
 			 */
-			if (state->have_timezone &&
-				(state->next_offset->day != 0 || state->next_offset->month != 0))
+			if (state->have_timezone)
 			{
 				bool isnull;
 				/* TODO: optimize by constifying and caching the datum if possible */
@@ -666,18 +664,62 @@ gapfill_advance_timestamp(GapFillState *state)
 					gapfill_exec_expr(state, state->scanslot, get_timezone_arg(state), &isnull);
 				Assert(!isnull);
 
-				/* Convert to local timestamp */
-				next = DirectFunctionCall2(timestamptz_zone,
-										   tzname,
-										   TimestampTzGetDatum(state->gapfill_start));
+				if (state->next_offset->day != 0 || state->next_offset->month != 0)
+				{
+					/*
+					 * For variable-length intervals (day/month components),
+					 * convert to local time, add interval, convert back.
+					 */
+					next = DirectFunctionCall2(timestamptz_zone,
+											   tzname,
+											   TimestampTzGetDatum(state->gapfill_start));
+					next = DirectFunctionCall2(timestamp_pl_interval,
+											   next,
+											   IntervalPGetDatum(state->next_offset));
+					next = DirectFunctionCall2(timestamp_zone, tzname, next);
+				}
+				else
+				{
+					/*
+					 * For fixed-size intervals with timezone, we must compute
+					 * bucket boundaries using the same logic as time_bucket
+					 * with timezone (convert to local, bucket, convert back,
+					 * DST fix-up). Plain UTC arithmetic produces boundaries
+					 * that don't match time_bucket during DST transitions,
+					 * causing out-of-order output (issue #8844).
+					 */
+					Datum period = IntervalPGetDatum(state->gapfill_interval);
+					int64 period_us = state->gapfill_interval->time;
+					TimestampTz candidate = state->next_timestamp;
+					next = TimestampGetDatum(candidate);
+					Datum local_ts;
+					Datum local_bucket;
 
-				/* Add interval */
-				next = DirectFunctionCall2(timestamp_pl_interval,
-										   next,
-										   IntervalPGetDatum(state->next_offset));
+					/*
+					 * During DST transitions the aligned bucket may equal or
+					 * precede the current position. Advance the candidate
+					 * until we find the next distinct bucket boundary.
+					 */
+					while (DatumGetTimestampTz(next) <= state->next_timestamp)
+					{
+						candidate += period_us;
+						local_ts = DirectFunctionCall2(timestamptz_zone,
+													   tzname,
+													   TimestampTzGetDatum(candidate));
+						local_bucket = DirectFunctionCall2(ts_timestamp_bucket, period, local_ts);
+						next = DirectFunctionCall2(timestamp_zone, tzname, local_bucket);
 
-				/* Convert back to specified timezone */
-				next = DirectFunctionCall2(timestamp_zone, tzname, next);
+						/*
+						 * DST fix-up: during fall-back, timestamp_zone may pick
+						 * the standard-time interpretation, placing the bucket
+						 * start after the candidate. Subtract periods until the
+						 * bucket is at or before the candidate (same fix-up as
+						 * ts_timestamptz_timezone_bucket, issue #9136).
+						 */
+						while (DatumGetTimestampTz(next) > candidate)
+							next = DirectFunctionCall2(timestamptz_mi_interval, next, period);
+					}
+				}
 			}
 			else
 			{

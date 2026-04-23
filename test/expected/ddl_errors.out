@@ -117,3 +117,8 @@ ERROR:  invalid tablespace name
 select set_number_partitions(NULL,NULL);
 ERROR:  hypertable cannot be NULL
 \set ON_ERROR_STOP 1
+\set ON_ERROR_STOP 0
+CREATE TABLE t1(time timestamptz) with (tsdb.hypertable,tsdb.chunk_interval='-1 day');
+NOTICE:  using column "time" as partitioning column
+ERROR:  invalid interval for timestamp with time zone dimension
+\set ON_ERROR_STOP 1

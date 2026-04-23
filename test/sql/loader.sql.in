@@ -140,30 +140,19 @@ SELECT format($$\! utils/test_fatal_command.sh %1$s "CREATE EXTENSION timescaled
 SELECT * FROM test.extension;
 
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
---broken version and drop
 CREATE EXTENSION timescaledb VERSION 'mock-broken';
 
-\set ON_ERROR_STOP 0
---intentional broken version
 SELECT * FROM test.extension;
 SELECT 1;
 SELECT 1;
---cannot drop extension; already loaded broken version
-DROP EXTENSION timescaledb;
-\set ON_ERROR_STOP 1
-
-\c :TEST_DBNAME_2 :ROLE_SUPERUSER
---can drop extension now. Since drop first command.
 DROP EXTENSION timescaledb;
 SELECT * FROM test.extension;
 
---broken version and update to fixed
+--cannot update extension; already loaded version
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 CREATE EXTENSION timescaledb VERSION 'mock-broken';
-\set ON_ERROR_STOP 0
---intentional broken version
 SELECT 1;
---cannot update extension; already loaded bad version
+\set ON_ERROR_STOP 0
 ALTER EXTENSION timescaledb UPDATE TO 'mock-5';
 \set ON_ERROR_STOP 1
 

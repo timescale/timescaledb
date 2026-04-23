@@ -15,18 +15,22 @@ jobs:
 
     steps:
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get purge llvm-16 llvm-17 llvm-18 clang-16 clang-17 clang-18
-        sudo apt-get install llvm-19 llvm-19-dev clang-19 libclang-19-dev clang-tidy-19 libcurl4-openssl-dev
-        sudo ln -sf /usr/bin/clang-tidy-19 /usr/bin/clang-tidy
+    - name: Install Linux Dependencies
+      uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+      with:
+        timeout_minutes: 3
+        max_attempts: 3
+        command: |
+          sudo apt-get update
+          sudo apt-get purge llvm-16 llvm-17 llvm-18 clang-16 clang-17 clang-18
+          sudo apt-get install llvm-19 llvm-19-dev clang-19 libclang-19-dev clang-tidy-19 libcurl4-openssl-dev
+          sudo ln -sf /usr/bin/clang-tidy-19 /usr/bin/clang-tidy
 
     - name: Checkout timescaledb
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     - name: Checkout pg_ladybug
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         repository: 'timescale/pg_ladybug'
         path: 'pg_ladybug'
@@ -44,6 +48,7 @@ jobs:
         clang-tidy --load /usr/local/lib/libPostgresCheck.so --checks='-*,postgres-*' --list-checks | grep postgres
 
     - name: Configure timescaledb
+      timeout-minutes: 3
       run: |
         # installing postgres headers pulls in llvm-17 which confuses pg_ladybug build process so we install this here instead of at beginning
         sudo apt-get install postgresql-server-dev-16

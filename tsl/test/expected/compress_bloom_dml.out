@@ -1,0 +1,244 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+create table dml_test(
+    ts int,
+    o bigint,
+    boo bigint,
+    foo bigint,
+    sby bigint);
+select create_hypertable('dml_test', 'ts', create_default_indexes=>false);
+   create_hypertable   
+-----------------------
+ (1,public,dml_test,t)
+
+insert into dml_test select x, (30000-x), x%2000, x+100, x%5 from generate_series(1, 50000) x;
+alter table dml_test set (
+    timescaledb.compress,
+    timescaledb.order_by='o',
+    timescaledb.segment_by='sby',
+    timescaledb.compress_index = 'bloom(foo, boo), bloom(boo)');
+select count(compress_chunk(x)) from show_chunks('dml_test') x;
+ count 
+-------
+     1
+
+vacuum analyze dml_test;
+-- 2 filter clauses
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from dml_test where foo = 1001 and boo = 1002;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+   Vectorized Filter: ((foo = 1001) AND (boo = 1002))
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
+         Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_boo_foo, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_boo, TEST-HASHES::bigint[]))
+         Rows Removed by Filter: 50
+
+SET timescaledb.enable_dml_bloom_filter = off;
+BEGIN;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+UPDATE dml_test SET foo = foo+1 WHERE foo = 1001 AND boo = 1002;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 50
+   Batches filtered after decompression: 50
+   ->  Update on dml_test (actual rows=0.00 loops=1)
+         Update on _hyper_1_1_chunk dml_test_1
+         ->  Result (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk dml_test_1 (actual rows=0.00 loops=1)
+                     Filter: ((foo = 1001) AND (boo = 1002))
+
+ROLLBACK;
+SET timescaledb.enable_dml_bloom_filter = on;
+BEGIN;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+UPDATE dml_test SET foo = foo+1 WHERE foo = 1001 AND boo = 1002;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 50
+   Compressed batches filtered: 50
+   Batches checked by bloom: 50
+   Batches pruned by bloom: 50
+   ->  Update on dml_test (actual rows=0.00 loops=1)
+         Update on _hyper_1_1_chunk dml_test_1
+         ->  Result (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk dml_test_1 (actual rows=0.00 loops=1)
+                     Filter: ((foo = 1001) AND (boo = 1002))
+
+ROLLBACK;
+SET timescaledb.enable_dml_bloom_filter = off;
+BEGIN;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+DELETE FROM dml_test WHERE foo = 1001 AND boo = 1002;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 50
+   Batches filtered after decompression: 50
+   ->  Delete on dml_test (actual rows=0.00 loops=1)
+         Delete on _hyper_1_1_chunk dml_test_1
+         ->  Seq Scan on _hyper_1_1_chunk dml_test_1 (actual rows=0.00 loops=1)
+               Filter: ((foo = 1001) AND (boo = 1002))
+
+ROLLBACK;
+SET timescaledb.enable_dml_bloom_filter = on;
+BEGIN;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+DELETE FROM dml_test WHERE foo = 1001 AND boo = 1002;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 50
+   Compressed batches filtered: 50
+   Batches checked by bloom: 50
+   Batches pruned by bloom: 50
+   ->  Delete on dml_test (actual rows=0.00 loops=1)
+         Delete on _hyper_1_1_chunk dml_test_1
+         ->  Seq Scan on _hyper_1_1_chunk dml_test_1 (actual rows=0.00 loops=1)
+               Filter: ((foo = 1001) AND (boo = 1002))
+
+ROLLBACK;
+-- 1 filter clause
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from dml_test where foo = 12;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
+   Vectorized Filter: (foo = 12)
+   Rows Removed by Filter: 50000
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=50.00 loops=1)
+
+SET timescaledb.enable_dml_bloom_filter = off;
+BEGIN;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+UPDATE dml_test SET foo = foo+1 WHERE foo = 12;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 50
+   Batches filtered after decompression: 50
+   ->  Update on dml_test (actual rows=0.00 loops=1)
+         Update on _hyper_1_1_chunk dml_test_1
+         ->  Result (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk dml_test_1 (actual rows=0.00 loops=1)
+                     Filter: (foo = 12)
+
+ROLLBACK;
+SET timescaledb.enable_dml_bloom_filter = on;
+BEGIN;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+UPDATE dml_test SET foo = foo+1 WHERE foo = 12;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 50
+   Batches filtered after decompression: 50
+   ->  Update on dml_test (actual rows=0.00 loops=1)
+         Update on _hyper_1_1_chunk dml_test_1
+         ->  Result (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk dml_test_1 (actual rows=0.00 loops=1)
+                     Filter: (foo = 12)
+
+ROLLBACK;
+SET timescaledb.enable_dml_bloom_filter = off;
+BEGIN;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+DELETE FROM dml_test WHERE foo = 12;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 50
+   Batches filtered after decompression: 50
+   ->  Delete on dml_test (actual rows=0.00 loops=1)
+         Delete on _hyper_1_1_chunk dml_test_1
+         ->  Seq Scan on _hyper_1_1_chunk dml_test_1 (actual rows=0.00 loops=1)
+               Filter: (foo = 12)
+
+ROLLBACK;
+SET timescaledb.enable_dml_bloom_filter = on;
+BEGIN;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+DELETE FROM dml_test WHERE foo = 12;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 50
+   Batches filtered after decompression: 50
+   ->  Delete on dml_test (actual rows=0.00 loops=1)
+         Delete on _hyper_1_1_chunk dml_test_1
+         ->  Seq Scan on _hyper_1_1_chunk dml_test_1 (actual rows=0.00 loops=1)
+               Filter: (foo = 12)
+
+ROLLBACK;
+-- 1 filter clause, real updates
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+select * from dml_test where foo = 1002;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+   Vectorized Filter: (foo = 1002)
+   Rows Removed by Filter: 49999
+   ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=50.00 loops=1)
+
+SET timescaledb.enable_dml_bloom_filter = off;
+BEGIN;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+UPDATE dml_test SET foo = foo+1 WHERE foo = 1002;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 50
+   Batches filtered after decompression: 49
+   Batches decompressed: 1
+   Tuples decompressed: 1000
+   ->  Update on dml_test (actual rows=0.00 loops=1)
+         Update on _hyper_1_1_chunk dml_test_1
+         ->  Result (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk dml_test_1 (actual rows=1.00 loops=1)
+                     Filter: (foo = 1002)
+                     Rows Removed by Filter: 999
+
+ROLLBACK;
+SET timescaledb.enable_dml_bloom_filter = on;
+BEGIN;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+UPDATE dml_test SET foo = foo+1 WHERE foo = 1002;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 50
+   Batches filtered after decompression: 49
+   Batches decompressed: 1
+   Tuples decompressed: 1000
+   ->  Update on dml_test (actual rows=0.00 loops=1)
+         Update on _hyper_1_1_chunk dml_test_1
+         ->  Result (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk dml_test_1 (actual rows=1.00 loops=1)
+                     Filter: (foo = 1002)
+                     Rows Removed by Filter: 999
+
+ROLLBACK;
+SET timescaledb.enable_dml_bloom_filter = off;
+BEGIN;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+DELETE FROM dml_test WHERE foo = 1002;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 50
+   Batches filtered after decompression: 49
+   Batches decompressed: 1
+   Tuples decompressed: 1000
+   ->  Delete on dml_test (actual rows=0.00 loops=1)
+         Delete on _hyper_1_1_chunk dml_test_1
+         ->  Seq Scan on _hyper_1_1_chunk dml_test_1 (actual rows=1.00 loops=1)
+               Filter: (foo = 1002)
+               Rows Removed by Filter: 999
+
+ROLLBACK;
+SET timescaledb.enable_dml_bloom_filter = on;
+BEGIN;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF)
+DELETE FROM dml_test WHERE foo = 1002;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches scanned: 50
+   Batches filtered after decompression: 49
+   Batches decompressed: 1
+   Tuples decompressed: 1000
+   ->  Delete on dml_test (actual rows=0.00 loops=1)
+         Delete on _hyper_1_1_chunk dml_test_1
+         ->  Seq Scan on _hyper_1_1_chunk dml_test_1 (actual rows=1.00 loops=1)
+               Filter: (foo = 1002)
+               Rows Removed by Filter: 999
+
+ROLLBACK;

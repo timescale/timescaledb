@@ -140,6 +140,13 @@ static void row_compressor_append_row(RowCompressor *row_compressor, TupleTableS
 static void row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer,
 								 bool changed_groups);
 
+static int find_segmentby_candidates(CompressionSettings *settings, TupleDesc in_desc,
+									 ColumnAnalysis *candidates);
+static void process_segmentby_candidate_value(ColumnAnalysis *ca, Datum val, bool is_null);
+static ArrayType *analyze_segmentby_candidates(ColumnAnalysis *candidates, int n_candidates);
+static ArrayType *analyze_and_get_segmentby(CompressionSettings *settings,
+											RowCompressor *compressor);
+
 /********************
  ** compress_chunk **
  ********************/
@@ -597,7 +604,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 }
 
 Tuplesortstate *
-compression_create_tuplesort_state(CompressionSettings *settings, Relation rel)
+compression_create_tuplesort_state(CompressionSettings *settings, Relation rel, bool random_access)
 {
 	TupleDesc tupdesc = RelationGetDescr(rel);
 	int num_segmentby = ts_array_length(settings->fd.segmentby);
@@ -643,7 +650,7 @@ compression_create_tuplesort_state(CompressionSettings *settings, Relation rel)
 								nulls_first,
 								maintenance_work_mem,
 								NULL,
-								false /*=randomAccess*/);
+								random_access);
 }
 
 static Tuplesortstate *
@@ -653,7 +660,7 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 	Tuplesortstate *tuplesortstate;
 	TableScanDesc scan;
 	TupleTableSlot *slot;
-	tuplesortstate = compression_create_tuplesort_state(settings, in_rel);
+	tuplesortstate = compression_create_tuplesort_state(settings, in_rel, false);
 	scan = table_beginscan(in_rel, GetActiveSnapshot(), 0, NULL);
 	slot = table_slot_create(in_rel, NULL);
 
@@ -984,6 +991,11 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 		{
 			tuplesort_performsort(compressor->sort_state);
 
+			if (compressor->needs_analyze_segmentby)
+			{
+				tsl_compressor_apply_segmentby_and_rebuild(compressor, bulk_writer);
+				compressor->needs_analyze_segmentby = false;
+			}
 			TupleTableSlot *slot = MakeTupleTableSlot(compressor->in_desc, &TTSOpsMinimalTuple);
 
 			while (tuplesort_gettupleslot(compressor->sort_state,
@@ -1004,8 +1016,14 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 	else
 	{
 		if (compressor->rows_compressed_into_current_value > 0)
+		{
+			Ensure(!compressor->needs_analyze_segmentby,
+				   "trying to analyze segmentby with no sort state");
 			row_compressor_flush(compressor, bulk_writer, false);
+		}
 	}
+
+	Assert(!compressor->needs_analyze_segmentby);
 }
 
 void
@@ -1013,12 +1031,132 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
 {
 	if (compressor->sort_state)
 		tuplesort_end(compressor->sort_state);
+	tsl_compressor_flush(compressor, bulk_writer);
 	if (compressor->invalidation)
 		pfree(compressor->invalidation);
-	tsl_compressor_flush(compressor, bulk_writer);
 	row_compressor_close(compressor);
 	bulk_writer_close(bulk_writer);
 	table_close(bulk_writer->out_rel, NoLock);
+}
+
+/*
+ * Determine the segmentby column from tuples in Tuplesortstate in the RowCompressor,
+ * then rebuild the compressed chunk and compressor to use it.
+ */
+void
+tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *compressor, BulkWriter *bulk_writer)
+{
+	if (compressor->sort_state == NULL || compressor->tuples_to_sort == 0)
+	{
+		return;
+	}
+
+	Oid old_compressed_relid = RelationGetRelid(bulk_writer->out_rel);
+	CompressionSettings *settings =
+		ts_compression_settings_get_by_compress_relid(old_compressed_relid);
+	Chunk *src_chunk = ts_chunk_get_by_relid(settings->fd.relid, true);
+	Chunk *old_compressed_chunk = ts_chunk_get_by_relid(old_compressed_relid, true);
+	Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
+	Hypertable *compress_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+
+	if (settings->fd.segmentby)
+	{
+		/* Something went wrong, but just throw a warning to not stop workflow */
+		elog(WARNING, "trying to apply segmentby when segmentby is not NULL");
+		return;
+	}
+
+	/* Can happen for partial chunks, but problematic if happening otherwise */
+	if (!CheckRelationOidLockedByMe(src_chunk->table_id, AccessExclusiveLock, false))
+	{
+		/* Since the segmentby rebuild is triggered by a DML, expect at least RowExclusiveLock */
+		Ensure(CheckRelationOidLockedByMe(src_chunk->table_id, RowExclusiveLock, true),
+			   "hypertable chunk \"%s\".\"%s\" must have at least a RowExclusiveLock "
+			   "to apply segmentby",
+			   NameStr(src_chunk->fd.schema_name),
+			   NameStr(src_chunk->fd.table_name));
+
+		elog(DEBUG1,
+			 "chunk \"%s\".\"%s\" does not have AccessExclusiveLock "
+			 "but trying to apply segmentby",
+			 NameStr(src_chunk->fd.schema_name),
+			 NameStr(src_chunk->fd.table_name));
+	}
+
+	Ensure(CheckRelationOidLockedByMe(old_compressed_relid, AccessExclusiveLock, false),
+		   "compressed chunk \"%s\".\"%s\" must have AccessExclusiveLock "
+		   "to apply segmentby",
+		   NameStr(old_compressed_chunk->fd.schema_name),
+		   NameStr(old_compressed_chunk->fd.table_name));
+
+	settings->fd.segmentby = analyze_and_get_segmentby(settings, compressor);
+
+	/* nothing qualified as segmentby */
+	if (!settings->fd.segmentby)
+	{
+		return;
+	}
+
+	if (ts_array_length(settings->fd.segmentby) != 1)
+	{
+		elog(WARNING,
+			 "expected exactly one segmentby column, got %d",
+			 ts_array_length(settings->fd.segmentby));
+		settings->fd.segmentby = NULL;
+		return;
+	}
+
+	if (ts_array_is_member(settings->fd.orderby,
+						   ts_array_get_element_text(settings->fd.segmentby, 1)))
+	{
+		elog(DEBUG1, "selected segmentby column is also an orderby column, skipping");
+		settings->fd.segmentby = NULL;
+		return;
+	}
+
+	Relation in_rel = table_open(src_chunk->table_id, NoLock);
+
+	/* Tear down old internals */
+	Tuplesortstate *old_sort_state = compressor->sort_state;
+	int saved_tuple_sort_limit = compressor->tuple_sort_limit;
+	TupleDesc old_in_desc = compressor->in_desc;
+	compressor->sort_state = NULL;
+	row_compressor_close(compressor);
+	bulk_writer_close(bulk_writer);
+	table_close(bulk_writer->out_rel, NoLock);
+
+	/* Create before drop. We must update settings first to point to the new chunk. */
+	Chunk *new_compressed_chunk =
+		create_compress_chunk(compress_ht, src_chunk, InvalidOid, false, settings);
+	ts_chunk_set_compressed_chunk(src_chunk, new_compressed_chunk->fd.id);
+	ts_chunk_drop(old_compressed_chunk, DROP_RESTRICT, -1);
+
+	/* Re-init bulk writer in place and compressor against the new compressed relation */
+	Relation out_rel = table_open(new_compressed_chunk->table_id, RowExclusiveLock);
+	*bulk_writer = bulk_writer_build(out_rel, 0);
+	row_compressor_init(compressor, settings, RelationGetDescr(in_rel), RelationGetDescr(out_rel));
+	compressor->sort_state = compression_create_tuplesort_state(settings, in_rel, false);
+	compressor->tuple_sort_limit = saved_tuple_sort_limit;
+
+	/* Transfer from old sort state into the new one with segmentby settings */
+	TupleTableSlot *slot = MakeTupleTableSlot(old_in_desc, &TTSOpsMinimalTuple);
+
+	while (tuplesort_gettupleslot(old_sort_state,
+								  true /*=forward*/,
+								  false /*=copy*/,
+								  slot,
+								  NULL /*=abbrev*/))
+	{
+		tuplesort_puttupleslot(compressor->sort_state, slot);
+		compressor->tuples_to_sort++;
+	}
+
+	ExecDropSingleTupleTableSlot(slot);
+	tuplesort_performsort(compressor->sort_state);
+	tuplesort_end(old_sort_state);
+
+	FreeTupleDesc(old_in_desc);
+	table_close(in_rel, NoLock);
 }
 
 /*
@@ -1028,7 +1166,8 @@ tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
  * Tuplesortstate and sort them before flushing to the output relation.
  */
 RowCompressor *
-tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int sort_limit)
+tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int sort_limit,
+					bool created_compressed_chunk)
 {
 	RowCompressor *compressor = palloc0(sizeof(RowCompressor));
 	CompressionSettings *settings = ts_compression_settings_get(in_rel->rd_id);
@@ -1038,7 +1177,18 @@ tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int so
 
 	if (sort)
 	{
-		compressor->sort_state = compression_create_tuplesort_state(settings, in_rel);
+		/*
+		 * Analyze segmentby on first flush if none is configured
+		 * and if client is not responsible for sorting (sort = true)
+		 */
+		compressor->needs_analyze_segmentby = ts_guc_enable_direct_compress_auto_segmentby &&
+											  (settings->fd.segmentby == NULL) &&
+											  created_compressed_chunk;
+		compressor->sort_state =
+			compression_create_tuplesort_state(settings,
+											   in_rel,
+											   compressor
+												   ->needs_analyze_segmentby); /* random_access */
 		compressor->tuple_sort_limit = sort_limit;
 	}
 
@@ -1495,6 +1645,8 @@ segment_info_new(Form_pg_attribute column_attr)
 	SegmentInfo *segment_info = palloc(sizeof(*segment_info));
 
 	*segment_info = (SegmentInfo){
+		.attnum = column_attr->attnum,
+		.attname = pstrdup(NameStr(column_attr->attname)),
 		.typlen = column_attr->attlen,
 		.typ_by_val = column_attr->attbyval,
 	};
@@ -2470,6 +2622,12 @@ tsl_compressed_data_column_size(PG_FUNCTION_ARGS)
 	/* Get compressed data header and validate */
 	header = get_compressed_data_header(compressed_data);
 
+	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
+	{
+		/* All values are NULL, so size is 0 */
+		PG_RETURN_INT32(0);
+	}
+
 	/* Initialize the decompression iterator */
 	iter = definitions[header->compression_algorithm].iterator_init_forward(PointerGetDatum(header),
 																			element_type);
@@ -2767,4 +2925,194 @@ algorithm_definition(CompressionAlgorithm algo)
 {
 	Assert(algo > 0 && algo < _END_COMPRESSION_ALGORITHMS);
 	return &definitions[algo];
+}
+
+/***********************
+ ** analyze_segmentby **
+ ***********************/
+
+/*
+ * Build the list of candidate columns for segmentby analysis.
+ * Returns the number of candidates found.
+ */
+static int
+find_segmentby_candidates(CompressionSettings *settings, TupleDesc in_desc,
+						  ColumnAnalysis *candidates)
+{
+	int n_candidates = 0;
+
+	for (int i = 0; i < in_desc->natts; i++)
+	{
+		Form_pg_attribute attr = TupleDescAttr(in_desc, i);
+
+		if (!ts_accept_for_segmentby(settings, attr))
+		{
+			continue;
+		}
+
+		ColumnAnalysis *ca = &candidates[n_candidates++];
+		ca->seg_info = segment_info_new(attr);
+		ca->n_distinct = 0;
+		ca->rejected = false;
+
+		/* Limit scan to first 10 eligible columns */
+		if (n_candidates >= MAX_SEGMENTBY_CANDIDATES)
+		{
+			break;
+		}
+	}
+
+	return n_candidates;
+}
+
+/*
+ * Track a single value for one candidate column.
+ * If the value matches an existing distinct entry, increment its count.
+ * Otherwise add a new entry, or mark the column as rejected.
+ */
+static void
+process_segmentby_candidate_value(ColumnAnalysis *ca, Datum val, bool is_null)
+{
+	for (int j = 0; j < ca->n_distinct; j++)
+	{
+		DistinctEntry *entry = &ca->entries[j];
+		ca->seg_info->val = entry->value;
+		ca->seg_info->is_null = entry->is_null;
+
+		if (segment_info_datum_is_in_group(ca->seg_info, val, is_null))
+		{
+			entry->count++;
+			return;
+		}
+	}
+
+	if (ca->n_distinct < MAX_SEGMENTBY_DISTINCT)
+	{
+		DistinctEntry *entry = &ca->entries[ca->n_distinct];
+		entry->value = datumCopy(val, ca->seg_info->typ_by_val, ca->seg_info->typlen);
+		entry->is_null = is_null;
+		entry->count = 1;
+		ca->n_distinct++;
+	}
+	else
+	{
+		ca->rejected = true;
+	}
+}
+
+/*
+ * Pick the first non-rejected candidate where every distinct value has at
+ * least batch_size_limit rows. Returns the column name as a single-element
+ * text ArrayType, or NULL if no candidate qualifies.
+ */
+static ArrayType *
+analyze_segmentby_candidates(ColumnAnalysis *candidates, int n_candidates)
+{
+	for (int c = 0; c < n_candidates; c++)
+	{
+		ColumnAnalysis *ca = &candidates[c];
+		if (ca->rejected || ca->n_distinct == 0)
+		{
+			continue;
+		}
+
+		bool qualifies = true;
+		for (int j = 0; j < ca->n_distinct; j++)
+		{
+			if (ca->entries[j].count < ts_guc_direct_compress_segmentby_batch_size_limit)
+			{
+				qualifies = false;
+				break;
+			}
+		}
+
+		if (qualifies)
+		{
+			elog(DEBUG1,
+				 "select_segmentby: selected column \"%s\" with %d distinct values",
+				 ca->seg_info->attname,
+				 ca->n_distinct);
+			return ts_array_add_element_text(NULL, ca->seg_info->attname);
+		}
+	}
+
+	return NULL;
+}
+
+static ArrayType *
+analyze_and_get_segmentby(CompressionSettings *settings, RowCompressor *compressor)
+{
+	if (!compressor->sort_state)
+	{
+		return NULL;
+	}
+
+	/*
+	 * Skip analysis if we don't have enough rows for a meaningful sample.
+	 */
+	if (compressor->tuples_to_sort < ts_guc_direct_compress_segmentby_min_rows)
+	{
+		return NULL;
+	}
+
+	/* Step 1: Prepare ColumnAnalysis */
+	TupleDesc in_desc = compressor->in_desc;
+	ColumnAnalysis *candidates = palloc0(sizeof(ColumnAnalysis) * MAX_SEGMENTBY_CANDIDATES);
+	int n_candidates = find_segmentby_candidates(settings, in_desc, candidates);
+
+	if (n_candidates == 0)
+	{
+		pfree(candidates);
+		return NULL;
+	}
+
+	/*
+	 * Step 2: Load data and process necessary information for future analysis.
+	 * Current Criteria: Reject candidates with too many distinct values or too few rows per value
+	 */
+	TupleTableSlot *slot = MakeTupleTableSlot(in_desc, &TTSOpsMinimalTuple);
+	int candidates_rejected = 0;
+	while (tuplesort_gettupleslot(compressor->sort_state,
+								  true /*=forward*/,
+								  false /*=copy*/,
+								  slot,
+								  NULL /*=abbrev*/))
+	{
+		for (int c = 0; c < n_candidates; c++)
+		{
+			ColumnAnalysis *ca = &candidates[c];
+			if (ca->rejected)
+			{
+				continue;
+			}
+
+			bool is_null;
+			Datum val = slot_getattr(slot, ca->seg_info->attnum, &is_null);
+			process_segmentby_candidate_value(ca, val, is_null);
+
+			if (ca->rejected)
+			{
+				candidates_rejected++;
+			}
+		}
+
+		if (candidates_rejected == n_candidates)
+		{
+			break;
+		}
+	}
+
+	ExecDropSingleTupleTableSlot(slot);
+	tuplesort_rescan(compressor->sort_state);
+
+	/* Step 3: Evaluate segmentby candidate */
+	ArrayType *result = NULL;
+
+	if (candidates_rejected != n_candidates)
+	{
+		result = analyze_segmentby_candidates(candidates, n_candidates);
+	}
+
+	pfree(candidates);
+	return result;
 }

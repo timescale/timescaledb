@@ -441,7 +441,8 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		 */
 		EventTriggerAlterTableStart(create_dummy_query());
 		/* create compressed chunk and a new table */
-		compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid);
+		compress_ht_chunk =
+			create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid, false, NULL);
 		/* Associate compressed chunk with main chunk. */
 		ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
 		new_compressed_chunk = true;
@@ -774,7 +775,8 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	 */
 	EventTriggerAlterTableStart(create_dummy_query());
 	/* Create compressed chunk using existing table */
-	compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table);
+	compress_ht_chunk =
+		create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table, false, NULL);
 	EventTriggerAlterTableEnd();
 
 	/* Insert empty stats to compression_chunk_size */
@@ -821,6 +823,17 @@ Oid
 tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress)
 {
 	Oid uncompressed_chunk_id = chunk->table_id;
+
+	if (ts_chunk_is_frozen(chunk))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("chunk \"%s.%s\" is frozen, skipping compression",
+						NameStr(chunk->fd.schema_name),
+						NameStr(chunk->fd.table_name)),
+				 errhint("Use _timescaledb_functions.unfreeze_chunk to unfreeze.")));
+		return uncompressed_chunk_id;
+	}
 
 	write_logical_replication_msg_compression_start();
 
@@ -1007,7 +1020,13 @@ Chunk *
 tsl_compression_chunk_create(Hypertable *compressed_ht, Chunk *src_chunk)
 {
 	/* Create a new compressed chunk */
-	return create_compress_chunk(compressed_ht, src_chunk, InvalidOid);
+	return create_compress_chunk(
+		compressed_ht,
+		src_chunk,
+		InvalidOid,
+		ts_guc_enable_direct_compress_auto_segmentby, /* skip_segmentby_default
+													   */
+		NULL);
 }
 
 Datum

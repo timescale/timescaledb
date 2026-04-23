@@ -43,6 +43,7 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_jobs_refresh_ranges.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
@@ -137,21 +138,6 @@ init_materialization_invalidation_log_scan_by_materialization_id(ScanIterator *i
 		Int32GetDatum(materialization_id));
 }
 
-static void
-init_materialization_ranges_scan_by_materialization_id(ScanIterator *iterator,
-													   const int32 materialization_id)
-{
-	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
-											CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
-											CONTINUOUS_AGGS_MATERIALIZATION_RANGES_IDX);
-
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_continuous_aggs_materialization_ranges_materialization_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(materialization_id));
-}
-
 static int32
 number_of_continuous_aggs_attached(int32 raw_hypertable_id)
 {
@@ -228,23 +214,6 @@ ts_materialization_invalidation_log_delete(int32 mat_hypertable_id)
 
 	elog(DEBUG1, "materialization log delete for hypertable %d", mat_hypertable_id);
 	init_materialization_invalidation_log_scan_by_materialization_id(&iterator, mat_hypertable_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	}
-}
-
-static void
-ts_materialization_ranges_delete(int32 mat_hypertable_id)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
-													RowExclusiveLock,
-													CurrentMemoryContext);
-
-	elog(DEBUG1, "materialization log delete for hypertable %d", mat_hypertable_id);
-	init_materialization_ranges_scan_by_materialization_id(&iterator, mat_hypertable_id);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -911,7 +880,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		}
 
 		ts_materialization_invalidation_log_delete(form.mat_hypertable_id);
-		ts_materialization_ranges_delete(form.mat_hypertable_id);
 
 		if (!raw_hypertable_has_other_caggs)
 		{
@@ -920,6 +888,9 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 
 		/* Delete watermark */
 		ts_cagg_watermark_delete_by_mat_hypertable_id(form.mat_hypertable_id);
+
+		/* Delete any refresh ranges registered for this CAgg */
+		ts_cagg_jobs_refresh_ranges_delete_by_mat_hypertable_id(form.mat_hypertable_id);
 	}
 
 	cagg_bucket_function_delete(cadata->mat_hypertable_id);
@@ -1501,6 +1472,25 @@ ts_compute_beginning_of_the_next_bucket_variable(int64 timeval,
 	return ts_time_value_to_internal(val_new, TIMESTAMPOID);
 }
 
+/*
+ * Calculates the beginning of the current bucket (i.e., floors timeval to the
+ * nearest bucket boundary).
+ *
+ * The algorithm is just:
+ *
+ * val = time_bucket(bucket_size, val)
+ */
+int64
+ts_compute_start_of_current_bucket_variable(int64 timeval, const ContinuousAggBucketFunction *bf)
+{
+	/*
+	 * It's OK to use TIMESTAMPOID here.
+	 * See the comment in ts_compute_inscribed_bucketed_refresh_window_variable()
+	 */
+	Datum val_beg = ts_internal_to_time_value(timeval, TIMESTAMPOID);
+	return ts_time_value_to_internal(generic_time_bucket(bf, val_beg), TIMESTAMPOID);
+}
+
 Oid
 ts_cagg_permissions_check(Oid cagg_oid, Oid userid)
 {
@@ -1527,6 +1517,32 @@ ts_continuous_agg_get_query(ContinuousAgg *cagg)
 										  NameStr(cagg->data.partial_view_name),
 										  false);
 
+	cagg_view_rel = table_open(cagg_view_oid, AccessShareLock);
+	cagg_view_rules = cagg_view_rel->rd_rules;
+	Assert(cagg_view_rules && cagg_view_rules->numLocks == 1);
+
+	rule = cagg_view_rules->rules[0];
+	if (rule->event != CMD_SELECT)
+		ereport(ERROR, (errcode(ERRCODE_TS_UNEXPECTED), errmsg("unexpected rule event for view")));
+
+	cagg_view_query = (Query *) copyObject(linitial(rule->actions));
+	table_close(cagg_view_rel, NoLock);
+
+	return cagg_view_query;
+}
+
+Query *
+ts_continuous_agg_get_finalized_query(ContinuousAgg *cagg)
+{
+	Oid cagg_view_oid;
+	Relation cagg_view_rel;
+	RuleLock *cagg_view_rules;
+	RewriteRule *rule;
+	Query *cagg_view_query;
+
+	cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.user_view_schema),
+										  NameStr(cagg->data.user_view_name),
+										  false);
 	cagg_view_rel = table_open(cagg_view_oid, AccessShareLock);
 	cagg_view_rules = cagg_view_rel->rd_rules;
 	Assert(cagg_view_rules && cagg_view_rules->numLocks == 1);

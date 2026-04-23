@@ -60,9 +60,9 @@
 
 #include "bgw_policy/compression_api.h"
 
-#ifdef USE_ASSERT_CHECKING
 static const char *sparse_index_types[] = { "min", "max" };
 
+#ifdef USE_ASSERT_CHECKING
 static bool
 is_sparse_index_type(const char *type)
 {
@@ -112,7 +112,7 @@ compression_column_segment_metadata_name(const char *type, int16 column_index)
 	Assert(column_index > 0);
 	int ret =
 		snprintf(buf, NAMEDATALEN, COMPRESSION_COLUMN_METADATA_PATTERN_V1, type, column_index);
-	if (ret < 0 || ret > NAMEDATALEN)
+	if (ret < 0 || ret >= NAMEDATALEN)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("bad segment metadata column name")));
@@ -380,6 +380,12 @@ create_sparse_index_column_def(List *attributes, const char *metadata_type)
 		 * result is almost incompressible with lz4 (~2%), so disable it.
 		 */
 		column_def->storage = TYPSTORAGE_EXTERNAL;
+
+		/* Composite bloom filters are more selective, try to store them inline. */
+		if (list_length(column_names) > 1)
+		{
+			column_def->storage = TYPSTORAGE_MAIN;
+		}
 	}
 	else /* either min or max */
 	{
@@ -685,14 +691,15 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
  *
  */
 Chunk *
-create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
+create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
+					  bool skip_segmentby_default, CompressionSettings *settings)
 {
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
 	Chunk *compress_chunk;
 	int namelen;
 	Oid tablespace_oid;
-
+	bool settings_provided = (settings != NULL);
 	Assert(compress_ht->space->num_dimensions == 0);
 
 	/* Create a new catalog entry for chunk based on uncompressed chunk */
@@ -739,29 +746,36 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	 * for now.
 	 */
 	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
-	CompressionSettings *settings = ts_compression_settings_get(src_chunk->hypertable_relid);
-
-	/*
-	 * On hypertables created with CREATE TABLE ... WITH we enable compression
-	 * by default but do not create CompressionSettings immediately assuming
-	 * that we have more information available when the first compression
-	 * is actually triggered allowing us to generate better compression
-	 * settings.
-	 */
-
-	if (!settings)
+	if (!settings_provided)
 	{
-		settings = ts_compression_settings_create(src_chunk->hypertable_relid,
-												  InvalidOid,
-												  NULL,
-												  NULL,
-												  NULL,
-												  NULL,
-												  NULL);
-	}
+		settings = ts_compression_settings_get(src_chunk->hypertable_relid);
 
-	Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
-	compression_settings_set_defaults(ht, settings, ts_alter_table_with_clause_parse(NIL));
+		/*
+		 * On hypertables created with CREATE TABLE ... WITH we enable compression
+		 * by default but do not create CompressionSettings immediately assuming
+		 * that we have more information available when the first compression
+		 * is actually triggered allowing us to generate better compression
+		 * settings.
+		 */
+
+		if (!settings)
+		{
+			settings = ts_compression_settings_create(src_chunk->hypertable_relid,
+													  InvalidOid,
+													  NULL,
+													  NULL,
+													  NULL,
+													  NULL,
+													  NULL);
+		}
+
+		Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
+
+		compression_settings_set_defaults(ht,
+										  settings,
+										  ts_alter_table_with_clause_parse(NIL),
+										  skip_segmentby_default);
+	}
 
 	if (OidIsValid(table_id))
 		compress_chunk->table_id = table_id;
@@ -779,7 +793,17 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 		elog(ERROR, "could not create columnstore chunk table");
 
 	/* Materialize current compression settings for this chunk */
-	ts_compression_settings_materialize(settings, src_chunk->table_id, compress_chunk->table_id);
+	if (!settings_provided)
+	{
+		ts_compression_settings_materialize(settings,
+											src_chunk->table_id,
+											compress_chunk->table_id);
+	}
+	else
+	{
+		settings->fd.compress_relid = compress_chunk->table_id;
+		ts_compression_settings_update(settings);
+	}
 
 	/* if the src chunk is not in the default tablespace, the compressed indexes
 	 * should also be in a non-default tablespace. IN the usual case, this is inferred
@@ -1054,6 +1078,21 @@ drop_column_from_compression_table(CompressionSettings *comp_settings, char *nam
 	cmd->missing_ok = true;
 	cmds = list_make1(cmd);
 
+	/* always try to drop sparse index metadata columns */
+	for (size_t i = 0; i < sizeof(sparse_index_types) / sizeof(sparse_index_types[0]); i++)
+	{
+		char *meta_name =
+			compressed_column_metadata_name_v2(sparse_index_types[i], (const char **) &name, 1);
+		if (get_attnum(relid, meta_name) != InvalidAttrNumber)
+		{
+			cmd = makeNode(AlterTableCmd);
+			cmd->subtype = AT_DropColumn;
+			cmd->name = meta_name;
+			cmd->missing_ok = true;
+			cmds = lappend(cmds, cmd);
+		}
+	}
+
 	if (jb)
 	{
 		SparseIndexSettings *parsed_settings = ts_convert_to_sparse_index_settings(jb);
@@ -1084,6 +1123,9 @@ drop_column_from_compression_table(CompressionSettings *comp_settings, char *nam
 								compressed_column_metadata_name_list_v2(bloom1_column_prefix,
 																		pair->values);
 							Assert(bloom_column_name != NULL);
+							/* No need to remove if its not there */
+							if (get_attnum(relid, bloom_column_name) == InvalidAttrNumber)
+								bloom_column_name = NULL;
 							break;
 						}
 					}
@@ -1199,6 +1241,20 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 	}
 
 	compression_settings_set_manually_for_alter(ht, settings, with_clause_options);
+
+	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	{
+		bool settings_changed = !with_clause_options[AlterTableFlagSegmentBy].is_default ||
+								!with_clause_options[AlterTableFlagOrderBy].is_default ||
+								!with_clause_options[AlterTableFlagIndex].is_default;
+		if (settings_changed)
+		{
+			ereport(NOTICE,
+					(errmsg("updated compression settings will only apply to future compressions"),
+					 errdetail("Existing compressed chunks will not be recompressed."),
+					 errhint("Use compress_chunk(chunk, recompress => true) to recompress.")));
+		}
+	}
 
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
@@ -1341,8 +1397,8 @@ validate_hypertable_for_compression(Hypertable *ht)
 /*
  * Get the default segment by value for a hypertable
  */
-static ArrayType *
-compression_setting_segmentby_get_default(const Hypertable *ht)
+ArrayType *
+tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 {
 	StringInfoData command;
 	StringInfoData result;
@@ -1789,7 +1845,8 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 
 void
 compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
-								  WithClauseResult *with_clause_options)
+								  WithClauseResult *with_clause_options,
+								  bool skip_segmentby_default)
 {
 	/* orderby arrays should always be in sync either all NULL or none */
 	Assert(
@@ -1800,9 +1857,10 @@ compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 	/* get default settings which will be stored at chunk level */
 	if (!(settings->fd.orderby) && with_clause_options[AlterTableFlagOrderBy].is_default)
 	{
-		if (!settings->fd.segmentby && with_clause_options[AlterTableFlagSegmentBy].is_default)
+		if (!skip_segmentby_default && !settings->fd.segmentby &&
+			with_clause_options[AlterTableFlagSegmentBy].is_default)
 		{
-			settings->fd.segmentby = compression_setting_segmentby_get_default(ht);
+			settings->fd.segmentby = tsl_compression_setting_segmentby_get_default(ht);
 		}
 		settings->fd.index = ts_remove_orderby_sparse_index(settings);
 		OrderBySettings obs = compression_setting_orderby_get_default(ht, settings->fd.segmentby);

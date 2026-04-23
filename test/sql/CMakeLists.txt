@@ -45,10 +45,10 @@ set(TEST_FILES
     pg_join.sql
     plain.sql
     plan_hypertable_inline.sql
+    qual_filtering.sql
     query.sql
     relocate_extension.sql
     reloptions.sql
-    repair.sql
     size_utils.sql
     sort_optimization.sql
     sql_query.sql
@@ -109,6 +109,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
     TEST_FILES
+    alter_table_memory.sql
     bgw_launcher.sql
     c_unit_tests.sql
     copy_memory_usage.sql

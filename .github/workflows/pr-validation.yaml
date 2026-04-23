@@ -21,26 +21,35 @@ jobs:
     runs-on: timescaledb-runner-arm64
     steps:
     - name: Checkout source
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         ref: ${{ github.event.pull_request.head.sha }}
         fetch-depth: 0
-    - name: Dump GitHub context (for debugging)
-      env:
-        GITHUB_CONTEXT: ${{ toJSON(github) }}
-      run: |
-        echo "GITHUB_CONTEXT: $GITHUB_CONTEXT"
     - name: Check number of commits
+      if: github.event.pull_request.auto_merge.merge_method != 'squash'
       shell: bash --norc --noprofile {0}
       env:
         BODY: ${{ github.event.pull_request.body }}
       run: |
+        base=${{ github.event.pull_request.base.sha }}
+        head=${{ github.event.pull_request.head.sha }}
+        count=`git rev-list --no-merges --count $base..$head`
+
+        # Hard limit of 5 commits per pull request. This check cannot
+        # be disabled via the Disable-check trailer or by using squash
+        # merge.
+        if [[ "$count" -gt 5 ]]; then
+          echo "Found $count commits in pull request (there must be no more than 5):"
+          git log --format=format:'- %h %s' $base..$head
+          echo
+          echo "This limit cannot be overridden. Please rebase and reduce"
+          echo "the number of commits to 5 or fewer."
+          exit 1
+        fi
+
         echo "$BODY" | egrep -qsi '^disable-check:.*\<commit-count\>'
-        if [[ $? -ne 0 ]] && [[ "${{ github.event.pull_request.auto_merge.merge_method }}" != "squash" ]]
+        if [[ $? -ne 0 ]]
         then
-          base=${{ github.event.pull_request.base.sha }}
-          head=${{ github.event.pull_request.head.sha }}
-          count=`git rev-list --no-merges --count $base..$head`
           if [[ "$count" -ne 1 ]]; then
             echo "Found $count commits in pull request (there should be only one):"
             git log --format=format:'- %h %s' $base..$head

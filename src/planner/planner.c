@@ -395,7 +395,6 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 			}
 		}
 	}
-
 	else if (IsA(node, Query))
 	{
 		Query *query = castNode(Query, node);
@@ -433,11 +432,15 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 
 					if (ht)
 					{
-						/* Mark hypertable RTEs we'd like to expand ourselves */
+						/* Mark hypertable RTEs we'd like to expand ourselves.
+						 * We skip the DML target relation (resultRelation != 0
+						 * in the current query) but allow non-target hypertables
+						 * in subqueries of UPDATE/DELETE to use TSDB expansion. */
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-							!IS_UPDL_CMD(context->rootquery) && query->resultRelation == 0 &&
-							rte->inh)
+							query->resultRelation == 0 && rte->inh)
+						{
 							rte_mark_for_expansion(rte);
+						}
 
 						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 						{
@@ -662,21 +665,26 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 #ifdef USE_TELEMETRY
 			ts_telemetry_function_info_gather(parse);
 #endif
+#if PG16_GE
+			if (ts_guc_enable_optimizations &&
+				ts_cm_functions->continuous_agg_apply_rewrites_tsl != NULL)
+				context.rootquery = ts_cm_functions->continuous_agg_apply_rewrites_tsl(parse);
+#endif
 			/*
 			 * Preprocess the hypertables in the query and warm up the caches.
 			 */
-			preprocess_query((Node *) parse, &context);
+			preprocess_query((Node *) context.rootquery, &context);
 
 			if (ts_guc_enable_optimizations)
-				ts_cm_functions->preprocess_query_tsl(parse, &cursor_opts);
+				ts_cm_functions->preprocess_query_tsl(context.rootquery, &cursor_opts);
 		}
 
 		if (prev_planner_hook != NULL)
 			/* Call any earlier hooks */
-			stmt = (prev_planner_hook) (parse, query_string, cursor_opts, bound_params);
+			stmt = (prev_planner_hook) (context.rootquery, query_string, cursor_opts, bound_params);
 		else
 			/* Call the standard planner */
-			stmt = standard_planner(parse, query_string, cursor_opts, bound_params);
+			stmt = standard_planner(context.rootquery, query_string, cursor_opts, bound_params);
 
 		if (ts_extension_is_loaded_and_not_upgrading())
 		{
@@ -1371,28 +1379,11 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 		case TS_REL_CHUNK_STANDALONE:
 		case TS_REL_CHUNK_CHILD:
 			/* Check for UPDATE/DELETE/MERGE (DML) on compressed chunks */
-			if (IS_UPDL_CMD(root->parse) && dml_involves_hypertable(root, ht, rti))
+			if ((IS_UPDL_CMD(root->parse) || root->parse->commandType == CMD_MERGE) &&
+				dml_involves_hypertable(root, ht, rti))
 			{
 				if (ts_cm_functions->set_rel_pathlist_dml != NULL)
 					ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
-				break;
-			}
-			/*
-			 * For MERGE command if there is an UPDATE or DELETE action, then
-			 * do not allow this to succeed on compressed chunks
-			 */
-			if (root->parse->commandType == CMD_MERGE && dml_involves_hypertable(root, ht, rti))
-			{
-				ListCell *ml;
-				foreach (ml, root->parse->mergeActionList)
-				{
-					MergeAction *action = (MergeAction *) lfirst(ml);
-					if (action->commandType == CMD_UPDATE || action->commandType == CMD_DELETE)
-					{
-						if (ts_cm_functions->set_rel_pathlist_dml != NULL)
-							ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
-					}
-				}
 				break;
 			}
 			TS_FALLTHROUGH;
@@ -1433,38 +1424,18 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	Query *query = root->parse;
 	Hypertable *ht;
 	const TsRelType type = ts_classify_relation(root, rel, &ht);
-	AclMode requiredPerms = 0;
-
-#if PG16_LT
-	requiredPerms = rte->requiredPerms;
-#else
-	if (rte->perminfoindex > 0)
-	{
-		RTEPermissionInfo *perminfo = getRTEPermissionInfo(query->rteperminfos, rte);
-		requiredPerms = perminfo->requiredPerms;
-	}
-#endif
 
 	switch (type)
 	{
 		case TS_REL_HYPERTABLE:
 		{
 			/* Mark hypertable RTEs we'd like to expand ourselves.
-			 * Hypertables inside inlineable functions don't get marked during the query
-			 * preprocessing step. Therefore we do an extra try here. However, we need to
-			 * be careful for UPDATE/DELETE as Postgres (in at least version 12) plans them
-			 * in a complicated way (see planner.c:inheritance_planner). First, it runs the
-			 * UPDATE/DELETE through the planner as a simulated SELECT. It uses the results
-			 * of this fake planning to adapt its own UPDATE/DELETE plan. Then it's planned
-			 * a second time as a real UPDATE/DELETE, but with requiredPerms set to 0, as it
-			 * assumes permission checking has been done already during the first planner call.
-			 * We don't want to touch the UPDATE/DELETEs, so we need to check all the regular
-			 * conditions here that are checked during preprocess_query, as well as the
-			 * condition that requiredPerms is not requiring UPDATE/DELETE on this rel.
+			 * Hypertables inside inlineable functions don't get marked during
+			 * the query preprocessing step. Therefore we do an extra try here.
+			 * We skip the DML target relation identified by resultRelation.
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
-				rte->ctename == NULL && !IS_UPDL_CMD(query) && query->resultRelation == 0 &&
-				(requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
+				rte->ctename == NULL && rel->relid != (Index) query->resultRelation)
 			{
 				rte_mark_for_expansion(rte);
 			}
@@ -1656,21 +1627,29 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 				}
 				case CMD_MERGE:
 				{
-					List *firstMergeActionList = linitial(mt->mergeActionLists);
-					ListCell *l;
 					/*
-					 * Iterate over merge action to check if there is an INSERT sql.
-					 * If so, then add ModifyHypertable node.
+					 * Create ModifyHypertable node for MERGE when:
+					 * - INSERT actions need chunk tuple routing
+					 * - Compressed chunks need decompression for correct
+					 *   join evaluation of matched vs not-matched rows
 					 */
-					foreach (l, firstMergeActionList)
+					bool need_modify = (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht));
+					if (!need_modify)
 					{
-						MergeAction *action = (MergeAction *) lfirst(l);
-						if (action->commandType == CMD_INSERT)
+						List *firstMergeActionList = linitial(mt->mergeActionLists);
+						ListCell *l;
+						foreach (l, firstMergeActionList)
 						{
-							path = ts_modify_hypertable_path_create(root, mt, input_rel);
-							break;
+							MergeAction *action = (MergeAction *) lfirst(l);
+							if (action->commandType == CMD_INSERT)
+							{
+								need_modify = true;
+								break;
+							}
 						}
 					}
+					if (need_modify)
+						path = ts_modify_hypertable_path_create(root, mt, input_rel);
 					break;
 				}
 				default:

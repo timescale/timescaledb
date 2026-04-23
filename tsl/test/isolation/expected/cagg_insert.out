@@ -1,13 +1,11 @@
 Parsed test spec with 17 sessions
 
-starting permutation: LockInvalThrEx Refresh Refresh2 Refresh3 UnlockInvalThrEx
+starting permutation: LockInvalThrEx Refresh Refresh3 UnlockInvalThrEx
 step LockInvalThrEx: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold ;
 step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
-step Refresh2: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
 step Refresh3: CALL refresh_continuous_aggregate('continuous_view_2', NULL, 15); <waiting ...>
 step UnlockInvalThrEx: ROLLBACK;
 step Refresh: <... completed>
-step Refresh2: <... completed>
 step Refresh3: <... completed>
 
 starting permutation: Ib LockCagg1 I1 Refresh Ic UnLockCagg1
