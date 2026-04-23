@@ -251,8 +251,9 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_4_4_chunk | _ts_meta_v2_min_value
 
 select index from settings where relid = (select oid from pg_class where relname = 'sparse_sister') and index is not null group by 1 order by 1;
- index 
--------
+                                                       index                                                       
+-------------------------------------------------------------------------------------------------------------------
+ [{"type": "minmax", "column": "o", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
 
 select distinct(attname) from compressedcols where relname = 'sparse_sister' order by 1 asc;
  attname 
