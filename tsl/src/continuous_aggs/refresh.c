@@ -1240,15 +1240,17 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	/* Prepare for SPI call */
 	int res;
-	Oid types[] = { INT4OID, INT4OID, INT4OID, INT8OID, INT8OID, INT8OID, INT8OID };
+	Oid types[] = { INT4OID, INT4OID, INT4OID, INT8OID,
+					INT8OID, INT8OID, INT8OID, INT8OID };
 	Datum values[] = { Int32GetDatum(ht->fd.id),
 					   Int32GetDatum(time_dim->fd.id),
 					   Int32GetDatum(cagg->data.mat_hypertable_id),
 					   Int64GetDatum(batch_size),
 					   Int64GetDatum(refresh_window.start),
 					   Int64GetDatum(refresh_window.end),
-					   Int64GetDatum(CAGG_INVALIDATION_WRONG_GREATEST_VALUE) };
-	char nulls[] = { false, false, false, false, false, false, false };
+					   Int64GetDatum(CAGG_INVALIDATION_WRONG_GREATEST_VALUE),
+					   Int64GetDatum(bucket_width) };
+	char nulls[] = { false, false, false, false, false, false, false, false };
 	MemoryContext oldcontext = CurrentMemoryContext;
 
 	if (SPI_connect() != SPI_OK_CONNECT)
@@ -1257,6 +1259,134 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
 	RestrictSearchPath();
+
+	if (cagg->bucket_function->bucket_fixed_interval)
+	{
+		const char *aligned_range_query = psprintf(" \
+			WITH dimension_slices AS ( \
+				SELECT \
+					range_start AS start, \
+					range_end AS end \
+				FROM \
+					_timescaledb_catalog.dimension_slice \
+					JOIN _timescaledb_catalog.dimension ON dimension.id = dimension_slice.dimension_id \
+				WHERE \
+					hypertable_id = $1 \
+					AND dimension_id = $2 \
+					AND range_end >= range_start \
+			), \
+			invalidation_logs AS ( \
+				SELECT \
+					lowest_modified_value, \
+					greatest_modified_value \
+				FROM \
+					_timescaledb_catalog.continuous_aggs_materialization_invalidation_log \
+				WHERE \
+					materialization_id = $3 \
+					AND greatest_modified_value >= lowest_modified_value \
+				UNION ALL \
+				SELECT \
+					pg_catalog.min(lowest_modified_value) AS lowest_modified_value, \
+					pg_catalog.max(greatest_modified_value) AS greatest_modified_value \
+				FROM \
+					_timescaledb_catalog.continuous_aggs_hypertable_invalidation_log \
+				WHERE \
+					hypertable_id = $1 \
+					AND greatest_modified_value >= lowest_modified_value \
+			), \
+			eligible_ranges AS ( \
+				SELECT \
+					GREATEST(dimension_slices.start, invalidation_logs.lowest_modified_value, $5) AS range_start, \
+					LEAST(dimension_slices.end, invalidation_logs.greatest_modified_value, $6) AS range_end \
+				FROM \
+					dimension_slices, \
+					invalidation_logs \
+				WHERE \
+					invalidation_logs.lowest_modified_value IS NOT NULL \
+					AND (invalidation_logs.greatest_modified_value IS NOT NULL AND \
+						 invalidation_logs.greatest_modified_value != $7) \
+					AND pg_catalog.int8range(dimension_slices.start, dimension_slices.end) \
+						OPERATOR(pg_catalog.&&) \
+						pg_catalog.int8range(invalidation_logs.lowest_modified_value, \
+											 invalidation_logs.greatest_modified_value) \
+					AND pg_catalog.int8range(dimension_slices.start, dimension_slices.end) \
+						OPERATOR(pg_catalog.&&) pg_catalog.int8range($5, $6) \
+					AND pg_catalog.int8range(invalidation_logs.lowest_modified_value, \
+											 invalidation_logs.greatest_modified_value) \
+						OPERATOR(pg_catalog.&&) pg_catalog.int8range($5, $6) \
+			), \
+			bucketed_ranges AS ( \
+				SELECT \
+					pg_catalog.int8range( \
+						($5::numeric + pg_catalog.floor(((range_start - $5)::numeric / $8::numeric)) * \
+						 $8::numeric)::bigint, \
+						($5::numeric + pg_catalog.ceil(((range_end - $5)::numeric / $8::numeric)) * \
+						 $8::numeric)::bigint) AS range \
+				FROM \
+					eligible_ranges \
+				WHERE \
+					range_start < range_end \
+			), \
+			merged_ranges AS ( \
+				SELECT \
+					pg_catalog.unnest(pg_catalog.range_agg(range)) AS range \
+				FROM \
+					bucketed_ranges \
+			) \
+			SELECT \
+				pg_catalog.lower(range) AS start, \
+				pg_catalog.upper(range) AS end \
+			FROM \
+				merged_ranges \
+			WHERE \
+				pg_catalog.upper(range) - pg_catalog.lower(range) = $4 \
+				AND (pg_catalog.lower(range) > $5 OR pg_catalog.upper(range) < $6) \
+			ORDER BY \
+				start %s;",
+												   refresh_newest_first ? "DESC" : "ASC");
+
+		res = SPI_execute_with_args(aligned_range_query,
+									8,
+									types,
+									values,
+									nulls,
+									false /* read_only */,
+									0 /* count */);
+
+		if (res < 0)
+			elog(ERROR, "%s: could not produce aligned batch for the policy cagg refresh", __func__);
+
+		if (SPI_processed == 1)
+		{
+			bool range_start_isnull, range_end_isnull;
+			Datum range_start = SPI_getbinval(SPI_tuptable->vals[0],
+											  SPI_tuptable->tupdesc,
+											  1,
+											  &range_start_isnull);
+			Datum range_end = SPI_getbinval(SPI_tuptable->vals[0],
+											SPI_tuptable->tupdesc,
+											2,
+											&range_end_isnull);
+
+			MemoryContext saved_context = MemoryContextSwitchTo(oldcontext);
+			InternalTimeRange *range = palloc0(sizeof(InternalTimeRange));
+			range->start = DatumGetInt64(range_start);
+			range->start_isnull = range_start_isnull;
+			range->end = DatumGetInt64(range_end);
+			range->end_isnull = range_end_isnull;
+			range->type = original_refresh_window->type;
+			refresh_window_list = lappend(refresh_window_list, range);
+			MemoryContextSwitchTo(saved_context);
+
+			AtEOXact_GUC(false, save_nestlevel);
+
+			res = SPI_finish();
+			if (res != SPI_OK_FINISH)
+				elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+
+			return refresh_window_list;
+		}
+	}
 
 	res = SPI_execute_with_args(query_str,
 								7,

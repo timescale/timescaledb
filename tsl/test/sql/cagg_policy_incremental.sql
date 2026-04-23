@@ -578,6 +578,72 @@ FROM
     EXCEPT
     (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
 
+------------------------------------------------------------------------------------------
+-- Test fixed-width batching starts at eligible bucket boundaries
+------------------------------------------------------------------------------------------
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log, _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+\c :TEST_DBNAME test_cagg_refresh_policy_user
+
+CREATE TABLE batch_anchor_test (
+    time TIMESTAMPTZ NOT NULL,
+    value INT
+);
+
+SELECT table_name FROM create_hypertable('batch_anchor_test', 'time', chunk_time_interval => INTERVAL '1 hour');
+
+CREATE MATERIALIZED VIEW batch_anchor_cagg
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT
+    time_bucket('5 minutes', time) AS bucket,
+    count(*)
+FROM
+    batch_anchor_test
+GROUP BY
+    1
+WITH NO DATA;
+
+SELECT
+    add_continuous_aggregate_policy(
+        'batch_anchor_cagg',
+        start_offset => INTERVAL '40 minutes',
+        end_offset => INTERVAL '20 minutes',
+        schedule_interval => INTERVAL '1 hour',
+        buckets_per_batch => 2
+    ) AS batch_anchor_job \gset
+
+INSERT INTO batch_anchor_test
+SELECT
+    t,
+    1
+FROM
+    generate_series(
+        '2025-03-10 23:25:00+00',
+        '2025-03-10 23:34:00+00',
+        '1 minute'::interval) AS t;
+
+SELECT mat_hypertable_id AS batch_anchor_mat_id
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'batch_anchor_cagg' \gset
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log, _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+INSERT INTO _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+SELECT
+    :batch_anchor_mat_id,
+    _timescaledb_functions.to_unix_microseconds('2025-03-10 23:25:00+00'::timestamptz),
+    _timescaledb_functions.to_unix_microseconds('2025-03-10 23:35:00+00'::timestamptz);
+\c :TEST_DBNAME test_cagg_refresh_policy_user
+
+SET client_min_messages TO LOG;
+CALL run_job(:batch_anchor_job);
+RESET client_min_messages;
+
+SELECT count(*) FROM batch_anchor_cagg;
+
+DROP TABLE batch_anchor_test CASCADE;
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_SUPERUSER;
 REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_policy_user;
