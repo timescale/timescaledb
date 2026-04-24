@@ -65,6 +65,15 @@ docker run -d --name timescaledb \
     timescale/timescaledb-ha:pg18
 ```
 
+**For Windows PowerShell:**
+
+```bash
+docker run -d --name timescaledb `
+    -p 6543:5432 `
+    -e POSTGRES_PASSWORD=password `
+    timescale/timescaledb-ha:pg18
+```
+
 **Note:** We use port **6543** (mapped to container port 5432) to avoid conflicts if you have other PostgreSQL instances running on the standard port 5432.
 
 Wait about 1-2 minutes for TimescaleDB to download & initialize.
