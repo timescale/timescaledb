@@ -54,5 +54,4 @@ void continuous_agg_update_materialization_for_tenant(Hypertable *mat_ht, const 
 													  const NameData *time_column_name,
 													  InternalTimeRange materialization_range,
 													  const NameData *tenant_column_name,
-													  Datum tenant_values_array,
-													  Oid tenant_type);
+													  Datum tenant_values_array, Oid tenant_type);
