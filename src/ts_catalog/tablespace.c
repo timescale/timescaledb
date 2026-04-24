@@ -732,7 +732,8 @@ ts_tablespace_detach_all_from_hypertable(PG_FUNCTION_ARGS)
 		elog(ERROR, "invalid number of arguments");
 
 	if (PG_ARGISNULL(0))
-		elog(ERROR, "invalid argument");
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("hypertable cannot be NULL")));
 
 	result = tablespace_detach_all(hypertable_relid);
 	ts_alter_table_with_event_trigger(hypertable_relid, fcinfo->context, list_make1(cmd), false);
@@ -756,7 +757,8 @@ ts_tablespace_show(PG_FUNCTION_ARGS)
 		MemoryContext oldcontext;
 
 		if (!OidIsValid(hypertable_oid))
-			elog(ERROR, "invalid argument");
+			ereport(ERROR,
+					(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("hypertable cannot be NULL")));
 
 		funcctx = SRF_FIRSTCALL_INIT();
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
