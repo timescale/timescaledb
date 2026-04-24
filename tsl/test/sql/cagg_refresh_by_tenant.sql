@@ -82,6 +82,58 @@ FROM metrics_hourly
 WHERE bucket >= '2024-01-08' AND bucket < '2024-01-09'
 ORDER BY tenant_id, bucket;
 
+-- Test 3: a single tenant backfilled across three adjacent buckets. One
+-- tracker row must produce one materialized row per affected bucket.
+INSERT INTO metrics VALUES
+    ('2024-01-05 09:30:00+00', 'omega', 100),
+    ('2024-01-05 10:30:00+00', 'omega', 200),
+    ('2024-01-05 11:30:00+00', 'omega', 300);
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'metrics' ORDER BY device_value;
+
+CALL refresh_continuous_aggregate('metrics_hourly', '2024-01-05 00:00+00', '2024-01-06 00:00+00');
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'metrics' ORDER BY device_value;
+
+SELECT tenant_id,
+       bucket AT TIME ZONE 'UTC' AS bucket,
+       sum_temp
+FROM metrics_hourly
+WHERE bucket >= '2024-01-05' AND bucket < '2024-01-06'
+ORDER BY tenant_id, bucket;
+
+-- Test 4: cross-tenant isolation. Pre-materialize three tenants in a bucket,
+-- then backfill a fourth tenant in the same bucket. The second refresh must
+-- add the fourth tenant's row and leave the existing three untouched.
+INSERT INTO metrics VALUES
+    ('2024-01-04 10:15:00+00', 'x', 11),
+    ('2024-01-04 10:30:00+00', 'y', 22),
+    ('2024-01-04 10:45:00+00', 'z', 33);
+
+CALL refresh_continuous_aggregate('metrics_hourly', '2024-01-04 00:00+00', '2024-01-05 00:00+00');
+
+SELECT tenant_id,
+       bucket AT TIME ZONE 'UTC' AS bucket,
+       sum_temp
+FROM metrics_hourly
+WHERE bucket >= '2024-01-04' AND bucket < '2024-01-05'
+ORDER BY tenant_id, bucket;
+
+INSERT INTO metrics VALUES ('2024-01-04 10:20:00+00', 'w', 44);
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'metrics' ORDER BY device_value;
+
+CALL refresh_continuous_aggregate('metrics_hourly', '2024-01-04 00:00+00', '2024-01-05 00:00+00');
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'metrics' ORDER BY device_value;
+
+SELECT tenant_id,
+       bucket AT TIME ZONE 'UTC' AS bucket,
+       sum_temp
+FROM metrics_hourly
+WHERE bucket >= '2024-01-04' AND bucket < '2024-01-05'
+ORDER BY tenant_id, bucket;
+
 -- Cleanup
 DROP TABLE metrics CASCADE;
 DROP VIEW hyper_invalidation_log_view;
