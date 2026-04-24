@@ -112,6 +112,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     alter_table_memory.sql
     bgw_launcher.sql
     c_unit_tests.sql
+    cache_invalidate_uaf.sql
     copy_memory_usage.sql
     metadata.sql
     multi_transaction_index.sql
