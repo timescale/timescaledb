@@ -415,19 +415,23 @@ elif len(sys.argv) > 2:
 
     if tests:
         to_run = [t for t in list(tests) if t not in flaky_exclude_tests] * 20
-        random.shuffle(to_run)
-        installcheck_args = f'TESTS="{" ".join(to_run)}"'
-        m["include"].append(
-            build_debug_config(
-                {
-                    "coverage": False,
-                    "installcheck_args": installcheck_args,
-                    "name": "Flaky Check Debug",
-                    "pg": PG18_LATEST,
-                    "pginstallcheck": False,
-                }
+        # Skip the Flaky job when every changed test is excluded. Otherwise
+        # TESTS="" makes `make installcheck` run the full suite, which exposes
+        # pre-existing XX000s the per-test loop would never have touched.
+        if to_run:
+            random.shuffle(to_run)
+            installcheck_args = f'TESTS="{" ".join(to_run)}"'
+            m["include"].append(
+                build_debug_config(
+                    {
+                        "coverage": False,
+                        "installcheck_args": installcheck_args,
+                        "name": "Flaky Check Debug",
+                        "pg": PG18_LATEST,
+                        "pginstallcheck": False,
+                    }
+                )
             )
-        )
 
 # generate command to set github action variable
 with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
