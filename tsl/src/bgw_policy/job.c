@@ -474,6 +474,67 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 						PGC_S_SESSION);
 	}
 
+	/* Compress chunks that need it after the refresh if the cagg has compression enabled */
+	Hypertable *mat_ht = ts_hypertable_get_by_id(policy_data.cagg->data.mat_hypertable_id);
+
+	if (policy_data.compress_after_refresh && mat_ht &&
+		TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
+	{
+		const Dimension *dim = hyperspace_get_open_dimension(mat_ht->space, 0);
+
+		StrategyNumber start_strategy = InvalidStrategy;
+		int64 start_value = -1;
+		StrategyNumber end_strategy = InvalidStrategy;
+		int64 end_value = -1;
+
+		if (!policy_data.refresh_window.start_isnull)
+		{
+			start_strategy = BTGreaterEqualStrategyNumber;
+			start_value = policy_data.refresh_window.start;
+		}
+		if (!policy_data.refresh_window.end_isnull)
+		{
+			end_strategy = BTLessStrategyNumber;
+			end_value = policy_data.refresh_window.end;
+		}
+
+		List *chunkid_lst = ts_dimension_slice_get_chunkids_to_compress(dim->fd.id,
+																		start_strategy,
+																		start_value,
+																		end_strategy,
+																		end_value,
+																		true, /* compress */
+																		true, /* recompress */
+																		0);	  /* all chunks */
+
+		if (chunkid_lst)
+		{
+			if (ActiveSnapshotSet())
+				PopActiveSnapshot();
+
+			/* Process each chunk in its own transaction */
+			foreach (lc, chunkid_lst)
+			{
+				PushActiveSnapshot(GetTransactionSnapshot());
+
+				int32 chunkid = lfirst_int(lc);
+				Chunk *chunk = ts_chunk_get_by_id(chunkid, true /* fail_if_not_found */);
+				tsl_compress_chunk_wrapper(chunk,
+										   true /* if_not_compressed */,
+										   false /* recompress */);
+
+				elog(DEBUG1,
+					 "compressed chunk \"%s.%s\" after continuous aggregate refresh",
+					 NameStr(chunk->fd.schema_name),
+					 NameStr(chunk->fd.table_name));
+
+				PopActiveSnapshot();
+				CommitTransactionCommand();
+				StartTransactionCommand();
+			}
+		}
+	}
+
 	return true;
 }
 
@@ -539,6 +600,8 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 
 	refresh_newest_first = policy_refresh_cagg_get_refresh_newest_first(config);
 
+	bool compress_after_refresh = policy_refresh_cagg_get_compress_after_refresh(config);
+
 	if (policy_data)
 	{
 		policy_data->refresh_window.type = dim_type;
@@ -552,6 +615,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 		policy_data->buckets_per_batch = buckets_per_batch;
 		policy_data->max_batches_per_execution = max_batches_per_execution;
 		policy_data->refresh_newest_first = refresh_newest_first;
+		policy_data->compress_after_refresh = compress_after_refresh;
 	}
 }
 
