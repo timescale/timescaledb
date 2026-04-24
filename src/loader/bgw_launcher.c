@@ -933,13 +933,15 @@ database_checks(void)
 
 	if (!pgdb->datallowconn)
 		ereport(ERROR,
-				(errmsg("background worker \"%s\" trying to connect to database that does not "
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("background worker \"%s\" trying to connect to database that does not "
 						"allow connections, exiting",
 						MyBgworkerEntry->bgw_name)));
 
 	if (pgdb->datistemplate)
 		ereport(ERROR,
-				(errmsg("background worker \"%s\" trying to connect to template database, exiting",
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("background worker \"%s\" trying to connect to template database, exiting",
 						MyBgworkerEntry->bgw_name)));
 
 	ReleaseSysCache(tuple);

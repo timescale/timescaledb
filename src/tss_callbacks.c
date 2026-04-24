@@ -63,7 +63,7 @@ ts_is_tss_enabled(void)
 			if (ptr->version_num != TSS_CALLBACKS_VERSION)
 			{
 				ereport(WARNING,
-						(errcode(ERRCODE_INTERNAL_ERROR),
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("version mismatch between timescaledb and ts_stat_statements "
 								"callbacks"),
 						 errdetail("Callbacks versions: TimescaleDB (%d) and ts_stat_statements "
