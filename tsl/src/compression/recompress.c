@@ -830,16 +830,13 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, lockmode);
 	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, lockmode);
 
-	/* Check new chunk will have the same compression settings */
-	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
-	CompressionSettings *check_new_settings =
+	/* Inherit missing settings from the existing chunks. */
+	CompressionSettings *new_settings =
 		ts_compression_settings_get(uncompressed_chunk->hypertable_relid);
-	compression_settings_set_defaults(ht,
-									  check_new_settings,
-									  ts_alter_table_with_clause_parse(NIL),
-									  false);
 
-	if (!ts_array_equal(settings->fd.segmentby, check_new_settings->fd.segmentby))
+	bool settings_changed = ts_compression_settings_add_from_chunk(settings, new_settings);
+
+	if (settings_changed && !ts_array_equal(settings->fd.segmentby, new_settings->fd.segmentby))
 	{
 		table_close(uncompressed_chunk_rel, lockmode);
 		table_close(compressed_chunk_rel, lockmode);
@@ -866,19 +863,11 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 											   index_rel,
 											   false);
 
-	/* Delete old compression settings before creating new compressed chunk to avoid conflict */
-	ts_compression_settings_delete(uncompressed_chunk->table_id);
+	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
 	Hypertable *compressed_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 	Chunk *new_compressed_chunk =
-		create_compress_chunk(compressed_ht, uncompressed_chunk, InvalidOid, false, NULL);
-	/* The old compression settings were deleted above to avoid catalog conflicts. */
-	CompressionSettings *new_settings = ts_compression_settings_get(uncompressed_chunk->table_id);
+		create_compress_chunk(compressed_ht, uncompressed_chunk, InvalidOid, false, new_settings);
 	Relation new_compressed_chunk_rel = table_open(new_compressed_chunk->table_id, lockmode);
-
-	Ensure(ts_compression_settings_equal(new_settings, check_new_settings),
-		   "compression settings mismatch during recompression of \"%s.%s\"",
-		   NameStr(uncompressed_chunk->fd.schema_name),
-		   NameStr(uncompressed_chunk->fd.table_name));
 
 	perform_recompression(recompress_ctx,
 						  compressed_chunk_rel,

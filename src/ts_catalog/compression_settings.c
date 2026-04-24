@@ -724,6 +724,16 @@ ts_accept_for_segmentby(CompressionSettings *settings, Form_pg_attribute attr)
 
 	return false;
 }
+/* Sparse indexes are only set by default when no user configuration exists */
+bool
+ts_can_set_default_sparse_index(CompressionSettings *settings)
+{
+	return (settings->fd.index == NULL) ||
+		   !ts_jsonb_has_key_value_str_field(settings->fd.index,
+											 ts_sparse_index_common_keys[SparseIndexKeySource],
+											 ts_sparse_index_source_names
+												 [_SparseIndexSourceEnumConfig]);
+}
 
 /* adds orderby sparse index settings into fd.index */
 Jsonb *
@@ -1437,4 +1447,39 @@ ts_get_values_by_key_from_parsed_object(SparseIndexSettingsObject *obj, const ch
 		}
 	}
 	return NIL;
+}
+
+/*
+ * Populate empty fields in new_settings from the existing chunk settings.
+ * Returns true if any field was changed.
+ */
+bool
+ts_compression_settings_add_from_chunk(CompressionSettings *chunk_settings,
+									   CompressionSettings *new_settings)
+{
+	bool changed = false;
+	new_settings->fd.relid = chunk_settings->fd.relid;
+	new_settings->fd.compress_relid = InvalidOid;
+
+	if (!new_settings->fd.orderby)
+	{
+		new_settings->fd.orderby = chunk_settings->fd.orderby;
+		new_settings->fd.orderby_desc = chunk_settings->fd.orderby_desc;
+		new_settings->fd.orderby_nullsfirst = chunk_settings->fd.orderby_nullsfirst;
+		changed = true;
+	}
+
+	if (!new_settings->fd.segmentby)
+	{
+		new_settings->fd.segmentby = chunk_settings->fd.segmentby;
+		changed = true;
+	}
+
+	if (ts_can_set_default_sparse_index(new_settings))
+	{
+		new_settings->fd.index = chunk_settings->fd.index;
+		changed = true;
+	}
+
+	return changed;
 }
