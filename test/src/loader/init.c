@@ -30,8 +30,6 @@ PG_MODULE_MAGIC;
 extern void PGDLLEXPORT _PG_init(void);
 #endif
 
-static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
-
 bool ts_license_guc_check_hook(char **newval, void **extra, GucSource source);
 void ts_license_guc_assign_hook(const char *newval, void *extra);
 
@@ -44,26 +42,6 @@ cache_invalidate_callback(Datum arg, Oid relid)
 		ts_extension_invalidate();
 }
 
-static void
-post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
-{
-	if (ts_extension_is_loaded_and_not_upgrading())
-		elog(WARNING, "mock post_analyze_hook " STR(TIMESCALEDB_VERSION_MOD));
-
-		/*
-		 * a symbol needed by IsParallelWorker is not exported on windows so we do
-		 * not perform this check
-		 */
-#ifndef WIN32
-	if (prev_post_parse_analyze_hook != NULL && !IsParallelWorker())
-		elog(ERROR, "the extension called with a loader should always have a NULL prev hook");
-#endif
-	if (BROKEN && !creating_extension)
-		ereport(ERROR,
-				(errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION),
-				 errmsg("mock broken " STR(TIMESCALEDB_VERSION_MOD))));
-}
-
 void
 _PG_init(void)
 {
@@ -73,17 +51,20 @@ _PG_init(void)
 	 */
 	ts_extension_check_version(TIMESCALEDB_VERSION_MOD);
 	elog(WARNING, "mock init " STR(TIMESCALEDB_VERSION_MOD));
-	prev_post_parse_analyze_hook = post_parse_analyze_hook;
 
 	/*
-	 * a symbol needed by IsParallelWorker is not exported on windows so we do
-	 * not perform this check
+	 * The loader sets post_parse_analyze_hook to NULL before calling
+	 * ts_post_load_init so that a versioned extension cannot splice its own
+	 * hook into the chain. A non-NULL value here would indicate the loader
+	 * contract has changed.
+	 *
+	 * A symbol needed by IsParallelWorker is not exported on windows so we
+	 * do not perform this check there.
 	 */
 #ifndef WIN32
-	if (prev_post_parse_analyze_hook != NULL && !IsParallelWorker())
+	if (post_parse_analyze_hook != NULL && !IsParallelWorker())
 		elog(ERROR, "the extension called with a loader should always have a NULL prev hook");
 #endif
-	post_parse_analyze_hook = post_analyze_hook;
 	CacheRegisterRelcacheCallback(cache_invalidate_callback, PointerGetDatum(NULL));
 }
 

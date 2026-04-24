@@ -83,11 +83,14 @@ jobs:
           git config user.email "123763385+github-actions[bot]@users.noreply.github.com"
 
       - name: Install Linux Dependencies
-        timeout-minutes: 3
-        run: |
-          sudo apt-get update
-          sudo apt-get install pip
-          pip install PyGithub requests
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+        with:
+          timeout_minutes: 3
+          max_attempts: 3
+          command: |
+            sudo apt-get update
+            sudo apt-get install pip
+            pip install PyGithub requests
 
       # Read the next version and build the next versions
       - name: Set version configuration
