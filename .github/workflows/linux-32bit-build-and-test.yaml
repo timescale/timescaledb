@@ -101,23 +101,20 @@ jobs:
 
     # /__e/node16/bin/node (used by actions/checkout@v4) needs 64-bit libraries
     - name: Install 64-bit libraries for GitHub actions
-      timeout-minutes: 3
+      timeout-minutes: 15
       run: |
         apt-get update
         apt-get install -y lib64atomic1 lib64gcc-s1 lib64stdc++6 libc6-amd64 jq
 
     - name: Install build dependencies
-      uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
-      with:
-        timeout_minutes: 3
-        max_attempts: 3
-        command: |
-          PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
-          echo '/tmp/core.%h.%e.%t' > /proc/sys/kernel/core_pattern
-          apt-get install -y gcc make cmake libssl-dev libipc-run-perl \
-            libtest-most-perl sudo gdb git wget gawk lbzip2 flex bison lcov base-files \
-            locales clang-14 llvm-14 llvm-14-dev llvm-14-tools postgresql-client pkgconf \
-            icu-devtools
+      timeout-minutes: 15
+      run: |
+        PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
+        echo '/tmp/core.%h.%e.%t' > /proc/sys/kernel/core_pattern
+        apt-get install -y gcc make cmake libssl-dev libipc-run-perl \
+          libtest-most-perl sudo gdb git wget gawk lbzip2 flex bison lcov base-files \
+          locales clang-14 llvm-14 llvm-14-dev llvm-14-tools postgresql-client pkgconf \
+          icu-devtools
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
