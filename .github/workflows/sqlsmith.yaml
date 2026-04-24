@@ -31,24 +31,21 @@ jobs:
 
     steps:
     - name: Install Linux Dependencies
-      uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
-      with:
-        timeout_minutes: 3
-        max_attempts: 3
-        command: |
-          sudo apt-get update
-          sudo apt-get install gnupg systemd-coredump gdb postgresql-common \
-              build-essential autoconf autoconf-archive \
-              libboost-regex-dev libsqlite3-dev jq
+      timeout-minutes: 15
+      run: |
+        sudo apt-get update
+        sudo apt-get install gnupg systemd-coredump gdb postgresql-common \
+            build-essential autoconf autoconf-archive \
+            libboost-regex-dev libsqlite3-dev jq
 
-          yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
-          sudo apt-get purge postgresql*
-          sudo apt-get install libpqxx-dev postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
+        yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        sudo apt-get purge postgresql*
+        sudo apt-get install libpqxx-dev postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
 
-          # Make sure the system postgres service is not running.
-          sudo systemctl mask postgresql
-          sudo systemctl stop postgresql
-          { psql -c "select 1" && exit 1 ; } || :
+        # Make sure the system postgres service is not running.
+        sudo systemctl mask postgresql
+        sudo systemctl stop postgresql
+        { psql -c "select 1" && exit 1 ; } || :
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
