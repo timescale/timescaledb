@@ -78,7 +78,7 @@ jobs:
     steps:
     - name: Install Linux Dependencies
       if: runner.os == 'Linux'
-      timeout-minutes: 3
+      timeout-minutes: 15
       run: |
         # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
         # If needed, install them before opening the core dump.
@@ -94,6 +94,7 @@ jobs:
 
     - name: Install macOS Test Dependencies
       if: runner.os == 'macOS' && matrix.installcheck
+      timeout-minutes: 15
       run: |
         # Disable the automatic dependency upgrade executed by `brew install`
         # https://docs.brew.sh/Manpage#install-options-formulacask-
