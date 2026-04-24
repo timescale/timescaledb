@@ -11,6 +11,7 @@
 #include <utils/builtins.h>
 #include <utils/date.h>
 #include <utils/guc.h>
+#include <utils/lsyscache.h>
 #include <utils/palloc.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
@@ -66,10 +67,14 @@ typedef struct MaterializationContext
 	InternalTimeRange internal_materialization_range;
 	int nargs;
 
-	/* Optional per-tenant filter. NULL tenant_column_name => time-only path. */
+	/*
+	 * Optional per-tenant filter. NULL tenant_column_name => time-only path.
+	 * tenant_type is the element type (e.g. INT4OID). tenant_values is an
+	 * ArrayType* (as Datum) of that element type; the SQL uses `= ANY($3)`.
+	 */
 	const NameData *tenant_column_name;
 	Oid tenant_type;
-	Datum tenant_value;
+	Datum tenant_values;
 } MaterializationContext;
 
 typedef char *(*MaterializationCreateStatement)(MaterializationContext *context);
@@ -203,13 +208,13 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 
 /*
  * Per-tenant variant of continuous_agg_update_materialization. Re-materializes
- * a single (tenant_value, time-range) rectangle by issuing a DELETE then
- * INSERT both narrowed by AND <tenant_column_name> = <tenant_value>.
+ * a (tenants[], time-range) rectangle by issuing a DELETE then INSERT both
+ * narrowed by AND <tenant_column_name> = ANY(<tenant_values_array>).
  *
  * Caller must ensure tenant_column_name names a real column on mat_ht and
  * the partial view (i.e. it is a GROUP BY column of the cagg defining query),
- * tenant_type matches that column's atttypid, and tenant_value is a Datum
- * of tenant_type.
+ * tenant_type matches that column's atttypid, and tenant_values_array is a
+ * constructed ArrayType* (as Datum) with that element type.
  */
 void
 continuous_agg_update_materialization_for_tenant(Hypertable *mat_ht, const ContinuousAgg *cagg,
@@ -218,7 +223,7 @@ continuous_agg_update_materialization_for_tenant(Hypertable *mat_ht, const Conti
 												 const NameData *time_column_name,
 												 InternalTimeRange materialization_range,
 												 const NameData *tenant_column_name,
-												 Datum tenant_value, Oid tenant_type)
+												 Datum tenant_values_array, Oid tenant_type)
 {
 	MaterializationContext context = {
 		.mat_ht = mat_ht,
@@ -229,7 +234,7 @@ continuous_agg_update_materialization_for_tenant(Hypertable *mat_ht, const Conti
 		.materialization_range = internal_time_range_to_time_range(materialization_range),
 		.internal_materialization_range = materialization_range,
 		.tenant_column_name = tenant_column_name,
-		.tenant_value = tenant_value,
+		.tenant_values = tenant_values_array,
 		.tenant_type = tenant_type,
 	};
 
@@ -511,7 +516,11 @@ create_materialization_delete_statement(MaterializationContext *context)
 	return query.data;
 }
 
-/* Create INSERT statement scoped to a single tenant value (bound to $3). */
+/*
+ * Create INSERT statement scoped to the set of tenants in the $3 array.
+ * The array element type matches context->tenant_type; SPI binds $3 as the
+ * corresponding array type.
+ */
 static char *
 create_materialization_insert_by_tenant_statement(MaterializationContext *context)
 {
@@ -524,7 +533,7 @@ create_materialization_insert_by_tenant_statement(MaterializationContext *contex
 	initStringInfo(&query);
 	appendStringInfo(&query,
 					 "INSERT INTO %s.%s SELECT * FROM %s.%s AS I "
-					 "WHERE I.%s >= $1 AND I.%s < $2 AND I.%s = $3 %s;",
+					 "WHERE I.%s >= $1 AND I.%s < $2 AND I.%s = ANY($3) %s;",
 					 quote_identifier(NameStr(*context->materialization_table.schema)),
 					 quote_identifier(NameStr(*context->materialization_table.name)),
 					 quote_identifier(NameStr(*context->partial_view.schema)),
@@ -536,7 +545,9 @@ create_materialization_insert_by_tenant_statement(MaterializationContext *contex
 	return query.data;
 }
 
-/* Create DELETE statement scoped to a single tenant value (bound to $3). */
+/*
+ * Create DELETE statement scoped to the set of tenants in the $3 array.
+ */
 static char *
 create_materialization_delete_by_tenant_statement(MaterializationContext *context)
 {
@@ -546,7 +557,7 @@ create_materialization_delete_by_tenant_statement(MaterializationContext *contex
 	initStringInfo(&query);
 	appendStringInfo(&query,
 					 "DELETE FROM %s.%s AS D "
-					 "WHERE D.%s >= $1 AND D.%s < $2 AND D.%s = $3;",
+					 "WHERE D.%s >= $1 AND D.%s < $2 AND D.%s = ANY($3);",
 					 quote_identifier(NameStr(*context->materialization_table.schema)),
 					 quote_identifier(NameStr(*context->materialization_table.name)),
 					 quote_identifier(NameStr(*context->time_column_name)),
@@ -699,7 +710,17 @@ create_materialization_plan_argtypes(MaterializationContext *context,
 	{
 		Assert(nargs == 3);
 		Assert(OidIsValid(context->tenant_type));
-		argtypes[2] = context->tenant_type;
+
+		/*
+		 * SQL uses `= ANY($3)`, so $3 must be declared as the array type of
+		 * the tenant column's element type.
+		 */
+		Oid array_type = get_array_type(context->tenant_type);
+		if (!OidIsValid(array_type))
+			elog(ERROR,
+				 "no array type found for tenant column element type %u",
+				 context->tenant_type);
+		argtypes[2] = array_type;
 	}
 
 	return argtypes;
@@ -759,7 +780,7 @@ create_materialization_plan_args(MaterializationContext *context, Materializatio
 
 	if (is_by_tenant_plan_type(plan_type))
 	{
-		(*values)[2] = context->tenant_value;
+		(*values)[2] = context->tenant_values;
 		(*nulls)[2] = false;
 	}
 }
