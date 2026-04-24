@@ -327,6 +327,24 @@ SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, ti
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
 ROLLBACK;
 
+-- test sort limit with TEXT segmentby triggers multiple flush cycles
+BEGIN;
+ALTER TABLE metrics SET (tsdb.segmentby = 'device');
+SET timescaledb.enable_direct_compress_insert = true;
+SET timescaledb.enable_direct_compress_insert_sort_batches = true;
+SET timescaledb.enable_direct_compress_insert_client_sorted = false;
+SET timescaledb.direct_compress_insert_tuple_sort_limit = 50;
+INSERT INTO metrics
+SELECT t, 'location_' || (i % 3), random()
+FROM generate_series('2025-01-02'::timestamptz,
+                     '2025-01-02 00:30:00'::timestamptz,
+                     '1 minute') t,
+     generate_series(1, 3) i;
+SELECT count(*) FROM metrics;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
+ROLLBACK;
+
 -- test INSERT SELECT from compressed source into compressed target
 -- this tests that reading from ColumnarScan correctly copies all rows
 SET timescaledb.enable_direct_compress_insert = true;

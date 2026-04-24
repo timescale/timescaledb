@@ -254,6 +254,9 @@ typedef struct InvalidationSettings
 
 typedef struct RowCompressor
 {
+	/* memory context for row compressor parts */
+	MemoryContext row_compressor_context;
+
 	/* memory context reset per-row is stored */
 	MemoryContext per_row_ctx;
 
@@ -403,8 +406,10 @@ extern void row_compressor_init(RowCompressor *row_compressor, const Compression
 
 extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort,
 										  int tuple_sort_limit, bool created_compressed_chunk);
-extern void tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *compressor,
-													   BulkWriter *bulk_writer);
+extern void tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor,
+													   BulkWriter *old_bulk_writer,
+													   RowCompressor **output_compressor,
+													   BulkWriter **output_bulk_writer);
 extern void tsl_compressor_set_invalidation(RowCompressor *compressor, Hypertable *ht,
 											Oid chunk_relid);
 extern void tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer,

@@ -2511,9 +2511,13 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					/* if client does not commit to global ordering, set chunk to unordered */
 					if (!ts_guc_enable_direct_compress_insert_client_sorted)
 					{
+						MemoryContext oldctx = MemoryContextSwitchTo(estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
 						Chunk *chunk = ts_chunk_get_by_id(ctr->cis->chunk_id, true);
 						if (!ts_chunk_is_unordered(chunk))
+						{
 							ts_chunk_set_unordered(chunk);
+						}
+						MemoryContextSwitchTo(oldctx);
 					}
 				}
 
