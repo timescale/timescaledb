@@ -48,34 +48,28 @@ jobs:
 
     steps:
       - name: Install Linux Dependencies
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
-        with:
-          timeout_minutes: 3
-          max_attempts: 3
-          command: |
-            sudo apt-get update
-            sudo apt-get install pip postgresql-common
+        timeout-minutes: 15
+        run: |
+          sudo apt-get update
+          sudo apt-get install pip postgresql-common
 
       - name: Install testgres
         run: |
           pip install testgres
 
       - name: Install PostgreSQL ${{ matrix.pg_version_old}} and ${{ matrix.pg_version_new }}
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
-        with:
-          timeout_minutes: 3
-          max_attempts: 3
-          command: |
-            yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
-            echo "deb https://packagecloud.io/timescale/timescaledb/ubuntu/ $(lsb_release -c -s) main" | sudo tee /etc/apt/sources.list.d/timescaledb.list
-            wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | sudo apt-key add -
-            sudo apt-get update
-            sudo apt-get install -y \
-              postgresql-${{ matrix.pg_version_old }} postgresql-server-dev-${{ matrix.pg_version_old }} \
-              postgresql-${{ matrix.pg_version_new }} postgresql-server-dev-${{ matrix.pg_version_new }}
-            sudo apt-get install -y --no-install-recommends \
-              timescaledb-2-postgresql-${{ matrix.pg_version_old }} \
-              timescaledb-2-postgresql-${{ matrix.pg_version_new }}
+        timeout-minutes: 15
+        run: |
+          yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+          echo "deb https://packagecloud.io/timescale/timescaledb/ubuntu/ $(lsb_release -c -s) main" | sudo tee /etc/apt/sources.list.d/timescaledb.list
+          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install -y \
+            postgresql-${{ matrix.pg_version_old }} postgresql-server-dev-${{ matrix.pg_version_old }} \
+            postgresql-${{ matrix.pg_version_new }} postgresql-server-dev-${{ matrix.pg_version_new }}
+          sudo apt-get install -y --no-install-recommends \
+            timescaledb-2-postgresql-${{ matrix.pg_version_old }} \
+            timescaledb-2-postgresql-${{ matrix.pg_version_new }}
 
       - name: Checkout TimescaleDB
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
