@@ -11,6 +11,7 @@
 #include <miscadmin.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
+#include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
 #include <utils/fmgrprotos.h>
@@ -78,6 +79,12 @@ static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   const InvalidationStore *invalidations,
 											   const ContinuousAggRefreshContext context,
 											   bool bucketing_refresh_window);
+static void continuous_agg_refresh_with_tracker(const ContinuousAgg *cagg,
+												const TrackerStore *tracker,
+												ContinuousAggRefreshContext context);
+static void log_refresh_window_tenant(int elevel, const ContinuousAgg *cagg,
+									  const InternalTimeRange *bucket, int tenant_count,
+									  ContinuousAggRefreshContext context);
 static void emit_up_to_date_notice(const ContinuousAgg *cagg,
 								   const ContinuousAggRefreshContext context);
 static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
@@ -571,6 +578,76 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	Assert(count);
 }
 
+static void
+log_refresh_window_tenant(int elevel, const ContinuousAgg *cagg, const InternalTimeRange *bucket,
+						  int tenant_count, ContinuousAggRefreshContext context)
+{
+	elog(elevel,
+		 "continuous aggregate refresh (tenant invalidation) on \"%s\" in bucket "
+		 "[ %s, %s ] for %d tenant(s)",
+		 NameStr(cagg->data.user_view_name),
+		 ts_internal_to_time_string(bucket->start, bucket->type),
+		 ts_internal_to_time_string(bucket->end, bucket->type),
+		 tenant_count);
+}
+
+/*
+ * Execute per-bucket refreshes driven by the backfill tracker. Each
+ * BucketTenantGroup is already bucket-aligned (see Step 1 collector), so this
+ * helper walks the list and issues one DELETE+INSERT per bucket, scoped to
+ * `tenant = ANY($3)` via the materialization-for-tenant API.
+ *
+ * Does not bucketize the caller's refresh_window and does not merge adjacent
+ * bucket groups — the per-tenant filter would be lost.
+ */
+static void
+continuous_agg_refresh_with_tracker(const ContinuousAgg *cagg, const TrackerStore *tracker,
+									ContinuousAggRefreshContext context)
+{
+	Hypertable *mat_ht = cagg_get_hypertable_or_fail(cagg->data.mat_hypertable_id);
+	SchemaAndName partial_view = {
+		.schema = &((ContinuousAgg *) cagg)->data.partial_view_schema,
+		.name = &((ContinuousAgg *) cagg)->data.partial_view_name,
+	};
+	SchemaAndName mat_table = {
+		.schema = &mat_ht->fd.schema_name,
+		.name = &mat_ht->fd.table_name,
+	};
+	const Dimension *time_dim = hyperspace_get_open_dimension(mat_ht->space, 0);
+	Assert(time_dim != NULL);
+
+	ListCell *lc;
+	foreach (lc, tracker->groups)
+	{
+		BucketTenantGroup *g = lfirst(lc);
+
+		ArrayType *arr = construct_array(g->tenant_values,
+										 g->tenant_count,
+										 tracker->tenant_type,
+										 tracker->tenant_typlen,
+										 tracker->tenant_typbyval,
+										 tracker->tenant_typalign);
+
+		log_refresh_window_tenant(CAGG_REFRESH_LOG_LEVEL,
+								  cagg,
+								  &g->bucket,
+								  g->tenant_count,
+								  context);
+
+		continuous_agg_update_materialization_for_tenant(mat_ht,
+														 cagg,
+														 partial_view,
+														 mat_table,
+														 &time_dim->fd.column_name,
+														 g->bucket,
+														 &cagg->data.tenant_column_name,
+														 PointerGetDatum(arr),
+														 tracker->tenant_type);
+
+		pfree(arr);
+	}
+}
+
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
 /*
  * Refresh a continuous aggregate across the given window.
@@ -684,7 +761,20 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 		invalidation_store_free(invalidations);
 	}
 
-	return invalidations != NULL;
+	/*
+	 * After draining the time-only cagg log, pick up any per-tenant backfill
+	 * tracker entries in this window. The tracker captures inserts routed to
+	 * it by continuous_agg_backfill_check (backfill-chunk + tenant_column set);
+	 * see Step 1 collector for bucket-grouping semantics.
+	 */
+	TrackerStore *tracker = collect_and_delete_tracker_entries_in_window(cagg, refresh_window);
+	if (tracker != NULL)
+	{
+		continuous_agg_refresh_with_tracker(cagg, tracker, context);
+		tracker_store_free(tracker);
+	}
+
+	return invalidations != NULL || tracker != NULL;
 }
 
 static void

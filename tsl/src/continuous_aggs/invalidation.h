@@ -69,6 +69,7 @@ typedef struct TrackerStore
 	Oid tenant_type;
 	bool tenant_typbyval;
 	int16 tenant_typlen;
+	char tenant_typalign;
 } TrackerStore;
 
 extern TrackerStore *

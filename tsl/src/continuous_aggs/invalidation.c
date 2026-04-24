@@ -1355,7 +1355,8 @@ collect_and_delete_tracker_entries_in_window(const ContinuousAgg *cagg,
 	getTypeInputInfo(tenant_type, &typinput, &typioparam);
 	int16 typlen;
 	bool typbyval;
-	get_typlenbyval(tenant_type, &typlen, &typbyval);
+	char typalign;
+	get_typlenbyvalalign(tenant_type, &typlen, &typbyval, &typalign);
 
 	Oid time_type = refresh_window->type;
 	int64 window_end = refresh_window->end;
@@ -1480,6 +1481,7 @@ collect_and_delete_tracker_entries_in_window(const ContinuousAgg *cagg,
 	store->tenant_type = tenant_type;
 	store->tenant_typbyval = typbyval;
 	store->tenant_typlen = typlen;
+	store->tenant_typalign = typalign;
 	return store;
 }
 
