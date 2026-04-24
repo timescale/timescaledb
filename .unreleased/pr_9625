@@ -1,0 +1,1 @@
+Fixes: #9625 Make timescaledb_post_restore() reliably restart background workers in a single call

@@ -42,6 +42,7 @@
 
 /* for getting settings correct before loading the versioned scheduler */
 #include "catalog/pg_db_role_setting.h"
+#include "utils/guc.h"
 
 #include "../compat/compat.h"
 #include "../extension_constants.h"
@@ -963,6 +964,16 @@ process_settings(Oid databaseid)
 
 	if (!IsUnderPostmaster)
 		return;
+
+	/*
+	 * Force the restoring placeholder's reset_val to "off". The worker may
+	 * have read pg_db_role_settings before post_restore's RESET committed and
+	 * stored the old 'on' value as reset_val. ApplySetting below only applies
+	 * rows that exist, so the stale reset_val would be inherited by the real
+	 * GUC once DefineCustomBoolVariable runs and the scheduler would exit.
+	 * NULL would only restore that stale value, so pass "off" explicitly.
+	 */
+	SetConfigOption(MAKE_EXTOPTION("restoring"), "off", PGC_SUSET, PGC_S_DATABASE);
 
 	relsetting = table_open(DbRoleSettingRelationId, AccessShareLock);
 
