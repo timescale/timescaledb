@@ -4825,11 +4825,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DisableTrigAll:
 		case AT_EnableTrigUser:
 		case AT_DisableTrigUser:
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("hypertables do not support  "
-							"enabling or disabling triggers.")));
-			/* Break here to silence compiler */
+			foreach_chunk(ht, process_altertable_chunk, cmd);
 			break;
 		case AT_ClusterOn:
 			process_altertable_clusteron_end(ht, cmd);

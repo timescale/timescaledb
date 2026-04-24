@@ -289,10 +289,41 @@ SELECT * FROM color;
 -- switch back to default user to run some dropping tests
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER;
 
-\set ON_ERROR_STOP 0
--- test that disable trigger is disallowed
+-- test that ENABLE/DISABLE TRIGGER is propagated to chunks
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'create_vehicle_trigger'
+  AND tgrelid = 'location'::regclass;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+
 ALTER TABLE location DISABLE TRIGGER create_vehicle_trigger;
-\set ON_ERROR_STOP 1
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'create_vehicle_trigger'
+  AND tgrelid = 'location'::regclass;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+
+ALTER TABLE location ENABLE TRIGGER create_vehicle_trigger;
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'create_vehicle_trigger'
+  AND tgrelid = 'location'::regclass;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+
+ALTER TABLE location ENABLE ALWAYS TRIGGER create_vehicle_trigger;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+
+ALTER TABLE location DISABLE TRIGGER USER;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+
+ALTER TABLE location ENABLE TRIGGER USER;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
 
 -- test that drop trigger works
 DROP TRIGGER create_color_trigger ON location;
