@@ -98,6 +98,12 @@ bloom1_hash_4(PG_FUNCTION_ARGS)
 	PG_RETURN_UINT64(bloom1_hash64(PG_GETARG_INT32(0)));
 }
 
+static Datum
+bloom1_hash_2(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_UINT64(bloom1_hash64(PG_GETARG_INT16(0)));
+}
+
 #ifdef TS_USE_UMASH
 static struct umash_params *
 hashing_params()
@@ -196,6 +202,10 @@ bloom1_get_hash_function(Oid type, FmgrInfo **finfo)
 		case F_HASHDATEEXTENDED:
 #endif
 			return bloom1_hash_4;
+
+		case F_HASHINT2EXTENDED:
+			return bloom1_hash_2;
+
 		default:
 			/*
 			 * Use the Postgres hash function. We might require the finfo, for
