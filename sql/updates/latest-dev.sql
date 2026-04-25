@@ -88,17 +88,23 @@ DROP PROCEDURE IF EXISTS @extschema@.add_process_hypertable_invalidations_policy
 DROP PROCEDURE IF EXISTS @extschema@.remove_process_hypertable_invalidations_policy(REGCLASS, BOOL);
 
 -- #9578: rename composite bloom metadata columns that were created with the
--- pre-fix naming scheme ("_ts_meta_v2_bloomh_<col1>_<col2>") to the post-fix
--- collision-safe scheme ("_ts_meta_v2_bloomh_<hash4>_<col1>_<col2>").  The
--- pre-fix scheme joined column names with '_', which collided whenever two
--- composite specs flattened to the same string (e.g. bloom(a_b, c) vs
--- bloom(a, b_c) both produced "_ts_meta_v2_bloomh_a_b_c").  Renaming existing
--- columns in place preserves bloom-filter pushdown on already-compressed data.
+-- pre-fix naming scheme to the post-fix collision-safe scheme.  The pre-fix
+-- scheme joined column names with '_', which collided whenever two composite
+-- specs flattened to the same string (e.g. bloom(a_b, c) vs bloom(a, b_c)
+-- both produced "_ts_meta_v2_bloomh_a_b_c").  Renaming existing columns in
+-- place preserves bloom-filter pushdown on already-compressed data.
+--
+-- Pre-fix naming had two branches (compressed_column_metadata_name_v2 in
+-- tsl/src/compression/create.c):
+--   short (joined length <= 39): _ts_meta_v2_bloomh_<joined>
+--   long  (joined length  > 39): _ts_meta_v2_bloomh_<md5(joined)[0:4]>_<joined[0:39]>
+-- The migration tries both candidate old names and renames whichever exists.
 DO $$
 DECLARE
   cs_rec RECORD;
   spec JSONB;
   col_names TEXT[];
+  joined TEXT;
   old_name TEXT;
   new_name TEXT;
 BEGIN
@@ -121,10 +127,17 @@ BEGIN
         CONTINUE;
       END IF;
 
-      -- Pre-fix name: literal '_' join, no hash. Post-fix: C-computed name
-      -- (with 4-char md5 hash prefix computed from NUL-separated columns).
-      old_name := '_ts_meta_v2_bloomh_' || array_to_string(col_names, '_');
+      joined := array_to_string(col_names, '_');
       new_name := _timescaledb_functions.compressed_column_metadata_name('bloomh', col_names);
+
+      -- Reconstruct the pre-fix old_name using the same branch the C code
+      -- would have taken on this column list. md5() returns 32-char lowercase
+      -- hex, which matches pg_md5_hash's output format.
+      IF length(joined) > 39 THEN
+        old_name := '_ts_meta_v2_bloomh_' || substr(md5(joined), 1, 4) || '_' || left(joined, 39);
+      ELSE
+        old_name := '_ts_meta_v2_bloomh_' || joined;
+      END IF;
 
       IF old_name = new_name THEN
         CONTINUE;
