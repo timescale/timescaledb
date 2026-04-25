@@ -160,6 +160,12 @@ extern TSDLLEXPORT bool ts_guc_enable_rowlevel_compression_locking;
 extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_batch_sorted_merge;
 
 extern bool ts_guc_enable_partitioned_hypertables;
+extern TSDLLEXPORT int ts_guc_observ_buffer_capacity;
+
+/* Each entry takes 16 bytes */
+#define TS_OBSERV_CAPACITY_DEFAULT 262144 /* 2^18 * 16 = 4 MB */
+#define TS_OBSERV_CAPACITY_MIN 8192		  /* 2^13 * 16 = 128 KB */
+#define TS_OBSERV_CAPACITY_MAX 16777216	  /* 2^24 * 16 = 256 MB */
 
 void _guc_init(void);
 

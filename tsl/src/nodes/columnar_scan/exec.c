@@ -418,6 +418,52 @@ columnar_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	detoaster_init(&dcontext->detoaster, CurrentMemoryContext);
+
+	/* Initialize observability aggregators */
+	TsObservKV agg_desc[] = {
+		{ TS_KEY_EVENT_TYPE, TS_EVENT_DECOMPRESS },
+		{ TS_KEY_COMPRESS_RELID, (double) chunk_state->chunk_relid },
+		{ TS_KEY_HYPERTABLE_ID, (double) chunk_state->hypertable_id },
+		{ TS_KEY_IS_COLUMNAR_SCAN, 1.0 },
+		{ TS_KEY_CMD_TYPE, (double) CMD_SELECT },
+	};
+
+	/* Create the observability aggregators */
+	dcontext->rows_per_batch_observ_id = ts_observ_agg_start(agg_desc, lengthof(agg_desc));
+	dcontext->batch_size_observ_id = ts_observ_agg_start(agg_desc, lengthof(agg_desc));
+
+	/* Describe what we want to aggregate */
+	ts_observ_agg_describe(dcontext->rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_MIN,
+						   TS_OBSERV_AGG_MIN);
+	ts_observ_agg_describe(dcontext->rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_MAX,
+						   TS_OBSERV_AGG_MAX);
+	ts_observ_agg_describe(dcontext->rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_SUM,
+						   TS_OBSERV_AGG_SUM);
+	ts_observ_agg_describe(dcontext->rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_STDDEV,
+						   TS_OBSERV_AGG_STDDEV);
+	ts_observ_agg_describe(dcontext->rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_AVG,
+						   TS_OBSERV_AGG_AVG);
+
+	ts_observ_agg_describe(dcontext->batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_MIN,
+						   TS_OBSERV_AGG_MIN);
+	ts_observ_agg_describe(dcontext->batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_MAX,
+						   TS_OBSERV_AGG_MAX);
+	ts_observ_agg_describe(dcontext->batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_SUM,
+						   TS_OBSERV_AGG_SUM);
+	ts_observ_agg_describe(dcontext->batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_STDDEV,
+						   TS_OBSERV_AGG_STDDEV);
+	ts_observ_agg_describe(dcontext->batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_AVG,
+						   TS_OBSERV_AGG_AVG);
 }
 
 /*
@@ -492,11 +538,15 @@ columnar_scan_end(CustomScanState *node)
 {
 	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	BatchQueue *bq = chunk_state->batch_queue;
+	DecompressContext *dcontext = &chunk_state->decompress_context;
 
 	bq->funcs->free(bq);
 	ExecEndNode(linitial(node->custom_ps));
 
 	detoaster_close(&chunk_state->decompress_context.detoaster);
+
+	ts_observ_agg_finish(dcontext->rows_per_batch_observ_id);
+	ts_observ_agg_finish(dcontext->batch_size_observ_id);
 }
 
 /*

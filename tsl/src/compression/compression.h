@@ -19,6 +19,7 @@ typedef struct BulkInsertStateData *BulkInsertState;
 #include "batch_metadata_builder_minmax.h"
 #include "hypertable.h"
 #include "nodes/columnar_scan/detoaster.h"
+#include "observ/ts_observ_agg.h"
 #include "ts_catalog/compression_settings.h"
 
 /*
@@ -179,6 +180,13 @@ typedef struct RowDecompressor
 	AttrMap *attrmap;
 
 	Detoaster detoaster;
+
+	/* Handles for aggregated observability data:
+	 * - rows per batch
+	 * - batch sizes
+	 */
+	TsObservAggID rows_per_batch_observ_id;
+	TsObservAggID batch_size_observ_id;
 } RowDecompressor;
 
 /*
@@ -303,6 +311,14 @@ typedef struct RowCompressor
 	bool needs_analyze_segmentby;
 
 	List *metadata_builders; /* List of BatchMetadataBuilder */
+
+	/* Handles for aggregated observability data:
+	 * - rows per batch
+	 * - batch sizes
+	 */
+	TsObservAggID rows_per_batch_observ_id;
+	TsObservAggID batch_size_observ_id;
+
 } RowCompressor;
 
 /*
@@ -428,7 +444,8 @@ extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_nu
 extern BulkWriter bulk_writer_build(Relation out_rel, int insert_options);
 extern BulkWriter *bulk_writer_alloc(Relation out_rel, int insert_options);
 extern void bulk_writer_close(BulkWriter *writer);
-extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc);
+extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc,
+										  Oid in_oid);
 
 extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);

@@ -14,6 +14,7 @@
 
 #include "batch_array.h"
 #include "detoaster.h"
+#include "observ/ts_observ_agg.h"
 
 typedef enum CompressionColumnType
 {
@@ -97,6 +98,13 @@ typedef struct DecompressContext
 	Detoaster detoaster;
 
 	int32 chunk_status;
+
+	/* Handles for aggregated observability data:
+	 * - rows per batch
+	 * - batch sizes
+	 */
+	TsObservAggID rows_per_batch_observ_id;
+	TsObservAggID batch_size_observ_id;
 
 } DecompressContext;
 

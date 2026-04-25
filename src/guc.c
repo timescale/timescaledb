@@ -153,6 +153,8 @@ TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 
 bool ts_guc_enable_partitioned_hypertables = false;
+TSDLLEXPORT int ts_guc_observ_buffer_capacity = TS_OBSERV_CAPACITY_DEFAULT;
+
 #if PG16_GE
 TSDLLEXPORT bool ts_guc_enable_cagg_rewrites = false;
 TSDLLEXPORT bool ts_guc_cagg_rewrites_debug_info = false;
@@ -483,6 +485,38 @@ static void
 assign_default_chunk_time_interval(const char *newval, void *extra)
 {
 	default_chunk_time_interval = extra;
+}
+
+/*
+ * check_hook: accept 0 (feature disabled) or a power of two in [MIN, MAX].
+ * Non-power-of-two values are rejected with a hint listing valid sizes.
+ */
+static bool
+observ_capacity_check_hook(int *newval, void **extra, GucSource source)
+{
+	int v = *newval;
+
+	if (v == 0)
+		return true; /* 0 = disabled, explicitly allowed */
+
+	if (v < TS_OBSERV_CAPACITY_MIN)
+	{
+		GUC_check_errdetail("Minimum buffer capacity is %d tuples (%d bytes). "
+							"Set to 0 to disable the observability feature.",
+							TS_OBSERV_CAPACITY_MIN,
+							TS_OBSERV_CAPACITY_MIN * 16);
+		return false;
+	}
+
+	if ((v & (v - 1)) != 0)
+	{
+		GUC_check_errdetail(
+			"timescaledb.observ_buffer_capacity must be 0 (disabled) or a power of 2.");
+		GUC_check_errhint("Valid values: 0, 8192, 16384, 32768, 65536, 131072, 262144, "
+						  "524288, 1048576, 2097152, 4194304, 8388608, 16777216.");
+		return false;
+	}
+	return true;
 }
 
 void
@@ -1414,6 +1448,22 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 #endif
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("observ_buffer_capacity"),
+							"Per-database observability buffer capacity, "
+							"in 16-byte tuples. 0 disables the feature.",
+							"Must be 0 or a power of 2. "
+							"Takes effect only for databases whose observability segment "
+							"has not yet been created.",
+							&ts_guc_observ_buffer_capacity,
+							TS_OBSERV_CAPACITY_DEFAULT, /* default */
+							0,							/* min: 0 = disabled */
+							TS_OBSERV_CAPACITY_MAX,		/* max: 2^24 = 256 MB */
+							PGC_SIGHUP,
+							0,
+							observ_capacity_check_hook,
+							NULL,
+							NULL);
 
 #ifdef USE_TELEMETRY
 	DefineCustomEnumVariable(MAKE_EXTOPTION("telemetry_level"),

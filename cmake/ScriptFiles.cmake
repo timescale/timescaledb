@@ -53,6 +53,7 @@ set(SOURCE_FILES
     policy_internal.sql
     cagg_utils.sql
     job_stat_history_log_retention.sql
+    observability.sql
     osm_api.sql
     compression_defaults.sql
     sparse_index.sql)
