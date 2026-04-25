@@ -1050,7 +1050,7 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 																	   FUNCTIONS_SCHEMA_NAME,
 																	   ht->fd.id);
 	if (compression_jobs != NIL)
-		policy_compression_remove_internal(ht->main_table_relid, true);
+		policy_compression_remove_internal(ht->main_table_relid, false);
 
 	return true;
 }
