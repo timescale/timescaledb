@@ -662,20 +662,20 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
 \gset
 -- Show columns before drop
 select * from test.show_columns_ext(:'chunk'::regclass);
-           Column           |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
-----------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count             | integer                               |           |          |         | plain    |         1000 | 
- _ts_meta_min_1             | integer                               |           |          |         | plain    |         1000 | 
- _ts_meta_max_1             | integer                               |           |          |         | plain    |         1000 | 
- x                          | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
- value                      | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
- regress-test-bloom_u       | _timescaledb_internal.bloom1          |           |          |         | external |         1000 | 
- u                          | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
- _ts_meta_v2_min_ts         | timestamp without time zone           |           |          |         | plain    |         1000 | 
- _ts_meta_v2_max_ts         | timestamp without time zone           |           |          |         | plain    |         1000 | 
- ts                         | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
- extra                      | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
- regress-test-bloom_u_extra | _timescaledb_internal.bloom1          |           |          |         | main     |         1000 | 
+             Column              |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count                  | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_min_1                  | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_max_1                  | integer                               |           |          |         | plain    |         1000 | 
+ x                               | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ value                           | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
+ regress-test-bloom_u            | _timescaledb_internal.bloom1          |           |          |         | external |         1000 | 
+ u                               | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ _ts_meta_v2_min_ts              | timestamp without time zone           |           |          |         | plain    |         1000 | 
+ _ts_meta_v2_max_ts              | timestamp without time zone           |           |          |         | plain    |         1000 | 
+ ts                              | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ extra                           | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
+ regress-test-bloom_2dff_u_extra | _timescaledb_internal.bloom1          |           |          |         | main     |         1000 | 
 
 -- Drop column with minmax sparse index
 alter table test_drop_sparse drop column ts;
@@ -686,17 +686,17 @@ select * from settings;
  _timescaledb_internal._hyper_7_11_chunk | _timescaledb_internal.compress_hyper_8_12_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "bloom", "column": ["u", "extra"], "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
 
 select * from test.show_columns_ext(:'chunk'::regclass);
-           Column           |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
-----------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count             | integer                               |           |          |         | plain    |         1000 | 
- _ts_meta_min_1             | integer                               |           |          |         | plain    |         1000 | 
- _ts_meta_max_1             | integer                               |           |          |         | plain    |         1000 | 
- x                          | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
- value                      | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
- regress-test-bloom_u       | _timescaledb_internal.bloom1          |           |          |         | external |         1000 | 
- u                          | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
- extra                      | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
- regress-test-bloom_u_extra | _timescaledb_internal.bloom1          |           |          |         | main     |         1000 | 
+             Column              |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+---------------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count                  | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_min_1                  | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_max_1                  | integer                               |           |          |         | plain    |         1000 | 
+ x                               | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ value                           | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
+ regress-test-bloom_u            | _timescaledb_internal.bloom1          |           |          |         | external |         1000 | 
+ u                               | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ extra                           | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
+ regress-test-bloom_2dff_u_extra | _timescaledb_internal.bloom1          |           |          |         | main     |         1000 | 
 
 -- Verify data is still queryable
 select count(*) from test_drop_sparse;
@@ -758,16 +758,16 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_drop_sparse2') limit 1)
 \gset
 select * from test.show_columns_ext(:'chunk'::regclass);
-          Column          |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
---------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count           | integer                               |           |          |         | plain    |         1000 | 
- _ts_meta_min_1           | integer                               |           |          |         | plain    |         1000 | 
- _ts_meta_max_1           | integer                               |           |          |         | plain    |         1000 | 
- x                        | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
- a                        | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
- b                        | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
- c                        | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
- regress-test-bloom_a_b_c | _timescaledb_internal.bloom1          |           |          |         | main     |         1000 | 
+            Column             |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+-------------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count                | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_min_1                | integer                               |           |          |         | plain    |         1000 | 
+ _ts_meta_max_1                | integer                               |           |          |         | plain    |         1000 | 
+ x                             | _timescaledb_internal.compressed_data |           |          |         | external |            0 | 
+ a                             | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
+ b                             | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
+ c                             | _timescaledb_internal.compressed_data |           |          |         | extended |            0 | 
+ regress-test-bloom_ce14_a_b_c | _timescaledb_internal.bloom1          |           |          |         | main     |         1000 | 
 
 -- Drop one column from the composite bloom
 alter table test_drop_sparse2 drop column b;
