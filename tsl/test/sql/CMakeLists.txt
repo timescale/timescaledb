@@ -7,6 +7,9 @@ set(TEST_FILES
     bgw_job_ddl.sql
     bgw_policy.sql
     bgw_security.sql
+    cagg_backfill_tracking.sql
+    cagg_backfill_tracking_errors.sql
+    cagg_refresh_by_tenant.sql
     cagg_direct_compress.sql
     cagg_errors.sql
     cagg_invalidation.sql

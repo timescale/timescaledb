@@ -248,6 +248,15 @@ continuous_agg_dml_invalidate_default(int32 hypertable_id, Relation chunk_rel,
 	pg_unreachable();
 }
 
+static bool
+continuous_agg_backfill_check_default(int32 hypertable_id, int64 chunk_range_end,
+									  TupleTableSlot *slot, const Hypertable *ht,
+									  const char *tenant_column_name)
+{
+	/* no-op when TSL is not loaded — nothing tracked, caller must run cache_inval */
+	return false;
+}
+
 TS_FUNCTION_INFO_V1(ts_tsl_loaded);
 
 PGDLLEXPORT Datum
@@ -333,6 +342,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht_all_default,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate_default,
+	.continuous_agg_backfill_check = continuous_agg_backfill_check_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_apply_rewrites_tsl = NULL,
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,

@@ -127,6 +127,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
+	.continuous_agg_backfill_check = continuous_agg_backfill_check,
 	.continuous_agg_update_options = continuous_agg_update_options,
 #if PG16_GE
 	.continuous_agg_apply_rewrites_tsl = continuous_agg_apply_rewrites,

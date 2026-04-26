@@ -134,6 +134,10 @@ typedef struct ChunkInsertState
 	/* Should this INSERT be skipped due to ON CONFLICT DO NOTHING */
 	bool skip_current_tuple;
 	SharedCounters *counters;
+
+	/* Time range end of this chunk's open (time) dimension slice.
+	 * Used by backfill tracking to determine if a chunk is "old". */
+	int64 chunk_range_end;
 } ChunkInsertState;
 
 extern ChunkInsertState *ts_chunk_insert_state_create(Oid chunk_relid,

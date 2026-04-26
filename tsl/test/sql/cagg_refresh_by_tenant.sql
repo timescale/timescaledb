@@ -1,0 +1,182 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- Tests for manual refresh of continuous aggregates consuming the backfill
+-- tracker. Uses current_timestamp_mock for deterministic "now".
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timescaledb.current_timestamp_mock = '2024-01-15 00:00:00+00';
+
+CREATE VIEW hyper_invalidation_log_view AS
+SELECT ht.table_name,
+       _timescaledb_functions.to_timestamp(il.lowest_modified_value) AT TIME ZONE 'UTC' AS start,
+       _timescaledb_functions.to_timestamp(il.greatest_modified_value) AT TIME ZONE 'UTC' AS "end"
+FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il
+JOIN _timescaledb_catalog.hypertable ht ON ht.id = il.hypertable_id;
+
+CREATE VIEW backfill_tracker_view AS
+SELECT ht.table_name,
+       bt.device_value,
+       _timescaledb_functions.to_timestamp(bt.lowest_modified_value) AT TIME ZONE 'UTC' AS start,
+       _timescaledb_functions.to_timestamp(bt.greatest_modified_value) AT TIME ZONE 'UTC' AS "end"
+FROM _timescaledb_catalog.continuous_aggs_backfill_tracker bt
+JOIN _timescaledb_catalog.hypertable ht ON ht.id = bt.hypertable_id;
+
+CREATE TABLE metrics(
+    ts TIMESTAMPTZ NOT NULL,
+    tenant_id TEXT NOT NULL,
+    temp INTEGER
+);
+SELECT create_hypertable('metrics', 'ts', chunk_time_interval => interval '6 hours');
+
+INSERT INTO metrics VALUES ('2024-01-15 00:00:00+00', 'seed', 0);
+
+CREATE MATERIALIZED VIEW metrics_hourly
+WITH (timescaledb.continuous) AS
+SELECT tenant_id, time_bucket('1 hour', ts) AS bucket, sum(temp) AS sum_temp
+FROM metrics
+GROUP BY tenant_id, bucket
+WITH DATA;
+
+ALTER MATERIALIZED VIEW metrics_hourly SET (timescaledb.tenant_column = 'tenant_id');
+
+-- Test 1: backfill for a single tenant is captured in the tracker, drained
+-- by the refresh, and reflected in the cagg. The hypertable invalidation log
+-- must remain empty for this hypertable.
+INSERT INTO metrics VALUES
+    ('2024-01-07 10:30:00+00', 'alpha', 25);
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'metrics' ORDER BY device_value;
+
+CALL refresh_continuous_aggregate('metrics_hourly', '2024-01-07 00:00+00', '2024-01-08 00:00+00');
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'metrics' ORDER BY device_value;
+
+SELECT tenant_id,
+       bucket AT TIME ZONE 'UTC' AS bucket,
+       sum_temp
+FROM metrics_hourly
+WHERE bucket >= '2024-01-07' AND bucket < '2024-01-08'
+ORDER BY tenant_id, bucket;
+
+-- Test 2: multiple tenants backfilled into the same bucket. Each tenant is
+-- materialized with its own aggregate after a single refresh call.
+INSERT INTO metrics VALUES
+    ('2024-01-08 10:15:00+00', 'alpha', 10),
+    ('2024-01-08 10:45:00+00', 'alpha', 20),
+    ('2024-01-08 10:30:00+00', 'beta', 30),
+    ('2024-01-08 10:45:00+00', 'gamma', 40);
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'metrics' ORDER BY device_value;
+
+CALL refresh_continuous_aggregate('metrics_hourly', '2024-01-08 00:00+00', '2024-01-09 00:00+00');
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'metrics' ORDER BY device_value;
+SELECT * FROM hyper_invalidation_log_view WHERE table_name = 'metrics' ORDER BY start;
+
+SELECT tenant_id,
+       bucket AT TIME ZONE 'UTC' AS bucket,
+       sum_temp
+FROM metrics_hourly
+WHERE bucket >= '2024-01-08' AND bucket < '2024-01-09'
+ORDER BY tenant_id, bucket;
+
+-- Test 3: a single tenant backfilled across three adjacent buckets. One
+-- tracker row must produce one materialized row per affected bucket.
+INSERT INTO metrics VALUES
+    ('2024-01-05 09:30:00+00', 'omega', 100),
+    ('2024-01-05 10:30:00+00', 'omega', 200),
+    ('2024-01-05 11:30:00+00', 'omega', 300);
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'metrics' ORDER BY device_value;
+
+CALL refresh_continuous_aggregate('metrics_hourly', '2024-01-05 00:00+00', '2024-01-06 00:00+00');
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'metrics' ORDER BY device_value;
+
+SELECT tenant_id,
+       bucket AT TIME ZONE 'UTC' AS bucket,
+       sum_temp
+FROM metrics_hourly
+WHERE bucket >= '2024-01-05' AND bucket < '2024-01-06'
+ORDER BY tenant_id, bucket;
+
+-- Test 4: cross-tenant isolation. Pre-materialize three tenants in a bucket,
+-- then backfill a fourth tenant in the same bucket. The second refresh must
+-- add the fourth tenant's row and leave the existing three untouched.
+INSERT INTO metrics VALUES
+    ('2024-01-04 10:15:00+00', 'x', 11),
+    ('2024-01-04 10:30:00+00', 'y', 22),
+    ('2024-01-04 10:45:00+00', 'z', 33);
+
+CALL refresh_continuous_aggregate('metrics_hourly', '2024-01-04 00:00+00', '2024-01-05 00:00+00');
+
+SELECT tenant_id,
+       bucket AT TIME ZONE 'UTC' AS bucket,
+       sum_temp
+FROM metrics_hourly
+WHERE bucket >= '2024-01-04' AND bucket < '2024-01-05'
+ORDER BY tenant_id, bucket;
+
+INSERT INTO metrics VALUES ('2024-01-04 10:20:00+00', 'w', 44);
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'metrics' ORDER BY device_value;
+
+CALL refresh_continuous_aggregate('metrics_hourly', '2024-01-04 00:00+00', '2024-01-05 00:00+00');
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'metrics' ORDER BY device_value;
+
+SELECT tenant_id,
+       bucket AT TIME ZONE 'UTC' AS bucket,
+       sum_temp
+FROM metrics_hourly
+WHERE bucket >= '2024-01-04' AND bucket < '2024-01-05'
+ORDER BY tenant_id, bucket;
+
+-- Second hypertable with a UUID-typed tenant column.
+CREATE TABLE events(
+    ts TIMESTAMPTZ NOT NULL,
+    tenant_uuid UUID NOT NULL,
+    value INTEGER
+);
+SELECT create_hypertable('events', 'ts', chunk_time_interval => interval '6 hours');
+
+INSERT INTO events VALUES ('2024-01-15 00:00:00+00', '00000000-0000-0000-0000-000000000000', 0);
+
+CREATE MATERIALIZED VIEW events_hourly
+WITH (timescaledb.continuous) AS
+SELECT tenant_uuid, time_bucket('1 hour', ts) AS bucket, sum(value) AS sum_value
+FROM events
+GROUP BY tenant_uuid, bucket
+WITH DATA;
+
+ALTER MATERIALIZED VIEW events_hourly SET (timescaledb.tenant_column = 'tenant_uuid');
+
+-- Test 5: a recent below-watermark insert populates the hypertable
+-- invalidation log while an old backfill insert populates the tracker.
+-- A single refresh call drains both and materializes the corresponding
+-- rows in the cagg.
+INSERT INTO events VALUES
+    ('2024-01-14 20:15:00+00', '11111111-1111-1111-1111-111111111111', 50),
+    ('2024-01-06 10:30:00+00', '22222222-2222-2222-2222-222222222222', 60);
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'events' ORDER BY device_value;
+SELECT * FROM hyper_invalidation_log_view WHERE table_name = 'events' ORDER BY start;
+
+CALL refresh_continuous_aggregate('events_hourly', '2024-01-06 00:00+00', '2024-01-15 00:00+00');
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'events' ORDER BY device_value;
+SELECT * FROM hyper_invalidation_log_view WHERE table_name = 'events' ORDER BY start;
+
+SELECT tenant_uuid,
+       bucket AT TIME ZONE 'UTC' AS bucket,
+       sum_value
+FROM events_hourly
+ORDER BY tenant_uuid, bucket;
+
+-- Cleanup
+DROP TABLE events CASCADE;
+DROP TABLE metrics CASCADE;
+DROP VIEW hyper_invalidation_log_view;
+DROP VIEW backfill_tracker_view;
