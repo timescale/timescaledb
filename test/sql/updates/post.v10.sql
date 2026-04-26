@@ -4,3 +4,4 @@
 
 \ir post.v9.sql
 \ir post.sparse_index.sql
+\ir post.fix_sparse_index_migration.sql

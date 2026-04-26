@@ -700,7 +700,7 @@ SELECT compress_chunk(c) FROM show_chunks('test_segmentby_stats') c;
 SELECT * FROM _timescaledb_catalog.compression_settings;
                   relid                   |                  compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                            index                            
 ------------------------------------------+--------------------------------------------------+-------------+---------+--------------+--------------------+-------------------------------------------------------------
- metrics                                  |                                                  |             | {time}  | {f}          | {f}                | 
+ metrics                                  |                                                  |             | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  metrics_status                           |                                                  |             |         |              |                    | 
  _timescaledb_internal._hyper_4_54_chunk  | _timescaledb_internal.compress_hyper_5_55_chunk  |             | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  metrics_chunk                            |                                                  |             |         |              |                    | 
@@ -717,7 +717,7 @@ ANALYZE test_segmentby_stats;
 SELECT * FROM _timescaledb_catalog.compression_settings;
                   relid                   |                  compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                            index                            
 ------------------------------------------+--------------------------------------------------+-------------+---------+--------------+--------------------+-------------------------------------------------------------
- metrics                                  |                                                  |             | {time}  | {f}          | {f}                | 
+ metrics                                  |                                                  |             | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  metrics_status                           |                                                  |             |         |              |                    | 
  _timescaledb_internal._hyper_4_54_chunk  | _timescaledb_internal.compress_hyper_5_55_chunk  |             | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  metrics_chunk                            |                                                  |             |         |              |                    | 
@@ -744,7 +744,7 @@ ANALYZE test_segmentby_stats;
 SELECT * FROM _timescaledb_catalog.compression_settings;
                   relid                   |                  compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                            index                            
 ------------------------------------------+--------------------------------------------------+-------------+---------+--------------+--------------------+-------------------------------------------------------------
- metrics                                  |                                                  |             | {time}  | {f}          | {f}                | 
+ metrics                                  |                                                  |             | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  metrics_status                           |                                                  |             |         |              |                    | 
  _timescaledb_internal._hyper_4_54_chunk  | _timescaledb_internal.compress_hyper_5_55_chunk  |             | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  metrics_chunk                            |                                                  |             |         |              |                    | 
@@ -769,7 +769,7 @@ INSERT INTO test_orderby_not_segmentby SELECT '2024-06-01'::timestamptz + (i||' 
 SELECT * FROM _timescaledb_catalog.compression_settings;
                   relid                   |                  compress_relid                  | segmentby |     orderby      | orderby_desc | orderby_nullsfirst |                                                            index                                                            
 ------------------------------------------+--------------------------------------------------+-----------+------------------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------------
- metrics                                  |                                                  |           | {time}           | {f}          | {f}                | 
+ metrics                                  |                                                  |           | {time}           | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  metrics_status                           |                                                  |           |                  |              |                    | 
  _timescaledb_internal._hyper_4_54_chunk  | _timescaledb_internal.compress_hyper_5_55_chunk  |           | {time}           | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  metrics_chunk                            |                                                  |           |                  |              |                    | 
