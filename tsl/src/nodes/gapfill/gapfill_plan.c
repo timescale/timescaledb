@@ -275,6 +275,13 @@ gapfill_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path, List *
 	cscan->flags = path->flags;
 	cscan->methods = &gapfill_plan_methods;
 
+	/*
+	 * HAVING quals stolen from the aggregate subpath get evaluated on top of
+	 * the GapFill node so that they do not prevent gap rows from being
+	 * generated. See fix for #5202.
+	 */
+	cscan->scan.plan.qual = gfpath->having_quals;
+
 	cscan->custom_private = ts_new_list(T_List, GFP_Count);
 	lfirst(list_nth_cell(cscan->custom_private, GFP_GapfillFunc)) = gfpath->func;
 	lfirst(list_nth_cell(cscan->custom_private, GFP_GroupClause)) = root->parse->groupClause;
@@ -414,6 +421,35 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
 }
 
 /*
+ * Return true when every Aggref inside the given quals also appears as a
+ * top-level expression in the pathtarget. Used to decide whether HAVING quals
+ * can be safely lifted onto the CustomScan plan's qual list, since
+ * set_customscan_references matches expressions against custom_scan_tlist and
+ * would otherwise fail to resolve Vars buried inside an Aggref's arguments.
+ */
+static bool
+gapfill_quals_reference_only_pathtarget_aggs(List *quals, PathTarget *pt)
+{
+	List *aggs = pull_var_clause((Node *) quals,
+								 PVC_INCLUDE_AGGREGATES | PVC_RECURSE_PLACEHOLDERS);
+	ListCell *lc;
+
+	foreach (lc, aggs)
+	{
+		Node *agg = lfirst(lc);
+
+		if (IsA(agg, Aggref) && !list_member(pt->exprs, agg))
+		{
+			list_free(aggs);
+			return false;
+		}
+	}
+
+	list_free(aggs);
+	return true;
+}
+
+/*
  * Create a Gapfill Path node.
  *
  * The gap fill node needs rows to be sorted by time ASC
@@ -445,6 +481,45 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 	gapfill_build_pathtarget(root->upper_targets[UPPERREL_FINAL],
 							 path->cpath.path.pathtarget,
 							 subpath->pathtarget);
+
+	/*
+	 * Lift the HAVING quals off the aggregate subpath so they can be evaluated
+	 * on top of the GapFill node. Evaluating them below gapfill drops groups
+	 * before gaps are generated (issue #5202): when every group is filtered
+	 * out, gapfill has nothing to extend; when only some are filtered out,
+	 * gapfill still generates synthetic rows for the filtered buckets.
+	 *
+	 * We only lift when every Aggref referenced by HAVING is also a top-level
+	 * expression in the GapFill pathtarget. Otherwise setrefs would fail to
+	 * resolve Aggref references when processing scan.plan.qual against
+	 * custom_scan_tlist. This happens for queries that wrap aggregates in
+	 * locf/interpolate - pt_path contains locf(agg) rather than the bare agg.
+	 * For those queries we keep the old (partially broken) behaviour, which
+	 * at least works when HAVING does not filter out every group.
+	 */
+	List **subpath_qual_slot = NULL;
+	switch (nodeTag(subpath))
+	{
+		case T_AggPath:
+			subpath_qual_slot = &((AggPath *) subpath)->qual;
+			break;
+		case T_GroupPath:
+			subpath_qual_slot = &((GroupPath *) subpath)->qual;
+			break;
+		case T_GroupingSetsPath:
+			subpath_qual_slot = &((GroupingSetsPath *) subpath)->qual;
+			break;
+		default:
+			break;
+	}
+
+	if (subpath_qual_slot != NULL && *subpath_qual_slot != NIL &&
+		gapfill_quals_reference_only_pathtarget_aggs(*subpath_qual_slot,
+													 path->cpath.path.pathtarget))
+	{
+		path->having_quals = *subpath_qual_slot;
+		*subpath_qual_slot = NIL;
+	}
 
 	if (!gapfill_correct_order(root, subpath, func))
 	{

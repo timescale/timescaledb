@@ -32,5 +32,7 @@ void gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel,
 typedef struct GapFillPath
 {
 	CustomPath cpath;
-	FuncExpr *func; /* time_bucket_gapfill function call */
+	FuncExpr *func;		/* time_bucket_gapfill function call */
+	List *having_quals; /* HAVING quals lifted from the aggregate subpath so they are evaluated
+						   after gaps are generated (fixes #5202) */
 } GapFillPath;
