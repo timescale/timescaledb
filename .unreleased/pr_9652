@@ -1,0 +1,1 @@
+Fixes: #9652 Error on missing custom job function in ts_bgw_job_get_funcid
