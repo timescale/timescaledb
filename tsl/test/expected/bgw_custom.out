@@ -1074,20 +1074,11 @@ SELECT ts_test_bgw_job_function_call_string(:job_proc);
 ----------------------------------------------------------
  CALL public.custom_proc('1021', '{"type": "procedure"}')
 
--- Remove the procedure and let's check it fallingback to PROKIND_FUNCTION
+-- Remove the procedure and let's check it errors out when we try to call the function that gets the proc name
 DROP PROCEDURE custom_proc(jobid int, args jsonb);
-SELECT ts_test_bgw_job_function_call_string(:job_proc);
-            ts_test_bgw_job_function_call_string            
-------------------------------------------------------------
- SELECT public.custom_proc('1021', '{"type": "procedure"}')
-
 \set ON_ERROR_STOP 0
--- Mess with pg catalog to don't identify the PROKIND
-BEGIN;
-UPDATE pg_catalog.pg_proc SET prokind = 'X' WHERE oid = 'custom_func(int,jsonb)'::regprocedure;
-SELECT ts_test_bgw_job_function_call_string(:job_func);
-ERROR:  unsupported function type: X
-ROLLBACK;
+SELECT ts_test_bgw_job_function_call_string(:job_proc);
+ERROR:  function or procedure "public.custom_proc(integer, jsonb)" does not exist
 \set ON_ERROR_STOP 1
 SELECT delete_job(:job_func);
  delete_job 
