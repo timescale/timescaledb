@@ -1597,12 +1597,14 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown; ROLLBACK;
 
 -- test DELETE optimization on non-segmentby columns
 -- this shows optimization can be applied if in-memory filtering is enabled
+-- Use a time filter within the chunk range so chunk exclusion doesn't
+-- remove the filter entirely (all data is from 2020-01-01).
 \set QUIET off
-BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
-BEGIN; DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time > '2020-01-01 01:00'; ROLLBACK;
+BEGIN; DELETE FROM test_pushdown WHERE time > '2020-01-01 01:00'; ROLLBACK;
 SET timescaledb.enable_dml_decompression_tuple_filtering TO OFF;
-BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
-BEGIN; DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time > '2020-01-01 01:00'; ROLLBACK;
+BEGIN; DELETE FROM test_pushdown WHERE time > '2020-01-01 01:00'; ROLLBACK;
 RESET timescaledb.enable_dml_decompression_tuple_filtering;
 \set QUIET on
 

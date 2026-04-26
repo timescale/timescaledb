@@ -86,6 +86,7 @@ bool ts_guc_enable_chunk_append = true;
 bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
+bool ts_guc_enable_hypertable_expansion_for_dml = true;
 bool ts_guc_enable_qual_propagation = true;
 TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
 bool ts_guc_enable_qual_filtering = true;
@@ -733,6 +734,17 @@ _guc_init(void)
 							 "Enable constraint exclusion",
 							 "Enable planner constraint exclusion",
 							 &ts_guc_enable_constraint_exclusion,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_hypertable_expansion_for_dml"),
+							 "Enable chunk exclusion for DML",
+							 "Enable hypertable expansion and chunk exclusion for UPDATE/DELETE",
+							 &ts_guc_enable_hypertable_expansion_for_dml,
 							 true,
 							 PGC_USERSET,
 							 0,

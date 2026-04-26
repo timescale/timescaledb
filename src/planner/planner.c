@@ -432,14 +432,31 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 
 					if (ht)
 					{
-						/* Mark hypertable RTEs we'd like to expand ourselves.
-						 * We skip the DML target relation (resultRelation != 0
-						 * in the current query) but allow non-target hypertables
-						 * in subqueries of UPDATE/DELETE to use TSDB expansion. */
+						/* Mark hypertable RTEs we'd like to expand ourselves */
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-							query->resultRelation == 0 && rte->inh)
+							rte->inh)
 						{
-							rte_mark_for_expansion(rte);
+							/*
+							 * UPDATE/DELETE DML target: expand with GUC guard.
+							 * Check rootquery (not `query`) because this walker
+							 * recurses into subqueries before PG inlines them —
+							 * a subquery has resultRelation == 0, so the
+							 * non-target branch below would incorrectly mark it.
+							 * MERGE: not implemented because it can contain
+							 * INSERT actions requiring chunk routing, which
+							 * uses a separate planner path (ModifyHypertable).
+							 */
+							if (rti == (Index) query->resultRelation &&
+								IS_UPDL_CMD(context->rootquery) &&
+								ts_guc_enable_hypertable_expansion_for_dml)
+							{
+								rte_mark_for_expansion(rte);
+							}
+							/* Non-target table: always expand. */
+							else if (query->resultRelation == 0)
+							{
+								rte_mark_for_expansion(rte);
+							}
 						}
 
 						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
@@ -1432,12 +1449,26 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			/* Mark hypertable RTEs we'd like to expand ourselves.
 			 * Hypertables inside inlineable functions don't get marked during
 			 * the query preprocessing step. Therefore we do an extra try here.
-			 * We skip the DML target relation identified by resultRelation.
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
-				rte->ctename == NULL && rel->relid != (Index) query->resultRelation)
+				rte->ctename == NULL)
 			{
-				rte_mark_for_expansion(rte);
+				/*
+				 * UPDATE/DELETE DML target: expand with GUC guard.
+				 * MERGE: not implemented because it can contain INSERT
+				 * actions requiring chunk routing, which uses a separate
+				 * planner path (ModifyHypertable).
+				 */
+				if (rel->relid == (Index) query->resultRelation && IS_UPDL_CMD(query) &&
+					ts_guc_enable_hypertable_expansion_for_dml)
+				{
+					rte_mark_for_expansion(rte);
+				}
+				/* Non-target table: always expand. */
+				else if (rel->relid != (Index) query->resultRelation)
+				{
+					rte_mark_for_expansion(rte);
+				}
 			}
 			ts_create_private_reloptinfo(rel);
 			ts_plan_expand_timebucket_annotate(root, rel);

@@ -88,9 +88,12 @@ WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_
          ->  Hash Join
                Hash Cond: ("one_Partition".series_1 = "one_Partition_1".series_1)
                ->  Append
-                     ->  Seq Scan on _hyper_1_1_chunk "one_Partition_2"
-                     ->  Seq Scan on _hyper_1_2_chunk "one_Partition_3"
-                     ->  Seq Scan on _hyper_1_3_chunk "one_Partition_4"
+                     ->  Index Scan using "_hyper_1_1_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_1_chunk "one_Partition_2"
+                           Index Cond: (series_1 > (series_val())::double precision)
+                     ->  Index Scan using "_hyper_1_2_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_2_chunk "one_Partition_3"
+                           Index Cond: (series_1 > (series_val())::double precision)
+                     ->  Index Scan using "_hyper_1_3_chunk_one_Partition_timeCustom_series_1_idx" on _hyper_1_3_chunk "one_Partition_4"
+                           Index Cond: (series_1 > (series_val())::double precision)
                ->  Hash
                      ->  HashAggregate
                            Group Key: "one_Partition_1".series_1
