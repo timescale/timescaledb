@@ -180,7 +180,14 @@ ts_chunk_append_state_create(CustomScan *cscan)
 	state->csstate.methods = &chunk_append_state_methods;
 
 	state->initial_subplans = cscan->custom_plans;
-	state->initial_ri_clauses = list_nth(cscan->custom_private, CAP_ChunkRIClauses);
+	/*
+	 * Deep-copy the restrictinfo clauses out of custom_private. initialize_constraints
+	 * may rewrite them with ChangeVarNodes, which allocates new Bitmapsets in the
+	 * current (per-execution) memory context. Mutating the cached plan would leave
+	 * dangling pointers inside cached PlaceHolderVars on the next EXECUTE.
+	 */
+	state->initial_ri_clauses =
+		(List *) copyObject(list_nth(cscan->custom_private, CAP_ChunkRIClauses));
 	state->sort_options = list_nth(cscan->custom_private, CAP_SortOptions);
 	state->initial_parent_clauses = list_nth(cscan->custom_private, CAP_ParentClauses);
 
