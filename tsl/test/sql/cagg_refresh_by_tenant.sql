@@ -175,6 +175,38 @@ SELECT tenant_uuid,
 FROM events_hourly
 ORDER BY tenant_uuid, bucket;
 
+-- Test 6: a tracker row whose range straddles the refresh window end
+-- must stay in place. A subsequent refresh over a wider window that
+-- fully contains the row drains it and materializes the cagg.
+-- FIX ME --
+INSERT INTO events VALUES
+    ('2024-01-10 10:30:00+00', '55555555-5555-5555-5555-555555555555', 70),
+    ('2024-01-10 14:30:00+00', '55555555-5555-5555-5555-555555555555', 80);
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'events' ORDER BY device_value;
+
+CALL refresh_continuous_aggregate('events_hourly', '2024-01-10 00:00+00', '2024-01-10 12:00+00');
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'events' ORDER BY device_value;
+
+SELECT tenant_uuid,
+       bucket AT TIME ZONE 'UTC' AS bucket,
+       sum_value
+FROM events_hourly
+WHERE tenant_uuid = '55555555-5555-5555-5555-555555555555'
+ORDER BY bucket;
+
+CALL refresh_continuous_aggregate('events_hourly', '2024-01-10 00:00+00', '2024-01-10 15:00+00');
+
+SELECT * FROM backfill_tracker_view WHERE table_name = 'events' ORDER BY device_value;
+
+SELECT tenant_uuid,
+       bucket AT TIME ZONE 'UTC' AS bucket,
+       sum_value
+FROM events_hourly
+WHERE tenant_uuid = '55555555-5555-5555-5555-555555555555'
+ORDER BY bucket;
+
 -- Cleanup
 DROP TABLE events CASCADE;
 DROP TABLE metrics CASCADE;
