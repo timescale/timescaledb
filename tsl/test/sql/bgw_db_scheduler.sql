@@ -698,6 +698,41 @@ SELECT job_id, last_run_success, total_runs, total_successes, total_failures, to
 SELECT * FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
 SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
 
+--
+-- Test recovery from a failover-inherited job_stat row pinned at
+-- next_start = -infinity. mark_start writes -infinity while a job is
+-- running, and a primary crash before mark_end leaves the replica with
+-- this sentinel. The scheduler must replace it with a real next_start
+-- rather than propagate -infinity (issue #9360).
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+DELETE FROM _timescaledb_catalog.bgw_job;
+SELECT ts_bgw_params_reset_time();
+SELECT insert_job('test_failover_recovery', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s') AS failover_job_id \gset
+
+-- Inherited from a primary that crashed mid-execution.
+INSERT INTO _timescaledb_internal.bgw_job_stat
+(job_id, last_start, last_finish, next_start, last_successful_finish,
+ last_run_success, total_runs, total_duration, total_duration_failures,
+ total_successes, total_failures, total_crashes, consecutive_failures,
+ consecutive_crashes, flags)
+VALUES (:failover_job_id, '2020-01-01'::timestamptz, '-infinity', '-infinity',
+        '-infinity', false, 1, '0'::interval, '0'::interval, 0, 0, 1, 0, 1, 0);
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- Run long enough mock-time to clear the post-crash 5 minute wait.
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(400000);
+
+-- The scheduler must have run the job and replaced -infinity with a real
+-- next_start so subsequent scheduler ticks can pick up the job again.
+SELECT total_successes > 0 AS job_ran,
+       next_start <> '-infinity'::timestamptz AS next_start_recovered,
+       last_finish <> '-infinity'::timestamptz AS last_finish_recovered,
+       consecutive_crashes = 0 AS crash_counter_cleared
+FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :failover_job_id;
+
 -- clean up jobs
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();

@@ -518,12 +518,15 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 
 		/*
 		 * Mark the next start at the end if the job itself hasn't (this may
-		 * have happened before failure) and the failure was not in starting.
-		 * If the failure was in starting, then next_start should have been
-		 * restored in `on_failure_to_start_job` and thus we don't change it here.
-		 * Even if it wasn't restored, then keep it as DT_NOBEGIN to mark it as highest priority.
+		 * have happened before failure). For JOB_FAILURE_TO_START the
+		 * next_start should already have been restored to its previous value
+		 * in `on_failure_to_start_job` so we don't need to recalculate.
+		 * However when the previous next_start was DT_NOBEGIN (the sentinel
+		 * mark_start writes) the restore is skipped and the row would be
+		 * left pinned at -infinity. Calculate a real next_start in that case
+		 * to avoid the job getting permanently stuck.
 		 */
-		if (!bgw_job_stat_next_start_was_set(fd) && result_ctx->result != JOB_FAILURE_TO_START)
+		if (!bgw_job_stat_next_start_was_set(fd))
 			fd->next_start = calculate_next_start_on_failure(fd->last_finish,
 															 fd->consecutive_failures,
 															 result_ctx->job,
@@ -814,6 +817,19 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 
 		return calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
 	}
+
+	/*
+	 * A persisted next_start of DT_NOBEGIN is a sentinel mark_start writes
+	 * while a job is running. After a primary failover it can be inherited
+	 * by the new primary, and on_failure_to_start_job's `next_start !=
+	 * DT_NOBEGIN` guard can also leave it in this state. Returning
+	 * DT_NOBEGIN here would propagate the sentinel into sjob->next_start
+	 * and the row would never be cleared, leaving the job permanently
+	 * stuck. Sanitize to "now" so the scheduler runs the job and a real
+	 * next_start gets persisted on completion.
+	 */
+	if (jobstat->fd.next_start == DT_NOBEGIN)
+		return ts_timer_get_current_timestamp();
 
 	return jobstat->fd.next_start;
 }
