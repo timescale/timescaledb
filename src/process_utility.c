@@ -4908,7 +4908,7 @@ continuous_agg_with_clause_perm_check(ContinuousAgg *cagg, Oid view_relid)
 {
 	Oid ownerid = ts_rel_get_owner(view_relid);
 
-	if (!has_privs_of_role(GetUserId(), ownerid))
+	if (!ts_has_owner_privs(GetUserId(), ownerid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
