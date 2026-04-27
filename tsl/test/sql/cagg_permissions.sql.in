@@ -274,3 +274,34 @@ WITH NO DATA;
 SELECT user_view_perm IS NOT DISTINCT FROM mat_table_perm
 FROM cagg_info
 WHERE user_view = 'test_default_privileges.devices_summary'::regclass;
+
+-- Verify that members of pg_database_owner (the database owner) can
+-- configure continuous aggregates alongside the CAgg owner.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE dbowner_metrics (
+    timec INT NOT NULL,
+    val   DOUBLE PRECISION
+);
+SELECT FROM create_hypertable('dbowner_metrics', 'timec', chunk_time_interval => 100);
+CREATE OR REPLACE FUNCTION dbowner_now() RETURNS INT LANGUAGE SQL STABLE AS $$ SELECT 0::INT $$;
+SELECT set_integer_now_func('dbowner_metrics', 'dbowner_now');
+
+CREATE MATERIALIZED VIEW dbowner_summary
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT time_bucket(100, timec) AS bucket, max(val)
+FROM dbowner_metrics
+GROUP BY bucket WITH NO DATA;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('dbowner_summary', NULL, -200, '12 h'::interval);
+\set ON_ERROR_STOP 1
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT add_continuous_aggregate_policy('dbowner_summary', NULL, -200, '12 h'::interval) IS NOT NULL AS added;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;

@@ -14,6 +14,7 @@
 #include <catalog/namespace.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_am.h>
+#include <catalog/pg_authid_d.h>
 #include <catalog/pg_cast.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_operator.h>
@@ -935,6 +936,17 @@ ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 {
 	EquivalenceMember *em = ts_find_em_for_rel(ec, rel);
 	return em ? em->em_expr : NULL;
+}
+
+/*
+ * True if `userid` has privileges of `ownerid` or of `pg_database_owner`.
+ * Used to gate hypertable/CAGG/job configuration: the table owner and the
+ * database owner are both allowed.
+ */
+bool
+ts_has_owner_privs(Oid userid, Oid ownerid)
+{
+	return has_privs_of_role(userid, ownerid) || has_privs_of_role(userid, ROLE_PG_DATABASE_OWNER);
 }
 
 bool

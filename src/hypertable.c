@@ -103,7 +103,7 @@ ts_rel_get_owner(Oid relid)
 bool
 ts_hypertable_has_privs_of(Oid hypertable_oid, Oid userid)
 {
-	return has_privs_of_role(userid, ts_rel_get_owner(hypertable_oid));
+	return ts_has_owner_privs(userid, ts_rel_get_owner(hypertable_oid));
 }
 
 /*
@@ -118,7 +118,7 @@ ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 {
 	Oid ownerid = ts_rel_get_owner(hypertable_oid);
 
-	if (!has_privs_of_role(userid, ownerid))
+	if (!ts_has_owner_privs(userid, ownerid))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),

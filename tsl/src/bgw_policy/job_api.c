@@ -22,6 +22,7 @@
 #include "job.h"
 #include "job_api.h"
 #include "policies_v2.h"
+#include "utils.h"
 
 /* Default max runtime for a custom job is unlimited for now */
 #define DEFAULT_MAX_RUNTIME 0
@@ -261,7 +262,7 @@ job_delete(PG_FUNCTION_ARGS)
 
 	job = find_job(job_id, PG_ARGISNULL(0), false);
 
-	if (!has_privs_of_role(GetUserId(), job->fd.owner))
+	if (!ts_has_owner_privs(GetUserId(), job->fd.owner))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),

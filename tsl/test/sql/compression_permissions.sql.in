@@ -189,3 +189,42 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 INSERT INTO conditions VALUES( '2018-12-02 00:00'::timestamp, 'NYC', 75, 95);
 SELECT count(*) FROM conditions;
 SELECT count(*) FROM ( SELECT show_chunks('conditions'))q;
+
+-- Verify that members of pg_database_owner (the database owner) can run
+-- hypertable and policy configuration alongside the relation/job owner.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+CREATE TABLE dbowner_conditions (
+    timec       TIMESTAMPTZ      NOT NULL,
+    location    TEXT             NOT NULL,
+    temperature DOUBLE PRECISION NULL
+);
+SELECT FROM create_hypertable('dbowner_conditions', 'timec', chunk_time_interval => INTERVAL '1 day');
+ALTER TABLE dbowner_conditions SET (timescaledb.compress);
+SELECT add_retention_policy('dbowner_conditions', INTERVAL '1 year') AS dbowner_retention_id \gset
+
+-- ROLE_DEFAULT_PERM_USER_2 is currently neither the table owner nor
+-- the database owner: all configuration calls below must fail.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+\set ON_ERROR_STOP 0
+SELECT set_chunk_time_interval('dbowner_conditions', INTERVAL '7 days');
+SELECT add_compression_policy('dbowner_conditions', INTERVAL '6 months');
+SELECT alter_job(:dbowner_retention_id, schedule_interval => INTERVAL '1 hour');
+SELECT delete_job(:dbowner_retention_id);
+\set ON_ERROR_STOP 1
+
+-- Make ROLE_DEFAULT_PERM_USER_2 the database owner. They become an
+-- implicit member of pg_database_owner.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER_2;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+SELECT set_chunk_time_interval('dbowner_conditions', INTERVAL '7 days');
+SELECT add_compression_policy('dbowner_conditions', INTERVAL '6 months') > 0 AS added;
+SELECT (alter_job(:dbowner_retention_id, schedule_interval => INTERVAL '1 hour')).schedule_interval AS altered;
+SELECT delete_job(:dbowner_retention_id);
+
+-- Restore the database owner so the runner can drop the database
+-- during teardown.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_SUPERUSER;
