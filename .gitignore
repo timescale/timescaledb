@@ -7,6 +7,7 @@
 /sql/timescaledb--*.sql
 /sql/pre_install/*.gen
 /sql/updates/*.gen
+/sql/updates/header.sql
 /data/
 /src/*.o
 /src/*.so
