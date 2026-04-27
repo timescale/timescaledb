@@ -557,3 +557,35 @@ SELECT * FROM compress_settings_merge ORDER BY time;
 ROLLBACK;
 
 DROP TABLE compress_settings_merge;
+
+-- Concurrent merge of compressed chunks: chunk_rewrite cleanup must not drop
+-- the new compressed transient heap when cascading through non-result chunks.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE concurrent_compressed_merge(
+    time timestamptz NOT NULL, device int, temp float8
+);
+SELECT create_hypertable('concurrent_compressed_merge', 'time',
+                         chunk_time_interval => INTERVAL '1 day');
+ALTER TABLE concurrent_compressed_merge
+    SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+INSERT INTO concurrent_compressed_merge VALUES
+    ('2024-01-01 12:00', 1, 1.5),
+    ('2024-01-02 12:00', 2, 2.5);
+SELECT compress_chunk(ch) FROM show_chunks('concurrent_compressed_merge') ch;
+
+SELECT format('%I.%I', schema_name, table_name) AS ccm_c1
+  FROM _timescaledb_catalog.chunk
+ WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='concurrent_compressed_merge')
+ ORDER BY id LIMIT 1 \gset
+SELECT format('%I.%I', schema_name, table_name) AS ccm_c2
+  FROM _timescaledb_catalog.chunk
+ WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='concurrent_compressed_merge')
+ ORDER BY id OFFSET 1 LIMIT 1 \gset
+
+CALL merge_chunks(:'ccm_c1'::regclass, :'ccm_c2'::regclass, concurrently => true);
+
+SELECT count(*) AS rows_after, count(DISTINCT show_chunks) AS chunks_after
+FROM concurrent_compressed_merge,
+     show_chunks('concurrent_compressed_merge');
+
+DROP TABLE concurrent_compressed_merge;
