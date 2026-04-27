@@ -42,6 +42,7 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_rewrite.h"
 #include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/compression_settings.h"
 
 typedef struct RelationMergeInfo
 {
@@ -1319,6 +1320,45 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		 * resort */
 		if (relinfos[i].isresult)
 			mergeindex = i;
+	}
+
+	/*
+	 * All compressed chunks being merged must share the same compression
+	 * settings. Without this check, the heap copy in merge_relinfos rewrites
+	 * tuples positionally between chunks whose compressed layouts diverge,
+	 * silently corrupting the merged chunk and producing decompression errors
+	 * or crashes at read time.
+	 */
+	{
+		const CompressionSettings *result_settings = NULL;
+		const Chunk *result_chunk = relinfos[mergeindex].chunk;
+
+		if (result_chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+			result_settings = ts_compression_settings_get(result_chunk->table_id);
+
+		for (int i = 0; i < nrelids; i++)
+		{
+			const Chunk *chunk = relinfos[i].chunk;
+			const CompressionSettings *settings;
+
+			if (i == mergeindex || chunk->fd.compressed_chunk_id == INVALID_CHUNK_ID)
+				continue;
+
+			settings = ts_compression_settings_get(chunk->table_id);
+
+			if (result_settings == NULL ||
+				!ts_compression_settings_equal(result_settings, settings))
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("cannot merge compressed chunks with different "
+								"compression settings"),
+						 errdetail("Chunk \"%s\" was compressed with different "
+								   "settings than chunk \"%s\".",
+								   get_rel_name(chunk->table_id),
+								   get_rel_name(result_chunk->table_id)),
+						 errhint("Decompress the affected chunks and recompress them "
+								 "with the current compression settings before merging.")));
+		}
 	}
 
 	DEBUG_WAITPOINT("merge_chunks_before_rewrite");
