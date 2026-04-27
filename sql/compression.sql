@@ -12,3 +12,17 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_data_column_size(_t
    AS '@MODULE_PATHNAME@', 'ts_compressed_data_column_size'
    LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
+-- Compute the generated metadata column name for a given metadata type and
+-- ordered column list. Used by the #9578 migration to rename pre-fix composite
+-- bloom columns to the post-fix collision-safe format.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_column_metadata_name(metadata_type TEXT, column_names TEXT[])
+   RETURNS TEXT
+   AS '@MODULE_PATHNAME@', 'ts_compressed_column_metadata_name'
+   LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+-- Rename a column on a compressed chunk, bypassing the normal chunk-rename
+-- restriction. Used exclusively by the #9578 upgrade path.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.rename_compressed_column(compress_relid REGCLASS, old_name TEXT, new_name TEXT)
+   RETURNS VOID
+   AS '@MODULE_PATHNAME@', 'ts_rename_compressed_column'
+   LANGUAGE C VOLATILE STRICT;

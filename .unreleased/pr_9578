@@ -1,0 +1,1 @@
+Fixes: #9578 Prevent composite bloom metadata column name collisions when column names contain underscores

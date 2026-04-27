@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include <fmgr.h>
 #include <nodes/parsenodes.h>
 
 #include "hypertable.h"
@@ -32,6 +33,10 @@ char *column_segment_max_name(int16 column_index);
 char *compressed_column_metadata_name_v2(const char *metadata_type, const char **column_names,
 										 int num_columns);
 char *compressed_column_metadata_name_list_v2(const char *metadata_type, List *column_names_list);
+
+/* SQL-callable helpers (cross-module wrappers; see src/cross_module_fn.c). */
+extern Datum tsl_compressed_column_metadata_name(PG_FUNCTION_ARGS);
+extern Datum tsl_rename_compressed_column(PG_FUNCTION_ARGS);
 
 int compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_reloid,
 									 AttrNumber chunk_attno, Oid compressed_reloid,

@@ -60,6 +60,8 @@ CROSSMODULE_WRAPPER(compressed_data_decompress_forward);
 CROSSMODULE_WRAPPER(compressed_data_decompress_reverse);
 CROSSMODULE_WRAPPER(compressed_data_column_size);
 CROSSMODULE_WRAPPER(compressed_data_to_array);
+CROSSMODULE_WRAPPER(compressed_column_metadata_name);
+CROSSMODULE_WRAPPER(rename_compressed_column);
 CROSSMODULE_WRAPPER(compressed_data_send);
 CROSSMODULE_WRAPPER(compressed_data_recv);
 CROSSMODULE_WRAPPER(compressed_data_in);
@@ -354,6 +356,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.compressed_data_decompress_reverse = error_no_default_fn_pg_community,
 	.compressed_data_column_size = error_no_default_fn_pg_community,
 	.compressed_data_to_array = error_no_default_fn_pg_community,
+	.compressed_column_metadata_name = error_no_default_fn_pg_community,
+	.rename_compressed_column = error_no_default_fn_pg_community,
 	.deltadelta_compressor_append = error_no_default_fn_pg_community,
 	.deltadelta_compressor_finish = error_no_default_fn_pg_community,
 	.gorilla_compressor_append = error_no_default_fn_pg_community,
