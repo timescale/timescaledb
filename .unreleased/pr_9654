@@ -1,0 +1,1 @@
+Fixes: #9654 Fix backend crash in sort_transform with hypertable on nullable side of outer join
