@@ -24,9 +24,9 @@ select * from settings;
 alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x');
 select * from settings;
-     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
----------------+----------------+-----------+---------+--------------+--------------------+-------
- test_settings |                |           | {x}     | {f}          | {f}                | 
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                          index                           
+---------------+----------------+-----------+---------+--------------+--------------------+----------------------------------------------------------
+ test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
 
 -- one sparse index
 alter table test_settings set (timescaledb.compress,
@@ -528,7 +528,7 @@ select * from test.show_columns_ext(:'chunk'::regclass);
 select * from settings;
                  relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                          index                                                          
 ----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
- test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | 
+ test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
  _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_8_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "value_new", "source": "default"}, {"type": "minmax", "column": "x", "source": "orderby"}]
 
 -- Test empty sparse index
@@ -599,3 +599,27 @@ select * from settings;
 
 reset timescaledb.enable_sparse_index_bloom;
 drop table test_sparse_index;
+-- Test orderby sparse index with default orderby and auto_sparse_indexes off
+set timescaledb.auto_sparse_indexes = false;
+create table test_orderby_default_noguc(x int, value float);
+select create_hypertable('test_orderby_default_noguc', 'x');
+            create_hypertable            
+-----------------------------------------
+ (7,public,test_orderby_default_noguc,t)
+
+-- No explicit orderby — triggers compression_settings_set_defaults path
+alter table test_orderby_default_noguc set (timescaledb.compress);
+insert into test_orderby_default_noguc select i, random() from generate_series(1, 10000) i;
+select count(compress_chunk(c)) from show_chunks('test_orderby_default_noguc') c;
+ count 
+-------
+     1
+
+select * from settings;
+                  relid                  |                 compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                          index                           
+-----------------------------------------+-------------------------------------------------+-----------+---------+--------------+--------------------+----------------------------------------------------------
+ test_orderby_default_noguc              |                                                 |           |         |              |                    | 
+ _timescaledb_internal._hyper_7_11_chunk | _timescaledb_internal.compress_hyper_8_12_chunk |           | {x}     | {t}          | {t}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
+
+reset timescaledb.auto_sparse_indexes;
+drop table test_orderby_default_noguc;
