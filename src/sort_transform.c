@@ -382,7 +382,16 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig, Relids child_relids
 			int i = -1;
 			while ((i = bms_next_member(em->em_relids, i)) >= 0)
 			{
+				/*
+				 * em_relids may include outer-join relids from varnullingrels
+				 * (PG16+); those don't correspond to a base RelOptInfo.
+				 */
+#if PG16_GE
+				if (bms_is_member(i, root->outer_join_rels))
+					continue;
+#endif
 				RelOptInfo *rel = root->simple_rel_array[i];
+				Assert(rel != NULL);
 
 				rel->eclass_indexes =
 					bms_add_member(rel->eclass_indexes, list_length(root->eq_classes));

@@ -98,3 +98,15 @@ FROM row_numbered
 GROUP BY machine_id, (time - (seqnum * interval '1 minute'))
 ORDER BY min(time);
 
+-- Crash in sort_transform_ec when a hypertable sits on the nullable side of an
+-- outer join and the pathkey expression references that nullable column.
+-- pull_varnos pulls outer-join nullingrels into em_relids on PG16+, and those
+-- relids have no entry in simple_rel_array.
+CREATE TABLE sort_oj_plain(v int);
+CREATE TABLE sort_oj_ht(time timestamptz NOT NULL, v int) WITH (tsdb.hypertable);
+INSERT INTO sort_oj_ht VALUES ('2026-01-01', 1);
+SELECT DISTINCT time_bucket('1 day', b.time)
+FROM sort_oj_plain a LEFT JOIN sort_oj_ht b ON a.v = b.v;
+DROP TABLE sort_oj_ht;
+DROP TABLE sort_oj_plain;
+
