@@ -1417,7 +1417,8 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 	if (row_compressor->invalidation)
 	{
 		InvalidationSettings *settings = row_compressor->invalidation;
-		AttrNumber dim_attnum = AttrOffsetGetAttrNumber(settings->invalidation_column_offset);
+		int16 dim_offset = settings->invalidation_column_offset;
+		AttrNumber dim_attnum = AttrOffsetGetAttrNumber(dim_offset);
 
 		BatchMetadataBuilderMinMax *minmax_builder = NULL;
 		ListCell *lc;
@@ -1435,11 +1436,32 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 			}
 		}
 
-		Assert(minmax_builder != NULL);
-		Datum min = row_compressor->compressed_values[minmax_builder->min_metadata_attr_offset];
-		Datum max = row_compressor->compressed_values[minmax_builder->max_metadata_attr_offset];
-		int64 start = ts_time_value_to_internal(min, minmax_builder->type_oid);
-		int64 end = ts_time_value_to_internal(max, minmax_builder->type_oid);
+		Datum min;
+		Datum max;
+		Oid type_oid;
+		if (minmax_builder != NULL)
+		{
+			min = row_compressor->compressed_values[minmax_builder->min_metadata_attr_offset];
+			max = row_compressor->compressed_values[minmax_builder->max_metadata_attr_offset];
+			type_oid = minmax_builder->type_oid;
+		}
+		else
+		{
+			/*
+			 * No minmax sparse index for the cagg invalidation column means it
+			 * is configured as segmentby. Every row in the batch shares the
+			 * same segmentby value, so use it as both bounds.
+			 */
+			PerColumn *dim_column = &row_compressor->per_column[dim_offset];
+			Ensure(dim_column->compressor == NULL && dim_column->segment_info != NULL,
+				   "cagg invalidation column has no minmax builder and is not segmentby");
+			Ensure(!dim_column->segment_info->is_null, "cagg invalidation column is NULL");
+			int16 compressed_col = row_compressor->uncompressed_col_to_compressed_col[dim_offset];
+			min = max = row_compressor->compressed_values[compressed_col];
+			type_oid = TupleDescAttr(row_compressor->in_desc, dim_offset)->atttypid;
+		}
+		int64 start = ts_time_value_to_internal(min, type_oid);
+		int64 end = ts_time_value_to_internal(max, type_oid);
 		continuous_agg_invalidate_range(settings->hypertable_id, settings->chunk_relid, start, end);
 	}
 
