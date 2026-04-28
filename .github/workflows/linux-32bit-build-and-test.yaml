@@ -101,13 +101,13 @@ jobs:
 
     # /__e/node16/bin/node (used by actions/checkout@v4) needs 64-bit libraries
     - name: Install 64-bit libraries for GitHub actions
-      timeout-minutes: 3
+      timeout-minutes: 15
       run: |
         apt-get update
         apt-get install -y lib64atomic1 lib64gcc-s1 lib64stdc++6 libc6-amd64 jq
 
     - name: Install build dependencies
-      timeout-minutes: 3
+      timeout-minutes: 15
       run: |
         PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
         echo '/tmp/core.%h.%e.%t' > /proc/sys/kernel/core_pattern

@@ -489,3 +489,16 @@ select * from test.show_columns_ext(:'chunk'::regclass);
 select count(*) from test_drop_sparse2;
 
 drop table test_drop_sparse2;
+
+-- Test orderby sparse index with default orderby and auto_sparse_indexes off
+set timescaledb.auto_sparse_indexes = false;
+create table test_orderby_default_noguc(x int, value float);
+select create_hypertable('test_orderby_default_noguc', 'x');
+-- No explicit orderby — triggers compression_settings_set_defaults path
+alter table test_orderby_default_noguc set (timescaledb.compress);
+insert into test_orderby_default_noguc select i, random() from generate_series(1, 10000) i;
+select count(compress_chunk(c)) from show_chunks('test_orderby_default_noguc') c;
+select * from settings;
+
+reset timescaledb.auto_sparse_indexes;
+drop table test_orderby_default_noguc;

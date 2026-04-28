@@ -346,8 +346,12 @@ ALTER TABLE transition_drop DROP COLUMN to_drop;
 
 CREATE OR REPLACE FUNCTION transition_drop_fn()
     RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
+DECLARE
+    r record;
 BEGIN
-    PERFORM name FROM to_insert;
+    FOR r IN SELECT name, c1 FROM to_insert ORDER BY name LOOP
+        RAISE NOTICE 'transition: name=% c1=%', r.name, r.c1;
+    END LOOP;
     RETURN NULL;
 END $$;
 
@@ -358,5 +362,11 @@ CREATE TRIGGER transition_drop_tg
 
 INSERT INTO transition_drop (time, name, c1) VALUES ('2026-04-16 08:00:00+00', 'xxxxx', 1);
 INSERT INTO transition_drop (time, name, c1) VALUES ('2026-04-16 08:00:00+00', 'xxxxxx', 1);
+
+-- Same issue also affects the COPY path.
+COPY transition_drop (time, name, c1) FROM STDIN;
+2026-04-16 08:00:00+00	yyyyy	2
+2026-04-16 08:00:00+00	yyyyyy	2
+\.
 DROP TABLE transition_drop;
 

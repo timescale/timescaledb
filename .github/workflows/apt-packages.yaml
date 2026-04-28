@@ -42,7 +42,7 @@ jobs:
 
     steps:
     - name: Add repositories
-      timeout-minutes: 3
+      timeout-minutes: 15
       run: |
         apt-get update
         apt-get install -y wget lsb-release gnupg apt-transport-https sudo postgresql-common jq
@@ -58,7 +58,7 @@ jobs:
 
 
     - name: Install timescaledb
-      timeout-minutes: 3
+      timeout-minutes: 15
       run: |
         apt-get update
         apt-get install -y --no-install-recommends \
@@ -110,7 +110,7 @@ jobs:
         fi
 
     - name: Install toolkit
-      timeout-minutes: 3
+      timeout-minutes: 15
       run: |
         apt-get install -y --no-install-recommends \
           timescaledb-toolkit-postgresql-${{ matrix.pg }}

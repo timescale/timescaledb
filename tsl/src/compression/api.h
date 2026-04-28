@@ -10,6 +10,7 @@
 #include <utils.h>
 
 #include "chunk.h"
+#include "ts_catalog/compression_settings.h"
 
 extern Datum tsl_create_compressed_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_compress_chunk(PG_FUNCTION_ARGS);
@@ -28,3 +29,5 @@ extern void compression_chunk_size_catalog_insert(int32 src_chunk_id, const Rela
 												  int64 rowcnt_post_compression,
 												  int64 rowcnt_frozen);
 extern Datum tsl_estimate_compressed_batch_size(PG_FUNCTION_ARGS);
+
+extern bool is_chunk_orderby_nonnullable(CompressionSettings *settings);

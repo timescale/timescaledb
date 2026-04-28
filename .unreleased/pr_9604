@@ -1,0 +1,1 @@
+Fixes: #9604 Remove dead post_parse_analyze_hook capture in loader

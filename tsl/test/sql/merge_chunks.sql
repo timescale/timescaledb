@@ -502,3 +502,90 @@ ORDER BY schemaname, tablename;
 -- Cleanup
 DROP PUBLICATION test_merge_pub CASCADE;
 DROP TABLE pub_merge_test CASCADE;
+
+-- Test merging chunks compressed with different compression settings.
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE compress_settings_merge(
+    time   timestamptz NOT NULL,
+    device int,
+    name   text,
+    temp   float8,
+    val    int
+);
+SELECT create_hypertable('compress_settings_merge', 'time', chunk_time_interval => INTERVAL '1 day');
+
+INSERT INTO compress_settings_merge VALUES
+    ('2024-01-01 12:00', 1, 'one', 1.5, 100),
+    ('2024-01-02 12:00', 2, 'two', 2.5, 200);
+
+SELECT format('%I.%I', schema_name, table_name) AS first_chunk
+FROM _timescaledb_catalog.chunk
+WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='compress_settings_merge')
+ORDER BY id LIMIT 1 \gset
+SELECT format('%I.%I', schema_name, table_name) AS second_chunk
+FROM _timescaledb_catalog.chunk
+WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='compress_settings_merge')
+ORDER BY id OFFSET 1 LIMIT 1 \gset
+
+-- Variant 1: change compress_segmentby between compressions.
+BEGIN;
+ALTER TABLE compress_settings_merge SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT compress_chunk(:'first_chunk');
+
+ALTER TABLE compress_settings_merge SET (timescaledb.compress, timescaledb.compress_segmentby='name');
+SELECT compress_chunk(:'second_chunk');
+
+\set ON_ERROR_STOP 0
+CALL merge_chunks(ARRAY[:'first_chunk', :'second_chunk']::regclass[]);
+SELECT * FROM compress_settings_merge ORDER BY time;
+\set ON_ERROR_STOP 1
+ROLLBACK;
+
+-- Variant 2: change compress_orderby between compressions.
+BEGIN;
+ALTER TABLE compress_settings_merge SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time');
+SELECT compress_chunk(:'first_chunk');
+
+ALTER TABLE compress_settings_merge SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='val DESC');
+SELECT compress_chunk(:'second_chunk');
+
+\set ON_ERROR_STOP 0
+CALL merge_chunks(ARRAY[:'first_chunk', :'second_chunk']::regclass[]);
+SELECT * FROM compress_settings_merge ORDER BY time;
+\set ON_ERROR_STOP 1
+ROLLBACK;
+
+DROP TABLE compress_settings_merge;
+
+-- Concurrent merge of compressed chunks: chunk_rewrite cleanup must not drop
+-- the new compressed transient heap when cascading through non-result chunks.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE concurrent_compressed_merge(
+    time timestamptz NOT NULL, device int, temp float8
+);
+SELECT create_hypertable('concurrent_compressed_merge', 'time',
+                         chunk_time_interval => INTERVAL '1 day');
+ALTER TABLE concurrent_compressed_merge
+    SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+INSERT INTO concurrent_compressed_merge VALUES
+    ('2024-01-01 12:00', 1, 1.5),
+    ('2024-01-02 12:00', 2, 2.5);
+SELECT compress_chunk(ch) FROM show_chunks('concurrent_compressed_merge') ch;
+
+SELECT format('%I.%I', schema_name, table_name) AS ccm_c1
+  FROM _timescaledb_catalog.chunk
+ WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='concurrent_compressed_merge')
+ ORDER BY id LIMIT 1 \gset
+SELECT format('%I.%I', schema_name, table_name) AS ccm_c2
+  FROM _timescaledb_catalog.chunk
+ WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name='concurrent_compressed_merge')
+ ORDER BY id OFFSET 1 LIMIT 1 \gset
+
+CALL merge_chunks(:'ccm_c1'::regclass, :'ccm_c2'::regclass, concurrently => true);
+
+SELECT count(*) AS rows_after, count(DISTINCT show_chunks) AS chunks_after
+FROM concurrent_compressed_merge,
+     show_chunks('concurrent_compressed_merge');
+
+DROP TABLE concurrent_compressed_merge;

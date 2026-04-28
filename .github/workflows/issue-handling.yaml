@@ -101,7 +101,7 @@ jobs:
     if: github.event_name == 'issue_comment' && !github.event.issue.pull_request
     steps:
       - name: Install Linux Dependencies
-        timeout-minutes: 3
+        timeout-minutes: 15
         run: |
           sudo apt-get update
           sudo apt-get install jq
