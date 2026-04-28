@@ -208,6 +208,34 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
 ROLLBACK;
 
+-- cagg + direct compress where the cagg time column is segmentby.
+-- segmentby columns don't get _ts_meta_min/max columns, so no MINMAX builder
+-- is created for them; the flush path must still derive an invalidation range
+-- from the segmentby value rather than crashing.
+BEGIN;
+CREATE TABLE metrics_segmentby_time (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+    WITH (tsdb.hypertable);
+CREATE MATERIALIZED VIEW metrics_segmentby_time_cagg WITH (tsdb.continuous) AS
+    SELECT time_bucket('1 hour', time) AS bucket, device, avg(value) AS avg_value
+    FROM metrics_segmentby_time GROUP BY bucket, device WITH NO DATA;
+ALTER TABLE metrics_segmentby_time SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'time'
+);
+INSERT INTO metrics_segmentby_time
+SELECT '2025-01-01'::timestamptz + (i * interval '5 minutes'), 'd1', random()
+FROM generate_series(1, 50) i;
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO metrics_segmentby_time
+SELECT '2025-02-01'::timestamptz + (i * interval '1 second'), 'd1', random()
+FROM generate_series(1, 5000) i;
+-- The new chunk should be in COMPRESSED state, confirming the flush path ran.
+SELECT _timescaledb_functions.chunk_status_text(chunk)
+  FROM show_chunks('metrics_segmentby_time') chunk
+ WHERE chunk::text LIKE '%hyper_%'
+ ORDER BY chunk::text;
+ROLLBACK;
+
 -- test chunk status handling
 CREATE TABLE metrics_status(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time');
 
