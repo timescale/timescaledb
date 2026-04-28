@@ -1,2 +1,0 @@
-Fixes: #9615 Fix segfault with transition tables after column drop
-Thanks: @patstrom for reporting a segfault with transition table triggers after dropping a column
