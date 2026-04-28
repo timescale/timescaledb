@@ -33,7 +33,7 @@ This release contains performance improvements and bug fixes since the 2.26.3 re
 * [#9655](https://github.com/timescale/timescaledb/pull/9655) Fix data corruption when merging chunks with different compression settings
 * [#9654](https://github.com/timescale/timescaledb/pull/9654) Fix `sort_transform` crash with hypertable on nullable side of outer join
 * [#9656](https://github.com/timescale/timescaledb/pull/9656) Fix concurrent merge of compressed chunks dropping the new heap
-* [#9641](https://github.com/timescale/timescaledb/pull/9641) Fix COPY path with transition tables after column drop
+* [#9641](https://github.com/timescale/timescaledb/pull/9641) Fix `COPY` path with transition tables after column drop
 
 **New Settings**
 
