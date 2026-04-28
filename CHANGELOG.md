@@ -32,10 +32,10 @@ This release contains bug fixes since the 2.26.3 release. We recommend that you 
 
 **Thanks**
 * @GetsuDer and @WeiJie-JL for reporting an error with timescaledb and extensions using Explain
-* @igor2x for reporting a problem when trying to query compressed data with apache license
-* @ivaaaan for reporting an issue with cosntraint pushdown in continuous aggregate queries
+* @igor2x for reporting a problem when trying to query compressed data with the Apache license
+* @ivaaaan for reporting an issue with constraint pushdown in continuous aggregate queries
 * @patstrom for reporting a segfault with transition table triggers after dropping a column
-* @patstrom for reporting an out of memory error when dropping constraints
+* @patstrom for reporting an out-of-memory error when dropping constraints
 * @pcayen for reporting an issue with GROUP BY ROLLUP on views over hypertables
 
 ## 2.26.3 (2026-04-14)
