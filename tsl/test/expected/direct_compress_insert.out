@@ -433,6 +433,39 @@ SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id
       3
 
 ROLLBACK;
+-- cagg + direct compress where the cagg time column is segmentby.
+-- segmentby columns don't get _ts_meta_min/max columns, so no MINMAX builder
+-- is created for them; the flush path must still derive an invalidation range
+-- from the segmentby value rather than crashing.
+BEGIN;
+CREATE TABLE metrics_segmentby_time (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+    WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+CREATE MATERIALIZED VIEW metrics_segmentby_time_cagg WITH (tsdb.continuous) AS
+    SELECT time_bucket('1 hour', time) AS bucket, device, avg(value) AS avg_value
+    FROM metrics_segmentby_time GROUP BY bucket, device WITH NO DATA;
+ALTER TABLE metrics_segmentby_time SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'time'
+);
+INSERT INTO metrics_segmentby_time
+SELECT '2025-01-01'::timestamptz + (i * interval '5 minutes'), 'd1', random()
+FROM generate_series(1, 50) i;
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO metrics_segmentby_time
+SELECT '2025-02-01'::timestamptz + (i * interval '1 second'), 'd1', random()
+FROM generate_series(1, 5000) i;
+-- The new chunk should be in COMPRESSED state, confirming the flush path ran.
+SELECT _timescaledb_functions.chunk_status_text(chunk)
+  FROM show_chunks('metrics_segmentby_time') chunk
+ WHERE chunk::text LIKE '%hyper_%'
+ ORDER BY chunk::text;
+   chunk_status_text    
+------------------------
+ {}
+ {COMPRESSED,UNORDERED}
+
+ROLLBACK;
 -- test chunk status handling
 CREATE TABLE metrics_status(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time');
 INSERT INTO metrics_status SELECT '2025-01-01';
@@ -511,7 +544,7 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
 SELECT compress_chunk(show_chunks('metrics_status'));
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_4_54_chunk
+ _timescaledb_internal._hyper_7_57_chunk
 
 -- status should be COMPRESSED
 SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
@@ -560,7 +593,7 @@ EXPLAIN (costs off,summary off,timing off) INSERT INTO :CHUNK SELECT '2025-01-01
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    Direct Compress: true
-   ->  Insert on _hyper_6_56_chunk
+   ->  Insert on _hyper_9_59_chunk
          ->  Function Scan on generate_series i
 
 BEGIN;
@@ -582,8 +615,8 @@ EXPLAIN (analyze,buffers off,costs off,summary off,timing off) DELETE FROM :CHUN
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 1
    Tuples decompressed: 101
-   ->  Delete on _hyper_6_56_chunk (actual rows=0.00 loops=1)
-         ->  Index Scan using _hyper_6_56_chunk_metrics_chunk_time_idx on _hyper_6_56_chunk (actual rows=100.00 loops=1)
+   ->  Delete on _hyper_9_59_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_9_59_chunk_metrics_chunk_time_idx on _hyper_9_59_chunk (actual rows=100.00 loops=1)
                Index Cond: ("time" > 'Wed Jan 01 00:00:00 2025 PST'::timestamp with time zone)
 
 SELECT count(*) FROM :CHUNK;
@@ -611,8 +644,8 @@ SET timescaledb.direct_compress_insert_tuple_sort_limit = 1000;
 INSERT INTO metrics SELECT '2025-01-02'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(1,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 --- QUERY PLAN ---
- Custom Scan (ColumnarScan) on _hyper_1_59_chunk (actual rows=3000.00 loops=1)
-   ->  Seq Scan on compress_hyper_2_60_chunk (actual rows=3.00 loops=1)
+ Custom Scan (ColumnarScan) on _hyper_1_62_chunk (actual rows=3000.00 loops=1)
+   ->  Seq Scan on compress_hyper_2_63_chunk (actual rows=3.00 loops=1)
 
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
             first             |             last             
