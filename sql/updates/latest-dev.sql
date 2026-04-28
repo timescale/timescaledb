@@ -65,22 +65,6 @@ BEGIN
     END LOOP;
 END;
 $$;
--- Add continuous_aggs_jobs_refresh_ranges table
-CREATE TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (
-  materialization_id integer NOT NULL,
-  start_range bigint NOT NULL,
-  end_range bigint NOT NULL,
-  pid integer NOT NULL,
-  job_id integer NOT NULL,
-  created_at timestamptz NOT NULL,
-  CONSTRAINT continuous_aggs_jobs_refresh_ranges_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
-);
-
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_jobs_refresh_ranges', '');
-
-CREATE INDEX continuous_aggs_jobs_refresh_ranges_idx ON _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (materialization_id);
-
-GRANT SELECT ON _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges TO PUBLIC;
 
 -- Cleanup orphaned compression settings
 WITH orphaned_settings AS (
@@ -97,4 +81,30 @@ ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT IF EXISTS hypertable
 ALTER TABLE _timescaledb_catalog.chunk DROP CONSTRAINT IF EXISTS chunk_compressed_chunk_id_fkey;
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.job_history_bsearch;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.policy_process_hypertable_invalidations_check(JSONB);
+DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_process_hypertable_invalidations(INTEGER, JSONB);
+DROP PROCEDURE IF EXISTS @extschema@.add_process_hypertable_invalidations_policy(REGCLASS, INTERVAL, BOOL, TIMESTAMPTZ, TEXT);
+DROP PROCEDURE IF EXISTS @extschema@.remove_process_hypertable_invalidations_policy(REGCLASS, BOOL);
+
+-- Migration: refresh orderby sparse index entries in compression_settings
+UPDATE _timescaledb_catalog.compression_settings
+SET index = (
+    SELECT COALESCE(jsonb_agg(elem), '[]'::jsonb)
+    FROM jsonb_array_elements(index) AS elem
+    WHERE elem->>'source' != 'orderby'
+)
+WHERE index IS NOT NULL
+AND index @> '[{"source": "orderby"}]';
+
+UPDATE _timescaledb_catalog.compression_settings cs
+SET index = COALESCE(index, '[]'::jsonb) ||
+            (
+            SELECT jsonb_agg(jsonb_build_object(
+                                'type', 'minmax',
+                                'source', 'orderby',
+                                'column', elem))
+            FROM unnest(cs.orderby) AS elem
+            )
+WHERE cs.orderby IS NOT NULL;
 

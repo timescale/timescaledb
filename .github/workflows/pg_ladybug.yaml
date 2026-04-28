@@ -15,7 +15,8 @@ jobs:
 
     steps:
 
-    - name: Install dependencies
+    - name: Install Linux Dependencies
+      timeout-minutes: 15
       run: |
         sudo apt-get update
         sudo apt-get purge llvm-16 llvm-17 llvm-18 clang-16 clang-17 clang-18
@@ -44,6 +45,7 @@ jobs:
         clang-tidy --load /usr/local/lib/libPostgresCheck.so --checks='-*,postgres-*' --list-checks | grep postgres
 
     - name: Configure timescaledb
+      timeout-minutes: 15
       run: |
         # installing postgres headers pulls in llvm-17 which confuses pg_ladybug build process so we install this here instead of at beginning
         sudo apt-get install postgresql-server-dev-16

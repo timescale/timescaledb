@@ -28,7 +28,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Install Dependencies
+    - name: Install Linux Dependencies
+      timeout-minutes: 15
       run: |
         sudo apt-get update
         sudo apt-get install shellcheck

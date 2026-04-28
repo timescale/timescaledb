@@ -18,7 +18,8 @@ jobs:
       fail-fast: false
 
     steps:
-    - name: Install Dependencies
+    - name: Install Linux Dependencies
+      timeout-minutes: 15
       run: |
         sudo apt-get update
         sudo apt-get install gnupg systemd-coredump gdb postgresql-common python3-psutil

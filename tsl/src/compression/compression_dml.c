@@ -568,24 +568,40 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	if (delete_only && ht_state->has_continuous_aggregate)
 	{
 		const Dimension *time_dim = hyperspace_get_open_dimension(ht_state->ht->space, 0);
-		AttrNumber chunk_time_attno =
-			get_attnum(chunk->table_id, NameStr(time_dim->fd.column_name));
+		const char *time_col_name = NameStr(time_dim->fd.column_name);
+		AttrNumber chunk_time_attno = get_attnum(chunk->table_id, time_col_name);
 
 		invalidation_ctx.hypertable_id = ht_state->ht->fd.id;
 		invalidation_ctx.chunk_relid = chunk->table_id;
 		invalidation_ctx.time_type_oid = time_dim->fd.column_type;
-		invalidation_ctx.min_time_attno =
-			compressed_column_metadata_attno(settings,
-											 chunk->table_id,
-											 chunk_time_attno,
-											 settings->fd.compress_relid,
-											 "min");
-		invalidation_ctx.max_time_attno =
-			compressed_column_metadata_attno(settings,
-											 chunk->table_id,
-											 chunk_time_attno,
-											 settings->fd.compress_relid,
-											 "max");
+
+		if (ts_array_is_member(settings->fd.segmentby, time_col_name))
+		{
+			/*
+			 * Time column is segmentby: every row in the batch shares the same
+			 * value, so use the segmentby column's compressed-tuple attno for
+			 * both bounds. Segmentby columns don't have _ts_meta_min/max
+			 * sparse-index columns to look up.
+			 */
+			AttrNumber compressed_attno = get_attnum(settings->fd.compress_relid, time_col_name);
+			invalidation_ctx.min_time_attno = compressed_attno;
+			invalidation_ctx.max_time_attno = compressed_attno;
+		}
+		else
+		{
+			invalidation_ctx.min_time_attno =
+				compressed_column_metadata_attno(settings,
+												 chunk->table_id,
+												 chunk_time_attno,
+												 settings->fd.compress_relid,
+												 "min");
+			invalidation_ctx.max_time_attno =
+				compressed_column_metadata_attno(settings,
+												 chunk->table_id,
+												 chunk_time_attno,
+												 settings->fd.compress_relid,
+												 "max");
+		}
 	}
 
 	process_predicates(chunk,

@@ -35,7 +35,7 @@ drop table onechunk;
 \set CHUNK_ROWS 100000::int
 \set GROUPING_CARDINALITY 10::int
 
-create table agggroup(t int, s int,
+create table agggroup(t int NOT NULL, s int,
     cint2 int2, cint4 int4, cint8 int8);
 select create_hypertable('agggroup', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
 

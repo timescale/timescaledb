@@ -194,7 +194,7 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 		if (cube->num_slices == 0)
 		{
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_DATA_CORRUPTED),
 					 errmsg("chunk %s has no dimension slices", get_rel_name(chunk->table_id))));
 		}
 

@@ -14,7 +14,8 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Install Dependencies
+    - name: Install Linux Dependencies
+      timeout-minutes: 15
       run: |
         sudo apt-get update
         sudo apt-get -y install coccinelle

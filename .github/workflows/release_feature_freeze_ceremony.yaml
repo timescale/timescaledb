@@ -82,7 +82,8 @@ jobs:
           git config user.name "timescale-automation"
           git config user.email "123763385+github-actions[bot]@users.noreply.github.com"
 
-      - name: Install Dependencies
+      - name: Install Linux Dependencies
+        timeout-minutes: 15
         run: |
           sudo apt-get update
           sudo apt-get install pip

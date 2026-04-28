@@ -74,9 +74,14 @@ cache_destroy(Cache **cache_ptr)
 	if (cache->pre_destroy_hook != NULL)
 		cache->pre_destroy_hook(cache);
 
-	hash_destroy(cache->htab);
-	MemoryContextDelete(cache->hctl.hcxt);
+	/*
+	 * Save the memory context and NULL out the external pointer before
+	 * deleting. Deleting the parent context recursively frees the hash
+	 * table's child context and all cache allocations.
+	 */
+	MemoryContext hcxt = cache->hctl.hcxt;
 	*cache_ptr = NULL;
+	MemoryContextDelete(hcxt);
 }
 
 void

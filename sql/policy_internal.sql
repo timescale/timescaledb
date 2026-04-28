@@ -34,14 +34,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_refresh_continuous_aggr
 RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_check'
 LANGUAGE C;
 
-CREATE OR REPLACE PROCEDURE _timescaledb_functions.policy_process_hypertable_invalidations(job_id INTEGER, config JSONB)
-AS '@MODULE_PATHNAME@', 'ts_policy_process_hyper_inval_proc'
-LANGUAGE C;
-
-CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_process_hypertable_invalidations_check(config JSONB)
-RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_process_hyper_inval_check'
-LANGUAGE C;
-
 CREATE OR REPLACE PROCEDURE
 _timescaledb_functions.policy_compression_execute(
   job_id              INTEGER,
@@ -65,8 +57,7 @@ DECLARE
   -- fully compressed chunk status
   status_fully_compressed int := 1;
   -- chunk status bits:
-  bit_compressed int := 1;
-  bit_compressed_unordered int := 2;
+  bit_uncompressed int := 0;
   bit_frozen int := 4;
   bit_compressed_partial int := 8;
   creation_lag INTERVAL := NULL;
@@ -113,7 +104,7 @@ BEGIN
     AND ch.status & bit_frozen = 0
   LOOP
     BEGIN
-      IF chunk_rec.status = bit_compressed OR recompress_enabled IS TRUE THEN
+      IF chunk_rec.status = bit_uncompressed OR recompress_enabled IS TRUE THEN
         PERFORM @extschema@.compress_chunk(chunk_rec.oid);
         numchunks_compressed := numchunks_compressed + 1;
       END IF;

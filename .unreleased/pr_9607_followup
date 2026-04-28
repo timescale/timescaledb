@@ -1,0 +1,1 @@
+Fixes: #9607 Fix use-after-free of PlaceHolderVar.phrels in cached ChunkAppend plans

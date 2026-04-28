@@ -22,6 +22,7 @@ jobs:
 
     steps:
     - name: Install Linux Dependencies
+      timeout-minutes: 15
       run: |
         # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
         # If needed, install them before opening the core dump.
@@ -144,9 +145,10 @@ jobs:
 
     steps:
     - name: Install Linux dependencies
+      timeout-minutes: 15
       run: |
-        sudo apt update
-        sudo apt install 7zip systemd-coredump gdb
+        sudo apt-get update
+        sudo apt-get install 7zip systemd-coredump gdb
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

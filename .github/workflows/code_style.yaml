@@ -77,16 +77,17 @@ jobs:
     env:
       LLVM_VER: 17
     steps:
-    - name: Install dependencies
+    - name: Install Linux Dependencies
+      timeout-minutes: 15
       run: |
-          gpg --batch --keyserver hkp://keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
-          gpg --batch --export --export-options export-minimal --armor 15CF4D18AF4F7421 | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
+        gpg --batch --keyserver hkp://keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
+        gpg --batch --export --export-options export-minimal --armor 15CF4D18AF4F7421 | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
 
-          . /etc/os-release
-          echo "deb https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-${LLVM_VER} main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
-          sudo apt-get update
+        . /etc/os-release
+        echo "deb https://apt.llvm.org/${VERSION_CODENAME}/ llvm-toolchain-${VERSION_CODENAME}-${LLVM_VER} main" | sudo tee /etc/apt/sources.list.d/llvm.list >/dev/null
+        sudo apt-get update
 
-          sudo apt-get install clang-format-${LLVM_VER}
+        sudo apt-get install clang-format-${LLVM_VER}
     - name: Checkout source
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Check trailing whitespace

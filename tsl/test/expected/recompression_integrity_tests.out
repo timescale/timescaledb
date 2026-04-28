@@ -107,7 +107,7 @@ SELECT
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
                  relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
 ----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
- recomp_segmentby_test                  |                                                | {device}  | {time}  | {f}          | {f}                | 
+ recomp_segmentby_test                  |                                                | {device}  | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal.compress_hyper_2_5_chunk | {device}  | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal.compress_hyper_2_4_chunk | {device}  | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
 
@@ -212,7 +212,7 @@ SELECT
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
                  relid                  |                 compress_relid                  |     segmentby     | orderby | orderby_desc | orderby_nullsfirst |                            index                            
 ----------------------------------------+-------------------------------------------------+-------------------+---------+--------------+--------------------+-------------------------------------------------------------
- recomp_multi_segmentby_test            |                                                 | {device,location} | {time}  | {f}          | {f}                | 
+ recomp_multi_segmentby_test            |                                                 | {device,location} | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal.compress_hyper_4_10_chunk | {device,location} | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  _timescaledb_internal._hyper_3_7_chunk | _timescaledb_internal.compress_hyper_4_9_chunk  | {device,location} | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
 
@@ -542,7 +542,7 @@ SELECT
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
                   relid                  |                  compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
 -----------------------------------------+--------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
- recomp_direct_compress                  |                                                  |           | {time}  | {f}          | {f}                | 
+ recomp_direct_compress                  |                                                  |           | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
  _timescaledb_internal._hyper_9_19_chunk | _timescaledb_internal.compress_hyper_10_21_chunk |           | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
 
 DROP TABLE IF EXISTS recomp_direct_compress CASCADE;

@@ -1,5 +1,6 @@
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND PROVE_TEST_FILES 001_replication_telemetry.pl)
+  list(APPEND PROVE_TEST_FILES 001_replication_telemetry.pl
+       002_compressed_chunk_apache.pl)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 foreach(P_FILE ${PROVE_TEST_FILES})

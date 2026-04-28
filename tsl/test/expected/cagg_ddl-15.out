@@ -1510,6 +1510,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1586,6 +1587,7 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';

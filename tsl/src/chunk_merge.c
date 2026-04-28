@@ -42,6 +42,7 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_rewrite.h"
 #include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/compression_settings.h"
 
 typedef struct RelationMergeInfo
 {
@@ -1321,6 +1322,45 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			mergeindex = i;
 	}
 
+	/*
+	 * All compressed chunks being merged must share the same compression
+	 * settings. Without this check, the heap copy in merge_relinfos rewrites
+	 * tuples positionally between chunks whose compressed layouts diverge,
+	 * silently corrupting the merged chunk and producing decompression errors
+	 * or crashes at read time.
+	 */
+	{
+		const CompressionSettings *result_settings = NULL;
+		const Chunk *result_chunk = relinfos[mergeindex].chunk;
+
+		if (result_chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+			result_settings = ts_compression_settings_get(result_chunk->table_id);
+
+		for (int i = 0; i < nrelids; i++)
+		{
+			const Chunk *chunk = relinfos[i].chunk;
+			const CompressionSettings *settings;
+
+			if (i == mergeindex || chunk->fd.compressed_chunk_id == INVALID_CHUNK_ID)
+				continue;
+
+			settings = ts_compression_settings_get(chunk->table_id);
+
+			if (result_settings == NULL ||
+				!ts_compression_settings_equal(result_settings, settings))
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("cannot merge compressed chunks with different "
+								"compression settings"),
+						 errdetail("Chunk \"%s\" was compressed with different "
+								   "settings than chunk \"%s\".",
+								   get_rel_name(chunk->table_id),
+								   get_rel_name(result_chunk->table_id)),
+						 errhint("Decompress the affected chunks and recompress them "
+								 "with the current compression settings before merging.")));
+		}
+	}
+
 	DEBUG_WAITPOINT("merge_chunks_before_rewrite");
 
 	/*
@@ -1416,6 +1456,34 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 	 * Step 4: Finish the merge by swapping relation files.
 	 */
 	DEBUG_WAITPOINT("merge_chunks_before_heap_swap");
+
+	/*
+	 * Delete chunk_rewrite catalog rows for all non-result chunks (both
+	 * uncompressed and compressed) before running merge_chunks_finish.
+	 *
+	 * The cleanup loop in merge_chunks_finish drops the non-result chunks,
+	 * which cascades through chunk_tuple_delete -> ts_chunk_rewrite_delete.
+	 * That helper interprets a still-alive new_relid as an "orphaned heap"
+	 * and drops it -- but mid-merge the new compressed heap (new_crelid) is
+	 * still actively in use as the destination for the second
+	 * merge_chunks_finish call. Dropping it here would cascade-remove its
+	 * indexes and the second swap would fail with a cache-lookup error.
+	 *
+	 * Preemptively delete only the catalog rows so the cascade has nothing
+	 * to act on. The result-chunk row is still cleaned up inside
+	 * merge_chunks_finish.
+	 */
+	if (concurrently)
+	{
+		for (int i = 0; i < nrelids; i++)
+		{
+			if (!relinfos[i].isresult && ItemPointerIsValid(&relinfos[i].chunk_rewrite_tid))
+				ts_chunk_rewrite_delete_by_tid(&relinfos[i].chunk_rewrite_tid);
+
+			if (!crelinfos[i].isresult && ItemPointerIsValid(&crelinfos[i].chunk_rewrite_tid))
+				ts_chunk_rewrite_delete_by_tid(&crelinfos[i].chunk_rewrite_tid);
+		}
+	}
 
 	merge_chunks_finish(new_relid, relinfos, nrelids, &merge_stats);
 

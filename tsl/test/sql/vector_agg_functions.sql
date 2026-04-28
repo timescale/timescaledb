@@ -15,7 +15,7 @@ $$ LANGUAGE SQL;
 \set CHUNK_ROWS 100000::int
 \set GROUPING_CARDINALITY 10::int
 
-create table aggfns(t int, s int,
+create table aggfns(t int NOT NULL, s int,
     cint2 int2, cint4 int4, cint8 int8,
     cfloat4 float4,
     cts timestamp, ctstz timestamptz,

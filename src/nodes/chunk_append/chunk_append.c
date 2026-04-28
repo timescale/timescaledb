@@ -190,7 +190,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			 *
 			 */
 			path->runtime_exclusion_parent = true;
-			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, 0))
+			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, PVC_RECURSE_PLACEHOLDERS))
 			{
 				Var *var = lfirst(lc_var);
 				/*
@@ -225,7 +225,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
 			ListCell *lc_var;
 
-			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, 0))
+			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, PVC_RECURSE_PLACEHOLDERS))
 			{
 				Var *var = lfirst(lc_var);
 				if ((Index) var->varno == rel->relid && var->varattno > 0 &&

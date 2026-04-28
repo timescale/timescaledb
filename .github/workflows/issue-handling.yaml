@@ -100,7 +100,8 @@ jobs:
     runs-on: timescaledb-runner-arm64
     if: github.event_name == 'issue_comment' && !github.event.issue.pull_request
     steps:
-      - name: Install dependencies
+      - name: Install Linux Dependencies
+        timeout-minutes: 15
         run: |
           sudo apt-get update
           sudo apt-get install jq

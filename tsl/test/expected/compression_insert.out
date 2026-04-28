@@ -1424,6 +1424,9 @@ ALTER TABLE gen_column SET (
 	timescaledb.compress_segmentby = '',
 	timescaledb.compress_orderby='"timestamp"'
 );
+NOTICE:  updated compression settings will only apply to future compressions
+DETAIL:  Existing compressed chunks will not be recompressed.
+HINT:  Use compress_chunk(chunk, recompress => true) to recompress.
 SELECT compress_chunk(show_chunks('gen_column'));
               compress_chunk              
 ------------------------------------------

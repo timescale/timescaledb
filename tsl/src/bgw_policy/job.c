@@ -37,11 +37,9 @@
 #include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/policy_config.h"
 #include "bgw_policy/policy_utils.h"
-#include "bgw_policy/process_hyper_inval_api.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
 #include "compression/api.h"
-#include "continuous_aggs/invalidation_threshold.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/refresh.h"
 #include "ts_catalog/continuous_agg.h"
@@ -447,6 +445,16 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 			 ts_internal_to_time_string(refresh_window->end, refresh_window->type));
 
 		context.processing_batch = ++processing_batch;
+
+		/* extend_last_bucket must only apply to the boundary batch — the one
+		 * whose window abuts the adjacent policy.  For newest-first ordering
+		 * that is batch 1; for oldest-first it is the final batch.
+		 * In non-batched mode (single batch) the one batch is always the boundary. */
+		bool apply_extend =
+			extend_last_bucket &&
+			(policy_data.refresh_newest_first ? processing_batch == 1 :
+												processing_batch == context.number_of_batches);
+
 		continuous_agg_refresh_internal(policy_data.cagg,
 										refresh_window,
 										context,
@@ -454,8 +462,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 										refresh_window->end_isnull,
 										(context.callctx != CAGG_REFRESH_POLICY_BATCHED),
 										false, /* force */
-										policy_data.process_hypertable_invalidations,
-										extend_last_bucket);
+										apply_extend);
 		DEBUG_ERROR_INJECTION(psprintf("cagg_policy_batch_%d_after_refresh", processing_batch));
 		if (processing_batch >= policy_data.max_batches_per_execution &&
 			processing_batch < context.number_of_batches &&
@@ -542,11 +549,6 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 
 	refresh_newest_first = policy_refresh_cagg_get_refresh_newest_first(config);
 
-	bool process_hypertable_invalidations_found;
-	bool process_hypertable_invalidations =
-		ts_jsonb_get_bool_field(config,
-								POL_REFRESH_CONF_KEY_PROCESS_HYPERTABLE_INVALIDATIONS,
-								&process_hypertable_invalidations_found);
 	if (policy_data)
 	{
 		policy_data->refresh_window.type = dim_type;
@@ -560,8 +562,6 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 		policy_data->buckets_per_batch = buckets_per_batch;
 		policy_data->max_batches_per_execution = max_batches_per_execution;
 		policy_data->refresh_newest_first = refresh_newest_first;
-		policy_data->process_hypertable_invalidations =
-			!process_hypertable_invalidations_found || process_hypertable_invalidations;
 	}
 }
 
@@ -660,51 +660,6 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 	}
 
 	elog(DEBUG1, "job %d completed recompressing chunk", job_id);
-	return true;
-}
-
-void
-policy_process_hyper_inval_read_and_validate_config(Jsonb *config,
-													PolicyMoveHyperInvalData *policy_data)
-{
-	int32 hypertable_id = policy_config_get_hypertable_id(config);
-	Oid table_relid = ts_hypertable_id_to_relid(hypertable_id, true);
-
-	if (!OidIsValid(table_relid))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("configuration hypertable id %d not found", hypertable_id)));
-
-	Cache *hcache;
-	Hypertable *hypertable =
-		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
-	if (policy_data)
-	{
-		policy_data->hypertable = hypertable;
-		policy_data->hcache = hcache;
-	}
-	else
-	{
-		ts_cache_release(&hcache);
-	}
-}
-
-bool
-policy_process_hyper_inval_execute(int32 job_id, Jsonb *config)
-{
-	PolicyMoveHyperInvalData policy_data;
-
-	policy_process_hyper_inval_read_and_validate_config(config, &policy_data);
-
-	const Dimension *dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
-	Oid dimtype = ts_dimension_get_partition_type(dim);
-	int32 hypertable_id = policy_data.hypertable->fd.id;
-
-	/* We serialized on the invalidation threshold, so we get and lock it. */
-	invalidation_threshold_get(hypertable_id);
-	invalidation_process_hypertable_log(hypertable_id, dimtype);
-	ts_cache_release(&policy_data.hcache);
-
 	return true;
 }
 

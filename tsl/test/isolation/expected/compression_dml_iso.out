@@ -138,6 +138,9 @@ time|device|location|value
 
 
 starting permutation: NOS CA1 CAc SH I1 Ic SH UPD1 UPDc SH DEL1 DELc SH UPD1 UPDc SH
+CompressAll: NOTICE:  updated compression settings will only apply to future compressions
+DETAIL:  Existing compressed chunks will not be recompressed.
+HINT:  Use compress_chunk(chunk, recompress => true) to recompress.
 step NOS: 
     ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_orderby='time');
 
@@ -190,6 +193,9 @@ total_chunks|number_compressed_chunks
 
 
 starting permutation: NOS IN1 INc CA1 CAc SH SS DEL1 UPD1 DELc UPDc SH SS
+CompressAll: NOTICE:  updated compression settings will only apply to future compressions
+DETAIL:  Existing compressed chunks will not be recompressed.
+HINT:  Use compress_chunk(chunk, recompress => true) to recompress.
 step NOS: 
     ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_orderby='time');
 
@@ -235,6 +241,9 @@ time|device|location|value
 
 
 starting permutation: NOS IN1 INc CA1 CAc SH SS UPD1 DEL1 UPDc DELc SH SS
+CompressAll: NOTICE:  updated compression settings will only apply to future compressions
+DETAIL:  Existing compressed chunks will not be recompressed.
+HINT:  Use compress_chunk(chunk, recompress => true) to recompress.
 step NOS: 
     ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_orderby='time');
 

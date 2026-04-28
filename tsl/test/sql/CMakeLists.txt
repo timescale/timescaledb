@@ -12,7 +12,6 @@ set(TEST_FILES
     cagg_invalidation.sql
     cagg_invalidation_variable_bucket.sql
     cagg_policy.sql
-    cagg_policy_move.sql
     cagg_refresh_using_trigger.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
@@ -43,6 +42,7 @@ set(TEST_FILES
     compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
+    direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
     compression.sql
     compression_allocation.sql
@@ -72,6 +72,7 @@ set(TEST_FILES
     rebuild_columnstore_tests.sql
     recompression_integrity_tests.sql
     recompression_integrity_unordered.sql
+    recompression_nullable_orderby.sql
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql
