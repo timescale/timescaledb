@@ -7,13 +7,7 @@ commands from accidentally triggering the load of a previous DB version.**
 
 ## 2.26.4 (2026-04-28)
 
-This release contains performance improvements and bug fixes since the 2.26.3 release. We recommend that you upgrade at the next available opportunity.
-
-**Highlighted features in TimescaleDB v2.26.4**
-
-**Backward-Incompatible Changes**
-
-**Features**
+This release contains bug fixes since the 2.26.3 release. We recommend that you upgrade at the next available opportunity.
 
 **Bugfixes**
 * [#9360](https://github.com/timescale/timescaledb/pull/9360) Sanitize `DT_NOBEGIN` next_start to recover jobs stuck after primary failover
@@ -34,10 +28,6 @@ This release contains performance improvements and bug fixes since the 2.26.3 re
 * [#9654](https://github.com/timescale/timescaledb/pull/9654) Fix `sort_transform` crash with hypertable on nullable side of outer join
 * [#9656](https://github.com/timescale/timescaledb/pull/9656) Fix concurrent merge of compressed chunks dropping the new heap
 * [#9641](https://github.com/timescale/timescaledb/pull/9641) Fix `COPY` path with transition tables after column drop
-
-**New Settings**
-
-**GUCs**
 
 **Thanks**
 * @GetsuDer and @WeiJie-JL for reporting an error with timescaledb and extensions using Explain
