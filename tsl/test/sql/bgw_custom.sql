@@ -629,6 +629,56 @@ SELECT count(*) = 0
 -- cleanup
 SELECT _timescaledb_functions.stop_background_workers();
 DROP TABLE sensor_data;
+
+SELECT _timescaledb_functions.restart_background_workers();
+
+-- Test that uncompressed chunks (status=0) are compressed even when
+-- recompress is explicitly disabled.
+CREATE TABLE sensor_data_recompress
+(
+    time timestamptz not null,
+    sensor_id integer not null,
+    cpu double precision null,
+    temperature double precision null
+);
+
+SELECT FROM create_hypertable('sensor_data_recompress', 'time');
+
+INSERT INTO sensor_data_recompress
+	SELECT
+		time,
+		sensor_id,
+		random() AS cpu,
+		random() * 100 AS temperature
+	FROM
+		generate_series('2022-08-01'::timestamptz, '2022-09-01'::timestamptz, INTERVAL '30 minute') AS g1(time),
+		generate_series(1, 10, 1) AS g2(sensor_id)
+	ORDER BY time;
+
+-- enable compression
+ALTER TABLE sensor_data_recompress SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+
+-- verify we have uncompressed chunks
+SELECT count(*) > 0 AS has_uncompressed_chunks
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data_recompress' AND NOT is_compressed;
+
+-- add compression policy with recompress explicitly set to false
+SELECT add_compression_policy('sensor_data_recompress', INTERVAL '1 minute') AS compressjob_recompress_id \gset
+SELECT alter_job(id, config := jsonb_set(config, '{recompress}', 'false')) FROM _timescaledb_catalog.bgw_job WHERE id = :compressjob_recompress_id;
+
+-- run the compression policy
+CALL run_job(:compressjob_recompress_id);
+
+-- all chunks should be compressed even with recompress=false
+SELECT count(*) = 0 AS all_chunks_compressed
+  FROM timescaledb_information.chunks
+  WHERE hypertable_name = 'sensor_data_recompress' AND NOT is_compressed;
+
+-- cleanup
+SELECT _timescaledb_functions.stop_background_workers();
+DROP TABLE sensor_data_recompress;
+
 SELECT _timescaledb_functions.restart_background_workers();
 
 -- Github issue #5537
@@ -651,30 +701,34 @@ BEGIN
 END;
 $$;
 
--- Proc that sleeps for 1m - to keep the test jobs in running state
-CREATE OR REPLACE PROCEDURE proc_that_sleeps(job_id INT, config JSONB)
+-- Proc that blocks on a session advisory lock held by the test session.
+-- This deterministically pins the worker in 'Running' state until the test
+-- releases the lock, removing any dependency on wall-clock timing.
+CREATE OR REPLACE PROCEDURE proc_that_blocks(job_id INT, config JSONB)
 LANGUAGE PLPGSQL AS
 $$
 BEGIN
-    PERFORM pg_sleep(60);
+    PERFORM pg_advisory_lock(8584);
+    PERFORM pg_advisory_unlock(8584);
 END
 $$;
 
--- create new jobs and ensure that the second one gets scheduled
--- before the first one by adjusting the initial_start values
-SELECT add_job('proc_that_sleeps', '1h', initial_start => now()::timestamptz + interval '2s') AS job_id_1 \gset
-SELECT add_job('proc_that_sleeps', '1h', initial_start => now()::timestamptz - interval '2s') AS job_id_2 \gset
+-- Hold the lock so any worker running proc_that_blocks waits on it.
+SELECT pg_advisory_lock(8584);
+
+SELECT add_job('proc_that_blocks', '1h', initial_start => now()) AS job_id_1 \gset
+SELECT add_job('proc_that_blocks', '1h', initial_start => now()) AS job_id_2 \gset
 
 SELECT _timescaledb_functions.restart_background_workers();
--- wait for the jobs to start running job_2 will start running first
-CALL wait_for_job_status(:job_id_2, 'Running');
+-- wait for both jobs to be picked up and blocked on the lock
 CALL wait_for_job_status(:job_id_1, 'Running');
+CALL wait_for_job_status(:job_id_2, 'Running');
 
 -- add a new job and wait for it to start
-SELECT add_job('proc_that_sleeps', '1h') AS job_id_3 \gset
+SELECT add_job('proc_that_blocks', '1h', initial_start => now()) AS job_id_3 \gset
 CALL wait_for_job_status(:job_id_3, 'Running');
 
--- verify that none of the jobs crashed
+-- verify that all three jobs are concurrently in Running state and none crashed
 SELECT job_id, job_status, next_start,
        total_runs, total_successes, total_failures
   FROM timescaledb_information.job_stats
@@ -683,6 +737,9 @@ SELECT job_id, job_status, next_start,
 SELECT job_id, err_message
   FROM timescaledb_information.job_errors
   WHERE job_id IN (:job_id_1, :job_id_2, :job_id_3);
+
+-- release the lock so the workers complete naturally
+SELECT pg_advisory_unlock(8584);
 
 -- cleanup
 SELECT _timescaledb_functions.stop_background_workers();
@@ -716,16 +773,10 @@ SELECT add_job('custom_proc', '1h', config => '{"type":"procedure"}'::jsonb) AS 
 SELECT ts_test_bgw_job_function_call_string(:job_func);
 SELECT ts_test_bgw_job_function_call_string(:job_proc);
 
--- Remove the procedure and let's check it fallingback to PROKIND_FUNCTION
+-- Remove the procedure and let's check it errors out when we try to call the function that gets the proc name
 DROP PROCEDURE custom_proc(jobid int, args jsonb);
-SELECT ts_test_bgw_job_function_call_string(:job_proc);
-
 \set ON_ERROR_STOP 0
--- Mess with pg catalog to don't identify the PROKIND
-BEGIN;
-UPDATE pg_catalog.pg_proc SET prokind = 'X' WHERE oid = 'custom_func(int,jsonb)'::regprocedure;
-SELECT ts_test_bgw_job_function_call_string(:job_func);
-ROLLBACK;
+SELECT ts_test_bgw_job_function_call_string(:job_proc);
 \set ON_ERROR_STOP 1
 
 SELECT delete_job(:job_func);

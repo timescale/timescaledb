@@ -432,11 +432,15 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 
 					if (ht)
 					{
-						/* Mark hypertable RTEs we'd like to expand ourselves */
+						/* Mark hypertable RTEs we'd like to expand ourselves.
+						 * We skip the DML target relation (resultRelation != 0
+						 * in the current query) but allow non-target hypertables
+						 * in subqueries of UPDATE/DELETE to use TSDB expansion. */
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-							!IS_UPDL_CMD(context->rootquery) && query->resultRelation == 0 &&
-							rte->inh)
+							query->resultRelation == 0 && rte->inh)
+						{
 							rte_mark_for_expansion(rte);
+						}
 
 						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 						{
@@ -1420,38 +1424,18 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	Query *query = root->parse;
 	Hypertable *ht;
 	const TsRelType type = ts_classify_relation(root, rel, &ht);
-	AclMode requiredPerms = 0;
-
-#if PG16_LT
-	requiredPerms = rte->requiredPerms;
-#else
-	if (rte->perminfoindex > 0)
-	{
-		RTEPermissionInfo *perminfo = getRTEPermissionInfo(query->rteperminfos, rte);
-		requiredPerms = perminfo->requiredPerms;
-	}
-#endif
 
 	switch (type)
 	{
 		case TS_REL_HYPERTABLE:
 		{
 			/* Mark hypertable RTEs we'd like to expand ourselves.
-			 * Hypertables inside inlineable functions don't get marked during the query
-			 * preprocessing step. Therefore we do an extra try here. However, we need to
-			 * be careful for UPDATE/DELETE as Postgres (in at least version 12) plans them
-			 * in a complicated way (see planner.c:inheritance_planner). First, it runs the
-			 * UPDATE/DELETE through the planner as a simulated SELECT. It uses the results
-			 * of this fake planning to adapt its own UPDATE/DELETE plan. Then it's planned
-			 * a second time as a real UPDATE/DELETE, but with requiredPerms set to 0, as it
-			 * assumes permission checking has been done already during the first planner call.
-			 * We don't want to touch the UPDATE/DELETEs, so we need to check all the regular
-			 * conditions here that are checked during preprocess_query, as well as the
-			 * condition that requiredPerms is not requiring UPDATE/DELETE on this rel.
+			 * Hypertables inside inlineable functions don't get marked during
+			 * the query preprocessing step. Therefore we do an extra try here.
+			 * We skip the DML target relation identified by resultRelation.
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
-				rte->ctename == NULL && !IS_UPDL_CMD(query) && query->resultRelation == 0 &&
-				(requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
+				rte->ctename == NULL && rel->relid != (Index) query->resultRelation)
 			{
 				rte_mark_for_expansion(rte);
 			}
@@ -1462,6 +1446,34 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 		case TS_REL_CHUNK_STANDALONE:
 		case TS_REL_CHUNK_CHILD:
 			ts_create_private_reloptinfo(rel);
+
+			/*
+			 * Querying a compressed chunk requires Community Edition that
+			 * lives in the TSL module. Under the Apache license the TSL
+			 * module is not available, so without this check the planner
+			 * would only return the contents of the uncompressed chunk
+			 * relation. Raise an error instead.
+			 *
+			 * Skip the chunk fetch when the hypertable has no compression at
+			 * all: no chunk under it can be compressed, and opening the chunk
+			 * relation here has observable side effects (schema USAGE checks
+			 * fire before the parent's table-level ACL check).
+			 */
+			if (ts_license_is_apache() && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+			{
+				const Chunk *chunk = ts_planner_chunk_fetch(root, rel);
+
+				if (chunk != NULL && ts_chunk_is_compressed(chunk))
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("querying compressed data is not supported under the "
+									"current \"timescaledb.license\""),
+							 errdetail("Chunk \"%s\" is compressed and requires "
+									   "the TimescaleDB Community Edition to query.",
+									   get_rel_name(chunk->table_id)),
+							 errhint("Set timescaledb.license to 'timescale' and install the "
+									 "TimescaleDB Community Edition to query compressed data.")));
+			}
 
 			/*
 			 * We don't want to plan index scans on empty uncompressed tables of

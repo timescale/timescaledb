@@ -16,8 +16,8 @@ jobs:
           || (steps.filter.outputs.sql == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
           filters: .github/filters.yaml
@@ -48,6 +48,7 @@ jobs:
 
     steps:
       - name: Install Linux Dependencies
+        timeout-minutes: 15
         run: |
           sudo apt-get update
           sudo apt-get install pip postgresql-common
@@ -57,6 +58,7 @@ jobs:
           pip install testgres
 
       - name: Install PostgreSQL ${{ matrix.pg_version_old}} and ${{ matrix.pg_version_new }}
+        timeout-minutes: 15
         run: |
           yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
           echo "deb https://packagecloud.io/timescale/timescaledb/ubuntu/ $(lsb_release -c -s) main" | sudo tee /etc/apt/sources.list.d/timescaledb.list
@@ -70,7 +72,7 @@ jobs:
             timescaledb-2-postgresql-${{ matrix.pg_version_new }}
 
       - name: Checkout TimescaleDB
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Build and install TimescaleDB on PostgreSQL ${{ matrix.pg_version_old}}
         env:

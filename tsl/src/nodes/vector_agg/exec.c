@@ -80,7 +80,9 @@ get_input_offset(const DecompressContext *dcontext, const Var *var)
 			break;
 		}
 	}
-	Ensure(value_column_description != NULL, "aggregated compressed column not found");
+	Ensure(value_column_description != NULL,
+		   "compressed column %d not found in columnar aggregation",
+		   var->varattno);
 
 	Assert(value_column_description->type == COMPRESSED_COLUMN ||
 		   value_column_description->type == SEGMENTBY_COLUMN);
@@ -996,6 +998,122 @@ vector_agg_rescan(CustomScanState *node)
 	state->grouping->gp_reset(state->grouping);
 }
 
+static void
+vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchState *batch_state,
+								   List *quals)
+{
+	Assert(batch_state->next_batch_row == 0);
+
+	const int num_words = (batch_state->total_batch_rows + 63) / 64;
+
+	uint64 *restrict combined_qual_result = NULL;
+
+	ListCell *lc;
+	foreach (lc, quals)
+	{
+		const CompressedColumnValues single_qual_result =
+			vector_slot_evaluate_expression(dcontext,
+											&batch_state->decompressed_scan_slot_data.base,
+											combined_qual_result != NULL ?
+												combined_qual_result :
+												batch_state->vector_qual_result,
+											lfirst(lc));
+
+		/*
+		 * The result is a nullable bool. We are checking a qualifier, so both
+		 * false and null mean "doesn't pass".
+		 *
+		 * Typically we expect to get the standard DT_ArrowBits representation
+		 * of bools there, but we can also get a DT_Scalar. In this case, the
+		 * entire batch either passes or is filtered out.
+		 *
+		 * First, determine if the qual filtered something out.
+		 */
+		bool some_rows_are_filtered_out_by_this_qual = false;
+		if (single_qual_result.decompression_type == DT_ArrowBits)
+		{
+			some_rows_are_filtered_out_by_this_qual |=
+				(get_vector_qual_summary(single_qual_result.buffers[0],
+										 batch_state->total_batch_rows) != AllRowsPass);
+			some_rows_are_filtered_out_by_this_qual |=
+				(get_vector_qual_summary(single_qual_result.buffers[1],
+										 batch_state->total_batch_rows) != AllRowsPass);
+		}
+		else if (single_qual_result.decompression_type == DT_Scalar)
+		{
+			const bool isnull = DatumGetBool(PointerGetDatum(single_qual_result.buffers[0]));
+			const bool value = DatumGetBool(PointerGetDatum(single_qual_result.buffers[1]));
+			some_rows_are_filtered_out_by_this_qual |= isnull;
+			some_rows_are_filtered_out_by_this_qual |= !value;
+		}
+		else
+		{
+			Ensure(false,
+				   "unexpected decompression type %d for postgres qual result",
+				   single_qual_result.decompression_type);
+		}
+
+		if (!some_rows_are_filtered_out_by_this_qual)
+		{
+			continue;
+		}
+
+		/*
+		 * Some rows were filtered out by this qual, we might need to allocate
+		 * the qual result storage.
+		 */
+		const int bitmap_bytes = num_words * sizeof(*combined_qual_result);
+		if (combined_qual_result == NULL)
+		{
+			combined_qual_result = MemoryContextAlloc(batch_state->per_batch_context, bitmap_bytes);
+			memset(combined_qual_result, 0xFF, bitmap_bytes);
+		}
+
+		/*
+		 * Integrate the results of this qual into the current results for the
+		 * batch using bool AND.
+		 */
+		if (single_qual_result.decompression_type == DT_ArrowBits)
+		{
+			arrow_validity_and(num_words, combined_qual_result, single_qual_result.buffers[0]);
+			arrow_validity_and(num_words, combined_qual_result, single_qual_result.buffers[1]);
+		}
+		else
+		{
+			/* The other option is scalar bool as we have checked above. */
+			Assert(single_qual_result.decompression_type == DT_Scalar);
+			const bool isnull = DatumGetBool(PointerGetDatum(single_qual_result.buffers[0]));
+			const bool value = DatumGetBool(PointerGetDatum(single_qual_result.buffers[1]));
+			if (isnull || !value)
+			{
+				memset(combined_qual_result, 0x0, bitmap_bytes);
+			}
+		}
+
+		/* Early exit when all rows are already filtered out. */
+		if (get_vector_qual_summary(combined_qual_result, batch_state->total_batch_rows) ==
+			NoRowsPass)
+		{
+			break;
+		}
+	}
+
+	if (combined_qual_result != NULL)
+	{
+		batch_state->vector_qual_result = combined_qual_result;
+
+		/* If no rows pass, mark the batch as fully consumed. */
+		if (get_vector_qual_summary(batch_state->vector_qual_result,
+									batch_state->total_batch_rows) == NoRowsPass)
+		{
+			compressed_batch_discard_tuples(batch_state);
+
+			InstrCountTuples2(dcontext->ps, 1);
+			InstrCountFiltered1(dcontext->ps, batch_state->total_batch_rows);
+		}
+	}
+}
+
 /*
  * Get the next slot to aggregate for a compressed batch.
  *
@@ -1014,6 +1132,9 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 	DecompressContext *dcontext = &decompress_state->decompress_context;
 	BatchQueue *batch_queue = decompress_state->batch_queue;
 	DecompressBatchState *batch_state = batch_array_get_at(&batch_queue->batch_array, 0);
+	List *pg_quals =
+		list_nth(castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_private,
+				 VASI_PostgresQuals);
 
 	do
 	{
@@ -1050,6 +1171,15 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 		}
 
 		compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
+
+		/*
+		 * If we have PG quals and there are some rows that passed the vectorized
+		 * quals, run the PG quals next.
+		 */
+		if (pg_quals && batch_state->next_batch_row < batch_state->total_batch_rows)
+		{
+			vector_agg_evaluate_postgres_quals(dcontext, batch_state, pg_quals);
+		}
 
 		/* If the entire batch is filtered out, then immediately read the next
 		 * one */

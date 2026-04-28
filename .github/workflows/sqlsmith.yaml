@@ -30,7 +30,8 @@ jobs:
       JOB_NAME: SQLsmith PG${{ matrix.pg }}
 
     steps:
-    - name: Install Dependencies
+    - name: Install Linux Dependencies
+      timeout-minutes: 15
       run: |
         sudo apt-get update
         sudo apt-get install gnupg systemd-coredump gdb postgresql-common \
@@ -47,7 +48,7 @@ jobs:
         { psql -c "select 1" && exit 1 ; } || :
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     - name: Build TimescaleDB
       run: |
@@ -56,7 +57,7 @@ jobs:
         sudo make -C build install
 
     - name: Checkout sqlsmith
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         repository: 'timescale/sqlsmith'
         path: 'sqlsmith'

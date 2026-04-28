@@ -74,16 +74,17 @@ jobs:
       fail-fast: false
     steps:
       - name: Checkout TimescaleDB
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install Dependencies
+      - name: Install Linux Dependencies
         # we want the right version of Postgres for handling any dump file
+        timeout-minutes: 15
         run: |
           sudo apt-get update
-          sudo apt-get install gnupg postgresql-common 
+          sudo apt-get install gnupg postgresql-common
           yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
           sudo apt-get update
-          sudo apt-get install postgresql-17 
+          sudo apt-get install postgresql-17
     
       - name: "Run update smoke test with v${{ matrix.version }} to ${{needs.get-next-version.outputs.next_version}}"
         # Now run the test.  Currently the cloud instance is always up.

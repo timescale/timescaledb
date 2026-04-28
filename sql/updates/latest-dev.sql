@@ -80,3 +80,31 @@ USING orphaned_settings AS os WHERE cs.relid = os.relid;
 ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT IF EXISTS hypertable_compressed_hypertable_id_fkey;
 ALTER TABLE _timescaledb_catalog.chunk DROP CONSTRAINT IF EXISTS chunk_compressed_chunk_id_fkey;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.job_history_bsearch;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.policy_process_hypertable_invalidations_check(JSONB);
+DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_process_hypertable_invalidations(INTEGER, JSONB);
+DROP PROCEDURE IF EXISTS @extschema@.add_process_hypertable_invalidations_policy(REGCLASS, INTERVAL, BOOL, TIMESTAMPTZ, TEXT);
+DROP PROCEDURE IF EXISTS @extschema@.remove_process_hypertable_invalidations_policy(REGCLASS, BOOL);
+
+-- Migration: refresh orderby sparse index entries in compression_settings
+UPDATE _timescaledb_catalog.compression_settings
+SET index = (
+    SELECT COALESCE(jsonb_agg(elem), '[]'::jsonb)
+    FROM jsonb_array_elements(index) AS elem
+    WHERE elem->>'source' != 'orderby'
+)
+WHERE index IS NOT NULL
+AND index @> '[{"source": "orderby"}]';
+
+UPDATE _timescaledb_catalog.compression_settings cs
+SET index = COALESCE(index, '[]'::jsonb) ||
+            (
+            SELECT jsonb_agg(jsonb_build_object(
+                                'type', 'minmax',
+                                'source', 'orderby',
+                                'column', elem))
+            FROM unnest(cs.orderby) AS elem
+            )
+WHERE cs.orderby IS NOT NULL;
+

@@ -152,6 +152,7 @@ SELECT * FROM ht_settings;
 -- create chunk
 INSERT INTO metrics VALUES ('2000-01-01');
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='d1');
+NOTICE:  updated compression settings will only apply to future compressions
 -- settings should be updated
 SELECT * FROM settings;
   relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
@@ -182,6 +183,7 @@ SELECT * FROM chunk_settings;
 
 -- changing settings should update settings for hypertable but not existing compressed chunks
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='d2');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM settings;
                  relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
 ----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
@@ -200,6 +202,7 @@ SELECT * FROM chunk_settings;
 
 -- changing settings should update settings for hypertable but not existing compressed chunks
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM settings;
                  relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
 ----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
@@ -244,6 +247,7 @@ SELECT * FROM chunk_settings;
  metrics    | _timescaledb_internal._hyper_3_8_chunk |           | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
 
 ALTER TABLE metrics SET (timescaledb.compress_orderby='"time" desc', timescaledb.compress_segmentby='d2', timescaledb.index='bloom(value)');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL ORDER BY id LIMIT 1 OFFSET 1\gset
 -- recompressing chunks should apply current hypertable settings
 SELECT compress_chunk(:'CHUNK', recompress:=true);
@@ -271,6 +275,7 @@ SELECT * FROM settings;
  _timescaledb_internal._hyper_3_8_chunk | _timescaledb_internal.compress_hyper_4_11_chunk | {d2}      | {time}  | {t}          | {t}                | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 
 ALTER TABLE metrics SET (timescaledb.compress_orderby='"time" desc', timescaledb.compress_segmentby='d2', timescaledb.index='');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL ORDER BY id LIMIT 1 OFFSET 1\gset
 SELECT compress_chunk(:'CHUNK', recompress:=true);
              compress_chunk             
@@ -310,20 +315,22 @@ SELECT * FROM ht_settings;
 
 ALTER TABLE metrics2 SET (timescaledb.compress_orderby='d1 NULLS FIRST, d2 NULLS LAST, time, value ASC');
 SELECT * FROM ht_settings;
- hypertable | segmentby |            orderby             | compress_interval_length |                                       index                                       
-------------+-----------+--------------------------------+--------------------------+-----------------------------------------------------------------------------------
+ hypertable | segmentby |            orderby             | compress_interval_length |                                                                                                                   index                                                                                                                   
+------------+-----------+--------------------------------+--------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  metrics    | d2        | "time" DESC                    |                          | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- metrics2   |           | d1 NULLS FIRST,d2,"time",value |                          | 
+ metrics2   |           | d1 NULLS FIRST,d2,"time",value |                          | [{"type": "minmax", "column": "d1", "source": "orderby"}, {"type": "minmax", "column": "d2", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}]
 
 ALTER TABLE metrics2 SET (timescaledb.compress_orderby='d1 DESC NULLS LAST, d2 ASC NULLS FIRST, value DESC, time ASC NULLS FIRST');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM ht_settings;
- hypertable | segmentby |                             orderby                             | compress_interval_length |                                       index                                       
-------------+-----------+-----------------------------------------------------------------+--------------------------+-----------------------------------------------------------------------------------
+ hypertable | segmentby |                             orderby                             | compress_interval_length |                                                                                                                   index                                                                                                                   
+------------+-----------+-----------------------------------------------------------------+--------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  metrics    | d2        | "time" DESC                                                     |                          | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- metrics2   |           | d1 DESC NULLS LAST,d2 NULLS FIRST,value DESC,"time" NULLS FIRST |                          | 
+ metrics2   |           | d1 DESC NULLS LAST,d2 NULLS FIRST,value DESC,"time" NULLS FIRST |                          | [{"type": "minmax", "column": "d1", "source": "orderby"}, {"type": "minmax", "column": "d2", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 
 -- test decompression uses the correct settings
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT compress_chunk(show_chunks('metrics'), recompress:=true);
              compress_chunk             
 ----------------------------------------
@@ -331,6 +338,7 @@ SELECT compress_chunk(show_chunks('metrics'), recompress:=true);
  _timescaledb_internal._hyper_3_8_chunk
 
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='d1,d2');
+NOTICE:  updated compression settings will only apply to future compressions
 SELECT * FROM chunk_settings;
  hypertable |                 chunk                  | segmentby |   orderby   |                                       index                                       
 ------------+----------------------------------------+-----------+-------------+-----------------------------------------------------------------------------------
@@ -342,10 +350,10 @@ SELECT * FROM metrics WHERE d1 = 'foo';
 ------+----+----+-------
 
 SELECT * FROM settings;
-                 relid                  |                 compress_relid                  | segmentby |      orderby       | orderby_desc | orderby_nullsfirst |                                       index                                       
-----------------------------------------+-------------------------------------------------+-----------+--------------------+--------------+--------------------+-----------------------------------------------------------------------------------
+                 relid                  |                 compress_relid                  | segmentby |      orderby       | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                   
+----------------------------------------+-------------------------------------------------+-----------+--------------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  metrics                                |                                                 | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- metrics2                               |                                                 |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | 
+ metrics2                               |                                                 |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | [{"type": "minmax", "column": "d1", "source": "orderby"}, {"type": "minmax", "column": "d2", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
  _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal.compress_hyper_4_13_chunk | {}        | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
  _timescaledb_internal._hyper_3_8_chunk | _timescaledb_internal.compress_hyper_4_14_chunk | {}        | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 
@@ -353,10 +361,10 @@ SELECT * FROM settings;
 -- settings for chunks that are dropped when truncating.
 TRUNCATE metrics;
 SELECT * FROM settings;
-  relid   | compress_relid | segmentby |      orderby       | orderby_desc | orderby_nullsfirst |                                       index                                       
-----------+----------------+-----------+--------------------+--------------+--------------------+-----------------------------------------------------------------------------------
+  relid   | compress_relid | segmentby |      orderby       | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                   
+----------+----------------+-----------+--------------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  metrics  |                | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- metrics2 |                |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | 
+ metrics2 |                |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | [{"type": "minmax", "column": "d1", "source": "orderby"}, {"type": "minmax", "column": "d2", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 
 SELECT * FROM chunk_settings;
  hypertable | chunk | segmentby | orderby | index 
@@ -371,10 +379,10 @@ SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
  _timescaledb_internal._hyper_3_16_chunk
 
 SELECT * FROM settings;
-                  relid                  |                 compress_relid                  | segmentby |      orderby       | orderby_desc | orderby_nullsfirst |                                       index                                       
------------------------------------------+-------------------------------------------------+-----------+--------------------+--------------+--------------------+-----------------------------------------------------------------------------------
+                  relid                  |                 compress_relid                  | segmentby |      orderby       | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                   
+-----------------------------------------+-------------------------------------------------+-----------+--------------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  metrics                                 |                                                 | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- metrics2                                |                                                 |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | 
+ metrics2                                |                                                 |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | [{"type": "minmax", "column": "d1", "source": "orderby"}, {"type": "minmax", "column": "d2", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
  _timescaledb_internal._hyper_3_15_chunk | _timescaledb_internal.compress_hyper_4_17_chunk | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
  _timescaledb_internal._hyper_3_16_chunk | _timescaledb_internal.compress_hyper_4_18_chunk | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 
@@ -382,9 +390,9 @@ SELECT * FROM settings;
 -- hypertable so needs to be tested separately.
 DROP TABLE metrics CASCADE;
 SELECT * FROM settings;
-  relid   | compress_relid | segmentby |      orderby       | orderby_desc | orderby_nullsfirst | index 
-----------+----------------+-----------+--------------------+--------------+--------------------+-------
- metrics2 |                |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | 
+  relid   | compress_relid | segmentby |      orderby       | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                   
+----------+----------------+-----------+--------------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ metrics2 |                |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | [{"type": "minmax", "column": "d1", "source": "orderby"}, {"type": "minmax", "column": "d2", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 
 -- Test column limits for orderby and segmentby
 \set ON_ERROR_STOP 0
@@ -453,3 +461,31 @@ ERROR:  too many segmentby and orderby columns
 DETAIL:  Combined segmentby keys (1) and orderby keys (32) cannot exceed 32
 \set ON_ERROR_STOP 1
 \set VERBOSITY terse
+-- Test NOTICE when changing compression settings on a table that already has compression enabled
+SET timescaledb.enable_direct_compress_insert = true;
+CREATE TABLE notice_test(time timestamptz not null, device text, temp float, created_at timestamptz not null default now()) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+ALTER TABLE notice_test SET (timescaledb.compress_segmentby='device');
+NOTICE:  updated compression settings will only apply to future compressions
+INSERT INTO notice_test SELECT t, 'dev1', 1.0, t + interval '1 hour' FROM generate_series('2000-01-01'::timestamptz, '2000-01-02', '1 minute') t;
+ALTER TABLE notice_test SET (timescaledb.compress_segmentby='');
+NOTICE:  updated compression settings will only apply to future compressions
+INSERT INTO notice_test SELECT t, 'dev1', 1.0, t + interval '1 hour' FROM generate_series('2000-02-01'::timestamptz, '2000-02-02', '1 minute') t;
+ALTER TABLE notice_test SET (timescaledb.compress_orderby='created_at');
+NOTICE:  updated compression settings will only apply to future compressions
+INSERT INTO notice_test SELECT t, 'dev1', 1.0, t + interval '1 hour' FROM generate_series('2000-02-10'::timestamptz, '2000-02-11', '1 minute') t;
+ALTER TABLE notice_test SET (timescaledb.index='bloom(temp)');
+NOTICE:  updated compression settings will only apply to future compressions
+INSERT INTO notice_test SELECT t, 'dev1', 1.0, t + interval '1 hour' FROM generate_series('2000-04-01'::timestamptz, '2000-04-02', '1 minute') t;
+SELECT * FROM settings;
+                  relid                  |                  compress_relid                  | segmentby |      orderby       | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                   
+-----------------------------------------+--------------------------------------------------+-----------+--------------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ metrics2                                |                                                  |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | [{"type": "minmax", "column": "d1", "source": "orderby"}, {"type": "minmax", "column": "d2", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ notice_test                             |                                                  | {}        | {created_at,time}  | {f,t}        | {f,t}              | [{"type": "bloom", "column": "temp", "source": "config"}, {"type": "minmax", "column": "created_at", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_9_19_chunk | _timescaledb_internal.compress_hyper_10_20_chunk | {device}  | {time}             | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_9_21_chunk | _timescaledb_internal.compress_hyper_10_22_chunk | {}        | {time}             | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_9_23_chunk | _timescaledb_internal.compress_hyper_10_24_chunk | {}        | {created_at,time}  | {f,t}        | {f,t}              | [{"type": "minmax", "column": "created_at", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_9_25_chunk | _timescaledb_internal.compress_hyper_10_26_chunk | {}        | {created_at,time}  | {f,t}        | {f,t}              | [{"type": "bloom", "column": "temp", "source": "config"}, {"type": "minmax", "column": "created_at", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+
+RESET timescaledb.enable_direct_compress_insert;
+DROP TABLE notice_test;

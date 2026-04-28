@@ -171,6 +171,24 @@ COMMIT;
 -- And they stay started
 SELECT wait_worker_counts(1,0,1,0);
 
+-- A single timescaledb_post_restore() should keep the scheduler running
+-- even if a new worker reads pg_db_role_settings before post_restore's
+-- RESET commits and stores restoring='on' as the placeholder's reset_val.
+-- Without the loader fix the versioned .so picks up that stale value via
+-- DefineCustomBoolVariable and the scheduler exits silently.
+SELECT timescaledb_pre_restore();
+SELECT wait_worker_counts(1,0,0,0);
+BEGIN;
+SELECT timescaledb_post_restore();
+-- Wait for the worker to read pg_db_role_settings (which still shows
+-- restoring='on' because the RESET has not committed yet).
+SELECT wait_worker_counts(1,0,1,0);
+SELECT pg_sleep(1);
+COMMIT;
+-- Give the scheduler time to exit (bug) or keep running (fix).
+SELECT pg_sleep(2);
+SELECT wait_worker_counts(1,0,1,0);
+
 -- Make sure dropping the extension means that the scheduler is stopped
 BEGIN;
 DROP EXTENSION timescaledb;

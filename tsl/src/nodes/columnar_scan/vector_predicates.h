@@ -37,6 +37,11 @@ typedef enum BatchQualSummary
 static pg_attribute_always_inline BatchQualSummary
 get_vector_qual_summary(const uint64 *qual_result, size_t n_rows)
 {
+	if (qual_result == NULL)
+	{
+		return AllRowsPass;
+	}
+
 	bool any_rows_pass = false;
 	bool all_rows_pass = true;
 	for (size_t i = 0; i < n_rows / 64; i++)

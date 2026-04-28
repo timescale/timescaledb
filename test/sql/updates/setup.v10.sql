@@ -4,4 +4,3 @@
 
 \ir setup.v9.sql
 \ir setup.sparse_index.sql
-\ir setup.fix_sparse_index_migration.sql

@@ -25,7 +25,7 @@ jobs:
 
     steps:
     - name: Checkout source code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -47,8 +47,8 @@ jobs:
          }}
       run_installcheck: ${{ github.event_name == 'push' || steps.filter.outputs.windows-workflow == 'true' }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
           filters: .github/filters.yaml
@@ -131,11 +131,13 @@ jobs:
         }
 
     - name: Setup WSL
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       uses: Vampire/setup-wsl@6a8db447be7ed35f2f499c02c6e60ff77ef11278 # v6.0.0
       with:
         distribution: Debian
 
     - name: Configure apt retries and timeout in WSL
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       run: |
         echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
@@ -143,6 +145,7 @@ jobs:
         echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
 
     - name: Install additional packages in WSL
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       run: |
         # Workaround for https://github.com/Vampire/setup-wsl/issues/76
@@ -159,17 +162,15 @@ jobs:
         git config --global core.eol lf
 
     - name: Checkout TimescaleDB source
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
     - name: Get date for build caching
       id: get-date
-      env:
-        WSLENV: GITHUB_OUTPUT/p
-      shell: wsl-bash {0}
+      shell: powershell
       run: |
-        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+        echo "date=$(Get-Date -Format 'dd')" >> $env:GITHUB_OUTPUT
 
       # Use a cache for the PostgreSQL installation to speed things up
       # and avoid unnecessary package downloads. Since we only save
@@ -179,7 +180,7 @@ jobs:
       # --extract-only and launch our own test instance, which is
       # probably better anyway since it gives us more control.
     - name: Cache PostgreSQL installation
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       id: cache-postgresql
       with:
         path: C:\Progra~1\PostgreSQL\${{ matrix.versions.pg }}
@@ -303,7 +304,7 @@ jobs:
 
     - name: Show regression diffs
       id: collectlogs
-      if: always()
+      if: always() && needs.check_paths.outputs.run_installcheck == 'true'
       env:
         WSLENV: GITHUB_OUTPUT/p
       shell: wsl-bash {0}
@@ -375,7 +376,7 @@ jobs:
             build_wsl/compile_commands.json
 
     - name: Upload test results to the database
-      if: always()
+      if: always() && needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       env:
         # Update when adding new variables.

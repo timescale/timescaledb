@@ -1086,6 +1086,16 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		if (insertMethod != buffer->method)
 			TSCopyMultiInsertInfoFlush(&multiInsertInfo, cis);
 
+		/*
+		 * If we're capturing transition tuples, save the original tuple in
+		 * hypertable format before converting to chunk format. Chunks created
+		 * after a column drop have a different TupleDesc, and the transition
+		 * table must store tuples in the hypertable's format.
+		 * See PostgreSQL's CopyFrom in copyfrom.c.
+		 */
+		if (ccstate->cstate && ccstate->cstate->transition_capture != NULL)
+			ccstate->cstate->transition_capture->tcs_original_insert_tuple = myslot;
+
 		/* Convert the tuple to match the chunk's rowtype */
 		if (buffer->method == TS_CIM_SINGLE)
 		{

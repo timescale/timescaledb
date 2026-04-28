@@ -63,7 +63,7 @@ jobs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -82,13 +82,14 @@ jobs:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
     steps:
     - name: Install Linux Dependencies
+      timeout-minutes: 15
       run: |
         sudo apt-get update
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
           libtest-most-perl jq ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
@@ -108,7 +109,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }}
       id: cache-postgresql
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}\

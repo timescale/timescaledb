@@ -55,7 +55,6 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_chunk_size.h"
-#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "utils.h"
 #include "wal_utils.h"
@@ -442,7 +441,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		EventTriggerAlterTableStart(create_dummy_query());
 		/* create compressed chunk and a new table */
 		compress_ht_chunk =
-			create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid, false);
+			create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid, false, NULL);
 		/* Associate compressed chunk with main chunk. */
 		ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
 		new_compressed_chunk = true;
@@ -662,6 +661,24 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	write_logical_replication_msg_decompression_end();
 }
 
+bool
+is_chunk_orderby_nonnullable(CompressionSettings *settings)
+{
+	int num_orderby = ts_array_length(settings->fd.orderby);
+	const char *attname;
+	int attnum;
+	for (int i = 1; i <= num_orderby; i++)
+	{
+		attname = ts_array_get_element_text(settings->fd.orderby, i);
+		attnum = get_attnum(settings->fd.relid, attname);
+		if (!AttributeNumberIsValid(attnum) || !ts_get_attnotnull(settings->fd.relid, attnum))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
 static bool
 recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
 {
@@ -705,7 +722,21 @@ recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
 			return false;
 		}
 
-		*uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
+		/* #9444: do not recompress when order by columns are nullable, do segmentwise
+		 * decompress/compress instead. It is due to compression min/max metadata not handling
+		 * NULLs. When we implement chunks with min/max NULL-handling metadata, this restriction can
+		 * be lifted.
+		 */
+		bool nullable_orderby = !is_chunk_orderby_nonnullable(chunk_settings);
+		if (nullable_orderby)
+		{
+			elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
+				 "in-memory recompression is disabled due to nullable order by, "
+				 "performing segmentwise decompress/compress on chunk \"%s.%s\"",
+				 NameStr(chunk->fd.schema_name),
+				 NameStr(chunk->fd.table_name));
+		}
+		*uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk, nullable_orderby);
 		recompressed = true;
 	}
 	else
@@ -775,7 +806,8 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	 */
 	EventTriggerAlterTableStart(create_dummy_query());
 	/* Create compressed chunk using existing table */
-	compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table, false);
+	compress_ht_chunk =
+		create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table, false, NULL);
 	EventTriggerAlterTableEnd();
 
 	/* Insert empty stats to compression_chunk_size */
@@ -822,6 +854,17 @@ Oid
 tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress)
 {
 	Oid uncompressed_chunk_id = chunk->table_id;
+
+	if (ts_chunk_is_frozen(chunk))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("chunk \"%s.%s\" is frozen, skipping compression",
+						NameStr(chunk->fd.schema_name),
+						NameStr(chunk->fd.table_name)),
+				 errhint("Use _timescaledb_functions.unfreeze_chunk to unfreeze.")));
+		return uncompressed_chunk_id;
+	}
 
 	write_logical_replication_msg_compression_start();
 
@@ -1012,8 +1055,9 @@ tsl_compression_chunk_create(Hypertable *compressed_ht, Chunk *src_chunk)
 		compressed_ht,
 		src_chunk,
 		InvalidOid,
-		ts_guc_enable_direct_compress_auto_segmentby); /* skip_segmentby_default
-														*/
+		ts_guc_enable_direct_compress_auto_segmentby, /* skip_segmentby_default
+													   */
+		NULL);
 }
 
 Datum

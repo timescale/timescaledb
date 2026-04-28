@@ -955,16 +955,21 @@ ts_bgw_job_get_funcid(BgwJob *job)
 								 makeString(NameStr(job->fd.proc_name)));
 	object->objargs = list_make2(SystemTypeName("int4"), SystemTypeName("jsonb"));
 
-	/* Return InvalidOid if don't found */
-	return LookupFuncWithArgs(OBJECT_ROUTINE, object, true);
+	Oid funcid = LookupFuncWithArgs(OBJECT_ROUTINE, object, true);
+	if (!OidIsValid(funcid))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_FUNCTION),
+				 errmsg("function or procedure \"%s.%s(integer, jsonb)\" does not exist",
+						NameStr(job->fd.proc_schema),
+						NameStr(job->fd.proc_name)),
+				 errhint("Custom job actions must accept (integer, jsonb) arguments.")));
+	return funcid;
 }
 
 const char *
 ts_bgw_job_function_call_string(BgwJob *job)
 {
-	Oid funcid = ts_bgw_job_get_funcid(job);
-	/* If do not found the function or procedure then fallback to PROKIND_FUNCTION */
-	char prokind = OidIsValid(funcid) ? get_func_prokind(funcid) : PROKIND_FUNCTION;
+	char prokind = get_func_prokind(ts_bgw_job_get_funcid(job));
 	StringInfoData stmt;
 	initStringInfo(&stmt);
 	char *jsonb_str = "NULL";

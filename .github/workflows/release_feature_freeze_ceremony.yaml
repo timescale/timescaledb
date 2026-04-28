@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
       
@@ -75,14 +75,15 @@ jobs:
 
     steps:
       - name: Checkout TimescaleDB
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       # git user config timescale-automation
       - run: |
           git config user.name "timescale-automation"
           git config user.email "123763385+github-actions[bot]@users.noreply.github.com"
 
-      - name: Install Dependencies
+      - name: Install Linux Dependencies
+        timeout-minutes: 15
         run: |
           sudo apt-get update
           sudo apt-get install pip
@@ -112,7 +113,7 @@ jobs:
       # -------------------------------------------------------
       
       # Bump minor in main for minor releases
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: main
 
@@ -163,7 +164,7 @@ jobs:
       # -------------------------------------------------------
 
       # Generate the CHANGELOG and submit it in a separate PR
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ env.RELEASE_BRANCH }}
 
@@ -189,7 +190,7 @@ jobs:
           echo "* ✅ CHANGELOG: $PR_URL" >> $GITHUB_STEP_SUMMARY
 
       # Rework version.config and up & down grade scripts
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ env.RELEASE_BRANCH }}
       - name: Generate release artefacts

@@ -27,13 +27,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
-          if gh workflow run tsdb-refresh-gucs-list.yaml -R timescale/docs -f tag=${{ github.event.release.tag_name }}; then
+          if gh workflow run tsdb-refresh-gucs-list.yaml -R timescale/Tiger-Data-Docs -f tag=${{ github.event.release.tag_name }}; then
             echo "✅ Triggered generation of GUC list in docs" >> $GITHUB_STEP_SUMMARY
           else
             echo "❌ docs workflow to generate the GUCs failed" >> $GITHUB_STEP_SUMMARY
           fi
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.release.tag_name }}
       
@@ -80,7 +80,7 @@ jobs:
           echo "RELEASE_BRANCH=${RELEASE_BRANCH}" >> $GITHUB_ENV
           echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ env.RELEASE_BRANCH }}
 

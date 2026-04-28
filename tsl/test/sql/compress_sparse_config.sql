@@ -407,3 +407,98 @@ select * from test.show_columns_ext(:'chunk'::regclass);
 select * from settings;
 reset timescaledb.enable_sparse_index_bloom;
 drop table test_sparse_index;
+
+-- Test drop column with sparse indexes
+create table test_drop_sparse(x int, value text, u uuid, ts timestamp, extra text);
+select create_hypertable('test_drop_sparse', 'x');
+
+insert into test_drop_sparse
+select x, md5(x::text),
+    '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid,
+    '2021-01-01'::timestamp + (interval '1 hour') * x,
+    'extra'
+from generate_series(1, 1000) x;
+
+-- Configure with bloom on u, minmax on ts, composite bloom on (u, extra)
+alter table test_drop_sparse set (timescaledb.compress,
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"), minmax("ts"), bloom("u","extra")');
+select * from settings;
+
+select count(compress_chunk(x)) from show_chunks('test_drop_sparse') x;
+
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'test_drop_sparse') limit 1)
+\gset
+
+-- Show columns before drop
+select * from test.show_columns_ext(:'chunk'::regclass);
+
+-- Drop column with minmax sparse index
+alter table test_drop_sparse drop column ts;
+select * from settings;
+
+select * from test.show_columns_ext(:'chunk'::regclass);
+
+-- Verify data is still queryable
+select count(*) from test_drop_sparse;
+
+-- Drop column with bloom sparse index (also part of composite bloom)
+alter table test_drop_sparse drop column u;
+select * from settings;
+
+select * from test.show_columns_ext(:'chunk'::regclass);
+
+-- Verify data is still queryable
+select count(*) from test_drop_sparse;
+
+-- Drop column with only composite bloom participation
+drop table test_drop_sparse;
+
+create table test_drop_sparse2(x int, a text, b text, c text);
+select create_hypertable('test_drop_sparse2', 'x');
+
+insert into test_drop_sparse2
+select x, 'a', 'b', 'c' from generate_series(1, 1000) x;
+
+alter table test_drop_sparse2 set (timescaledb.compress,
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("a","b","c")');
+select * from settings;
+
+select count(compress_chunk(x)) from show_chunks('test_drop_sparse2') x;
+
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'test_drop_sparse2') limit 1)
+\gset
+
+select * from test.show_columns_ext(:'chunk'::regclass);
+
+-- Drop one column from the composite bloom
+alter table test_drop_sparse2 drop column b;
+select * from settings;
+
+select * from test.show_columns_ext(:'chunk'::regclass);
+
+select count(*) from test_drop_sparse2;
+
+drop table test_drop_sparse2;
+
+-- Test orderby sparse index with default orderby and auto_sparse_indexes off
+set timescaledb.auto_sparse_indexes = false;
+create table test_orderby_default_noguc(x int, value float);
+select create_hypertable('test_orderby_default_noguc', 'x');
+-- No explicit orderby — triggers compression_settings_set_defaults path
+alter table test_orderby_default_noguc set (timescaledb.compress);
+insert into test_orderby_default_noguc select i, random() from generate_series(1, 10000) i;
+select count(compress_chunk(c)) from show_chunks('test_orderby_default_noguc') c;
+select * from settings;
+
+reset timescaledb.auto_sparse_indexes;
+drop table test_orderby_default_noguc;
