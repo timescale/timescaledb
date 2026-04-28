@@ -447,6 +447,16 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 			 ts_internal_to_time_string(refresh_window->end, refresh_window->type));
 
 		context.processing_batch = ++processing_batch;
+
+		/* extend_last_bucket must only apply to the boundary batch — the one
+		 * whose window abuts the adjacent policy.  For newest-first ordering
+		 * that is batch 1; for oldest-first it is the final batch.
+		 * In non-batched mode (single batch) the one batch is always the boundary. */
+		bool apply_extend =
+			extend_last_bucket &&
+			(policy_data.refresh_newest_first ? processing_batch == 1 :
+												processing_batch == context.number_of_batches);
+
 		continuous_agg_refresh_internal(policy_data.cagg,
 										refresh_window,
 										context,
@@ -455,7 +465,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 										(context.callctx != CAGG_REFRESH_POLICY_BATCHED),
 										false, /* force */
 										policy_data.process_hypertable_invalidations,
-										extend_last_bucket);
+										apply_extend);
 		DEBUG_ERROR_INJECTION(psprintf("cagg_policy_batch_%d_after_refresh", processing_batch));
 		if (processing_batch >= policy_data.max_batches_per_execution &&
 			processing_batch < context.number_of_batches &&
