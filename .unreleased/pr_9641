@@ -1,1 +1,0 @@
-Fixes: #9641 Fix corrupted transition table tuples with COPY after column drop
