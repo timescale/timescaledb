@@ -1149,9 +1149,6 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 	DecompressContext *dcontext = &decompress_state->decompress_context;
 	BatchQueue *batch_queue = decompress_state->batch_queue;
 	DecompressBatchState *batch_state = batch_array_get_at(&batch_queue->batch_array, 0);
-	List *pg_quals =
-		list_nth(castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_private,
-				 VASI_PostgresQuals);
 
 	do
 	{
@@ -1199,11 +1196,12 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 		 * If we have PG quals and there are some rows that passed the vectorized
 		 * quals, run the PG quals next.
 		 */
-		if (pg_quals && batch_state->next_batch_row < batch_state->total_batch_rows)
+		if (vector_agg_state->pg_quals &&
+			batch_state->next_batch_row < batch_state->total_batch_rows)
 		{
 			vector_agg_evaluate_postgres_quals(dcontext,
 											   batch_state,
-											   pg_quals,
+											   vector_agg_state->pg_quals,
 											   vector_agg_state->expr_cache);
 		}
 
