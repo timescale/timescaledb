@@ -897,6 +897,14 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	/*
+	 * We might have non-vectorized filters that we still can evaluate in the
+	 * columnar pipeline.
+	 */
+	vector_agg_state->pg_quals =
+		list_nth(castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_private,
+				 VASI_PostgresQuals);
+
+	/*
 	 * Intern the expression subtrees for common subexpression elimination.
 	 * Aggregates with FILTER clauses are excluded because caching would
 	 * require evaluating the expression under the batch filter, which could
@@ -921,6 +929,11 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		col->expr = (Expr *) cse_interning_expression_mutator((Node *) col->expr, interning_table);
 	}
 
+	vector_agg_state->pg_quals =
+		castNode(List,
+				 cse_interning_expression_mutator((Node *) vector_agg_state->pg_quals,
+												  interning_table));
+
 	cse_interning_destroy(interning_table);
 
 	/*
@@ -929,24 +942,27 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	 * avoids caching subtrees that are shared only because they appear inside
 	 * a parent that is itself cached.
 	 */
-	struct cse_refcount_hash *refcounts = cse_refcount_create(CurrentMemoryContext, 32, NULL);
+	struct cse_refcount_hash *refcounts_table = cse_refcount_create(CurrentMemoryContext, 32, NULL);
 	for (int i = 0; i < vector_agg_state->num_agg_defs; i++)
 	{
 		VectorAggDef *def = &vector_agg_state->agg_defs[i];
 		if (def->filter_clauses == NIL && def->argument != NULL)
 		{
-			count_expr_refs_walker((Node *) def->argument, refcounts);
+			count_expr_refs_walker((Node *) def->argument, refcounts_table);
 		}
 	}
 
 	for (int i = 0; i < vector_agg_state->num_grouping_columns; i++)
 	{
-		count_expr_refs_walker((Node *) vector_agg_state->grouping_columns[i].expr, refcounts);
+		count_expr_refs_walker((Node *) vector_agg_state->grouping_columns[i].expr,
+							   refcounts_table);
 	}
 
-	vector_agg_state->expr_cache = build_expr_cache(refcounts);
+	count_expr_refs_walker((Node *) vector_agg_state->pg_quals, refcounts_table);
 
-	cse_refcount_destroy(refcounts);
+	vector_agg_state->expr_cache = build_expr_cache(refcounts_table);
+
+	cse_refcount_destroy(refcounts_table);
 
 	/*
 	 * Create the grouping policy chosen at plan time.
@@ -1000,7 +1016,7 @@ vector_agg_rescan(CustomScanState *node)
 
 static void
 vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchState *batch_state,
-								   List *quals)
+								   List *quals, struct expr_cache_hash *expr_cache)
 {
 	Assert(batch_state->next_batch_row == 0);
 
@@ -1017,7 +1033,8 @@ vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchS
 											combined_qual_result != NULL ?
 												combined_qual_result :
 												batch_state->vector_qual_result,
-											lfirst(lc));
+											/* argument = */ lfirst(lc),
+											expr_cache);
 
 		/*
 		 * The result is a nullable bool. We are checking a qualifier, so both
@@ -1147,6 +1164,12 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 		 */
 		compressed_batch_discard_tuples(batch_state);
 
+		/*
+		 * Discard the common subexpression cache before starting with the new
+		 * batch.
+		 */
+		reset_expr_cache(vector_agg_state->expr_cache);
+
 		TupleTableSlot *compressed_slot =
 			ExecProcNode(linitial(decompress_state->csstate.custom_ps));
 
@@ -1178,7 +1201,10 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 		 */
 		if (pg_quals && batch_state->next_batch_row < batch_state->total_batch_rows)
 		{
-			vector_agg_evaluate_postgres_quals(dcontext, batch_state, pg_quals);
+			vector_agg_evaluate_postgres_quals(dcontext,
+											   batch_state,
+											   pg_quals,
+											   vector_agg_state->expr_cache);
 		}
 
 		/* If the entire batch is filtered out, then immediately read the next
@@ -1337,10 +1363,8 @@ vector_agg_exec(CustomScanState *node)
 		}
 
 		/*
-		 * Reset the CSE cache for the new batch, then pass the batch to
-		 * the grouping policy.
+		 * Pass the batch to the grouping policy.
 		 */
-		reset_expr_cache(vector_agg_state->expr_cache);
 		grouping->gp_add_batch(grouping, dcontext, slot, vector_agg_state->expr_cache);
 	}
 

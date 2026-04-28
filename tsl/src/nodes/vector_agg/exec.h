@@ -58,6 +58,11 @@ typedef struct VectorAggState
 	GroupingPolicy *grouping;
 
 	/*
+	 * Non-vectorized filters that we still can evaluate in the columnar pipeline.
+	 */
+	List *pg_quals;
+
+	/*
 	 * Per-batch result cache for common subexpression elimination. Contains
 	 * entries only for interned expression subtrees that appear more than
 	 * once. NULL when no common subexpressions were found at init time.
