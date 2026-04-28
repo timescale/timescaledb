@@ -10,7 +10,6 @@ commands from accidentally triggering the load of a previous DB version.**
 This release contains performance improvements and bug fixes since the 2.26.3 release. We recommend that you upgrade at the next available opportunity.
 
 **Highlighted features in TimescaleDB v2.26.4**
-* 
 
 **Backward-Incompatible Changes**
 
@@ -29,7 +28,8 @@ This release contains performance improvements and bug fixes since the 2.26.3 re
 * [#9623](https://github.com/timescale/timescaledb/pull/9623) Error when querying compressed chunks under Apache license
 * [#9625](https://github.com/timescale/timescaledb/pull/9625) Make timescaledb_post_restore() reliably restart background workers in a single call
 * [#9639](https://github.com/timescale/timescaledb/pull/9639) Fix lost orderby sparse index
-* [#9646](https://github.com/timescale/timescaledb/pull/9646) Replace ERRCODE_INTERNAL_ERROR on user-reachable error paths
+* [#9646](https://github.com/timescale/timescaledb/pull/9646) Replace `ERRCODE_INTERNAL_ERROR` on user-reachable error paths
+* [#9652](https://github.com/timescale/timescaledb/pull/9652) Add Error on missing custom job function in `ts_bgw_job_get_funci`
 
 **New Settings**
 
