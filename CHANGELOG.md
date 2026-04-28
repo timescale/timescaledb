@@ -29,6 +29,7 @@ This release contains bug fixes since the 2.26.3 release. We recommend that you 
 * [#9656](https://github.com/timescale/timescaledb/pull/9656) Fix concurrent merge of compressed chunks dropping the new heap
 * [#9641](https://github.com/timescale/timescaledb/pull/9641) Fix `COPY` path with transition tables after column drop
 * [#9660](https://github.com/timescale/timescaledb/pull/9660) Fix incremental continuous aggregate refresh so that `extend_last_bucket` only applies to the boundary batch
+* [#9674](https://github.com/timescale/timescaledb/pull/9674) Fix segmentby crash in cagg invalidation tracking
 
 **Thanks**
 * @GetsuDer and @WeiJie-JL for reporting an error with timescaledb and extensions using Explain
