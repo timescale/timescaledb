@@ -2007,7 +2007,6 @@ ts_is_time_bucket_function(Expr *node)
 	return false;
 }
 
-#if PG17_LT
 bool
 ts_get_attnotnull(Oid relid, AttrNumber attno)
 {
@@ -2019,4 +2018,3 @@ ts_get_attnotnull(Oid relid, AttrNumber attno)
 	ReleaseSysCache(tp);
 	return result;
 }
-#endif

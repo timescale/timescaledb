@@ -83,7 +83,7 @@ jobs:
           git config user.email "123763385+github-actions[bot]@users.noreply.github.com"
 
       - name: Install Linux Dependencies
-        timeout-minutes: 3
+        timeout-minutes: 15
         run: |
           sudo apt-get update
           sudo apt-get install pip

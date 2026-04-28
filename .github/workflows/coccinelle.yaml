@@ -15,7 +15,7 @@ jobs:
 
     steps:
     - name: Install Linux Dependencies
-      timeout-minutes: 3
+      timeout-minutes: 15
       run: |
         sudo apt-get update
         sudo apt-get -y install coccinelle

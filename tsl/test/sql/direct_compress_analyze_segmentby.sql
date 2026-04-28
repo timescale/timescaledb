@@ -336,3 +336,23 @@ ANALYZE test_copy_segmentby;
 -- should have default segmentby set for the new direct compressed chunk
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ROLLBACK;
+
+-- Test NULL values in pass-by-reference column during auto segmentby analysis
+BEGIN;
+CREATE TABLE test_null_text(time timestamptz NOT NULL, tag text, val float);
+SELECT create_hypertable('test_null_text', 'time', chunk_time_interval => '7 days'::interval);
+ALTER TABLE test_null_text SET (timescaledb.compress, timescaledb.compress_orderby = 'time');
+
+SET timescaledb.direct_compress_insert_tuple_sort_limit = 500;
+SET timescaledb.direct_compress_segmentby_min_rows = 100;
+SET timescaledb.direct_compress_segmentby_batch_size_limit = 10;
+
+-- tag is text (pass-by-reference); mix of non-NULL and NULL values
+-- exercises the datumCopy guard for NULL distinct entries
+INSERT INTO test_null_text
+SELECT
+    '2020-01-01'::timestamptz + (i || ' seconds')::interval,
+    CASE WHEN i <= 200 THEN 'a' WHEN i <= 400 THEN 'b' ELSE NULL END,
+    i
+FROM generate_series(1, 600) i;
+ROLLBACK;

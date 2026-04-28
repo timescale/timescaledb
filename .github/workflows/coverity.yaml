@@ -23,7 +23,7 @@ jobs:
         os: [ubuntu-22.04]
     steps:
     - name: Install Linux Dependencies
-      timeout-minutes: 3
+      timeout-minutes: 15
       run: |
         sudo apt-get update
         sudo apt-get install gnupg systemd-coredump gdb postgresql-common

@@ -60,7 +60,7 @@ jobs:
     steps:
 
     - name: Install Linux Dependencies
-      timeout-minutes: 3
+      timeout-minutes: 15
       run: |
         # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
         # If needed, install them before opening the core dump.
@@ -141,8 +141,8 @@ jobs:
     - name: make regresscheck
       id: regresscheck
       run: |
-          set -o pipefail
-          make -k -C build_snapshot installcheck IGNORES="${{ matrix.ignores }}" | tee installcheck.log
+        set -o pipefail
+        make -k -C build_snapshot installcheck IGNORES="${{ matrix.ignores }}" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()
