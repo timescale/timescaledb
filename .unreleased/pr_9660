@@ -1,0 +1,1 @@
+Fixes: #9660 Fix incremental CAgg refresh so that extend_last_bucket only applies to the boundary batch.
