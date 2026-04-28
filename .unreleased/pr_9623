@@ -1,2 +1,0 @@
-Fixes: #9623 Error when querying compressed chunks under Apache license
-Thanks: @igor2x for reporting a problem when trying to query compressed data with apache license
