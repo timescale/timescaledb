@@ -189,7 +189,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_agg_modify_hypertable.sql
     vector_agg_segmentby.sql
     vector_agg_uuid.sql
-    vector_agg_expr_debug.sql
     vector_qual_default.sql
     vacuum.sql)
 
@@ -217,6 +216,9 @@ endif()
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
   list(APPEND TEST_FILES privilege_maintain.sql
        merge_append_partially_compressed.sql)
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES vector_agg_expr_debug.sql)
+  endif(CMAKE_BUILD_TYPE MATCHES Debug)
 endif()
 
 set(SOLO_TESTS
