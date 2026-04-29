@@ -2,14 +2,14 @@ name: Release - Feature Freeze Ceremony
 
 #
 # Feature Freeze
-# 
-# prereqs: 
+#
+# prereqs:
 # 0. needs approval from another person to run the action (environment)
 # 1. ensure the correct branch is used to execute the action
 #   a. if the run was triggered from the `main` branch, the NEXT_VERSION must be a new minor (end with a .0)
 #   b. if NEXT_VERSION is a patch release, then the branch the action was triggered on must be a release branch: `^[0-9]+\.[0-9]+\.x$`
 # 2. ensure the next version does not exist as tag yet
-# 
+#
 # Tasks
 # 0. bump minor -dev version in version.config on main, if and only if it's a .0 release
 # 1. creates the release branch X.Y.x, if and if the branch does not exist yet
@@ -35,17 +35,17 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-      
+
       - name: Check Release Conditions
         run: |
           NEXT_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
           RELEASE_BRANCH="${NEXT_VERSION/%.[0-9]/.x}"
-          
+
           echo "Checking run conditions for release: $NEXT_VERSION" >> $GITHUB_STEP_SUMMARY
           echo "Current branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "Expected release branch: $RELEASE_BRANCH" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           # Condition: version tag can not exist
           if git tag -l | grep -q "^$NEXT_VERSION$"; then
             echo "❌ \`$NEXT_VERSION\` tag already exists" >> $GITHUB_STEP_SUMMARY
@@ -111,7 +111,7 @@ jobs:
       # Only running for new minor releases
       #
       # -------------------------------------------------------
-      
+
       # Bump minor in main for minor releases
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -139,7 +139,7 @@ jobs:
             --head $BRANCH \
             --label "release")
           echo "* ✅ minor version increase on main: $PR_URL" >> $GITHUB_STEP_SUMMARY
-      
+
       # Create `2.XX.x` release branch of `main`
       # Release branch is a dependency for the next steps
       # only execute this step on .0 releases
@@ -172,7 +172,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
-          ./scripts/changelog/generate.sh 
+          ./scripts/changelog/generate.sh
           BODY=$(head -n 19 CHANGELOG.md | tail -n 20)
 
           BRANCH="release/${{ env.NEXT_VERSION }}-changelog"
@@ -188,29 +188,3 @@ jobs:
             --head $BRANCH \
             --label "release,changelog")
           echo "* ✅ CHANGELOG: $PR_URL" >> $GITHUB_STEP_SUMMARY
-
-      # Rework version.config and up & down grade scripts
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ env.RELEASE_BRANCH }}
-      - name: Generate release artefacts
-        env:
-          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-        run: |
-          ./scripts/release/build_release_artefacts.sh ${{ env.CURRENT_VERSION }} ${{ env.NEXT_VERSION }}
-
-          BRANCH="release/${{ env.CURRENT_VERSION }}-${{ env.NEXT_VERSION }}"
-          git checkout -b $BRANCH
-          git add version.config sql/updates/*.sql sql/CMakeLists.txt
-          git commit -m "release artefacts from ${{ env.CURRENT_VERSION }} to ${{ env.NEXT_VERSION }}"
-          git push origin $BRANCH
-
-          BODY="- CHANGELOG\n- set previous_version in version.config\n- adjust CMakeList.txt with up & down grade files"
-
-          PR_URL=$(gh pr create \
-            --title "Release artefacts ${{ env.NEXT_VERSION }}" \
-            --body "${BODY//\\n/$\n}" \
-            --base ${{ env.RELEASE_BRANCH }} \
-            --head $BRANCH \
-            --label "release")
-          echo "* ✅ Release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY

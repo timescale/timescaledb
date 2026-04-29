@@ -5,6 +5,40 @@ This page lists all the latest features and updates to TimescaleDB. When
 you use psql to update your database, use the -X flag and prevent any .psqlrc
 commands from accidentally triggering the load of a previous DB version.**
 
+## 2.26.4 (2026-04-28)
+
+This release contains bug fixes since the 2.26.3 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#9360](https://github.com/timescale/timescaledb/pull/9360) Sanitize `DT_NOBEGIN` next_start to recover jobs stuck after primary failover
+* [#9515](https://github.com/timescale/timescaledb/pull/9515) Fix `now()` constification for continuous aggregate queries
+* [#9550](https://github.com/timescale/timescaledb/pull/9550) Fix out of memory when propagating `ALTER TABLE` to many chunks
+* [#9605](https://github.com/timescale/timescaledb/pull/9605) Fix `InstrStartNode` called twice in a row
+* [#9607](https://github.com/timescale/timescaledb/pull/9607) Fix use-after-free of `PlaceHolderVar.phrels` in cached ChunkAppend plans
+* [#9612](https://github.com/timescale/timescaledb/pull/9612) Fix `PlaceHolderVar` error in runtime chunk exclusion
+* [#9614](https://github.com/timescale/timescaledb/pull/9614) Remove stale hypertable entries during upgrade
+* [#9615](https://github.com/timescale/timescaledb/pull/9615) Fix segfault with transition tables after column drop
+* [#9616](https://github.com/timescale/timescaledb/pull/9616) Use `DROP CASCADE` for trigger removal
+* [#9623](https://github.com/timescale/timescaledb/pull/9623) Error when querying compressed chunks under Apache license
+* [#9625](https://github.com/timescale/timescaledb/pull/9625) Make `timescaledb_post_restore()` reliably restart background workers in a single call
+* [#9639](https://github.com/timescale/timescaledb/pull/9639) Fix lost orderby sparse index
+* [#9646](https://github.com/timescale/timescaledb/pull/9646) Replace `ERRCODE_INTERNAL_ERROR` on user-reachable error paths
+* [#9652](https://github.com/timescale/timescaledb/pull/9652) Add Error on missing custom job function in `ts_bgw_job_get_funci`
+* [#9655](https://github.com/timescale/timescaledb/pull/9655) Fix data corruption when merging chunks with different compression settings
+* [#9654](https://github.com/timescale/timescaledb/pull/9654) Fix `sort_transform` crash with hypertable on nullable side of outer join
+* [#9656](https://github.com/timescale/timescaledb/pull/9656) Fix concurrent merge of compressed chunks dropping the new heap
+* [#9641](https://github.com/timescale/timescaledb/pull/9641) Fix `COPY` path with transition tables after column drop
+* [#9660](https://github.com/timescale/timescaledb/pull/9660) Fix incremental continuous aggregate refresh so that `extend_last_bucket` only applies to the boundary batch
+* [#9674](https://github.com/timescale/timescaledb/pull/9674) Fix segmentby crash in cagg invalidation tracking
+
+**Thanks**
+* @GetsuDer and @WeiJie-JL for reporting an error with timescaledb and extensions using Explain
+* @igor2x for reporting a problem when trying to query compressed data with the Apache license
+* @ivaaaan for reporting an issue with constraint pushdown in continuous aggregate queries
+* @patstrom for reporting a segfault with transition table triggers after dropping a column
+* @patstrom for reporting an out-of-memory error when dropping constraints
+* @pcayen for reporting an issue with GROUP BY ROLLUP on views over hypertables
+
 ## 2.26.3 (2026-04-14)
 
 This release contains bug fixes since the 2.26.2 release. We recommend that you upgrade at the next available opportunity.

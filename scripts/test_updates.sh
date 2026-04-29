@@ -98,7 +98,9 @@ if [ -n "${VERSIONS}" ]; then
     fi
 
 
-    if [ "${ts_minor_version}" -ge 20 ]; then
+    if [ "${ts_minor_version}" -ge 22 ]; then
+        TEST_VERSION=v11
+    elif [ "${ts_minor_version}" -ge 20 ]; then
         TEST_VERSION=v10
     elif [ "${ts_minor_version}" -ge 16 ]; then
         TEST_VERSION=v9

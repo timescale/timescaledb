@@ -3261,3 +3261,55 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log O
             45 |      1577865600000000 |        1577865600000000
             45 |      1609488000000000 |        1609488000000000
 
+-- direct batch delete with time column as segmentby. Segmentby columns don't
+-- have _ts_meta_min/max, so the invalidation context must read the segmentby
+-- value directly. The invalidation log entry's bounds must equal the deleted
+-- segmentby value; without the fix the consumer reads compressed_datums[-1]
+-- and produces garbage bounds.
+SET TIME ZONE 'UTC';
+SET
+CREATE TABLE cagg_inval_segmentby_time(time timestamptz NOT NULL, device text, value float)
+    WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+HINT:  Use "timescaledb.partition_column" to specify a different column to use as partitioning column.
+CREATE TABLE
+INSERT INTO cagg_inval_segmentby_time
+SELECT '2025-01-01 00:00:00+00'::timestamptz + (i * interval '5 minutes'), 'd1', random()
+FROM generate_series(1, 50) i;
+INSERT 0 50
+-- Refresh on creation sets the cagg invalidation threshold so subsequent
+-- DELETEs below it write to the hypertable invalidation log.
+CREATE MATERIALIZED VIEW cagg_inval_segmentby_time_cagg
+    WITH (tsdb.continuous) AS
+    SELECT time_bucket('1 hour', time) FROM cagg_inval_segmentby_time GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "cagg_inval_segmentby_time_cagg"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+CREATE MATERIALIZED VIEW
+ALTER TABLE cagg_inval_segmentby_time SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'time'
+);
+NOTICE:  updated compression settings will only apply to future compressions
+DETAIL:  Existing compressed chunks will not be recompressed.
+HINT:  Use compress_chunk(chunk, recompress => true) to recompress.
+ALTER TABLE
+SELECT count(compress_chunk(c)) FROM show_chunks('cagg_inval_segmentby_time') c;
+ count 
+-------
+     1
+
+DELETE FROM cagg_inval_segmentby_time WHERE time = '2025-01-01 00:05:00+00';
+DELETE 1
+-- The single deleted segmentby batch covers exactly time = 2025-01-01 00:05:00 UTC.
+-- Convert internal microseconds back to a timestamptz for a stable comparison.
+SELECT to_timestamp(lowest_modified_value / 1000000.0) AS lowest,
+       to_timestamp(greatest_modified_value / 1000000.0) AS greatest
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+ WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable
+                         WHERE table_name = 'cagg_inval_segmentby_time');
+            lowest            |           greatest           
+------------------------------+------------------------------
+ Wed Jan 01 00:05:00 2025 UTC | Wed Jan 01 00:05:00 2025 UTC
+
+RESET TIME ZONE;
+RESET
