@@ -631,7 +631,7 @@ ExecPrepareTupleRouting(ModifyTableState *mtstate,
 		mtstate->mt_transition_capture->tcs_original_insert_tuple = slot;
 
 	/* Convert the tuple to the chunk's rowtype, if necessary */
-	if (cis->hyper_to_chunk_map != NULL && ctr->has_dropped_attrs == false)
+	if (cis->hyper_to_chunk_map != NULL)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
 
 	*partRelInfo = cis->result_relation_info;
@@ -3488,36 +3488,7 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 #else
 				context->relaction = action;
 #endif
-				if (ctr->has_dropped_attrs)
-				{
-					AttrMap *map;
-					TupleDesc parenttupdesc, chunktupdesc;
-					TupleTableSlot *chunk_slot = NULL;
-
-					parenttupdesc = RelationGetDescr(resultRelInfo->ri_RelationDesc);
-					chunktupdesc = RelationGetDescr(ctr->cis->result_relation_info->ri_RelationDesc);
-					/* map from parent to chunk */
-#if PG16_LT
-					map = build_attrmap_by_name_if_req(parenttupdesc, chunktupdesc);
-#else
-					map = build_attrmap_by_name_if_req(parenttupdesc, chunktupdesc, false);
-#endif
-					if (map != NULL)
-						chunk_slot =
-							execute_attr_map_slot(map,
-												  newslot,
-												  MakeSingleTupleTableSlot(chunktupdesc,
-																		   &TTSOpsVirtual));
-					rslot = ExecInsert(context,
-									   resultRelInfo,
-									   ctr,
-									   (chunk_slot ? chunk_slot : newslot),
-									   canSetTag);
-					if (chunk_slot)
-						ExecDropSingleTupleTableSlot(chunk_slot);
-				}
-				else
-					rslot = ExecInsert(context, resultRelInfo, ctr, newslot, canSetTag);
+				rslot = ExecInsert(context, resultRelInfo, ctr, newslot, canSetTag);
 				mtstate->mt_merge_inserted = 1;
 				break;
 			case CMD_NOTHING:
