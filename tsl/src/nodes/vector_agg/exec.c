@@ -603,6 +603,11 @@ typedef struct CSEInterningTableEntry
 static uint32
 cse_interning_hash_expr(Expr *expr)
 {
+	/*
+	 * Unfortunately, this approach doesn't work on PG <= 16, and there's no
+	 * easy way to reset location there, so on these old Postgres versions this
+	 * optimization just doesn't work.
+	 */
 	char *s = nodeToString(expr);
 	uint32 h = hash_bytes((unsigned char const *) s, strlen(s));
 	pfree(s);
@@ -675,9 +680,8 @@ typedef struct CSERefcountTableEntry
 #include <lib/simplehash.h>
 
 /*
- * Walker callback for counting how many top-level expression roots reach
- * each non-leaf node. Var and Const are skipped: Var just looks up the
- * already-decompressed column array, and Const returns a literal.
+ * Walker callback for counting how many top-level expression roots reach each
+ * non-leaf node.
  */
 static bool
 count_expr_refs_walker(Node *node, void *context)
@@ -689,6 +693,10 @@ count_expr_refs_walker(Node *node, void *context)
 
 	if (IsA(node, Var) || IsA(node, Const))
 	{
+		/*
+		 * Evaluating a Var or a Const does not require additional computation
+		 * and therefore caching.
+		 */
 		return false;
 	}
 
@@ -702,9 +710,9 @@ count_expr_refs_walker(Node *node, void *context)
 	entry->refcount++;
 
 	/*
-	 * On second+ visit, skip recursion into children -- they were already
-	 * counted during the first visit. Return false (not true) so the
-	 * walker continues visiting sibling nodes at the parent level.
+	 * Starting with second visit, skip recursion into children -- they were
+	 * already counted during the first visit. Return false so the walker
+	 * continues visiting sibling nodes at the parent level.
 	 */
 	if (entry->refcount > 1)
 	{
