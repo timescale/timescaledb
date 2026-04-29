@@ -47,3 +47,4 @@ WHERE d.classid = 'pg_constraint'::regclass
   AND child.conrelid = pg_catalog.format('%I.%I', c.schema_name, c.table_name)::regclass
   AND parent.conrelid = pg_catalog.format('%I.%I', ht.schema_name, ht.table_name)::regclass;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.decompress_batch(record);

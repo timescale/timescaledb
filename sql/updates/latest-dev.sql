@@ -75,3 +75,8 @@ WHERE cc.chunk_id = c.id
   AND cc.dimension_slice_id IS NULL
   AND cc.hypertable_constraint_name IS NOT NULL;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.decompress_batch(record)
+   RETURNS SETOF record
+   AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
+   LANGUAGE C STRICT;
+
