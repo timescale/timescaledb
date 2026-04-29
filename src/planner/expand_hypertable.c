@@ -81,56 +81,78 @@ typedef struct CollectQualCtx
 static void propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx);
 
 /*
- * Fix up processed_tlist and reltarget for UPDATE/DELETE result relations.
+ * For the UPDATE/DELETE result relations, Postgres must add row identity
+ * variables to the targetlist. For inheritance hierarchies, this involves
+ * creating the special ROWID_VAR variables, that are later materialized into
+ * actual per-chunk row identity resjunk variables such as ctid.
  *
- * In standard PG, expand_inherited_rtentry() runs before
- * preprocess_targetlist(), so PG knows about children when building
- * the target list and uses per-child ROWID_VAR entries from the start.
+ * In the standard Postgres inheritance hierarchy expansion, the entries in
+ * PlannerInfo.row_id_vars are built by expand_inherited_rtentry() ->
+ * expand_single_inheritance_child(). The TimescaleDB counterpart of this is
+ * ts_plan_expand_hypertable_chunks() -> ts_expand_single_inheritance_child().
  *
- * TimescaleDB expands hypertable chunks later (in set_rel_pathlist
- * hook, which fires during query_planner), after preprocess_targetlist
- * has already run. Since rte_mark_for_expansion cleared rte->inh,
- * preprocess_targetlist saw no inheritance and added a direct ctid Var
- * for the parent. We must remove it since per-child ctids are now
- * ROWID_VAR entries added by ts_expand_single_inheritance_child.
+ * For Postgres tables that don't have children (RangeTableEntry.inh == false),
+ * this is done by preprocess_targetlist().
  *
- * Similarly, PG's distribute_row_identity_vars() already ran in
- * query_planner before our hook, so we must manually distribute
- * ROWID_VAR entries to the parent reltarget.
+ * Then, for the inheritance parent the ROWID_VARs are added into the
+ * parent reltarget in distribute_row_identity_vars().
+ *
+ * Finally, the child reltarget is set based on the parent reltarget in
+ * set_append_rel_size(). The ROWID_VAR entries are converted to the particular
+ * child row ids by adjust_appendrel_attrs_mutator().
+ *
+ * The TimescaleDB hypertable expansion interferes with this mechanism. During
+ * the query preprocessing hook, we only mark hypertable for expansion and set
+ * RangeTableEntry.inh == false on the hypertable to prevent the standard
+ * Postgres expansion. This flag is only restored during the actual hypertable
+ * expansion performed by expand_hypertables() when it is called during
+ * make_one_rel(). The row identity variables are also only created during that
+ * time and not earlier like with the normal Postgres code. As an effect of this,
+ * distribute_row_identity_vars() doesn't see the row identity variables and
+ * doesn't add them to the hypertable reltarget.
+ *
+ * The second site that breaks is preprocess_targetlist(). It will add a
+ * concrete ctid column for the hypertable.
+ *
+ * This function fixes these problems.
  */
 static void
 ts_fixup_row_identity_for_dml(PlannerInfo *root, RelOptInfo *rel, Index rti)
 {
 	ListCell *lc;
 
-	/* Remove parent's direct ctid from processed_tlist. */
-	List *new_tlist = NIL;
-	int resno = 1;
-	foreach (lc, root->processed_tlist)
-	{
-		TargetEntry *tle = lfirst_node(TargetEntry, lc);
-		Var *var = (Var *) tle->expr;
-		if (tle->resjunk && IsA(var, Var) && var->varno == (int) rti &&
-			var->varattno == SelfItemPointerAttributeNumber)
-			continue;
-		tle->resno = resno++;
-		new_tlist = lappend(new_tlist, tle);
-	}
-	root->processed_tlist = new_tlist;
+//	/* Remove parent's direct ctid from processed_tlist. */
+//	List *new_tlist = NIL;
+//	int resno = 1;
+//	foreach (lc, root->processed_tlist)
+//	{
+//		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+//		Var *var = (Var *) tle->expr;
+//		if (tle->resjunk && IsA(var, Var) && var->varno == (int) rti &&
+//			var->varattno == SelfItemPointerAttributeNumber)
+//			continue;
+//		tle->resno = resno++;
+//		new_tlist = lappend(new_tlist, tle);
+//	}
+//	root->processed_tlist = new_tlist;
 
-	/* Remove parent's direct ctid from reltarget. */
-	List *new_exprs = NIL;
-	foreach (lc, rel->reltarget->exprs)
-	{
-		Var *var = (Var *) lfirst(lc);
-		if (IsA(var, Var) && var->varno == (int) rti &&
-			var->varattno == SelfItemPointerAttributeNumber)
-			continue;
-		new_exprs = lappend(new_exprs, var);
-	}
-	rel->reltarget->exprs = new_exprs;
+//	/* Remove parent's direct ctid from reltarget. */
+//	List *new_exprs = NIL;
+//	foreach (lc, rel->reltarget->exprs)
+//	{
+//		Var *var = (Var *) lfirst(lc);
+//		if (IsA(var, Var) && var->varno == (int) rti &&
+//			var->varattno == SelfItemPointerAttributeNumber)
+//			continue;
+//		new_exprs = lappend(new_exprs, var);
+//	}
+//	rel->reltarget->exprs = new_exprs;
 
-	/* Parent is not a leaf result rel; children are. */
+	/*
+	 * Undo the marking as "leaf" result relid that would be done during the
+	 * subquery_planner() because it already sees hypertables as inh == false.
+	 */
+	Assert(bms_is_member(rti, root->leaf_result_relids));
 	root->leaf_result_relids = bms_del_member(root->leaf_result_relids, rti);
 
 	/* Distribute ROWID_VAR entries to the parent rel's reltarget. */
@@ -143,6 +165,10 @@ ts_fixup_row_identity_for_dml(PlannerInfo *root, RelOptInfo *rel, Index rti)
 			rel->reltarget->exprs = lappend(rel->reltarget->exprs, copyObject(var));
 		}
 	}
+
+//	mybt();
+//	fprintf(stderr, "reltarget after row identity fix:\n");
+//	my_print(rel->reltarget->exprs);
 }
 
 /*

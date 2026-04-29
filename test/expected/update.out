@@ -213,3 +213,15 @@ SELECT count(*) FROM i6790_update WHERE value = 0.3;
 -------
      5
 
+-- Test using a ctid column directly on a hypertable that is a target of an
+-- UPDATE query.
+CREATE TABLE ht_update_join(time timestamptz NOT NULL, val int);
+SELECT create_hypertable('ht_update_join', 'time', chunk_time_interval => interval '1 month');
+      create_hypertable      
+-----------------------------
+ (4,public,ht_update_join,t)
+
+INSERT INTO ht_update_join VALUES ('2020-01-15', 1), ('2020-02-15', 2);
+UPDATE ht_update_join a SET val = 0
+FROM ht_update_join b
+WHERE a.time = b.time AND a.ctid = b.ctid;
