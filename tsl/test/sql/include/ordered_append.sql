@@ -11,7 +11,7 @@
 
 SET timescaledb.enable_decompression_sorted_merge = 0;
 
-vacuum analyze :TEST_TABLE;
+vacuum (analyze, freeze) :TEST_TABLE;
 
 -- test ASC for ordered chunks
 :PREFIX

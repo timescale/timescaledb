@@ -128,7 +128,7 @@ set enable_nestloop to off;
 -- SequentialScans. Disable the optimization for the following tests to ensure we have
 -- stable query plans in all CI environments.
 SET timescaledb.enable_decompression_sorted_merge = 0;
-vacuum analyze :TEST_TABLE;
+vacuum (analyze, freeze) :TEST_TABLE;
 -- test ASC for ordered chunks
 :PREFIX
 SELECT time
@@ -770,7 +770,7 @@ LIMIT 3;
 -- SequentialScans. Disable the optimization for the following tests to ensure we have
 -- stable query plans in all CI environments.
 SET timescaledb.enable_decompression_sorted_merge = 0;
-vacuum analyze :TEST_TABLE;
+vacuum (analyze, freeze) :TEST_TABLE;
 -- test ASC for ordered chunks
 :PREFIX
 SELECT time
@@ -1799,7 +1799,7 @@ LIMIT 3;
 -- SequentialScans. Disable the optimization for the following tests to ensure we have
 -- stable query plans in all CI environments.
 SET timescaledb.enable_decompression_sorted_merge = 0;
-vacuum analyze :TEST_TABLE;
+vacuum (analyze, freeze) :TEST_TABLE;
 -- test ASC for ordered chunks
 :PREFIX
 SELECT time
@@ -2778,7 +2778,7 @@ LIMIT 3;
 -- SequentialScans. Disable the optimization for the following tests to ensure we have
 -- stable query plans in all CI environments.
 SET timescaledb.enable_decompression_sorted_merge = 0;
-vacuum analyze :TEST_TABLE;
+vacuum (analyze, freeze) :TEST_TABLE;
 -- test ASC for ordered chunks
 :PREFIX
 SELECT time
