@@ -66,6 +66,17 @@ SELECT compress_chunk(show_chunks('public.table_to_compress'));
  _timescaledb_internal._hyper_2_8_chunk
  _timescaledb_internal._hyper_2_9_chunk
 
+-- compressed_chunk_parent_id resolves a real compressed chunk back to its
+-- parent. Used by logical decoding plugins via the active snapshot.
+SELECT bool_and(_timescaledb_functions.compressed_chunk_parent_id(compressed.id) = parent.id) AS ok
+FROM _timescaledb_catalog.chunk parent
+JOIN _timescaledb_catalog.chunk compressed ON parent.compressed_chunk_id = compressed.id
+JOIN _timescaledb_catalog.hypertable h ON h.id = parent.hypertable_id
+WHERE h.table_name = 'table_to_compress';
+ ok 
+----
+ t
+
 -- check that approx size function works. We call VACUUM to ensure all forks exist
 VACUUM public.table_to_compress;
 SELECT * FROM hypertable_approximate_size('public.table_to_compress');
