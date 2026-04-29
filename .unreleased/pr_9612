@@ -1,2 +1,0 @@
-Fixes: #9612 Fix PlaceHolderVar error in runtime chunk exclusion
-Thanks: @pcayen for reporting an issue with GROUP BY ROLLUP on views over hypertables
