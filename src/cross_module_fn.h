@@ -147,6 +147,7 @@ typedef struct CrossModuleFunctions
 	PGFunction compressed_data_decompress_reverse;
 	PGFunction compressed_data_column_size;
 	PGFunction compressed_data_to_array;
+	PGFunction decompress_batch;
 	PGFunction deltadelta_compressor_append;
 	PGFunction deltadelta_compressor_finish;
 	PGFunction gorilla_compressor_append;

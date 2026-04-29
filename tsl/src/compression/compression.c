@@ -7,6 +7,7 @@
 #include <access/attmap.h>
 #include <access/attnum.h>
 #include <access/detoast.h>
+#include <access/htup_details.h>
 #include <access/skey.h>
 #include <access/tupdesc.h>
 #include <catalog/heap.h>
@@ -2678,6 +2679,87 @@ tsl_compressed_data_decompress_reverse(PG_FUNCTION_ARGS)
 
 	SRF_RETURN_NEXT(funcctx, res.val);
 	;
+}
+
+/*
+ * decompress_batch(compressed_tuple record) RETURNS SETOF record
+ *
+ * Decompresses a single compressed batch (one row of a compressed chunk) into
+ * the individual rows it represents. The shape of the input compressed tuple
+ * is taken from the record's own type info (typeId/typmod in the header).
+ * The shape of the output rows is taken from the call site's column
+ * definition list (the AS t(...) clause).
+ */
+typedef struct DecompressBatchSRFContext
+{
+	RowDecompressor decompressor;
+	int next_row;
+	int total_rows;
+} DecompressBatchSRFContext;
+
+Datum
+tsl_decompress_batch(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	DecompressBatchSRFContext *decompress_ctx;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		funcctx = SRF_FIRSTCALL_INIT();
+		MemoryContext oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		TupleDesc out_desc;
+		if (get_call_result_type(fcinfo, NULL, &out_desc) != TYPEFUNC_COMPOSITE)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("function returning record called in context "
+							"that cannot accept type record")));
+		}
+		BlessTupleDesc(out_desc);
+
+		HeapTupleHeader td = PG_GETARG_HEAPTUPLEHEADER(0);
+		TupleDesc in_desc =
+			lookup_rowtype_tupdesc(HeapTupleHeaderGetTypeId(td), HeapTupleHeaderGetTypMod(td));
+
+		decompress_ctx = palloc0(sizeof(DecompressBatchSRFContext));
+		decompress_ctx->decompressor = build_decompressor(in_desc, out_desc);
+
+		HeapTupleData tmp;
+		tmp.t_len = HeapTupleHeaderGetDatumLength(td);
+		ItemPointerSetInvalid(&tmp.t_self);
+		tmp.t_tableOid = InvalidOid;
+		tmp.t_data = td;
+
+		heap_deform_tuple(&tmp,
+						  in_desc,
+						  decompress_ctx->decompressor.compressed_datums,
+						  decompress_ctx->decompressor.compressed_is_nulls);
+
+		ReleaseTupleDesc(in_desc);
+
+		decompress_ctx->total_rows = decompress_batch(&decompress_ctx->decompressor);
+		decompress_ctx->next_row = 0;
+
+		funcctx->user_fctx = decompress_ctx;
+		funcctx->tuple_desc = decompress_ctx->decompressor.out_desc;
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	decompress_ctx = (DecompressBatchSRFContext *) funcctx->user_fctx;
+
+	if (decompress_ctx->next_row >= decompress_ctx->total_rows)
+	{
+		row_decompressor_close(&decompress_ctx->decompressor);
+		SRF_RETURN_DONE(funcctx);
+	}
+
+	TupleTableSlot *slot =
+		decompress_ctx->decompressor.decompressed_slots[decompress_ctx->next_row++];
+	bool should_free;
+	HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
+	SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
 }
 
 /*
