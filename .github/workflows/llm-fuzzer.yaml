@@ -173,6 +173,9 @@ jobs:
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: |
+        export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
+        export PGDATABASE=postgres
+
         rc=0
         claude -p --output-format stream-json --verbose \
           --max-budget-usd 5.00 --dangerously-skip-permissions \
