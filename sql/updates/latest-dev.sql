@@ -126,6 +126,7 @@ BEGIN
     FROM int2_bloom_suffixes
     JOIN pg_attribute ON attrelid = compress_relid
      AND attname IN (
+       '_ts_meta_v2_bloom1_' || col_suffix,
        '_ts_meta_v2_bloomh_' || col_suffix,
        '_ts_meta_v2_bloomg_' || col_suffix
      )
