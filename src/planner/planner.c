@@ -1447,25 +1447,24 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	{
 		case TS_REL_HYPERTABLE:
 		{
-			/* Mark hypertable RTEs we'd like to expand ourselves.
+			/*
+			 * Mark hypertable RTEs we'd like to expand ourselves.
 			 * Hypertables inside inlineable functions don't get marked during
-			 * the query preprocessing step. Therefore we do an extra try here.
+			 * the query preprocessing step handled in preprocess_query().
+			 * Therefore we do an extra try here.
+			 *
+			 * For the explanation of the logic, see the comments in
+			 * preprocess_query().
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
 				rte->ctename == NULL)
 			{
-				/*
-				 * UPDATE/DELETE DML target: expand with GUC guard.
-				 * MERGE: not implemented because it can contain INSERT
-				 * actions requiring chunk routing, which uses a separate
-				 * planner path (ModifyHypertable).
 				 */
 				if (rel->relid == (Index) query->resultRelation && IS_UPDL_CMD(query) &&
 					ts_guc_enable_hypertable_expansion_for_dml)
 				{
 					rte_mark_for_expansion(rte);
 				}
-				/* Non-target table: always expand. */
 				else if (rel->relid != (Index) query->resultRelation)
 				{
 					rte_mark_for_expansion(rte);
