@@ -432,27 +432,28 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 
 					if (ht)
 					{
-						/* Mark hypertable RTEs we'd like to expand ourselves */
+						/*
+						 * Mark hypertable RTEs we'd like to expand ourselves.
+						 * We always do this for SELECTs from hypertables.
+						 *
+						 * For DML, we also always expand the non-target relations.
+						 *
+						 * And finally, we also expand the target relation for
+						 * UPDATE/DELETE. The MERGE support is not fully implemented.
+						 *
+						 * The hypertables that are not expanded by our custom code
+						 * here fall back to the standard Postgres inheritance
+						 * hierarchy expansion.
+						 */
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
 							rte->inh)
 						{
-							/*
-							 * UPDATE/DELETE DML target: expand with GUC guard.
-							 * Check rootquery (not `query`) because this walker
-							 * recurses into subqueries before PG inlines them —
-							 * a subquery has resultRelation == 0, so the
-							 * non-target branch below would incorrectly mark it.
-							 * MERGE: not implemented because it can contain
-							 * INSERT actions requiring chunk routing, which
-							 * uses a separate planner path (ModifyHypertable).
-							 */
 							if (rti == (Index) query->resultRelation &&
 								IS_UPDL_CMD(context->rootquery) &&
 								ts_guc_enable_hypertable_expansion_for_dml)
 							{
 								rte_mark_for_expansion(rte);
 							}
-							/* Non-target table: always expand. */
 							else if (query->resultRelation == 0)
 							{
 								rte_mark_for_expansion(rte);

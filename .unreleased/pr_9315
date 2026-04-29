@@ -1,1 +1,2 @@
-Implements: #9315 Enable chunk exclusion for DML
+Implements: #9315 Speed up the DML operations on hypertables by using the optimized TimescaleDB hypertable expansion code instead of the generic Postgres inheritance hierarchy expansion.
+Setting: `timescaledb.enable_hypertable_expansion_for_dml`: allow using the optimized TimescaleDB hypertable expansion code instead of the generic Postgres inheritance hierarchy expansion. 

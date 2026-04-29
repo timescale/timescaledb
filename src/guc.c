@@ -742,8 +742,10 @@ _guc_init(void)
 							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_hypertable_expansion_for_dml"),
-							 "Enable chunk exclusion for DML",
-							 "Enable hypertable expansion and chunk exclusion for UPDATE/DELETE",
+							 "Enable TimescaleDB hypertable expansion for DML",
+							 "Allow using the TimescaleDB hypertable expansion code for "
+							 "UPDATE/DELETE queries, instead of the slower Postgres inheritance "
+							 "hierarchy expansion code.",
 							 &ts_guc_enable_hypertable_expansion_for_dml,
 							 true,
 							 PGC_USERSET,

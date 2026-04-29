@@ -1298,6 +1298,8 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		Index child_rtindex;
 		LOCKMODE chunk_lock = ht_rte->rellockmode;
 
+		/* Open rel if needed */
+
 		Assert(child_oid != parent_oid);
 		newrelation = table_open(child_oid, chunk_lock);
 
@@ -1399,7 +1401,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	}
 
 	if (bms_is_member(ht_relindex, root->all_result_relids))
+	{
 		ts_fixup_row_identity_for_dml(root, ht_rel, ht_relindex);
+	}
 
 	/*
 	 * If applicable, collect the quals that are true everywhere inside the current
