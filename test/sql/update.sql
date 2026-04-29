@@ -82,3 +82,9 @@ UPDATE ht_update_join a SET val = 0
 FROM ht_update_join b
 WHERE a.time = b.time AND a.ctid = b.ctid;
 
+-- Test nesting.
+WITH updated AS (
+  UPDATE ht_update_join SET val = 99 WHERE time = '2020-01-15' RETURNING *
+)
+SELECT * FROM updated;
+

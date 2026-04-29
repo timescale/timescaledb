@@ -449,7 +449,7 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 							rte->inh)
 						{
 							if (rti == (Index) query->resultRelation &&
-								IS_UPDL_CMD(context->rootquery) &&
+								IS_UPDL_CMD(query) &&
 								ts_guc_enable_hypertable_expansion_for_dml)
 							{
 								rte_mark_for_expansion(rte);
