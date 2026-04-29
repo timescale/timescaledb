@@ -451,6 +451,35 @@ ANALYZE test_segmentby_stats;
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ROLLBACK;
 
+-- Direct compress on a hypertable with a dropped column before the time
+-- dimension. Chunks created after the drop have a different TupleDesc than
+-- the hypertable, so the slot must be converted to chunk format before being
+-- passed to the compressor. Cover both INSERT and COPY entry points.
+BEGIN;
+RESET timescaledb.enable_direct_compress_insert;
+CREATE TABLE test_dropcol(col1 int, time timestamptz NOT NULL, device text, value float);
+SELECT create_hypertable('test_dropcol', 'time');
+ALTER TABLE test_dropcol DROP COLUMN col1;
+INSERT INTO test_dropcol(time, device, value)
+SELECT '2025-01-01'::timestamptz + (i * interval '5 minutes'), 'd1', i::float
+FROM generate_series(1, 50) i;
+ALTER TABLE test_dropcol SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+SELECT count(compress_chunk(c)) FROM show_chunks('test_dropcol') c;
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO test_dropcol(time, device, value)
+SELECT '2025-02-01'::timestamptz + (i * interval '1 second'), 'd2', i::float
+FROM generate_series(1, 5000) i;
+SELECT count(*), min(time), max(time), min(value), max(value) FROM test_dropcol WHERE device = 'd2';
+RESET timescaledb.enable_direct_compress_insert;
+SET timescaledb.enable_direct_compress_copy = true;
+COPY test_dropcol(time, device, value) FROM STDIN WITH (FORMAT csv);
+2025-03-01 00:00:01+00,d3,1.0
+2025-03-01 00:00:02+00,d3,2.0
+2025-03-01 00:00:03+00,d3,3.0
+\.
+SELECT count(*), min(time), max(time), min(value), max(value) FROM test_dropcol WHERE device = 'd3';
+ROLLBACK;
+
 -- Test orderby columns are not selected by DC segmentby default
 BEGIN;
 RESET timescaledb.enable_direct_compress_insert;
