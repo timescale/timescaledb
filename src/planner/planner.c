@@ -432,12 +432,18 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 
 					if (ht)
 					{
-						/* Mark hypertable RTEs we'd like to expand ourselves.
-						 * We skip the DML target relation (resultRelation != 0
-						 * in the current query) but allow non-target hypertables
-						 * in subqueries of UPDATE/DELETE to use TSDB expansion. */
+						/*
+						 * Mark hypertable RTEs we'd like to expand ourselves.
+						 * We always do this for SELECTs from hypertables.
+						 *
+						 * For DML, we also always expand the non-target relations.
+						 *
+						 * The hypertables that are not expanded by our custom code
+						 * here fall back to the standard Postgres inheritance
+						 * hierarchy expansion.
+						 */
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-							query->resultRelation == 0 && rte->inh)
+							rte->inh && (Index) query->resultRelation != rti)
 						{
 							rte_mark_for_expansion(rte);
 						}
@@ -1429,10 +1435,14 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	{
 		case TS_REL_HYPERTABLE:
 		{
-			/* Mark hypertable RTEs we'd like to expand ourselves.
+			/*
+			 * Mark hypertable RTEs we'd like to expand ourselves.
 			 * Hypertables inside inlineable functions don't get marked during
-			 * the query preprocessing step. Therefore we do an extra try here.
-			 * We skip the DML target relation identified by resultRelation.
+			 * the query preprocessing step handled in preprocess_query().
+			 * Therefore we do an extra try here.
+			 *
+			 * For the explanation of the logic, see the comments in
+			 * preprocess_query().
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
 				rte->ctename == NULL && rel->relid != (Index) query->resultRelation)
