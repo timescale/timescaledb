@@ -232,6 +232,7 @@ jobs:
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ./build/coverage/timescaledb-coverage.info
+        fail_ci_if_error: true
 
     - name: Save LCOV coverage report
       if: matrix.coverage
