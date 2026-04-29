@@ -88,7 +88,18 @@ create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation rel, EState *e
 	ResultRelInfo *rri;
 	rri = makeNode(ResultRelInfo);
 
-	InitResultRelInfo(rri, rel, ht_rri->ri_RangeTableIndex, NULL, estate->es_instrument);
+	/*
+	 * For MERGE, the hypertable's ResultRelInfo points to an RTE with
+	 * perminfoindex = 0; the valid RTEPermissionInfo lives on the
+	 * rootResultRelInfo that PG sets up via ModifyTable->rootRelation.
+	 * Forward that link to the chunk so GetResultRTEPermissionInfo() can
+	 * find it during ExecConstraints, RLS checks, etc.
+	 */
+	InitResultRelInfo(rri,
+					  rel,
+					  ht_rri->ri_RangeTableIndex,
+					  ht_rri->ri_RootResultRelInfo,
+					  estate->es_instrument);
 
 	/* Copy options from the main table's (hypertable's) result relation info */
 	rri->ri_WithCheckOptions = ht_rri->ri_WithCheckOptions;
