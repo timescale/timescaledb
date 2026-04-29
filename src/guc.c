@@ -124,7 +124,7 @@ TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT bool ts_guc_enable_uuid_compression = true;
 TSDLLEXPORT int ts_guc_compression_batch_size_limit = TARGET_COMPRESSED_BATCH_SIZE;
 TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
-TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
+TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_OR_DELETE;
 bool ts_guc_enable_event_triggers = false;
 bool ts_guc_enable_chunk_auto_publication = false;
 bool ts_guc_debug_skip_scan_info = false;
@@ -1393,7 +1393,7 @@ _guc_init(void)
 							 "instead of truncate. 'truncate_or_delete' allows falling back to "
 							 "deletion.",
 							 (int *) &ts_guc_compress_truncate_behaviour,
-							 COMPRESS_TRUNCATE_ONLY,
+							 COMPRESS_TRUNCATE_OR_DELETE,
 							 compress_truncate_behaviour_options,
 							 PGC_USERSET,
 							 0,
