@@ -408,6 +408,63 @@ ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid)
 	return relid;
 }
 
+/*
+ * Look up a hypertable's relation Oid by its internal id, using the active
+ * snapshot.
+ *
+ * Reads the snapshot via GetActiveSnapshot() so a logical decoding plugin can
+ * install a HistoricSnapshot via PushActiveSnapshot() before invoking. Returns
+ * NULL when the hypertable does not exist or its underlying schema/relation
+ * cannot be resolved against the same snapshot.
+ */
+TS_FUNCTION_INFO_V1(ts_hypertable_relid_by_id);
+Datum
+ts_hypertable_relid_by_id(PG_FUNCTION_ARGS)
+{
+	int32 hypertable_id = PG_GETARG_INT32(0);
+	ScanIterator iterator =
+		ts_scan_iterator_create(HYPERTABLE, AccessShareLock, CurrentMemoryContext);
+	Oid relid = InvalidOid;
+
+	iterator.ctx.snapshot = GetActiveSnapshot();
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), HYPERTABLE, HYPERTABLE_ID_INDEX);
+
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_hypertable_pkey_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(hypertable_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		bool schema_isnull;
+		bool table_isnull;
+		Datum schema_datum =
+			slot_getattr(iterator.tinfo->slot, Anum_hypertable_schema_name, &schema_isnull);
+		Datum table_datum =
+			slot_getattr(iterator.tinfo->slot, Anum_hypertable_table_name, &table_isnull);
+
+		if (!schema_isnull && !table_isnull)
+		{
+			Oid schema_oid = get_namespace_oid(NameStr(*DatumGetName(schema_datum)), true);
+
+			if (OidIsValid(schema_oid))
+			{
+				relid = get_relname_relid(NameStr(*DatumGetName(table_datum)), schema_oid);
+			}
+		}
+		break;
+	}
+	ts_scan_iterator_close(&iterator);
+
+	if (!OidIsValid(relid))
+	{
+		PG_RETURN_NULL();
+	}
+
+	PG_RETURN_OID(relid);
+}
+
 int32
 ts_hypertable_relid_to_id(Oid relid)
 {

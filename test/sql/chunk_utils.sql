@@ -451,6 +451,51 @@ SELECT _timescaledb_functions.chunk_id_from_relid(tableoid) FROM chunk_id_from_r
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.chunk_id_from_relid('pg_type'::regclass);
 SELECT _timescaledb_functions.chunk_id_from_relid('chunk_id_from_relid_test'::regclass);
+\set ON_ERROR_STOP 1
+
+-- Logical-decoder lookups (chunk_id_by_name / compressed_chunk_parent_id /
+-- chunk_hypertable_id / hypertable_relid_by_id) read GetActiveSnapshot() so a
+-- decoder can install a HistoricSnapshot via PushActiveSnapshot() before
+-- invoking. From an ordinary SQL session the executor's snapshot is in effect.
+CREATE TABLE lookup_test(time bigint NOT NULL, value float8);
+SELECT create_hypertable('lookup_test', 'time', chunk_time_interval => 10);
+INSERT INTO lookup_test VALUES (0, 1.0), (15, 2.0), (30, 3.0);
+
+SELECT c.schema_name AS chunk_schema, c.table_name AS chunk_table,
+       c.id AS chunk_id, c.hypertable_id
+INTO TEMP lookup_chunks
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.hypertable h ON h.id = c.hypertable_id
+WHERE h.table_name = 'lookup_test'
+ORDER BY c.id;
+
+-- Resolve chunk id by (schema, table).
+SELECT bool_and(_timescaledb_functions.chunk_id_by_name(chunk_schema, chunk_table) = chunk_id) AS ok
+FROM lookup_chunks;
+
+-- Resolve owning hypertable id.
+SELECT bool_and(_timescaledb_functions.chunk_hypertable_id(chunk_id) = hypertable_id) AS ok
+FROM lookup_chunks;
+
+-- Resolve hypertable's relation Oid.
+SELECT DISTINCT _timescaledb_functions.hypertable_relid_by_id(hypertable_id) AS relid
+FROM lookup_chunks;
+
+-- Without compression no chunk has a parent. See chunk_utils_compression.sql
+-- for more tests
+SELECT bool_and(_timescaledb_functions.compressed_chunk_parent_id(chunk_id) IS NULL) AS ok
+FROM lookup_chunks;
+
+-- Misses return NULL (not an error).
+SELECT
+    _timescaledb_functions.chunk_id_by_name('nonexistent_schema', 'nonexistent_table') IS NULL AS chunk_id_miss,
+    _timescaledb_functions.compressed_chunk_parent_id(999999) IS NULL AS parent_miss,
+    _timescaledb_functions.chunk_hypertable_id(999999) IS NULL AS chunk_ht_miss,
+    _timescaledb_functions.hypertable_relid_by_id(999999) IS NULL AS ht_relid_miss;
+
+DROP TABLE lookup_chunks;
+DROP TABLE lookup_test;
+\set ON_ERROR_STOP 0
 
 -- test drop/show_chunks on custom partition types
 CREATE FUNCTION extract_time(a jsonb)

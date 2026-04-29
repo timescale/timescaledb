@@ -36,6 +36,22 @@ AS $$ SELECT _timescaledb_functions.chunk_status_text(_timescaledb_functions.chu
 CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_id_from_relid(relid OID) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_chunk_id_from_relid' LANGUAGE C STABLE STRICT PARALLEL SAFE;
 
+-- Look up a chunk id by (schema_name, table_name) using the active snapshot.
+-- Intended for logical decoding plugins, which install a HistoricSnapshot via
+-- PushActiveSnapshot() before invoking. Returns NULL when no chunk matches.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_id_by_name(schema_name NAME, table_name NAME) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_chunk_id_by_name' LANGUAGE C STABLE STRICT PARALLEL SAFE;
+
+-- Look up the parent (uncompressed) chunk id from a compressed chunk id, using
+-- the active snapshot. See chunk_id_by_name for snapshot semantics.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_chunk_parent_id(compressed_chunk_id INTEGER) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_compressed_chunk_parent_id' LANGUAGE C STABLE STRICT PARALLEL SAFE;
+
+-- Look up the owning hypertable id of a chunk by chunk id, using the active
+-- snapshot. See chunk_id_by_name for snapshot semantics.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_hypertable_id(chunk_id INTEGER) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_chunk_hypertable_id' LANGUAGE C STABLE STRICT PARALLEL SAFE;
+
 -- Show the definition of a chunk.
 CREATE OR REPLACE FUNCTION _timescaledb_functions.show_chunk(chunk REGCLASS)
 RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, schema_name NAME, table_name NAME, relkind "char", slices JSONB)
