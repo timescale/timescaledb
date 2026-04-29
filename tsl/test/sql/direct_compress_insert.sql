@@ -493,6 +493,6 @@ ALTER TABLE test_orderby_not_segmentby SET (timescaledb.compress);
 SET timescaledb.enable_direct_compress_insert = on;
 INSERT INTO test_orderby_not_segmentby SELECT '2024-06-01'::timestamptz + (i||' min')::interval,
     (i%5)+1, random() FROM generate_series(1,2000) i;
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
 ROLLBACK;
 
