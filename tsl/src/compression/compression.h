@@ -303,6 +303,15 @@ typedef struct RowCompressor
 	bool needs_analyze_segmentby;
 
 	List *metadata_builders; /* List of BatchMetadataBuilder */
+
+	/*
+	 * Tracks the previous row's value of the first orderby column. Used when
+	 * ts_guc_compression_flush_batch_on_first_orderby_change is enabled to
+	 * finish the current batch as soon as that value changes. NULL if the
+	 * table has no orderby column.
+	 */
+	int16 first_orderby_col_offset;
+	SegmentInfo *first_orderby_segment_info;
 } RowCompressor;
 
 /*

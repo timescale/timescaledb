@@ -75,6 +75,7 @@ extern TSDLLEXPORT bool ts_guc_enable_bool_compression;
 extern TSDLLEXPORT bool ts_guc_enable_uuid_compression;
 extern TSDLLEXPORT int ts_guc_compression_batch_size_limit;
 extern TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit;
+extern TSDLLEXPORT bool ts_guc_compression_flush_batch_on_first_orderby_change;
 #if PG16_GE
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
 #endif

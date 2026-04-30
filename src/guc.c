@@ -124,6 +124,7 @@ TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT bool ts_guc_enable_uuid_compression = true;
 TSDLLEXPORT int ts_guc_compression_batch_size_limit = TARGET_COMPRESSED_BATCH_SIZE;
 TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
+TSDLLEXPORT bool ts_guc_compression_flush_batch_on_first_orderby_change = false;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
 bool ts_guc_enable_event_triggers = false;
 bool ts_guc_enable_chunk_auto_publication = false;
@@ -1141,6 +1142,19 @@ _guc_init(void)
 							 "limit those compressors by reducing the size of the batch and thus "
 							 "avoid hitting the limit.",
 							 &ts_guc_compression_enable_compressor_batch_limit,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("compression_flush_batch_on_first_orderby_change"),
+							 "Finish a compressed batch when the first orderby column changes",
+							 "When enabled, the row compressor finishes the current batch as "
+							 "soon as the value of the first orderby column changes between "
+							 "consecutive rows. This keeps every batch aligned to a single "
+							 "value of the first orderby column.",
+							 &ts_guc_compression_flush_batch_on_first_orderby_change,
 							 false,
 							 PGC_USERSET,
 							 0,

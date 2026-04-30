@@ -1227,6 +1227,8 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 		.num_compressed_rows = 0,
 		.first_iteration = true,
 		.sort_state = NULL,
+		.first_orderby_col_offset = -1,
+		.first_orderby_segment_info = NULL,
 	};
 
 	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * compressed_tupdesc->natts);
@@ -1243,6 +1245,27 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 	row_compressor->needs_fullness_check =
 		check_for_limited_size_compressors(row_compressor->per_column,
 										   row_compressor->n_input_columns);
+
+	/*
+	 * Look up the first orderby column so we can track its value across rows
+	 * when flushing per first-orderby change is requested via GUC.
+	 */
+	if (settings->fd.orderby != NULL && ts_array_length(settings->fd.orderby) >= 1)
+	{
+		const char *first_orderby_name = ts_array_get_element_text(settings->fd.orderby, 1);
+		for (int i = 0; i < noncompressed_tupdesc->natts; i++)
+		{
+			Form_pg_attribute attr = TupleDescAttr(noncompressed_tupdesc, i);
+			if (attr->attisdropped)
+				continue;
+			if (strcmp(NameStr(attr->attname), first_orderby_name) == 0)
+			{
+				row_compressor->first_orderby_col_offset = AttrNumberGetAttrOffset(attr->attnum);
+				row_compressor->first_orderby_segment_info = segment_info_new(attr);
+				break;
+			}
+		}
+	}
 }
 
 void
@@ -1349,12 +1372,40 @@ row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlo
 	}
 	bool changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
 	bool compressed_row_is_full = row_compressor_is_full(row_compressor, slot);
-	if (compressed_row_is_full || changed_groups)
+
+	bool track_first_orderby = ts_guc_compression_flush_batch_on_first_orderby_change &&
+							   row_compressor->first_orderby_segment_info != NULL;
+	bool first_orderby_is_null = false;
+	Datum first_orderby_val = (Datum) 0;
+	bool first_orderby_changed = false;
+	if (track_first_orderby)
+	{
+		first_orderby_val =
+			slot_getattr(slot,
+						 AttrOffsetGetAttrNumber(row_compressor->first_orderby_col_offset),
+						 &first_orderby_is_null);
+		if (row_compressor->rows_compressed_into_current_value > 0)
+			first_orderby_changed =
+				!segment_info_datum_is_in_group(row_compressor->first_orderby_segment_info,
+												first_orderby_val,
+												first_orderby_is_null);
+	}
+
+	if (compressed_row_is_full || changed_groups || first_orderby_changed)
 	{
 		if (row_compressor->rows_compressed_into_current_value > 0)
 			row_compressor_flush(row_compressor, writer, changed_groups);
 		if (changed_groups)
 			row_compressor_update_group(row_compressor, slot);
+	}
+
+	if (track_first_orderby)
+	{
+		MemoryContext segment_ctx = MemoryContextSwitchTo(row_compressor->per_row_ctx->parent);
+		segment_info_update(row_compressor->first_orderby_segment_info,
+							first_orderby_val,
+							first_orderby_is_null);
+		MemoryContextSwitchTo(segment_ctx);
 	}
 
 	row_compressor_append_row(row_compressor, slot);
