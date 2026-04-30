@@ -3001,7 +3001,6 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	if (compression_info->num_segmentby_columns > 0)
 	{
 		Bitmapset *segmentby_columns;
-
 		/*
 		 * initialize segmentby with equality constraints from baserestrictinfo because
 		 * those columns dont need to be prefix of pathkeys
@@ -3053,8 +3052,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		 * If pathkeys still has items, but we didn't find all segmentby columns,
 		 * we cannot satisfy these pathkeys by sorting the compressed chunk table.
 		 */
-		if (i != list_length(pathkeys) &&
-			bms_num_members(segmentby_columns) != compression_info->num_segmentby_columns)
+		if (bms_num_members(segmentby_columns) != compression_info->num_segmentby_columns)
 		{
 			/*
 			 * If we didn't have any segmentby columns in pathkeys, try batch sorted merge
@@ -3074,12 +3072,34 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		}
 	}
 
+	/* We are here when either compression doesn't have segmentby
+	 * or pathkeys prefix matches all segmentby columns but there are more pathkeys to match, for
+	 * example: (order by segcol1, segcol2, obycol1, obycol2) for
+	 * (compress.segmentby='segcol1,segcol2').
+	 */
+
 	/*
 	 * Cannot push down sort on non-segmentby columns
 	 * if the chunk has batches overlapping on orderby columns
 	 */
 	if (ts_chunk_is_unordered(chunk))
 	{
+		/*
+		 * If compression has no segmentby columns or all segmentby columns in a query are pinned to
+		 * a Const, try batch sorted merge instead.
+		 */
+		if (compression_info->num_segmentby_columns == 0 ||
+			bms_num_members(compression_info->chunk_const_segmentby) ==
+				compression_info->num_segmentby_columns)
+		{
+			sort_info.use_batch_sorted_merge =
+				match_pathkeys_to_compression_orderby(pathkeys,
+													  chunk_em_exprs,
+													  /* starting_pathkey_offset = */ 0,
+													  compression_info,
+													  /* for_bsm = */ true,
+													  &sort_info.reverse);
+		}
 		return sort_info;
 	}
 

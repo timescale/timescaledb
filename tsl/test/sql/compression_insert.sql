@@ -1211,8 +1211,13 @@ SET timescaledb.enable_direct_compress_insert = true;
 -- Insert >= 10 rows to trigger direct compress path
 INSERT INTO i9314 SELECT '2024-02-01'::timestamptz + format('%s day',i)::interval, i + 10 FROM generate_series(1, 10) i;
 
+-- Should use BatchSortedMerge for unordered chunks with no segmentby and matching orderby
+SET timescaledb.debug_require_batch_sorted_merge = 'force';
+
 :PREFIX SELECT * FROM i9314 ORDER BY time;
 SELECT * FROM i9314 ORDER BY time;
+
+RESET timescaledb.debug_require_batch_sorted_merge;
 
 -- test copy
 COPY i9314 FROM STDIN DELIMITER ',' CSV;
@@ -1225,8 +1230,13 @@ COPY i9314 FROM STDIN DELIMITER ',' CSV;
 
 SELECT compress_chunk(show_chunks('i9314'));
 
+-- Should use BatchSortedMerge for unordered chunks with no segmentby and matching orderby
+SET timescaledb.debug_require_batch_sorted_merge = 'force';
+
 :PREFIX SELECT * FROM i9314 ORDER BY time;
 SELECT * FROM i9314 ORDER BY time;
+
+RESET timescaledb.debug_require_batch_sorted_merge;
 
 SET timescaledb.enable_direct_compress_copy = true;
 COPY i9314 FROM STDIN DELIMITER ',' CSV;
@@ -1237,7 +1247,12 @@ COPY i9314 FROM STDIN DELIMITER ',' CSV;
 2024-04-17,34
 \.
 
+-- Should use BatchSortedMerge for unordered chunks with no segmentby and matching orderby
+SET timescaledb.debug_require_batch_sorted_merge = 'force';
+
 :PREFIX SELECT * FROM i9314 ORDER BY time;
 SELECT * FROM i9314 ORDER BY time;
+
+RESET timescaledb.debug_require_batch_sorted_merge;
 
 RESET timescaledb.enable_direct_compress_insert;
