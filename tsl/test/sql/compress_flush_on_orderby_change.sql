@@ -151,3 +151,40 @@ SELECT count(*), sum(val) FROM flush_orderby_big;
 
 DROP TABLE flush_orderby_big;
 RESET timescaledb.compression_flush_batch_on_first_orderby_change;
+
+
+-- First orderby column is text (pass-by-reference) to exercise the
+-- datumCopy path in segment_info_update.
+CREATE TABLE flush_orderby_text(seg int, label text, ts int, val int)
+    WITH (tsdb.hypertable, tsdb.partition_column = 'ts',
+          tsdb.chunk_interval = 1000000);
+
+INSERT INTO flush_orderby_text
+SELECT 1,
+       'label_' || lpad((x % 5)::text, 2, '0'),
+       x,
+       x
+FROM generate_series(1, 50) x;
+
+ALTER TABLE flush_orderby_text SET (tsdb.compress, tsdb.compress_segmentby = 'seg',
+    tsdb.compress_orderby = 'label, ts');
+
+SET timescaledb.compression_flush_batch_on_first_orderby_change = on;
+SELECT count(compress_chunk(c)) FROM show_chunks('flush_orderby_text') c;
+
+SELECT format('%I.%I', schema_name, table_name) AS "CCHUNK"
+FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NULL
+ORDER BY id DESC LIMIT 1 \gset
+
+-- One batch per distinct label, with min and max equal.
+SELECT _ts_meta_min_1, _ts_meta_max_1, _ts_meta_count
+FROM :CCHUNK ORDER BY _ts_meta_min_1;
+
+SELECT bool_and(_ts_meta_min_1 = _ts_meta_max_1) AS every_batch_single_value,
+       count(*) AS num_batches
+FROM :CCHUNK;
+
+SELECT count(*), sum(val), count(DISTINCT label) FROM flush_orderby_text;
+
+DROP TABLE flush_orderby_text;
+RESET timescaledb.compression_flush_batch_on_first_orderby_change;
