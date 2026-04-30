@@ -14,10 +14,13 @@
 
 #include "func_cache.h"
 #include "guc.h"
+#include "hypertable_restrict_info.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner/planner.h"
 
 static Var *find_equality_join_var(Var *sort_var, Index ht_relid, List *join_conditions);
+static bool estimate_startup_surviving_chunk_oids(PlannerInfo *root, RelOptInfo *rel,
+												  Hypertable *ht, List **out_oids);
 
 static CustomPathMethods chunk_append_path_methods = {
 	.CustomName = "ChunkAppend",
@@ -78,6 +81,18 @@ ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths, PathTarget *patht
 		total_cost += child->total_cost;
 		rows += child->rows;
 	}
+
+	/*
+	 * Re-apply the startup-exclusion row discount we computed in
+	 * ts_chunk_append_path_create. Without this, callers that rebuild a
+	 * ChunkAppendPath with replaced subpaths (e.g., chunkwise partial
+	 * aggregation pushdown) would lose the discount and revert to the
+	 * unscaled child sum.
+	 */
+	double ratio = new->startup_exclusion_ratio;
+	if (ratio > 0.0 && ratio < 1.0)
+		rows *= ratio;
+
 	new->cpath.path.total_cost = total_cost;
 	new->cpath.path.rows = rows;
 	new->cpath.path.pathtarget = copy_pathtarget(pathtarget);
@@ -284,6 +299,25 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			break;
 	}
 
+	/*
+	 * If startup exclusion is expected, try to estimate (using current
+	 * parameter values via estimate_expression_value) which chunks would
+	 * actually survive. Used below to scale rows down to the sum over the
+	 * surviving chunks rather than over all chunks.
+	 *
+	 * NULL means "no useful estimate" — leave row estimates unchanged.
+	 *
+	 * children_flat is captured here because below the children list may be
+	 * reshaped into MergeAppend wrappers for ordered / space-partitioned
+	 * cases, hiding direct chunk paths.
+	 */
+	List *estimated_surviving_oids = NIL;
+	bool have_estimate = false;
+	List *children_flat = children;
+	if (path->startup_exclusion)
+		have_estimate =
+			estimate_startup_surviving_chunk_oids(root, rel, ht, &estimated_surviving_oids);
+
 	if (!ordered)
 	{
 		path->cpath.custom_paths = children;
@@ -465,6 +499,50 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		}
 	}
 
+	/*
+	 * When startup exclusion is expected to prune chunks at executor startup,
+	 * scale the row estimate down to reflect only the chunks that are likely
+	 * to survive (estimated using current parameter values). Without this,
+	 * the row estimate is the sum over all chunks because the restriction
+	 * couldn't be folded at plan time (e.g. a stable timestamptz->timestamp
+	 * cast on a parameter), which can cascade into bad sizing for upstream
+	 * HashAggregates, joins, and sorts.
+	 *
+	 * We discount rows but not total_cost — leaving total_cost alone keeps
+	 * the relative ordering of ChunkAppend, ordered append, and
+	 * ConstraintAwareAppend variants stable so PostgreSQL doesn't flip plan
+	 * shapes purely on the basis of this estimate. The real plan still
+	 * contains all chunks, and runtime startup exclusion remains the
+	 * mechanism that enforces correctness.
+	 */
+	path->startup_exclusion_ratio = 1.0;
+	if (have_estimate)
+	{
+		double surviving_rows = 0.0;
+		foreach (lc, children_flat)
+		{
+			Path *child = lfirst(lc);
+			Oid child_oid = (child->parent && child->parent->relid != 0) ?
+								root->simple_rte_array[child->parent->relid]->relid :
+								InvalidOid;
+			if (OidIsValid(child_oid) && list_member_oid(estimated_surviving_oids, child_oid))
+				surviving_rows += child->rows;
+		}
+
+		/*
+		 * Floor at one row to avoid producing zero-row estimates that some
+		 * upstream nodes treat as "fits in any memory budget".
+		 */
+		if (surviving_rows < 1.0)
+			surviving_rows = 1.0;
+
+		if (rows > 0.0 && surviving_rows < rows)
+		{
+			path->startup_exclusion_ratio = surviving_rows / rows;
+			rows = surviving_rows;
+		}
+	}
+
 	path->cpath.path.rows = rows;
 	path->cpath.path.total_cost = total_cost;
 
@@ -472,6 +550,82 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		path->cpath.path.startup_cost = ((Path *) linitial(path->cpath.custom_paths))->startup_cost;
 
 	return &path->cpath.path;
+}
+
+/*
+ * Estimate which chunks would survive startup-time exclusion using the
+ * current session state and bound parameters.
+ *
+ * The regular plan-time exclusion pass (see get_chunks() in
+ * expand_hypertable.c) only uses clauses that fold to a Const via
+ * eval_const_expressions(). STABLE casts (e.g. timestamptz -> timestamp) and
+ * external parameters don't fold there, so those clauses are skipped and
+ * every chunk ends up in the plan. ChunkAppend then prunes them at executor
+ * startup via estimate_expression_value() — correct, but by that point the
+ * planner has already based the row estimate on "all chunks are scanned".
+ *
+ * We replay that exclusion using estimate_expression_value() here so that
+ * the row estimate reflects the likely runtime outcome.
+ *
+ * Writes the list of chunk relation Oids expected to survive into *out_oids
+ * and returns true. The list may be empty (when all chunks are estimated
+ * excluded). Returns false when no useful estimate can be produced (no
+ * parameterized/stable clauses to evaluate).
+ */
+static bool
+estimate_startup_surviving_chunk_oids(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
+									  List **out_oids)
+{
+	HypertableRestrictInfo *hri;
+	List *estimated_clauses = NIL;
+	List *result = NIL;
+	ListCell *lc;
+	bool has_estimable_clause = false;
+
+	foreach (lc, rel->baserestrictinfo)
+	{
+		RestrictInfo *ri = lfirst_node(RestrictInfo, lc);
+		bool was_deferred = contain_mutable_functions((Node *) ri->clause) ||
+							ts_contains_external_param((Node *) ri->clause);
+		Expr *clause = ri->clause;
+
+		if (was_deferred)
+		{
+			clause = (Expr *) estimate_expression_value(root, (Node *) ri->clause);
+
+			/*
+			 * If estimation didn't remove the mutable/param parts, we can't
+			 * use this clause for chunk exclusion — skip it. The clause
+			 * remains in the plan and will be evaluated at startup time as
+			 * normal.
+			 */
+			if (contain_mutable_functions((Node *) clause) ||
+				ts_contains_external_param((Node *) clause))
+				continue;
+
+			has_estimable_clause = true;
+		}
+
+		estimated_clauses = lappend(estimated_clauses, clause);
+	}
+
+	if (!has_estimable_clause)
+		return false;
+
+	hri = ts_hypertable_restrict_info_create(rel, ht);
+	foreach (lc, estimated_clauses)
+	{
+		ts_hypertable_restrict_info_add_clause(hri, root, lfirst(lc));
+	}
+
+	unsigned int num_chunks = 0;
+	Chunk **chunks = ts_hypertable_restrict_info_get_chunks(hri, ht, true, &num_chunks);
+
+	for (unsigned int i = 0; i < num_chunks; i++)
+		result = lappend_oid(result, chunks[i]->table_id);
+
+	*out_oids = result;
+	return true;
 }
 
 /*
