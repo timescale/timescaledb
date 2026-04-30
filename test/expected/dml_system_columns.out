@@ -10,7 +10,9 @@ SELECT create_hypertable('ht_update_join', 'time', chunk_time_interval => interv
  (1,public,ht_update_join,t)
 
 INSERT INTO ht_update_join VALUES ('2020-01-15', 1), ('2020-02-15', 2);
+VACUUM FREEZE ANALYZE ht_update_join;
 -- ctid self-join UPDATE
+BEGIN;
 :PREFIX
 UPDATE ht_update_join a SET val = 0
 FROM ht_update_join b
@@ -21,15 +23,16 @@ WHERE a.time = b.time AND a.ctid = b.ctid
    ->  Update on public.ht_update_join a (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_1_1_chunk a_1
          Update on _timescaledb_internal._hyper_1_2_chunk a_2
-         ->  Hash Join (actual rows=2.00 loops=1)
+         ->  Nested Loop (actual rows=2.00 loops=1)
                Output: 0, b.ctid, a.tableoid, a.ctid, b.tableoid
-               Hash Cond: ((a."time" = b."time") AND (a.ctid = b.ctid))
+               Join Filter: ((a."time" = b."time") AND (a.ctid = b.ctid))
+               Rows Removed by Join Filter: 2
                ->  Append (actual rows=2.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
                            Output: a_1."time", a_1.ctid, a_1.tableoid, a_1.ctid
                      ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk a_2 (actual rows=1.00 loops=1)
                            Output: a_2."time", a_2.ctid, a_2.tableoid, a_2.ctid
-               ->  Hash (actual rows=2.00 loops=1)
+               ->  Materialize (actual rows=2.00 loops=2)
                      Output: b.ctid, b."time", b.tableoid
                      ->  Append (actual rows=2.00 loops=1)
                            ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk b_1 (actual rows=1.00 loops=1)
@@ -37,7 +40,9 @@ WHERE a.time = b.time AND a.ctid = b.ctid
                            ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk b_2 (actual rows=1.00 loops=1)
                                  Output: b_2.ctid, b_2."time", b_2.tableoid
 
+ROLLBACK;
 -- WITH ... UPDATE ... RETURNING * nesting
+BEGIN;
 :PREFIX
 WITH updated AS (
   UPDATE ht_update_join SET val = 99 WHERE time = '2020-01-15' RETURNING *
@@ -55,11 +60,13 @@ SELECT * FROM updated
                  Update on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1
                  ->  Result (actual rows=1.00 loops=1)
                        Output: 99, ht_update_join_1.tableoid, ht_update_join_1.ctid
-                       ->  Index Scan using _hyper_1_1_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1 (actual rows=1.00 loops=1)
+                       ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1 (actual rows=1.00 loops=1)
                              Output: ht_update_join_1.tableoid, ht_update_join_1.ctid
-                             Index Cond: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
+                             Filter: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
 
+ROLLBACK;
 -- RETURNING ctid explicitly
+BEGIN;
 :PREFIX
 UPDATE ht_update_join SET val = 98 WHERE time = '2020-01-15'
 RETURNING ctid, time, val
@@ -72,11 +79,13 @@ RETURNING ctid, time, val
          Update on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1
          ->  Result (actual rows=1.00 loops=1)
                Output: 98, ht_update_join_1.tableoid, ht_update_join_1.ctid
-               ->  Index Scan using _hyper_1_1_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1 (actual rows=1.00 loops=1)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1 (actual rows=1.00 loops=1)
                      Output: ht_update_join_1.tableoid, ht_update_join_1.ctid
-                     Index Cond: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
+                     Filter: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
 
+ROLLBACK;
 -- DELETE with ctid self-join
+BEGIN;
 :PREFIX
 DELETE FROM ht_update_join a
 USING ht_update_join b
@@ -87,15 +96,16 @@ WHERE a.time = b.time AND a.ctid = b.ctid
    ->  Delete on public.ht_update_join a (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_1_1_chunk a_1
          Delete on _timescaledb_internal._hyper_1_2_chunk a_2
-         ->  Hash Join (actual rows=2.00 loops=1)
+         ->  Nested Loop (actual rows=2.00 loops=1)
                Output: b.ctid, a.tableoid, a.ctid, b.tableoid
-               Hash Cond: ((a."time" = b."time") AND (a.ctid = b.ctid))
+               Join Filter: ((a."time" = b."time") AND (a.ctid = b.ctid))
+               Rows Removed by Join Filter: 2
                ->  Append (actual rows=2.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
                            Output: a_1."time", a_1.ctid, a_1.tableoid, a_1.ctid
                      ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk a_2 (actual rows=1.00 loops=1)
                            Output: a_2."time", a_2.ctid, a_2.tableoid, a_2.ctid
-               ->  Hash (actual rows=2.00 loops=1)
+               ->  Materialize (actual rows=2.00 loops=2)
                      Output: b.ctid, b."time", b.tableoid
                      ->  Append (actual rows=2.00 loops=1)
                            ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk b_1 (actual rows=1.00 loops=1)
@@ -103,9 +113,9 @@ WHERE a.time = b.time AND a.ctid = b.ctid
                            ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk b_2 (actual rows=1.00 loops=1)
                                  Output: b_2.ctid, b_2."time", b_2.tableoid
 
--- Re-insert for further tests
-INSERT INTO ht_update_join VALUES ('2020-01-15', 1), ('2020-02-15', 2);
+ROLLBACK;
 -- UPDATE with tableoid in join condition
+BEGIN;
 :PREFIX
 UPDATE ht_update_join a SET val = 10
 FROM ht_update_join b
@@ -116,26 +126,26 @@ WHERE a.time = b.time AND a.tableoid = b.tableoid
    ->  Update on public.ht_update_join a (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_1_1_chunk a_1
          Update on _timescaledb_internal._hyper_1_2_chunk a_2
-         ->  Merge Join (actual rows=2.00 loops=1)
+         ->  Nested Loop (actual rows=2.00 loops=1)
                Output: 10, b.ctid, a.tableoid, a.ctid, b.tableoid
-               Merge Cond: (a."time" = b."time")
-               Join Filter: (a.tableoid = b.tableoid)
-               ->  Merge Append (actual rows=2.00 loops=1)
-                     Sort Key: a."time"
-                     ->  Index Scan Backward using _hyper_1_1_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
+               Join Filter: ((a."time" = b."time") AND (a.tableoid = b.tableoid))
+               Rows Removed by Join Filter: 2
+               ->  Append (actual rows=2.00 loops=1)
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
                            Output: a_1."time", a_1.tableoid, a_1.tableoid, a_1.ctid
-                     ->  Index Scan Backward using _hyper_1_2_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_2_chunk a_2 (actual rows=1.00 loops=1)
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk a_2 (actual rows=1.00 loops=1)
                            Output: a_2."time", a_2.tableoid, a_2.tableoid, a_2.ctid
-               ->  Materialize (actual rows=2.00 loops=1)
+               ->  Materialize (actual rows=2.00 loops=2)
                      Output: b.ctid, b."time", b.tableoid
-                     ->  Merge Append (actual rows=2.00 loops=1)
-                           Sort Key: b."time"
-                           ->  Index Scan Backward using _hyper_1_1_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_1_chunk b_1 (actual rows=1.00 loops=1)
+                     ->  Append (actual rows=2.00 loops=1)
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk b_1 (actual rows=1.00 loops=1)
                                  Output: b_1.ctid, b_1."time", b_1.tableoid
-                           ->  Index Scan Backward using _hyper_1_2_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_2_chunk b_2 (actual rows=1.00 loops=1)
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk b_2 (actual rows=1.00 loops=1)
                                  Output: b_2.ctid, b_2."time", b_2.tableoid
 
+ROLLBACK;
 -- UPDATE with ctid+tableoid in join condition
+BEGIN;
 :PREFIX
 UPDATE ht_update_join a SET val = 20
 FROM ht_update_join b
@@ -146,15 +156,16 @@ WHERE a.time = b.time AND a.ctid = b.ctid AND a.tableoid = b.tableoid
    ->  Update on public.ht_update_join a (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_1_1_chunk a_1
          Update on _timescaledb_internal._hyper_1_2_chunk a_2
-         ->  Hash Join (actual rows=2.00 loops=1)
+         ->  Nested Loop (actual rows=2.00 loops=1)
                Output: 20, b.ctid, a.tableoid, a.ctid, b.tableoid
-               Hash Cond: ((a."time" = b."time") AND (a.ctid = b.ctid) AND (a.tableoid = b.tableoid))
+               Join Filter: ((a."time" = b."time") AND (a.ctid = b.ctid) AND (a.tableoid = b.tableoid))
+               Rows Removed by Join Filter: 2
                ->  Append (actual rows=2.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
                            Output: a_1."time", a_1.ctid, a_1.tableoid, a_1.tableoid, a_1.ctid
                      ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk a_2 (actual rows=1.00 loops=1)
                            Output: a_2."time", a_2.ctid, a_2.tableoid, a_2.tableoid, a_2.ctid
-               ->  Hash (actual rows=2.00 loops=1)
+               ->  Materialize (actual rows=2.00 loops=2)
                      Output: b.ctid, b."time", b.tableoid
                      ->  Append (actual rows=2.00 loops=1)
                            ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk b_1 (actual rows=1.00 loops=1)
@@ -162,24 +173,28 @@ WHERE a.time = b.time AND a.ctid = b.ctid AND a.tableoid = b.tableoid
                            ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk b_2 (actual rows=1.00 loops=1)
                                  Output: b_2.ctid, b_2."time", b_2.tableoid
 
+ROLLBACK;
 -- UPDATE with ctid in WHERE (not join): ctid used as qual
+BEGIN;
 :PREFIX UPDATE ht_update_join a SET val = 15 WHERE a.ctid = '(0,1)';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.ht_update_join a (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_1_1_chunk a_1
          Update on _timescaledb_internal._hyper_1_2_chunk a_2
-         ->  Result (actual rows=0.00 loops=1)
+         ->  Result (actual rows=2.00 loops=1)
                Output: 15, a.tableoid, a.ctid
-               ->  Append (actual rows=0.00 loops=1)
-                     ->  Tid Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=0.00 loops=1)
+               ->  Append (actual rows=2.00 loops=1)
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
                            Output: a_1.tableoid, a_1.ctid
-                           TID Cond: (a_1.ctid = '(0,1)'::tid)
-                     ->  Tid Scan on _timescaledb_internal._hyper_1_2_chunk a_2 (actual rows=0.00 loops=1)
+                           Filter: (a_1.ctid = '(0,1)'::tid)
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk a_2 (actual rows=1.00 loops=1)
                            Output: a_2.tableoid, a_2.ctid
-                           TID Cond: (a_2.ctid = '(0,1)'::tid)
+                           Filter: (a_2.ctid = '(0,1)'::tid)
 
+ROLLBACK;
 -- UPDATE with xmin in WHERE: row identity must not strip xmin
+BEGIN;
 :PREFIX UPDATE ht_update_join SET val = 16 WHERE xmin::text::bigint > 0;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
@@ -196,7 +211,9 @@ WHERE a.time = b.time AND a.ctid = b.ctid AND a.tableoid = b.tableoid
                            Output: ht_update_join_2.tableoid, ht_update_join_2.ctid
                            Filter: (((ht_update_join_2.xmin)::text)::bigint > 0)
 
+ROLLBACK;
 -- UPDATE with xmin RETURNING: must survive
+BEGIN;
 :PREFIX
 UPDATE ht_update_join SET val = 161
 WHERE time = '2020-01-15'
@@ -210,11 +227,13 @@ RETURNING xmin, ctid, val
          Update on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1
          ->  Result (actual rows=1.00 loops=1)
                Output: 161, ht_update_join_1.tableoid, ht_update_join_1.ctid
-               ->  Index Scan using _hyper_1_1_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1 (actual rows=1.00 loops=1)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1 (actual rows=1.00 loops=1)
                      Output: ht_update_join_1.tableoid, ht_update_join_1.ctid
-                     Index Cond: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
+                     Filter: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
 
+ROLLBACK;
 -- UPDATE with xmax in WHERE (system column, not row-identity)
+BEGIN;
 :PREFIX UPDATE ht_update_join SET val = 162 WHERE xmax::text::bigint >= 0;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
@@ -231,7 +250,9 @@ RETURNING xmin, ctid, val
                            Output: ht_update_join_2.tableoid, ht_update_join_2.ctid
                            Filter: (((ht_update_join_2.xmax)::text)::bigint >= 0)
 
+ROLLBACK;
 -- UPDATE with cmin/cmax in WHERE
+BEGIN;
 :PREFIX
 UPDATE ht_update_join SET val = 163
 WHERE cmin::text::bigint >= 0 AND cmax::text::bigint >= 0
@@ -251,7 +272,9 @@ WHERE cmin::text::bigint >= 0 AND cmax::text::bigint >= 0
                            Output: ht_update_join_2.tableoid, ht_update_join_2.ctid
                            Filter: ((((ht_update_join_2.cmin)::text)::bigint >= 0) AND (((ht_update_join_2.cmax)::text)::bigint >= 0))
 
+ROLLBACK;
 -- UPDATE with whole-row reference in RETURNING
+BEGIN;
 :PREFIX
 UPDATE ht_update_join SET val = 164
 WHERE time = '2020-02-15'
@@ -265,12 +288,14 @@ RETURNING ht_update_join.*, ctid
          Update on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1
          ->  Result (actual rows=1.00 loops=1)
                Output: 164, ht_update_join_1.tableoid, ht_update_join_1.ctid
-               ->  Index Scan using _hyper_1_2_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1 (actual rows=1.00 loops=1)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk ht_update_join_1 (actual rows=1.00 loops=1)
                      Output: ht_update_join_1.tableoid, ht_update_join_1.ctid
-                     Index Cond: (ht_update_join_1."time" = 'Sat Feb 15 00:00:00 2020 PST'::timestamp with time zone)
+                     Filter: (ht_update_join_1."time" = 'Sat Feb 15 00:00:00 2020 PST'::timestamp with time zone)
 
+ROLLBACK;
 -- UPDATE that joins on ctid AND filters on xmin: ctid+tableoid get
 -- the row-identity treatment, xmin must pass through unaffected
+BEGIN;
 :PREFIX
 UPDATE ht_update_join a SET val = 165
 FROM ht_update_join b
@@ -283,25 +308,28 @@ WHERE a.time = b.time
    ->  Update on public.ht_update_join a (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_1_1_chunk a_1
          Update on _timescaledb_internal._hyper_1_2_chunk a_2
-         ->  Hash Join (actual rows=2.00 loops=1)
+         ->  Nested Loop (actual rows=2.00 loops=1)
                Output: 165, b.ctid, a.tableoid, a.ctid, b.tableoid
-               Hash Cond: ((b."time" = a."time") AND (b.ctid = a.ctid))
+               Join Filter: ((a."time" = b."time") AND (a.ctid = b.ctid))
+               Rows Removed by Join Filter: 2
                ->  Append (actual rows=2.00 loops=1)
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk b_1 (actual rows=1.00 loops=1)
-                           Output: b_1.ctid, b_1."time", b_1.tableoid
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk b_2 (actual rows=1.00 loops=1)
-                           Output: b_2.ctid, b_2."time", b_2.tableoid
-               ->  Hash (actual rows=2.00 loops=1)
-                     Output: a."time", a.ctid, a.tableoid, a.ctid
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
+                           Output: a_1."time", a_1.ctid, a_1.tableoid, a_1.ctid
+                           Filter: (((a_1.xmin)::text)::bigint > 0)
+                     ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk a_2 (actual rows=1.00 loops=1)
+                           Output: a_2."time", a_2.ctid, a_2.tableoid, a_2.ctid
+                           Filter: (((a_2.xmin)::text)::bigint > 0)
+               ->  Materialize (actual rows=2.00 loops=2)
+                     Output: b.ctid, b."time", b.tableoid
                      ->  Append (actual rows=2.00 loops=1)
-                           ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
-                                 Output: a_1."time", a_1.ctid, a_1.tableoid, a_1.ctid
-                                 Filter: (((a_1.xmin)::text)::bigint > 0)
-                           ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk a_2 (actual rows=1.00 loops=1)
-                                 Output: a_2."time", a_2.ctid, a_2.tableoid, a_2.ctid
-                                 Filter: (((a_2.xmin)::text)::bigint > 0)
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk b_1 (actual rows=1.00 loops=1)
+                                 Output: b_1.ctid, b_1."time", b_1.tableoid
+                           ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk b_2 (actual rows=1.00 loops=1)
+                                 Output: b_2.ctid, b_2."time", b_2.tableoid
 
+ROLLBACK;
 -- DELETE with xmin in qual
+BEGIN;
 :PREFIX DELETE FROM ht_update_join WHERE xmin::text::bigint > 0 AND val < 0;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
@@ -318,7 +346,9 @@ WHERE a.time = b.time
                      Filter: ((ht_update_join_2.val < 0) AND (((ht_update_join_2.xmin)::text)::bigint > 0))
                      Rows Removed by Filter: 1
 
+ROLLBACK;
 -- UPDATE with correlated EXISTS on ctid (semi-join from subquery pullup)
+BEGIN;
 :PREFIX
 UPDATE ht_update_join SET val = 17
 WHERE EXISTS (SELECT 1 FROM ht_update_join b
@@ -329,15 +359,16 @@ WHERE EXISTS (SELECT 1 FROM ht_update_join b
    ->  Update on public.ht_update_join (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1
          Update on _timescaledb_internal._hyper_1_2_chunk ht_update_join_2
-         ->  Hash Semi Join (actual rows=2.00 loops=1)
+         ->  Nested Loop Semi Join (actual rows=2.00 loops=1)
                Output: 17, b.ctid, ht_update_join.tableoid, ht_update_join.ctid, b.tableoid
-               Hash Cond: ((ht_update_join.ctid = b.ctid) AND (ht_update_join."time" = b."time"))
+               Join Filter: ((ht_update_join.ctid = b.ctid) AND (ht_update_join."time" = b."time"))
+               Rows Removed by Join Filter: 1
                ->  Append (actual rows=2.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1 (actual rows=1.00 loops=1)
                            Output: ht_update_join_1.ctid, ht_update_join_1."time", ht_update_join_1.tableoid, ht_update_join_1.ctid
                      ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk ht_update_join_2 (actual rows=1.00 loops=1)
                            Output: ht_update_join_2.ctid, ht_update_join_2."time", ht_update_join_2.tableoid, ht_update_join_2.ctid
-               ->  Hash (actual rows=2.00 loops=1)
+               ->  Materialize (actual rows=2.00 loops=2)
                      Output: b.ctid, b."time", b.tableoid
                      ->  Append (actual rows=2.00 loops=1)
                            ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk b_1 (actual rows=1.00 loops=1)
@@ -345,7 +376,9 @@ WHERE EXISTS (SELECT 1 FROM ht_update_join b
                            ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk b_2 (actual rows=1.00 loops=1)
                                  Output: b_2.ctid, b_2."time", b_2.tableoid
 
+ROLLBACK;
 -- Plain UPDATE without join (negative control)
+BEGIN;
 :PREFIX UPDATE ht_update_join SET val = 30 WHERE time = '2020-01-15';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
@@ -353,11 +386,13 @@ WHERE EXISTS (SELECT 1 FROM ht_update_join b
          Update on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1
          ->  Result (actual rows=1.00 loops=1)
                Output: 30, ht_update_join_1.tableoid, ht_update_join_1.ctid
-               ->  Index Scan using _hyper_1_1_chunk_ht_update_join_time_idx on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1 (actual rows=1.00 loops=1)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1 (actual rows=1.00 loops=1)
                      Output: ht_update_join_1.tableoid, ht_update_join_1.ctid
-                     Index Cond: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
+                     Filter: (ht_update_join_1."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
 
+ROLLBACK;
 -- DELETE with ctid+tableoid self-join
+BEGIN;
 :PREFIX
 DELETE FROM ht_update_join a
 USING ht_update_join b
@@ -368,15 +403,16 @@ WHERE a.time = b.time AND a.ctid = b.ctid AND a.tableoid = b.tableoid
    ->  Delete on public.ht_update_join a (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_1_1_chunk a_1
          Delete on _timescaledb_internal._hyper_1_2_chunk a_2
-         ->  Hash Join (actual rows=2.00 loops=1)
+         ->  Nested Loop (actual rows=2.00 loops=1)
                Output: b.ctid, a.tableoid, a.ctid, b.tableoid
-               Hash Cond: ((a."time" = b."time") AND (a.ctid = b.ctid) AND (a.tableoid = b.tableoid))
+               Join Filter: ((a."time" = b."time") AND (a.ctid = b.ctid) AND (a.tableoid = b.tableoid))
+               Rows Removed by Join Filter: 2
                ->  Append (actual rows=2.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
                            Output: a_1."time", a_1.ctid, a_1.tableoid, a_1.tableoid, a_1.ctid
                      ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk a_2 (actual rows=1.00 loops=1)
                            Output: a_2."time", a_2.ctid, a_2.tableoid, a_2.tableoid, a_2.ctid
-               ->  Hash (actual rows=2.00 loops=1)
+               ->  Materialize (actual rows=2.00 loops=2)
                      Output: b.ctid, b."time", b.tableoid
                      ->  Append (actual rows=2.00 loops=1)
                            ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk b_1 (actual rows=1.00 loops=1)
@@ -384,6 +420,7 @@ WHERE a.time = b.time AND a.ctid = b.ctid AND a.tableoid = b.tableoid
                            ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk b_2 (actual rows=1.00 loops=1)
                                  Output: b_2.ctid, b_2."time", b_2.tableoid
 
+ROLLBACK;
 DROP TABLE ht_update_join;
 -- UPDATE/DELETE on a hypertable with zero chunks.
 CREATE TABLE ht_zero_chunks(time timestamptz NOT NULL, v int);
@@ -392,21 +429,22 @@ SELECT create_hypertable('ht_zero_chunks', 'time');
 -----------------------------
  (2,public,ht_zero_chunks,t)
 
+VACUUM FREEZE ANALYZE ht_zero_chunks;
 :PREFIX UPDATE ht_zero_chunks SET v = 1 WHERE time = '2020-01-15';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.ht_zero_chunks (actual rows=0.00 loops=1)
-         ->  Index Scan using ht_zero_chunks_time_idx on public.ht_zero_chunks (actual rows=0.00 loops=1)
+         ->  Seq Scan on public.ht_zero_chunks (actual rows=0.00 loops=1)
                Output: 1, ctid
-               Index Cond: (ht_zero_chunks."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
+               Filter: (ht_zero_chunks."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
 
 :PREFIX DELETE FROM ht_zero_chunks WHERE time = '2020-01-15';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.ht_zero_chunks (actual rows=0.00 loops=1)
-         ->  Index Scan using ht_zero_chunks_time_idx on public.ht_zero_chunks (actual rows=0.00 loops=1)
+         ->  Seq Scan on public.ht_zero_chunks (actual rows=0.00 loops=1)
                Output: ctid
-               Index Cond: (ht_zero_chunks."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
+               Filter: (ht_zero_chunks."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
 
 :PREFIX UPDATE ht_zero_chunks SET v = 1 RETURNING ctid, xmin, tableoid::regclass, *;
 --- QUERY PLAN ---
@@ -436,6 +474,7 @@ SELECT create_hypertable('ht_dummy', 'time', chunk_time_interval => interval '1 
  (3,public,ht_dummy,t)
 
 INSERT INTO ht_dummy VALUES ('2020-01-15', 1);
+VACUUM FREEZE ANALYZE ht_dummy;
 :PREFIX UPDATE ht_dummy SET v = 99 WHERE 1 = 0;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
