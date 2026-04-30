@@ -347,6 +347,18 @@ extern Datum tsl_compressed_data_has_nulls(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_column_size(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_to_array(PG_FUNCTION_ARGS);
 
+static inline AttrNumber
+TupleDescGetAttrNumber(TupleDesc desc, const char *name)
+{
+	for (int i = 0; i < desc->natts; i++)
+	{
+		if (strcmp(name, NameStr(TupleDescAttr(desc, i)->attname)) == 0)
+			return TupleDescAttr(desc, i)->attnum;
+	}
+
+	return InvalidAttrNumber;
+}
+
 static void
 pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 {

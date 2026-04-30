@@ -1251,8 +1251,8 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 	if (ts_array_length(settings->fd.orderby) > 0)
 	{
 		AttrNumber attnum =
-			get_attnum(settings->fd.relid,
-					   ts_array_get_element_text(settings->fd.orderby, 1));
+			TupleDescGetAttrNumber(noncompressed_tupdesc,
+								   ts_array_get_element_text(settings->fd.orderby, 1));
 		if (AttributeNumberIsValid(attnum))
 			row_compressor->first_orderby_segment_info = segment_info_new(
 				TupleDescAttr(noncompressed_tupdesc, AttrNumberGetAttrOffset(attnum)));
