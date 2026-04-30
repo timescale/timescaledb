@@ -1387,9 +1387,9 @@ row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlo
 
 	if (first_ob)
 	{
-		MemoryContext seg_ctx = MemoryContextSwitchTo(row_compressor->per_row_ctx->parent);
+		MemoryContext old = MemoryContextSwitchTo(GetMemoryChunkContext(first_ob));
 		segment_info_update(first_ob, first_ob_val, first_ob_isnull);
-		MemoryContextSwitchTo(seg_ctx);
+		MemoryContextSwitchTo(old);
 	}
 
 	row_compressor_append_row(row_compressor, slot);
