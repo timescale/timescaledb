@@ -310,7 +310,6 @@ typedef struct RowCompressor
 	 * finish the current batch as soon as that value changes. NULL if the
 	 * table has no orderby column.
 	 */
-	int16 first_orderby_col_offset;
 	SegmentInfo *first_orderby_segment_info;
 } RowCompressor;
 
