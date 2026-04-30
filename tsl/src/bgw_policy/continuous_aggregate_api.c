@@ -49,10 +49,12 @@ policy_continuous_aggregate_get_mat_hypertable_id(const Jsonb *config)
 		ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_MAT_HYPERTABLE_ID, &found);
 
 	if (!found)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_SQL_JSON_MEMBER_NOT_FOUND),
 				 errmsg("could not find \"%s\" in config for job",
 						POL_REFRESH_CONF_KEY_MAT_HYPERTABLE_ID)));
+	}
 
 	return mat_hypertable_id;
 }
@@ -77,7 +79,9 @@ get_time_from_interval(const Dimension *dim, Datum interval, Oid type)
 		return ts_time_value_to_internal(res, partitioning_type);
 	}
 	else
+	{
 		elog(ERROR, "unsupported offset type for continuous aggregate policy");
+	}
 
 	pg_unreachable();
 
@@ -139,7 +143,9 @@ policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config, b
 	int64 res = get_time_from_config(dim, config, POL_REFRESH_CONF_KEY_END_OFFSET, end_isnull);
 
 	if (*end_isnull)
+	{
 		return ts_time_get_noend_or_max(ts_dimension_get_partition_type(dim));
+	}
 	return res;
 }
 
@@ -160,7 +166,9 @@ policy_refresh_cagg_get_buckets_per_batch(const Jsonb *config)
 	int32 res = ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH, &found);
 
 	if (!found)
+	{
 		res = DEFAULT_BUCKETS_PER_BATCH; /* default value */
+	}
 
 	return res;
 }
@@ -173,7 +181,9 @@ policy_refresh_cagg_get_max_batches_per_execution(const Jsonb *config)
 		ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION, &found);
 
 	if (!found)
+	{
 		res = DEFAULT_MAX_BATCHES_PER_EXECUTION; /* default value */
+	}
 
 	return res;
 }
@@ -185,7 +195,9 @@ policy_refresh_cagg_get_refresh_newest_first(const Jsonb *config)
 	bool res = ts_jsonb_get_bool_field(config, POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST, &found);
 
 	if (!found)
+	{
 		res = DEFAULT_REFRESH_NEWEST_FIRST; /* default value */
+	}
 
 	return res;
 }
@@ -197,7 +209,9 @@ policy_refresh_cagg_get_compress_after_refresh(const Jsonb *config)
 	bool res = ts_jsonb_get_bool_field(config, POL_REFRESH_CONF_KEY_COMPRESS_AFTER_REFRESH, &found);
 
 	if (!found)
+	{
 		res = DEFAULT_COMPRESS_AFTER_REFRESH; /* default value */
+	}
 
 	return res;
 }
@@ -209,16 +223,20 @@ policy_refresh_cagg_exists(int32 materialization_id)
 	Hypertable *mat_ht = ts_hypertable_get_by_id(materialization_id);
 
 	if (!mat_ht)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("configuration materialization hypertable id %d not found",
 						materialization_id)));
+	}
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
 														   FUNCTIONS_SCHEMA_NAME,
 														   materialization_id);
 	if (jobs == NIL)
+	{
 		return false;
+	}
 
 	return true;
 }
@@ -227,7 +245,9 @@ Datum
 policy_refresh_cagg_proc(PG_FUNCTION_ARGS)
 {
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
+	{
 		PG_RETURN_VOID();
+	}
 
 	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
@@ -283,25 +303,31 @@ convert_interval_arg(Oid dim_type, Datum interval, Oid *interval_type, const cha
 	Datum converted;
 
 	if (IS_TIMESTAMP_TYPE(dim_type))
+	{
 		convert_to = INTERVALOID;
+	}
 
 	if (*interval_type != convert_to)
 	{
 		if (!can_coerce_type(1, interval_type, &convert_to, COERCION_IMPLICIT))
 		{
 			if (IS_INTEGER_TYPE(dim_type))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("invalid parameter value for %s", str_msg),
 						 errhint("Use time interval of type %s with the continuous aggregate.",
 								 format_type_be(dim_type))));
+			}
 			else if (IS_TIMESTAMP_TYPE(dim_type))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("invalid parameter value for %s", str_msg),
 						 errhint("Use time interval with a continuous aggregate using "
 								 "timestamp-based time "
 								 "bucket.")));
+			}
 		}
 	}
 
@@ -331,9 +357,13 @@ convert_interval_arg(Oid dim_type, Datum interval, Oid *interval_type, const cha
 
 	/* Cap at min and max */
 	if (DatumGetInt64(converted) < ts_time_get_min(dim_type))
+	{
 		converted = ts_time_get_min(dim_type);
+	}
 	else if (DatumGetInt64(converted) > ts_time_get_max(dim_type))
+	{
 		converted = ts_time_get_max(dim_type);
+	}
 
 	/* Convert to the desired integer type */
 	switch (dim_type)
@@ -405,11 +435,17 @@ interval_to_int64(Datum interval, Oid type)
 			INT128 bigres = interval_to_int128(DatumGetIntervalP(interval));
 
 			if (int128_compare(bigres, int64_to_int128(max)) >= 0)
+			{
 				return max;
+			}
 			else if (int128_compare(bigres, int64_to_int128(min)) <= 0)
+			{
 				return min;
+			}
 			else
+			{
 				return int128_to_int64(bigres);
+			}
 		}
 		default:
 			break;
@@ -442,25 +478,35 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 	int64 bucket_width;
 
 	if (config->offset_start.isnull)
+	{
 		start_offset = ts_time_get_max(cagg->partition_type);
+	}
 	else
+	{
 		start_offset = interval_to_int64(config->offset_start.value, config->offset_start.type);
+	}
 
 	if (config->offset_end.isnull)
+	{
 		end_offset = ts_time_get_min(cagg->partition_type);
+	}
 	else
+	{
 		end_offset = interval_to_int64(config->offset_end.value, config->offset_end.type);
+	}
 
 	bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
 	Assert(bucket_width > 0);
 
 	if (ts_time_saturating_add(end_offset, bucket_width * 2, INT8OID) > start_offset)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("policy refresh window too small"),
 				 errdetail("The start and end offsets must cover at least"
 						   " two buckets in the valid time range of type \"%s\".",
 						   format_type_be(cagg->partition_type))));
+	}
 }
 
 static void
@@ -507,7 +553,9 @@ policy_refresh_cagg_check_if_last_policy(PolicyContinuousAggData *policy_data)
 	bool end_isnull = policy_data->refresh_window.end_isnull;
 
 	if (end_isnull)
+	{
 		return true;
+	}
 
 	Hypertable *mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 	const Dimension *dim = get_open_dimension_for_hypertable(mat_ht, true);
@@ -548,7 +596,9 @@ policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config
 	PolicyRefreshOffsetOverlapResult overlap_result = POLICY_REFRESH_OFFSET_OVERLAP_NONE;
 
 	if (jobs == NIL)
+	{
 		return overlap_result;
+	}
 
 	Hypertable *mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 	const Dimension *dim = get_open_dimension_for_hypertable(mat_ht, true);
@@ -574,7 +624,9 @@ policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config
 
 	TypeCacheEntry *typcache = lookup_type_cache(INT8RANGEOID, TYPECACHE_RANGE_INFO);
 	if (typcache == NULL || typcache->rngelemtype == NULL)
+	{
 		elog(ERROR, "cache lookup failed");
+	}
 
 	RangeType *range = make_range_compat(typcache, &lower, &upper, false, NULL);
 
@@ -652,10 +704,12 @@ policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config
 		int max_concurrent = existing_job_id ? 1 : 0;
 
 		if (list_length(jobs) > max_concurrent)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("multiple refresh policies are not supported for hierarchical "
 							"continuous aggregates")));
+		}
 	}
 
 	return overlap_result;
@@ -684,16 +738,22 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 
 	cagg = ts_continuous_agg_find_by_relid(cagg_oid);
 	if (!cagg)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(cagg_oid))));
+	}
 
 	if (!start_offset.isnull)
+	{
 		start_offset.isnull =
 			ts_if_offset_is_infinity(start_offset.value, start_offset_type, true /* is_start */);
+	}
 	if (!end_offset.isnull)
+	{
 		end_offset.isnull =
 			ts_if_offset_is_infinity(end_offset.value, end_offset_type, false /* is_start */);
+	}
 
 	parse_cagg_policy_config(cagg,
 							 start_offset_type,
@@ -716,40 +776,56 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 					   cagg->data.mat_hypertable_id);
 
 	if (!policyconf.offset_start.isnull)
+	{
 		json_add_dim_interval_value(parse_state,
 									POL_REFRESH_CONF_KEY_START_OFFSET,
 									policyconf.offset_start.type,
 									policyconf.offset_start.value);
+	}
 	else
+	{
 		ts_jsonb_add_null(parse_state, POL_REFRESH_CONF_KEY_START_OFFSET);
+	}
 
 	if (!policyconf.offset_end.isnull)
+	{
 		json_add_dim_interval_value(parse_state,
 									POL_REFRESH_CONF_KEY_END_OFFSET,
 									policyconf.offset_end.type,
 									policyconf.offset_end.value);
+	}
 	else
+	{
 		ts_jsonb_add_null(parse_state, POL_REFRESH_CONF_KEY_END_OFFSET);
+	}
 
 	if (!include_tiered_data.isnull)
+	{
 		ts_jsonb_add_bool(parse_state,
 						  POL_REFRESH_CONF_KEY_INCLUDE_TIERED_DATA,
 						  include_tiered_data.value);
+	}
 
 	if (!buckets_per_batch.isnull)
+	{
 		ts_jsonb_add_int32(parse_state,
 						   POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH,
 						   buckets_per_batch.value);
+	}
 
 	if (!max_batches_per_execution.isnull)
+	{
 		ts_jsonb_add_int32(parse_state,
 						   POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION,
 						   max_batches_per_execution.value);
+	}
 
 	if (!refresh_newest_first.isnull)
+	{
 		ts_jsonb_add_bool(parse_state,
 						  POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST,
 						  refresh_newest_first.value);
+	}
 
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
@@ -830,9 +906,11 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	cagg_oid = PG_GETARG_OID(0);
 
 	if (PG_ARGISNULL(3))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot use NULL refresh_schedule_interval")));
+	}
 
 	start_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	start_offset.value = PG_GETARG_DATUM(1);
@@ -861,11 +939,15 @@ policy_refresh_cagg_add(PG_FUNCTION_ARGS)
 	{
 		ts_bgw_job_validate_schedule_interval(&refresh_interval);
 		if (TIMESTAMP_NOT_FINITE(initial_start))
+		{
 			initial_start = ts_timer_get_current_timestamp();
+		}
 	}
 
 	if (timezone != NULL)
+	{
 		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(6));
+	}
 
 	retval = policy_refresh_cagg_add_internal(cagg_oid,
 											  start_offset_type,
@@ -897,9 +979,11 @@ policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists)
 	ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(cagg_oid);
 
 	if (!cagg)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(cagg_oid))));
+	}
 
 	ts_cagg_permissions_check(cagg_oid, GetUserId());
 	mat_htid = cagg->data.mat_hypertable_id;
@@ -909,10 +993,12 @@ policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists)
 	if (jobs == NIL)
 	{
 		if (!if_exists)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 (errmsg("continuous aggregate policy not found for \"%s\"",
 							 get_rel_name(cagg_oid)))));
+		}
 		else
 		{
 			ereport(NOTICE,

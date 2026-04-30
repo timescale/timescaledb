@@ -87,7 +87,9 @@ void
 batch_array_clear_all(BatchArray *array)
 {
 	for (int i = 0; i < array->n_batch_states; i++)
+	{
 		batch_array_clear_at(array, i);
+	}
 
 	Assert(bms_num_members(array->unused_batch_states) == array->n_batch_states);
 }
@@ -99,7 +101,9 @@ int
 batch_array_get_unused_slot(BatchArray *array)
 {
 	if (bms_is_empty(array->unused_batch_states))
+	{
 		batch_array_enlarge(array, array->n_batch_states * 2);
+	}
 
 	Assert(!bms_is_empty(array->unused_batch_states));
 

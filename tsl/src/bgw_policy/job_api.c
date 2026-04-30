@@ -53,12 +53,14 @@ validate_check_signature(Oid check)
 	proc = LookupFuncWithArgs(OBJECT_ROUTINE, object, true);
 
 	if (!OidIsValid(proc))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("function or procedure %s.%s(config jsonb) not found",
 						NameStr(check_schema),
 						NameStr(check_name)),
 				 errhint("The check function's signature must be (config jsonb).")));
+	}
 }
 
 /*
@@ -100,51 +102,67 @@ job_add(PG_FUNCTION_ARGS)
 	text *timezone = PG_ARGISNULL(7) ? NULL : PG_GETARG_TEXT_PP(7);
 	/* verify it's a valid timezone */
 	if (timezone != NULL)
+	{
 		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(7));
+	}
 	char *job_name_str = PG_ARGISNULL(8) ? NULL : text_to_cstring(PG_GETARG_TEXT_PP(8));
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (PG_ARGISNULL(0))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("function or procedure cannot be NULL")));
+	}
 
 	if (NULL == schedule_interval)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("schedule interval cannot be NULL")));
+	}
 
 	/* for fixed schedules, we use time_bucket in the calculation of next_start
 	 Therefore, we cannot allow schedule intervals containing both month and day components */
 	if (fixed_schedule)
+	{
 		ts_bgw_job_validate_schedule_interval(schedule_interval);
+	}
 
 	func_name = get_func_name(proc);
 	if (func_name == NULL)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("function or procedure with OID %u does not exist", proc)));
+	}
 
 	if (object_aclcheck(ProcedureRelationId, proc, owner, ACL_EXECUTE) != ACLCHECK_OK)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("permission denied for function \"%s\"", func_name),
 				 errhint("Job owner must have EXECUTE privilege on the function.")));
+	}
 
 	if (OidIsValid(check))
 	{
 		check_name_str = get_func_name(check);
 		if (check_name_str == NULL)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("function with OID %d does not exist", check)));
+		}
 
 		if (object_aclcheck(ProcedureRelationId, check, owner, ACL_EXECUTE) != ACLCHECK_OK)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 					 errmsg("permission denied for function \"%s\"", check_name_str),
 					 errhint("Job owner must have EXECUTE privilege on the function.")));
+		}
 
 		namestrcpy(&check_schema, get_namespace_name(get_func_namespace(check)));
 		namestrcpy(&check_name, check_name_str);
@@ -165,15 +183,21 @@ job_add(PG_FUNCTION_ARGS)
 
 	/* Next, insert a new job into jobs table */
 	if (job_name_str)
+	{
 		namestrcpy(&application_name, job_name_str);
+	}
 	else
+	{
 		namestrcpy(&application_name, "User-Defined Action");
+	}
 	namestrcpy(&proc_schema, get_namespace_name(get_func_namespace(proc)));
 	namestrcpy(&proc_name, func_name);
 
 	/* The check exists but may not have the expected signature: (config jsonb) */
 	if (OidIsValid(check))
+	{
 		validate_check_signature(check);
+	}
 
 	ts_bgw_job_run_config_check(check, 0, config);
 
@@ -195,7 +219,9 @@ job_add(PG_FUNCTION_ARGS)
 										valid_timezone);
 
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
+	{
 		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);
+	}
 
 	PG_RETURN_INT32(job_id);
 }
@@ -206,7 +232,9 @@ find_job(int32 job_id, bool null_job_id, bool missing_ok)
 	BgwJob *job;
 
 	if (null_job_id && !missing_ok)
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("job ID cannot be NULL")));
+	}
 
 	job = ts_bgw_job_find(job_id, CurrentMemoryContext, !missing_ok);
 
@@ -234,10 +262,12 @@ job_delete(PG_FUNCTION_ARGS)
 	job = find_job(job_id, PG_ARGISNULL(0), false);
 
 	if (!has_privs_of_role(GetUserId(), job->fd.owner))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("insufficient permissions to delete job owned by \"%s\"",
 						GetUserNameFromId(job->fd.owner, false))));
+	}
 
 	ts_bgw_job_delete_by_id(job_id);
 
@@ -316,36 +346,54 @@ job_alter(PG_FUNCTION_ARGS)
 	char *valid_timezone = NULL;
 	/* verify it's a valid timezone */
 	if (timezone != NULL)
+	{
 		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(12));
+	}
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	/* check that caller accepts tuple and abort early if that is not the
 	 * case */
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
+	}
 
 	job = find_job(job_id, PG_ARGISNULL(0), if_exists);
 	if (job == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 
 	ts_bgw_job_permission_check(job, "alter");
 
 	if (!PG_ARGISNULL(1))
+	{
 		job->fd.schedule_interval = *PG_GETARG_INTERVAL_P(1);
+	}
 	if (!PG_ARGISNULL(2))
+	{
 		job->fd.max_runtime = *PG_GETARG_INTERVAL_P(2);
+	}
 	if (!PG_ARGISNULL(3))
+	{
 		job->fd.max_retries = PG_GETARG_INT32(3);
+	}
 	if (!PG_ARGISNULL(4))
+	{
 		job->fd.retry_period = *PG_GETARG_INTERVAL_P(4);
+	}
 	if (!PG_ARGISNULL(5))
+	{
 		job->fd.scheduled = PG_GETARG_BOOL(5);
+	}
 	if (!PG_ARGISNULL(6))
+	{
 		job->fd.config = PG_GETARG_JSONB_P(6);
+	}
 
 	if (!PG_ARGISNULL(9))
 	{
@@ -353,16 +401,20 @@ job_alter(PG_FUNCTION_ARGS)
 		{
 			check_name_str = get_func_name(check);
 			if (check_name_str == NULL)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
 						 errmsg("function with OID %d does not exist", check)));
+			}
 
 			if (object_aclcheck(ProcedureRelationId, check, GetUserId(), ACL_EXECUTE) !=
 				ACLCHECK_OK)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 						 errmsg("permission denied for function \"%s\"", check_name_str),
 						 errhint("Job owner must have EXECUTE privilege on the function.")));
+			}
 
 			namestrcpy(&check_schema, get_namespace_name(get_func_namespace(check)));
 			namestrcpy(&check_name, check_name_str);
@@ -380,11 +432,13 @@ job_alter(PG_FUNCTION_ARGS)
 		}
 	}
 	else
+	{
 		snprintf(schema_qualified_check_name,
 				 sizeof(schema_qualified_check_name) / sizeof(schema_qualified_check_name[0]),
 				 "%s.%s",
 				 NameStr(job->fd.check_schema),
 				 NameStr(job->fd.check_name));
+	}
 
 	/*
 	 * If the CAgg refresh policy job is being altered, then always check for overlap.
@@ -481,15 +535,21 @@ job_alter(PG_FUNCTION_ARGS)
 							job_id);
 
 		if (name_len >= NAMEDATALEN)
+		{
 			ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("application name too long.")));
+		}
 
 		namestrcpy(&job->fd.application_name, app_name);
 	}
 
 	if (valid_timezone != NULL)
+	{
 		job->fd.timezone = cstring_to_text(valid_timezone);
+	}
 	else
+	{
 		job->fd.timezone = NULL;
+	}
 	/* it's also possible to alter the fields initial_start and timezone without
 	 * specifying fixed_schedule. In that case, update them and also update the
 	 * next_start accordingly.
@@ -530,13 +590,19 @@ job_alter(PG_FUNCTION_ARGS)
 	}
 
 	if (!PG_ARGISNULL(7))
+	{
 		ts_bgw_job_stat_upsert_next_start(job_id, PG_GETARG_TIMESTAMPTZ(7));
+	}
 
 	stat = ts_bgw_job_stat_find(job_id);
 	if (stat != NULL)
+	{
 		next_start = stat->fd.next_start;
+	}
 	else
+	{
 		next_start = DT_NOBEGIN;
+	}
 
 	tupdesc = BlessTupleDesc(tupdesc);
 	values[0] = Int32GetDatum(job->fd.id);
@@ -547,18 +613,28 @@ job_alter(PG_FUNCTION_ARGS)
 	values[5] = BoolGetDatum(job->fd.scheduled);
 
 	if (job->fd.config == NULL)
+	{
 		nulls[6] = true;
+	}
 	else
+	{
 		values[6] = JsonbPGetDatum(job->fd.config);
+	}
 
 	values[7] = TimestampTzGetDatum(next_start);
 
 	if (unregister_check)
+	{
 		nulls[8] = true;
+	}
 	else if (strlen(NameStr(job->fd.check_schema)) > 0)
+	{
 		values[8] = CStringGetTextDatum(schema_qualified_check_name);
+	}
 	else
+	{
 		nulls[8] = true;
+	}
 
 	/* values/nulls[9]: fixed_schedule */
 	values[9] = job->fd.fixed_schedule;
@@ -568,12 +644,18 @@ job_alter(PG_FUNCTION_ARGS)
 		nulls[10] = true;
 	}
 	else
+	{
 		values[10] = TimestampTzGetDatum(job->fd.initial_start);
+	}
 	/* values/nulls[11]: timezone */
 	if (valid_timezone)
+	{
 		values[11] = CStringGetTextDatum(valid_timezone);
+	}
 	else
+	{
 		nulls[11] = true;
+	}
 
 	values[12] = NameGetDatum(&job->fd.application_name);
 
@@ -591,18 +673,22 @@ get_hypertable_from_oid(Cache **hcache, Oid table_oid)
 		const char *view_name = get_rel_name(table_oid);
 
 		if (!view_name)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("relation is not a hypertable or continuous aggregate")));
+		}
 		else
 		{
 			ContinuousAgg *ca = ts_continuous_agg_find_by_relid(table_oid);
 
 			if (!ca)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
 						 errmsg("relation \"%s\" is not a hypertable or continuous aggregate",
 								view_name)));
+			}
 			hypertable = ts_hypertable_get_by_id(ca->data.mat_hypertable_id);
 		}
 	}
@@ -621,7 +707,9 @@ job_alter_set_hypertable_id(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	BgwJob *job = find_job(job_id, PG_ARGISNULL(0), false /* missing_ok */);
 	if (job == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 
 	ts_bgw_job_permission_check(job, "alter");
 
@@ -634,6 +722,8 @@ job_alter_set_hypertable_id(PG_FUNCTION_ARGS)
 	job->fd.hypertable_id = (ht != NULL ? ht->fd.id : 0);
 	ts_bgw_job_update_by_id(job_id, job);
 	if (hcache)
+	{
 		ts_cache_release(&hcache);
+	}
 	PG_RETURN_INT32(job_id);
 }

@@ -185,14 +185,18 @@ can_skip_constraint_check(Hypertable *ht, TupleDesc tupledesc)
 	 */
 	Assert(tupledesc->constr->num_check >= ht->space->num_dimensions);
 	if (tupledesc->constr && tupledesc->constr->num_check != ht->space->num_dimensions)
+	{
 		return false;
+	}
 
 	for (int i = 0; i < tupledesc->natts; i++)
 	{
 		Form_pg_attribute att = TupleDescAttr(tupledesc, i);
 
 		if (att->attisdropped)
+		{
 			continue;
+		}
 
 		/*
 		 * If we have NOT NULL constraints on non-partitioning columns, we cannot skip
@@ -201,7 +205,9 @@ can_skip_constraint_check(Hypertable *ht, TupleDesc tupledesc)
 		if (att->attnotnull)
 		{
 			if (ts_is_partitioning_column_name(ht, att->attname))
+			{
 				continue;
+			}
 
 			return false;
 		}
@@ -298,7 +304,9 @@ TSCopyMultiInsertBufferInit(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis
 			{
 				Chunk *chunk = ts_chunk_get_by_id(cis->chunk_id, true);
 				if (!ts_chunk_is_unordered(chunk))
+				{
 					ts_chunk_set_unordered(chunk);
+				}
 			}
 			cis->columnstore_insert = true;
 			break;
@@ -377,7 +385,9 @@ TSCopyMultiInsertInfoIsFull(TSCopyMultiInsertInfo *miinfo)
 {
 	if (miinfo->bufferedTuples >= MAX_BUFFERED_TUPLES ||
 		miinfo->bufferedBytes >= MAX_BUFFERED_BYTES)
+	{
 		return true;
+	}
 
 	return false;
 }
@@ -453,7 +463,9 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 	for (i = 0; i < nused; i++)
 	{
 		if (cstate != NULL)
+		{
 			cstate->cur_lineno = buffer->linenos[i];
+		}
 		/*
 		 * If there are any indexes, update them for all the inserted tuples,
 		 * and run AFTER ROW INSERT triggers.
@@ -504,7 +516,9 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 														   NULL,
 														   false);
 			if (should_free)
+			{
 				heap_freetuple(tuple);
+			}
 		}
 
 		ExecClearTuple(slots[i]);
@@ -553,7 +567,9 @@ TSCopyMultiInsertBufferCleanup(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertB
 
 			/* Since we only create slots on demand, just drop the non-null ones. */
 			for (i = 0; i < MAX_BUFFERED_TUPLES && buffer->slots[i] != NULL; i++)
+			{
 				ExecDropSingleTupleTableSlot(buffer->slots[i]);
+			}
 
 			FreeTupleDesc(buffer->tupdesc);
 			break;
@@ -620,7 +636,9 @@ TSCopyMultiInsertInfoFlush(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cur_
 
 	/* Sorting is only needed if we want to remove the least used buffers */
 	if (buffers_to_delete > 0)
+	{
 		list_sort(buffer_list, TSCmpBuffersByUsage);
+	}
 
 	/* Flush buffers and delete them if needed */
 	foreach (lc, buffer_list)
@@ -721,7 +739,9 @@ TSCopyMultiInsertInfoStore(TSCopyMultiInsertInfo *miinfo, ResultRelInfo *rri,
 	 * the members like the line number or the size of the tuple.
 	 */
 	if (cstate != NULL)
+	{
 		lineno = cstate->cur_lineno;
+	}
 	buffer->linenos[buffer->nused] = lineno;
 
 	/* Record this slot as being used */
@@ -796,9 +816,11 @@ choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resul
 				(errmsg("Using normal unbuffered copy operation (TS_CIM_SINGLE) "
 						"because triggers are defined on the destination table.")));
 		if (ts_guc_enable_direct_compress_copy)
+		{
 			ereport(WARNING,
 					(errmsg("disabling direct compress copy due to presence of triggers on the "
 							"destination table")));
+		}
 		return TS_CIM_SINGLE;
 	}
 
@@ -859,29 +881,39 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	if (ccstate->rel->rd_rel->relkind != RELKIND_RELATION)
 	{
 		if (ccstate->rel->rd_rel->relkind == RELKIND_VIEW)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy to view \"%s\"", RelationGetRelationName(ccstate->rel))));
+		}
 		else if (ccstate->rel->rd_rel->relkind == RELKIND_MATVIEW)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy to materialized view \"%s\"",
 							RelationGetRelationName(ccstate->rel))));
+		}
 		else if (ccstate->rel->rd_rel->relkind == RELKIND_FOREIGN_TABLE)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy to foreign table \"%s\"",
 							RelationGetRelationName(ccstate->rel))));
+		}
 		else if (ccstate->rel->rd_rel->relkind == RELKIND_SEQUENCE)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy to sequence \"%s\"",
 							RelationGetRelationName(ccstate->rel))));
+		}
 		else
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 					 errmsg("cannot copy to non-table relation \"%s\"",
 							RelationGetRelationName(ccstate->rel))));
+		}
 	}
 
 	/*----------
@@ -976,13 +1008,17 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	 * state in this case.
 	 */
 	if (ccstate->cstate)
+	{
 		ccstate->cstate->transition_capture =
 			MakeTransitionCaptureState(ccstate->rel->trigdesc,
 									   RelationGetRelid(ccstate->rel),
 									   CMD_INSERT);
+	}
 
 	if (ccstate->where_clause)
+	{
 		qualexpr = ExecInitQual(castNode(List, ccstate->where_clause), NULL);
+	}
 
 	/*
 	 * Check BEFORE STATEMENT insertion triggers. It's debatable whether we
@@ -1038,7 +1074,9 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 			reset_count = 0;
 		}
 		else
+		{
 			reset_count++;
+		}
 
 		myslot = singleslot;
 		Assert(myslot != NULL);
@@ -1049,7 +1087,9 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		ExecClearTuple(myslot);
 
 		if (!ccstate->next_copy_from(ccstate, econtext, myslot->tts_values, myslot->tts_isnull))
+		{
 			break;
+		}
 
 		ExecStoreVirtualTuple(myslot);
 
@@ -1084,7 +1124,9 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		 * visible to the triggers.
 		 */
 		if (insertMethod != buffer->method)
+		{
 			TSCopyMultiInsertInfoFlush(&multiInsertInfo, cis);
+		}
 
 		/*
 		 * If we're capturing transition tuples, save the original tuple in
@@ -1094,18 +1136,24 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		 * See PostgreSQL's CopyFrom in copyfrom.c.
 		 */
 		if (ccstate->cstate && ccstate->cstate->transition_capture != NULL)
+		{
 			ccstate->cstate->transition_capture->tcs_original_insert_tuple = myslot;
+		}
 
 		/* Convert the tuple to match the chunk's rowtype */
 		if (buffer->method == TS_CIM_SINGLE)
 		{
 			if (NULL != cis->hyper_to_chunk_map)
+			{
 				myslot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, myslot, cis->slot);
+			}
 		}
 		else if (buffer->method == TS_CIM_COMPRESSION)
 		{
 			if (NULL != cis->hyper_to_chunk_map)
+			{
 				myslot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, myslot, cis->slot);
+			}
 		}
 		else
 		{
@@ -1120,7 +1168,9 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 														  buffer);
 
 			if (NULL != cis->hyper_to_chunk_map)
+			{
 				myslot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, myslot, batchslot);
+			}
 			else
 			{
 				/*
@@ -1139,7 +1189,9 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		{
 			econtext->ecxt_scantuple = myslot;
 			if (!ExecQual(qualexpr, econtext))
+			{
 				continue;
+			}
 		}
 
 		/*
@@ -1157,7 +1209,9 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 		/* BEFORE ROW INSERT Triggers */
 		if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_before_row)
+		{
 			skip_tuple = !ExecBRInsertTriggers(estate, resultRelInfo, myslot);
+		}
 
 		if (!skip_tuple)
 		{
@@ -1170,7 +1224,9 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 			/* Compute stored generated columns */
 			if (resultRelInfo->ri_RelationDesc->rd_att->constr &&
 				resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
+			{
 				ExecComputeStoredGenerated(resultRelInfo, estate, myslot, CMD_INSERT);
+			}
 
 			/*
 			 * If the target is a plain table, check the constraints of
@@ -1194,6 +1250,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 								   bistate);
 
 				if (resultRelInfo->ri_NumIndices > 0)
+				{
 					recheckIndexes = ExecInsertIndexTuplesCompat(resultRelInfo,
 																 myslot,
 																 estate,
@@ -1202,15 +1259,18 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 																 NULL,
 																 NIL,
 																 false);
+				}
 				/* AFTER ROW INSERT Triggers. We do not need to do this if we
 				 * are migrating data from an existing table in a call from
 				 * create_hypertable(). */
 				if (ccstate->cstate)
+				{
 					ExecARInsertTriggers(estate,
 										 resultRelInfo,
 										 myslot,
 										 recheckIndexes,
 										 ccstate->cstate->transition_capture);
+				}
 			}
 			else if (buffer->method == TS_CIM_COMPRESSION)
 			{
@@ -1263,11 +1323,15 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 	/* Flush any remaining buffered tuples */
 	if (insertMethod != TS_CIM_SINGLE)
+	{
 		TSCopyMultiInsertInfoFlushAndCleanup(&multiInsertInfo);
+	}
 
 	/* Done, clean up */
 	if (ccstate->cstate && callback)
+	{
 		error_context_stack = errcallback.previous;
+	}
 
 	FreeBulkInsertState(bistate);
 
@@ -1281,7 +1345,9 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	 * create_hypertable().
 	 */
 	if (ccstate->cstate)
+	{
 		ExecASInsertTriggers(estate, resultRelInfo, ccstate->cstate->transition_capture);
+	}
 
 	/* Handle queued AFTER triggers */
 	AfterTriggerEndQuery(estate);
@@ -1296,7 +1362,9 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	 * indexes since those use WAL anyway)
 	 */
 	if (!RelationNeedsWAL(ccstate->rel))
+	{
 		smgrimmedsync(RelationGetSmgr(ccstate->rel), MAIN_FORKNUM);
+	}
 
 	return processed;
 }
@@ -1326,7 +1394,9 @@ timescaledb_CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 			Form_pg_attribute attr = TupleDescAttr(tupDesc, i);
 
 			if (attr->attisdropped)
+			{
 				continue;
+			}
 			attnums = lappend_int(attnums, i + 1);
 		}
 	}
@@ -1348,7 +1418,9 @@ timescaledb_CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 				Form_pg_attribute attr = TupleDescAttr(tupDesc, i);
 
 				if (attr->attisdropped)
+				{
 					continue;
+				}
 				if (namestrcmp(&(attr->attname), name) == 0)
 				{
 					attnum = attr->attnum;
@@ -1358,21 +1430,27 @@ timescaledb_CopyGetAttnums(TupleDesc tupDesc, Relation rel, List *attnamelist)
 			if (attnum == InvalidAttrNumber)
 			{
 				if (rel != NULL)
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_COLUMN),
 							 errmsg("column \"%s\" of relation \"%s\" does not exist",
 									name,
 									RelationGetRelationName(rel))));
+				}
 				else
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_UNDEFINED_COLUMN),
 							 errmsg("column \"%s\" does not exist", name)));
+				}
 			}
 			/* Check for duplicates */
 			if (list_member_int(attnums, attnum))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_DUPLICATE_COLUMN),
 						 errmsg("column \"%s\" specified more than once", name)));
+			}
 			attnums = lappend_int(attnums, attnum);
 		}
 	}
@@ -1439,7 +1517,9 @@ copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 	xactReadOnly = GetConfigOptionByName("transaction_read_only", NULL, false);
 
 	if (strncmp(xactReadOnly, "on", sizeof("on")) == 0 && !rel->rd_islocaltemp)
+	{
 		PreventCommandIfReadOnly("COPY FROM");
+	}
 	PreventCommandIfParallelMode("COPY FROM");
 }
 
@@ -1459,21 +1539,27 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	if (!pipe && !superuser())
 	{
 		if (stmt->is_program)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 					 errmsg("must be superuser to COPY to or from an external program"),
 					 errhint("Anyone can COPY to stdout or from stdin. "
 							 "psql's \\copy command also works for anyone.")));
+		}
 		else
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 					 errmsg("must be superuser to COPY to or from a file"),
 					 errhint("Anyone can COPY to stdout or from stdin. "
 							 "psql's \\copy command also works for anyone.")));
+		}
 	}
 
 	if (!stmt->is_from || NULL == stmt->relation)
+	{
 		elog(ERROR, "timescale DoCopy should only be called for COPY FROM");
+	}
 
 	Assert(!stmt->query);
 
@@ -1535,7 +1621,9 @@ next_copy_from_table_to_chunks(CopyChunkState *ccstate, ExprContext *econtext, D
 	tuple = heap_getnext(scandesc, ForwardScanDirection);
 
 	if (!HeapTupleIsValid(tuple))
+	{
 		return false;
+	}
 
 	heap_deform_tuple(tuple, RelationGetDescr(ccstate->rel), values, nulls);
 
@@ -1593,7 +1681,9 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 	table_close(rel, lockmode);
 
 	if (MemoryContextIsValid(copycontext))
+	{
 		MemoryContextDelete(copycontext);
+	}
 
 	ExecuteTruncate(&stmt);
 }

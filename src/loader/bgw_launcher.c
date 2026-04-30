@@ -142,11 +142,13 @@ static void
 report_bgw_limit_exceeded(DbHashEntry *entry)
 {
 	if (entry->state_transition_failures == 0)
+	{
 		ereport(LOG,
 				(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
 				 errmsg("TimescaleDB background worker limit of %d exceeded",
 						ts_guc_max_background_workers),
 				 errhint("Consider increasing timescaledb.max_background_workers.")));
+	}
 	entry->state_transition_failures++;
 }
 
@@ -154,11 +156,13 @@ static void
 report_error_on_worker_register_failure(DbHashEntry *entry)
 {
 	if (entry->state_transition_failures == 0)
+	{
 		ereport(LOG,
 				(errcode(ERRCODE_INSUFFICIENT_RESOURCES),
 				 errmsg("no available background worker slots"),
 				 errhint("Consider increasing max_worker_processes in tandem with "
 						 "timescaledb.max_background_workers.")));
+	}
 	entry->state_transition_failures++;
 }
 
@@ -178,16 +182,22 @@ get_background_worker_pid(BackgroundWorkerHandle *handle, pid_t *pidp)
 	pid_t pid;
 
 	if (handle == NULL)
+	{
 		status = BGWH_STOPPED;
+	}
 	else
 	{
 		status = GetBackgroundWorkerPid(handle, &pid);
 		if (pidp != NULL)
+		{
 			*pidp = pid;
+		}
 	}
 
 	if (status == BGWH_POSTMASTER_DIED)
+	{
 		bgw_on_postmaster_death();
+	}
 	return status;
 }
 
@@ -197,9 +207,13 @@ wait_for_background_worker_startup(BackgroundWorkerHandle *handle, pid_t *pidp)
 	BgwHandleStatus status;
 
 	if (handle == NULL)
+	{
 		status = BGWH_STOPPED;
+	}
 	else
+	{
 		status = WaitForBackgroundWorkerStartup(handle, pidp);
+	}
 
 	/*
 	 * We don't care whether we get BGWH_STOPPED or BGWH_STARTED here, because
@@ -209,7 +223,9 @@ wait_for_background_worker_startup(BackgroundWorkerHandle *handle, pid_t *pidp)
 	 */
 
 	if (status == BGWH_POSTMASTER_DIED)
+	{
 		bgw_on_postmaster_death();
+	}
 
 	Assert(status == BGWH_STOPPED || status == BGWH_STARTED);
 }
@@ -220,13 +236,19 @@ wait_for_background_worker_shutdown(BackgroundWorkerHandle *handle)
 	BgwHandleStatus status;
 
 	if (handle == NULL)
+	{
 		status = BGWH_STOPPED;
+	}
 	else
+	{
 		status = WaitForBackgroundWorkerShutdown(handle);
+	}
 
 	/* We can only ever get BGWH_STOPPED stopped unless the Postmaster died. */
 	if (status == BGWH_POSTMASTER_DIED)
+	{
 		bgw_on_postmaster_death();
+	}
 
 	Assert(status == BGWH_STOPPED);
 }
@@ -235,16 +257,22 @@ static void
 terminate_background_worker(BackgroundWorkerHandle *handle)
 {
 	if (handle == NULL)
+	{
 		return;
+	}
 	else
+	{
 		TerminateBackgroundWorker(handle);
+	}
 }
 
 static bool
 check_scheduler_restart_time(int *newval, void **extra, GucSource source)
 {
 	if (*newval == -1 || *newval >= 10)
+	{
 		return true;
+	}
 	GUC_check_errdetail("Scheduler restart time must be be either -1 or at least 10 seconds.");
 	return false;
 }
@@ -306,7 +334,9 @@ register_entrypoint_for_db(Oid db_id, VirtualTransactionId vxid, BackgroundWorke
 	 * case PostgreSQL changes it. Compiler should optimize this away if they
 	 * are the same. */
 	if (restart_time_sec == -1)
+	{
 		restart_time_sec = BGW_NEVER_RESTART;
+	}
 
 	memset(&worker, 0, sizeof(worker));
 	snprintf(worker.bgw_type, BGW_MAXLEN, TS_BGW_TYPE_SCHEDULER);
@@ -438,7 +468,9 @@ terminate_backends_by_backend_type(const char *backend_type)
 		{
 			int error = ts_signal_backend(beentry->st_procpid, SIGTERM);
 			if (error)
+			{
 				elog(LOG, "failed to terminate backend with pid %d", beentry->st_procpid);
+			}
 		}
 	}
 }
@@ -474,8 +506,10 @@ populate_database_htab(HTAB *db_htab)
 		Form_pg_database pgdb = (Form_pg_database) GETSTRUCT(tup);
 
 		if (!pgdb->datallowconn || pgdb->datistemplate)
+		{
 			continue; /* don't bother with dbs that don't allow
 					   * connections or are templates */
+		}
 		db_hash_entry_create_if_not_exists(db_htab, pgdb->oid);
 	}
 	table_endscan(scan);
@@ -591,14 +625,18 @@ scheduler_state_trans_automatic(DbHashEntry *entry)
 		case ENABLED:
 			scheduler_state_trans_enabled_to_allocated(entry);
 			if (entry->state == ALLOCATED)
+			{
 				scheduler_state_trans_allocated_to_started(entry);
+			}
 			break;
 		case ALLOCATED:
 			scheduler_state_trans_allocated_to_started(entry);
 			break;
 		case STARTED:
 			if (get_background_worker_pid(entry->db_scheduler_handle, NULL) == BGWH_STOPPED)
+			{
 				scheduler_state_trans_started_to_disabled(entry);
+			}
 			break;
 		case DISABLED:
 			break;
@@ -613,7 +651,9 @@ scheduler_state_trans_automatic_all(HTAB *db_htab)
 
 	hash_seq_init(&hash_seq, db_htab);
 	while ((current_entry = hash_seq_search(&hash_seq)) != NULL)
+	{
 		scheduler_state_trans_automatic(current_entry);
+	}
 }
 
 /* This is called when we're going to shut down so we don't leave things messy*/
@@ -675,7 +715,9 @@ message_start_action(HTAB *db_htab, BgwMessage *message)
 	entry = db_hash_entry_create_if_not_exists(db_htab, message->db_oid);
 
 	if (entry->state == DISABLED)
+	{
 		scheduler_state_trans_disabled_to_enabled(entry);
+	}
 
 	scheduler_state_trans_automatic(entry);
 
@@ -767,7 +809,9 @@ launcher_handle_message(HTAB *db_htab)
 	AckResult action_result = ACK_FAILURE;
 
 	if (message == NULL)
+	{
 		return false;
+	}
 
 	sender = BackendPidGetProc(message->sender_pid);
 	if (sender == NULL)
@@ -889,7 +933,9 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 		handled_msgs = launcher_handle_message(db_htab);
 		scheduler_state_trans_automatic_all(db_htab);
 		if (handled_msgs)
+		{
 			continue;
+		}
 
 		wl_rc = WaitLatch(MyLatch,
 						  WL_LATCH_SET | WL_POSTMASTER_DEATH | WL_TIMEOUT,
@@ -897,7 +943,9 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 						  PG_WAIT_EXTENSION);
 		ResetLatch(MyLatch);
 		if (wl_rc & WL_POSTMASTER_DEATH)
+		{
 			bgw_on_postmaster_death();
+		}
 
 		if (got_SIGHUP)
 		{
@@ -925,24 +973,30 @@ database_checks(void)
 
 	tuple = SearchSysCache1(DATABASEOID, ObjectIdGetDatum(MyDatabaseId));
 	if (!HeapTupleIsValid(tuple))
+	{
 		ereport(ERROR,
 				(errmsg("TimescaleDB background worker failed to find entry for database in "
 						"syscache")));
+	}
 
 	pgdb = (Form_pg_database) GETSTRUCT(tuple);
 
 	if (!pgdb->datallowconn)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("background worker \"%s\" trying to connect to database that does not "
 						"allow connections, exiting",
 						MyBgworkerEntry->bgw_name)));
+	}
 
 	if (pgdb->datistemplate)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("background worker \"%s\" trying to connect to template database, exiting",
 						MyBgworkerEntry->bgw_name)));
+	}
 
 	ReleaseSysCache(tuple);
 }
@@ -965,7 +1019,9 @@ process_settings(Oid databaseid)
 	Snapshot snapshot;
 
 	if (!IsUnderPostmaster)
+	{
 		return;
+	}
 
 	/*
 	 * Force the restoring placeholder's reset_val to "off". The worker may
@@ -1022,7 +1078,9 @@ get_versioned_scheduler()
 		process_settings(MyDatabaseId);
 		ts_installed = ts_loader_extension_exists();
 		if (ts_installed)
+		{
 			strlcpy(version, ts_loader_extension_version(), MAX_VERSION_LEN);
+		}
 
 		ts_loader_extension_check();
 		CommitTransactionCommand();
@@ -1033,9 +1091,11 @@ get_versioned_scheduler()
 			versioned_scheduler_main =
 				load_external_function(soname, BGW_DB_SCHEDULER_FUNCNAME, false, NULL);
 			if (versioned_scheduler_main == NULL)
+			{
 				ereport(ERROR,
 						(errmsg("TimescaleDB version %s does not have a background worker, exiting",
 								soname)));
+			}
 		}
 	}
 	PG_CATCH();
@@ -1084,7 +1144,9 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	(void) GetTransactionSnapshot();
 	memcpy(&vxid, MyBgworkerEntry->bgw_extra, sizeof(VirtualTransactionId));
 	if (VirtualTransactionIdIsValid(vxid))
+	{
 		VirtualXactLock(vxid, true);
+	}
 	CommitTransactionCommand();
 
 	/*
@@ -1095,6 +1157,8 @@ ts_bgw_db_scheduler_entrypoint(PG_FUNCTION_ARGS)
 	 */
 	PGFunction versioned_scheduler_main = get_versioned_scheduler();
 	if (versioned_scheduler_main)
+	{
 		DirectFunctionCall1(versioned_scheduler_main, ObjectIdGetDatum(InvalidOid));
+	}
 	PG_RETURN_VOID();
 }

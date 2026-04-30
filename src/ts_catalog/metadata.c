@@ -34,7 +34,9 @@ convert_type_to_text(Datum value, Oid from_type)
 	getTypeOutputInfo(from_type, &outfunc, &is_varlena);
 
 	if (!OidIsValid(outfunc))
+	{
 		TYPE_ERROR("output", from_type);
+	}
 
 	return DirectFunctionCall1(textin, OidFunctionCall1(outfunc, value));
 }
@@ -48,7 +50,9 @@ convert_text_to_type(Datum value, Oid to_type)
 	getTypeInputInfo(to_type, &value_in, &value_ioparam);
 
 	if (!OidIsValid(value_in))
+	{
 		TYPE_ERROR("input", to_type);
+	}
 
 	value = OidFunctionCall3(value_in,
 							 CStringGetDatum(TextDatumGetCString(value)),
@@ -78,7 +82,9 @@ metadata_tuple_get_value(TupleInfo *ti, void *data)
 	dv->value = slot_getattr(ti->slot, Anum_metadata_value, &dv->isnull);
 
 	if (!dv->isnull)
+	{
 		dv->value = convert_text_to_type(dv->value, dv->typeid);
+	}
 
 	return SCAN_DONE;
 }
@@ -112,7 +118,9 @@ metadata_get_value_internal(const char *key, Oid value_type, bool *isnull, LOCKM
 	ts_scanner_scan(&scanctx);
 
 	if (NULL != isnull)
+	{
 		*isnull = dv.isnull;
+	}
 
 	return dv.value;
 }
@@ -215,7 +223,9 @@ get_uuid_by_key(const char *key)
 	uuid = ts_metadata_get_value(key, UUIDOID, &isnull);
 
 	if (isnull)
+	{
 		uuid = ts_metadata_insert(key, UUIDPGetDatum(ts_uuid_create()), UUIDOID, true);
+	}
 	return uuid;
 }
 
@@ -240,10 +250,12 @@ ts_metadata_get_install_timestamp(void)
 	timestamp = ts_metadata_get_value(METADATA_TIMESTAMP_KEY_NAME, TIMESTAMPTZOID, &isnull);
 
 	if (isnull)
+	{
 		timestamp = ts_metadata_insert(METADATA_TIMESTAMP_KEY_NAME,
 									   TimestampTzGetDatum(GetCurrentTimestamp()),
 									   TIMESTAMPTZOID,
 									   true);
+	}
 
 	return timestamp;
 }

@@ -76,7 +76,9 @@ chunk_index_choose_name(const char *tabname, const char *main_index_name, Oid na
 		idxname = makeObjectName(tabname, main_index_name, label);
 
 		if (!OidIsValid(get_relname_relid(idxname, namespaceid)))
+		{
 			break;
+		}
 
 		/* found a conflict, so try a new name component */
 		pfree(idxname);
@@ -95,11 +97,15 @@ adjust_expr_attnos(Oid ht_relid, IndexInfo *ii, Relation chunkrel)
 
 	/* Get a list of references to all Vars in the expression */
 	if (ii->ii_Expressions != NIL)
+	{
 		vars = list_concat(vars, pull_var_clause((Node *) ii->ii_Expressions, 0));
+	}
 
 	/* Get a list of references to all Vars in the predicate */
 	if (ii->ii_Predicate != NIL)
+	{
 		vars = list_concat(vars, pull_var_clause((Node *) ii->ii_Predicate, 0));
+	}
 
 	foreach (lc, vars)
 	{
@@ -122,7 +128,9 @@ chunk_adjust_colref_attnos(IndexInfo *ii, Oid ht_relid, Relation chunkrel)
 	{
 		/* zeroes indicate expressions */
 		if (ii->ii_IndexAttrNumbers[i] == 0)
+		{
 			continue;
+		}
 		/* we must not use get_attname on the index here as the index column names
 		 * are independent of parent relation column names. Instead we need to look
 		 * up the attno of the referenced hypertable column and do the matching
@@ -152,7 +160,9 @@ ts_adjust_indexinfo_attnos(IndexInfo *indexinfo, Oid ht_relid, Relation chunkrel
 	chunk_adjust_colref_attnos(indexinfo, ht_relid, chunkrel);
 
 	if (indexinfo->ii_Expressions || indexinfo->ii_Predicate)
+	{
 		adjust_expr_attnos(ht_relid, indexinfo, chunkrel);
+	}
 }
 
 #define CHUNK_INDEX_TABLESPACE_OFFSET 1
@@ -173,7 +183,9 @@ chunk_index_select_tablespace(int32 hypertable_id, Relation chunkrel)
 													   CHUNK_INDEX_TABLESPACE_OFFSET);
 
 	if (NULL != tspc)
+	{
 		tablespace_oid = tspc->tablespace_oid;
+	}
 
 	return tablespace_oid;
 }
@@ -186,9 +198,13 @@ ts_chunk_index_get_tablespace(int32 hypertable_id, Relation template_indexrel, R
 	 * if not set, select one at an offset from the chunk's tablespace.
 	 */
 	if (OidIsValid(template_indexrel->rd_rel->reltablespace))
+	{
 		return template_indexrel->rd_rel->reltablespace;
+	}
 	else
+	{
 		return chunk_index_select_tablespace(hypertable_id, chunkrel);
+	}
 }
 
 /*
@@ -210,7 +226,9 @@ chunk_relation_index_create(Relation htrel, Relation template_indexrel, Relation
 	 * hypertable or on a relation with the same physical layout as chunkrel.
 	 */
 	if (IndexGetRelation(template_indexrel->rd_id, false) != htrel->rd_id)
+	{
 		skip_mapping = true;
+	}
 
 	/*
 	 * Convert the IndexInfo's attnos to match the chunk instead of the
@@ -218,7 +236,9 @@ chunk_relation_index_create(Relation htrel, Relation template_indexrel, Relation
 	 */
 	if (!skip_mapping &&
 		chunk_index_need_attnos_adjustment(RelationGetDescr(htrel), RelationGetDescr(chunkrel)))
+	{
 		ts_adjust_indexinfo_attnos(indexinfo, htrel->rd_id, chunkrel);
+	}
 
 	hypertable_id = ts_hypertable_relid_to_id(htrel->rd_id);
 	Assert(hypertable_id != INVALID_HYPERTABLE_ID);
@@ -250,9 +270,11 @@ ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_ind
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(RelationGetRelid(template_indexrel)));
 
 	if (!HeapTupleIsValid(tuple))
+	{
 		elog(ERROR,
 			 "cache lookup failed for index relation %u",
 			 RelationGetRelid(template_indexrel));
+	}
 
 	reloptions = SysCacheGetAttr(RELOID, tuple, Anum_pg_class_reloptions, &isnull);
 
@@ -267,15 +289,23 @@ ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_ind
 										get_rel_name(RelationGetRelid(template_indexrel)),
 										get_rel_namespace(RelationGetRelid(chunkrel)));
 	if (OidIsValid(index_tablespace))
+	{
 		tablespace = index_tablespace;
+	}
 	else
+	{
 		tablespace = ts_chunk_index_get_tablespace(hypertable_id, template_indexrel, chunkrel);
+	}
 
 	/* assign flags for index creation and constraint creation */
 	if (isconstraint)
+	{
 		flags |= INDEX_CREATE_ADD_CONSTRAINT;
+	}
 	if (template_indexrel->rd_index->indisprimary)
+	{
 		flags |= INDEX_CREATE_IS_PRIMARY;
+	}
 
 	chunk_indexrelid = index_create_compat(chunkrel,
 										   indexname,
@@ -314,7 +344,9 @@ chunk_index_find_matching(Relation chunk_rel, Oid ht_indexoid)
 	{
 		Oid indexoid = lfirst_oid(lc);
 		if (ts_indexing_compare(indexoid, ht_indexoid))
+		{
 			return indexoid;
+		}
 	}
 	list_free(indexlist);
 	return InvalidOid;
@@ -382,7 +414,9 @@ ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk
 
 	/* Foreign table chunks don't support indexes */
 	if (chunk_relkind == RELKIND_FOREIGN_TABLE)
+	{
 		return;
+	}
 
 	Assert(chunk_relkind == RELKIND_RELATION);
 
@@ -435,7 +469,9 @@ ts_chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid)
 	{
 		Chunk *chunk = lfirst(lc);
 		if (!OidIsValid(chunk->table_id))
+		{
 			continue;
+		}
 
 		Relation chunk_rel = table_open(chunk->table_id, AccessShareLock);
 		Oid chunk_indexrelid =
@@ -484,7 +520,9 @@ ts_chunk_index_rename(Hypertable *ht, Oid hypertable_indexrelid, const char *ht_
 	{
 		Chunk *chunk = lfirst(lc);
 		if (!OidIsValid(chunk->table_id))
+		{
 			continue;
+		}
 
 		Relation chunk_rel = table_open(chunk->table_id, AccessExclusiveLock);
 		Oid chunk_indexrelid =
@@ -610,7 +648,9 @@ ts_chunk_index_duplicate(Oid src_chunkrelid, Oid dest_chunkrelid, List **src_ind
 	table_close(src_chunk_rel, NoLock);
 
 	if (src_index_oids != NULL)
+	{
 		*src_index_oids = index_oids;
+	}
 
 	return new_index_oids;
 }
@@ -630,7 +670,9 @@ ts_chunk_index_move_all(Oid chunk_relid, Oid index_tblspc)
 
 	/* Foreign table chunks don't support indexes */
 	if (chunk_relkind == RELKIND_FOREIGN_TABLE)
+	{
 		return;
+	}
 
 	Assert(chunk_relkind == RELKIND_RELATION);
 

@@ -66,7 +66,9 @@ static Node *
 map_varnos_mutator(Node *node, map_varnos_context *context)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 	if (IsA(node, Var))
 	{
 		Var *var = (Var *) node;
@@ -80,7 +82,9 @@ map_varnos_mutator(Node *node, map_varnos_context *context)
 			newvar->varno = new_varno;
 			/* If the syntactic referent is same RTE, fix it too */
 			if (newvar->varnosyn == (Index) var->varno)
+			{
 				newvar->varnosyn = newvar->varno;
+			}
 
 			return (Node *) newvar;
 		}
@@ -127,20 +131,30 @@ flatten_qual(Node *node, CollectQualsContext *ctx)
 	qual = (Node *) canonicalize_qual((Expr *) qual, false);
 	qual = (Node *) make_ands_implicit((Expr *) qual);
 	if (qual && IsA(qual, List))
+	{
 		ctx->quals = list_concat(ctx->quals, (List *) qual);
+	}
 	else if (qual)
+	{
 		ctx->quals = lappend(ctx->quals, qual);
+	}
 }
 
 static bool
 collect_quals_walker(Node *node, CollectQualsContext *context)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 	if (IsA(node, FromExpr))
+	{
 		flatten_qual(((FromExpr *) node)->quals, context);
+	}
 	else if (IsA(node, JoinExpr))
+	{
 		flatten_qual(((JoinExpr *) node)->quals, context);
+	}
 
 	return expression_tree_walker(node, collect_quals_walker, context);
 }
@@ -152,9 +166,13 @@ collect_flattened_quals(Node *node)
 {
 	CollectQualsContext ctx = { .quals = NULL };
 	if (IsA(node, FromExpr))
+	{
 		collect_quals_walker(node, &ctx);
+	}
 	else
+	{
 		flatten_qual(node, &ctx);
+	}
 
 	return ctx.quals;
 }
@@ -169,24 +187,36 @@ match_expr(Node *expr1, Node *expr2)
 		RangeTblEntry *rte2 = castNode(RangeTblEntry, expr2);
 		if (rte1->relkind == rte2->relkind && rte1->relkind == RELKIND_VIEW &&
 			rte1->relid == rte2->relid)
+		{
 			return true;
+		}
 		if (rte1->rtekind != rte2->rtekind || rte1->relid != rte2->relid)
+		{
 			return false;
+		}
 		if (rte1->rtekind == RTE_RELATION)
+		{
 			return true;
+		}
 		else if (rte1->rtekind == RTE_SUBQUERY)
 		{
 			return (rte1->lateral == rte2->lateral && rte1->inFromCl == rte2->inFromCl &&
 					equal(rte1->subquery, rte2->subquery));
 		}
 		else
+		{
 			return equal(rte1, rte2);
+		}
 	}
 	/* Time buckets are matched separately */
 	else if (ts_is_time_bucket_function((Expr *) expr1))
+	{
 		return true;
+	}
 	else if (equal(expr1, expr2))
+	{
 		return true;
+	}
 	/* Check for equivalent OpExprs like "a=5" and "5=a" or "a<b" and "b>a" */
 	else if (IsA(expr1, OpExpr) && IsA(expr2, OpExpr))
 	{
@@ -198,7 +228,9 @@ match_expr(Node *expr1, Node *expr2)
 		{
 			Oid pred_op = get_commutator(op1->opno);
 			if (OidIsValid(pred_op) && pred_op == op2->opno)
+			{
 				return true;
+			}
 		}
 	}
 
@@ -228,7 +260,9 @@ match_lists(List *src, List *tgt)
 			}
 		}
 		if (!match)
+		{
 			return false;
+		}
 	}
 	return true;
 }
@@ -258,9 +292,11 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 	{
 		cagg_rewrite_ctx->eligible = false;
 		if (ts_guc_cagg_rewrites_debug_info)
+		{
 			appendStringInfo(&(cagg_rewrite_ctx->msg),
 							 "no continuous aggregates defined on %s",
 							 cagg_rewrite_ctx->ht_name.data);
+		}
 		return;
 	}
 
@@ -268,9 +304,11 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 	{
 		cagg_rewrite_ctx->eligible = false;
 		if (ts_guc_cagg_rewrites_debug_info)
+		{
 			appendStringInfo(&(cagg_rewrite_ctx->msg),
 							 "invalidated ranges are present in hypertable %s",
 							 cagg_rewrite_ctx->ht_name.data);
+		}
 		return;
 	}
 
@@ -381,7 +419,9 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 				RangeTblEntry *qrte = lfirst_node(RangeTblEntry, lq);
 #if PG18_GE
 				if (qrte->rtekind == RTE_GROUP)
+				{
 					break;
+				}
 #endif
 				bool found = false;
 				int vrti = 0;
@@ -393,7 +433,9 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 						found = true;
 						varno_map->attnums[qrti] = vrti;
 						if (qrti != vrti)
+						{
 							same_join_order = false;
+						}
 						break;
 					}
 					++vrti;
@@ -421,7 +463,9 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 
 		Query *newquery = (Query *) copyObject(query);
 		if (varno_map)
+		{
 			newquery = (Query *) map_varnos((Node *) newquery, varno_map);
+		}
 
 		bool timebucket_only = (list_length(newquery->groupClause) == 1);
 		/* have to match group expressions */
@@ -512,7 +556,9 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 		{
 			TargetEntry *tle = (TargetEntry *) lfirst(lsrc);
 			if (tle->resjunk)
+			{
 				continue;
+			}
 			Node *new_entry = ts_replace_tlist_expr((Node *) tle, itlist, 1, 0);
 			if (!new_entry)
 			{
@@ -520,11 +566,15 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 				break;
 			}
 			else
+			{
 				new_tlist = lappend(new_tlist, new_entry);
+			}
 		}
 
 		if (new_tlist)
+		{
 			newquery->targetList = new_tlist;
+		}
 		else
 		{
 			add_optional_debug_info(cagg,
@@ -536,7 +586,9 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 		/* Found matching CAgg: rewrite query with it if asked */
 		cagg_rewrite_ctx->cagg = cagg;
 		if (!do_rewrite)
+		{
 			return;
+		}
 
 		/* rewrite the query with Cagg:
 		 * TLEs are already rewritten,
@@ -575,7 +627,9 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 		{
 			TargetEntry *tle = lfirst_node(TargetEntry, lv);
 			if (tle->resjunk)
+			{
 				continue;
+			}
 			newrte->eref->colnames = lappend(newrte->eref->colnames, makeString(tle->resname));
 			attno = list_length(newrte->eref->colnames) - FirstLowInvalidHeapAttributeNumber;
 			perminfo->selectedCols = bms_add_member(perminfo->selectedCols, attno);
@@ -585,7 +639,9 @@ match_query_to_cagg(CaggRewriteContext *cagg_rewrite_ctx, Query *query, bool do_
 			TargetEntry *tle = lfirst_node(TargetEntry, lq);
 			tle->resorigtbl = newrte->relid;
 			if (IsA(tle->expr, Var))
+			{
 				tle->resorigcol = castNode(Var, tle->expr)->varattno;
+			}
 		}
 
 		RangeTblRef *rtr = makeNode(RangeTblRef);
@@ -670,7 +726,9 @@ static bool
 rewrite_query_with_caggs(Node *node, RewriteWithCaggsContext *context)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	/* FROM subquery can be a Cagg (user or internal) view: don't rewrite it with Caggs in this case
 	 */
@@ -692,10 +750,14 @@ rewrite_query_with_caggs(Node *node, RewriteWithCaggsContext *context)
 				{
 					/* Enter Cagg view query*/
 					if (!OidIsValid(context->cagg_relid))
+					{
 						context->cagg_relid = cagg->relid;
+					}
 					/* Leave the same Cagg view query */
 					else if (context->cagg_relid == cagg->relid)
+					{
 						context->cagg_relid = InvalidOid;
+					}
 				}
 			}
 		}
@@ -732,7 +794,9 @@ rewrite_query_with_caggs(Node *node, RewriteWithCaggsContext *context)
 			Hypertable *ht;
 
 			if (cagg_rewrite_ctx.eligible)
+			{
 				check_query_rtes_for_cagg_rewrites(&cagg_rewrite_ctx, rte);
+			}
 
 			if (cagg_rewrite_ctx.eligible && rte->rtekind == RTE_RELATION)
 			{
@@ -740,7 +804,9 @@ rewrite_query_with_caggs(Node *node, RewriteWithCaggsContext *context)
 
 				/* Record hypertable in case query will be eligible for Cagg rewrites */
 				if (ht)
+				{
 					cagg_rewrite_ctx.ht = ht;
+				}
 			}
 		}
 
@@ -748,8 +814,10 @@ rewrite_query_with_caggs(Node *node, RewriteWithCaggsContext *context)
 		{
 			cagg_rewrite_ctx.eligible = false;
 			if (ts_guc_cagg_rewrites_debug_info)
+			{
 				appendStringInfoString(&cagg_rewrite_ctx.msg,
 									   "at least one hypertable should be used in the query");
+			}
 		}
 
 		/* Found a hypertable, check that time bucket is valid and on hypertable time dimension */
@@ -823,46 +891,64 @@ rewrite_query_with_caggs(Node *node, RewriteWithCaggsContext *context)
 		 * If CAgg rewrites are disabled we will do match without rewriting, for debug info.
 		 */
 		if (cagg_rewrite_ctx.eligible)
+		{
 			match_query_to_cagg(&cagg_rewrite_ctx, query, ts_guc_enable_cagg_rewrites);
+		}
 
 		if (cagg_rewrite_ctx.cagg && ts_guc_enable_cagg_rewrites)
+		{
 			context->rewritten_with_caggs = true;
+		}
 
 		if (!OidIsValid(context->cagg_relid) && ts_guc_cagg_rewrites_debug_info)
 		{
 			StringInfoData query_label;
 			initStringInfo(&query_label);
 			if (context->is_root_query)
+			{
 				appendStringInfoString(&query_label, "Query");
+			}
 			else if (context->subquery_alias)
+			{
 				appendStringInfo(&query_label, "Subquery \"%s\"", context->subquery_alias);
+			}
 			else
+			{
 				appendStringInfo(&query_label, "Sublink");
+			}
 
 			if (cagg_rewrite_ctx.cagg)
 			{
 				if (ts_guc_enable_cagg_rewrites)
+				{
 					elog(INFO,
 						 "%s was rewritten with Cagg \"%s.%s\"",
 						 query_label.data,
 						 NameStr(cagg_rewrite_ctx.cagg->data.user_view_schema),
 						 NameStr(cagg_rewrite_ctx.cagg->data.user_view_name));
+				}
 				else
+				{
 					elog(INFO,
 						 "%s can be rewritten with Cagg \"%s.%s\"",
 						 query_label.data,
 						 NameStr(cagg_rewrite_ctx.cagg->data.user_view_schema),
 						 NameStr(cagg_rewrite_ctx.cagg->data.user_view_name));
+				}
 			}
 			else
+			{
 				elog(INFO,
 					 "%s cannot be rewritten with CAggs: %s",
 					 query_label.data,
 					 cagg_rewrite_ctx.msg.data);
+			}
 		}
 
 		if (context->is_root_query)
+		{
 			context->is_root_query = false;
+		}
 		context->subquery_alias = NULL;
 
 		ret = query_tree_walker(query,

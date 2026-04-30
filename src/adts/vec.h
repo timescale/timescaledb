@@ -109,7 +109,9 @@ VEC_RESERVE(VEC_TYPE *vec, uint32 additional)
 
 	/* this doesn't handle integer overflow or >MaxAllocSize allocations */
 	if (num_new_elements == 0 || vec->num_elements + num_new_elements <= vec->max_elements)
+	{
 		return;
+	}
 
 	num_elements = vec->num_elements + num_new_elements;
 	if (num_new_elements < vec->num_elements)
@@ -121,11 +123,13 @@ VEC_RESERVE(VEC_TYPE *vec, uint32 additional)
 	if (num_elements >= max_element_limit)
 	{
 		if (vec->num_elements + num_new_elements >= max_element_limit)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 					 errmsg("vector allocation overflow when trying to allocate %ld bytes",
 							(long) ((vec->num_elements + num_new_elements) *
 									sizeof(VEC_ELEMENT_TYPE)))));
+		}
 
 		/* Clamp num_elements to max allocation size if they can fit*/
 		num_elements = max_element_limit;
@@ -136,9 +140,13 @@ VEC_RESERVE(VEC_TYPE *vec, uint32 additional)
 
 	num_bytes = vec->max_elements * sizeof(VEC_ELEMENT_TYPE);
 	if (vec->data == NULL)
+	{
 		vec->data = MemoryContextAlloc(vec->ctx, num_bytes);
+	}
 	else
+	{
 		vec->data = repalloc(vec->data, num_bytes);
+	}
 }
 
 /*
@@ -152,7 +160,9 @@ VEC_INIT(VEC_TYPE *vec, MemoryContext ctx, uint32 nelements)
 		.ctx = ctx,
 	};
 	if (nelements > 0)
+	{
 		VEC_RESERVE(vec, nelements);
+	}
 }
 
 /*
@@ -172,7 +182,9 @@ VEC_SCOPE void
 VEC_FREE_DATA(VEC_TYPE *vec)
 {
 	if (vec->data != NULL)
+	{
 		pfree(vec->data);
+	}
 	/* zero out all the vec data except the memory context so it can be reused */
 	*vec = (VEC_TYPE){
 		.ctx = vec->ctx,
@@ -184,7 +196,9 @@ VEC_SCOPE void
 VEC_FREE(VEC_TYPE *vec)
 {
 	if (vec == NULL)
+	{
 		return;
+	}
 	VEC_FREE_DATA(vec);
 	pfree(vec);
 }
@@ -252,9 +266,13 @@ VEC_SCOPE void
 VEC_DELETE_RANGE(VEC_TYPE *vec, uint32 start, uint32 len)
 {
 	if (start > vec->num_elements)
+	{
 		elog(ERROR, "trying to delete starting past the end of a vector");
+	}
 	if (start + (uint64) len > (uint64) vec->num_elements)
+	{
 		elog(ERROR, "trying to delete past the end of a vector");
+	}
 
 	if (start + (uint64) len < (uint64) vec->num_elements)
 	{

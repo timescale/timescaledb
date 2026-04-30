@@ -105,7 +105,9 @@ ts_cagg_jobs_refresh_ranges_delete_by_pid(int32 materialization_id, int32 pid)
 		Assert(!isnull);
 
 		if (DatumGetInt32(pid_datum) == pid)
+		{
 			ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+		}
 	}
 	ts_scan_iterator_close(&iterator);
 }
@@ -201,7 +203,9 @@ ts_cagg_jobs_refresh_ranges_lock_and_register(int32 materialization_id, int64 st
 	UnregisterSnapshot(iterator.ctx.snapshot);
 
 	if (overlap_found)
+	{
 		return false;
+	}
 
 	ts_cagg_jobs_refresh_ranges_insert(materialization_id, start_range, end_range, pid, job_id);
 	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_registration");

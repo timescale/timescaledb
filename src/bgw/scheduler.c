@@ -341,10 +341,14 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			 */
 			mark_job_as_started(sjob);
 			if (ts_bgw_job_has_timeout(&sjob->job))
+			{
 				sjob->timeout_at =
 					ts_bgw_job_timeout_at(&sjob->job, ts_timer_get_current_timestamp());
+			}
 			else
+			{
 				sjob->timeout_at = DT_NOEND;
+			}
 
 			PopActiveSnapshot();
 			CommitTransactionCommand();
@@ -394,7 +398,9 @@ on_failure_to_start_job(ScheduledBgwJob *sjob)
 	{
 		/* restore the original next_start to maintain priority (it is unset during mark_start) */
 		if (sjob->next_start != DT_NOBEGIN)
+		{
 			ts_bgw_job_stat_set_next_start(sjob->job.fd.id, sjob->next_start);
+		}
 		ErrorData *edata = makeJobErrorData(sjob, JOB_FAILURE_TO_START);
 		mark_job_as_ended(sjob,
 						  JOB_FAILURE_TO_START,
@@ -438,11 +444,15 @@ scheduled_ts_bgw_job_start(ScheduledBgwJob *sjob,
 	scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_STARTED);
 
 	if (sjob->state != JOB_STATE_STARTED)
+	{
 		return;
+	}
 
 	Assert(sjob->handle != NULL);
 	if (bgw_register != NULL)
+	{
 		bgw_register(sjob->handle, scheduler_mctx);
+	}
 
 	status = WaitForBackgroundWorkerStartup(sjob->handle, &pid);
 	switch (status)
@@ -486,7 +496,9 @@ terminate_and_cleanup_job(ScheduledBgwJob *sjob)
 				pg_usleep(100000); /* 100ms */
 				status = GetBackgroundWorkerPid(sjob->handle, &pid);
 				if (status == BGWH_STOPPED)
+				{
 					break;
+				}
 			}
 
 			if (status != BGWH_STOPPED)
@@ -548,7 +560,9 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 
 			/* reload the scheduling information from the job_stats */
 			if (cur_sjob->state == JOB_STATE_SCHEDULED)
+			{
 				scheduled_bgw_job_transition_state_to(new_sjob, JOB_STATE_SCHEDULED);
+			}
 
 			cur_ptr = lnext(cur_jobs_list, cur_ptr);
 			new_ptr = lnext(new_jobs, new_ptr);
@@ -572,7 +586,9 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 		ListCell *ptr;
 
 		for_each_cell (ptr, cur_jobs_list, cur_ptr)
+		{
 			terminate_and_cleanup_job(lfirst(ptr));
+		}
 	}
 
 	if (new_ptr != NULL)
@@ -581,7 +597,9 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 		ListCell *ptr;
 
 		for_each_cell (ptr, new_jobs, new_ptr)
+		{
 			scheduled_bgw_job_transition_state_to(lfirst(ptr), JOB_STATE_SCHEDULED);
+		}
 	}
 
 	/* Free the old list */
@@ -596,7 +614,9 @@ void
 ts_populate_scheduled_job_tuple(ScheduledBgwJob *sjob, Datum *values)
 {
 	if (sjob == NULL)
+	{
 		return;
+	}
 
 	values[0] = Int32GetDatum(sjob->job.fd.id);
 	values[1] = NameGetDatum(&sjob->job.fd.application_name);
@@ -618,10 +638,14 @@ cmp_next_start(const ListCell *left_cell, const ListCell *right_cell)
 	ScheduledBgwJob *right_sjob = lfirst(right_cell);
 
 	if (left_sjob->next_start < right_sjob->next_start)
+	{
 		return -1;
+	}
 
 	if (left_sjob->next_start > right_sjob->next_start)
+	{
 		return 1;
+	}
 
 	return 0;
 }
@@ -680,7 +704,9 @@ earliest_wakeup_to_start_next_job()
 			/* if the start is less than now, this means we tried and failed to start it already, so
 			 * use the retry period */
 			if (start < now)
+			{
 				start = TimestampTzPlusMilliseconds(now, START_RETRY_MS);
+			}
 			earliest = least_timestamp(earliest, start);
 		}
 	}
@@ -699,7 +725,9 @@ earliest_job_timeout()
 		ScheduledBgwJob *sjob = lfirst(lc);
 
 		if (sjob->state == JOB_STATE_STARTED)
+		{
 			earliest = least_timestamp(earliest, sjob->timeout_at);
+		}
 	}
 	return earliest;
 }
@@ -725,7 +753,9 @@ terminate_all_jobs_and_release_workers()
 		 * transition.
 		 */
 		if (sjob->handle != NULL)
+		{
 			TerminateBackgroundWorker(sjob->handle);
+		}
 
 		if (sjob->reserved_worker)
 		{
@@ -745,7 +775,9 @@ wait_for_all_jobs_to_shutdown()
 		ScheduledBgwJob *sjob = lfirst(lc);
 
 		if (sjob->state == JOB_STATE_STARTED || sjob->state == JOB_STATE_TERMINATING)
+		{
 			WaitForBackgroundWorkerShutdown(sjob->handle);
+		}
 	}
 }
 
@@ -762,7 +794,9 @@ check_for_stopped_and_timed_out_jobs()
 		TimestampTz now = ts_timer_get_current_timestamp();
 
 		if (sjob->state != JOB_STATE_STARTED && sjob->state != JOB_STATE_TERMINATING)
+		{
 			continue;
+		}
 
 		status = GetBackgroundWorkerPid(sjob->handle, &pid);
 
@@ -849,7 +883,9 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 	jobs_list_needs_update = false;
 
 	if (run_for_interval_ms > 0)
+	{
 		quit_time = TimestampTzPlusMilliseconds(start, run_for_interval_ms);
+	}
 
 	elog(DEBUG1, "database scheduler for database %u starting", MyDatabaseId);
 
@@ -911,7 +947,9 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 
 #ifdef TS_DEBUG
 	if (ts_shutdown_bgw)
+	{
 		elog(WARNING, "bgw scheduler stopped due to shutdown_bgw guc");
+	}
 #endif
 
 scheduler_exit:

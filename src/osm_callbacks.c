@@ -37,13 +37,17 @@ ts_get_osm_chunk_insert_hook()
 	if (ptr)
 	{
 		if (ptr->version_num == 1)
+		{
 			return ptr->chunk_insert_check_hook;
+		}
 	}
 	else
 	{
 		OsmCallbacks *ptr_old = ts_get_osm_callbacks_old();
 		if (ptr_old)
+		{
 			return ptr_old->chunk_insert_check_hook;
+		}
 	}
 	return NULL;
 }
@@ -55,13 +59,17 @@ ts_get_osm_hypertable_drop_hook()
 	if (ptr)
 	{
 		if (ptr->version_num == 1)
+		{
 			return ptr->hypertable_drop_hook;
+		}
 	}
 	else
 	{
 		OsmCallbacks *ptr_old = ts_get_osm_callbacks_old();
 		if (ptr_old)
+		{
 			return ptr_old->hypertable_drop_hook;
+		}
 	}
 	return NULL;
 }
@@ -71,6 +79,8 @@ ts_get_osm_hypertable_drop_chunks_hook()
 {
 	OsmCallbacks_Versioned *ptr = ts_get_osm_callbacks();
 	if (ptr && ptr->version_num == 1)
+	{
 		return ptr->hypertable_drop_chunks_hook;
+	}
 	return NULL;
 }

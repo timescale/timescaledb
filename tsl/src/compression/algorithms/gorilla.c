@@ -135,7 +135,9 @@ gorilla_compressor_append_float(Compressor *compressor, Datum val)
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	uint64 value = float_get_bits(DatumGetFloat4(val));
 	if (extended->internal == NULL)
+	{
 		extended->internal = gorilla_compressor_alloc();
+	}
 
 	gorilla_compressor_append_value(extended->internal, value);
 }
@@ -146,7 +148,9 @@ gorilla_compressor_append_double(Compressor *compressor, Datum val)
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	uint64 value = double_get_bits(DatumGetFloat8(val));
 	if (extended->internal == NULL)
+	{
 		extended->internal = gorilla_compressor_alloc();
+	}
 
 	gorilla_compressor_append_value(extended->internal, value);
 }
@@ -156,7 +160,9 @@ gorilla_compressor_append_int16(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = gorilla_compressor_alloc();
+	}
 
 	gorilla_compressor_append_value(extended->internal, (uint16) DatumGetInt16(val));
 }
@@ -166,7 +172,9 @@ gorilla_compressor_append_int32(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = gorilla_compressor_alloc();
+	}
 
 	gorilla_compressor_append_value(extended->internal, (uint32) DatumGetInt32(val));
 }
@@ -176,7 +184,9 @@ gorilla_compressor_append_int64(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = gorilla_compressor_alloc();
+	}
 
 	gorilla_compressor_append_value(extended->internal, DatumGetInt64(val));
 }
@@ -186,7 +196,9 @@ gorilla_compressor_append_null_value(Compressor *compressor)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = gorilla_compressor_alloc();
+	}
 
 	gorilla_compressor_append_null(extended->internal);
 }
@@ -311,7 +323,9 @@ tsl_gorilla_compressor_append(PG_FUNCTION_ARGS)
 	}
 
 	if (PG_ARGISNULL(1))
+	{
 		compressor->append_null(compressor);
+	}
 	else
 	{
 		compressor->append_val(compressor, PG_GETARG_DATUM(1));
@@ -328,12 +342,16 @@ tsl_gorilla_compressor_finish(PG_FUNCTION_ARGS)
 	Compressor *compressor = (Compressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 
 	if (compressor == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 
 	void *compressed = compressor->finish(compressor);
 
 	if (compressed == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 
 	PG_RETURN_POINTER(compressed);
 }
@@ -359,7 +377,9 @@ gorilla_compressor_append_value(GorillaCompressor *compressor, uint64 val)
 	has_values = !simple8brle_compressor_is_empty(&compressor->bits_used_per_xor);
 
 	if (has_values && xor == 0)
+	{
 		simple8brle_compressor_append(&compressor->tag0s, 0);
+	}
 	else
 	{
 		/* leftmost/rightmost 1 is not well-defined when all the bits in the number
@@ -413,17 +433,23 @@ compressed_gorilla_data_serialize(CompressedGorillaData *input)
 	char *data;
 	GorillaCompressed *compressed;
 	if (input->header->has_nulls)
+	{
 		nulls_size = simple8brle_serialized_total_size(input->nulls);
+	}
 
 	compressed_size = sizeof(GorillaCompressed) + tags0s_size + tags1s_size + leading_zeros_size +
 					  bits_used_per_xor_size + xors_size;
 	if (input->header->has_nulls)
+	{
 		compressed_size += nulls_size;
+	}
 
 	if (!AllocSizeIsValid(compressed_size))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
+	}
 
 	data = palloc0(compressed_size);
 	compressed = (GorillaCompressed *) data;
@@ -452,7 +478,9 @@ compressed_gorilla_data_serialize(CompressedGorillaData *input)
 											 &compressed->bits_used_in_last_xor_bucket);
 
 	if (input->header->has_nulls)
+	{
 		data = bytes_serialize_simple8b_and_advance(data, nulls_size, input->nulls);
+	}
 	return compressed;
 }
 
@@ -467,7 +495,9 @@ gorilla_compressor_finish(GorillaCompressor *compressor)
 	CompressedGorillaData data = { .header = &header };
 	data.tag0s = simple8brle_compressor_finish(&compressor->tag0s);
 	if (data.tag0s == NULL)
+	{
 		return NULL;
+	}
 
 	data.tag1s = simple8brle_compressor_finish(&compressor->tag1s);
 	Assert(data.tag1s != NULL);
@@ -507,7 +537,9 @@ compressed_gorilla_data_init_from_stringinfo(CompressedGorillaData *expanded, St
 	expanded->header = (GorillaCompressed *) consumeCompressedData(si, sizeof(GorillaCompressed));
 
 	if (expanded->header->compression_algorithm != COMPRESSION_ALGORITHM_GORILLA)
+	{
 		elog(ERROR, "unknown compression algorithm");
+	}
 
 	bool has_nulls = expanded->header->has_nulls == 1;
 
@@ -527,9 +559,13 @@ compressed_gorilla_data_init_from_stringinfo(CompressedGorillaData *expanded, St
 									   expanded->header->bits_used_in_last_xor_bucket);
 
 	if (has_nulls)
+	{
 		expanded->nulls = bytes_deserialize_simple8b_and_advance(si);
+	}
 	else
+	{
 		expanded->nulls = NULL;
+	}
 }
 
 static void
@@ -569,8 +605,10 @@ gorilla_iterator_init_from_expanded_forward(GorillaDecompressionIterator *iterat
 
 	iterator->has_nulls = iterator->gorilla_data.nulls != NULL;
 	if (iterator->has_nulls)
+	{
 		simple8brle_decompression_iterator_init_forward(&iterator->nulls,
 														iterator->gorilla_data.nulls);
+	}
 }
 
 DecompressionIterator *
@@ -754,7 +792,9 @@ gorilla_decompression_iterator_from_datum_reverse(Datum gorilla_compressed, Oid 
 
 	iter->has_nulls = iter->gorilla_data.nulls != NULL;
 	if (iter->has_nulls)
+	{
 		simple8brle_decompression_iterator_init_reverse(&iter->nulls, iter->gorilla_data.nulls);
+	}
 
 	/* we need to know how many bits are used, even if the last value didn't store them */
 	iter->prev_leading_zeroes =
@@ -780,9 +820,11 @@ gorilla_decompression_iterator_try_next_reverse_internal(GorillaDecompressionIte
 			simple8brle_decompression_iterator_try_next_reverse(&iter->nulls);
 
 		if (null.is_done)
+		{
 			return (DecompressResultInternal){
 				.is_done = true,
 			};
+		}
 
 		if ((null.val & 1) != 0)
 		{
@@ -797,19 +839,25 @@ gorilla_decompression_iterator_try_next_reverse_internal(GorillaDecompressionIte
 	tag0 = simple8brle_decompression_iterator_try_next_reverse(&iter->tag0s);
 	/* if we don't have a null bitset, this will determine when we're done */
 	if (tag0.is_done)
+	{
 		return (DecompressResultInternal){
 			.is_done = true,
 		};
+	}
 
 	if (tag0.val == 0)
+	{
 		return (DecompressResultInternal){
 			.val = val,
 		};
+	}
 
 	xor = bit_array_iter_next_rev(&iter->xors, iter->prev_xor_bits_used);
 
 	if (iter->prev_leading_zeroes + iter->prev_xor_bits_used < 64)
+	{
 		xor <<= 64 - (iter->prev_leading_zeroes + iter->prev_xor_bits_used);
+	}
 	iter->prev_val ^= xor;
 
 	tag1 = simple8brle_decompression_iterator_try_next_reverse(&iter->tag1s);
@@ -958,7 +1006,9 @@ gorilla_compressed_send(CompressedDataHeader *header, StringInfo buf)
 	simple8brle_serialized_send(buf, data.num_bits_used_per_xor);
 	bit_array_send(buf, &data.xors);
 	if (data.header->has_nulls)
+	{
 		simple8brle_serialized_send(buf, data.nulls);
+	}
 }
 
 Datum
@@ -980,7 +1030,9 @@ gorilla_compressed_recv(StringInfo buf)
 	data.xors = bit_array_recv(buf);
 
 	if (header.has_nulls)
+	{
 		data.nulls = simple8brle_serialized_recv(buf);
+	}
 
 	PG_RETURN_POINTER(compressed_gorilla_data_serialize(&data));
 }

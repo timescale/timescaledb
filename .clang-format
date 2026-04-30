@@ -82,6 +82,7 @@ IndentCaseLabels: true
 IndentPPDirectives: None # do not indent preprocessor directives after the '#'
 IndentWidth:     4
 IndentWrappedFunctionNames: false # we do not indent the function name in the declaration
+InsertBraces: true
 JavaScriptQuotes: Double # N/A js
 JavaScriptWrapImports: true # N/A js
 KeepEmptyLinesAtTheStartOfBlocks: false

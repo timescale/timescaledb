@@ -47,13 +47,17 @@ convert_text_memory_amount_to_bytes(const char *memory_amount)
 	int64 bytes;
 
 	if (NULL == memory_amount)
+	{
 		elog(ERROR, "invalid memory amount");
+	}
 
 	if (!parse_int(memory_amount, &nblocks, GUC_UNIT_BLOCKS, &hintmsg))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid data amount"),
 				 errhint("%s", hintmsg)));
+	}
 
 	bytes = nblocks;
 	bytes *= BLCKSZ;
@@ -90,15 +94,21 @@ get_memory_cache_size(void)
 	int64 memory_bytes;
 
 	if (fixed_memory_cache_size > 0)
+	{
 		return fixed_memory_cache_size;
+	}
 
 	val = GetConfigOption("shared_buffers", false, false);
 
 	if (NULL == val)
+	{
 		elog(ERROR, "missing configuration for 'shared_buffers'");
+	}
 
 	if (!parse_int(val, &shared_buffers, GUC_UNIT_BLOCKS, &hintmsg))
+	{
 		elog(ERROR, "could not parse 'shared_buffers' setting: %s", hintmsg);
+	}
 
 	memory_bytes = shared_buffers;
 
@@ -145,7 +155,9 @@ minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 	tce = lookup_type_cache(atttype, TYPECACHE_CMP_PROC | TYPECACHE_CMP_PROC_FINFO);
 
 	if (NULL == tce || !OidIsValid(tce->cmp_proc))
+	{
 		elog(ERROR, "no comparison function for type %u", atttype);
+	}
 
 	PushActiveSnapshot(GetTransactionSnapshot());
 	scan = table_beginscan(rel, GetActiveSnapshot(), 0, NULL);
@@ -156,7 +168,9 @@ minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 		Datum value = slot_getattr(slot, attnum, &isnull);
 
 		if (isnull)
+		{
 			continue;
+		}
 
 		/* Check for new min */
 		if (nulls[0] || DatumGetInt32(FunctionCall2(&tce->cmp_proc_finfo, value, minmax[0])) < 0)
@@ -212,7 +226,9 @@ minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[
 		found_tuple = index_getnext_slot(scan, directions[i], slot);
 
 		if (!found_tuple)
+		{
 			break;
+		}
 
 		minmax[i] = slot_getattr(slot, attnum, &isnull);
 		nulls[i] = isnull;
@@ -247,12 +263,16 @@ relation_minmax_indexscan(Relation rel, Oid atttype, Name attname, AttrNumber at
 		idxattr = TupleDescAttr(idxrel->rd_att, 0);
 
 		if (idxattr->atttypid == atttype && namestrcmp(&idxattr->attname, NameStr(*attname)) == 0)
+		{
 			res = minmax_indexscan(rel, idxrel, attnum, minmax);
+		}
 
 		index_close(idxrel, AccessShareLock);
 
 		if (res == MINMAX_FOUND)
+		{
 			break;
+		}
 	}
 
 	return res;
@@ -434,21 +454,27 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 	AclResult acl_result;
 
 	if (PG_NARGS() != CHUNK_SIZING_FUNC_NARGS)
+	{
 		elog(ERROR, "invalid number of arguments");
+	}
 
 	if (chunk_target_size_bytes < 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("chunk_target_size must be positive")));
+	}
 
 	elog(DEBUG1, "[adaptive] chunk_target_size_bytes=" UINT64_FORMAT, chunk_target_size_bytes);
 
 	hypertable_id = ts_dimension_get_hypertable_id(dimension_id);
 
 	if (hypertable_id <= 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("could not find a matching hypertable for dimension %u", dimension_id)));
+	}
 
 	ht = ts_hypertable_get_by_id(hypertable_id);
 
@@ -456,9 +482,11 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 
 	acl_result = pg_class_aclcheck(ht->main_table_relid, GetUserId(), ACL_SELECT);
 	if (acl_result != ACLCHECK_OK)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("permission denied for table %s", NameStr(ht->fd.table_name))));
+	}
 
 	dim = ts_hyperspace_get_dimension_by_id(ht->space, dimension_id);
 
@@ -588,7 +616,9 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 		PG_RETURN_INT64(current_interval);
 	}
 	else
+	{
 		chunk_interval /= num_intervals;
+	}
 
 	/*
 	 * If the interval hasn't really changed much from before, we keep the old
@@ -631,13 +661,17 @@ ts_chunk_sizing_func_validate(regproc func, ChunkSizingInfo *info)
 	Oid *typearr;
 
 	if (!OidIsValid(func))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_FUNCTION), (errmsg("invalid chunk sizing function"))));
+	}
 
 	tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(func));
 
 	if (!HeapTupleIsValid(tuple))
+	{
 		elog(ERROR, "cache lookup failed for function %u", func);
+	}
 
 	form = (Form_pg_proc) GETSTRUCT(tuple);
 	typearr = form->proargtypes.values;
@@ -677,16 +711,24 @@ chunk_target_size_in_bytes(const text *target_size_text)
 	int64 target_size_bytes = 0;
 
 	if (pg_strcasecmp(target_size, "off") == 0 || pg_strcasecmp(target_size, "disable") == 0)
+	{
 		return 0;
+	}
 
 	if (pg_strcasecmp(target_size, "estimate") == 0)
+	{
 		target_size_bytes = ts_chunk_calculate_initial_chunk_target_size();
+	}
 	else
+	{
 		target_size_bytes = convert_text_memory_amount_to_bytes(target_size);
+	}
 
 	/* Disable if target size is zero or less */
 	if (target_size_bytes <= 0)
+	{
 		target_size_bytes = 0;
+	}
 
 	return target_size_bytes;
 }
@@ -701,47 +743,63 @@ ts_chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info)
 	Oid atttype;
 
 	if (!OidIsValid(info->table_relid))
+	{
 		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_TABLE), errmsg("table does not exist")));
+	}
 
 	ts_hypertable_permissions_check(info->table_relid, GetUserId());
 
 	if (NULL == info->colname)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DIMENSION_NOT_EXIST),
 				 errmsg("no open dimension found for adaptive chunking")));
+	}
 
 	attnum = get_attnum(info->table_relid, info->colname);
 	namestrcpy(&attname, info->colname);
 	atttype = get_atttype(info->table_relid, attnum);
 
 	if (!OidIsValid(atttype))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_COLUMN),
 				 errmsg("column \"%s\" does not exist", info->colname)));
+	}
 
 	ts_chunk_sizing_func_validate(info->func, info);
 
 	if (NULL == info->target_size)
+	{
 		info->target_size_bytes = 0;
+	}
 	else
+	{
 		info->target_size_bytes = chunk_target_size_in_bytes(info->target_size);
+	}
 
 	/* Don't validate further if disabled */
 	if (info->target_size_bytes <= 0 || !OidIsValid(info->func))
+	{
 		return;
+	}
 
 	/* Warn of small target sizes */
 	if (info->target_size_bytes > 0 && info->target_size_bytes < (10 * MB))
+	{
 		elog(WARNING, "target chunk size for adaptive chunking is less than 10 MB");
+	}
 
 	if (info->check_for_index &&
 		!table_has_minmax_index(info->table_relid, atttype, &attname, attnum))
+	{
 		ereport(WARNING,
 				(errmsg("no index on \"%s\" found for adaptive chunking on hypertable \"%s\"",
 						info->colname,
 						get_rel_name(info->table_relid)),
 				 errdetail("Adaptive chunking works best with an index on the dimension being "
 						   "adapted.")));
+	}
 }
 
 TS_FUNCTION_INFO_V1(ts_chunk_adaptive_set);
@@ -769,12 +827,16 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	if (PG_ARGISNULL(0))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid hypertable: cannot be NULL")));
+	}
 
 	if (!OidIsValid(info.table_relid))
+	{
 		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_TABLE), errmsg("table does not exist")));
+	}
 
 	ts_hypertable_permissions_check(info.table_relid, GetUserId());
 
@@ -784,16 +846,20 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 	dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
 
 	if (NULL == dim)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_DIMENSION_NOT_EXIST),
 				 errmsg("no open dimension found for adaptive chunking")));
+	}
 
 	info.colname = NameStr(dim->fd.column_name);
 
 	ts_chunk_adaptive_sizing_info_validate(&info);
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		elog(ERROR, "function returning record called in context that cannot accept type record");
+	}
 
 	tupdesc = BlessTupleDesc(tupdesc);
 
@@ -808,8 +874,10 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 		values[0] = ObjectIdGetDatum(ht->chunk_sizing_func);
 	}
 	else
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_FUNCTION), errmsg("invalid chunk sizing function")));
+	}
 
 	values[1] = Int64GetDatum(info.target_size_bytes);
 

@@ -46,7 +46,9 @@ ts_with_clause_filter(const List *def_elems, List **within_namespace, List **oth
 			 pg_strcasecmp(def->defnamespace, EXTENSION_NAMESPACE_ALIAS) == 0))
 		{
 			if (within_namespace != NULL)
+			{
 				*within_namespace = lappend(*within_namespace, def);
+			}
 		}
 		else if (def->defnamespace != NULL && other_namespace != NULL)
 		{
@@ -72,7 +74,9 @@ ts_with_clause_definition_names(const WithClauseDefinition *args, Size nargs)
 	for (i = 0; i < nargs; i++)
 	{
 		if (i > 0)
+		{
 			appendStringInfoString(&buf, ", ");
+		}
 		appendStringInfoString(&buf, args[i].arg_names[0]);
 	}
 
@@ -118,11 +122,13 @@ ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, S
 					argument_recognized = true;
 
 					if (!results[i].is_default)
+					{
 						ereport(ERROR,
 								(errcode(ERRCODE_AMBIGUOUS_PARAMETER),
 								 errmsg("duplicate parameter \"%s.%s\"",
 										def->defnamespace,
 										def->defname)));
+					}
 
 					results[i].parsed = parse_arg(args[i], def);
 					results[i].is_default = false;
@@ -132,11 +138,13 @@ ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, S
 		}
 
 		if (!argument_recognized)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("unrecognized parameter \"%s.%s\"", def->defnamespace, def->defname),
 					 errhint("Valid timescaledb parameters are: %s",
 							 ts_with_clause_definition_names(args, nargs))));
+		}
 	}
 
 	return results;
@@ -175,11 +183,13 @@ ts_with_clauses_parse_reset(const List *def_elems, const WithClauseDefinition *a
 					argument_recognized = true;
 
 					if (!results[i].is_default)
+					{
 						ereport(ERROR,
 								(errcode(ERRCODE_AMBIGUOUS_PARAMETER),
 								 errmsg("duplicate parameter \"%s.%s\"",
 										def->defnamespace,
 										def->defname)));
+					}
 
 					results[i].is_default = false;
 					break;
@@ -188,11 +198,13 @@ ts_with_clauses_parse_reset(const List *def_elems, const WithClauseDefinition *a
 		}
 
 		if (!argument_recognized)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("unrecognized parameter \"%s.%s\"", def->defnamespace, def->defname),
 					 errhint("Valid timescaledb parameters are: %s",
 							 ts_with_clause_definition_names(args, nargs))));
+		}
 	}
 
 	return results;
@@ -217,20 +229,28 @@ parse_arg(WithClauseDefinition arg, DefElem *def)
 	Oid typIOParam;
 
 	if (!OidIsValid(arg.type_id))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_PARAMETER),
 				 errmsg("argument \"%s.%s\" not implemented", def->defnamespace, def->defname)));
+	}
 
 	if (def->arg != NULL)
+	{
 		value = defGetString(def);
+	}
 	else if (arg.type_id == BOOLOID)
+	{
 		/* for booleans, postgres defines the option timescale.foo to be the same as
 		 * timescaledb.foo='true' so if no value is found set it to "true" here */
 		value = "true";
+	}
 	else
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("parameter \"%s.%s\" must have a value", def->defnamespace, def->defname)));
+	}
 
 	getTypeInputInfo(arg.type_id, &in_fn, &typIOParam);
 
@@ -271,11 +291,13 @@ parse_arg(WithClauseDefinition arg, DefElem *def)
 		Form_pg_type typetup;
 		HeapTuple tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(arg.type_id));
 		if (!HeapTupleIsValid(tup))
+		{
 			elog(ERROR,
 				 "cache lookup failed for type of %s.%s '%u'",
 				 def->defnamespace,
 				 def->defname,
 				 arg.type_id);
+		}
 
 		typetup = (Form_pg_type) GETSTRUCT(tup);
 

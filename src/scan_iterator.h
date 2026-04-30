@@ -135,9 +135,13 @@ static inline void
 ts_scan_iterator_start_or_restart_scan(ScanIterator *iterator)
 {
 	if (ts_scan_iterator_is_started(iterator))
+	{
 		ts_scan_iterator_rescan(iterator);
+	}
 	else
+	{
 		ts_scan_iterator_start_scan(iterator);
+	}
 }
 
 /* You must use `ts_scan_iterator_close` if terminating this loop early */

@@ -64,7 +64,9 @@ static bool
 constify_cagg_watermark_walker(Node *node, ConstifyWatermarkContext *context)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	if (IsA(node, FuncExpr))
 	{
@@ -261,7 +263,9 @@ replace_watermark_with_const(ConstifyWatermarkContext *context)
 
 	/* We need to have at least one watermark value */
 	if (list_length(context->watermark_functions) < 1)
+	{
 		return;
+	}
 
 	HTAB *watermarks = init_watermark_map();
 
@@ -292,7 +296,9 @@ replace_watermark_with_const(ConstifyWatermarkContext *context)
 		 * range table and no invalidations would be processed. So, not replacing the function
 		 * invocation. */
 		if (watermark_const == NULL)
+		{
 			continue;
+		}
 
 		/* Replace cagg_watermark FuncExpr node by a Const node */
 		if (IsA(lfirst(parent_lc), FuncExpr))
@@ -319,11 +325,15 @@ void
 constify_cagg_watermark(Query *parse)
 {
 	if (parse == NULL)
+	{
 		return;
+	}
 
 	/* process only SELECT queries */
 	if (parse->commandType != CMD_SELECT)
+	{
 		return;
+	}
 
 	Node *node = (Node *) parse;
 
@@ -360,7 +370,9 @@ constify_cagg_watermark(Query *parse)
 
 	/* Replace watermark functions with const value if the query might belong to the CAgg query */
 	if (context.valid_query)
+	{
 		replace_watermark_with_const(&context);
+	}
 }
 
 /*
@@ -377,12 +389,16 @@ cagg_sort_pushdown(Query *parse, int *cursor_opts)
 
 	/* We dont optimize aggregations on top of caggs for now. */
 	if (parse->groupClause)
+	{
 		return;
+	}
 
 	/* Nothing to do if we have no valid sort clause */
 	if (list_length(parse->rtable) != 1 || list_length(parse->sortClause) != 1 ||
 		!OidIsValid(linitial_node(SortGroupClause, parse->sortClause)->sortop))
+	{
 		return;
+	}
 
 	Cache *cache = ts_hypertable_cache_pin();
 
@@ -396,7 +412,9 @@ cagg_sort_pushdown(Query *parse, int *cursor_opts)
 		 */
 		if (rte->rtekind != RTE_SUBQUERY || rte->relkind != RELKIND_VIEW ||
 			list_length(rte->subquery->rtable) != 2)
+		{
 			continue;
+		}
 
 		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(rte->relid);
 
@@ -404,14 +422,18 @@ cagg_sort_pushdown(Query *parse, int *cursor_opts)
 		 * This optimization only applies to realtime caggs.
 		 */
 		if (!cagg || cagg->data.materialized_only)
+		{
 			continue;
+		}
 
 		Hypertable *ht = ts_hypertable_cache_get_entry_by_id(cache, cagg->data.mat_hypertable_id);
 		Dimension const *dim = hyperspace_get_open_dimension(ht->space, 0);
 
 		/* We should only encounter hypertables with an open dimension */
 		if (!dim)
+		{
 			continue;
+		}
 
 		SortGroupClause *sort = linitial_node(SortGroupClause, parse->sortClause);
 		TargetEntry *tle = get_sortgroupref_tle(sort->tleSortGroupRef, parse->targetList);
@@ -422,7 +444,9 @@ cagg_sort_pushdown(Query *parse, int *cursor_opts)
 		 */
 		AttrNumber time_col = dim->column_attno;
 		if (!IsA(tle->expr, Var) || castNode(Var, tle->expr)->varattno != time_col)
+		{
 			continue;
+		}
 
 		RangeTblEntry *mat_rte = linitial_node(RangeTblEntry, rte->subquery->rtable);
 		RangeTblEntry *rt_rte = lsecond_node(RangeTblEntry, rte->subquery->rtable);
