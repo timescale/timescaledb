@@ -269,3 +269,25 @@ explain (analyze, buffers off, costs off, timing off, summary off)
 select * from booltab where flag = (ts = 99);
 
 drop table booltab;
+
+-- Regression: GROUP BY time_bucket() with a filter on the bucket expression
+-- must not error when compress_segmentby is the time column. Previously
+-- failed with: could not find pathkey item to sort.
+SET TIME ZONE 'UTC';
+CREATE TABLE pathkey_segby_time(time timestamptz NOT NULL, value float);
+SELECT FROM create_hypertable('pathkey_segby_time', 'time', chunk_time_interval => interval '1 day');
+INSERT INTO pathkey_segby_time
+SELECT '2025-01-01 00:00:00+00'::timestamptz + (i || ' hour')::interval, i::float
+FROM generate_series(0, 47) i;
+ALTER TABLE pathkey_segby_time SET (timescaledb.compress, timescaledb.compress_segmentby = 'time');
+SELECT count(compress_chunk(c)) FROM show_chunks('pathkey_segby_time') c;
+
+SELECT time_bucket('6 hours', time) AS bucket, avg(value)
+FROM pathkey_segby_time
+GROUP BY 1
+HAVING time_bucket('6 hours', time) >= '2025-01-01 00:00:00+00'
+   AND time_bucket('6 hours', time) <  '2025-01-03 00:00:00+00'
+ORDER BY 1;
+
+DROP TABLE pathkey_segby_time;
+RESET TIME ZONE;
