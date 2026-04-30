@@ -25,7 +25,7 @@ WHERE a.time = b.time AND a.ctid = b.ctid
          Update on _timescaledb_internal._hyper_1_2_chunk a_2
          ->  Nested Loop (actual rows=2.00 loops=1)
                Output: 0, b.ctid, a.tableoid, a.ctid, b.tableoid
-               Join Filter: ((a."time" = b."time") AND (a.ctid = b.ctid))
+               Join Filter: ((a."time" = b."time") AND (b.ctid = a.ctid))
                Rows Removed by Join Filter: 2
                ->  Append (actual rows=2.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
@@ -98,7 +98,7 @@ WHERE a.time = b.time AND a.ctid = b.ctid
          Delete on _timescaledb_internal._hyper_1_2_chunk a_2
          ->  Nested Loop (actual rows=2.00 loops=1)
                Output: b.ctid, a.tableoid, a.ctid, b.tableoid
-               Join Filter: ((a."time" = b."time") AND (a.ctid = b.ctid))
+               Join Filter: ((a."time" = b."time") AND (b.ctid = a.ctid))
                Rows Removed by Join Filter: 2
                ->  Append (actual rows=2.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
@@ -128,7 +128,7 @@ WHERE a.time = b.time AND a.tableoid = b.tableoid
          Update on _timescaledb_internal._hyper_1_2_chunk a_2
          ->  Nested Loop (actual rows=2.00 loops=1)
                Output: 10, b.ctid, a.tableoid, a.ctid, b.tableoid
-               Join Filter: ((a."time" = b."time") AND (a.tableoid = b.tableoid))
+               Join Filter: ((a."time" = b."time") AND (b.tableoid = a.tableoid))
                Rows Removed by Join Filter: 2
                ->  Append (actual rows=2.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
@@ -158,7 +158,7 @@ WHERE a.time = b.time AND a.ctid = b.ctid AND a.tableoid = b.tableoid
          Update on _timescaledb_internal._hyper_1_2_chunk a_2
          ->  Nested Loop (actual rows=2.00 loops=1)
                Output: 20, b.ctid, a.tableoid, a.ctid, b.tableoid
-               Join Filter: ((a."time" = b."time") AND (a.ctid = b.ctid) AND (a.tableoid = b.tableoid))
+               Join Filter: ((a."time" = b."time") AND (b.ctid = a.ctid) AND (b.tableoid = a.tableoid))
                Rows Removed by Join Filter: 2
                ->  Append (actual rows=2.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
@@ -310,7 +310,7 @@ WHERE a.time = b.time
          Update on _timescaledb_internal._hyper_1_2_chunk a_2
          ->  Nested Loop (actual rows=2.00 loops=1)
                Output: 165, b.ctid, a.tableoid, a.ctid, b.tableoid
-               Join Filter: ((a."time" = b."time") AND (a.ctid = b.ctid))
+               Join Filter: ((a."time" = b."time") AND (b.ctid = a.ctid))
                Rows Removed by Join Filter: 2
                ->  Append (actual rows=2.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
@@ -361,7 +361,7 @@ WHERE EXISTS (SELECT 1 FROM ht_update_join b
          Update on _timescaledb_internal._hyper_1_2_chunk ht_update_join_2
          ->  Nested Loop Semi Join (actual rows=2.00 loops=1)
                Output: 17, b.ctid, ht_update_join.tableoid, ht_update_join.ctid, b.tableoid
-               Join Filter: ((ht_update_join.ctid = b.ctid) AND (ht_update_join."time" = b."time"))
+               Join Filter: ((b.ctid = ht_update_join.ctid) AND (ht_update_join."time" = b."time"))
                Rows Removed by Join Filter: 1
                ->  Append (actual rows=2.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk ht_update_join_1 (actual rows=1.00 loops=1)
@@ -405,7 +405,7 @@ WHERE a.time = b.time AND a.ctid = b.ctid AND a.tableoid = b.tableoid
          Delete on _timescaledb_internal._hyper_1_2_chunk a_2
          ->  Nested Loop (actual rows=2.00 loops=1)
                Output: b.ctid, a.tableoid, a.ctid, b.tableoid
-               Join Filter: ((a."time" = b."time") AND (a.ctid = b.ctid) AND (a.tableoid = b.tableoid))
+               Join Filter: ((a."time" = b."time") AND (b.ctid = a.ctid) AND (b.tableoid = a.tableoid))
                Rows Removed by Join Filter: 2
                ->  Append (actual rows=2.00 loops=1)
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk a_1 (actual rows=1.00 loops=1)
