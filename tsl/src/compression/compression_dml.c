@@ -22,6 +22,9 @@
 
 #include <compat/compat.h>
 #include "foreach_ptr.h"
+#include "observ/ts_observ_agg.h"
+#include "observ/ts_observ_keys.h"
+#include "observ/ts_observ_write.h"
 #include <chunk_insert_state.h>
 #include <compression/arrow_c_data_interface.h>
 #include <compression/compression.h>
@@ -60,7 +63,7 @@ static struct decompress_batches_stats
 decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, Snapshot snapshot,
 						bool *skip_current_tuple, bool delete_only, List *is_nulls,
 						InvalidationContext *invalidation_ctx, CachedDecompressionState *cdst,
-						TupleTableSlot *insert_slot);
+						TupleTableSlot *insert_slot, CmdType cmd_type);
 
 static BatchQualSummary batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys,
 									  int num_scankeys, tuple_filtering_constraints *constraints,
@@ -92,6 +95,8 @@ static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constra
 static void update_scankeys(ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags);
 static void init_upsert_bloom_state(ChunkInsertState *cis);
 static Bitmapset *get_arbiter_index_attnums(ChunkInsertState *cis);
+static void emit_observability_stats(const struct decompress_batches_stats *stats,
+									 int hypertable_id, Oid compress_relid, CmdType cmd_type);
 
 static AttrNumber
 TupleDescGetAttrNumber(TupleDesc desc, const char *name)
@@ -496,7 +501,9 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 									NIL,
 									NULL /* no CAgg invalidation for inserts */,
 									cdst,
-									slot);
+									slot,
+									CMD_INSERT);
+
 	if (index_rel)
 		index_close(index_rel, AccessShareLock);
 	PopActiveSnapshot();
@@ -505,6 +512,11 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 	{
 		cis->skip_current_tuple = true;
 	}
+
+	emit_observability_stats(&stats,
+							 cis->hypertable_relid,
+							 cdst->compression_settings->fd.compress_relid,
+							 CMD_INSERT);
 
 	cis->counters->batches_deleted += stats.batches_deleted;
 	cis->counters->batches_filtered_decompressed += stats.batches_filtered_decompressed;
@@ -658,7 +670,8 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 									is_null,
 									ht_state->has_continuous_aggregate ? &invalidation_ctx : NULL,
 									&temp_cdst,
-									NULL);
+									NULL,
+									ht_state->mt->operation);
 
 	/* close the selected index */
 	if (matching_index_rel)
@@ -688,6 +701,11 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	}
 
 	list_free_deep(bloom_filters);
+
+	emit_observability_stats(&stats,
+							 ht_state->ht->fd.id,
+							 settings->fd.compress_relid,
+							 ht_state->mt->operation);
 
 	ht_state->batches_deleted += stats.batches_deleted;
 	ht_state->batches_filtered_decompressed += stats.batches_filtered_decompressed;
@@ -790,7 +808,7 @@ static struct decompress_batches_stats
 decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, Snapshot snapshot,
 						bool *skip_current_tuple, bool delete_only, List *is_nulls,
 						InvalidationContext *invalidation_ctx, CachedDecompressionState *cdst,
-						TupleTableSlot *insert_slot)
+						TupleTableSlot *insert_slot, CmdType cmd_type)
 {
 	HeapTuple compressed_tuple;
 	BulkWriter writer;
@@ -928,7 +946,15 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 
 		if (!decompressor_initialized)
 		{
-			decompressor = build_decompressor(RelationGetDescr(in_rel), RelationGetDescr(out_rel));
+			decompressor = build_decompressor(RelationGetDescr(in_rel),
+											  RelationGetDescr(out_rel),
+											  RelationGetRelid(in_rel));
+
+			/* set the cmd type in the metrics record */
+			TsObservKV cmd_type_kv = { TS_KEY_CMD_TYPE, (double) cmd_type };
+			ts_observ_agg_add_kv(decompressor.rows_per_batch_observ_id, cmd_type_kv);
+			ts_observ_agg_add_kv(decompressor.batch_size_observ_id, cmd_type_kv);
+
 			decompressor_initialized = true;
 			writer = bulk_writer_build(out_rel, 0);
 			meta_count_attno = TupleDescGetAttrNumber(decompressor.in_desc,
@@ -1231,6 +1257,8 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 	 * behaviour we need to bump it here.
 	 */
 	decompressor->batches_decompressed++;
+
+	ts_observ_agg_add(decompressor->rows_per_batch_observ_id, (double) n_rows);
 
 	for (int sk = 0; sk < num_scankeys; sk++)
 	{
@@ -2346,4 +2374,53 @@ can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 	}
 
 	return true;
+}
+
+void
+emit_observability_stats(const struct decompress_batches_stats *stats, int hypertable_id,
+						 Oid compress_relid, CmdType cmd_type)
+{
+	Assert(stats != NULL);
+	if (!stats)
+		return;
+
+	/* Emit stats for observability */
+	TsObservKV kvs[20] = { 0 };
+	int num_keys = 0;
+
+/* only emit non-zero stats */
+#define ADD_NONZERO_STAT(K, VALUE)                                                                 \
+	do                                                                                             \
+	{                                                                                              \
+		if ((VALUE) != 0 && num_keys < (int) TS_ARRAY_LEN(kvs))                                    \
+		{                                                                                          \
+			kvs[num_keys].key_id = (K);                                                            \
+			kvs[num_keys].value = (double) (VALUE);                                                \
+			num_keys++;                                                                            \
+		}                                                                                          \
+	} while (0)
+
+	ADD_NONZERO_STAT(TS_KEY_BATCHES_DELETED, stats->batches_deleted);
+	ADD_NONZERO_STAT(TS_KEY_BATCHES_DECOMPRESSED, stats->batches_decompressed);
+	ADD_NONZERO_STAT(TS_KEY_BATCHES_SCANNED, stats->batches_scanned);
+	ADD_NONZERO_STAT(TS_KEY_BATCHES_CHECKED_BY_BLOOM, stats->batches_checked_by_bloom);
+	ADD_NONZERO_STAT(TS_KEY_BATCHES_PRUNED_BY_BLOOM, stats->batches_pruned_by_bloom);
+	ADD_NONZERO_STAT(TS_KEY_BATCHES_WITHOUT_BLOOM, stats->batches_without_bloom);
+	ADD_NONZERO_STAT(TS_KEY_BLOOM_FALSE_POSITIVES, stats->batches_bloom_false_positives);
+	ADD_NONZERO_STAT(TS_KEY_DECOMPRESSED_TUPLES, stats->tuples_decompressed);
+	ADD_NONZERO_STAT(TS_KEY_DELETED_TUPLES, stats->tuples_deleted);
+	ADD_NONZERO_STAT(TS_KEY_BATCHES_FILTERED_COMPRESSED, stats->batches_filtered_compressed);
+	ADD_NONZERO_STAT(TS_KEY_BATCHES_FILTERED_DECOMPRESSED, stats->batches_filtered_decompressed);
+	/* Descriptor information */
+	ADD_NONZERO_STAT(TS_KEY_HYPERTABLE_ID, hypertable_id);
+	ADD_NONZERO_STAT(TS_KEY_COMPRESS_RELID, compress_relid);
+	ADD_NONZERO_STAT(TS_KEY_CMD_TYPE, cmd_type);
+	ADD_NONZERO_STAT(TS_KEY_EVENT_TYPE, TS_EVENT_DML_STATS);
+
+	if (num_keys > 0)
+	{
+		ts_observ_emit(kvs, num_keys);
+	}
+
+#undef ADD_NONZERO_STAT
 }

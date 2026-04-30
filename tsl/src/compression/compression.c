@@ -45,6 +45,8 @@
 #include "debug_point.h"
 #include "guc.h"
 #include "nodes/modify_hypertable.h"
+#include "observ/ts_observ_agg.h"
+#include "observ/ts_observ_keys.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
@@ -1243,6 +1245,51 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 	row_compressor->needs_fullness_check =
 		check_for_limited_size_compressors(row_compressor->per_column,
 										   row_compressor->n_input_columns);
+
+	/* Initialize observability aggregators */
+	TsObservKV agg_desc[] = {
+		{ TS_KEY_EVENT_TYPE, TS_EVENT_COMPRESS },
+		{ TS_KEY_RELID, (double) settings->fd.relid },
+		{ TS_KEY_COMPRESS_RELID, (double) settings->fd.compress_relid },
+	};
+
+	/* Create the observability aggregators */
+	row_compressor->rows_per_batch_observ_id =
+		ts_observ_agg_start(agg_desc, TS_ARRAY_LEN(agg_desc));
+	row_compressor->batch_size_observ_id = ts_observ_agg_start(agg_desc, TS_ARRAY_LEN(agg_desc));
+
+	/* Describe what we want to aggregate */
+	ts_observ_agg_describe(row_compressor->rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_MIN,
+						   TS_OBSERV_AGG_MIN);
+	ts_observ_agg_describe(row_compressor->rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_MAX,
+						   TS_OBSERV_AGG_MAX);
+	ts_observ_agg_describe(row_compressor->rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_SUM,
+						   TS_OBSERV_AGG_SUM);
+	ts_observ_agg_describe(row_compressor->rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_STDDEV,
+						   TS_OBSERV_AGG_STDDEV);
+	ts_observ_agg_describe(row_compressor->rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_AVG,
+						   TS_OBSERV_AGG_AVG);
+
+	ts_observ_agg_describe(row_compressor->batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_MIN,
+						   TS_OBSERV_AGG_MIN);
+	ts_observ_agg_describe(row_compressor->batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_MAX,
+						   TS_OBSERV_AGG_MAX);
+	ts_observ_agg_describe(row_compressor->batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_SUM,
+						   TS_OBSERV_AGG_SUM);
+	ts_observ_agg_describe(row_compressor->batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_STDDEV,
+						   TS_OBSERV_AGG_STDDEV);
+	ts_observ_agg_describe(row_compressor->batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_AVG,
+						   TS_OBSERV_AGG_AVG);
 }
 
 void
@@ -1483,8 +1530,13 @@ row_compressor_build_tuple(RowCompressor *row_compressor)
 			row_compressor->compressed_is_null[compressed_col] = compressed_data == NULL;
 
 			if (compressed_data != NULL)
+			{
 				row_compressor->compressed_values[compressed_col] =
 					PointerGetDatum(compressed_data);
+
+				ts_observ_agg_add(row_compressor->batch_size_observ_id,
+								  (double) (VARSIZE_ANY_EXHDR(compressed_data)));
+			}
 		}
 		else if (column->segment_info != NULL)
 		{
@@ -1632,6 +1684,9 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 		row_compressor->on_flush(row_compressor,
 								 row_compressor->rows_compressed_into_current_value);
 
+	ts_observ_agg_add(row_compressor->rows_per_batch_observ_id,
+					  (double) row_compressor->rows_compressed_into_current_value);
+
 	MemoryContextSwitchTo(old_cxt);
 	row_compressor_clear_batch(row_compressor, changed_groups);
 }
@@ -1645,6 +1700,10 @@ row_compressor_reset(RowCompressor *row_compressor)
 void
 row_compressor_close(RowCompressor *row_compressor)
 {
+	/* Flush the observability data */
+	ts_observ_agg_finish(row_compressor->rows_per_batch_observ_id);
+	ts_observ_agg_finish(row_compressor->batch_size_observ_id);
+
 	pfree(row_compressor->compressed_is_null);
 	pfree(row_compressor->compressed_values);
 	pfree(row_compressor->per_column);
@@ -1834,7 +1893,7 @@ bulk_writer_close(BulkWriter *writer)
  **********************/
 
 RowDecompressor
-build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc)
+build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc, Oid in_oid)
 {
 	AttrNumber count_meta_attnum = InvalidAttrNumber;
 	AttrMap *attrmap = build_decompress_attrmap(out_desc, in_desc, &count_meta_attnum);
@@ -1877,6 +1936,49 @@ build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc)
 
 	detoaster_init(&decompressor.detoaster, CurrentMemoryContext);
 
+	/* Initialize observability aggregators */
+	TsObservKV agg_desc[] = {
+		{ TS_KEY_EVENT_TYPE, TS_EVENT_DECOMPRESS },
+		{ TS_KEY_COMPRESS_RELID, (double) in_oid },
+	};
+
+	/* Create the observability aggregators */
+	decompressor.rows_per_batch_observ_id = ts_observ_agg_start(agg_desc, TS_ARRAY_LEN(agg_desc));
+	decompressor.batch_size_observ_id = ts_observ_agg_start(agg_desc, TS_ARRAY_LEN(agg_desc));
+
+	/* Describe what we want to aggregate */
+	ts_observ_agg_describe(decompressor.rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_MIN,
+						   TS_OBSERV_AGG_MIN);
+	ts_observ_agg_describe(decompressor.rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_MAX,
+						   TS_OBSERV_AGG_MAX);
+	ts_observ_agg_describe(decompressor.rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_SUM,
+						   TS_OBSERV_AGG_SUM);
+	ts_observ_agg_describe(decompressor.rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_STDDEV,
+						   TS_OBSERV_AGG_STDDEV);
+	ts_observ_agg_describe(decompressor.rows_per_batch_observ_id,
+						   TS_KEY_BATCH_ROWS_AVG,
+						   TS_OBSERV_AGG_AVG);
+
+	ts_observ_agg_describe(decompressor.batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_MIN,
+						   TS_OBSERV_AGG_MIN);
+	ts_observ_agg_describe(decompressor.batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_MAX,
+						   TS_OBSERV_AGG_MAX);
+	ts_observ_agg_describe(decompressor.batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_SUM,
+						   TS_OBSERV_AGG_SUM);
+	ts_observ_agg_describe(decompressor.batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_STDDEV,
+						   TS_OBSERV_AGG_STDDEV);
+	ts_observ_agg_describe(decompressor.batch_size_observ_id,
+						   TS_KEY_BATCH_BYTES_AVG,
+						   TS_OBSERV_AGG_AVG);
+
 	return decompressor;
 }
 
@@ -1892,6 +1994,10 @@ row_decompressor_reset(RowDecompressor *decompressor)
 void
 row_decompressor_close(RowDecompressor *decompressor)
 {
+	/* Flush the observability data */
+	ts_observ_agg_finish(decompressor->rows_per_batch_observ_id);
+	ts_observ_agg_finish(decompressor->batch_size_observ_id);
+
 	MemoryContextDelete(decompressor->per_compressed_row_ctx);
 	detoaster_close(&decompressor->detoaster);
 	free_attrmap(decompressor->attrmap);
@@ -1926,8 +2032,9 @@ decompress_chunk(Oid in_table, Oid out_table)
 
 	PushActiveSnapshot(GetLatestSnapshot());
 	BulkWriter writer = bulk_writer_build(out_rel, 0);
-	RowDecompressor decompressor =
-		build_decompressor(RelationGetDescr(in_rel), RelationGetDescr(out_rel));
+	RowDecompressor decompressor = build_decompressor(RelationGetDescr(in_rel),
+													  RelationGetDescr(out_rel),
+													  RelationGetRelid(in_rel));
 	TupleTableSlot *slot = table_slot_create(in_rel, NULL);
 	TableScanDesc scan = table_beginscan(in_rel, GetActiveSnapshot(), 0, (ScanKey) NULL);
 	int64 report_reltuples = calculate_reltuples_to_report(in_rel->rd_rel->reltuples);
@@ -2114,6 +2221,9 @@ init_batch(RowDecompressor *decompressor, AttrNumber *attnos, int num_attnos)
 										CurrentMemoryContext));
 		CompressedDataHeader *header = get_compressed_data_header(compressed_datum);
 
+		ts_observ_agg_add(decompressor->batch_size_observ_id,
+						  (double) (VARSIZE_ANY_EXHDR(compressed_datum)));
+
 		init_iterator(decompressor, header, input_column);
 	}
 }
@@ -2238,6 +2348,8 @@ decompress_batch(RowDecompressor *decompressor)
 
 	decompressor->unprocessed_tuples = n_batch_rows;
 
+	ts_observ_agg_add(decompressor->rows_per_batch_observ_id, (double) n_batch_rows);
+
 	return n_batch_rows;
 }
 
@@ -2355,6 +2467,9 @@ decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *
 										column_info->decompressed_type);
 
 	Assert(decompress_all);
+
+	ts_observ_agg_add(decompressor->batch_size_observ_id,
+					  (double) (VARSIZE_ANY_EXHDR(compressed_datum)));
 
 	return decompress_all(compressed_datum,
 						  column_info->decompressed_type,
