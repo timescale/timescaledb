@@ -21,6 +21,7 @@ set(TEST_FILES
     ddl.sql
     ddl_errors.sql
     ddl_extra.sql
+    dml_system_columns.sql
     debug_utils.sql
     delete.sql
     drop_extension.sql
