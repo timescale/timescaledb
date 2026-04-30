@@ -85,7 +85,9 @@ invalidation_threshold_scan_update(TupleInfo *ti, void *const data)
 	/* If the tuple was modified concurrently, retry the operation and use a new snapshot
 	 * to see the updated tuple. */
 	if (ti->lockresult == TM_Updated)
+	{
 		return SCAN_RESTART_WITH_NEW_SNAPSHOT;
+	}
 
 	if (ti->lockresult != TM_Ok)
 	{
@@ -138,7 +140,9 @@ invalidation_threshold_scan_update(TupleInfo *ti, void *const data)
 		heap_freetuple(new_tuple);
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 	}
 	else
 	{
@@ -239,10 +243,14 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 	Hypertable *ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
 
 	if (IS_TIMESTAMP_TYPE(refresh_window->type))
+	{
 		max_refresh = TS_TIME_IS_END(refresh_window->end, refresh_window->type) ||
 					  TS_TIME_IS_NOEND(refresh_window->end, refresh_window->type);
+	}
 	else
+	{
 		max_refresh = TS_TIME_IS_MAX(refresh_window->end, refresh_window->type);
+	}
 
 	if (max_refresh)
 	{

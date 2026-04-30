@@ -58,12 +58,16 @@ policy_reorder_get_index_name(const Jsonb *config)
 	char *index_name = NULL;
 
 	if (config != NULL)
+	{
 		index_name = ts_jsonb_get_str_field(config, CONFIG_KEY_INDEX_NAME);
+	}
 
 	if (index_name == NULL)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not find index_name in config for job")));
+	}
 
 	return index_name;
 }
@@ -78,15 +82,19 @@ check_valid_index(Hypertable *ht, Name index_name)
 	index_oid = ts_get_relation_relid(NameStr(ht->fd.schema_name), NameStr(*index_name), true);
 	idxtuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(index_oid));
 	if (!HeapTupleIsValid(idxtuple))
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid reorder index")));
+	}
 
 	indexForm = (Form_pg_index) GETSTRUCT(idxtuple);
 	if (indexForm->indrelid != ht->main_table_relid)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid reorder index"),
 				 errhint("The reorder index must by an index on hypertable \"%s\".",
 						 NameStr(ht->fd.table_name))));
+	}
 
 	ReleaseSysCache(idxtuple);
 }
@@ -111,7 +119,9 @@ Datum
 policy_reorder_proc(PG_FUNCTION_ARGS)
 {
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
+	{
 		PG_RETURN_VOID();
+	}
 
 	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
@@ -126,7 +136,9 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 {
 	/* behave like a strict function */
 	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+	{
 		PG_RETURN_NULL();
+	}
 
 	NameData application_name;
 	NameData proc_name, proc_schema, check_name, check_schema, owner;
@@ -151,7 +163,9 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (timezone != NULL)
+	{
 		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(4));
+	}
 
 	ht = ts_hypertable_cache_get_cache_and_entry(ht_oid, CACHE_FLAG_NONE, &hcache);
 	Assert(ht != NULL);
@@ -161,12 +175,14 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	owner_id = ts_hypertable_permissions_check(ht_oid, GetUserId());
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot add reorder policy to compressed hypertable \"%s\"",
 						get_rel_name(ht_oid)),
 				 errhint("Please add the policy to the corresponding uncompressed hypertable "
 						 "instead.")));
+	}
 
 	/* Now verify that the index is an actual index on that hypertable */
 	check_valid_index(ht, index_name);
@@ -202,10 +218,12 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 		Assert(list_length(jobs) == 1);
 
 		if (!if_not_exists)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("reorder policy already exists for hypertable \"%s\"",
 							get_rel_name(ht_oid))));
+		}
 
 		if (!DatumGetBool(DirectFunctionCall2Coll(nameeq,
 												  C_COLLATION_OID,
@@ -232,7 +250,9 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	{
 		ts_bgw_job_validate_schedule_interval(&schedule_interval);
 		if (TIMESTAMP_NOT_FINITE(initial_start))
+		{
 			initial_start = ts_timer_get_current_timestamp();
+		}
 	}
 
 	/* Next, insert a new job into jobs table */
@@ -271,7 +291,9 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 										valid_timezone);
 
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
+	{
 		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);
+	}
 
 	PG_RETURN_INT32(job_id);
 }
@@ -297,10 +319,12 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 	if (jobs == NIL)
 	{
 		if (!if_exists)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("reorder policy not found for hypertable \"%s\"",
 							get_rel_name(hypertable_oid))));
+		}
 		else
 		{
 			ereport(NOTICE,

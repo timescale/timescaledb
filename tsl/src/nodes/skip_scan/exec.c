@@ -191,7 +191,9 @@ skip_scan_begin(CustomScanState *node, EState *estate, int eflags)
 		state->idx = linitial(castNode(CustomScanState, child_state)->custom_ps);
 	}
 	else
+	{
 		elog(ERROR, "unknown subscan type in SkipScan");
+	}
 
 	if (IsA(state->idx_scan, IndexScan))
 	{
@@ -208,11 +210,15 @@ skip_scan_begin(CustomScanState *node, EState *estate, int eflags)
 		state->scan_desc = &idx->ioss_ScanDesc;
 	}
 	else
+	{
 		elog(ERROR, "unknown subscan type in SkipScan");
+	}
 
 	/* scankeys are not setup for explain only */
 	if (eflags & EXEC_FLAG_EXPLAIN_ONLY)
+	{
 		return;
+	}
 
 	/* find position of our skip key
 	 * skip key is put as first key for the respective column in sort_indexquals
@@ -235,11 +241,15 @@ skip_scan_begin(CustomScanState *node, EState *estate, int eflags)
 							   CurrentMemoryContext);
 			}
 			if (j == state->num_skip_keys)
+			{
 				break;
+			}
 		}
 	}
 	if (j < state->num_skip_keys)
+	{
 		elog(ERROR, "ScanKey for skip qual not found");
+	}
 
 	/* when we fetch the 1st tuple we update all skip keys from 0 to N */
 	state->current_key = 0;
@@ -408,15 +418,21 @@ skip_scan_exec(CustomScanState *node)
 	while (true)
 	{
 		if (state->needs_rescan)
+		{
 			skip_scan_rescan_index(state);
+		}
 
 		switch (state->stage)
 		{
 			case SS_BEGIN:
 				if (has_nulls_first(state))
+				{
 					skip_scan_switch_stage(state, SS_NULLS_FIRST);
+				}
 				else
+				{
 					skip_scan_switch_stage(state, SS_NOT_NULL);
+				}
 
 				break;
 
@@ -430,7 +446,9 @@ skip_scan_exec(CustomScanState *node)
 				 */
 				skip_scan_switch_stage(state, SS_NOT_NULL);
 				if (!TupIsNull(result))
+				{
 					return result;
+				}
 
 				break;
 
@@ -451,7 +469,9 @@ skip_scan_exec(CustomScanState *node)
 					 */
 					skip_scan_update_key(state, result);
 					if (state->stage == SS_NOT_NULL || state->stage == SS_PREV_KEY)
+					{
 						skip_scan_switch_stage(state, SS_VALUES);
+					}
 
 					return result;
 				}
@@ -468,11 +488,17 @@ skip_scan_exec(CustomScanState *node)
 					 * "=" to ">"
 					 */
 					if (has_nulls_last(state))
+					{
 						skip_scan_switch_stage(state, SS_NULLS_LAST);
+					}
 					else if (state->current_key > 0)
+					{
 						skip_scan_switch_stage(state, SS_PREV_KEY);
+					}
 					else
+					{
 						skip_scan_switch_stage(state, SS_END);
+					}
 				}
 				break;
 
@@ -509,9 +535,13 @@ skip_scan_rescan(CustomScanState *node)
 	 * means we dont have to call skip_scan_rescan_index
 	 * as ExecReScan on the child scan takes care of that. */
 	if (has_nulls_first(state))
+	{
 		skip_scan_switch_stage(state, SS_NULLS_FIRST);
+	}
 	else
+	{
 		skip_scan_switch_stage(state, SS_NOT_NULL);
+	}
 
 	for (int i = 0; i < state->num_skip_keys; i++)
 	{

@@ -273,7 +273,9 @@ do_startup_exclusion(ChunkAppendState *state)
 			if (can_exclude_chunk(lfirst(lc_constraints), restrictinfos))
 			{
 				if (i < state->first_partial_plan)
+				{
 					filtered_first_partial_plan--;
+				}
 
 				continue;
 			}
@@ -377,7 +379,9 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	if (state->startup_exclusion)
+	{
 		do_startup_exclusion(state);
+	}
 
 	perform_plan_init(state, estate, eflags);
 }
@@ -420,7 +424,9 @@ perform_plan_init(ChunkAppendState *state, EState *estate, int eflags)
 		 * pass down limit to child nodes
 		 */
 		if (state->limit)
+		{
 			ExecSetTupleBound(state->limit, state->subplanstates[i]);
+		}
 
 		i++;
 	}
@@ -537,9 +543,13 @@ initialize_runtime_exclusion(ChunkAppendState *state)
 																	 ps);
 
 			if (!can_exclude)
+			{
 				state->valid_subplans = bms_add_member(state->valid_subplans, i);
+			}
 			else
+			{
 				state->runtime_number_exclusions_children++;
+			}
 		}
 
 		lc_clauses = lnext(state->filtered_ri_clauses, lc_clauses);
@@ -565,7 +575,9 @@ chunk_append_exec(CustomScanState *node)
 	Assert(state->init_done == true);
 
 	if (state->current == INVALID_SUBPLAN_INDEX)
+	{
 		state->choose_next_subplan(state);
+	}
 
 	while (true)
 	{
@@ -574,7 +586,9 @@ chunk_append_exec(CustomScanState *node)
 		CHECK_FOR_INTERRUPTS();
 
 		if (state->current == NO_MATCHING_SUBPLANS)
+		{
 			return ExecClearTuple(node->ss.ps.ps_ResultTupleSlot);
+		}
 
 		Assert(state->current >= 0 && state->current < state->num_subplans);
 		subnode = state->subplanstates[state->current];
@@ -591,7 +605,9 @@ chunk_append_exec(CustomScanState *node)
 			 * to do projection otherwise return as is.
 			 */
 			if (projinfo == NULL)
+			{
 				return subslot;
+			}
 
 			ResetExprContext(econtext);
 			econtext->ecxt_scantuple = subslot;
@@ -609,12 +625,16 @@ static int
 get_next_subplan(ChunkAppendState *state, int last_plan)
 {
 	if (last_plan == NO_MATCHING_SUBPLANS)
+	{
 		return NO_MATCHING_SUBPLANS;
+	}
 
 	if (state->runtime_exclusion_parent || state->runtime_exclusion_children)
 	{
 		if (!state->runtime_initialized)
+		{
 			initialize_runtime_exclusion(state);
+		}
 
 		/*
 		 * bms_next_member will return -2 (NO_MATCHING_SUBPLANS) if there are
@@ -627,7 +647,9 @@ get_next_subplan(ChunkAppendState *state, int last_plan)
 		int next_plan = last_plan + 1;
 
 		if (next_plan >= state->num_subplans)
+		{
 			return NO_MATCHING_SUBPLANS;
+		}
 
 		return next_plan;
 	}
@@ -650,13 +672,19 @@ choose_next_subplan_for_worker(ChunkAppendState *state)
 
 	/* mark just completed subplan as finished */
 	if (state->current >= 0)
+	{
 		pstate->subplan_state[state->current] =
 			ts_set_flags_32(pstate->subplan_state[state->current], SUBPLAN_STATE_FINISHED);
+	}
 
 	if (pstate->next_plan == INVALID_SUBPLAN_INDEX)
+	{
 		next_plan = get_next_subplan(state, INVALID_SUBPLAN_INDEX);
+	}
 	else
+	{
 		next_plan = pstate->next_plan;
+	}
 
 	if (next_plan == NO_MATCHING_SUBPLANS)
 	{
@@ -676,7 +704,9 @@ choose_next_subplan_for_worker(ChunkAppendState *state)
 
 		/* wrap around if we reach end of subplan list */
 		if (next_plan < 0)
+		{
 			next_plan = get_next_subplan(state, INVALID_SUBPLAN_INDEX);
+		}
 
 		if (next_plan == start || next_plan < 0)
 		{
@@ -705,8 +735,10 @@ choose_next_subplan_for_worker(ChunkAppendState *state)
 	 * immediately so it does not get assigned another worker
 	 */
 	if (next_plan < state->filtered_first_partial_plan)
+	{
 		pstate->subplan_state[next_plan] =
 			ts_set_flags_32(pstate->subplan_state[next_plan], SUBPLAN_STATE_FINISHED);
+	}
 
 	/* advance next_plan for next worker */
 	pstate->next_plan = get_next_subplan(state, state->current);
@@ -716,7 +748,9 @@ choose_next_subplan_for_worker(ChunkAppendState *state)
 	 * on next call
 	 */
 	if (pstate->next_plan < 0)
+	{
 		pstate->next_plan = INVALID_SUBPLAN_INDEX;
+	}
 
 	LWLockRelease(state->lock);
 }
@@ -751,7 +785,9 @@ chunk_append_rescan(CustomScanState *node)
 	for (i = 0; i < state->num_subplans; i++)
 	{
 		if (node->ss.ps.chgParam != NULL)
+		{
 			UpdateChangedParamSet(state->subplanstates[i], node->ss.ps.chgParam);
+		}
 
 		ExecReScan(state->subplanstates[i]);
 	}
@@ -922,7 +958,9 @@ chunk_append_get_lock_pointer()
 	LWLock **lock = (LWLock **) find_rendezvous_variable(RENDEZVOUS_CHUNK_APPEND_LWLOCK);
 
 	if (*lock == NULL)
+	{
 		elog(ERROR, "LWLock for coordinating parallel workers not initialized");
+	}
 
 	return *lock;
 }
@@ -1004,12 +1042,16 @@ static Node *
 constify_param_mutator(Node *node, void *context)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 
 	/* Don't descend into subplans to constify their parameters, because they may not be valid yet
 	 */
 	if (IsA(node, SubPlan))
+	{
 		return node;
+	}
 
 	if (IsA(node, Param))
 	{
@@ -1030,6 +1072,7 @@ constify_param_mutator(Node *node, void *context)
 			}
 
 			if (prm.execPlan == NULL)
+			{
 				return (Node *) makeConst(param->paramtype,
 										  param->paramtypmod,
 										  param->paramcollid,
@@ -1037,6 +1080,7 @@ constify_param_mutator(Node *node, void *context)
 										  prm.value,
 										  prm.isnull,
 										  tce->typbyval);
+			}
 		}
 		return node;
 	}
@@ -1074,7 +1118,9 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 			 * ignore it here.
 			 */
 			if (!constr->check[i].ccvalid)
+			{
 				continue;
+			}
 
 			cexpr = stringToNode(constr->check[i].ccbin);
 
@@ -1093,7 +1139,9 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 
 			/* Fix Vars to have the desired varno */
 			if (varno != 1)
+			{
 				ChangeVarNodes(cexpr, 1, varno, 0);
+			}
 
 			/*
 			 * Finally, convert to implicit-AND format (that is, a List) and
@@ -1175,7 +1223,9 @@ can_exclude_chunk(List *constraints, List *baserestrictinfo)
 
 		if (clause && IsA(clause, Const) &&
 			(((Const *) clause)->constisnull || !DatumGetBool(((Const *) clause)->constvalue)))
+		{
 			return true;
+		}
 	}
 
 	/*
@@ -1192,7 +1242,9 @@ can_exclude_chunk(List *constraints, List *baserestrictinfo)
 	 * would yield false, not just NULL.
 	 */
 	if (predicate_refuted_by(constraints, baserestrictinfo, false))
+	{
 		return true;
+	}
 
 	return false;
 }
@@ -1209,7 +1261,9 @@ initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes)
 	EState *estate = state->csstate.ss.ps.state;
 
 	if (initial_rt_indexes == NIL)
+	{
 		return;
+	}
 
 	Assert(list_length(state->initial_subplans) == list_length(state->initial_ri_clauses));
 	Assert(list_length(state->initial_subplans) == list_length(initial_rt_indexes));
@@ -1237,7 +1291,9 @@ initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes)
 			 * different from the final index after flattening.
 			 */
 			if (rt_index != initial_index)
+			{
 				ChangeVarNodes(lfirst(lc_clauses), initial_index, scan->scanrelid, 0);
+			}
 		}
 		constraints = lappend(constraints, relation_constraints);
 	}
@@ -1258,21 +1314,29 @@ chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 	ChunkAppendState *state = (ChunkAppendState *) node;
 
 	if (state->sort_options != NIL)
+	{
 		show_sort_group_keys(state, ancestors, es);
+	}
 
 	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
+	{
 		ExplainPropertyBool("Startup Exclusion", state->startup_exclusion, es);
+	}
 
 	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
+	{
 		ExplainPropertyBool("Runtime Exclusion",
 							(state->runtime_exclusion_parent || state->runtime_exclusion_children),
 							es);
+	}
 
 	if (state->startup_exclusion)
+	{
 		ExplainPropertyInteger("Chunks excluded during startup",
 							   NULL,
 							   list_length(state->initial_subplans) - list_length(node->custom_ps),
 							   es);
+	}
 
 	if (state->runtime_exclusion_parent && state->runtime_number_loops > 0)
 	{
@@ -1308,7 +1372,9 @@ show_sort_group_keys(ChunkAppendState *state, List *ancestors, ExplainState *es)
 	List *sort_nulls = lfourth(state->sort_options);
 
 	if (nkeys <= 0)
+	{
 		return;
+	}
 
 	initStringInfo(&sortkeybuf);
 
@@ -1325,18 +1391,22 @@ show_sort_group_keys(ChunkAppendState *state, List *ancestors, ExplainState *es)
 		char *exprstr;
 
 		if (!target)
+		{
 			elog(ERROR, "no tlist entry for key %d", keyresno);
+		}
 		/* Deparse the expression, showing any top-level cast */
 		exprstr = deparse_expression((Node *) target->expr, context, useprefix, true);
 		resetStringInfo(&sortkeybuf);
 		appendStringInfoString(&sortkeybuf, exprstr);
 		/* Append sort order information, if relevant */
 		if (sort_ops != NIL)
+		{
 			show_sortorder_options(&sortkeybuf,
 								   (Node *) target->expr,
 								   list_nth_oid(sort_ops, keyno),
 								   list_nth_oid(sort_collations, keyno),
 								   list_nth_oid(sort_nulls, keyno));
+		}
 		/* Emit one property-list item per sort key */
 		result = lappend(result, pstrdup(sortkeybuf.data));
 	}
@@ -1365,7 +1435,9 @@ show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid col
 		char *collname = get_collation_name(collation);
 
 		if (collname == NULL)
+		{
 			elog(ERROR, "cache lookup failed for collation %u", collation);
+		}
 		appendStringInfo(buf, " COLLATE %s", quote_identifier(collname));
 	}
 
@@ -1380,7 +1452,9 @@ show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid col
 		char *opname = get_opname(sortOperator);
 
 		if (opname == NULL)
+		{
 			elog(ERROR, "cache lookup failed for operator %u", sortOperator);
+		}
 		appendStringInfo(buf, " USING %s", opname);
 		/* Determine whether operator would be considered ASC or DESC */
 		(void) get_equality_op_for_ordering_op(sortOperator, &reverse);

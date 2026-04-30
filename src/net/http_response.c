@@ -82,10 +82,14 @@ ts_http_response_state_valid_status(HttpResponseState *state)
 {
 	/* If the status code hasn't been parsed yet, return */
 	if (state->status_code == -1)
+	{
 		return true;
+	}
 	/* If it's a bad status code, then bad! */
 	if (state->status_code / 100 == 2)
+	{
 		return true;
+	}
 	return false;
 }
 
@@ -120,14 +124,18 @@ ts_http_response_state_next_buffer(HttpResponseState *state, ssize_t *bufsize)
 	Assert(state->offset <= MAX_RAW_BUFFER_SIZE);
 
 	if (NULL != bufsize)
+	{
 		*bufsize = ts_http_response_state_buffer_remaining(state);
+	}
 
 	/*
 	 * This should not happen, be we return NULL in this case and let caller
 	 * deal with it
 	 */
 	if (state->offset > MAX_RAW_BUFFER_SIZE)
+	{
 		return NULL;
+	}
 
 	return state->raw_buffer + state->offset;
 }
@@ -179,9 +187,13 @@ http_parse_status(HttpResponseState *state, const char next)
 			if (sscanf(raw_buf, "%127s%*[ ]%d%*[ ]%*s", state->version, &state->status_code) == 2)
 			{
 				if (http_parse_version(state))
+				{
 					state->state = HTTP_STATE_INTERM;
+				}
 				else
+				{
 					state->state = HTTP_STATE_ERROR;
+				}
 			}
 			break;
 		case NEW_LINE:
@@ -316,7 +328,9 @@ http_parse_almost_done(HttpResponseState *state, const char next)
 			state->body_start = state->raw_buffer + state->parse_offset + 1;
 			/* Special case if there is no body */
 			if (state->content_length == 0)
+			{
 				state->state = HTTP_STATE_DONE;
+			}
 			break;
 		default:
 			state->state = HTTP_STATE_ERROR;
@@ -330,7 +344,9 @@ ts_http_response_state_parse(HttpResponseState *state, size_t bytes)
 	state->offset += bytes;
 
 	if (state->offset > MAX_RAW_BUFFER_SIZE)
+	{
 		state->offset = MAX_RAW_BUFFER_SIZE;
+	}
 
 	/* Each state function will do the state AND transition */
 	while (state->parse_offset < state->offset)

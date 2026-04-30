@@ -98,13 +98,17 @@ ts_plain_connect(Connection *conn, const char *host, const char *servname, int p
 						   WSA_FLAG_OVERLAPPED);
 
 	if (conn->sock == INVALID_SOCKET)
+	{
 		ret = SOCKET_ERROR;
+	}
 #else
 	ret = conn->sock = socket(ainfo->ai_family, ainfo->ai_socktype, ainfo->ai_protocol);
 #endif
 
 	if (IS_SOCKET_ERROR(ret))
+	{
 		goto out_addrinfo;
+	}
 
 	/*
 	 * Set send / recv timeout so that write and read don't block forever. Set
@@ -150,14 +154,20 @@ plain_write(Connection *conn, const char *buf, size_t writelen)
 	conn->err = WSASend(conn->sock, &wbuf, 1, &b, 0, NULL, NULL);
 
 	if (IS_SOCKET_ERROR(conn->err))
+	{
 		ret = -1;
+	}
 	else
+	{
 		ret = b;
+	}
 #else
 	ret = send(conn->sock, buf, writelen, 0);
 
 	if (ret < 0)
+	{
 		conn->err = ret;
+	}
 #endif
 
 	return ret;
@@ -177,14 +187,20 @@ plain_read(Connection *conn, char *buf, size_t buflen)
 	conn->err = WSARecv(conn->sock, &wbuf, 1, &b, &flags, NULL, NULL);
 
 	if (IS_SOCKET_ERROR(conn->err))
+	{
 		ret = -1;
+	}
 	else
+	{
 		ret = b;
+	}
 #else
 	ret = recv(conn->sock, buf, buflen, 0);
 
 	if (ret < 0)
+	{
 		conn->err = ret;
+	}
 #endif
 
 	return ret;
@@ -224,12 +240,16 @@ ts_plain_set_timeout(Connection *conn, unsigned long millis)
 	conn->err = setsockopt(conn->sock, SOL_SOCKET, SO_RCVTIMEO, (const char *) &timeout, optlen);
 
 	if (conn->err != 0)
+	{
 		return -1;
+	}
 
 	conn->err = setsockopt(conn->sock, SOL_SOCKET, SO_SNDTIMEO, (const char *) &timeout, optlen);
 
 	if (conn->err != 0)
+	{
 		return -1;
+	}
 
 	return 0;
 }
@@ -240,7 +260,9 @@ ts_plain_errmsg(Connection *conn)
 	const char *errmsg = "no connection error";
 
 	if (IS_SOCKET_ERROR(conn->err))
+	{
 		errmsg = strerror(get_error());
+	}
 	conn->err = 0;
 
 	return errmsg;
@@ -290,6 +312,8 @@ _conn_plain_fini(void)
 	int ret = WSACleanup();
 
 	if (ret != 0)
+	{
 		elog(WARNING, "WSACleanup failed");
+	}
 #endif
 }

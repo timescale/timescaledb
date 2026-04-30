@@ -305,7 +305,9 @@ write_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation
 	HeapTuple tup;
 
 	if (!IsValidInvalidation(invalidation))
+	{
 		return false;
+	}
 
 	tup = create_invalidation_tup(RelationGetDescr(cagg_log_rel),
 								  invalidation->hyper_id,
@@ -313,9 +315,13 @@ write_invalidation_entry(Relation cagg_log_rel, const Invalidation *invalidation
 								  invalidation->greatest_modified_value);
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	if (ItemPointerIsValid(update_tid))
+	{
 		ts_catalog_update_tid_only(cagg_log_rel, update_tid, tup);
+	}
 	else
+	{
 		ts_catalog_insert_only(cagg_log_rel, tup);
+	}
 	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(tup);
 
@@ -538,24 +544,34 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 	}
 
 	if (inv->lowest_modified_value < min_bucket_start)
+	{
 		/* Below the min bucket, so treat as invalid to -infinity. */
 		inv->lowest_modified_value = INVAL_NEG_INFINITY;
+	}
 	else if (inv->lowest_modified_value > max_bucket_end)
+	{
 		/* Above the max bucket, so treat as invalid to +infinity. */
 		inv->lowest_modified_value = INVAL_POS_INFINITY;
+	}
 	else
+	{
 		inv->lowest_modified_value = ts_time_bucket_by_type_extended(bucket_width,
 																	 inv->lowest_modified_value,
 																	 time_type_oid,
 																	 offset,
 																	 origin);
+	}
 
 	if (inv->greatest_modified_value < min_bucket_start)
+	{
 		/* Below the min bucket, so treat as invalid to -infinity. */
 		inv->greatest_modified_value = INVAL_NEG_INFINITY;
+	}
 	else if (inv->greatest_modified_value > max_bucket_end)
+	{
 		/* Above the max bucket, so treat as invalid to +infinity. */
 		inv->greatest_modified_value = INVAL_POS_INFINITY;
+	}
 	else
 	{
 		inv->greatest_modified_value = ts_time_bucket_by_type_extended(bucket_width,
@@ -668,11 +684,15 @@ static bool
 invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry)
 {
 	if (!IsValidInvalidation(newentry))
+	{
 		return false;
+	}
 
 	/* Quick exit if no overlap */
 	if (!invalidations_can_be_merged(entry, newentry))
+	{
 		return false;
+	}
 
 	/* Check if the new entry expands beyond the old one (first case above) */
 	if (entry->greatest_modified_value < newentry->greatest_modified_value)
@@ -794,7 +814,9 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 
 		/* Handle the last merged invalidation */
 		if (IsValidInvalidation(&mergedentry))
+		{
 			insert_new_cagg_invalidation(state, &mergedentry, cagg_hyper_id);
+		}
 	}
 }
 
@@ -877,7 +899,9 @@ cut_cagg_invalidation_and_compute_inner_range(const ContinuousAggInvalidationSta
 	new_inner_range = cut_cagg_invalidation(state, refresh_window, mergedentry);
 
 	if (!IsValidInvalidation(&inner_range))
+	{
 		inner_range = new_inner_range;
+	}
 	else if (IsValidInvalidation(&new_inner_range) &&
 			 !invalidation_entry_try_merge(&inner_range, &new_inner_range))
 	{
@@ -983,7 +1007,9 @@ process_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *sta
 		}
 
 		if (!IsValidInvalidation(&mergedentry))
+		{
 			mergedentry = logentry;
+		}
 		else if (invalidation_entry_try_merge(&mergedentry, &logentry))
 		{
 			/*
@@ -1009,10 +1035,12 @@ process_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *sta
 
 	/* Handle the last (merged) invalidation */
 	if (IsValidInvalidation(&mergedentry))
+	{
 		inner_range = cut_cagg_invalidation_and_compute_inner_range(state,
 																	refresh_window,
 																	&mergedentry,
 																	&inner_range);
+	}
 
 	/* Write the last (merged) inner range back to the cagg invalidation log */
 	insert_invalidation_entry(state->cagg_log_rel, &inner_range);
@@ -1229,7 +1257,9 @@ invalidation_hypertable_has_invalidations(int32 hyper_id)
 
 	ts_scan_iterator_start_scan(&iterator);
 	if (ts_scan_iterator_next(&iterator))
+	{
 		found = true;
+	}
 	ts_scan_iterator_close(&iterator);
 
 	return found;
@@ -1256,7 +1286,9 @@ invalidation_cagg_has_pending_mat_ranges(ContinuousAgg *cagg)
 
 	ts_scan_iterator_start_scan(&iterator);
 	if (ts_scan_iterator_next(&iterator))
+	{
 		found = true;
+	}
 	ts_scan_iterator_close(&iterator);
 
 	return found;
@@ -1289,7 +1321,9 @@ invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
 		/* Entries which cannot be invalidations */
 		if (logentry.greatest_modified_value == INVAL_NEG_INFINITY ||
 			logentry.lowest_modified_value >= watermark)
+		{
 			continue;
+		}
 		else
 		{
 			found = true;

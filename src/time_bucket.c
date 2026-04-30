@@ -212,7 +212,9 @@ ts_timestamp_bucket(PG_FUNCTION_ARGS)
 	Timestamp result;
 
 	if (TIMESTAMP_NOT_FINITE(timestamp))
+	{
 		PG_RETURN_TIMESTAMP(timestamp);
+	}
 
 	if (interval->month)
 	{
@@ -221,8 +223,10 @@ ts_timestamp_bucket(PG_FUNCTION_ARGS)
 
 		DateADT date = DatumGetDateADT(DirectFunctionCall1(timestamp_date, PG_GETARG_DATUM(1)));
 		if (origin != DEFAULT_ORIGIN)
+		{
 			origin_date =
 				DatumGetDateADT(DirectFunctionCall1(timestamp_date, TimestampGetDatum(origin)));
+		}
 
 		date = bucket_month(interval->month, date, origin_date);
 
@@ -247,7 +251,9 @@ ts_timestamp_offset_bucket(PG_FUNCTION_ARGS)
 	Datum timestamp = PG_GETARG_DATUM(1);
 
 	if (TIMESTAMP_NOT_FINITE(DatumGetTimestamp(timestamp)))
+	{
 		PG_RETURN_DATUM(timestamp);
+	}
 
 	/* Apply offset. */
 	timestamp = DirectFunctionCall2(timestamp_mi_interval, timestamp, PG_GETARG_DATUM(2));
@@ -274,7 +280,9 @@ ts_timestamptz_bucket(PG_FUNCTION_ARGS)
 	TimestampTz result;
 
 	if (TIMESTAMP_NOT_FINITE(timestamp))
+	{
 		PG_RETURN_TIMESTAMPTZ(timestamp);
+	}
 
 	if (interval->month)
 	{
@@ -283,8 +291,10 @@ ts_timestamptz_bucket(PG_FUNCTION_ARGS)
 
 		DateADT date = DatumGetDateADT(DirectFunctionCall1(timestamp_date, PG_GETARG_DATUM(1)));
 		if (origin != DEFAULT_ORIGIN)
+		{
 			origin_date =
 				DatumGetDateADT(DirectFunctionCall1(timestamp_date, TimestampTzGetDatum(origin)));
+		}
 
 		date = bucket_month(interval->month, date, origin_date);
 
@@ -309,7 +319,9 @@ ts_timestamptz_offset_bucket(PG_FUNCTION_ARGS)
 	Datum timestamp = PG_GETARG_DATUM(1);
 
 	if (TIMESTAMP_NOT_FINITE(DatumGetTimestampTz(timestamp)))
+	{
 		PG_RETURN_DATUM(timestamp);
+	}
 
 	/* Apply offset. */
 	timestamp = DirectFunctionCall2(timestamptz_mi_interval, timestamp, PG_GETARG_DATUM(2));
@@ -346,7 +358,9 @@ ts_timestamptz_timezone_bucket(PG_FUNCTION_ARGS)
 	 * defined STRICT due to the optional arguments.
 	 */
 	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+	{
 		PG_RETURN_NULL();
+	}
 
 	/*
 	 * Apply offset in UTC space to avoid DST issues (issue #7059).
@@ -426,7 +440,9 @@ ts_date_bucket(PG_FUNCTION_ARGS)
 	Timestamp timestamp, result;
 
 	if (DATE_NOT_FINITE(date))
+	{
 		PG_RETURN_DATEADT(date);
+	}
 
 	/* convert to timestamp (NOT tz), bucket, convert back to date */
 	timestamp = DatumGetTimestamp(DirectFunctionCall1(date_timestamp, PG_GETARG_DATUM(1)));
@@ -436,8 +452,10 @@ ts_date_bucket(PG_FUNCTION_ARGS)
 	{
 		origin = PG_GETARG_DATEADT(2);
 		if (!interval->month)
+		{
 			origin_ts =
 				DatumGetTimestamp(DirectFunctionCall1(date_timestamp, DateADTGetDatum(origin)));
+		}
 	}
 
 	if (interval->month)
@@ -467,7 +485,9 @@ ts_date_offset_bucket(PG_FUNCTION_ARGS)
 	Datum date = PG_GETARG_DATUM(1);
 
 	if (DATE_NOT_FINITE(DatumGetDateADT(date)))
+	{
 		PG_RETURN_DATUM(date);
+	}
 
 	/* Apply offset. */
 	Datum time = DirectFunctionCall2(date_mi_interval, date, PG_GETARG_DATUM(2));
@@ -496,9 +516,11 @@ ts_uuid_bucket(PG_FUNCTION_ARGS)
 	TimestampTz timestamp;
 
 	if (!ts_uuid_v7_extract_timestamptz(uuid, &timestamp, false))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("not a version 7 UUID: %s", uuid_to_str(uuid))));
+	}
 
 	PG_RETURN_DATUM(DirectFunctionCall3(ts_timestamptz_bucket,
 										PG_GETARG_DATUM(0),
@@ -515,9 +537,11 @@ ts_uuid_offset_bucket(PG_FUNCTION_ARGS)
 	TimestampTz timestamp;
 
 	if (!ts_uuid_v7_extract_timestamptz(uuid, &timestamp, false))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("not a version 7 UUID: %s", uuid_to_str(uuid))));
+	}
 	LOCAL_FCINFO(fcinfo_local, 3);
 	Datum result;
 
@@ -552,15 +576,19 @@ ts_uuid_timezone_bucket(PG_FUNCTION_ARGS)
 	 * defined STRICT due to the optional arguments.
 	 */
 	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+	{
 		PG_RETURN_NULL();
+	}
 
 	pg_uuid_t *uuid = PG_GETARG_UUID_P(1);
 	TimestampTz timestamp;
 
 	if (!ts_uuid_v7_extract_timestamptz(uuid, &timestamp, false))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("not a version 7 UUID: %s", uuid_to_str(uuid))));
+	}
 
 	LOCAL_FCINFO(fcinfo_local, 4);
 	Datum result;
@@ -629,23 +657,35 @@ ts_time_bucket_by_type_extended(int64 interval, int64 timestamp, Oid timestamp_t
 		case TIMESTAMPOID:
 			interval_in_interval_type = ts_internal_to_interval_value(interval, INTERVALOID);
 			if (offset.isnull)
+			{
 				bucket_function = ts_timestamp_bucket; /* handles also origin */
+			}
 			else
+			{
 				bucket_function = ts_timestamp_offset_bucket;
+			}
 			break;
 		case TIMESTAMPTZOID:
 			interval_in_interval_type = ts_internal_to_interval_value(interval, INTERVALOID);
 			if (offset.isnull)
+			{
 				bucket_function = ts_timestamptz_bucket; /* handles also origin */
+			}
 			else
+			{
 				bucket_function = ts_timestamptz_offset_bucket;
+			}
 			break;
 		case DATEOID:
 			interval_in_interval_type = ts_internal_to_interval_value(interval, INTERVALOID);
 			if (offset.isnull)
+			{
 				bucket_function = ts_date_bucket; /* handles also origin */
+			}
 			else
+			{
 				bucket_function = ts_date_offset_bucket;
+			}
 			break;
 		default:
 			elog(ERROR, "invalid time_bucket type \"%s\"", format_type_be(timestamp_type));

@@ -43,23 +43,29 @@ check_time_bucket_argument(Node *arg, char *position, bool process_checks, Strin
 						   bool for_rewrites)
 {
 	if (IsA(arg, NamedArgExpr))
+	{
 		arg = (Node *) castNode(NamedArgExpr, arg)->arg;
+	}
 
 	Node *expr = eval_const_expressions(NULL, arg);
 
 	if (process_checks && !IsA(expr, Const))
 	{
 		if (!for_rewrites)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("only immutable expressions allowed in time bucket function"),
 					 errhint("Use an immutable expression as %s argument to the time bucket "
 							 "function.",
 							 position)));
+		}
 		else if (msg)
+		{
 			appendStringInfo(msg,
 							 "non-immutable expression as %s argument to the time bucket function",
 							 position);
+		}
 		return NULL;
 	}
 
@@ -107,10 +113,14 @@ function_allowed_in_cagg_definition(Oid funcid)
 {
 	FuncInfo *finfo = ts_func_cache_get_bucketing_func(funcid);
 	if (finfo == NULL)
+	{
 		return false;
+	}
 
 	if (finfo->allowed_in_cagg_definition)
+	{
 		return true;
+	}
 
 	return false;
 }
@@ -195,8 +205,10 @@ process_additional_timebucket_parameter(ContinuousAggBucketFunction *bf, Const *
 		case DATEOID:
 			/* Bucket origin as Date */
 			if (!arg->constisnull)
+			{
 				bf->bucket_time_origin =
 					date2timestamptz_opt_overflow(DatumGetDateADT(arg->constvalue), NULL);
+			}
 			*custom_origin = true;
 			break;
 		case TIMESTAMPOID:
@@ -251,20 +263,26 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 
 	/* Could be a named argument */
 	if (IsA(col_arg, NamedArgExpr))
+	{
 		col_arg = (Node *) castNode(NamedArgExpr, col_arg)->arg;
+	}
 
 	if (process_checks && htpartcolno != InvalidAttrNumber &&
 		(!(IsA(col_arg, Var)) || castNode(Var, col_arg)->varattno != htpartcolno))
 	{
 		if (!for_rewrites)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("time bucket function must reference the primary hypertable "
 							"dimension column")));
+		}
 		else if (msg)
+		{
 			appendStringInfoString(msg,
 								   "time bucket function must reference the primary hypertable "
 								   "dimension column");
+		}
 		return;
 	}
 
@@ -296,7 +314,9 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 												msg,
 												for_rewrites);
 		if (!arg)
+		{
 			return;
+		}
 		process_additional_timebucket_parameter(bf, arg, &custom_origin);
 	}
 
@@ -316,7 +336,9 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 												msg,
 												for_rewrites);
 		if (!arg)
+		{
 			return;
+		}
 		process_additional_timebucket_parameter(bf, arg, &custom_origin);
 	}
 
@@ -328,18 +350,24 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 												msg,
 												for_rewrites);
 		if (!arg)
+		{
 			return;
+		}
 		process_additional_timebucket_parameter(bf, arg, &custom_origin);
 	}
 
 	if (process_checks && custom_origin && TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
 	{
 		if (!for_rewrites)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("invalid origin value: infinity")));
+		}
 		else if (msg)
+		{
 			appendStringInfoString(msg, "invalid time bucket origin value: infinity");
+		}
 		return;
 	}
 
@@ -352,7 +380,9 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 	width_arg = linitial(fe->args);
 
 	if (IsA(width_arg, NamedArgExpr))
+	{
 		width_arg = (Node *) castNode(NamedArgExpr, width_arg)->arg;
+	}
 
 	width_arg = eval_const_expressions(NULL, width_arg);
 	if (IsA(width_arg, Const))
@@ -363,9 +393,11 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 		if (width->constisnull)
 		{
 			if (process_checks && is_cagg_create)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("invalid bucket width for time bucket function")));
+			}
 		}
 		else
 		{
@@ -384,15 +416,19 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 	else if (process_checks)
 	{
 		if (!for_rewrites)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("only immutable expressions allowed in time bucket function"),
 					 errhint("Use an immutable expression as first argument to the time bucket "
 							 "function.")));
+		}
 		else if (msg)
+		{
 			appendStringInfoString(msg,
 								   "non-immutable expression as first argument to the time bucket "
 								   "function");
+		}
 		return;
 	}
 
@@ -433,7 +469,9 @@ caggtimebucket_validate_common(ContinuousAggBucketFunction *bf, List *groupClaus
 		RangeTblEntry *rte = (RangeTblEntry *) lfirst(l);
 
 		if (rte->rtekind == RTE_GROUP)
+		{
 			group_rte_exprs = list_concat(group_rte_exprs, rte->groupexprs);
+		}
 	}
 
 	group_exprs = group_rte_exprs;
@@ -468,18 +506,24 @@ caggtimebucket_validate_common(ContinuousAggBucketFunction *bf, List *groupClaus
 			if (found)
 			{
 				if (!for_rewrites)
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("continuous aggregate view cannot contain"
 									" multiple time bucket functions")));
+				}
 				else if (msg)
+				{
 					appendStringInfoString(msg,
 										   "multiple time bucket functions are not supported with "
 										   "CAggs");
+				}
 				return false;
 			}
 			else
+			{
 				found = true;
+			}
 
 			process_timebucket_parameters(fe,
 										  bf,
@@ -489,24 +533,30 @@ caggtimebucket_validate_common(ContinuousAggBucketFunction *bf, List *groupClaus
 										  msg,
 										  for_rewrites);
 			if (!OidIsValid(bf->bucket_function))
+			{
 				return false;
+			}
 		}
 	}
 
 	if (bf->bucket_time_offset != NULL && TIMESTAMP_NOT_FINITE(bf->bucket_time_origin) == false)
 	{
 		if (!for_rewrites)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("using offset and origin in a time_bucket function at the same time is "
 							"not "
 							"supported")));
+		}
 		else if (msg)
+		{
 			appendStringInfoString(msg,
 								   "using offset and origin in a time_bucket function at the same "
 								   "time is "
 								   "not "
 								   "supported");
+		}
 		return false;
 	}
 
@@ -518,22 +568,28 @@ caggtimebucket_validate_common(ContinuousAggBucketFunction *bf, List *groupClaus
 
 		if ((bf->bucket_time_width->month != 0) &&
 			((bf->bucket_time_width->day != 0) || (bf->bucket_time_width->time != 0)))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("invalid interval specified"),
 					 errhint("Use either months or days and hours, but not months, days and hours "
 							 "together")));
+		}
 	}
 
 	if (!found)
 	{
 		if (!for_rewrites)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg(
 						 "continuous aggregate view must include a valid time bucket function")));
+		}
 		else if (msg)
+		{
 			appendStringInfoString(msg, "should be a valid time bucket function in the query");
+		}
 
 		return false;
 	}
@@ -571,17 +627,25 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 	if (!query->jointree->fromlist)
 	{
 		if (!for_rewrites)
+		{
 			appendStringInfoString(hint, "FROM clause missing in the query");
+		}
 		else if (hint)
+		{
 			appendStringInfoString(hint, "FROM clause missing in the query");
+		}
 		return false;
 	}
 	if (query->commandType != CMD_SELECT)
 	{
 		if (!for_rewrites)
+		{
 			appendStringInfoString(hint, "Use a SELECT query in the continuous aggregate view.");
+		}
 		else if (hint)
+		{
 			appendStringInfoString(hint, "not a SELECT query");
+		}
 		return false;
 	}
 
@@ -590,12 +654,16 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 		if (ts_guc_enable_cagg_window_functions)
 		{
 			if (!for_rewrites)
+			{
 				elog(WARNING,
 					 "window function support is experimental and may result in unexpected results "
 					 "depending on the functions used.");
+			}
 
 			else if (hint)
+			{
 				appendStringInfoString(hint, "Window function in a query");
+			}
 		}
 		else
 		{
@@ -607,7 +675,9 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 									   "timescaledb.enable_cagg_window_functions.");
 			}
 			else if (hint)
+			{
 				appendStringInfoString(hint, "Window function in a query");
+			}
 			return false;
 		}
 	}
@@ -615,13 +685,17 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 	if (query->hasDistinctOn || query->distinctClause)
 	{
 		if (!for_rewrites)
+		{
 			appendStringInfoString(detail,
 								   "DISTINCT / DISTINCT ON queries are not supported by continuous "
 								   "aggregates.");
+		}
 		else if (hint)
+		{
 			appendStringInfoString(hint,
 								   "DISTINCT / DISTINCT ON queries are not supported by continuous "
 								   "aggregates.");
+		}
 		return false;
 	}
 
@@ -640,37 +714,49 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 	if (query->hasRecursive || query->hasSubLinks || query->cteList)
 	{
 		if (!for_rewrites)
+		{
 			appendStringInfoString(detail,
 								   "CTEs and subqueries are not supported by "
 								   "continuous aggregates.");
+		}
 		else if (hint)
+		{
 			appendStringInfoString(hint,
 								   "CTEs and sublinks are not supported by "
 								   "continuous aggregates.");
+		}
 		return false;
 	}
 
 	if (query->hasForUpdate || query->hasModifyingCTE)
 	{
 		if (!for_rewrites)
+		{
 			appendStringInfoString(detail,
 								   "Data modification is not allowed in continuous aggregate view "
 								   "definitions.");
+		}
 		else if (hint)
+		{
 			appendStringInfoString(hint,
 								   "Data modification is not allowed in continuous aggregates");
+		}
 		return false;
 	}
 
 	if (query->hasRowSecurity)
 	{
 		if (!for_rewrites)
+		{
 			appendStringInfoString(detail,
 								   "Row level security is not supported by continuous aggregate "
 								   "views.");
+		}
 		else if (hint)
+		{
 			appendStringInfoString(hint,
 								   "Row level security is not supported by continuous aggregates");
+		}
 		return false;
 	}
 
@@ -686,22 +772,28 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 								   "levels.");
 		}
 		else if (hint)
+		{
 			appendStringInfoString(hint,
 								   "GROUP BY GROUPING SETS, ROLLUP and CUBE are not supported by "
 								   "continuous aggregates");
+		}
 		return false;
 	}
 
 	if (query->setOperations)
 	{
 		if (!for_rewrites)
+		{
 			appendStringInfoString(detail,
 								   "UNION, EXCEPT & INTERSECT are not supported by continuous "
 								   "aggregates");
+		}
 		else if (hint)
+		{
 			appendStringInfoString(hint,
 								   "UNION, EXCEPT & INTERSECT are not supported by continuous "
 								   "aggregates");
+		}
 		return false;
 	}
 
@@ -712,11 +804,15 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 		 * for groupClause.
 		 */
 		if (!for_rewrites)
+		{
 			appendStringInfoString(hint,
 								   "Include at least one aggregate function"
 								   " and a GROUP BY clause with time bucket.");
+		}
 		else if (hint)
+		{
 			appendStringInfoString(hint, "no GROUP BY clause in the query");
+		}
 		return false;
 	}
 
@@ -741,28 +837,36 @@ cagg_query_rtes_supported(RangeTblEntry *rte, RangeTblEntry **ht_rte, StringInfo
 		else if (is_hypertable && (*ht_rte))
 		{
 			if (!for_rewrites)
+			{
 				appendStringInfoString(detail,
 									   "Only one hypertable is allowed in continuous aggregate "
 									   "view.");
+			}
 			else if (detail)
+			{
 				appendStringInfo(detail,
 								 "More than one hypertable in the query: \"%s\" and \"%s\"",
 								 rte->eref->aliasname,
 								 (*ht_rte)->eref->aliasname);
+			}
 			return false;
 		}
 
 		if (is_hypertable && rte->inh == false && !(for_rewrites && rte->relkind == RELKIND_VIEW))
 		{
 			if (!for_rewrites)
+			{
 				appendStringInfoString(detail,
 									   "FROM ONLY on hypertables is not allowed in continuous "
 									   "aggregate.");
+			}
 			else if (detail)
+			{
 				appendStringInfo(detail,
 								 "FROM ONLY on hypertable \"%s\" is not allowed in continuous "
 								 "aggregate.",
 								 rte->eref->aliasname);
+			}
 			return false;
 		}
 	}
@@ -770,9 +874,11 @@ cagg_query_rtes_supported(RangeTblEntry *rte, RangeTblEntry **ht_rte, StringInfo
 	if (rte->jointype != JOIN_INNER && rte->jointype != JOIN_LEFT)
 	{
 		if (detail)
+		{
 			appendStringInfoString(detail,
 								   "only INNER or LEFT joins are supported in continuous "
 								   "aggregates");
+		}
 		return false;
 	}
 
@@ -780,11 +886,15 @@ cagg_query_rtes_supported(RangeTblEntry *rte, RangeTblEntry **ht_rte, StringInfo
 	if (rte->subquery && !rte->lateral && !(for_rewrites && rte->relkind == RELKIND_VIEW))
 	{
 		if (!for_rewrites)
+		{
 			appendStringInfoString(detail, "Sub-queries are not supported in FROM clause.");
+		}
 		else if (detail)
+		{
 			appendStringInfoString(detail,
 								   "only LATERAL subqueries in FROM clause are supported in "
 								   "continuous aggregates.");
+		}
 		return false;
 	}
 
@@ -792,7 +902,9 @@ cagg_query_rtes_supported(RangeTblEntry *rte, RangeTblEntry **ht_rte, StringInfo
 	if (rte->tablesample)
 	{
 		if (detail)
+		{
 			appendStringInfoString(detail, "TABLESAMPLE is not supported in continuous aggregate.");
+		}
 		return false;
 	}
 	return true;
@@ -805,12 +917,16 @@ cagg_hypertable_dim_supported(RangeTblEntry *ht_rte, Hypertable *ht, StringInfo 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 	{
 		if (!for_rewrites)
+		{
 			appendStringInfoString(msg, "hypertable is an internal compressed hypertable");
+		}
 		else if (msg)
+		{
 			appendStringInfo(msg,
 							 "hypertable \"%s.%s\" is an internal compressed hypertable",
 							 NameStr(ht->fd.schema_name),
 							 NameStr(ht->fd.table_name));
+		}
 		return NULL;
 	}
 
@@ -860,9 +976,11 @@ cagg_hypertable_dim_supported(RangeTblEntry *ht_rte, Hypertable *ht, StringInfo 
 	if (part_dimension == NULL || part_dimension->partitioning != NULL)
 	{
 		if (msg)
+		{
 			appendStringInfoString(msg,
 								   "custom partitioning functions not supported with continuous "
 								   "aggregates");
+		}
 		return NULL;
 	}
 
@@ -885,9 +1003,11 @@ cagg_hypertable_dim_supported(RangeTblEntry *ht_rte, Hypertable *ht, StringInfo 
 				appendStringInfoString(hint, "Set a custom time function on the hypertable.");
 			}
 			else if (msg)
+			{
 				appendStringInfo(msg,
 								 "custom time function required on integer-based hypertable \"%s\"",
 								 get_rel_name(ht->main_table_relid));
+			}
 			return NULL;
 		}
 	}
@@ -898,46 +1018,64 @@ bool
 cagg_timebucket_equal(ContinuousAggBucketFunction *bf1, ContinuousAggBucketFunction *bf2)
 {
 	if (bf1->bucket_time_based != bf2->bucket_time_based)
+	{
 		return false;
+	}
 
 	if (bf1->bucket_fixed_interval != bf2->bucket_fixed_interval)
+	{
 		return false;
+	}
 
 	if (bf1->bucket_time_based)
 	{
 		if (bf1->bucket_time_origin != bf2->bucket_time_origin)
+		{
 			return false;
+		}
 
 		if ((bf1->bucket_time_offset && !bf2->bucket_time_offset) ||
 			(!bf1->bucket_time_offset && bf2->bucket_time_offset))
+		{
 			return false;
+		}
 		if (bf1->bucket_time_offset && bf2->bucket_time_offset)
 		{
 			Datum offset1 = IntervalPGetDatum(bf1->bucket_time_offset);
 			Datum offset2 = IntervalPGetDatum(bf2->bucket_time_offset);
 			bool equal_offsets = DatumGetBool(DirectFunctionCall2(interval_eq, offset1, offset2));
 			if (!equal_offsets)
+			{
 				return false;
+			}
 		}
 
 		if ((bf1->bucket_time_timezone && !bf2->bucket_time_timezone) ||
 			(!bf1->bucket_time_timezone && bf2->bucket_time_timezone))
+		{
 			return false;
+		}
 		if (bf1->bucket_time_timezone && bf2->bucket_time_timezone &&
 			strcmp(bf1->bucket_time_timezone, bf2->bucket_time_timezone) != 0)
+		{
 			return false;
+		}
 	}
 	else
 	{
 		if (bf1->bucket_integer_offset != bf2->bucket_integer_offset)
+		{
 			return false;
+		}
 	}
 
 	int64 bucket_width1 = ts_continuous_agg_bucket_width(bf1);
 	int64 bucket_width2 = ts_continuous_agg_bucket_width(bf2);
 
 	if (bucket_width1 != bucket_width2)
+	{
 		return false;
+	}
 
 	return true;
 }
@@ -1058,7 +1196,9 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 				 errdetail("At least one hypertable should be used in the view definition.")));
 	}
 	else
+	{
 		ht_rte = copyObject(ht_rte);
+	}
 
 	const Dimension *part_dimension = NULL;
 	int32 parent_mat_hypertable_id = INVALID_HYPERTABLE_ID;
@@ -1095,11 +1235,15 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 
 		/* If parent cagg is hierarchical then we should get the matht otherwise the rawht. */
 		if (ContinuousAggIsHierarchical(cagg_parent))
+		{
 			ht_parent =
 				ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.mat_hypertable_id);
+		}
 		else
+		{
 			ht_parent =
 				ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.raw_hypertable_id);
+		}
 
 		/* Get the querydef for the source cagg. */
 		is_hierarchical = true;
@@ -1170,9 +1314,11 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 
 	/* Check row security settings for the table. */
 	if (ts_has_row_security(ht_rte->relid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot create continuous aggregate on hypertable with row security")));
+	}
 
 	/* At this point, we should have a valid bucket function. Otherwise, we have errored out before.
 	 */
@@ -1224,9 +1370,13 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 		if (bucket_width_parent != 0)
 		{
 			if (bucket_width_parent > bucket_width && bucket_width != 0)
+			{
 				is_multiple_of_parent = ((bucket_width_parent % bucket_width) == 0);
+			}
 			else
+			{
 				is_multiple_of_parent = ((bucket_width % bucket_width_parent) == 0);
+			}
 		}
 
 		/* Proceed with validation errors. */
@@ -1236,11 +1386,15 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 
 			/* New bucket should be multiple of the parent. */
 			if (!is_multiple_of_parent)
+			{
 				message = "multiple of";
+			}
 
 			/* New bucket should be greater than the parent. */
 			if (!is_greater_or_equal_than_parent)
+			{
 				message = "greater or equal than";
+			}
 
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1344,7 +1498,9 @@ cagg_validate_query(const Query *query, const char *cagg_schema, const char *cag
 	}
 
 	if (is_hierarchical)
+	{
 		bucket_info.htoidparent = cagg_parent->relid;
+	}
 
 	return bucket_info;
 }
@@ -1577,7 +1733,9 @@ makeRangeTblEntry(Query *query, const char *aliasname)
 	{
 		TargetEntry *tle = lfirst_node(TargetEntry, lc);
 		if (!tle->resjunk)
+		{
 			rte->eref->colnames = lappend(rte->eref->colnames, makeString(pstrdup(tle->resname)));
+		}
 	}
 
 	rte->lateral = false;
@@ -1622,7 +1780,9 @@ build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *
 	q2 = copyObject(q2);
 
 	if (q1->sortClause)
+	{
 		sortClause = copyObject(q1->sortClause);
+	}
 
 	/*
 	 * For UUID-partitioned hypertables, the materialization table's partition
@@ -1634,7 +1794,9 @@ build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *
 	Oid q2_partcoltype = tbinfo->htpartcoltype;
 
 	if (tbinfo->htpartcoltype == UUIDOID)
+	{
 		q1_partcoltype = TIMESTAMPTZOID;
+	}
 
 	TypeCacheEntry *tce_q1 = lookup_type_cache(q1_partcoltype, TYPECACHE_LT_OPR);
 	TypeCacheEntry *tce_q2 = lookup_type_cache(q2_partcoltype, TYPECACHE_LT_OPR);
@@ -1765,8 +1927,10 @@ cagg_get_by_relid_or_fail(const Oid cagg_relid)
 	ContinuousAgg *cagg;
 
 	if (!OidIsValid(cagg_relid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid continuous aggregate")));
+	}
 
 	cagg = ts_continuous_agg_find_by_relid(cagg_relid);
 
@@ -1775,13 +1939,17 @@ cagg_get_by_relid_or_fail(const Oid cagg_relid)
 		const char *relname = get_rel_name(cagg_relid);
 
 		if (relname == NULL)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_TABLE),
 					 (errmsg("continuous aggregate does not exist"))));
+		}
 		else
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 (errmsg("relation \"%s\" is not a continuous aggregate", relname))));
+		}
 	}
 
 	return cagg;
@@ -1822,7 +1990,9 @@ ts_cagg_get_bucket_function_info(Oid view_oid)
 			Assert(var->varattno > 0);
 			Expr *node = list_nth(rte->groupexprs, var->varattno - 1);
 			if (IsA(node, FuncExpr))
+			{
 				expr = node;
+			}
 		}
 #endif
 
@@ -1833,7 +2003,9 @@ ts_cagg_get_bucket_function_info(Oid view_oid)
 			/* Filter any non bucketing functions */
 			FuncInfo *finfo = ts_func_cache_get_bucketing_func(fe->funcid);
 			if (finfo == NULL)
+			{
 				continue;
+			}
 
 			Assert(finfo->is_bucketing_func);
 
@@ -1887,9 +2059,11 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 		RangeTblEntry *finalize_query_rte = linitial(cagg_view_query->rtable);
 #endif
 		if (finalize_query_rte->rtekind != RTE_SUBQUERY)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_UNEXPECTED),
 					 errmsg("unexpected rte type for view %d", finalize_query_rte->rtekind)));
+		}
 
 		finalize_query = finalize_query_rte->subquery;
 	}
@@ -1905,7 +2079,9 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 
 		/* "resname" is the same as "mat column names" */
 		if (!cagg_tle->resjunk && cagg_tle->resname)
+		{
 			retlist = lappend(retlist, get_attname(mat_relid, cagg_tle->resno, false));
+		}
 	}
 	return retlist;
 }

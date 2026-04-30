@@ -149,17 +149,21 @@ ts_time_value_from_arg(Datum arg, Oid argtype, Oid timetype, bool need_now_func)
 	if (IS_INTEGER_TYPE(timetype) && (argtype == INTERVALOID || IS_TIMESTAMP_TYPE(argtype)))
 	{
 		if (need_now_func)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("invalid time argument type \"%s\"", format_type_be(argtype)),
 					 errhint("Try casting the argument to \"%s\".", format_type_be(timetype))));
+		}
 		/*
 		 * The argument type is INTERVAL or TIMESTAMP-like for INTEGER column; this signifies that
 		 * chunks are retained based on chunk creation time. Chunk creation time is represented
 		 * as TIMESTAMPTZ, the input argument should be typecast to TIMESTAMPTZ.
 		 */
 		if (argtype == INTERVALOID)
+		{
 			arg = ts_subtract_interval_from_now(DatumGetIntervalP(arg), TIMESTAMPTZOID);
+		}
 
 		return DatumGetInt64(arg);
 	}
@@ -170,10 +174,12 @@ ts_time_value_from_arg(Datum arg, Oid argtype, Oid timetype, bool need_now_func)
 		argtype = timetype;
 	}
 	else if (argtype != timetype && !can_coerce_type(1, &argtype, &timetype, COERCION_IMPLICIT))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid time argument type \"%s\"", format_type_be(argtype)),
 				 errhint("Try casting the argument to \"%s\".", format_type_be(timetype))));
+	}
 
 	return ts_time_value_to_internal(arg, argtype);
 }
@@ -193,7 +199,9 @@ static Oid
 coerce_to_time_type(Oid type)
 {
 	if (ts_type_is_int8_binary_compatible(type))
+	{
 		return INT8OID;
+	}
 
 	ereport(ERROR,
 			errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -321,7 +329,9 @@ Datum
 ts_time_datum_get_nobegin_or_min(Oid timetype)
 {
 	if (IS_TIMESTAMP_TYPE(timetype))
+	{
 		return ts_time_datum_get_nobegin(timetype);
+	}
 
 	return ts_time_datum_get_min(timetype);
 }
@@ -446,7 +456,9 @@ int64
 ts_time_get_end_or_max(Oid timetype)
 {
 	if (IS_TIMESTAMP_TYPE(timetype))
+	{
 		return ts_time_get_end(timetype);
+	}
 
 	return ts_time_get_max(timetype);
 }
@@ -477,7 +489,9 @@ int64
 ts_time_get_nobegin_or_min(Oid timetype)
 {
 	if (IS_TIMESTAMP_TYPE(timetype))
+	{
 		return ts_time_get_nobegin(timetype);
+	}
 
 	return ts_time_get_min(timetype);
 }
@@ -508,7 +522,9 @@ int64
 ts_time_get_noend_or_max(Oid timetype)
 {
 	if (IS_TIMESTAMP_TYPE(timetype))
+	{
 		return ts_time_get_noend(timetype);
+	}
 
 	return ts_time_get_max(timetype);
 }
@@ -525,10 +541,14 @@ int64
 ts_time_saturating_add(int64 timeval, int64 interval, Oid timetype)
 {
 	if (timeval > 0 && interval > 0 && timeval > (ts_time_get_max(timetype) - interval))
+	{
 		return ts_time_get_noend_or_max(timetype);
+	}
 
 	if (timeval < 0 && interval < 0 && timeval < (ts_time_get_min(timetype) - interval))
+	{
 		return ts_time_get_nobegin_or_min(timetype);
+	}
 
 	return timeval + interval;
 }
@@ -545,10 +565,14 @@ int64
 ts_time_saturating_sub(int64 timeval, int64 interval, Oid timetype)
 {
 	if (timeval < 0 && interval > 0 && timeval < (ts_time_get_min(timetype) + interval))
+	{
 		return ts_time_get_nobegin_or_min(timetype);
+	}
 
 	if (timeval > 0 && interval < 0 && timeval > (ts_time_get_max(timetype) + interval))
+	{
 		return ts_time_get_noend_or_max(timetype);
+	}
 
 	return timeval - interval;
 }
@@ -583,11 +607,17 @@ ts_subtract_integer_from_now_saturating(Oid now_func, int64 interval, Oid timety
 			elog(ERROR, "unsupported integer time type \"%s\"", format_type_be(timetype));
 	}
 	if (nowval > 0 && interval < 0 && nowval > time_max + interval)
+	{
 		res = time_max;
+	}
 	else if (nowval < 0 && interval > 0 && nowval < time_min + interval)
+	{
 		res = time_min;
+	}
 	else
+	{
 		res = nowval - interval;
+	}
 	return res;
 }
 
