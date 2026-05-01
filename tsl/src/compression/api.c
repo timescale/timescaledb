@@ -44,6 +44,7 @@
 #include "debug_point.h"
 #include "error_utils.h"
 #include "errors.h"
+#include "guc.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
@@ -505,9 +506,14 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	 * In contrast, when the compressed chunk part is created in the same transaction as the tuples
 	 * are written, the compressed chunk (i.e., the catalog entry) becomes visible to other
 	 * transactions only after the transaction that performs the compression is committed and
-	 * the uncompressed chunk is truncated.
+	 * the uncompressed chunk is truncated. This only holds for truncate_only behaviour; the
+	 * other behaviours may DELETE instead, which leaves the uncompressed rows visible to
+	 * concurrent readers and would expose duplicates when combined with HEAP_INSERT_FROZEN.
 	 */
-	int insert_options = new_compressed_chunk ? HEAP_INSERT_FROZEN : 0;
+	int insert_options =
+		(new_compressed_chunk && ts_guc_compress_truncate_behaviour == COMPRESS_TRUNCATE_ONLY) ?
+			HEAP_INSERT_FROZEN :
+			0;
 
 	before_size = ts_relation_size_impl(cxt.srcht_chunk->table_id);
 
