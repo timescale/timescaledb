@@ -97,6 +97,20 @@ FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
 
 SELECT debug_waitpoint_release('cagg_refresh_fail_in_registration');
 
+-- Test 4b: refresh fails at the start of Txn1 (right after registration commit)
+BEGIN; INSERT INTO conditions VALUES ('2026-03-01', 333), ('2026-03-05', 333); COMMIT;
+
+SELECT debug_waitpoint_enable('cagg_refresh_fail_at_txn1_start');
+
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('cond_daily', '2026-01-05', '2026-03-15');
+\set ON_ERROR_STOP 1
+
+SELECT count(*) AS jobs_after_txn1_start_fail
+FROM _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges;
+
+SELECT debug_waitpoint_release('cagg_refresh_fail_at_txn1_start');
+
 -- Test 5: stale entry with a dead PID is cleaned up by the next refresh.
 -- Inserting a row with PID 0 as a dummy job.
 INSERT INTO _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges

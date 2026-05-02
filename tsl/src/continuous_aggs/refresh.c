@@ -915,13 +915,20 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 	}
 
 	DEBUG_WAITPOINT("cagg_refresh_before_first_txn_commit");
-	SPI_commit_and_chain();
 
 	volatile bool refreshed = false;
 	volatile ErrorData *edata = NULL;
 	PG_TRY();
 	{
-		/* Commit and Start a new transaction */
+		/*
+		 * Commit the registration row and start a new transaction. Kept inside
+		 * PG_TRY so that an error here (e.g. cancel arriving after the commit
+		 * is durable but before the chained transaction has started) is routed
+		 * through rollback_and_error, which deletes the just-committed
+		 * registration row in a fresh transaction.
+		 */
+		SPI_commit_and_chain();
+		DEBUG_ERROR_INJECTION("cagg_refresh_fail_at_txn1_start");
 
 		DEBUG_WAITPOINT("cagg_refresh_after_register");
 
