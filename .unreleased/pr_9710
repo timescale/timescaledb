@@ -1,0 +1,1 @@
+Fixes: #9710 Return bigint from compressed_data_column_size

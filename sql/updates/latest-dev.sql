@@ -163,6 +163,10 @@ DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_process_hypertable_invali
 DROP PROCEDURE IF EXISTS @extschema@.add_process_hypertable_invalidations_policy(REGCLASS, INTERVAL, BOOL, TIMESTAMPTZ, TEXT);
 DROP PROCEDURE IF EXISTS @extschema@.remove_process_hypertable_invalidations_policy(REGCLASS, BOOL);
 
+-- Return type widened from INTEGER to BIGINT; per-batch byte count can
+-- exceed INT32_MAX for wide varlena columns and was silently wrapping.
+DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_column_size(_timescaledb_internal.compressed_data, ANYELEMENT);
+
 -- Migration: refresh orderby sparse index entries in compression_settings
 UPDATE _timescaledb_catalog.compression_settings
 SET index = (
