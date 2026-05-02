@@ -591,7 +591,7 @@ tsl_uuid_compressor_finish(PG_FUNCTION_ARGS)
 extern ArrowArray *
 uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 {
-	Assert(element_type == UUIDOID);
+	CheckCompressedData(element_type == UUIDOID);
 
 	MemoryContext old_context;
 	ArrowArray *timestamp_array = NULL;
@@ -744,7 +744,7 @@ static void
 decompression_iterator_init(UuidDecompressionIterator *iter, void *compressed, Oid element_type,
 							bool forward)
 {
-	Assert(element_type == UUIDOID);
+	CheckCompressedData(element_type == UUIDOID);
 
 	ArrowArray *arrow_array =
 		uuid_decompress_all(PointerGetDatum(compressed), element_type, CurrentMemoryContext);

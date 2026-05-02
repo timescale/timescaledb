@@ -134,6 +134,34 @@ FROM
 ORDER BY
 	1,2,3;
 
+-- Calling compressed_data_to_array / compressed_data_column_size on a
+-- bool-compressed value with a non-bool element type must raise a clean
+-- error rather than aborting on an assert (or silently producing garbage
+-- in release builds).
+\set ON_ERROR_STOP 0
+DO $$
+DECLARE
+    bool_chunk regclass;
+BEGIN
+    SELECT compressed_chunk INTO bool_chunk
+    FROM compression_info WHERE result LIKE '(BOOL,%' LIMIT 1;
+    EXECUTE format(
+        'SELECT _timescaledb_functions.compressed_data_to_array(b1, NULL::int4) FROM %s WHERE b1 IS NOT NULL LIMIT 1',
+        bool_chunk);
+END $$;
+
+DO $$
+DECLARE
+    bool_chunk regclass;
+BEGIN
+    SELECT compressed_chunk INTO bool_chunk
+    FROM compression_info WHERE result LIKE '(BOOL,%' LIMIT 1;
+    EXECUTE format(
+        'SELECT _timescaledb_functions.compressed_data_column_size(b1, NULL::int4) FROM %s WHERE b1 IS NOT NULL LIMIT 1',
+        bool_chunk);
+END $$;
+\set ON_ERROR_STOP 1
+
 DROP TABLE t;
 DROP TABLE d;
 DROP TABLE chunks_done;
