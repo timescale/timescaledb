@@ -251,16 +251,13 @@ delete_relation_rows(Oid table_oid)
 	Relation rel = table_open(table_oid, RowExclusiveLock);
 	Snapshot snap = RegisterSnapshot(GetLatestSnapshot());
 
-	/* Delete the rows in the table */
+	/*
+	 * Delete the rows in the table. heap_delete also deletes any out-of-line
+	 * TOAST values via heap_toast_delete, so the TOAST relation does not need
+	 * a separate pass; doing one would re-visit those TOAST tuples in the
+	 * same command and fail with "tuple already updated by self".
+	 */
 	RelationDeleteAllRows(rel, snap);
-
-	/* Delete the rows in the toast table */
-	if (OidIsValid(rel->rd_rel->reltoastrelid))
-	{
-		Relation toast_rel = table_open(rel->rd_rel->reltoastrelid, RowExclusiveLock);
-		RelationDeleteAllRows(toast_rel, snap);
-		table_close(toast_rel, NoLock);
-	}
 
 	table_close(rel, NoLock);
 	UnregisterSnapshot(snap);
