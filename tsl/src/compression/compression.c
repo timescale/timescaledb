@@ -2811,14 +2811,14 @@ tsl_compressed_data_column_size(PG_FUNCTION_ARGS)
 	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
 	{
 		/* All values are NULL, so size is 0 */
-		PG_RETURN_INT32(0);
+		PG_RETURN_INT64(0);
 	}
 
 	/* Initialize the decompression iterator */
 	iter = definitions[header->compression_algorithm].iterator_init_forward(PointerGetDatum(header),
 																			element_type);
 
-	int32 column_size = 0;
+	int64 column_size = 0;
 	/* Iterate through all compressed values */
 	for (;;)
 	{
@@ -2849,7 +2849,7 @@ tsl_compressed_data_column_size(PG_FUNCTION_ARGS)
 		}
 	}
 
-	PG_RETURN_INT32(column_size);
+	PG_RETURN_INT64(column_size);
 }
 
 Datum
