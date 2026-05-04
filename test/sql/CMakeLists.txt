@@ -21,7 +21,6 @@ set(TEST_FILES
     ddl.sql
     ddl_errors.sql
     ddl_extra.sql
-    dml_system_columns.sql
     debug_utils.sql
     delete.sql
     drop_extension.sql
@@ -134,7 +133,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
-  list(APPEND TEST_FILES insert_returning_old_new.sql)
+  list(APPEND TEST_FILES insert_returning_old_new.sql dml_system_columns.sql)
 endif()
 
 # only test custom type if we are in 64-bit architecture
