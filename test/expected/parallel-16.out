@@ -769,7 +769,6 @@ RESET max_parallel_workers_per_gather;
          ->  Seq Scan on _hyper_1_2_chunk
                Filter: (ts < now())
 
-
 -- test parallel ChunkAppend with InitPlan params (runtime exclusion)
 -- Filter on j (non-partitioning column) so that the planner produces a
 -- parallel-aware ChunkAppend with runtime_exclusion_parent but without
