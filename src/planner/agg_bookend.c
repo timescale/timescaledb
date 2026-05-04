@@ -95,7 +95,9 @@ Node *
 mutate_aggref_node(Node *node, MutatorContext *context)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 	if (IsA(node, Aggref))
 	{
 		Aggref *aggref = (Aggref *) node;
@@ -111,7 +113,9 @@ mutate_aggref_node(Node *node, MutatorContext *context)
 				MinMaxAggInfo *mminfo = (MinMaxAggInfo *) lfirst(cell);
 
 				if (mminfo->aggfnoid == aggref->aggfnoid && equal(mminfo->target, curTarget->expr))
+				{
 					return (Node *) copyObject(mminfo->param);
+				}
 			}
 		}
 	}
@@ -144,12 +148,18 @@ get_func_strategy(Oid func_oid)
 {
 	/* Ensure function cache is initialized */
 	if (!OidIsValid(ts_first_func_oid) || !OidIsValid(ts_last_func_oid))
+	{
 		ts_func_cache_init();
+	}
 
 	if (func_oid == ts_first_func_oid)
+	{
 		return BTLessStrategyNumber;
+	}
 	if (func_oid == ts_last_func_oid)
+	{
 		return BTGreaterStrategyNumber;
+	}
 
 	return InvalidStrategy;
 }
@@ -158,13 +168,17 @@ static bool
 is_first_last_node(Node *node, List **context)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 	if (IsA(node, Aggref))
 	{
 		Aggref *aggref = (Aggref *) node;
 
 		if (aggref->aggfnoid == ts_first_func_oid || aggref->aggfnoid == ts_last_func_oid)
+		{
 			return true;
+		}
 	}
 	return expression_tree_walker(node, is_first_last_node, (void *) context);
 }
@@ -182,7 +196,9 @@ contains_first_last_node(List *sortClause, List *targetList)
 		bool found = is_first_last_node(expr, &context);
 
 		if (found)
+		{
 			return true;
+		}
 	}
 	return false;
 }
@@ -225,7 +241,9 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 
 	/* Nothing to do if query has no aggregates */
 	if (!parse->hasAggs)
+	{
 		return;
+	}
 
 	Assert(!parse->setOperations);	/* shouldn't get here if a setop */
 	Assert(parse->rowMarks == NIL); /* nor if FOR UPDATE */
@@ -243,7 +261,9 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	 */
 	if (parse->groupClause || list_length(parse->groupingSets) > 1 || parse->hasWindowFuncs ||
 		contains_first_last_node(parse->sortClause, tlist))
+	{
 		return;
+	}
 
 	/*
 	 * Reject if query contains any CTEs; there's no way to build an indexscan
@@ -251,7 +271,9 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	 * that's not true, but it doesn't seem worth expending cycles to check.)
 	 */
 	if (parse->cteList)
+	{
 		return;
+	}
 
 	/*
 	 * We also restrict the query to reference exactly one table, since join
@@ -266,11 +288,15 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	while (IsA(jtnode, FromExpr))
 	{
 		if (list_length(jtnode->fromlist) != 1)
+		{
 			return;
+		}
 		jtnode = linitial(jtnode->fromlist);
 	}
 	if (!IsA(jtnode, RangeTblRef))
+	{
 		return;
+	}
 	rtr = (RangeTblRef *) jtnode;
 	rte = planner_rt_fetch(rtr->rtindex, root);
 	if (rte->rtekind == RTE_RELATION)
@@ -278,7 +304,9 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	else if (rte->rtekind == RTE_SUBQUERY && rte->inh)
 		/* flattened UNION ALL subquery, ok */;
 	else
+	{
 		return;
+	}
 
 	/*
 	 * Scan the tlist and HAVING qual to find all the aggregates and verify
@@ -286,9 +314,13 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 	 */
 	first_last_aggs = NIL;
 	if (find_first_last_aggs_walker((Node *) tlist, &first_last_aggs))
+	{
 		return;
+	}
 	if (find_first_last_aggs_walker(parse->havingQual, &first_last_aggs))
+	{
 		return;
+	}
 
 	/*
 	 * OK, there is at least the possibility of performing the optimization.
@@ -309,9 +341,11 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 		 */
 		eqop = get_equality_op_for_ordering_op(mminfo->aggsortop, &reverse);
 		if (!OidIsValid(eqop)) /* shouldn't happen */
+		{
 			elog(ERROR,
 				 "could not find equality operator for ordering operator %u",
 				 mminfo->aggsortop);
+		}
 
 		/*
 		 * We can use either an ordering that gives NULLS FIRST or one that
@@ -322,9 +356,13 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 		 * reverse-sort operator, so try that first if reverse.
 		 */
 		if (build_first_last_path(root, fl_info, eqop, mminfo->aggsortop, reverse, reverse))
+		{
 			continue;
+		}
 		if (build_first_last_path(root, fl_info, eqop, mminfo->aggsortop, reverse, !reverse))
+		{
 			continue;
+		}
 
 		/* No indexable path for this aggregate, so fail */
 		return;
@@ -404,7 +442,9 @@ static bool
 find_first_last_aggs_walker(Node *node, List **context)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 	if (IsA(node, Aggref))
 	{
 		Aggref *aggref = (Aggref *) node;
@@ -420,7 +460,9 @@ find_first_last_aggs_walker(Node *node, List **context)
 
 		Assert(aggref->agglevelsup == 0);
 		if (list_length(aggref->args) != 2)
+		{
 			return true; /* it couldn't be first/last */
+		}
 
 		/*
 		 * ORDER BY is usually irrelevant for FIRST/LAST, but it can change
@@ -436,7 +478,9 @@ find_first_last_aggs_walker(Node *node, List **context)
 		 * quickly.
 		 */
 		if (aggref->aggorder != NIL)
+		{
 			return true;
+		}
 		/* note: we do not care if DISTINCT is mentioned ... */
 
 		/*
@@ -445,22 +489,28 @@ find_first_last_aggs_walker(Node *node, List **context)
 		 * now, just punt.
 		 */
 		if (aggref->aggfilter != NULL)
+		{
 			return true;
+		}
 
 		/* We sort by second argument (eg. time) */
 		sort_oid = lsecond_oid(aggref->aggargtypes);
 
 		func_strategy = get_func_strategy(aggref->aggfnoid);
 		if (func_strategy == InvalidStrategy)
+		{
 			return true; /* not first/last aggregate */
+		}
 
 		sort_tce = lookup_type_cache(sort_oid, TYPECACHE_BTREE_OPFAMILY);
 		aggsortop = get_opfamily_member(sort_tce->btree_opf, sort_oid, sort_oid, func_strategy);
 		if (!OidIsValid(aggsortop))
+		{
 			elog(ERROR,
 				 "Cannot resolve sort operator for function \"%s\" and type \"%s\"",
 				 format_procedure(aggref->aggfnoid),
 				 format_type_be(sort_oid));
+		}
 
 		/* Used in projection */
 		value = (TargetEntry *) linitial(aggref->args);
@@ -468,10 +518,14 @@ find_first_last_aggs_walker(Node *node, List **context)
 		sort = (TargetEntry *) lsecond(aggref->args);
 
 		if (contain_mutable_functions((Node *) sort->expr))
+		{
 			return true; /* not potentially indexable */
+		}
 
 		if (type_is_rowtype(exprType((Node *) sort->expr)))
+		{
 			return true; /* IS NOT NULL would have weird semantics */
+		}
 
 		/*
 		 * Check whether it's already in the list, and add it if not.
@@ -480,7 +534,9 @@ find_first_last_aggs_walker(Node *node, List **context)
 		{
 			mminfo = (MinMaxAggInfo *) lfirst(l);
 			if (mminfo->aggfnoid == aggref->aggfnoid && equal(mminfo->target, value->expr))
+			{
 				return false;
+			}
 		}
 
 		mminfo = makeNode(MinMaxAggInfo);
@@ -621,7 +677,9 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 
 		/* User might have had that in WHERE already */
 		if (!list_member((List *) parse->jointree->quals, ntest))
+		{
 			parse->jointree->quals = (Node *) lcons(ntest, (List *) parse->jointree->quals);
+		}
 	}
 
 	/* Build suitable ORDER BY clause */
@@ -704,7 +762,9 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 		RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
 
 		if (ts_rte_is_hypertable(rte))
+		{
 			rte->inh = true;
+		}
 	}
 
 	/*
@@ -721,16 +781,22 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	 * fetching just one row.  If there's no such path, fail.
 	 */
 	if (final_rel->rows > 1.0)
+	{
 		path_fraction = 1.0 / final_rel->rows;
+	}
 	else
+	{
 		path_fraction = 1.0;
+	}
 
 	sorted_path = get_cheapest_fractional_path_for_pathkeys(final_rel->pathlist,
 															subroot->query_pathkeys,
 															NULL,
 															path_fraction);
 	if (!sorted_path)
+	{
 		return false;
+	}
 
 	/*
 	 * The path might not return exactly what we want, so fix that.  (We

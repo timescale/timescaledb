@@ -63,9 +63,13 @@ polydatum_from_arg(int argno, FunctionCallInfo fcinfo)
 
 	value.is_null = PG_ARGISNULL(argno);
 	if (!value.is_null)
+	{
 		value.datum = PG_GETARG_DATUM(argno);
+	}
 	else
+	{
 		value.datum = PointerGetDatum(NULL);
+	}
 	return value;
 }
 
@@ -81,7 +85,9 @@ polydatum_serialize_type(StringInfo buf, Oid type_oid)
 
 	tup = SearchSysCache1(TYPEOID, ObjectIdGetDatum(type_oid));
 	if (!HeapTupleIsValid(tup))
+	{
 		elog(ERROR, "cache lookup failed for type %u", type_oid);
+	}
 	type_tuple = (Form_pg_type) GETSTRUCT(tup);
 	namespace_name = get_namespace_name(type_tuple->typnamespace);
 
@@ -124,7 +130,9 @@ polydatum_deserialize_type(StringInfo buf)
 								   PointerGetDatum(type_name),
 								   ObjectIdGetDatum(schema_oid));
 	if (!OidIsValid(type_oid))
+	{
 		elog(ERROR, "cache lookup failed for type %s.%s", schema_name, type_name);
+	}
 
 	return type_oid;
 }
@@ -154,9 +162,11 @@ polydatum_deserialize(MemoryContext mem_ctx, PolyDatum *result, StringInfo buf,
 	/* Get and check the item length */
 	itemlen = pq_getmsgint(buf, 4);
 	if (itemlen < -1 || itemlen > (buf->len - buf->cursor))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_BINARY_REPRESENTATION),
 				 errmsg("insufficient data left in message %d %d", itemlen, buf->len)));
+	}
 
 	if (itemlen == -1)
 	{
@@ -205,9 +215,11 @@ polydatum_deserialize(MemoryContext mem_ctx, PolyDatum *result, StringInfo buf,
 	{
 		/* Trouble if it didn't eat the whole buffer */
 		if (item_buf.cursor != itemlen)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_BINARY_REPRESENTATION),
 					 errmsg("improper binary format in polydata")));
+		}
 
 		buf->data[buf->cursor] = csave;
 	}
@@ -280,17 +292,23 @@ cmpproc_init(FunctionCallInfo fcinfo, FmgrInfo *cmp_proc, Oid type_oid, char *op
 	Oid cmp_op, cmp_regproc;
 
 	if (!OidIsValid(type_oid))
+	{
 		elog(ERROR, "could not determine the type of the comparison_element");
+	}
 
 	cmp_op = OpernameGetOprid(list_make1(makeString(opname)), type_oid, type_oid);
 	if (!OidIsValid(cmp_op))
+	{
 		elog(ERROR, "could not find a %s operator for type %d", opname, type_oid);
+	}
 	cmp_regproc = get_opcode(cmp_op);
 	if (!OidIsValid(cmp_regproc))
+	{
 		elog(ERROR,
 			 "could not find the procedure for the %s operator for type %d",
 			 opname,
 			 type_oid);
+	}
 	fmgr_info_cxt(cmp_regproc, cmp_proc, fcinfo->flinfo->fn_mcxt);
 }
 
@@ -361,7 +379,9 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1,
 	MemoryContext old_context;
 
 	if (state2 == NULL)
+	{
 		PG_RETURN_POINTER(state1);
+	}
 
 	/*
 	 * manually copy all fields from state2 to state1, as per other combine
@@ -399,9 +419,13 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1,
 	else if (state1->cmp.is_null != state2->cmp.is_null)
 	{
 		if (state1->cmp.is_null)
+		{
 			PG_RETURN_POINTER(state2);
+		}
 		else
+		{
 			PG_RETURN_POINTER(state1);
+		}
 	}
 
 	TransCache *cache1 = &state1->aggstate_type_cache;
@@ -540,7 +564,9 @@ ts_bookend_deserializefunc(PG_FUNCTION_ARGS)
 	InternalCmpAggStoreIOState *my_extra;
 
 	if (!AggCheckCallContext(fcinfo, &aggcontext))
+	{
 		elog(ERROR, "aggregate function called in non-aggregate context");
+	}
 
 	sstate = PG_GETARG_BYTEA_P(0);
 
@@ -584,7 +610,9 @@ ts_bookend_finalfunc(PG_FUNCTION_ARGS)
 	state = PG_ARGISNULL(0) ? NULL : (InternalCmpAggStore *) PG_GETARG_POINTER(0);
 
 	if (state == NULL || state->value.is_null || state->cmp.is_null)
+	{
 		PG_RETURN_NULL();
+	}
 
 	PG_RETURN_DATUM(state->value.datum);
 }

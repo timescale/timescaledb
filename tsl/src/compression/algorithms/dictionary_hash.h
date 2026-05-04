@@ -91,9 +91,11 @@ dictionary_hash_alloc(TypeCacheEntry *tentry)
 	collation = tentry->typcollation;
 
 	if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
+	{
 		elog(ERROR,
 			 "invalid type for dictionary compression, type must have both a hash function and "
 			 "equality function");
+	}
 
 	/* May be more correct to get collation defined on the column, which may be different than the
 	 * collation defined on the type (what we're currently using). We need to think about

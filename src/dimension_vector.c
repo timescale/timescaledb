@@ -27,12 +27,18 @@ static DimensionVec *
 dimension_vec_expand(DimensionVec *vec, int32 new_capacity)
 {
 	if (vec != NULL && vec->capacity >= new_capacity)
+	{
 		return vec;
+	}
 
 	if (NULL == vec)
+	{
 		vec = palloc(DIMENSION_VEC_SIZE(new_capacity));
+	}
 	else
+	{
 		vec = repalloc(vec, DIMENSION_VEC_SIZE(new_capacity));
+	}
 
 	vec->capacity = new_capacity;
 
@@ -56,7 +62,9 @@ ts_dimension_vec_sort(DimensionVec **vecptr)
 	DimensionVec *vec = *vecptr;
 
 	if (vec->num_slices > 1)
+	{
 		qsort((void *) vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices);
+	}
 
 	return vec;
 }
@@ -70,7 +78,9 @@ ts_dimension_vec_add_slice(DimensionVec **vecptr, DimensionSlice *slice)
 	Assert(vec->num_slices == 0 || vec->slices[0]->fd.dimension_id == slice->fd.dimension_id);
 
 	if (vec->num_slices + 1 > vec->capacity)
+	{
 		*vecptr = vec = dimension_vec_expand(vec, vec->capacity + 10);
+	}
 
 	vec->slices[vec->num_slices++] = slice;
 
@@ -84,7 +94,9 @@ ts_dimension_vec_add_unique_slice(DimensionVec **vecptr, DimensionSlice *slice)
 	int32 existing_slice_index = ts_dimension_vec_find_slice_index(vec, slice->fd.id);
 
 	if (existing_slice_index == -1)
+	{
 		return ts_dimension_vec_add_slice(vecptr, slice);
+	}
 
 	return vec;
 }
@@ -115,11 +127,17 @@ dimension_vec_is_sorted(const DimensionVec *vec)
 	int i;
 
 	if (vec->num_slices < 2)
+	{
 		return true;
+	}
 
 	for (i = 1; i < vec->num_slices; i++)
+	{
 		if (cmp_slices((void *) &vec->slices[i - 1], (void *) &vec->slices[i]) > 0)
+		{
 			return false;
+		}
+	}
 
 	return true;
 }
@@ -131,7 +149,9 @@ ts_dimension_vec_find_slice(const DimensionVec *vec, int64 coordinate)
 	DimensionSlice **res;
 
 	if (vec->num_slices == 0)
+	{
 		return NULL;
+	}
 
 	Assert(dimension_vec_is_sorted(vec));
 
@@ -142,7 +162,9 @@ ts_dimension_vec_find_slice(const DimensionVec *vec, int64 coordinate)
 									  cmp_coordinate_and_slice);
 
 	if (res == NULL)
+	{
 		return NULL;
+	}
 
 	return *res;
 }
@@ -153,8 +175,12 @@ ts_dimension_vec_find_slice_index(const DimensionVec *vec, int32 dimension_slice
 	int i;
 
 	for (i = 0; i < vec->num_slices; i++)
+	{
 		if (dimension_slice_id == vec->slices[i]->fd.id)
+		{
 			return i;
+		}
+	}
 
 	return -1;
 }
@@ -163,7 +189,9 @@ const DimensionSlice *
 ts_dimension_vec_get(const DimensionVec *vec, int32 index)
 {
 	if (index >= vec->num_slices)
+	{
 		return NULL;
+	}
 
 	return vec->slices[index];
 }
@@ -174,6 +202,8 @@ ts_dimension_vec_free(DimensionVec *vec)
 	int i;
 
 	for (i = 0; i < vec->num_slices; i++)
+	{
 		ts_dimension_slice_free(vec->slices[i]);
+	}
 	pfree(vec);
 }

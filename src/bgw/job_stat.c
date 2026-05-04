@@ -135,7 +135,9 @@ bgw_job_stat_tuple_mark_start(TupleInfo *ti, void *const data)
 	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(new_tuple);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	fd->last_start = ts_timer_get_current_timestamp();
 	fd->last_finish = DT_NOBEGIN;
@@ -309,9 +311,13 @@ calculate_next_start_on_success(TimestampTz finish_time, BgwJob *job)
 
 	/* calculate next_start differently depending on drift/no drift */
 	if (job->fd.fixed_schedule)
+	{
 		ts = calculate_next_start_on_success_fixed(last_finish, job);
+	}
 	else
+	{
 		ts = calculate_next_start_on_success_drifting(last_finish, job);
+	}
 
 	return ts;
 }
@@ -393,7 +399,9 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 		}
 
 		if (DatumGetInt32(DirectFunctionCall2(interval_cmp, ival, ival_max)) > 0)
+		{
 			ival = ival_max;
+		}
 
 		/* Add some random jitter to prevent stampeding-herds, interval will be within about +-13%
 		 */
@@ -437,7 +445,9 @@ calculate_next_start_on_failure(TimestampTz finish_time, int consecutive_failure
 	{
 		TimestampTz next_slot = ts_get_next_scheduled_execution_slot(job, finish_time);
 		if (res > next_slot)
+		{
 			res = next_slot;
+		}
 	}
 	return res;
 }
@@ -465,7 +475,9 @@ calculate_next_start_on_crash(int consecutive_crashes, BgwJob *job)
 	TimestampTz min_time = TimestampTzPlusMilliseconds(now, MIN_WAIT_AFTER_CRASH_MS);
 
 	if (min_time > failure_calc)
+	{
 		return min_time;
+	}
 	return failure_calc;
 }
 
@@ -480,7 +492,9 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 	Interval *duration;
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	fd->last_finish = ts_timer_get_current_timestamp();
 
@@ -505,7 +519,9 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 												   IntervalPGetDatum(duration)));
 		/* Mark the next start at the end if the job itself hasn't */
 		if (!bgw_job_stat_next_start_was_set(fd))
+		{
 			fd->next_start = calculate_next_start_on_success(fd->last_finish, result_ctx->job);
+		}
 	}
 	else
 	{
@@ -527,10 +543,12 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 		 * to avoid the job getting permanently stuck.
 		 */
 		if (!bgw_job_stat_next_start_was_set(fd))
+		{
 			fd->next_start = calculate_next_start_on_failure(fd->last_finish,
 															 fd->consecutive_failures,
 															 result_ctx->job,
 															 false);
+		}
 	}
 
 	ts_catalog_update(ti->scanrel, new_tuple);
@@ -548,7 +566,9 @@ bgw_job_stat_tuple_mark_crash_reported(TupleInfo *ti, void *const data)
 	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(new_tuple);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	fd->flags = ts_set_flags_32(fd->flags, LAST_CRASH_REPORTED);
 
@@ -568,7 +588,9 @@ bgw_job_stat_tuple_set_next_start(TupleInfo *ti, void *const data)
 	FormData_bgw_job_stat *fd = (FormData_bgw_job_stat *) GETSTRUCT(new_tuple);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	fd->next_start = *next_start;
 	ts_catalog_update(ti->scanrel, new_tuple);
@@ -591,11 +613,15 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_job_id)] = Int32GetDatum(bgw_job_id);
 	if (mark_start)
+	{
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_start)] =
 			TimestampGetDatum(ts_timer_get_current_timestamp());
+	}
 	else
+	{
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_start)] =
 			TimestampGetDatum(DT_NOBEGIN);
+	}
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_finish)] = TimestampGetDatum(DT_NOBEGIN);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_next_start)] = TimestampGetDatum(next_start);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_successful_finish)] =
@@ -648,7 +674,9 @@ ts_bgw_job_stat_mark_start(BgwJob *job)
 								  NULL,
 								  NULL,
 								  RowExclusiveLock))
+	{
 		bgw_job_stat_insert_relation(rel, job->fd.id, true, DT_NOBEGIN);
+	}
 	table_close(rel, NoLock);
 
 	/* We need to capture the execution start because failures are always logged */
@@ -783,7 +811,9 @@ ts_bgw_job_stat_upsert_next_start(int32 bgw_job_id, TimestampTz next_start)
 								  NULL,
 								  &next_start,
 								  RowExclusiveLock))
+	{
 		bgw_job_stat_insert_relation(rel, bgw_job_id, false, next_start);
+	}
 	table_close(rel, NoLock);
 }
 
@@ -802,10 +832,14 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 {
 	/* give the system some room to breathe, wait before trying to launch again */
 	if (consecutive_failed_launches > 0)
+	{
 		return calculate_next_start_on_failed_launch(consecutive_failed_launches, job);
+	}
 	if (jobstat == NULL)
+	{
 		/* Never previously run - run right away */
 		return DT_NOBEGIN;
+	}
 
 	if (jobstat->fd.consecutive_crashes > 0)
 	{
@@ -829,7 +863,9 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 	 * next_start gets persisted on completion.
 	 */
 	if (jobstat->fd.next_start == DT_NOBEGIN)
+	{
 		return ts_timer_get_current_timestamp();
+	}
 
 	return jobstat->fd.next_start;
 }

@@ -67,7 +67,9 @@ ts_get_mem_guard_callbacks(void)
 	static MGCallbacks **mem_guard_callback_ptr = NULL;
 
 	if (mem_guard_callback_ptr)
+	{
 		return *mem_guard_callback_ptr;
+	}
 
 	mem_guard_callback_ptr = (MGCallbacks **) find_rendezvous_variable(MG_CALLBACKS_VAR_NAME);
 
@@ -114,27 +116,37 @@ ts_bgw_job_run_config_check(Oid check, int32 job_id, Jsonb *config)
 {
 	/* Nothing to check if there is no check function provided */
 	if (!OidIsValid(check))
+	{
 		return;
+	}
 
 	/* NULL config may be valid */
 	Const *arg;
 	if (config == NULL)
+	{
 		arg = makeNullConst(JSONBOID, -1, InvalidOid);
+	}
 	else
+	{
 		arg = makeConst(JSONBOID, -1, InvalidOid, -1, JsonbPGetDatum(config), false, false);
+	}
 
 	List *args = list_make1(arg);
 	FuncExpr *funcexpr =
 		makeFuncExpr(check, VOIDOID, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
 
 	if (get_func_prokind(check) == PROKIND_FUNCTION)
+	{
 		job_execute_function(funcexpr);
+	}
 	else
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("unsupported function type"),
 				 errdetail("Only functions are allowed as custom configuration checks"),
 				 errhint("Use a FUNCTION instead")));
+	}
 }
 
 /* Run the check function on a configuration. It will generate errors if there
@@ -152,7 +164,9 @@ job_config_check(BgwJob *job, Jsonb *config)
 
 	/* If there is no function, just return */
 	if (strlen(NameStr(job->fd.check_name)) == 0)
+	{
 		return;
+	}
 
 	funcname = list_make2(makeString(NameStr(job->fd.check_schema)),
 						  makeString(NameStr(job->fd.check_name)));
@@ -166,14 +180,18 @@ job_config_check(BgwJob *job, Jsonb *config)
 	 because it was dropped or renamed. Allow alter_job to run if that's the case
 	 without validating the config but also print a warning */
 	if (OidIsValid(proc))
+	{
 		ts_bgw_job_run_config_check(proc, job->fd.id, config);
+	}
 	else
+	{
 		elog(WARNING,
 			 "function %s.%s(config jsonb) not found, skipping config validation for "
 			 "job %d",
 			 NameStr(job->fd.check_schema),
 			 NameStr(job->fd.check_name),
 			 job->fd.id);
+	}
 }
 
 static BgwJob *
@@ -206,25 +224,37 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 	heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_id)])
+	{
 		job->fd.id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_job_id)]);
+	}
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)])
+	{
 		namestrcpy(&job->fd.application_name,
 				   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)]));
+	}
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)])
+	{
 		job->fd.schedule_interval =
 			*DatumGetIntervalP(values[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)]);
+	}
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)])
+	{
 		job->fd.max_runtime =
 			*DatumGetIntervalP(values[AttrNumberGetAttrOffset(Anum_bgw_job_max_runtime)]);
+	}
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)])
+	{
 		job->fd.max_retries =
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_job_max_retries)]);
+	}
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)])
+	{
 		job->fd.fixed_schedule =
 			DatumGetBool(values[AttrNumberGetAttrOffset(Anum_bgw_job_fixed_schedule)]);
+	}
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)])
 	{
@@ -232,45 +262,69 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 			DatumGetTimestampTz(values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)]);
 	}
 	else
+	{
 		job->fd.initial_start = DT_NOBEGIN;
+	}
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)])
+	{
 		job->fd.timezone =
 			DatumGetTextPCopy(values[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)]);
+	}
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)])
+	{
 		job->fd.retry_period =
 			*DatumGetIntervalP(values[AttrNumberGetAttrOffset(Anum_bgw_job_retry_period)]);
+	}
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_proc_schema)])
+	{
 		namestrcpy(&job->fd.proc_schema,
 				   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_schema)]));
+	}
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_proc_name)])
+	{
 		namestrcpy(&job->fd.proc_name,
 				   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_name)]));
+	}
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)])
+	{
 		namestrcpy(&job->fd.check_schema,
 				   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)]));
+	}
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)])
+	{
 		namestrcpy(&job->fd.check_name,
 				   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)]));
+	}
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_owner)])
+	{
 		job->fd.owner = DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)]);
+	}
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)])
+	{
 		job->fd.scheduled = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)]);
+	}
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)])
+	{
 		job->fd.hypertable_id =
 			DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)]);
+	}
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_config)])
+	{
 		job->fd.config = DatumGetJsonbPCopy(values[AttrNumberGetAttrOffset(Anum_bgw_job_config)]);
+	}
 
 	MemoryContextSwitchTo(old_ctx);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	return job;
 }
@@ -343,7 +397,9 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		memcpy(job, GETSTRUCT(tuple), offsetof(FormData_bgw_job, initial_start));
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 
 #ifdef USE_TELEMETRY
 		/* ignore telemetry jobs if telemetry is disabled */
@@ -356,9 +412,13 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		/* handle NULL columns */
 		initial_start = slot_getattr(ti->slot, Anum_bgw_job_initial_start, &initial_start_isnull);
 		if (!initial_start_isnull)
+		{
 			job->fd.initial_start = DatumGetTimestampTz(initial_start);
+		}
 		else
+		{
 			job->fd.initial_start = DT_NOBEGIN;
+		}
 
 		value = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
 		job->fd.hypertable_id = isnull ? 0 : DatumGetInt32(value);
@@ -528,7 +588,9 @@ ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 	}
 
 	if (num_found == 0 && fail_if_not_found)
+	{
 		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("job %d not found", bgw_job_id)));
+	}
 
 	return job;
 }
@@ -630,7 +692,9 @@ ts_bgw_job_delete_by_id(int32 job_id)
 
 	/* Send SIGINT to the running worker for prompt cancellation */
 	if (result && NameStr(appname)[0] != '\0')
+	{
 		cancel_worker_for_job(NameStr(appname));
+	}
 
 	return result;
 }
@@ -722,7 +786,9 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 			JsonbPGetDatum(updated_job->fd.config);
 	}
 	else
+	{
 		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
+	}
 
 	if (updated_job->fd.hypertable_id != INVALID_HYPERTABLE_ID)
 	{
@@ -731,13 +797,19 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 		doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
 	}
 	else
+	{
 		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
+	}
 
 	if (TIMESTAMP_NOT_FINITE(updated_job->fd.initial_start))
+	{
 		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] = true;
+	}
 	else
+	{
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] =
 			TimestampTzGetDatum(updated_job->fd.initial_start);
+	}
 	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_initial_start)] = true;
 
 	if (updated_job->fd.timezone)
@@ -746,7 +818,9 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 			PointerGetDatum(updated_job->fd.timezone);
 	}
 	else
+	{
 		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)] = true;
+	}
 	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)] = true;
 
 	new_tuple = heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, isnull, doReplace);
@@ -755,7 +829,9 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 
 	heap_freetuple(new_tuple);
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	return SCAN_DONE;
 }
@@ -850,7 +926,9 @@ ts_bgw_job_validate_job_owner(Oid owner)
 	HeapTuple role_tup = SearchSysCache1(AUTHOID, ObjectIdGetDatum(owner));
 
 	if (!HeapTupleIsValid(role_tup))
+	{
 		elog(ERROR, "cache lookup failed for role %u", owner);
+	}
 
 	Form_pg_authid rform = (Form_pg_authid) GETSTRUCT(role_tup);
 
@@ -903,7 +981,9 @@ ts_bgw_job_execute(BgwJob *job)
 
 #ifdef TS_DEBUG
 	if (scheduler_test_hook != NULL)
+	{
 		return scheduler_test_hook(job);
+	}
 #endif
 
 	return ts_cm_functions->job_execute(job);
@@ -940,11 +1020,15 @@ zero_guc(const char *guc_name)
 		set_config_option(guc_name, "0", PGC_SUSET, PGC_S_SESSION, GUC_ACTION_SET, true, 0, false);
 
 	if (config_change == 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("guc \"%s\" does not exist", guc_name)));
+	}
 	else if (config_change < 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not set \"%s\" guc", guc_name)));
+	}
 }
 
 Oid
@@ -957,12 +1041,14 @@ ts_bgw_job_get_funcid(BgwJob *job)
 
 	Oid funcid = LookupFuncWithArgs(OBJECT_ROUTINE, object, true);
 	if (!OidIsValid(funcid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_FUNCTION),
 				 errmsg("function or procedure \"%s.%s(integer, jsonb)\" does not exist",
 						NameStr(job->fd.proc_schema),
 						NameStr(job->fd.proc_name)),
 				 errhint("Custom job actions must accept (integer, jsonb) arguments.")));
+	}
 	return funcid;
 }
 
@@ -975,8 +1061,10 @@ ts_bgw_job_function_call_string(BgwJob *job)
 	char *jsonb_str = "NULL";
 
 	if (job->fd.config)
+	{
 		jsonb_str = quote_literal_cstr(
 			JsonbToCString(NULL, &job->fd.config->root, VARSIZE(job->fd.config)));
+	}
 
 	switch (prokind)
 	{
@@ -1040,7 +1128,9 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	MGCallbacks *callbacks = ts_get_mem_guard_callbacks();
 	if (callbacks && callbacks->version_num == MG_CALLBACKS_VERSION &&
 		callbacks->toggle_allocation_blocking && !callbacks->enabled)
+	{
 		callbacks->toggle_allocation_blocking(/*enable=*/true);
+	}
 
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
@@ -1057,10 +1147,12 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	job = ts_bgw_job_find(params.job_id, TopMemoryContext, false);
 	if (job == NULL)
+	{
 		/* If the job is not found, we can't proceed */
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("job %d not found when running the background worker", params.job_id)));
+	}
 
 	/* get parameters from bgworker */
 	job->job_history.id = params.job_history_id;
@@ -1077,7 +1169,9 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	bool job_failed = false;
 	if (scheduler_test_hook == NULL)
+	{
 		ts_begin_tss_store_callback();
+	}
 
 	PG_TRY();
 	{
@@ -1093,10 +1187,12 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 		/* The job is responsible for committing or aborting it's own txns */
 		if (IsTransactionState())
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TRANSACTION_STATE),
 					 errmsg("TimescaleDB background job \"%s\" failed to end the transaction",
 							NameStr(job->fd.application_name))));
+		}
 	}
 	PG_CATCH();
 	{
@@ -1104,8 +1200,10 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		NameData proc_schema = { .data = { 0 } }, proc_name = { .data = { 0 } };
 
 		if (IsTransactionState())
+		{
 			/* If there was an error, rollback what was done before the error */
 			AbortCurrentTransaction();
+		}
 		StartTransactionCommand();
 		PushActiveSnapshot(GetTransactionSnapshot());
 
@@ -1225,15 +1323,21 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 	bool result;
 
 	if (atomic)
+	{
 		StartTransactionCommand();
+	}
 
 	if (mark)
+	{
 		ts_bgw_job_stat_mark_start(job);
+	}
 
 	result = func();
 
 	if (mark)
+	{
 		ts_bgw_job_stat_mark_end(job, result ? JOB_SUCCESS : JOB_FAILURE_IN_EXECUTION, NULL);
+	}
 
 	/* Now update next_start. */
 	job_stat = ts_bgw_job_stat_find(job->fd.id);
@@ -1254,7 +1358,9 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 	}
 
 	if (atomic)
+	{
 		CommitTransactionCommand();
+	}
 
 	return result;
 }
@@ -1290,14 +1396,22 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_name)] = NameGetDatum(proc_name);
 
 	if (strlen(NameStr(*check_schema)) > 0)
+	{
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] = NameGetDatum(check_schema);
+	}
 	else
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)] = true;
+	}
 
 	if (strlen(NameStr(*check_name)) > 0)
+	{
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = NameGetDatum(check_name);
+	}
 	else
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)] = true;
+	}
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)] = ObjectIdGetDatum(owner);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_scheduled)] = BoolGetDatum(scheduled);
@@ -1319,18 +1433,30 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	}
 
 	if (hypertable_id == INVALID_HYPERTABLE_ID)
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
+	}
 	else
+	{
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = Int32GetDatum(hypertable_id);
+	}
 
 	if (config == NULL)
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
+	}
 	else
+	{
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = JsonbPGetDatum(config);
+	}
 	if (timezone == NULL)
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)] = true;
+	}
 	else
+	{
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_timezone)] = CStringGetTextDatum(timezone);
+	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
@@ -1338,7 +1464,9 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	name_len = snprintf(app_name, NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
 
 	if (name_len >= NAMEDATALEN)
+	{
 		ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("application name too long.")));
+	}
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] = Int32GetDatum(job_id);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = CStringGetDatum(app_name);
@@ -1372,11 +1500,13 @@ ts_bgw_job_validate_schedule_interval(Interval *schedule_interval)
 	has_time = schedule_interval->time;
 
 	if (has_month && (has_day || has_time))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("month intervals cannot have day or time component"),
 				 errdetail("Fixed schedule jobs do not support such schedule intervals."),
 				 errhint("Express the interval in terms of days or time instead.")));
+	}
 }
 
 char *

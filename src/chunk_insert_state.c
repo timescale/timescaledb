@@ -110,7 +110,9 @@ create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation rel, EState *e
 	rri->ri_usesFdwDirectModify = ht_rri->ri_usesFdwDirectModify;
 
 	if (RelationGetForm(rel)->relkind == RELKIND_FOREIGN_TABLE)
+	{
 		rri->ri_FdwRoutine = GetFdwRoutineForRelation(rel, true);
+	}
 
 	create_chunk_rri_constraint_expr(rri, rel);
 
@@ -128,6 +130,7 @@ get_adjusted_projection_info_returning(ProjectionInfo *orig, List *returning_cla
 
 	/* map hypertable attnos -> chunk attnos */
 	if (map != NULL)
+	{
 		returning_clauses = castNode(List,
 									 map_variable_attnos((Node *) returning_clauses,
 														 varno,
@@ -135,6 +138,7 @@ get_adjusted_projection_info_returning(ProjectionInfo *orig, List *returning_cla
 														 map->attrMap,
 														 rowtype,
 														 &found_whole_row));
+	}
 
 	return ExecBuildProjectionInfo(returning_clauses,
 								   orig->pi_exprContext,
@@ -152,7 +156,9 @@ translate_clause(List *inclause, TupleConversionMap *chunk_map, Index varno, Rel
 
 	/* nothing to do here if the chunk_map is NULL */
 	if (!chunk_map)
+	{
 		return list_copy(clause);
+	}
 
 	/* map hypertable attnos -> chunk attnos for the "excluded" table */
 	clause = castNode(List,
@@ -199,7 +205,9 @@ adjust_chunk_colnos(List *colnos, ResultRelInfo *chunk_rri)
 
 		if (parentattrno <= 0 || parentattrno > attrMap->maplen ||
 			attrMap->attnums[parentattrno - 1] == 0)
+		{
 			elog(ERROR, "unexpected attno %d in target column list", parentattrno);
+		}
 		new_colnos = lappend_int(new_colnos, attrMap->attnums[parentattrno - 1]);
 	}
 
@@ -283,8 +291,10 @@ setup_on_conflict_state(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkI
 		Assert(map->outdesc == RelationGetDescr(chunk_rel));
 
 		if (!chunk_map)
+		{
 			chunk_map =
 				convert_tuples_by_name(RelationGetDescr(chunk_rel), RelationGetDescr(hyper_rel));
+		}
 
 		onconflset = translate_clause(onconflset,
 									  chunk_map,
@@ -297,9 +307,13 @@ setup_on_conflict_state(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkI
 
 		/* Finally, adjust the target colnos to match the chunk. */
 		if (chunk_map)
+		{
 			onconflcols = adjust_chunk_colnos(mt->onConflictCols, chunk_rri);
+		}
 		else
+		{
 			onconflcols = mt->onConflictCols;
+		}
 
 		/* create the tuple slot for the UPDATE SET projection */
 		onconfl->oc_ProjSlot = table_slot_create(chunk_rel, NULL);
@@ -403,7 +417,9 @@ adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsert
 		set_arbiter_indexes(cis, ht_rri->ri_onConflictArbiterIndexes);
 
 		if (onConflictAction == ONCONFLICT_UPDATE)
+		{
 			setup_on_conflict_state(ht_rri, mtstate, cis, chunk_map);
+		}
 	}
 }
 
@@ -447,20 +463,28 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 
 	MemoryContextSwitchTo(cis_context);
 	if (ctr->single_chunk_insert)
+	{
 		relinfo = ctr->root_rri;
+	}
 	else
+	{
 		relinfo = create_chunk_result_relation_info(ctr->root_rri, rel, ctr->estate);
+	}
 
 	if (ctr->mht_state)
+	{
 		CheckValidResultRelCompat(relinfo,
 								  ctr->mht_state->mt->operation,
 								  ctr->mht_state->mt->onConflictAction,
 								  NIL);
+	}
 
 	state = palloc0(sizeof(ChunkInsertState));
 	state->counters = ctr->counters;
 	if (ctr->mht_state)
+	{
 		state->onConflictAction = ctr->mht_state->mt->onConflictAction;
+	}
 	state->mctx = cis_context;
 	state->rel = rel;
 	state->result_relation_info = relinfo;
@@ -468,7 +492,9 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 	ts_set_compression_status(state, chunk);
 
 	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
+	{
 		ExecOpenIndices(relinfo, state->onConflictAction != ONCONFLICT_NONE);
+	}
 
 	if (relinfo->ri_TrigDesc != NULL)
 	{
@@ -487,7 +513,9 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 		 * statement triggers should not exist on chunks.
 		 */
 		if (tg->trig_insert_after_statement || tg->trig_insert_before_statement)
+		{
 			elog(ERROR, "statement trigger on chunk table not supported");
+		}
 	}
 
 	if (!ctr->single_chunk_insert)
@@ -499,11 +527,13 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 			convert_tuples_by_name(RelationGetDescr(parent_rel), RelationGetDescr(rel));
 
 		if (ctr->mht_state)
+		{
 			adjust_projections(ctr->root_rri,
 							   linitial_node(ModifyTableState,
 											 ctr->mht_state->cscan_state.custom_ps),
 							   state,
 							   RelationGetForm(rel)->reltype);
+		}
 
 		table_close(parent_rel, AccessShareLock);
 	}
@@ -556,18 +586,24 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state, bool single_chunk_insert)
 
 	table_close(state->rel, NoLock);
 	if (state->slot)
+	{
 		ExecDropSingleTupleTableSlot(state->slot);
+	}
 
 	/*
 	 * Clean up per-chunk tuple table slots created for ON CONFLICT handling.
 	 */
 	if (NULL != state->existing_slot)
+	{
 		ExecDropSingleTupleTableSlot(state->existing_slot);
+	}
 
 	/* The ON CONFLICT projection slot is only chunk specific in case the
 	 * tuple descriptor didn't match the hypertable */
 	if (NULL != state->hyper_to_chunk_map && NULL != state->conflproj_slot)
+	{
 		ExecDropSingleTupleTableSlot(state->conflproj_slot);
+	}
 
 	if (!single_chunk_insert)
 	{

@@ -29,14 +29,18 @@ ts_is_valid_timezone_name(const char *tz_name)
 	{
 		tz = pg_tzenumerate_next(tzenum);
 		if (!tz)
+		{
 			break;
+		}
 
 		/*
 		 * Convert now() to time in this TZ and skip if conversion fails.
 		 * This check is the same that pg_timezone_names() does.
 		 */
 		if (timestamp2tm(now, &tzoff, &tm, &fsec, &abbrev, tz) != 0)
+		{
 			continue;
+		}
 
 		if ((!strcmp(tz_name, pg_get_timezone_name(tz))) || (abbrev && !strcmp(tz_name, abbrev)))
 		{

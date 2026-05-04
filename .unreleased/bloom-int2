@@ -1,0 +1,1 @@
+Backward-Incompatible Change: #9579 The bloom filter sparse indexes on compressed int2 columns could lead to SELECT queries not returning the rows that actually match the WHERE condition. The upgrade is blocked for the affected databases, and the incorrect indexes have to be dropped manually before the upgrade.

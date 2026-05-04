@@ -42,7 +42,9 @@ estimate_max_spread_var(PlannerInfo *root, Var *var)
 	ReleaseVariableStats(vardata);
 
 	if (!valid)
+	{
 		return INVALID_ESTIMATE;
+	}
 
 	max = ts_time_value_to_internal(max_datum, var->vartype);
 	min = ts_time_value_to_internal(min_datum, var->vartype);
@@ -59,21 +61,31 @@ estimate_max_spread_opexpr(PlannerInfo *root, OpExpr *opexpr)
 	Expr *nonconst;
 
 	if (list_length(opexpr->args) != 2 || strlen(function_name) != 1)
+	{
 		return INVALID_ESTIMATE;
+	}
 
 	left = linitial(opexpr->args);
 	right = lsecond(opexpr->args);
 
 	if (IsA(left, Const))
+	{
 		nonconst = right;
+	}
 	else if (IsA(right, Const))
+	{
 		nonconst = left;
+	}
 	else
+	{
 		return INVALID_ESTIMATE;
+	}
 
 	/* adding or subtracting a constant doesn't affect the range */
 	if (function_name[0] == '-' || function_name[0] == '+')
+	{
 		return estimate_max_spread_expr(root, nonconst);
+	}
 
 	return INVALID_ESTIMATE;
 }
@@ -103,11 +115,15 @@ ts_estimate_group_expr_interval(PlannerInfo *root, Expr *expr, double interval_p
 	double max_period;
 
 	if (interval_period <= 0)
+	{
 		return INVALID_ESTIMATE;
+	}
 
 	max_period = estimate_max_spread_expr(root, expr);
 	if (!IS_VALID_ESTIMATE(max_period))
+	{
 		return INVALID_ESTIMATE;
+	}
 
 	return clamp_row_est(max_period / interval_period);
 }
@@ -125,7 +141,9 @@ group_estimate_integer_division(PlannerInfo *root, Oid opno, Node *left, Node *r
 		Const *c = (Const *) right;
 
 		if (c->consttype != INT2OID && c->consttype != INT4OID && c->consttype != INT8OID)
+		{
 			return INVALID_ESTIMATE;
+		}
 
 		return ts_estimate_group_expr_interval(root, (Expr *) left, (double) c->constvalue);
 	}
@@ -138,7 +156,9 @@ group_estimate_funcexpr(PlannerInfo *root, FuncExpr *group_estimate_func, double
 	FuncInfo *func_est = ts_func_cache_get_bucketing_func(group_estimate_func->funcid);
 
 	if (func_est && func_est->group_estimate)
+	{
 		return func_est->group_estimate(root, group_estimate_func, path_rows);
+	}
 	return INVALID_ESTIMATE;
 }
 
@@ -166,19 +186,27 @@ group_estimate_opexpr(PlannerInfo *root, OpExpr *opexpr, double path_rows)
 	double estimate;
 
 	if (list_length(opexpr->args) != 2)
+	{
 		return INVALID_ESTIMATE;
+	}
 
 	first = eval_const_expressions(root, linitial(opexpr->args));
 	second = eval_const_expressions(root, lsecond(opexpr->args));
 
 	estimate = group_estimate_integer_division(root, opexpr->opno, first, second);
 	if (IS_VALID_ESTIMATE(estimate))
+	{
 		return estimate;
+	}
 
 	if (IsA(first, Const))
+	{
 		return group_estimate_expr(root, second, path_rows);
+	}
 	if (IsA(second, Const))
+	{
 		return group_estimate_expr(root, first, path_rows);
+	}
 	return INVALID_ESTIMATE;
 }
 
@@ -214,19 +242,27 @@ ts_estimate_group(PlannerInfo *root, double path_rows)
 			d_num_groups *= estimate;
 		}
 		else
+		{
 			new_group_expr = lappend(new_group_expr, item);
+		}
 	}
 
 	/* nothing custom */
 	if (!found)
+	{
 		return INVALID_ESTIMATE;
+	}
 
 	/* multiply by default estimates */
 	if (new_group_expr != NIL)
+	{
 		d_num_groups *= estimate_num_groups(root, new_group_expr, path_rows, NULL, NULL);
+	}
 
 	if (d_num_groups > path_rows)
+	{
 		return INVALID_ESTIMATE;
+	}
 
 	return clamp_row_est(d_num_groups);
 }

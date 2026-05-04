@@ -22,8 +22,10 @@ makeMaterializeColumnName(char *colbuf, const char *type, int original_query_res
 {
 	int ret = snprintf(colbuf, NAMEDATALEN, "%s_%d_%d", type, original_query_resno, colno);
 	if (ret < 0 || ret >= NAMEDATALEN)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("bad materialization table column name")));
+	}
 }
 
 /*
@@ -63,7 +65,9 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,
 		TargetEntry *modte = copyObject(tle);
 
 		if (!orig_query->sortClause)
+		{
 			modte->ressortgroupref = 0;
+		}
 
 		/*
 		 * We need columns for non-aggregate targets.
@@ -244,7 +248,9 @@ mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *inpu
 			bool timebkt_chk = false;
 
 			if (IsA(tle->expr, FuncExpr))
+			{
 				timebkt_chk = function_allowed_in_cagg_definition(((FuncExpr *) tle->expr)->funcid);
+			}
 
 #if PG18_GE
 			/* PG18 introduced RTEs for group clauses so
@@ -283,11 +289,15 @@ mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *inpu
 #endif
 
 			if (tle->resname)
+			{
 				colname = pstrdup(tle->resname);
+			}
 			else
 			{
 				if (timebkt_chk)
+				{
 					colname = DEFAULT_MATPARTCOLUMN_NAME;
+				}
 				else
 				{
 					makeMaterializeColumnName(colbuf, "grp", original_query_resno, matcolno);
@@ -313,8 +323,10 @@ mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *inpu
 				 * to the materialization hypertable anymore.
 				 */
 				if (!*skip_adding && tle->ressortgroupref > 0)
+				{
 					out->mat_groupcolname_list =
 						lappend(out->mat_groupcolname_list, pstrdup(colname));
+				}
 			}
 
 			coltype = exprType((Node *) tle->expr);

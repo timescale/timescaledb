@@ -24,14 +24,18 @@ static bool
 should_use_direct_compress(ModifyHypertableState *state)
 {
 	if (!ts_guc_enable_direct_compress_insert)
+	{
 		return false;
+	}
 
 	ModifyTableState *mtstate = linitial_node(ModifyTableState, state->cscan_state.custom_ps);
 	ResultRelInfo *resultRelInfo = mtstate->resultRelInfo;
 	Hypertable *ht = state->ctr->hypertable;
 
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+	{
 		return false;
+	}
 
 	if (resultRelInfo->ri_TrigDesc)
 	{
@@ -77,7 +81,9 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	 * statement trigger defined only on the hypertable will not fire.
 	 */
 	if (mt->operation == CMD_DELETE || mt->operation == CMD_UPDATE || mt->operation == CMD_MERGE)
+	{
 		mt->rootRelation = mt->nominalRelation;
+	}
 	ps = ExecInitNode(&mt->plan, estate, eflags);
 	node->custom_ps = list_make1(ps);
 	mtstate = castNode(ModifyTableState, ps);
@@ -91,7 +97,9 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	 * ModifyHypertableState.
 	 */
 	if (estate->es_auxmodifytables && linitial(estate->es_auxmodifytables) == mtstate)
+	{
 		linitial(estate->es_auxmodifytables) = node;
+	}
 
 	state->ht =
 		ts_hypertable_cache_get_cache_and_entry(RelationGetRelid(
@@ -127,7 +135,9 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 
 		/* setup per tuple exprcontext for tuple routing */
 		if (!estate->es_per_tuple_exprcontext)
+		{
 			estate->es_per_tuple_exprcontext = CreateExprContext(estate);
+		}
 	}
 }
 
@@ -146,12 +156,16 @@ modify_hypertable_exec(CustomScanState *node)
 	 * arbitrary points (see issues #7583 and #8531).
 	 */
 	if (mtstate->ps.instrument)
+	{
 		InstrStartNode(mtstate->ps.instrument);
+	}
 
 	result = ExecModifyTable(node, &mtstate->ps);
 
 	if (mtstate->ps.instrument)
+	{
 		InstrStopNode(mtstate->ps.instrument, TupIsNull(result) ? 0.0 : 1.0);
+	}
 
 	return result;
 }
@@ -185,7 +199,9 @@ modify_hypertable_end(CustomScanState *node)
 
 	ExecEndNode(linitial(node->custom_ps));
 	if (state->ctr)
+	{
 		ts_chunk_tuple_routing_destroy(state->ctr);
+	}
 
 	ts_cache_release(&state->ht_cache);
 }
@@ -204,7 +220,9 @@ static bool
 is_chunk_append_or_projection(Plan *plan)
 {
 	while (IsA(plan, Result) && plan->lefttree != NULL)
+	{
 		plan = plan->lefttree;
+	}
 	return ts_is_chunk_append_plan(plan);
 }
 
@@ -276,39 +294,61 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		state->batches_bloom_false_positives += counters->batches_bloom_false_positives;
 	}
 	if (state->batches_scanned > 0)
+	{
 		ExplainPropertyInteger("Batches scanned", NULL, state->batches_scanned, es);
+	}
 	if (state->batches_filtered_compressed > 0)
+	{
 		ExplainPropertyInteger("Compressed batches filtered",
 							   NULL,
 							   state->batches_filtered_compressed,
 							   es);
+	}
 	if (state->batches_filtered_decompressed > 0)
+	{
 		ExplainPropertyInteger("Batches filtered after decompression",
 							   NULL,
 							   state->batches_filtered_decompressed,
 							   es);
+	}
 	if (state->batches_decompressed > 0)
+	{
 		ExplainPropertyInteger("Batches decompressed", NULL, state->batches_decompressed, es);
+	}
 	if (state->tuples_decompressed > 0)
+	{
 		ExplainPropertyInteger("Tuples decompressed", NULL, state->tuples_decompressed, es);
+	}
 	if (state->batches_deleted > 0)
+	{
 		ExplainPropertyInteger("Batches deleted", NULL, state->batches_deleted, es);
+	}
 	if (state->batches_checked_by_bloom > 0)
+	{
 		ExplainPropertyInteger("Batches checked by bloom",
 							   NULL,
 							   state->batches_checked_by_bloom,
 							   es);
+	}
 	if (state->batches_pruned_by_bloom > 0)
+	{
 		ExplainPropertyInteger("Batches pruned by bloom", NULL, state->batches_pruned_by_bloom, es);
+	}
 	if (state->batches_without_bloom > 0)
+	{
 		ExplainPropertyInteger("Batches without bloom", NULL, state->batches_without_bloom, es);
+	}
 	if (state->batches_bloom_false_positives > 0)
+	{
 		ExplainPropertyInteger("Batches bloom false positives",
 							   NULL,
 							   state->batches_bloom_false_positives,
 							   es);
+	}
 	if (ts_guc_enable_direct_compress_insert && state->mt->operation == CMD_INSERT)
+	{
 		ExplainPropertyBool("Direct Compress", state->columnstore_insert, es);
+	}
 }
 
 static CustomExecMethods modify_hypertable_state_methods = {

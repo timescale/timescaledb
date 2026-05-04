@@ -208,22 +208,38 @@ static void
 free_chunk_recompress_ctx(RecompressContext *recompress_ctx)
 {
 	if (recompress_ctx == NULL)
+	{
 		return;
+	}
 
 	if (recompress_ctx->sort_keys)
+	{
 		pfree(recompress_ctx->sort_keys);
+	}
 	if (recompress_ctx->sort_operators)
+	{
 		pfree(recompress_ctx->sort_operators);
+	}
 	if (recompress_ctx->sort_collations)
+	{
 		pfree(recompress_ctx->sort_collations);
+	}
 	if (recompress_ctx->nulls_first)
+	{
 		pfree(recompress_ctx->nulls_first);
+	}
 	if (recompress_ctx->current_segment)
+	{
 		pfree(recompress_ctx->current_segment);
+	}
 	if (recompress_ctx->index_scankeys)
+	{
 		pfree(recompress_ctx->index_scankeys);
+	}
 	if (recompress_ctx->orderby_scankeys)
+	{
 		pfree(recompress_ctx->orderby_scankeys);
+	}
 	pfree(recompress_ctx);
 }
 
@@ -241,12 +257,14 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 	 * 8: compressed_partial
 	 */
 	if (!ts_chunk_is_compressed(uncompressed_chunk) && ts_chunk_is_partial(uncompressed_chunk))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("unexpected chunk status %d in chunk %s.%s",
 						uncompressed_chunk->fd.status,
 						NameStr(uncompressed_chunk->fd.schema_name),
 						NameStr(uncompressed_chunk->fd.table_name))));
+	}
 
 	/* need it to find the segby cols from the catalog */
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
@@ -304,7 +322,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 
 	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
 	if (ht->range_space)
+	{
 		ts_chunk_column_stats_calculate(ht, uncompressed_chunk);
+	}
 
 	TupleDesc compressed_rel_tupdesc = RelationGetDescr(compressed_chunk_rel);
 	TupleDesc uncompressed_rel_tupdesc = RelationGetDescr(uncompressed_chunk_rel);
@@ -397,7 +417,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 															   uncompressed_chunk_rel,
 															   snapshot);
 	if (!found_tuple)
+	{
 		goto finish;
+	}
 	tuplesort_performsort(input_tuplesortstate);
 
 	for (found_tuple = tuplesort_gettupleslot(input_tuplesortstate,
@@ -505,7 +527,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 														isnulls,
 														recompress_ctx->num_segmentby);
 				if (done_with_segment)
+				{
 					break;
+				}
 
 				update_orderby_scankeys(values,
 										isnulls,
@@ -554,14 +578,18 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 				if (!delete_tuple_for_recompression(compressed_chunk_rel,
 													&(compressed_slot->tts_tid),
 													snapshot))
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 							 errmsg("aborting recompression due to concurrent updates on "
 									"compressed data, retrying with next policy run")));
+				}
 				CommandCounterIncrement();
 
 				if (should_free)
+				{
 					heap_freetuple(compressed_tuple);
+				}
 
 				continue;
 			}
@@ -811,7 +839,9 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 		row_decompressor_decompress_row_to_tuplesort(&decompressor, tuplesortstate);
 
 		if (should_free)
+		{
 			heap_freetuple(compressed_tuple);
+		}
 	}
 
 	recompress_segment(tuplesortstate, uncompressed_chunk_rel, &row_compressor, &writer);
@@ -888,12 +918,16 @@ bool
 recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 {
 	if (uncompressed_chunk == NULL)
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("chunk cannot be NULL")));
+	}
 
 	Ensure(ts_guc_enable_in_memory_recompression, "in-memory recompression functionality disabled");
 
 	if (!ts_chunk_is_compressed(uncompressed_chunk) || ts_chunk_is_frozen(uncompressed_chunk))
+	{
 		return false;
+	}
 
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 	Ensure(compressed_chunk != NULL,
@@ -964,10 +998,12 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
 	if (ts_chunk_clear_status(uncompressed_chunk, CHUNK_STATUS_COMPRESSED_UNORDERED))
+	{
 		ereport(DEBUG1,
 				(errmsg("cleared chunk status for recompression: \"%s.%s\"",
 						NameStr(uncompressed_chunk->fd.schema_name),
 						NameStr(uncompressed_chunk->fd.table_name))));
+	}
 	ts_chunk_set_compressed_chunk(uncompressed_chunk, new_compressed_chunk->fd.id);
 
 	/* recompress successful */
@@ -1012,7 +1048,9 @@ static enum Batch_match_result
 handle_null_scan(int key_flags, bool nulls_first, enum Batch_match_result result)
 {
 	if (key_flags & SK_ISNULL)
+	{
 		return nulls_first ? Tuple_before : Tuple_after;
+	}
 
 	return result;
 }
@@ -1026,11 +1064,15 @@ match_tuple_batch(TupleTableSlot *compressed_slot, int num_orderby, ScanKey orde
 	{
 		key = &orderby_scankeys[i * 2];
 		if (!slot_key_test(compressed_slot, key))
+		{
 			return handle_null_scan(key->sk_flags, nulls_first[i], Tuple_before);
+		}
 
 		key = &orderby_scankeys[i * 2 + 1];
 		if (!slot_key_test(compressed_slot, key))
+		{
 			return handle_null_scan(key->sk_flags, nulls_first[i], Tuple_after);
+		}
 	}
 
 	return Tuple_match;
@@ -1051,10 +1093,12 @@ fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 		slot_getallattrs(slot);
 		tuplesort_puttupleslot(tuplesortstate, slot);
 		if (!delete_tuple_for_recompression(uncompressed_chunk_rel, &slot->tts_tid, snapshot))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
 					 errmsg("aborting recompression due to concurrent updates on "
 							"uncompressed data, retrying with next policy run")));
+		}
 	}
 	ExecDropSingleTupleTableSlot(slot);
 	table_endscan(scan);
@@ -1092,7 +1136,9 @@ check_changed_group(CompressedSegmentInfo *current_segment, Datum *values, bool 
 	for (int i = 0; i < nsegmentby_cols; i++)
 	{
 		if (!segment_info_datum_is_in_group(current_segment[i].segment_info, values[i], isnulls[i]))
+		{
 			return true;
+		}
 	}
 	return false;
 }
@@ -1102,7 +1148,9 @@ init_scankey(ScanKey sk, AttrNumber attnum, Oid atttypid, Oid attcollid, Strateg
 {
 	TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_BTREE_OPFAMILY);
 	if (!OidIsValid(tce->btree_opf))
+	{
 		elog(ERROR, "no btree opfamily for type \"%s\"", format_type_be(atttypid));
+	}
 
 	Oid opr = get_opfamily_member(tce->btree_opf, atttypid, atttypid, strategy);
 
@@ -1117,11 +1165,15 @@ init_scankey(ScanKey sk, AttrNumber attnum, Oid atttypid, Oid attcollid, Strateg
 	}
 
 	if (!OidIsValid(opr))
+	{
 		elog(ERROR, "no operator for type \"%s\"", format_type_be(atttypid));
+	}
 
 	opr = get_opcode(opr);
 	if (!OidIsValid(opr))
+	{
 		elog(ERROR, "no opcode for type \"%s\"", format_type_be(atttypid));
+	}
 
 	ScanKeyEntryInitialize(sk,
 						   0, /* flags */
@@ -1265,10 +1317,12 @@ try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk
 		 * remain as is, so the UNORDERED flag must be preserved.
 		 */
 		if (ts_chunk_clear_status(uncompressed_chunk, CHUNK_STATUS_COMPRESSED_PARTIAL))
+		{
 			ereport(DEBUG1,
 					(errmsg("cleared chunk status for recompression: \"%s.%s\"",
 							NameStr(uncompressed_chunk->fd.schema_name),
 							NameStr(uncompressed_chunk->fd.table_name))));
+		}
 
 		/* changed chunk status, so invalidate any plans involving this chunk */
 		CacheInvalidateRelcacheByRelid(uncompressed_chunk->table_id);

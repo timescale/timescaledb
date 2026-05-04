@@ -46,7 +46,9 @@ ts_bgw_loader_api_version(void)
 	void **versionptr = find_rendezvous_variable(RENDEZVOUS_BGW_LOADER_API_VERSION);
 
 	if (*versionptr == NULL)
+	{
 		return 0;
+	}
 	return *((int32 *) *versionptr);
 }
 
@@ -56,8 +58,10 @@ ts_bgw_check_loader_api_version()
 	int version = ts_bgw_loader_api_version();
 
 	if (version < MIN_LOADER_API_VERSION)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("loader version out-of-date"),
 				 errhint("Please restart the database to upgrade the loader version.")));
+	}
 }

@@ -13,7 +13,9 @@ case PG_AGG_OID_HELPER(AGG_NAME, PG_TYPE):
 	 * back to the Postgres aggregation.
 	 */
 	if (lc_collate_is_c(collation))
+	{
 		return &FUNCTION_NAME(argdef);
+	}
 	return NULL;
 #else
 
