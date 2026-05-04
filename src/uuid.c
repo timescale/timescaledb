@@ -186,7 +186,9 @@ ts_uuid_v7_extract_timestamptz(const pg_uuid_t *uuid, TimestampTz *timestamp, bo
 	uint16 extra_micros = 0;
 
 	if (!ts_uuid_v7_extract_unixtime(uuid, &unixtime_millis, &extra_micros))
+	{
 		return false;
+	}
 
 	/* Milliseconds timestamp from PG Epoch (2000-01-01) */
 	const uint64 epoch_diff = POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE;
@@ -197,7 +199,9 @@ ts_uuid_v7_extract_timestamptz(const pg_uuid_t *uuid, TimestampTz *timestamp, bo
 
 	/* Add extra microseconds if requested */
 	if (with_micros)
+	{
 		*timestamp += extra_micros;
+	}
 
 	return true;
 }
@@ -211,7 +215,9 @@ ts_timestamptz_from_uuid_v7(PG_FUNCTION_ARGS)
 	TimestampTz ts = 0;
 
 	if (!ts_uuid_v7_extract_timestamptz(uuid, &ts, false))
+	{
 		PG_RETURN_NULL();
+	}
 
 	PG_RETURN_TIMESTAMPTZ(ts);
 }
@@ -225,7 +231,9 @@ ts_timestamptz_from_uuid_v7_with_microseconds(PG_FUNCTION_ARGS)
 	TimestampTz ts = 0;
 
 	if (!ts_uuid_v7_extract_timestamptz(uuid, &ts, true))
+	{
 		PG_RETURN_NULL();
+	}
 
 	PG_RETURN_TIMESTAMPTZ(ts);
 }
@@ -240,7 +248,9 @@ ts_uuid_version(PG_FUNCTION_ARGS)
 
 	/* Check that the variant field corresponds to RFC9562 */
 	if (!IS_RFC9562_VARIANT(uuid))
+	{
 		PG_RETURN_NULL();
+	}
 
 	version = UUID_VERSION(uuid); /* Get the version from the UUID */
 

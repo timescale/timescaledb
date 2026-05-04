@@ -96,7 +96,9 @@ ts_constraint_find_matching(HeapTuple ht_tup, Relation chunk_rel)
 
 		/* Check constraints are handled by CreateInheritance() */
 		if (ht_con->contype != chunk_con->contype || ht_con->contype == CONSTRAINT_CHECK)
+		{
 			continue;
+		}
 
 		/*
 		 * Get the main name for chunk constraint and check whether it matches

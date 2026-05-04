@@ -823,7 +823,9 @@ static void
 vector_agg_rescan(CustomScanState *node)
 {
 	if (node->ss.ps.chgParam != NULL)
+	{
 		UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
+	}
 
 	ExecReScan(linitial(node->custom_ps));
 
@@ -1135,7 +1137,9 @@ vector_agg_exec(CustomScanState *node)
 		 * "input_ended" flag instead.
 		 */
 		if (vector_agg_state->input_ended)
+		{
 			break;
+		}
 
 		/*
 		 * Compute the vectorized filters for the aggregate function FILTER

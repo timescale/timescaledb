@@ -387,7 +387,7 @@ FROM test_cases tc;
 SELECT ts_bloom1_composite_debug_hash(ROW(1::int2, 2::int2));
  ts_bloom1_composite_debug_hash 
 --------------------------------
-           -2833411701426218174
+           -8269931708899725482
 
 -- INT4 + INT8 (mixed integer sizes)
 SELECT ts_bloom1_composite_debug_hash(ROW(1::int4, 2::int8));

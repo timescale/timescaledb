@@ -70,9 +70,11 @@ ts_cagg_watermark_get(int32 hypertable_id)
 	ts_scan_iterator_close(&iterator);
 
 	if (value_isnull)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("watermark not defined for continuous aggregate: %d", hypertable_id)));
+	}
 
 	/* Log the read watermark, needed for MVCC tap tests */
 	ereport(DEBUG5,
@@ -212,7 +214,9 @@ ts_cagg_watermark_insert(Hypertable *mat_ht, int64 watermark, bool watermark_isn
 		const Dimension *dim = hyperspace_get_open_dimension(mat_ht->space, 0);
 
 		if (NULL == dim)
+		{
 			elog(ERROR, "invalid open dimension index %d", 0);
+		}
 
 		watermark = ts_time_get_min(ts_dimension_get_partition_type(dim));
 	}
@@ -248,7 +252,9 @@ cagg_watermark_update_scan_internal(TupleInfo *ti, void *data)
 	/* If the tuple was modified concurrently, retry the operation and use a new snapshot
 	 * to see the updated tuple. */
 	if (ti->lockresult == TM_Updated)
+	{
 		return SCAN_RESTART_WITH_NEW_SNAPSHOT;
+	}
 
 	Ensure(ti->lockresult == TM_Ok,
 		   "unable to lock watermark tuple for cagg %d (lock result %d)",
@@ -287,7 +293,9 @@ cagg_watermark_update_scan_internal(TupleInfo *ti, void *data)
 	}
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	return SCAN_DONE;
 }

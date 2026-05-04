@@ -35,7 +35,9 @@ bool
 ts_if_offset_is_infinity(Datum arg, Oid argtype, bool is_start)
 {
 	if (OidIsValid(argtype) && argtype != UNKNOWNOID && argtype != FLOAT8OID)
+	{
 		return false;
+	}
 
 	if (argtype != FLOAT8OID)
 	{
@@ -46,13 +48,17 @@ ts_if_offset_is_infinity(Datum arg, Oid argtype, bool is_start)
 		val = float8in_internal_opt_error(num, NULL, "double precision", num, &have_error);
 
 		if (have_error)
+		{
 			return false;
+		}
 #else
 		ErrorSaveContext escontext = { .type = T_ErrorSaveContext };
 		val = float8in_internal(num, NULL, "double precision", num, (Node *) &escontext);
 
 		if (escontext.error_occurred)
+		{
 			return false;
+		}
 #endif
 
 		arg = Float8GetDatum(val);
@@ -74,12 +80,18 @@ offset_to_int64(NullableDatum arg, Oid argtype, Oid partition_type, bool is_star
 	if (arg.isnull || ts_if_offset_is_infinity(arg.value, argtype, is_start))
 	{
 		if (is_start)
+		{
 			return ts_time_get_max(partition_type);
+		}
 		else
+		{
 			return ts_time_get_min(partition_type);
+		}
 	}
 	else
+	{
 		return interval_to_int64(arg.value, argtype);
+	}
 }
 /*
  * Check different conditions if the requested policy parameters
@@ -127,15 +139,21 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 		refresh_total_interval = start_offset;
 		if (!IS_INTEGER_TYPE(all_policies.partition_type) &&
 			refresh_total_interval != ts_time_get_max(all_policies.partition_type))
+		{
 			refresh_total_interval += refresh_interval;
+		}
 	}
 
 	if (all_policies.compress)
+	{
 		compress_after = interval_to_int64(all_policies.compress->compress_after,
 										   all_policies.compress->compress_after_type);
+	}
 	if (all_policies.retention)
+	{
 		drop_after = interval_to_int64(all_policies.retention->drop_after,
 									   all_policies.retention->drop_after_type);
+	}
 
 	if (orig_ht_reten_job)
 	{
@@ -169,17 +187,23 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 			end_offset == ts_time_get_min(all_policies.partition_type) ||
 			end_offset > start_offset ||
 			pg_sub_s64_overflow(start_offset, end_offset, &refresh_window_size))
+		{
 			refresh_window_size = start_offset;
+		}
 
 		/* if refresh_interval is greater than half of refresh_window_size, then there are gaps */
 		if (refresh_interval > (refresh_window_size / 2))
+		{
 			emit_error(err_gap_refresh);
+		}
 
 		/* Disallow refreshed data to be deleted */
 		if (orig_ht_reten_job)
 		{
 			if (refresh_total_interval > drop_after_HT)
+			{
 				emit_error(err_refresh_reten_ht_overlap);
+			}
 		}
 	}
 
@@ -188,19 +212,25 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	{
 		/* Check if refresh policy does not overlap with compression */
 		if (refresh_total_interval > compress_after)
+		{
 			emit_error(err_refresh_compress_overlap);
+		}
 	}
 	if (all_policies.refresh && all_policies.retention)
 	{
 		/* Check if refresh policy does not overlap with retention */
 		if (refresh_total_interval > drop_after)
+		{
 			emit_error(err_refresh_reten_overlap);
+		}
 	}
 	if (all_policies.retention && all_policies.compress)
 	{
 		/* Check if compression and retention policy overlap */
 		if (compress_after == drop_after)
+		{
 			emit_error(err_compress_reten_overlap);
+		}
 	}
 
 	/* Create policies as required, delete the old ones if coming from alter */
@@ -212,7 +242,9 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 		NullableDatum refresh_newest_first = { .isnull = true };
 
 		if (all_policies.is_alter_policy)
+		{
 			policy_refresh_cagg_remove_internal(all_policies.rel_oid, if_exists);
+		}
 		refresh_job_id = policy_refresh_cagg_add_internal(all_policies.rel_oid,
 														  all_policies.refresh->start_offset_type,
 														  all_policies.refresh->start_offset,
@@ -231,7 +263,9 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	if (all_policies.compress && all_policies.compress->create_policy)
 	{
 		if (all_policies.is_alter_policy)
+		{
 			policy_compression_remove_internal(all_policies.rel_oid, if_exists);
+		}
 		compression_job_id =
 			policy_compression_add_internal(all_policies.rel_oid,
 											all_policies.compress->compress_after,
@@ -248,7 +282,9 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	if (all_policies.retention && all_policies.retention->create_policy)
 	{
 		if (all_policies.is_alter_policy)
+		{
 			policy_retention_remove_internal(all_policies.rel_oid, if_exists);
+		}
 		retention_job_id =
 			policy_retention_add_internal(all_policies.rel_oid,
 										  all_policies.retention->drop_after_type,
@@ -281,9 +317,11 @@ policies_add(PG_FUNCTION_ARGS)
 
 	cagg = ts_continuous_agg_find_by_relid(rel_oid);
 	if (!cagg)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(rel_oid))));
+	}
 
 	all_policies.rel_oid = rel_oid;
 	all_policies.is_alter_policy = false;
@@ -347,7 +385,9 @@ policies_remove(PG_FUNCTION_ARGS)
 	ts_feature_flag_check(FEATURE_POLICY);
 
 	if (policy_array == NULL)
+	{
 		PG_RETURN_BOOL(false);
+	}
 
 	deconstruct_array(policy_array, TEXTOID, -1, false, TYPALIGN_INT, &policy, NULL, &npolicies);
 
@@ -356,17 +396,27 @@ policies_remove(PG_FUNCTION_ARGS)
 		char *curr_policy = VARDATA(policy[i]);
 
 		if (pg_strcasecmp(curr_policy, POLICY_REFRESH_CAGG_PROC_NAME) == 0)
+		{
 			success = policy_refresh_cagg_remove_internal(cagg_oid, if_exists);
+		}
 		else if (pg_strcasecmp(curr_policy, POLICY_COMPRESSION_PROC_NAME) == 0)
+		{
 			success = policy_compression_remove_internal(cagg_oid, if_exists);
+		}
 		else if (pg_strncasecmp(curr_policy,
 								POLICY_RETENTION_PROC_NAME,
 								strlen(POLICY_RETENTION_PROC_NAME)) == 0)
+		{
 			success = policy_retention_remove_internal(cagg_oid, if_exists);
+		}
 		else
+		{
 			ereport(NOTICE, (errmsg("No relevant policy found")));
+		}
 		if (!success)
+		{
 			++failures;
+		}
 	}
 	PG_RETURN_BOOL(success && (0 == failures));
 }
@@ -375,7 +425,9 @@ Datum
 policies_remove_all(PG_FUNCTION_ARGS)
 {
 	if (PG_ARGISNULL(0))
+	{
 		PG_RETURN_BOOL(false);
+	}
 
 	Oid cagg_oid = PG_GETARG_OID(0);
 	bool if_exists = PG_GETARG_BOOL(1);
@@ -388,24 +440,36 @@ policies_remove_all(PG_FUNCTION_ARGS)
 	ts_feature_flag_check(FEATURE_POLICY);
 
 	if (!cagg)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(cagg_oid))));
+	}
 
 	jobs = ts_bgw_job_find_by_hypertable_id(cagg->data.mat_hypertable_id);
 	foreach (lc, jobs)
 	{
 		BgwJob *job = lfirst(lc);
 		if (namestrcmp(&(job->fd.proc_name), POLICY_REFRESH_CAGG_PROC_NAME) == 0)
+		{
 			success = policy_refresh_cagg_remove_internal(cagg_oid, if_exists);
+		}
 		else if (namestrcmp(&(job->fd.proc_name), POLICY_COMPRESSION_PROC_NAME) == 0)
+		{
 			success = policy_compression_remove_internal(cagg_oid, if_exists);
+		}
 		else if (namestrcmp(&(job->fd.proc_name), POLICY_RETENTION_PROC_NAME) == 0)
+		{
 			success = policy_retention_remove_internal(cagg_oid, if_exists);
+		}
 		else
+		{
 			ereport(NOTICE, (errmsg("Ignoring custom job")));
+		}
 		if (!success)
+		{
 			++failures;
+		}
 	}
 	PG_RETURN_BOOL(success && (0 == failures));
 }
@@ -427,9 +491,11 @@ policies_alter(PG_FUNCTION_ARGS)
 
 	cagg = ts_continuous_agg_find_by_relid(rel_oid);
 	if (!cagg)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(rel_oid))));
+	}
 
 	all_policies.is_alter_policy = true;
 	all_policies.rel_oid = rel_oid;
@@ -438,7 +504,9 @@ policies_alter(PG_FUNCTION_ARGS)
 
 	jobs = ts_bgw_job_find_by_hypertable_id(cagg->data.mat_hypertable_id);
 	if ((NIL == jobs))
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no jobs found")));
+	}
 	foreach (lc, jobs)
 	{
 		BgwJob *job = lfirst(lc);
@@ -583,8 +651,10 @@ policies_alter(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(2))
 	{
 		if (!all_policies.refresh)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no refresh job found")));
+		}
 		all_policies.refresh->start_offset.value = PG_GETARG_DATUM(2);
 		all_policies.refresh->start_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 2);
 		all_policies.refresh->start_offset.isnull = false;
@@ -593,8 +663,10 @@ policies_alter(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(3))
 	{
 		if (!all_policies.refresh)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no refresh job found")));
+		}
 		all_policies.refresh->end_offset.value = PG_GETARG_DATUM(3);
 		all_policies.refresh->end_offset_type = get_fn_expr_argtype(fcinfo->flinfo, 3);
 		all_policies.refresh->end_offset.isnull = false;
@@ -603,8 +675,10 @@ policies_alter(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(4))
 	{
 		if (!all_policies.compress)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no compress job found")));
+		}
 		all_policies.compress->compress_after = PG_GETARG_DATUM(4);
 		all_policies.compress->compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 4);
 		all_policies.compress->create_policy = true;
@@ -612,8 +686,10 @@ policies_alter(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(5))
 	{
 		if (!all_policies.retention)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no retention job found")));
+		}
 		all_policies.retention->drop_after = PG_GETARG_DATUM(5);
 		all_policies.retention->drop_after_type = get_fn_expr_argtype(fcinfo->flinfo, 5);
 		all_policies.retention->create_policy = true;
@@ -631,17 +707,25 @@ push_to_json(Oid type, JsonbParseState *parse_state, BgwJob *job, char *json_lab
 		bool found;
 		int64 value = ts_jsonb_get_int64_field(job->fd.config, json_label, &found);
 		if (!found)
+		{
 			ts_jsonb_add_null(parse_state, show_config);
+		}
 		else
+		{
 			ts_jsonb_add_int64(parse_state, show_config, value);
+		}
 	}
 	else
 	{
 		Interval *value = ts_jsonb_get_interval_field(job->fd.config, json_label);
 		if (value == NULL)
+		{
 			ts_jsonb_add_null(parse_state, show_config);
+		}
 		else
+		{
 			ts_jsonb_add_interval(parse_state, show_config, value);
+		}
 	}
 }
 
@@ -660,9 +744,11 @@ policies_show(PG_FUNCTION_ARGS)
 
 	cagg = ts_continuous_agg_find_by_relid(rel_oid);
 	if (!cagg)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("\"%s\" is not a continuous aggregate", get_rel_name(rel_oid))));
+	}
 
 	type = IS_TIMESTAMP_TYPE(cagg->partition_type) ? INTERVALOID : cagg->partition_type;
 
@@ -690,7 +776,9 @@ policies_show(PG_FUNCTION_ARGS)
 	 * find a job for this hypertable
 	 */
 	if (lc == NULL || jobs == NULL)
+	{
 		SRF_RETURN_DONE(funcctx);
+	}
 	else
 	{
 		BgwJob *job = lfirst(lc);
@@ -743,9 +831,11 @@ policies_show(PG_FUNCTION_ARGS)
 								  &(job->fd.schedule_interval));
 		}
 		else
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("\"%s\" unsupported proc", NameStr(job->fd.proc_name))));
+		}
 
 		JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 

@@ -68,7 +68,9 @@ cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 		heap_freetuple(new_tuple);
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 
 		break;
 	}
@@ -108,13 +110,19 @@ cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht,
 			char *grpcol = (char *) lfirst(lc);
 			/* skip time dimension since we put it as first entry */
 			if (namestrcmp((Name) & (mat_ht_dim->fd.column_name), grpcol) == 0)
+			{
 				continue;
+			}
 
 			if (segmentby_columns && ts_array_is_member(segmentby_columns, grpcol))
+			{
 				continue;
+			}
 
 			if (info.len > 0)
+			{
 				appendStringInfoString(&info, ",");
+			}
 			appendStringInfoString(&info, quote_identifier(grpcol));
 		}
 	}
@@ -162,7 +170,9 @@ void
 continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_options)
 {
 	if (!with_clause_options[CreateMaterializedViewFlagContinuous].is_default)
+	{
 		elog(ERROR, "cannot disable continuous aggregates");
+	}
 
 	if (!with_clause_options[CreateMaterializedViewFlagMaterializedOnly].is_default)
 	{

@@ -66,7 +66,9 @@ ts_event_trigger_ddl_commands(void)
 		heap_deform_tuple(tuple, rsinfo.setDesc, values, nulls);
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 
 		if (rsinfo.setDesc->natts > 8 && !nulls[8])
 		{
@@ -99,7 +101,9 @@ extract_addrnames(ArrayType *arr)
 	for (i = 0; i < nelems; i++)
 	{
 		if (nulls[i])
+		{
 			elog(ERROR, "unexpected NULL in name list");
+		}
 
 		/* TextDatumGetCString heap allocates the string */
 		list = lappend(list, TextDatumGetCString(elems[i]));
@@ -272,13 +276,17 @@ ts_event_trigger_dropped_objects(void)
 				objtype = TextDatumGetCString(values[6]);
 
 				if (objtype == NULL)
+				{
 					break;
+				}
 
 				addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
 
 				if (strcmp(objtype, "index") == 0)
+				{
 					eventobj =
 						make_event_trigger_drop_index(lsecond(addrnames), linitial(addrnames));
+				}
 				else if (strcmp(objtype, "table") == 0)
 				{
 					eventobj = make_event_trigger_drop_table(DatumGetInt32(values[1]),
@@ -295,10 +303,12 @@ ts_event_trigger_dropped_objects(void)
 																   linitial(addrnames)));
 				}
 				else if (strcmp(objtype, "foreign table") == 0)
+				{
 					eventobj = make_event_trigger_drop_table(DatumGetInt32(values[1]),
 															 lsecond(addrnames),
 															 linitial(addrnames),
 															 RELKIND_FOREIGN_TABLE);
+				}
 				break;
 			case NamespaceRelationId:
 				addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
@@ -319,10 +329,14 @@ ts_event_trigger_dropped_objects(void)
 		}
 
 		if (NULL != eventobj)
+		{
 			objects = lappend(objects, eventobj);
+		}
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 	}
 
 	ExecDropSingleTupleTableSlot(slot);

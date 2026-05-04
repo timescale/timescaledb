@@ -132,9 +132,9 @@ jobs:
 
     - name: Setup WSL
       if: needs.check_paths.outputs.run_installcheck == 'true'
-      uses: Vampire/setup-wsl@6a8db447be7ed35f2f499c02c6e60ff77ef11278 # v6.0.0
+      uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364 # v7.0.0
       with:
-        distribution: Debian
+        distribution: Debian-13
 
     - name: Configure apt retries and timeout in WSL
       if: needs.check_paths.outputs.run_installcheck == 'true'
@@ -148,10 +148,8 @@ jobs:
       if: needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       run: |
-        # Workaround for https://github.com/Vampire/setup-wsl/issues/76
-        sed -i 's#ftp.debian.org/debian bullseye-backports#archive.debian.org/debian bullseye-backports#' /etc/apt/sources.list
         apt-get update
-        apt-get install --yes --no-install-recommends cmake gawk gcc git gnupg jq make postgresql-client postgresql-common tree
+        apt-get install --yes --no-install-recommends ca-certificates cmake gawk gcc git gnupg jq make postgresql-client postgresql-common tree
 
     - name: Configure git
       # Since we want to reuse the checkout in the WSL environment
@@ -180,7 +178,7 @@ jobs:
       # --extract-only and launch our own test instance, which is
       # probably better anyway since it gives us more control.
     - name: Cache PostgreSQL installation
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       id: cache-postgresql
       with:
         path: C:\Progra~1\PostgreSQL\${{ matrix.versions.pg }}
@@ -335,7 +333,7 @@ jobs:
 
     - name: Upload crash dumps and stack traces
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: Crash dumps PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
         path: |
@@ -344,7 +342,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: Regression ${{ matrix.versions.pg }} diff ${{ matrix.os }} ${{ matrix.build_type }} Build
         path: |
@@ -353,14 +351,14 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: PostgreSQL ${{ matrix.versions.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
         path: ${{ env.PGDATA }}\log\postmaster.log
 
     - name: Upload CMake Logs
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: CMake Logs ${{ matrix.versions.pg }} ${{ matrix.os }} ${{ matrix.build_type }}
         path: |

@@ -239,10 +239,12 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 
 		/* Build a tuple descriptor for our result type */
 		if (get_call_result_type(fcinfo, NULL, &funcctx->tuple_desc) != TYPEFUNC_COMPOSITE)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("function returning record called in context "
 							"that cannot accept type record")));
+		}
 
 		/*
 		 * generate attribute metadata needed later to produce tuples from raw

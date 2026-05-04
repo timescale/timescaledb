@@ -356,9 +356,11 @@ catalog_owner(void)
 	tuple = SearchSysCache1(NAMESPACEOID, ObjectIdGetDatum(nsp_oid));
 
 	if (!HeapTupleIsValid(tuple))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_SCHEMA),
 				 errmsg("schema with OID %u does not exist", nsp_oid)));
+	}
 
 	owner_oid = ((Form_pg_namespace) GETSTRUCT(tuple))->nspowner;
 
@@ -382,19 +384,25 @@ catalog_database_info_init(CatalogDatabaseInfo *info)
 	info->owner_uid = catalog_owner();
 
 	if (!OidIsValid(info->schema_id))
+	{
 		elog(ERROR, "OID lookup failed for schema \"%s\"", CATALOG_SCHEMA_NAME);
+	}
 }
 
 TSDLLEXPORT CatalogDatabaseInfo *
 ts_catalog_database_info_get()
 {
 	if (!ts_extension_is_loaded())
+	{
 		elog(ERROR, "tried calling catalog_database_info_get when extension isn't loaded");
+	}
 
 	if (!OidIsValid(database_info.database_id))
 	{
 		if (!IsTransactionState())
+		{
 			elog(ERROR, "cannot initialize catalog_database_info outside of a transaction");
+		}
 
 		memset(&database_info, 0, sizeof(CatalogDatabaseInfo));
 		catalog_database_info_init(&database_info);
@@ -424,10 +432,12 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 								   false);
 
 		if (!OidIsValid(id))
+		{
 			elog(ERROR,
 				 "OID lookup failed for table \"%s.%s\"",
 				 table_ary[i].schema_name,
 				 table_ary[i].table_name);
+		}
 
 		tables_info[i].id = id;
 
@@ -439,7 +449,9 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 			id = ts_get_relation_relid(table_ary[i].schema_name, index_ary[i].names[j], true);
 
 			if (!OidIsValid(id))
+			{
 				elog(ERROR, "OID lookup failed for table index \"%s\"", index_ary[i].names[j]);
+			}
 
 			tables_info[i].index_ids[j] = id;
 		}
@@ -460,7 +472,9 @@ ts_catalog_table_info_init(CatalogTableInfo *tables_info, int max_tables,
 			tables_info[i].serial_relid = RangeVarGetRelid(sequence, NoLock, false);
 		}
 		else
+		{
 			tables_info[i].serial_relid = InvalidOid;
+		}
 	}
 }
 
@@ -470,13 +484,19 @@ ts_catalog_get(void)
 	int i;
 
 	if (!OidIsValid(MyDatabaseId))
+	{
 		elog(ERROR, "invalid database ID");
+	}
 
 	if (!ts_extension_is_loaded())
+	{
 		elog(ERROR, "tried calling catalog_get when extension isn't loaded");
+	}
 
 	if (s_catalog.initialized || !IsTransactionState())
+	{
 		return &s_catalog;
+	}
 
 	memset(&s_catalog, 0, sizeof(Catalog));
 	ts_catalog_table_info_init(s_catalog.tables,
@@ -486,12 +506,16 @@ ts_catalog_get(void)
 							   catalog_table_serial_id_names);
 
 	for (i = 0; i < _TS_MAX_SCHEMA; i++)
+	{
 		s_catalog.extension_schema_id[i] = get_namespace_oid(ts_extension_schema_names[i], false);
+	}
 
 	for (i = 0; i < _MAX_CACHE_TYPES; i++)
+	{
 		s_catalog.caches[i].inval_proxy_id =
 			get_relname_relid(cache_proxy_table_names[i],
 							  s_catalog.extension_schema_id[TS_CACHE_SCHEMA]);
+	}
 
 	ts_cache_invalidate_set_proxy_tables(s_catalog.caches[CACHE_TYPE_HYPERTABLE].inval_proxy_id,
 										 s_catalog.caches[CACHE_TYPE_BGW_JOB].inval_proxy_id);
@@ -510,10 +534,12 @@ ts_catalog_get(void)
 								  false);
 
 		if (funclist == NULL || funclist->next)
+		{
 			elog(ERROR,
 				 "OID lookup failed for the function \"%s\" with %d args",
 				 def.name,
 				 def.args);
+		}
 
 		s_catalog.functions[i].function_id = funclist->oid;
 	}
@@ -542,16 +568,24 @@ catalog_get_table(Catalog *catalog, Oid relid)
 		const char *relname = get_rel_name(relid);
 
 		for (i = 0; i < _MAX_CATALOG_TABLES; i++)
+		{
 			if (strcmp(catalog_table_names[i].schema_name, schema_name) == 0 &&
 				strcmp(catalog_table_name(i), relname) == 0)
+			{
 				return (CatalogTable) i;
+			}
+		}
 
 		return INVALID_CATALOG_TABLE;
 	}
 
 	for (i = 0; i < _MAX_CATALOG_TABLES; i++)
+	{
 		if (catalog->tables[i].id == relid)
+		{
 			return (CatalogTable) i;
+		}
+	}
 
 	return INVALID_CATALOG_TABLE;
 }
@@ -571,10 +605,12 @@ ts_catalog_table_next_seq_id(const Catalog *catalog, CatalogTable table)
 	Oid relid = catalog->tables[table].serial_relid;
 
 	if (!OidIsValid(relid))
+	{
 		elog(ERROR,
 			 "no serial ID column for table \"%s.%s\"",
 			 catalog_table_names[table].schema_name,
 			 catalog_table_name(table));
+	}
 
 	return DatumGetInt64(DirectFunctionCall1(nextval_oid, ObjectIdGetDatum(relid)));
 }
@@ -590,7 +626,9 @@ ts_catalog_get_cache_proxy_id(Catalog *catalog, CacheType type)
 		 * get_namespace_oid() to work.
 		 */
 		if (!IsTransactionState())
+		{
 			return InvalidOid;
+		}
 
 		return ts_get_relation_relid(CACHE_SCHEMA_NAME,
 									 (char *) cache_proxy_table_names[type],
@@ -834,7 +872,9 @@ ts_catalog_index_insert(ResultRelInfo *indstate, HeapTuple heapTuple)
 	 */
 #ifndef USE_ASSERT_CHECKING
 	if (HeapTupleIsHeapOnly(heapTuple))
+	{
 		return;
+	}
 #endif
 
 	/*
@@ -842,7 +882,9 @@ ts_catalog_index_insert(ResultRelInfo *indstate, HeapTuple heapTuple)
 	 */
 	numIndexes = indstate->ri_NumIndices;
 	if (numIndexes == 0)
+	{
 		return;
+	}
 	relationDescs = indstate->ri_IndexRelationDescs;
 	indexInfoArray = indstate->ri_IndexRelationInfo;
 	heapRelation = indstate->ri_RelationDesc;
@@ -864,7 +906,9 @@ ts_catalog_index_insert(ResultRelInfo *indstate, HeapTuple heapTuple)
 
 		/* If the index is marked as read-only, ignore it */
 		if (!indexInfo->ii_ReadyForInserts)
+		{
 			continue;
+		}
 
 		/*
 		 * Expressional and partial indexes on system catalogs are not

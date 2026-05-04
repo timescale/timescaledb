@@ -50,10 +50,12 @@ ts_get_git_commit(PG_FUNCTION_ARGS)
 
 	/* Build a tuple descriptor for our result type */
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
+	}
 
 	tupdesc = BlessTupleDesc(tupdesc);
 
@@ -109,15 +111,21 @@ ts_version_get_os_info(VersionOSInfo *info)
 	bufsize = GetFileVersionInfoSizeA(TEXT("kernel32.dll"), NULL);
 
 	if (bufsize == 0)
+	{
 		return false;
+	}
 
 	buffer = palloc(bufsize);
 
 	if (!GetFileVersionInfoA(TEXT("kernel32.dll"), 0, bufsize, buffer))
+	{
 		goto error;
+	}
 
 	if (!VerQueryValueA(buffer, TEXT("\\"), &vinfo, &vinfo_len))
+	{
 		goto error;
+	}
 
 	snprintf(info->sysname, VERSION_INFO_LEN - 1, "Windows");
 	snprintf(info->version, VERSION_INFO_LEN - 1, "%u", HIWORD(vinfo->dwProductVersionMS));
@@ -155,24 +163,34 @@ get_pretty_version(char *pretty_version)
 	/* we cannot use pg_read_file because it doesn't allow absolute paths */
 	version_file = AllocateFile(OS_RELEASE_FILE, PG_BINARY_R);
 	if (version_file == NULL)
+	{
 		return false;
+	}
 
 	fseeko(version_file, 0, SEEK_SET);
 
 	bytes_read = fread(contents, 1, (size_t) MAX_READ_LEN, version_file);
 
 	if (bytes_read <= 0)
+	{
 		goto cleanup;
+	}
 
 	if (bytes_read < MAX_READ_LEN)
+	{
 		contents[bytes_read] = '\0';
+	}
 	else
+	{
 		contents[MAX_READ_LEN - 1] = '\0';
+	}
 
 	contents = strstr(contents, NAME_FIELD);
 
 	if (contents == NULL)
+	{
 		goto cleanup;
+	}
 
 	contents += sizeof(NAME_FIELD) - 1;
 
@@ -181,7 +199,9 @@ get_pretty_version(char *pretty_version)
 		char c = contents[i];
 
 		if (c == '\0' || c == '\n' || c == '\r' || c == '"')
+		{
 			break;
+		}
 
 		pretty_version[i] = c;
 	}
@@ -230,10 +250,12 @@ ts_get_os_info(PG_FUNCTION_ARGS)
 	VersionOSInfo info;
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
+	}
 
 	if (ts_version_get_os_info(&info))
 	{
@@ -241,12 +263,18 @@ ts_get_os_info(PG_FUNCTION_ARGS)
 		values[1] = CStringGetTextDatum(info.version);
 		values[2] = CStringGetTextDatum(info.release);
 		if (info.has_pretty_version)
+		{
 			values[3] = CStringGetTextDatum(info.pretty_version);
+		}
 		else
+		{
 			nulls[3] = true;
+		}
 	}
 	else
+	{
 		memset(nulls, true, sizeof(nulls));
+	}
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
