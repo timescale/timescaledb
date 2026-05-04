@@ -70,11 +70,12 @@ jobs:
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         pg_config: ["-cfsync=off -cstatement_timeout=60s -clisten_addresses=0.0.0.0"]
         event_name: ["${{ github.event_name }}"]
+        run_installcheck: ["${{ needs.check_paths.outputs.run_installcheck }}"]
         exclude:
           - versions: { pg: 15, pg_version: "${{ needs.config.outputs.pg15_latest }}" }
-            event_name: "pull_request"
+            run_installcheck: false
           - versions: { pg: 16, pg_version: "${{ needs.config.outputs.pg16_latest }}" }
-            event_name: "pull_request"
+            run_installcheck: false
     env:
       # PostgreSQL configuration
       PGPORT: 55432
@@ -149,7 +150,8 @@ jobs:
       shell: wsl-bash {0}
       run: |
         apt-get update
-        apt-get install --yes --no-install-recommends ca-certificates cmake gawk gcc git gnupg jq make postgresql-client postgresql-common tree
+        apt-get install --yes --no-install-recommends ca-certificates cmake gawk \
+          gcc git gnupg jq make postgresql-client-${{ matrix.versions.pg }} tree
 
     - name: Configure git
       # Since we want to reuse the checkout in the WSL environment
