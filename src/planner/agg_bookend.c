@@ -665,7 +665,6 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 		{
 			ListCell *prev = NULL;
 			ListCell *next = list_head(subroot->append_rel_list);
-			Assert(rte->inh);
 			rte->inh = false;
 			/* query planner gets confused when entries in the
 			 * append_rel_list refer to entries in the relarray that

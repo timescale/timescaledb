@@ -103,6 +103,10 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 -- can't do index scan when using WINDOW function
 :PREFIX SELECT gp, last(temp, time) OVER (PARTITION BY gp) AS last FROM btest;
 
+-- first/last on parent-only scan (ONLY keyword skips expansion)
+:PREFIX SELECT first(temp, time) FROM ONLY btest;
+:PREFIX SELECT last(temp, time) FROM ONLY btest;
+
 -- test constants
 :PREFIX SELECT first(100, 100) FROM btest;
 
