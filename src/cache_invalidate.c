@@ -58,6 +58,7 @@ cache_invalidate_relcache_all(void)
 {
 	ts_hypertable_cache_invalidate_callback();
 	ts_bgw_job_cache_invalidate_callback();
+	ts_catalog_invalidate();
 }
 
 static Oid hypertable_proxy_table_oid = InvalidOid;
@@ -98,6 +99,15 @@ cache_invalidate_relcache_callback(Datum arg, Oid relid)
 	else if (relid == bgw_proxy_table_oid)
 	{
 		ts_bgw_job_cache_invalidate_callback();
+	}
+	else if (ts_catalog_relid(relid))
+	{
+		/*
+		 * REINDEX CONCURRENTLY on a TimescaleDB catalog table or index
+		 * rotates the relation OID. Drop the cached OIDs so the next
+		 * ts_catalog_get() resolves them again from pg_class.
+		 */
+		ts_catalog_invalidate();
 	}
 }
 

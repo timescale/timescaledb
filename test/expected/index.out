@@ -606,3 +606,26 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_15_21_chunk');
  _timescaledb_internal._hyper_15_21_chunk_test_temp_idx | {temp}  |      | f      | f       | f         | 
  _timescaledb_internal._hyper_15_21_chunk_test_time_idx | {time}  |      | f      | f       | f         | 
 
+-- #7590 REINDEX CONCURRENTLY on _timescaledb_catalog tables/indexes
+-- rotates relation OIDs. The session-local catalog cache must drop the
+-- stale OIDs, otherwise the next catalog access fails with
+-- "could not open relation with OID".
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE i7590(time timestamptz NOT NULL, v int);
+SELECT table_name FROM create_hypertable('i7590', 'time');
+ table_name 
+------------
+ i7590
+
+INSERT INTO i7590 VALUES ('2024-01-01', 1);
+REINDEX INDEX CONCURRENTLY _timescaledb_catalog.chunk_schema_name_table_name_key;
+REINDEX INDEX CONCURRENTLY _timescaledb_catalog.hypertable_table_name_schema_name_key;
+INSERT INTO i7590 VALUES ('2024-01-02', 2);
+REINDEX TABLE CONCURRENTLY _timescaledb_catalog.chunk;
+INSERT INTO i7590 VALUES ('2024-01-03', 3);
+SELECT count(*) AS rows_after_reindex FROM i7590;
+ rows_after_reindex 
+--------------------
+                  3
+
+DROP TABLE i7590;

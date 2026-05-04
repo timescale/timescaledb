@@ -557,6 +557,52 @@ ts_catalog_reset(void)
 	ts_cache_invalidate_set_proxy_tables(InvalidOid, InvalidOid);
 }
 
+/*
+ * Mark the cached catalog OIDs as stale so the next ts_catalog_get()
+ * resolves them again from pg_class. Used by the relcache invalidation
+ * callback after operations like REINDEX CONCURRENTLY that change a
+ * catalog table or index OID without going through extension state
+ * transitions. Unlike ts_catalog_reset() this leaves database_info and
+ * proxy-table tracking in place since those are unaffected.
+ */
+void
+ts_catalog_invalidate(void)
+{
+	s_catalog.initialized = false;
+}
+
+/*
+ * Return true if relid is one of our cached catalog table or index OIDs.
+ * Safe to call from a relcache invalidation callback: only reads our own
+ * static state, no syscache or relcache lookups.
+ */
+bool
+ts_catalog_relid(Oid relid)
+{
+	if (!OidIsValid(relid) || !s_catalog.initialized)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < _MAX_CATALOG_TABLES; i++)
+	{
+		if (s_catalog.tables[i].id == relid)
+		{
+			return true;
+		}
+
+		for (int j = 0; j < _MAX_TABLE_INDEXES; j++)
+		{
+			if (s_catalog.tables[i].index_ids[j] == relid)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 static CatalogTable
 catalog_get_table(Catalog *catalog, Oid relid)
 {

@@ -1,0 +1,2 @@
+Fixes: #9713 Drop cached catalog OIDs on REINDEX CONCURRENTLY
+Thanks: @pmenke-de for reporting that REINDEX CONCURRENTLY of _timescaledb_catalog indexes left sessions unable to access the catalog

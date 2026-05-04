@@ -343,3 +343,23 @@ CREATE INDEX test_temp_idx ON ONLY test (time);
 
 SELECT * FROM test.show_indexes('test');
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_15_21_chunk');
+
+-- #7590 REINDEX CONCURRENTLY on _timescaledb_catalog tables/indexes
+-- rotates relation OIDs. The session-local catalog cache must drop the
+-- stale OIDs, otherwise the next catalog access fails with
+-- "could not open relation with OID".
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+CREATE TABLE i7590(time timestamptz NOT NULL, v int);
+SELECT table_name FROM create_hypertable('i7590', 'time');
+INSERT INTO i7590 VALUES ('2024-01-01', 1);
+
+REINDEX INDEX CONCURRENTLY _timescaledb_catalog.chunk_schema_name_table_name_key;
+REINDEX INDEX CONCURRENTLY _timescaledb_catalog.hypertable_table_name_schema_name_key;
+INSERT INTO i7590 VALUES ('2024-01-02', 2);
+
+REINDEX TABLE CONCURRENTLY _timescaledb_catalog.chunk;
+INSERT INTO i7590 VALUES ('2024-01-03', 3);
+
+SELECT count(*) AS rows_after_reindex FROM i7590;
+DROP TABLE i7590;
