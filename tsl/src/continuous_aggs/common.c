@@ -435,6 +435,13 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 	bf->bucket_function = fe->funcid;
 	bf->bucket_time_based = ts_continuous_agg_bucket_on_interval(bf->bucket_function);
 	bf->bucket_fixed_interval = time_bucket_info_has_fixed_width(bf);
+
+	if (process_checks && is_cagg_create && ts_continuous_agg_bucket_width(bf) <= 0)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("time bucket width must be greater than zero")));
+	}
 }
 
 /*
