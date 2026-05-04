@@ -431,6 +431,11 @@ elif len(sys.argv) > 2:
                 )
             )
 
+# DEBUG (probe_compbgw_flake): collapse matrix to a single entry so the
+# CI run is fast and focused on the flake-hunt configuration. Remove
+# before merging.
+m["include"] = [build_debug_config({"pg": PG18_LATEST})]
+
 # generate command to set github action variable
 with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
     print(str.format("matrix={0}", json.dumps(m, default=list)), file=output)

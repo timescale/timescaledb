@@ -212,11 +212,21 @@ jobs:
 
     - name: make installcheck
       if: matrix.installcheck
+      # DEBUG (probe_compbgw_flake): loop the failing test 50 times so
+      # we have a strong chance of catching the ~6.5% flake. Each
+      # iteration runs only compression_bgw, ~1s wall, so the whole
+      # step finishes in <2 min when no failure is hit. Exits on the
+      # first failing iteration so the regression.diffs artifact
+      # captures that iteration's output. Remove before merging.
       run: |
         set -o pipefail
-        make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
-            SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
-            | tee installcheck.log
+        for i in $(seq 1 50); do
+          echo "===== compression_bgw iteration $i ====="
+          make -k -C build installcheck TESTS=compression_bgw \
+              IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
+              SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
+              | tee installcheck.log
+        done
 
     - name: pginstallcheck
       if: matrix.pginstallcheck

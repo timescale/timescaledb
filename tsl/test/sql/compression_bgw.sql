@@ -340,6 +340,18 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk
 -- index size should decrease due to reindexing (8kB or 16kB)
 VACUUM ANALYZE metrics2;
 SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') <= 16384 as size_empty;
+-- DEBUG (probe_compbgw_flake): emit extra diagnostics so that when the
+-- size_empty assertion above flips to false on CI we can see what state
+-- the chunk and its indexes were actually in. Remove before merging.
+-- Avoid printing chunk identifiers since chunk IDs are unstable across runs.
+SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') AS probe_actual_size;
+SELECT count(*) AS probe_index_count,
+       sum(pg_relation_size(format('%I.%I', schemaname, indexname)::regclass)) AS probe_index_sz_sum
+FROM pg_indexes
+WHERE schemaname = :'chunk_schema' AND tablename = :'chunk_name';
+SELECT status AS probe_chunk_status
+FROM _timescaledb_catalog.chunk
+WHERE schema_name = :'chunk_schema' AND table_name = :'chunk_name';
 DROP TABLE metrics2;
 
 --TEST 8

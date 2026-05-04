@@ -767,6 +767,30 @@ SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') <= 16384 as size_empty;
 ------------
  t
 
+-- DEBUG (probe_compbgw_flake): emit extra diagnostics so that when the
+-- size_empty assertion above flips to false on CI we can see what state
+-- the chunk and its indexes were actually in. Remove before merging.
+-- Avoid printing chunk identifiers since chunk IDs are unstable across runs.
+SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') AS probe_actual_size;
+ probe_actual_size 
+-------------------
+              8192
+
+SELECT count(*) AS probe_index_count,
+       sum(pg_relation_size(format('%I.%I', schemaname, indexname)::regclass)) AS probe_index_sz_sum
+FROM pg_indexes
+WHERE schemaname = :'chunk_schema' AND tablename = :'chunk_name';
+ probe_index_count | probe_index_sz_sum 
+-------------------+--------------------
+                 1 |               8192
+
+SELECT status AS probe_chunk_status
+FROM _timescaledb_catalog.chunk
+WHERE schema_name = :'chunk_schema' AND table_name = :'chunk_name';
+ probe_chunk_status 
+--------------------
+                  1
+
 DROP TABLE metrics2;
 --TEST 8
 --compression policy errors
