@@ -155,7 +155,7 @@ jobs:
 
         /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
         apt-get update
-        apt-get install postgresql-client-${{ matrix.versions.pg }}
+        apt-get install --yes postgresql-client-${{ matrix.versions.pg }}
 
     - name: Configure git
       # Since we want to reuse the checkout in the WSL environment
