@@ -80,6 +80,82 @@ USING orphaned_settings AS os WHERE cs.relid = os.relid;
 ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT IF EXISTS hypertable_compressed_hypertable_id_fkey;
 ALTER TABLE _timescaledb_catalog.chunk DROP CONSTRAINT IF EXISTS chunk_compressed_chunk_id_fkey;
 
+
+-- Block upgrade if bloom filter sparse indexes exist on smallint (int2)
+-- columns. These bloom filters used PostgreSQL's hashint2extended while
+-- the new code uses bloom1_hash_2. Existing bloom data must be dropped
+-- before upgrading; recompress afterwards to rebuild with the new hash.
+DO $$
+DECLARE
+  drop_commands text;
+BEGIN
+  WITH bloom_entries AS (
+    SELECT relid AS chunk_oid,
+           compress_relid,
+           columns,
+           (SELECT string_agg(col, '_' ORDER BY ordinality)
+            FROM jsonb_array_elements_text(columns)
+                 WITH ORDINALITY AS t(col, ordinality)) AS col_suffix
+    FROM _timescaledb_catalog.compression_settings,
+         jsonb_array_elements(index) AS elem,
+         LATERAL (SELECT
+           CASE jsonb_typeof(elem->'column')
+             WHEN 'array' THEN elem->'column'
+             ELSE jsonb_build_array(elem->'column')
+           END AS columns
+         ) AS normalized
+    WHERE elem->>'type' = 'bloom'
+      AND compress_relid IS NOT NULL
+  ),
+  bloom_column_names AS (
+    SELECT chunk_oid, compress_relid, col_suffix, colname
+    FROM bloom_entries,
+         jsonb_array_elements_text(columns) AS bloom_column(colname)
+  ),
+  int2_bloom_suffixes AS (
+    SELECT DISTINCT compress_relid, col_suffix
+    FROM bloom_column_names
+    JOIN pg_attribute ON attrelid = chunk_oid
+     AND attname = colname
+     AND atttypid = 'int2'::regtype
+     AND attnum > 0
+  ),
+  bloom_cols_to_drop AS (
+    SELECT compress_relid,
+           attname AS bloom_attname
+    FROM int2_bloom_suffixes
+    JOIN pg_attribute ON attrelid = compress_relid
+     AND attname IN (
+       '_ts_meta_v2_bloom1_' || col_suffix,
+       '_ts_meta_v2_bloomh_' || col_suffix,
+       '_ts_meta_v2_bloomg_' || col_suffix
+     )
+     AND attnum > 0
+  )
+  SELECT string_agg(DISTINCT
+           format('ALTER TABLE %s DROP COLUMN %I;',
+                  compress_relid::regclass, bloom_attname),
+           E'\n' ORDER BY
+           format('ALTER TABLE %s DROP COLUMN %I;',
+                  compress_relid::regclass, bloom_attname))
+  INTO drop_commands
+  FROM bloom_cols_to_drop;
+
+  IF drop_commands IS NOT NULL THEN
+    RAISE EXCEPTION
+      'existing bloom filter sparse indexes on smallint columns are incompatible '
+      'with this version of TimescaleDB'
+      USING
+        DETAIL = E'These indexes must be dropped before upgrading. To do so, run the following commands:\n\n'
+                 || E'SET timescaledb.restoring = on;\n'
+                 || drop_commands || E'\n'
+                 || 'SET timescaledb.restoring = off;',
+        HINT = 'To rebuild the bloom filter indexes after upgrading, decompress and compress the affected chunks.';
+  END IF;
+END
+$$;
+
+
 DROP FUNCTION IF EXISTS _timescaledb_functions.job_history_bsearch;
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.policy_process_hypertable_invalidations_check(JSONB);
