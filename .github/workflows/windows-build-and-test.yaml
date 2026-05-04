@@ -151,7 +151,11 @@ jobs:
       run: |
         apt-get update
         apt-get install --yes --no-install-recommends ca-certificates cmake gawk \
-          gcc git gnupg jq make postgresql-client-${{ matrix.versions.pg }} tree
+          gcc git gnupg jq make postgresql-common tree
+
+        /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        apt-get update
+        apt-get install postgresql-client-${{ matrix.versions.pg }}
 
     - name: Configure git
       # Since we want to reuse the checkout in the WSL environment
