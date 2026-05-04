@@ -1,90 +1,190 @@
 
---
--- Rebuild the catalog table `_timescaledb_catalog.chunk` to drop column `dropped`
---
+DROP PROCEDURE IF EXISTS _timescaledb_functions.repair_relation_acls();
+DROP FUNCTION IF EXISTS _timescaledb_functions.makeaclitem(regrole, regrole, text, bool);
 
-CREATE TABLE _timescaledb_internal.tmp_chunk AS SELECT * from _timescaledb_catalog.chunk WHERE NOT dropped;
-CREATE TABLE _timescaledb_internal.tmp_chunk_seq_value AS SELECT last_value, is_called FROM _timescaledb_catalog.chunk_id_seq;
+-- Create watermark record when required. This uses pure SQL to avoid calling
+-- C functions that need catalog access during ALTER EXTENSION UPDATE.
+-- this is only needed for users upgrading from before 2.11.0, as the watermark
+-- was added in that version.
+DO
+$$
+DECLARE
+  ts_version TEXT;
+  cagg_rec RECORD;
+  max_val BIGINT;
+  watermark_val BIGINT;
+  bucket_width_val BIGINT;
+BEGIN
+    SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
+    IF ts_version < '2.11.0' THEN
+      RETURN;
+    END IF;
 
---drop foreign keys on chunk table
-ALTER TABLE _timescaledb_catalog.chunk_constraint DROP CONSTRAINT chunk_constraint_chunk_id_fkey;
-ALTER TABLE _timescaledb_catalog.chunk_column_stats DROP CONSTRAINT chunk_column_stats_chunk_id_fkey;
-ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats DROP CONSTRAINT bgw_policy_chunk_stats_chunk_id_fkey;
-ALTER TABLE _timescaledb_catalog.compression_chunk_size DROP CONSTRAINT compression_chunk_size_chunk_id_fkey;
-ALTER TABLE _timescaledb_catalog.compression_chunk_size DROP CONSTRAINT compression_chunk_size_compressed_chunk_id_fkey;
+    FOR cagg_rec IN
+      SELECT a.mat_hypertable_id,
+             h.schema_name, h.table_name,
+             d.column_name, d.column_type,
+             bf.bucket_width, bf.bucket_fixed_width
+      FROM _timescaledb_catalog.continuous_agg a
+      LEFT JOIN _timescaledb_catalog.continuous_aggs_watermark w ON w.mat_hypertable_id = a.mat_hypertable_id
+      JOIN _timescaledb_catalog.hypertable h ON h.id = a.mat_hypertable_id
+      JOIN _timescaledb_catalog.dimension d ON d.hypertable_id = a.mat_hypertable_id AND d.num_slices IS NULL
+      LEFT JOIN _timescaledb_catalog.continuous_aggs_bucket_function bf ON bf.mat_hypertable_id = a.mat_hypertable_id
+      WHERE w.mat_hypertable_id IS NULL
+      ORDER BY a.mat_hypertable_id
+    LOOP
+      -- Get max value from materialization hypertable converted to internal representation
+      IF cagg_rec.column_type IN ('timestamptz'::regtype, 'timestamp'::regtype, 'date'::regtype) THEN
+        EXECUTE format(
+          'SELECT (pg_catalog.date_part(''epoch'', pg_catalog.max(%I)) * 1000000)::bigint FROM %I.%I',
+          cagg_rec.column_name, cagg_rec.schema_name, cagg_rec.table_name
+        ) INTO max_val;
+      ELSE
+        EXECUTE format(
+          'SELECT pg_catalog.max(%I)::bigint FROM %I.%I',
+          cagg_rec.column_name, cagg_rec.schema_name, cagg_rec.table_name
+        ) INTO max_val;
+      END IF;
 
---drop dependent views
-DROP VIEW IF EXISTS timescaledb_information.hypertables;
-DROP VIEW IF EXISTS timescaledb_information.chunks;
-DROP VIEW IF EXISTS _timescaledb_internal.hypertable_chunk_local_size;
-DROP VIEW IF EXISTS _timescaledb_internal.compressed_chunk_stats;
-DROP VIEW IF EXISTS timescaledb_information.chunk_columnstore_settings;
-DROP VIEW IF EXISTS timescaledb_information.chunk_compression_settings;
+      IF max_val IS NULL OR cagg_rec.bucket_width IS NULL OR NOT cagg_rec.bucket_fixed_width THEN
+        -- No data, no bucket function info, or variable-width bucket: use minimum value.
+        -- The next cagg refresh will compute the correct watermark.
+        watermark_val := '-9223372036854775808'::bigint;
+      ELSE
+        -- Fixed-width bucket: watermark is max value + bucket width
+        IF cagg_rec.column_type IN ('timestamptz'::regtype, 'timestamp'::regtype, 'date'::regtype) THEN
+          bucket_width_val := (pg_catalog.date_part('epoch', cagg_rec.bucket_width::interval) * 1000000)::bigint;
+        ELSE
+          bucket_width_val := cagg_rec.bucket_width::bigint;
+        END IF;
+        watermark_val := max_val + bucket_width_val;
+      END IF;
 
-ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.chunk;
-ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.chunk_id_seq;
+      INSERT INTO _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark)
+      VALUES (cagg_rec.mat_hypertable_id, watermark_val);
+    END LOOP;
+END;
+$$;
 
-DROP TABLE _timescaledb_catalog.chunk;
+-- Cleanup orphaned compression settings
+WITH orphaned_settings AS (
+     SELECT cs.relid, cl.relname
+     FROM _timescaledb_catalog.compression_settings cs
+     LEFT JOIN pg_class cl ON (cs.relid = cl.oid)
+     WHERE cl.relname IS NULL
+)
+DELETE FROM _timescaledb_catalog.compression_settings AS cs
+USING orphaned_settings AS os WHERE cs.relid = os.relid;
 
-CREATE SEQUENCE _timescaledb_catalog.chunk_id_seq MINVALUE 1;
+-- Remove self-referential foreign keys to eliminate pg_dump circular dependency warnings
+ALTER TABLE _timescaledb_catalog.hypertable DROP CONSTRAINT IF EXISTS hypertable_compressed_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.chunk DROP CONSTRAINT IF EXISTS chunk_compressed_chunk_id_fkey;
 
--- now create table without self referential foreign key
-CREATE TABLE _timescaledb_catalog.chunk (
-  id integer NOT NULL DEFAULT nextval('_timescaledb_catalog.chunk_id_seq'),
-  hypertable_id int NOT NULL,
-  schema_name name NOT NULL,
-  table_name name NOT NULL,
-  compressed_chunk_id integer ,
-  status integer NOT NULL DEFAULT 0,
-  osm_chunk boolean NOT NULL DEFAULT FALSE,
-  creation_time timestamptz NOT NULL,
-  -- table constraints
-  CONSTRAINT chunk_pkey PRIMARY KEY (id),
-  CONSTRAINT chunk_schema_name_table_name_key UNIQUE (schema_name, table_name)
-);
 
-INSERT INTO _timescaledb_catalog.chunk( id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk, creation_time)
-SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, status, osm_chunk, creation_time
-FROM _timescaledb_internal.tmp_chunk;
+-- Block upgrade if bloom filter sparse indexes exist on smallint (int2)
+-- columns. These bloom filters used PostgreSQL's hashint2extended while
+-- the new code uses bloom1_hash_2. Existing bloom data must be dropped
+-- before upgrading; recompress afterwards to rebuild with the new hash.
+DO $$
+DECLARE
+  drop_commands text;
+BEGIN
+  WITH bloom_entries AS (
+    SELECT relid AS chunk_oid,
+           compress_relid,
+           columns,
+           (SELECT string_agg(col, '_' ORDER BY ordinality)
+            FROM jsonb_array_elements_text(columns)
+                 WITH ORDINALITY AS t(col, ordinality)) AS col_suffix
+    FROM _timescaledb_catalog.compression_settings,
+         jsonb_array_elements(index) AS elem,
+         LATERAL (SELECT
+           CASE jsonb_typeof(elem->'column')
+             WHEN 'array' THEN elem->'column'
+             ELSE jsonb_build_array(elem->'column')
+           END AS columns
+         ) AS normalized
+    WHERE elem->>'type' = 'bloom'
+      AND compress_relid IS NOT NULL
+  ),
+  bloom_column_names AS (
+    SELECT chunk_oid, compress_relid, col_suffix, colname
+    FROM bloom_entries,
+         jsonb_array_elements_text(columns) AS bloom_column(colname)
+  ),
+  int2_bloom_suffixes AS (
+    SELECT DISTINCT compress_relid, col_suffix
+    FROM bloom_column_names
+    JOIN pg_attribute ON attrelid = chunk_oid
+     AND attname = colname
+     AND atttypid = 'int2'::regtype
+     AND attnum > 0
+  ),
+  bloom_cols_to_drop AS (
+    SELECT compress_relid,
+           attname AS bloom_attname
+    FROM int2_bloom_suffixes
+    JOIN pg_attribute ON attrelid = compress_relid
+     AND attname IN (
+       '_ts_meta_v2_bloom1_' || col_suffix,
+       '_ts_meta_v2_bloomh_' || col_suffix,
+       '_ts_meta_v2_bloomg_' || col_suffix
+     )
+     AND attnum > 0
+  )
+  SELECT string_agg(DISTINCT
+           format('ALTER TABLE %s DROP COLUMN %I;',
+                  compress_relid::regclass, bloom_attname),
+           E'\n' ORDER BY
+           format('ALTER TABLE %s DROP COLUMN %I;',
+                  compress_relid::regclass, bloom_attname))
+  INTO drop_commands
+  FROM bloom_cols_to_drop;
 
---add indexes to the chunk table
-CREATE INDEX chunk_hypertable_id_idx ON _timescaledb_catalog.chunk (hypertable_id);
-CREATE INDEX chunk_compressed_chunk_id_idx ON _timescaledb_catalog.chunk (compressed_chunk_id);
-CREATE INDEX chunk_osm_chunk_idx ON _timescaledb_catalog.chunk (osm_chunk, hypertable_id);
-CREATE INDEX chunk_hypertable_id_creation_time_idx ON _timescaledb_catalog.chunk(hypertable_id, creation_time);
+  IF drop_commands IS NOT NULL THEN
+    RAISE EXCEPTION
+      'existing bloom filter sparse indexes on smallint columns are incompatible '
+      'with this version of TimescaleDB'
+      USING
+        DETAIL = E'These indexes must be dropped before upgrading. To do so, run the following commands:\n\n'
+                 || E'SET timescaledb.restoring = on;\n'
+                 || drop_commands || E'\n'
+                 || 'SET timescaledb.restoring = off;',
+        HINT = 'To rebuild the bloom filter indexes after upgrading, decompress and compress the affected chunks.';
+  END IF;
+END
+$$;
 
-ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;
-SELECT setval('_timescaledb_catalog.chunk_id_seq', last_value, is_called) FROM _timescaledb_internal.tmp_chunk_seq_value;
 
--- add self referential foreign key
-ALTER TABLE _timescaledb_catalog.chunk ADD CONSTRAINT chunk_compressed_chunk_id_fkey FOREIGN KEY ( compressed_chunk_id ) REFERENCES _timescaledb_catalog.chunk( id );
+DROP FUNCTION IF EXISTS _timescaledb_functions.job_history_bsearch;
 
---add foreign key constraint
-ALTER TABLE _timescaledb_catalog.chunk ADD CONSTRAINT chunk_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id);
+DROP FUNCTION IF EXISTS _timescaledb_functions.policy_process_hypertable_invalidations_check(JSONB);
+DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_process_hypertable_invalidations(INTEGER, JSONB);
+DROP PROCEDURE IF EXISTS @extschema@.add_process_hypertable_invalidations_policy(REGCLASS, INTERVAL, BOOL, TIMESTAMPTZ, TEXT);
+DROP PROCEDURE IF EXISTS @extschema@.remove_process_hypertable_invalidations_policy(REGCLASS, BOOL);
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk', '');
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_id_seq', '');
+-- Return type widened from INTEGER to BIGINT; per-batch byte count can
+-- exceed INT32_MAX for wide varlena columns and was silently wrapping.
+DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_column_size(_timescaledb_internal.compressed_data, ANYELEMENT);
 
---add the foreign key constraints
-ALTER TABLE _timescaledb_catalog.chunk_constraint ADD CONSTRAINT chunk_constraint_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id);
-ALTER TABLE _timescaledb_catalog.chunk_column_stats ADD CONSTRAINT chunk_column_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id);
-ALTER TABLE _timescaledb_internal.bgw_policy_chunk_stats ADD CONSTRAINT bgw_policy_chunk_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE;
-ALTER TABLE _timescaledb_catalog.compression_chunk_size ADD CONSTRAINT compression_chunk_size_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE;
-ALTER TABLE _timescaledb_catalog.compression_chunk_size ADD CONSTRAINT compression_chunk_size_compressed_chunk_id_fkey FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE;
+-- Migration: refresh orderby sparse index entries in compression_settings
+UPDATE _timescaledb_catalog.compression_settings
+SET index = (
+    SELECT COALESCE(jsonb_agg(elem), '[]'::jsonb)
+    FROM jsonb_array_elements(index) AS elem
+    WHERE elem->>'source' != 'orderby'
+)
+WHERE index IS NOT NULL
+AND index @> '[{"source": "orderby"}]';
 
---cleanup
-DROP TABLE _timescaledb_internal.tmp_chunk;
-DROP TABLE _timescaledb_internal.tmp_chunk_seq_value;
-
-GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
-GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
--- end rebuild _timescaledb_catalog.chunk table --
-
--- drop the catalog tables for continuous aggregate migration plans
-
-ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;
-ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step;
-ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq;
-DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step;
-DROP TABLE _timescaledb_catalog.continuous_agg_migrate_plan;
+UPDATE _timescaledb_catalog.compression_settings cs
+SET index = COALESCE(index, '[]'::jsonb) ||
+            (
+            SELECT jsonb_agg(jsonb_build_object(
+                                'type', 'minmax',
+                                'source', 'orderby',
+                                'column', elem))
+            FROM unnest(cs.orderby) AS elem
+            )
+WHERE cs.orderby IS NOT NULL;
 

@@ -74,7 +74,9 @@ propagate_fk(Relation ht_rel, HeapTuple fk_tuple, List *chunks)
 	{
 		Chunk *chunk = lfirst(lc);
 		if (chunk->fd.osm_chunk)
+		{
 			continue;
+		}
 
 		clone_constraint_on_chunk(chunk,
 								  ht_rel,
@@ -120,7 +122,9 @@ ts_fk_propagate(Oid conrelid, Hypertable *ht)
 	HeapTuple fk_tuple = relation_get_fk_constraint(conrelid, ht->main_table_relid);
 
 	if (!fk_tuple)
+	{
 		elog(ERROR, "foreign key constraint not found");
+	}
 
 	Relation ht_rel = table_open(ht->main_table_relid, AccessShareLock);
 	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.id);
@@ -148,7 +152,9 @@ clone_constraint_on_chunk(const Chunk *chunk, Relation parentRel, Form_pg_constr
 	AttrMap *attmap = build_attrmap_by_name(RelationGetDescr(pkrel), RelationGetDescr(parentRel));
 #endif
 	for (int i = 0; i < numfks; i++)
+	{
 		mapped_confkey[i] = attmap->attnums[confkey[i] - 1];
+	}
 
 	Oid indexoid = get_fk_index(pkrel, numfks, mapped_confkey);
 	/* Since postgres accepted the constraint, there should be a supporting index. */
@@ -239,7 +245,9 @@ ChooseForeignKeyConstraintNameAddition(int numkeys, AttrNumber *keys, Oid relid)
 	{
 		char *name = get_attname(relid, keys[i], false);
 		if (buflen > 0)
+		{
 			buf[buflen++] = '_'; /* insert _ between names */
+		}
 
 		/*
 		 * At this point we have buflen <= NAMEDATALEN.  name should be less
@@ -248,7 +256,9 @@ ChooseForeignKeyConstraintNameAddition(int numkeys, AttrNumber *keys, Oid relid)
 		strlcpy(buf + buflen, name, NAMEDATALEN);
 		buflen += strlen(buf + buflen);
 		if (buflen >= NAMEDATALEN)
+		{
 			break;
+		}
 	}
 	return pstrdup(buf);
 }
@@ -519,9 +529,13 @@ constraint_get_trigger(Oid conoid, Oid *updtrigoid, Oid *deltrigoid)
 		Form_pg_trigger trigform = (Form_pg_trigger) GETSTRUCT(htup);
 
 		if ((trigform->tgtype & TRIGGER_TYPE_UPDATE) == TRIGGER_TYPE_UPDATE)
+		{
 			*updtrigoid = trigform->oid;
+		}
 		if ((trigform->tgtype & TRIGGER_TYPE_DELETE) == TRIGGER_TYPE_DELETE)
+		{
 			*deltrigoid = trigform->oid;
+		}
 	}
 
 	systable_endscan(scan);

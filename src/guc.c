@@ -73,7 +73,10 @@ TSDLLEXPORT bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted = false;
 TSDLLEXPORT bool ts_guc_enable_direct_compress_on_cagg_refresh = false;
-int ts_guc_direct_compress_insert_tuple_sort_limit = 10000;
+TSDLLEXPORT bool ts_guc_enable_direct_compress_auto_segmentby = true;
+int ts_guc_direct_compress_insert_tuple_sort_limit = 30000;
+TSDLLEXPORT int ts_guc_direct_compress_segmentby_min_rows = 5000;
+TSDLLEXPORT int ts_guc_direct_compress_segmentby_batch_size_limit = 500;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -84,6 +87,7 @@ bool ts_guc_enable_parallel_chunk_append = true;
 bool ts_guc_enable_runtime_exclusion = true;
 bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
+TSDLLEXPORT bool ts_guc_enable_columnar_scan_filter_pushdown = true;
 bool ts_guc_enable_qual_filtering = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_window_functions = false;
@@ -96,8 +100,10 @@ TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
+TSDLLEXPORT bool ts_guc_enable_compressed_merge = false;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
+TSDLLEXPORT bool ts_guc_enable_dml_bloom_filter = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
 TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
@@ -147,7 +153,10 @@ TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 
 bool ts_guc_enable_partitioned_hypertables = false;
-
+#if PG16_GE
+TSDLLEXPORT bool ts_guc_enable_cagg_rewrites = false;
+TSDLLEXPORT bool ts_guc_cagg_rewrites_debug_info = false;
+#endif
 /* default value of ts_guc_max_open_chunks_per_insert and
  * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
  * GUC mechanism starts up */
@@ -257,7 +266,9 @@ ts_feature_flag_check(FeatureFlagType type)
 {
 	FeatureFlag *flag = &ts_feature_flags[type];
 	if (likely(*flag->enable))
+	{
 		return;
+	}
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("You are using a PostgreSQL service. This feature is only available on "
@@ -406,7 +417,9 @@ static void
 chunk_skipping_assign_hook(bool newval, void *extra)
 {
 	if (newval)
+	{
 		ts_hypertable_cache_invalidate_callback();
+	}
 }
 
 #if PG16_LT
@@ -420,10 +433,14 @@ guc_malloc(int elevel, size_t size)
 
 	/* Avoid unportable behavior of malloc(0) */
 	if (size == 0)
+	{
 		size = 1;
+	}
 	data = malloc(size);
 	if (data == NULL)
+	{
 		ereport(elevel, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("out of memory")));
+	}
 	return data;
 }
 #endif
@@ -585,15 +602,55 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_auto_segmentby"),
+							 "Enable automatic segmentby column selection during compression",
+							 "When enabled, automatically analyzes buffered tuples to pick "
+							 "an optimal segmentby column if none is configured.",
+							 &ts_guc_enable_direct_compress_auto_segmentby,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomIntVariable(MAKE_EXTOPTION("direct_compress_insert_tuple_sort_limit"),
 							"Number of tuples that can be sorted at once in an INSERT operation",
 							"This is mainly used to keep the memory footprint down for "
 							"operations like importing large amounts of data in "
 							"single transaction. Setting this to 0 would make it unlimited.",
 							&ts_guc_direct_compress_insert_tuple_sort_limit,
-							10000,
+							30000,
 							0,
 							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("direct_compress_segmentby_min_rows"),
+							"Minimum number of rows required for automatic segmentby analysis",
+							"During direct compress, automatic segmentby selection only runs "
+							"when the number of buffered tuples meets this threshold.",
+							&ts_guc_direct_compress_segmentby_min_rows,
+							5000,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("direct_compress_segmentby_batch_size_limit"),
+							"Minimum rows per distinct value for automatic segmentby selection",
+							"Each distinct value of a candidate segmentby column must have at "
+							"least this many rows for the column to be selected.",
+							&ts_guc_direct_compress_segmentby_batch_size_limit,
+							500,
+							1,
+							TARGET_COMPRESSED_BATCH_SIZE,
 							PGC_USERSET,
 							0,
 							NULL,
@@ -725,6 +782,32 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnar_scan_filter_pushdown"),
+							 "Enable columnar scan filter pushdown",
+							 "Enable pushing down the filters into the compressed scan part of the "
+							 "columnar scan",
+							 &ts_guc_enable_columnar_scan_filter_pushdown,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+#ifdef TS_DEBUG
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_merge"),
+							 "Enable MERGE support for compressed hypertables",
+							 "Enable MERGE support for compressed hypertables. This is only "
+							 "available in debug builds and will currently do full decompression",
+							 &ts_guc_enable_compressed_merge,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_dml_decompression"),
 							 "Enable DML decompression",
 							 "Enable DML decompression when modifying compressed hypertable",
@@ -741,6 +824,19 @@ _guc_init(void)
 							 "Recheck tuples during DML decompression to only decompress batches "
 							 "with matching tuples",
 							 &ts_guc_enable_dml_decompression_tuple_filtering,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_dml_bloom_filter"),
+							 "Enable bloom filter pruning for DML on compressed chunks",
+							 "When enabled, bloom filters are used to skip compressed batches "
+							 "that definitely do not contain matching rows during DELETE and "
+							 "UPDATE operations, reducing decompression overhead.",
+							 &ts_guc_enable_dml_bloom_filter,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -846,7 +942,29 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+#if PG16_GE
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_rewrites"),
+							 "Enable rewriting queries with Caggs",
+							 "Enable rewriting queries with eligible continuous aggregates",
+							 &ts_guc_enable_cagg_rewrites,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("cagg_rewrites_debug_info"),
+							 "Print debug info about whether queries can be rewritten with Caggs",
+							 "Print debug info about whether queries can be rewritten with Caggs",
+							 &ts_guc_cagg_rewrites_debug_info,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_wal_markers"),
 							 "Enable WAL markers for compression ops",
 							 "Enable the generation of markers in the WAL stream which mark the "

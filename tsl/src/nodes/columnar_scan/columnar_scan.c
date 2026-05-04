@@ -13,6 +13,7 @@
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/clauses.h>
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
@@ -25,7 +26,9 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
-
+#if PG16_GE
+#include <nodes/multibitmapset.h>
+#endif
 #include <planner.h>
 
 #include "compat/compat.h"
@@ -91,7 +94,9 @@ append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortI
 
 	/* Find the operator in pg_amop --- failure shouldn't happen */
 	if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+	{
 		elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+	}
 
 	/*
 	 * EquivalenceClasses need to contain opfamily lists based on the family
@@ -101,15 +106,19 @@ append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortI
 	 */
 	equality_op = get_opfamily_member(opfamily, opcintype, opcintype, BTEqualStrategyNumber);
 	if (!OidIsValid(equality_op)) /* shouldn't happen */
+	{
 		elog(ERROR,
 			 "missing operator %d(%u,%u) in opfamily %u",
 			 BTEqualStrategyNumber,
 			 opcintype,
 			 opcintype,
 			 opfamily);
+	}
 	opfamilies = get_mergejoin_opfamilies(equality_op);
 	if (!opfamilies) /* certainly should find some */
+	{
 		elog(ERROR, "could not find opfamilies for equality operator %u", equality_op);
+	}
 
 	em->em_expr = (Expr *) var;
 	em->em_relids = bms_make_singleton(info->compressed_rel->relid);
@@ -230,7 +239,9 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 			 * build_sortinfo().
 			 */
 			if (!compressed_em)
+			{
 				break;
+			}
 
 			required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
 		}
@@ -274,7 +285,9 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 			Oid opfamily, opcintype;
 			CompareType strategy;
 			if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+			{
 				elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+			}
 
 			pk = make_canonical_pathkey(root, ec, opfamily, strategy, nulls_first);
 
@@ -662,7 +675,9 @@ ts_columnar_estimate_compressed_batch_size(const Oid relid)
 {
 	AttrNumber attnum = get_attnum(relid, "_ts_meta_count");
 	if (attnum == InvalidAttrNumber)
+	{
 		return TARGET_COMPRESSED_BATCH_SIZE;
+	}
 
 	/* fetch statistics */
 	HeapTuple statsTuple = SearchSysCache3(STATRELATTINH,
@@ -742,18 +757,55 @@ ts_columnar_estimate_compressed_batch_size(const Oid relid)
  * we put cost of 1 tuple of compressed_scan as startup cost
  */
 static void
-cost_columnar_scan(PlannerInfo *root, const CompressionInfo *compression_info, Path *path,
+cost_columnar_scan(const CompressionInfo *compression_info, ColumnarScanPath *columnar_scan,
 				   Path *compressed_path)
 {
-	/* startup_cost is cost before fetching first tuple */
+	Path *path = &columnar_scan->custom_path.path;
+
 	const double compressed_rows = Max(1, compressed_path->rows);
-	path->startup_cost =
-		compressed_path->startup_cost +
+
+	/*
+	 * Startup cost is cost before fetching the first tuple. For the columnar
+	 * scan, it is composed of:
+	 *
+	 * 1) cost before fetching the first compressed tuple.
+	 */
+	path->startup_cost = compressed_path->startup_cost;
+
+	/*
+	 * 2) cost of actually fetching the first compressed tuple.
+	 */
+	path->startup_cost +=
 		(compressed_path->total_cost - compressed_path->startup_cost) / compressed_rows;
 
-	/* total_cost is cost for fetching all tuples */
+	/*
+	 * 3) in case of bulk decompression, cost of fully decompressing the first
+	 * batch.
+	 */
+	if (columnar_scan->enable_bulk_decompression)
+	{
+		path->startup_cost += compression_info->compressed_batch_size * cpu_tuple_cost;
+	}
+
+	/*
+	 * Estimate the resulting number of rows based on the batch size statistics.
+	 */
 	path->rows = compressed_path->rows * compression_info->compressed_batch_size;
-	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
+
+	/*
+	 * Bulk decompression is about 10x more efficient than row-by-row
+	 * decompression. In the startup cost calculation above, we assume the cost
+	 * of producing one uncompressed row by bulk decompression to be
+	 * cpu_tuple_cost.
+	 */
+	const double decompression_cost_per_uncompressed_row =
+		columnar_scan->enable_bulk_decompression ? cpu_tuple_cost : 10. * cpu_tuple_cost;
+
+	/*
+	 * total_cost is cost for fetching all tuples.
+	 */
+	path->total_cost =
+		compressed_path->total_cost + path->rows * decompression_cost_per_uncompressed_row;
 
 #if PG18_GE
 	/* PG18 changes the way we handle disabled nodes so we
@@ -1144,11 +1196,14 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 
 	/* translate chunk_rel->baserestrictinfo */
-	pushdown_quals(root,
-				   compression_info->settings,
-				   chunk_rel,
-				   compressed_rel,
-				   add_uncompressed_part);
+	if (ts_guc_enable_columnar_scan_filter_pushdown)
+	{
+		columnar_scan_filter_pushdown(root,
+									  compression_info->settings,
+									  chunk_rel,
+									  compressed_rel,
+									  add_uncompressed_part);
+	}
 	/*
 	 * Estimate the size of the compressed chunk table.
 	 */
@@ -1304,7 +1359,9 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 * EquivalenceClasses.
 	 */
 	if (IsA(compressed_path, BitmapHeapPath) && compressed_path->param_info)
+	{
 		return NIL;
+	}
 
 	/*
 	 * Filter out all paths that try to JOIN the compressed chunk on the
@@ -1320,7 +1377,9 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	if (compressed_path->param_info != NULL)
 	{
 		if (bms_is_member(chunk_rel->relid, compressed_path->param_info->ppi_req_outer))
+		{
 			return NIL;
+		}
 
 		/* check if this is path made with references between
 		 * compressed_rel + hypertable or a nesting subquery.
@@ -1356,6 +1415,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 
 		path_copy->reverse = sort_info->reverse;
 		path_copy->batch_sorted_merge = true;
+		path_copy->enable_bulk_decompression = false;
 
 		/*
 		 * The segment by optimization is only enabled if it can deliver the tuples in the
@@ -1438,7 +1498,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 					  work_mem,
 					  -1);
 
-			cost_columnar_scan(root, compression_info, &path_copy->custom_path.path, &sort_path);
+			cost_columnar_scan(compression_info, path_copy, &sort_path);
 
 			decompressed_paths = lappend(decompressed_paths, path_copy);
 		}
@@ -1862,7 +1922,9 @@ static Node *
 chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 
 	if (IsA(node, Var))
 	{
@@ -1871,7 +1933,9 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 		char *column_name;
 		AttrNumber compressed_attno;
 		if ((Index) var->varno != context->chunk_rel->relid)
+		{
 			return (Node *) var;
+		}
 
 		column_name = get_attname(context->chunk_rte->relid, var->varattno, false);
 		compressed_attno = get_attnum(context->compressed_rte->relid, column_name);
@@ -2079,7 +2143,9 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		 * uncompressed chunk */
 		node = strip_implicit_coercions((Node *) cur_em->em_expr);
 		if (!(node && IsA(node, Var)))
+		{
 			continue;
+		}
 		var = castNode(Var, node);
 
 		/*
@@ -2090,7 +2156,9 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		 * we have to specify a parent for the newly created equivalence member.
 		 */
 		if ((Index) var->varno != info->ht_rel->relid)
+		{
 			continue;
+		}
 
 		if (var->varattno <= 0)
 		{
@@ -2110,11 +2178,15 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		const char *attname = get_attname(info->ht_rte->relid, var->varattno, false);
 
 		if (!ts_array_is_member(context->settings->fd.segmentby, attname))
+		{
 			continue;
+		}
 
 		child_expr = (Expr *) create_var_for_compressed_equivalence_member(var, context, attname);
 		if (child_expr == NULL)
+		{
 			continue;
+		}
 
 		/* #8681: coerce compressed var to current equivalence member type/collation,
 		 *  in case we dug the "cur_em->em_expr" var from under RelabelTypes
@@ -2224,19 +2296,25 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 		 * volatile EC having only one EM.
 		 */
 		if (cur_ec->ec_has_volatile)
+		{
 			continue;
+		}
 
 		/* if the compressed rel is already part of this EC,
 		 * we don't need to re-add it
 		 */
 		if (bms_overlap(cur_ec->ec_relids, info->compressed_rel->relids))
+		{
 			continue;
+		}
 
 		bool em_added = add_segmentby_to_equivalence_class(root, cur_ec, info, &context);
 		/* Record this EC index for the compressed rel */
 		if (em_added)
+		{
 			info->compressed_rel->eclass_indexes =
 				bms_add_member(info->compressed_rel->eclass_indexes, i);
+		}
 	}
 	info->compressed_rel->has_eclass_joins = info->chunk_rel->has_eclass_joins;
 }
@@ -2312,7 +2390,9 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 		Form_pg_attribute attr = TupleDescAttr(r->rd_att, i);
 
 		if (attr->attisdropped || attr->atttypid != info->compresseddata_oid)
+		{
 			continue;
+		}
 
 		info->compressed_attnos_in_compressed_chunk =
 			bms_add_member(info->compressed_attnos_in_compressed_chunk, attr->attnum);
@@ -2395,6 +2475,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 
 	path->custom_path.methods = &columnar_scan_path_methods;
 	path->batch_sorted_merge = false;
+	path->enable_bulk_decompression = ts_guc_enable_bulk_decompression;
 
 	/*
 	 * ColumnarScan doesn't manage any parallelism itself.
@@ -2411,7 +2492,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 	path->reverse = false;
 	path->chunk_status = compression_info->chunk_status;
 	path->required_compressed_pathkeys = NIL;
-	cost_columnar_scan(root, compression_info, &path->custom_path.path, compressed_path);
+	cost_columnar_scan(compression_info, path, compressed_path);
 
 	return path;
 }
@@ -2597,7 +2678,9 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 				Expr *other;
 
 				if (op->opretset)
+				{
 					continue;
+				}
 
 				lnode = strip_implicit_coercions(linitial(op->args));
 				rnode = strip_implicit_coercions(lsecond(op->args));
@@ -2614,10 +2697,14 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 					other = linitial(op->args);
 				}
 				else
+				{
 					continue;
+				}
 
 				if ((Index) var->varno != chunk_rel->relid || var->varattno <= 0)
+				{
 					continue;
+				}
 
 				if (IsA(other, Const) || IsA(other, Param))
 				{
@@ -2657,17 +2744,73 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 							}
 						}
 						if (!equality)
+						{
 							continue;
+						}
 					}
 
 					if (bms_is_member(var->varattno, info->chunk_segmentby_attnos))
+					{
 						segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
+					}
 				}
 			}
 		}
 	}
 
 	return segmentby_columns;
+}
+
+static bool
+is_var_notnull(const CompressionInfo *compression_info, Var *var)
+{
+	bool notnull = false;
+	/* Is it declared NOT NULL? */
+#if PG17_LT
+	notnull = ts_get_attnotnull(compression_info->chunk_rte->relid, var->varattno);
+#else
+	notnull = bms_is_member(var->varattno, compression_info->chunk_rel->notnullattnums);
+#endif
+
+	if (notnull)
+	{
+		return true;
+	}
+
+	/* even if this column is nullable it may participate in strict predicates which will exclude
+	 * NULL values */
+	RelOptInfo *chunk_rel = compression_info->chunk_rel;
+	ListCell *l;
+	foreach (l, chunk_rel->baserestrictinfo)
+	{
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(l));
+		Bitmapset *clause_attnos = NULL;
+		pull_varattnos((Node *) ri->clause, chunk_rel->relid, &clause_attnos);
+		if (bms_is_member(var->varattno - FirstLowInvalidHeapAttributeNumber, clause_attnos))
+		{
+			/* Is this column made non-nullable by the query predicates? */
+			List *nonnullable_vars = find_nonnullable_vars((Node *) ri->clause);
+#if PG16_GE
+			if (mbms_is_member(var->varno,
+							   var->varattno - FirstLowInvalidHeapAttributeNumber,
+							   nonnullable_vars))
+			{
+				return true;
+			}
+#else
+			ListCell *lv;
+			foreach (lv, nonnullable_vars)
+			{
+				Var *v = castNode(Var, lfirst(lv));
+				if (v->varno == var->varno && v->varattno == var->varattno)
+				{
+					return true;
+				}
+			}
+#endif
+		}
+	}
+	return false;
 }
 
 /*
@@ -2677,7 +2820,8 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 static bool
 match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 									  int starting_pathkey_offset,
-									  const CompressionInfo *compression_info, bool *out_reverse)
+									  const CompressionInfo *compression_info, bool for_bsm,
+									  bool *out_reverse)
 {
 	int compressed_pk_index = 0;
 	for (int i = starting_pathkey_offset; i < list_length(pathkeys); i++)
@@ -2706,17 +2850,28 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 			return false;
 		}
 
+		/* Bail out on BSM if orderby column is nullable,
+		 * as at the moment the minmax metadata we have doesn't include NULLs,
+		 * so it's difficult to use it for null-sensitive ordering.
+		 * But this restriction can be lifted in the future on new type of chunks
+		 * with NULL-handling metadata.
+		 */
+		if (for_bsm && !is_var_notnull(compression_info, var))
+		{
+			return false;
+		}
+
 		bool orderby_desc =
 			ts_array_get_element_bool(compression_info->settings->fd.orderby_desc, orderby_index);
 		bool orderby_nullsfirst =
 			ts_array_get_element_bool(compression_info->settings->fd.orderby_nullsfirst,
 									  orderby_index);
-
 		/*
 		 * In PG18+: pk_cmptype is either COMPARE_LT (for ASC) or COMPARE_GT (for DESC)
 		 * For previous PG versions we have compatibility macros to make these new names available.
 		 */
 		bool this_pathkey_reverse = false;
+
 		if (pk->pk_cmptype == COMPARE_LT)
 		{
 			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
@@ -2846,7 +3001,6 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	if (compression_info->num_segmentby_columns > 0)
 	{
 		Bitmapset *segmentby_columns;
-
 		/*
 		 * initialize segmentby with equality constraints from baserestrictinfo because
 		 * those columns dont need to be prefix of pathkeys
@@ -2865,15 +3019,21 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 			Node *node = strip_implicit_coercions((Node *) list_nth(chunk_em_exprs, i));
 
 			if (node == NULL || !IsA(node, Var))
+			{
 				break;
+			}
 			var = castNode(Var, node);
 
 			if (var->varattno <= 0)
+			{
 				break;
+			}
 
 			column_name = get_attname(compression_info->chunk_rte->relid, var->varattno, false);
 			if (!ts_array_is_member(compression_info->settings->fd.segmentby, column_name))
+			{
 				break;
+			}
 
 			segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
 		}
@@ -2892,8 +3052,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 		 * If pathkeys still has items, but we didn't find all segmentby columns,
 		 * we cannot satisfy these pathkeys by sorting the compressed chunk table.
 		 */
-		if (i != list_length(pathkeys) &&
-			bms_num_members(segmentby_columns) != compression_info->num_segmentby_columns)
+		if (bms_num_members(segmentby_columns) != compression_info->num_segmentby_columns)
 		{
 			/*
 			 * If we didn't have any segmentby columns in pathkeys, try batch sorted merge
@@ -2906,18 +3065,43 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 														  chunk_em_exprs,
 														  /* starting_pathkey_offset = */ 0,
 														  compression_info,
+														  /* for_bsm = */ true,
 														  &sort_info.reverse);
 			}
 			return sort_info;
 		}
 	}
 
+	/* We are here when either compression doesn't have segmentby
+	 * or pathkeys prefix matches all segmentby columns but there are more pathkeys to match, for
+	 * example: (order by segcol1, segcol2, obycol1, obycol2) for
+	 * (compress.segmentby='segcol1,segcol2').
+	 */
+
 	/*
 	 * Cannot push down sort on non-segmentby columns
 	 * if the chunk has batches overlapping on orderby columns
 	 */
 	if (ts_chunk_is_unordered(chunk))
+	{
+		/*
+		 * If compression has no segmentby columns or all segmentby columns in a query are pinned to
+		 * a Const, try batch sorted merge instead.
+		 */
+		if (compression_info->num_segmentby_columns == 0 ||
+			bms_num_members(compression_info->chunk_const_segmentby) ==
+				compression_info->num_segmentby_columns)
+		{
+			sort_info.use_batch_sorted_merge =
+				match_pathkeys_to_compression_orderby(pathkeys,
+													  chunk_em_exprs,
+													  /* starting_pathkey_offset = */ 0,
+													  compression_info,
+													  /* for_bsm = */ true,
+													  &sort_info.reverse);
+		}
 		return sort_info;
+	}
 
 	/*
 	 * Pathkeys includes columns past segmentby columns, so we need sequence_num
@@ -2933,6 +3117,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 																		  chunk_em_exprs,
 																		  i,
 																		  compression_info,
+																		  /* for_bsm = */ false,
 																		  &sort_info.reverse);
 
 	return sort_info;

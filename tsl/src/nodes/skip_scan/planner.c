@@ -31,6 +31,7 @@
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "nodes/skip_scan/skip_scan.h"
+#include "utils.h"
 #include <import/planner.h>
 
 #include <math.h>
@@ -134,9 +135,11 @@ setup_index_plan(CustomScan *skip_plan, Plan *child_plan)
 		plan = linitial(csplan->custom_plans);
 	}
 	else
+	{
 		elog(ERROR,
 			 "unsupported subplan type for SkipScan: %s",
 			 ts_get_node_name((Node *) child_plan));
+	}
 
 	return plan;
 }
@@ -194,7 +197,9 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 		OpExpr *op =
 			fix_indexqual(index_path->indexinfo, skinfo->skip_clause, skinfo->scankey_attno);
 		if (OidIsValid(skinfo->eqcomp))
+		{
 			eqcomps = lappend_oid(eqcomps, skinfo->eqcomp);
+		}
 
 		if (IsA(plan, IndexScan))
 		{
@@ -213,21 +218,27 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 				sort_indexquals(index_path->indexinfo, lcons(op, idx_plan->indexqual));
 		}
 		else
+		{
 			elog(ERROR,
 				 "unsupported subplan type for SkipScan: %s",
 				 ts_get_node_name((Node *) plan));
+		}
 
 		/* get position of distinct column in tuples produced by child scan */
 		TargetEntry *tle = tlist_member_match_var(dvar, child_plan->targetlist);
 
 		SkipKeyNullStatus sknulls;
 		if (skinfo->notnull)
+		{
 			sknulls = SK_NOT_NULL;
+		}
 		else
 		{
 			bool nulls_first = index_path->indexinfo->nulls_first[skinfo->scankey_attno - 1];
 			if (index_path->indexscandir == BackwardScanDirection)
+			{
 				nulls_first = !nulls_first;
+			}
 			sknulls = (nulls_first ? SK_NULLS_FIRST : SK_NULLS_LAST);
 		}
 		skinfos = lappend(skinfos,
@@ -285,28 +296,6 @@ static CustomPathMethods skip_scan_path_methods = {
 	.PlanCustomPath = skip_scan_plan_create,
 };
 
-#if PG16_GE
-typedef struct FindAggrefsContext
-{
-	List *aggrefs; /* all non-nested Aggrefs found in a node */
-} FindAggrefsContext;
-
-static bool
-find_aggrefs_walker(Node *node, FindAggrefsContext *context)
-{
-	if (node == NULL)
-		return false;
-	if (IsA(node, Aggref))
-	{
-		context->aggrefs = lappend(context->aggrefs, node);
-		/* don't recurse inside Aggrefs */
-		return false;
-	}
-
-	return expression_tree_walker(node, find_aggrefs_walker, context);
-}
-#endif
-
 static Expr *
 get_distint_clause_expr(PlannerInfo *root, SortGroupClause *distinct_clause)
 {
@@ -315,15 +304,21 @@ get_distint_clause_expr(PlannerInfo *root, SortGroupClause *distinct_clause)
 	/* we ignore any columns that can be constified to allow for cases like DISTINCT 'abc',
 	 * column */
 	if (IsA(estimate_expression_value(root, expr), Const))
+	{
 		return NULL;
+	}
 
 	/* We ignore binary-compatible relabeling */
 	Expr *tlexpr = (Expr *) expr;
 	while (tlexpr && IsA(tlexpr, RelabelType))
+	{
 		tlexpr = ((RelabelType *) tlexpr)->arg;
+	}
 
 	if (!IsA(tlexpr, Var))
+	{
 		return NULL;
+	}
 
 	return tlexpr;
 }
@@ -351,9 +346,13 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 			distinct_clause = (SortGroupClause *) lfirst(lc);
 			tlexpr = get_distint_clause_expr(root, distinct_clause);
 			if (tlexpr)
+			{
 				result = lappend(result, tlexpr);
+			}
 			else
+			{
 				return NULL;
+			}
 		}
 #else
 		if (root->distinct_pathkeys)
@@ -373,20 +372,28 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 						}
 					}
 					if (!distinct_clause)
+					{
 						return NULL;
+					}
 				}
 				/* We can get PathKey with ec_sortref = 0 in PG15
 				 * when False filter is not pushed into a relation with distinct column (i.e. it's
 				 * on top of a join), so need to support this case in PG15
 				 */
 				else
+				{
 					return NULL;
+				}
 
 				tlexpr = get_distint_clause_expr(root, distinct_clause);
 				if (tlexpr)
+				{
 					result = lappend(result, tlexpr);
+				}
 				else
+				{
 					return NULL;
+				}
 			}
 		}
 		/* In PG16+ we use LIMIT instead of UpperUniquePath for (numkeys = 0),
@@ -400,9 +407,13 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 				distinct_clause = lfirst_node(SortGroupClause, lc);
 				tlexpr = get_distint_clause_expr(root, distinct_clause);
 				if (tlexpr)
+				{
 					result = lappend(result, tlexpr);
+				}
 				else
+				{
 					return NULL;
+				}
 			}
 		}
 #endif
@@ -410,11 +421,9 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 #if PG16_GE
 	else if (stage == UPPERREL_GROUP_AGG)
 	{
-		/* Find all non-nested Aggrefs in the query target list */
-		FindAggrefsContext agg_ctx = { .aggrefs = NULL };
-		find_aggrefs_walker((Node *) root->parse->targetList, &agg_ctx);
-
-		foreach (lc, agg_ctx.aggrefs)
+		/* Find all non-nested Aggref in the query target list */
+		List *aggrefs = ts_find_aggrefs((Node *) root->parse->targetList);
+		foreach (lc, aggrefs)
 		{
 			Aggref *agg = lfirst_node(Aggref, lc);
 			/* Only distinct aggs with 1 sorted argument are eligible*/
@@ -425,19 +434,27 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 				Expr *expr = tle->expr;
 				/* We ignore binary-compatible relabeling */
 				while (expr && IsA(expr, RelabelType))
+				{
 					expr = ((RelabelType *) expr)->arg;
+				}
 
 				/* Distinct agg over a Const is OK */
 				if (IsA(estimate_expression_value(root, (Node *) expr), Const))
+				{
 					continue;
+				}
 
 				/* Don't support no-var arguments */
 				if (!IsA(expr, Var))
+				{
 					return NULL;
+				}
 
 				/* Don't support multiple distinct aggs over different columns */
 				if (tlexpr && !tlist_member_match_var((Var *) tlexpr, agg->args))
+				{
 					return NULL;
+				}
 
 				/* If Distinct agg path has a groupby column, it needs to match Distinct agg column
 				 */
@@ -451,7 +468,9 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 						(SortGroupClause *) linitial(root->processed_groupClause);
 					Expr *gbykey = (Expr *) get_sortgroupclause_expr(sortcl, root->processed_tlist);
 					if (!equal(gbykey, expr))
+					{
 						return NULL;
+					}
 				}
 
 				/* Found a valid distinct agg over a valid Var */
@@ -485,7 +504,9 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 	if (dpinfo->stage == UPPERREL_DISTINCT)
 	{
 		if (!ts_guc_enable_skip_scan)
+		{
 			return;
+		}
 
 		foreach (lc, output_rel->pathlist)
 		{
@@ -501,7 +522,9 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 				 * find (1, N), then (2, N), etc
 				 */
 				if (!ts_guc_enable_multikey_skip_scan && unique->numkeys > 1)
+				{
 					return;
+				}
 
 #if PG16_GE
 				/* since PG16+ we no longer create UpperUniquePath with 0 numkeys,
@@ -520,11 +543,15 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 	else if (dpinfo->stage == UPPERREL_GROUP_AGG)
 	{
 		if (!ts_guc_enable_skip_scan_for_distinct_aggregates)
+		{
 			return;
+		}
 
 		/* Cannot apply SkipScan to distinct aggregates with more than one key */
 		if (list_length(root->group_pathkeys) > 1)
+		{
 			return;
+		}
 
 		foreach (lc, output_rel->pathlist)
 		{
@@ -548,10 +575,14 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 	}
 #endif
 	else
+	{
 		return;
+	}
 
 	if (!dpinfo->unique_path)
+	{
 		return;
+	}
 
 	/* Check if we have valid distinct expression to source from the underlying index */
 	dpinfo->distinct_expr = get_upper_distinct_expr(root, dpinfo->stage);
@@ -627,7 +658,9 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 
 	obtain_upper_distinct_path(root, output_rel, &dpinfo);
 	if (!dpinfo.unique_path)
+	{
 		return;
+	}
 
 	Assert(IsA(dpinfo.unique_path, UpperUniquePath) || IsA(dpinfo.unique_path, AggPath));
 	ListCell *lc;
@@ -643,7 +676,9 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 		if (IsA(dpinfo.unique_path, UpperUniquePath))
 		{
 			if (!pathkeys_contained_in(dpinfo.unique_path->pathkeys, subpath->pathkeys))
+			{
 				continue;
+			}
 		}
 		/* AggPath with distinct aggs may not be sorted, but the input into distinct aggs needs to
 		 * be sorted */
@@ -651,7 +686,9 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 		{
 			if (!subpath->pathkeys ||
 				!pathkeys_contained_in(dpinfo.unique_path->pathkeys, subpath->pathkeys))
+			{
 				continue;
+			}
 			/* Need to check sortedness for inputs of Distinct aggs, so we'll keep track of the
 			 * input pathkeys  */
 			top_pathkeys = subpath->pathkeys;
@@ -684,7 +721,9 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 		{
 			subpath = (Path *) skip_scan_path_create(root, subpath, &dpinfo);
 			if (!subpath)
+			{
 				continue;
+			}
 		}
 		else if (IsA(subpath, MergeAppendPath))
 		{
@@ -694,7 +733,9 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 
 			/* build_subpath returns NULL when no SkipScanPath was created */
 			if (!new_paths)
+			{
 				continue;
+			}
 
 			subpath = (Path *) create_merge_append_path(root,
 														merge_path->path.parent,
@@ -711,13 +752,17 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			AppendPath *append_path = castNode(AppendPath, subpath);
 
 			if (list_length(append_path->subpaths) > 1)
+			{
 				continue;
+			}
 
 			List *new_paths = build_subpath(root, append_path->subpaths, &dpinfo, top_pathkeys);
 
 			/* build_subpath returns NULL when no SkipScanPath was created */
 			if (!new_paths)
+			{
 				continue;
+			}
 
 			subpath = (Path *) create_append_path(root,
 												  append_path->path.parent,
@@ -739,7 +784,9 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 
 			/* build_subpath returns NULL when no SkipScanPath was created */
 			if (!new_paths)
+			{
 				continue;
+			}
 
 			/* We copy the existing ChunkAppendPath here because we don't have all the
 			 * information used for creating the original one and we don't want to
@@ -754,7 +801,9 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 
 		/* add ConstraintAwareAppendPath if the original path had one */
 		if (has_caa)
+		{
 			subpath = ts_constraint_aware_append_path_create(root, subpath);
+		}
 
 		Path *new_unique = NULL;
 
@@ -769,11 +818,13 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			new_unique->pathtarget = unique->path.pathtarget;
 
 			if (proj)
+			{
 				new_unique =
 					(Path *) create_projection_path(root,
 													output_rel,
 													new_unique,
 													copy_pathtarget(new_unique->pathtarget));
+			}
 		}
 		else if (IsA(dpinfo.unique_path, AggPath))
 		{
@@ -802,20 +853,6 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 	}
 }
 
-#if PG17_LT
-static bool
-attr_is_notnull(Oid relid, AttrNumber attno)
-{
-	HeapTuple tp = SearchSysCache2(ATTNUM, ObjectIdGetDatum(relid), Int16GetDatum(attno));
-	if (!HeapTupleIsValid(tp))
-		return false;
-	Form_pg_attribute att_tup = (Form_pg_attribute) GETSTRUCT(tp);
-	bool result = att_tup->attnotnull;
-	ReleaseSysCache(tp);
-	return result;
-}
-#endif
-
 /* Check if skip key is guaranteed not-null */
 static void
 check_notnull_skipkey(SkipKeyInfo *skinfo, Path *child_path, IndexPath *index_path)
@@ -827,7 +864,9 @@ check_notnull_skipkey(SkipKeyInfo *skinfo, Path *child_path, IndexPath *index_pa
 		IndexClause *ic = (IndexClause *) lfirst(l);
 		/* index quals are ordered by indexcol, nothing to see if we've passed our indexcol */
 		if (ic->indexcol > skinfo->scankey_attno - 1)
+		{
 			break;
+		}
 
 		/* We may have row comparison with skip key not being a leading col,
 		 * like (col, skipcol) > (3, 5), but it can allow NULL skipcols to pass if (col>3) is true,
@@ -899,7 +938,9 @@ get_compressed_index_path(ColumnarScanPath *dcpath)
 	{
 		IndexPath *index_path = castNode(IndexPath, compressed_path);
 		if (!pathkeys_contained_in(dcpath->required_compressed_pathkeys, compressed_path->pathkeys))
+		{
 			return NULL;
+		}
 
 		return index_path;
 	}
@@ -918,21 +959,29 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 	else if (ts_is_columnar_scan_path(child_path))
 	{
 		if (!ts_guc_enable_compressed_skip_scan)
+		{
 			return NULL;
+		}
 
 		ColumnarScanPath *dcpath = (ColumnarScanPath *) child_path;
 		index_path = get_compressed_index_path(dcpath);
 	}
 	if (!index_path)
+	{
 		return NULL;
+	}
 
 	/* cannot use SkipScan with non-orderable index or IndexPath without pathkeys */
 	if (!index_path->path.pathkeys || !index_path->indexinfo->sortopfamily)
+	{
 		return NULL;
+	}
 
 	/* orderbyops are not compatible with skipscan */
 	if (index_path->indexorderbys != NIL)
+	{
 		return NULL;
+	}
 
 	SkipScanPath *skip_scan_path = (SkipScanPath *) newNode(sizeof(SkipScanPath), T_CustomPath);
 	skip_scan_path->cpath.path.pathtype = T_CustomScan;
@@ -971,11 +1020,15 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 			return NULL;
 		}
 		if (!skinfo->notnull)
+		{
 			check_notnull_skipkey(skinfo, child_path, index_path);
+		}
 
 		/* Multikey SkipScan is only supported in not-null mode */
 		if (!skinfo->notnull && num_skipkeys > 1)
+		{
 			return NULL;
+		}
 
 		skip_scan_path->dvars = lappend(skip_scan_path->dvars, dvar);
 		skip_scan_path->skipkeyinfo = lappend(skip_scan_path->skipkeyinfo, skinfo);
@@ -994,7 +1047,9 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 	 * but for Distinct aggregates #rows = 1 usually, i.e. we can't cap "ndistinct" in this case.
 	 */
 	if (dpinfo->stage == UPPERREL_DISTINCT)
+	{
 		ndistinct = Min(ndistinct, dpinfo->unique_path->rows);
+	}
 
 	/* If we are on a chunk rather than on a PG table, we want to get "ndistinct" for this chunk,
 	 * as Unique path rows may combine rows from each chunk and may not represent a true
@@ -1020,7 +1075,9 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 	/* If a filter is not pushed down into compessed indexed data, it's a filter for which we will
 	 * need to scan and decompress until filter is passed */
 	if ((Path *) index_path != child_path)
+	{
 		clauses_needing_scan = child_path->parent->baserestrictinfo;
+	}
 	else
 	{
 		/* For uncompressed index data we need a finer check for which filters on the indexed data
@@ -1043,7 +1100,9 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 			/* This is a filter which is not an index qual: will have to scan indexed data until
 			 * this filter is passed */
 			if (!match_found)
+			{
 				clauses_needing_scan = lappend(clauses_needing_scan, ri);
+			}
 		}
 	}
 
@@ -1074,10 +1133,14 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 	{
 		skip_scan_path->cpath.path.startup_cost = startup;
 		if (indexscan_rows > 1)
+		{
 			skip_scan_path->cpath.path.total_cost =
 				ndistinct * startup * numkeys_multiplier + (ndistinct / rows) * total;
+		}
 		else
+		{
 			skip_scan_path->cpath.path.total_cost = startup;
+		}
 	}
 	/* For (SkipScan <- ColumnarScan <- compressed IndexScan) scenario
 	 * we will estimate cost as (ndistinct * costs( child_path LIMIT 1 OFFSET x))
@@ -1101,10 +1164,14 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 
 		skip_scan_path->cpath.path.startup_cost = startup;
 		if (indexscan_rows > 1)
+		{
 			skip_scan_path->cpath.path.total_cost =
 				startup + (total - startup) * ndistinct * numkeys_multiplier;
+		}
 		else
+		{
 			skip_scan_path->cpath.path.total_cost = startup;
+		}
 	}
 
 	/* Finally, adjust SkipScan run costs with GUC multiplier (1.0 by default), to give users more
@@ -1134,7 +1201,7 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 	 *  as NOT NULL constraint will be propagated to and checked on all chunks
 	 */
 #if PG17_LT
-	skinfo->notnull = attr_is_notnull(ht_rte->relid, var->varattno);
+	skinfo->notnull = ts_get_attnotnull(ht_rte->relid, var->varattno);
 #else
 	RelOptInfo *baserel = ((Index) var->varno == rel->relid ? rel : rel->parent);
 	skinfo->notnull = bms_is_member(var->varattno, baserel->notnullattnums);
@@ -1156,7 +1223,9 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 
 	/* Check for hypertable */
 	if (!ts_is_hypertable(ht_rte->relid) || !bms_is_member(var->varno, rel->top_parent_relids))
+	{
 		return NULL;
+	}
 
 	char *attname = get_attname(ht_rte->relid, var->varattno, false);
 	var = copyObject(var);
@@ -1202,7 +1271,9 @@ build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo, List 
 		if (IsA(child, IndexPath) || ts_is_columnar_scan_path(child))
 		{
 			if (top_pathkeys && !pathkeys_contained_in(top_pathkeys, child->pathkeys))
+			{
 				continue;
+			}
 
 			SkipScanPath *skip_path = skip_scan_path_create(root, child, dpinfo);
 
@@ -1252,7 +1323,9 @@ build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *index_path, V
 	 */
 	int idx_key = get_idx_key(index_path->indexinfo, skinfo->indexed_column_attno);
 	if (idx_key < 0)
+	{
 		return false;
+	}
 
 	/* sk_attno of the skip qual */
 	skinfo->scankey_attno = idx_key + 1;
@@ -1274,10 +1347,12 @@ build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *index_path, V
 
 	Oid eqop = InvalidOid;
 	if (build_eqop)
+	{
 		eqop = get_opfamily_member(info->sortopfamily[idx_key],
 								   column_type,
 								   column_type,
 								   BTEqualStrategyNumber);
+	}
 
 	/* If there is no exact operator match for the column type we have here check
 	 * if we can coerce to the type of the operator class. */
@@ -1288,17 +1363,23 @@ build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *index_path, V
 			comparator =
 				get_opfamily_member(info->sortopfamily[idx_key], opcintype, opcintype, strategy);
 			if (!OidIsValid(comparator))
+			{
 				return false;
+			}
 
 			if (build_eqop)
+			{
 				eqop = get_opfamily_member(info->sortopfamily[idx_key],
 										   opcintype,
 										   opcintype,
 										   BTEqualStrategyNumber);
+			}
 			need_coerce = true;
 		}
 		else
+		{
 			return false; /* cannot use this index */
+		}
 	}
 
 	Const *prev_val = makeNullConst(need_coerce ? opcintype : column_type, -1, column_collation);
@@ -1342,7 +1423,9 @@ get_idx_key(IndexOptInfo *idxinfo, AttrNumber attno)
 	for (int i = 0; i < idxinfo->nkeycolumns; i++)
 	{
 		if (attno == idxinfo->indexkeys[i])
+		{
 			return i;
+		}
 	}
 	return -1;
 }
@@ -1373,7 +1456,9 @@ sort_indexquals(IndexOptInfo *indexinfo, List *quals)
 	for (i = 0; i < indexinfo->nkeycolumns; i++)
 	{
 		if (indexclauses[i] != NIL)
+		{
 			ordered_list = list_concat(ordered_list, indexclauses[i]);
+		}
 	}
 
 	return ordered_list;
@@ -1429,10 +1514,14 @@ tlist_member_match_var(Var *var, List *targetlist)
 		Var *tlvar = (Var *) tlentry->expr;
 
 		if (!tlvar || !IsA(tlvar, Var))
+		{
 			continue;
+		}
 		if (var->varno == tlvar->varno && var->varattno == tlvar->varattno &&
 			var->varlevelsup == tlvar->varlevelsup && var->vartype == tlvar->vartype)
+		{
 			return tlentry;
+		}
 	}
 	return NULL;
 }

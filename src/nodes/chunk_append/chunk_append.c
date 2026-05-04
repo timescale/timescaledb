@@ -143,9 +143,13 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		has_joins(root->parse->jointree) || root->limit_tuples > PG_INT32_MAX ||
 		root->parse->hasTargetSRFs ||
 		!pathkeys_contained_in(root->sort_pathkeys, subpath->pathkeys))
+	{
 		path->limit_tuples = -1;
+	}
 	else
+	{
 		path->limit_tuples = (int) root->limit_tuples;
+	}
 
 	/*
 	 * check if we should do startup and runtime exclusion
@@ -190,7 +194,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			 *
 			 */
 			path->runtime_exclusion_parent = true;
-			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, 0))
+			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, PVC_RECURSE_PLACEHOLDERS))
 			{
 				Var *var = lfirst(lc_var);
 				/*
@@ -225,7 +229,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			RestrictInfo *rinfo = lfirst_node(RestrictInfo, lc);
 			ListCell *lc_var;
 
-			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, 0))
+			foreach (lc_var, pull_var_clause((Node *) rinfo->clause, PVC_RECURSE_PLACEHOLDERS))
 			{
 				Var *var = lfirst(lc_var);
 				if ((Index) var->varno == rel->relid && var->varattno > 0 &&
@@ -236,7 +240,9 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 				}
 			}
 			if (path->runtime_exclusion_children)
+			{
 				break;
+			}
 		}
 	}
 
@@ -249,7 +255,9 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	 */
 
 	if (path->runtime_exclusion_parent && path->runtime_exclusion_children)
+	{
 		path->runtime_exclusion_parent = false;
+	}
 
 	/*
 	 * Make sure our subpath is either an Append or MergeAppend node
@@ -261,7 +269,9 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			AppendPath *append = castNode(AppendPath, subpath);
 
 			if (append->path.parallel_aware && append->first_partial_path > 0)
+			{
 				path->first_partial_path = append->first_partial_path;
+			}
 			children = append->subpaths;
 			break;
 		}
@@ -389,7 +399,9 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 #endif
 				/* Before entering the "DO" loop, check for a valid path entry */
 				if (flat == NULL)
+				{
 					break;
+				}
 
 				do
 				{
@@ -406,7 +418,9 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 						merge_childs = lappend(merge_childs, child);
 						flat = lnext(children, flat);
 						if (flat == NULL)
+						{
 							break;
+						}
 					}
 					/* if current one matched then need to check next one for match */
 				} while (is_not_pruned);
@@ -469,7 +483,9 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	path->cpath.path.total_cost = total_cost;
 
 	if (path->cpath.custom_paths != NIL)
+	{
 		path->cpath.path.startup_cost = ((Path *) linitial(path->cpath.custom_paths))->startup_cost;
+	}
 
 	return &path->cpath.path;
 }
@@ -541,21 +557,29 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 		Expr *transformed;
 
 		if (!info || !info->sort_transform)
+		{
 			return false;
+		}
 
 		transformed = info->sort_transform(castNode(FuncExpr, tle->expr));
 
 		if (!IsA(transformed, Var))
+		{
 			return false;
+		}
 
 		sort_var = castNode(Var, transformed);
 	}
 	else
+	{
 		return false;
+	}
 
 	/* ordered append won't work for system columns / whole row orderings */
 	if (sort_var->varattno <= 0)
+	{
 		return false;
+	}
 
 	sort_relid = sort_var->varno;
 	tce = lookup_type_cache(sort_var->vartype,
@@ -563,7 +587,9 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 
 	/* check sort operation is either less than or greater than */
 	if (sort->sortop != tce->lt_opr && sort->sortop != tce->gt_opr)
+	{
 		return false;
+	}
 
 	/*
 	 * check the ORDER BY column actually belongs to our hypertable
@@ -603,18 +629,24 @@ ts_ordered_append_should_optimize(PlannerInfo *root, RelOptInfo *rel, Hypertable
 		join_conditions = list_concat(join_conditions, rel->joininfo);
 
 		if (join_conditions == NIL)
+		{
 			return false;
+		}
 
 		ht_var = find_equality_join_var(sort_var, ht_relid, join_conditions);
 
 		if (ht_var == NULL)
+		{
 			return false;
+		}
 	}
 
 	/* Check hypertable column is the first dimension of the hypertable */
 	column = strVal(list_nth(rte->eref->colnames, AttrNumberGetAttrOffset(ht_var->varattno)));
 	if (namestrcmp(&ht->space->dimensions[0].fd.column_name, column) != 0)
+	{
 		return false;
+	}
 
 	Assert(order_attno != NULL && reverse != NULL);
 	*order_attno = ht_var->varattno;

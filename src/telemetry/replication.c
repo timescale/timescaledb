@@ -21,7 +21,9 @@ ts_telemetry_replication_info_gather(void)
 	};
 
 	if (SPI_connect() != SPI_OK_CONNECT)
+	{
 		return info;
+	}
 
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
@@ -56,7 +58,9 @@ ts_telemetry_replication_info_gather(void)
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
+	{
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+	}
 
 	/* Restore search_path */
 	AtEOXact_GUC(false, save_nestlevel);

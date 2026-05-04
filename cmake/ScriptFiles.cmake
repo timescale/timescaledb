@@ -92,6 +92,4 @@ set(PRE_DOWNGRADE_FILES updates/pre-version-change.sql)
 
 # The POST_UPDATE_FILES should be executed as the last part of the update
 # script. sets state for executing POST_UPDATE_FILES during ALTER EXTENSION
-set(SET_POST_UPDATE_STAGE updates/set_post_update_stage.sql)
-set(UNSET_UPDATE_STAGE updates/unset_update_stage.sql)
 set(POST_UPDATE_FILES updates/post-update.sql)

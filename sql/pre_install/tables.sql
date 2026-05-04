@@ -60,8 +60,7 @@ CREATE TABLE _timescaledb_catalog.hypertable (
   -- internal compressed hypertables have compression state = 2
   CONSTRAINT hypertable_dim_compress_check CHECK (num_dimensions > 0 OR compression_state = 2),
   CONSTRAINT hypertable_chunk_target_size_check CHECK (chunk_target_size >= 0),
-  CONSTRAINT hypertable_compress_check CHECK ( (compression_state = 0 OR compression_state = 1 )  OR (compression_state = 2 AND compressed_hypertable_id IS NULL)),
-  CONSTRAINT hypertable_compressed_hypertable_id_fkey FOREIGN KEY (compressed_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
+  CONSTRAINT hypertable_compress_check CHECK ( (compression_state = 0 OR compression_state = 1 )  OR (compression_state = 2 AND compressed_hypertable_id IS NULL))
 );
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
@@ -153,7 +152,6 @@ CREATE TABLE _timescaledb_catalog.chunk (
   -- table constraints
   CONSTRAINT chunk_pkey PRIMARY KEY (id),
   CONSTRAINT chunk_schema_name_table_name_key UNIQUE (schema_name, table_name),
-  CONSTRAINT chunk_compressed_chunk_id_fkey FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk (id),
   CONSTRAINT chunk_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
 );
 ALTER SEQUENCE _timescaledb_catalog.chunk_id_seq OWNED BY _timescaledb_catalog.chunk.id;
@@ -309,7 +307,10 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat_history (
 
 ALTER SEQUENCE _timescaledb_internal.bgw_job_stat_history_id_seq OWNED BY _timescaledb_internal.bgw_job_stat_history.id;
 
-CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_stat_history (job_id);
+CREATE INDEX bgw_job_stat_history_execution_start_idx
+    ON _timescaledb_internal.bgw_job_stat_history (execution_start);
+CREATE INDEX bgw_job_stat_history_job_id_execution_start_idx
+    ON _timescaledb_internal.bgw_job_stat_history(job_id, execution_start DESC);
 
 --The job_stat table is not dumped by pg_dump on purpose because
 --the statistics probably aren't very meaningful across instances.
@@ -452,6 +453,22 @@ CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_ranges', '');
 
 CREATE INDEX continuous_aggs_materialization_ranges_idx ON _timescaledb_catalog.continuous_aggs_materialization_ranges (materialization_id, lowest_modified_value ASC);
+
+-- cagg jobs refresh ranges
+CREATE TABLE _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (
+  materialization_id integer NOT NULL,
+  start_range bigint NOT NULL,
+  end_range bigint NOT NULL,
+  pid integer NOT NULL,
+  job_id integer NOT NULL,
+  created_at timestamptz NOT NULL,
+  -- table constraints
+  CONSTRAINT continuous_aggs_jobs_refresh_ranges_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_jobs_refresh_ranges', '');
+
+CREATE INDEX continuous_aggs_jobs_refresh_ranges_idx ON _timescaledb_catalog.continuous_aggs_jobs_refresh_ranges (materialization_id);
 
 /* the source of this data is the enum from the source code that lists
  *  the algorithms. This table is NOT dumped.

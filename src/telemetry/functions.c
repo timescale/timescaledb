@@ -70,7 +70,9 @@ allowed_extension_functions(const char **visible_extensions, int num_visible_ext
 
 	// get the Oid for each of the visible extensions
 	for (int i = 0; i < num_visible_extensions; i++)
+	{
 		visible_extension_ids[i] = get_extension_oid(visible_extensions[i], true);
+	}
 
 	// go through the objects owned by each visible extension, and store the
 	// ones that are functions in the set.
@@ -82,7 +84,9 @@ allowed_extension_functions(const char **visible_extensions, int num_visible_ext
 		Oid extension_id = visible_extension_ids[i];
 
 		if (!OidIsValid(extension_id))
+		{
 			continue;
+		}
 
 		// Look in the (referenced object class, referenced object) index for
 		// the allowed extensions.
@@ -138,7 +142,9 @@ read_shared_map()
 		FnTelemetryEntry entry;
 		FnTelemetryHashEntry *hash_entry = hash_seq_search(&hash_seq);
 		if (!hash_entry)
+		{
 			break;
+		}
 
 		entry.fn = hash_entry->key;
 		/*
@@ -151,10 +157,14 @@ read_shared_map()
 		 */
 		entry.count = pg_atomic_read_u64(&hash_entry->count);
 		if (entry.count != 0)
+		{
 			fn_telemetry_entry_vec_append(entries, entry);
+		}
 	}
 	if (i == num_entries)
+	{
 		hash_seq_term(&hash_seq);
+	}
 
 	LWLockRelease(function_counts_lock);
 
@@ -193,7 +203,9 @@ ts_function_telemetry_read(const char **visible_extensions, int num_visible_exte
 			(FnTelemetryRendezvous **) find_rendezvous_variable(RENDEZVOUS_FUNCTION_TELEMENTRY);
 
 		if (*rendezvous == NULL)
+		{
 			return NULL;
+		}
 
 		function_counts = (*rendezvous)->function_counts;
 		function_counts_lock = (*rendezvous)->lock;
@@ -210,7 +222,9 @@ ts_function_telemetry_read(const char **visible_extensions, int num_visible_exte
 		bool is_builtin = entry->fn >= 1 && entry->fn <= 9999;
 		bool is_visible = is_builtin || hash_search(allowed_ext_fns, &entry->fn, HASH_FIND, NULL);
 		if (is_visible)
+		{
 			fn_telemetry_entry_vec_append(entries_to_send, *entry);
+		}
 	}
 
 	return entries_to_send;
@@ -234,7 +248,9 @@ ts_function_telemetry_reset_counts()
 {
 	HASH_SEQ_STATUS hash_seq;
 	if (!function_counts)
+	{
 		return;
+	}
 
 	LWLockAcquire(function_counts_lock, LW_SHARED);
 
@@ -244,7 +260,9 @@ ts_function_telemetry_reset_counts()
 	{
 		FnTelemetryHashEntry *hash_entry = hash_seq_search(&hash_seq);
 		if (!hash_entry)
+		{
 			break;
+		}
 
 		/*
 		 * We never remove entries here, merely set their counts to 0. At
@@ -287,7 +305,9 @@ function_telemetry_increment(Oid func_id, HTAB **local_counts)
 
 	entry = hash_search(*local_counts, &func_id, HASH_ENTER, &found);
 	if (!found)
+	{
 		entry->count = 0;
+	}
 
 	entry->count += 1;
 
@@ -307,11 +327,15 @@ function_gather_walker(Node *node, void *context)
 	bool end_early;
 
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	end_early = check_functions_in_node(node, function_gather_checker, context);
 	if (end_early)
+	{
 		return true;
+	}
 
 	if (IsA(node, Query))
 	{
@@ -364,9 +388,13 @@ store_function_counts_in_shared_mem(HTAB *query_function_counts)
 			hash_search(function_counts, &local_entry->fn, HASH_FIND, NULL);
 
 		if (shared_entry)
+		{
 			pg_atomic_fetch_add_u64(&shared_entry->count, local_entry->count);
+		}
 		else
+		{
 			fn_telemetry_entry_vec_append(&missing_entries, *local_entry);
+		}
 	}
 
 	LWLockRelease(function_counts_lock);
@@ -386,12 +414,18 @@ store_function_counts_in_shared_mem(HTAB *query_function_counts)
 				hash_search(function_counts, &missing_entry->fn, HASH_ENTER_NULL, &found);
 
 			if (!shared_entry)
+			{
 				break;
+			}
 
 			if (found)
+			{
 				pg_atomic_fetch_add_u64(&shared_entry->count, missing_entry->count);
+			}
 			else
+			{
 				pg_atomic_init_u64(&shared_entry->count, missing_entry->count);
+			}
 		}
 		LWLockRelease(function_counts_lock);
 	}
@@ -411,7 +445,9 @@ ts_telemetry_function_info_gather(Query *query)
 	HTAB *query_function_counts;
 
 	if (skip_telemetry || !ts_function_telemetry_on())
+	{
 		return;
+	}
 
 	// At the first time through initialize the shared state
 	if (function_counts == NULL)
@@ -432,5 +468,7 @@ ts_telemetry_function_info_gather(Query *query)
 	query_function_counts = record_function_counts(query);
 
 	if (query_function_counts)
+	{
 		store_function_counts_in_shared_mem(query_function_counts);
+	}
 }

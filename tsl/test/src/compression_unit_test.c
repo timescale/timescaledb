@@ -49,7 +49,9 @@ test_int_array()
 	DecompressionIterator *iter;
 	int i;
 	for (i = 0; i < TEST_ELEMENTS; i++)
+	{
 		array_compressor_append(compressor, Int32GetDatum(i));
+	}
 
 	compressed = array_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
@@ -88,10 +90,14 @@ test_string_array()
 	text *texts[5];
 	int i;
 	for (i = 0; i < 5; i++)
+	{
 		texts[i] = cstring_to_text(strings[i]);
+	}
 
 	for (i = 0; i < TEST_ELEMENTS; i++)
+	{
 		array_compressor_append(compressor, PointerGetDatum(texts[i % 5]));
+	}
 
 	compressed = array_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
@@ -104,12 +110,14 @@ test_string_array()
 	{
 		TestAssertTrue(!r.is_null);
 		if (strcmp(TextDatumGetCString(r.val), strings[i % 5]) != 0)
+		{
 			elog(ERROR,
 				 "%4d \"%s\" != \"%s\" @ %d",
 				 i,
 				 TextDatumGetCString(r.val),
 				 strings[i % 5],
 				 __LINE__);
+		}
 		i += 1;
 	}
 	TestAssertInt64Eq(i, TEST_ELEMENTS);
@@ -121,12 +129,14 @@ test_string_array()
 	{
 		TestAssertTrue(!r.is_null);
 		if (strcmp(TextDatumGetCString(r.val), strings[(i - 1) % 5]) != 0)
+		{
 			elog(ERROR,
 				 "%4d \"%s\" != \"%s\" @ %d",
 				 i,
 				 TextDatumGetCString(r.val),
 				 strings[i % 5],
 				 __LINE__);
+		}
 		i -= 1;
 	}
 	TestAssertInt64Eq(i, 0);
@@ -140,7 +150,9 @@ test_int_dictionary()
 	DecompressionIterator *iter;
 	int i;
 	for (i = 0; i < TEST_ELEMENTS; i++)
+	{
 		dictionary_compressor_append(compressor, Int32GetDatum(i % 15));
+	}
 
 	compressed = dictionary_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
@@ -168,10 +180,14 @@ test_string_dictionary()
 	text *texts[5];
 	int i;
 	for (i = 0; i < 5; i++)
+	{
 		texts[i] = cstring_to_text(strings[i]);
+	}
 
 	for (i = 0; i < 1014; i++)
+	{
 		dictionary_compressor_append(compressor, PointerGetDatum(texts[i % 5]));
+	}
 
 	compressed = dictionary_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
@@ -184,12 +200,14 @@ test_string_dictionary()
 	{
 		TestAssertTrue(!r.is_null);
 		if (strcmp(TextDatumGetCString(r.val), strings[i % 5]) != 0)
+		{
 			elog(ERROR,
 				 "%4d \"%s\" != \"%s\" @ %d",
 				 i,
 				 TextDatumGetCString(r.val),
 				 strings[i % 5],
 				 __LINE__);
+		}
 		i += 1;
 	}
 
@@ -201,12 +219,14 @@ test_string_dictionary()
 	{
 		TestAssertTrue(!r.is_null);
 		if (strcmp(TextDatumGetCString(r.val), strings[(i - 1) % 5]) != 0)
+		{
 			elog(ERROR,
 				 "%4d \"%s\" != \"%s\" @ %d",
 				 i,
 				 TextDatumGetCString(r.val),
 				 strings[i % 5],
 				 __LINE__);
+		}
 		i -= 1;
 	}
 	TestAssertInt64Eq(i, 0);
@@ -222,7 +242,9 @@ test_gorilla_int()
 	DecompressionIterator *iter;
 	uint32 i;
 	for (i = 0; i < TEST_ELEMENTS; i++)
+	{
 		gorilla_compressor_append_value(compressor, i);
+	}
 
 	compressed = gorilla_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
@@ -287,7 +309,9 @@ test_gorilla_float()
 	GorillaCompressed *compressed;
 	DecompressionIterator *iter;
 	for (int x = 0; x < TEST_ELEMENTS; x++)
+	{
 		gorilla_compressor_append_value(compressor, float_get_bits((float) x));
+	}
 
 	compressed = gorilla_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
@@ -438,7 +462,9 @@ test_delta()
 	DecompressionIterator *iter;
 	int i;
 	for (i = 0; i < TEST_ELEMENTS; i++)
+	{
 		delta_delta_compressor_append_value(compressor, i);
+	}
 
 	TestAssertInt64Eq(delta_delta_compressor_compressed_size(compressor, NULL), 56);
 	compressed = DirectFunctionCall1(tsl_deltadelta_compressor_finish, PointerGetDatum(compressor));
@@ -468,9 +494,13 @@ test_delta2()
 	{
 		/* prevent everything from being rle'd away */
 		if (i % 2 != 0)
+		{
 			delta_delta_compressor_append_value(compressor, 2 * i);
+		}
 		else
+		{
 			delta_delta_compressor_append_value(compressor, i);
+		}
 	}
 
 	size_t calc_size = delta_delta_compressor_compressed_size(compressor, NULL);
@@ -486,9 +516,13 @@ test_delta2()
 	{
 		TestAssertTrue(!r.is_null);
 		if (i % 2 != 0)
+		{
 			TestAssertInt64Eq(DatumGetInt64(r.val), 2 * i);
+		}
 		else
+		{
 			TestAssertInt64Eq(DatumGetInt64(r.val), i);
+		}
 		i += 1;
 	}
 	TestAssertInt64Eq(i, TEST_ELEMENTS);
@@ -648,7 +682,9 @@ test_bool_rle(bool nulls, int run_length, int expected_size)
 				++compressed_null_count;
 			}
 			else
+			{
 				compressor->append_val(compressor, BoolGetDatum(val));
+			}
 			rlen = run_length;
 			val = !val;
 		}
@@ -724,9 +760,13 @@ test_bool_array(bool nulls, int run_length, int expected_size)
 		if (rlen == 0)
 		{
 			if (nulls)
+			{
 				compressor->append_null(compressor);
+			}
 			else
+			{
 				compressor->append_val(compressor, BoolGetDatum(val));
+			}
 			rlen = run_length;
 			val = !val;
 		}
@@ -796,9 +836,13 @@ test_bool_dictionary(bool nulls, int run_length, int expected_size)
 		if (rlen == 0)
 		{
 			if (nulls)
+			{
 				compressor->append_null(compressor);
+			}
 			else
+			{
 				compressor->append_val(compressor, BoolGetDatum(val));
+			}
 			rlen = run_length;
 			val = !val;
 		}
@@ -915,9 +959,13 @@ bool_compressed_size(int num_values, int flip_nth)
 	for (int i = 1; i < (num_values + 1); ++i)
 	{
 		if (i % flip_nth == 0)
+		{
 			compressor->append_val(compressor, BoolGetDatum(false));
+		}
 		else
+		{
 			compressor->append_val(compressor, BoolGetDatum(true));
+		}
 	}
 
 	Datum compressed = (Datum) compressor->finish(compressor);
@@ -1157,9 +1205,13 @@ test_delta_size_and_placement(const int32 *values, int n, int expected_size)
 		{
 			/* Zero values are treated as nulls */
 			if (values[i] == 0)
+			{
 				delta_delta_compressor_append_null(compressor);
+			}
 			else
+			{
 				delta_delta_compressor_append_value(compressor, values[i]);
+			}
 		}
 		pass1 = (Datum) delta_delta_compressor_finish(compressor);
 		var_size = DatumGetPointer(pass1) == NULL ? 0 : VARSIZE(DatumGetPointer(pass1));
@@ -1194,7 +1246,9 @@ test_delta_size_and_placement(const int32 *values, int n, int expected_size)
 				 r = delta_delta_decompression_iterator_try_next_forward(iter))
 			{
 				if (values[i] == 0)
+				{
 					TestAssertTrue(r.is_null);
+				}
 				else
 				{
 					TestAssertTrue(!r.is_null);
@@ -1220,7 +1274,9 @@ test_delta_size_and_placement(const int32 *values, int n, int expected_size)
 				has_nulls = true;
 			}
 			else
+			{
 				delta_delta_compressor_append_value(compressor, values[i]);
+			}
 		}
 		size_t nulls_size = 0;
 		calc_size = delta_delta_compressor_compressed_size(compressor, &nulls_size);
@@ -1247,7 +1303,9 @@ test_delta_size_and_placement(const int32 *values, int n, int expected_size)
 				delta_delta_compressor_append_null(compressor);
 			}
 			else
+			{
 				delta_delta_compressor_append_value(compressor, values[i]);
+			}
 		}
 
 		size_t est_size = delta_delta_compressor_compressed_size(compressor, NULL);
@@ -1721,7 +1779,9 @@ ts_segment_meta_min_max_finish_max(PG_FUNCTION_ARGS)
 		(BatchMetadataBuilderMinMax *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 
 	if (builder == NULL || batch_metadata_builder_minmax_empty(builder))
+	{
 		PG_RETURN_NULL();
+	}
 
 	PG_RETURN_DATUM(batch_metadata_builder_minmax_max(builder));
 }
@@ -1734,7 +1794,9 @@ ts_segment_meta_min_max_finish_min(PG_FUNCTION_ARGS)
 		(BatchMetadataBuilderMinMax *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 
 	if (builder == NULL || batch_metadata_builder_minmax_empty(builder))
+	{
 		PG_RETURN_NULL();
+	}
 
 	PG_RETURN_DATUM(batch_metadata_builder_minmax_min(builder));
 }

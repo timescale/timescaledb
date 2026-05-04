@@ -96,36 +96,39 @@ ORDER BY 1 DESC, 2;
 SELECT * FROM measure_10
 ORDER BY 1 DESC, 2;
 
-CREATE OR REPLACE FUNCTION get_hyper_invals() RETURNS  TABLE (
-      "hyper_id" INT,
-      "start" BIGINT,
-      "end" BIGINT
-)
-LANGUAGE SQL VOLATILE AS
-$$
-SELECT hypertable_id,
-       lowest_modified_value,
-       greatest_modified_value
+CREATE VIEW hyper_invals AS
+SELECT hypertable_id as "hyper_id",
+       lowest_modified_value as "start",
+       greatest_modified_value as "end"
        FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
-       ORDER BY 1,2,3
-$$;
+       ORDER BY 1,2,3;
 
-CREATE OR REPLACE FUNCTION get_cagg_invals() RETURNS TABLE (
-      "cagg_id" INT,
-      "start" BIGINT,
-      "end" BIGINT
-)
-LANGUAGE SQL VOLATILE AS
-$$
-SELECT materialization_id,
-       lowest_modified_value,
-       greatest_modified_value
+CREATE VIEW hyper_invals_view AS
+SELECT hypertable_id as "hyper_id",
+       ht.table_name as "hypertable_name",
+       lowest_modified_value as "start",
+       greatest_modified_value as "end"
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log il,
+  _timescaledb_catalog.hypertable ht
+  WHERE ht.id = il.hypertable_id;
+
+CREATE VIEW cagg_invals_view AS
+  SELECT il.materialization_id AS "cagg_id",
+         ca.user_view_name AS "cagg_name",
+         il.lowest_modified_value AS "start",
+         il.greatest_modified_value AS "end"
+  FROM
+  _timescaledb_catalog.continuous_aggs_materialization_invalidation_log il,
+  _timescaledb_catalog.continuous_agg ca
+  WHERE ca.mat_hypertable_id = il.materialization_id;
+
+CREATE VIEW cagg_invals AS
+SELECT materialization_id AS "cagg_id",
+       lowest_modified_value AS "start",
+       greatest_modified_value AS "end"
        FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
        ORDER BY 1,2,3
-$$;
-
-CREATE VIEW hyper_invals AS SELECT * FROM get_hyper_invals();
-CREATE VIEW cagg_invals AS SELECT * FROM get_cagg_invals();
+;
 
 -- Must refresh to move the invalidation threshold, or no
 -- invalidations will be generated. Initially, threshold is the
@@ -138,6 +141,7 @@ ORDER BY 1,2;
 SELECT * FROM cagg_invals;
 
 -- Now refresh up to 50 without the first bucket, and the threshold should be updated accordingly:
+SELECT min(time), max(time) FROM conditions;
 CALL refresh_continuous_aggregate('cond_10', 1, 50);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
@@ -166,6 +170,7 @@ SELECT * FROM cagg_invals;
 
 -- Refresh on the second continuous aggregate, cond_20, on the first
 -- hypertable moves the same threshold as when refreshing cond_10:
+SELECT min(time), max(time) FROM conditions;
 CALL refresh_continuous_aggregate('cond_20', 60, 100);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
@@ -183,6 +188,7 @@ SELECT * FROM cagg_invals;
 -- Entries that should be left unmodified:
 INSERT INTO conditions VALUES (10, 4, 23.7);
 INSERT INTO conditions VALUES (10, 5, 23.8), (19, 3, 23.6);
+--This generates 2 entries as the inv. entry is per chunk.
 INSERT INTO conditions VALUES (60, 3, 23.7), (70, 4, 23.7);
 
 -- Should see some invaliations in the hypertable invalidation log:
@@ -193,15 +199,22 @@ INSERT INTO measurements VALUES (20, 4, 23.7);
 INSERT INTO measurements VALUES (30, 5, 23.8), (80, 3, 23.6);
 
 -- Should now see invalidations for both hypertables
+-- watermark for measurements is at 30. so we will only see 20.
 SELECT * FROM hyper_invals;
 
 -- First refresh a window where we don't have any invalidations. This
 -- allows us to see only the copying of the invalidations to the per
 -- cagg log without additional processing.
+SELECT * FROM cagg_invals_view WHERE cagg_name = 'cond_10';;
+SELECT * FROM hyper_invals_view WHERE hypertable_name = 'conditions';;
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
 -- Invalidation threshold remains at 100:
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
+-- check the output of raw cagg query and the cagg
+\set QUERY 'SELECT time_bucket( 10, time) AS bucket, device, avg(temp) FROM conditions WHERE time>= 20 and time < 60 GROUP BY 1, 2'
+\set VIEW_QUERY 'SELECT * FROM cond_10 WHERE bucket>= 20 and bucket < 60'
+\ir include/cont_agg_test_equal_query.sql
 
 -- Invalidations should be moved from the hypertable invalidation log
 -- to the continuous aggregate log, but only for the hypertable that
@@ -233,10 +246,13 @@ SELECT * FROM hyper_invals;
 SELECT * FROM cagg_invals;
 
 -- Refresh to process invalidations for daily temperature:
+SELECT min(time), max(time) FROM conditions;
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
 
 -- Invalidations should be moved from the hypertable invalidation log
 -- to the continuous aggregate log.
+-- Note how invalidations for cagg inv log is combined together (the chunk separation is lost when
+-- adjacent intervals are combined together.
 SELECT * FROM hyper_invals;
 
 -- Only the cond_10 cagg should have its entries cut:
@@ -247,16 +263,75 @@ CALL refresh_continuous_aggregate('cond_20', 20, 60);
 
 -- The cond_20 cagg should also have its entries cut:
 SELECT * FROM cagg_invals;
+-- check the output of raw cagg query and the cagg
+\set QUERY 'SELECT time_bucket( 20, time) AS bucket, device, avg(temp) FROM conditions WHERE time>= 20 and time < 60 GROUP BY 1, 2'
+\set VIEW_QUERY 'SELECT * FROM cond_20 WHERE bucket>= 20 and bucket < 60'
+\ir include/cont_agg_test_equal_query.sql
+
 
 -- Refresh cond_10 to completely remove an invalidation:
+SELECT min(time), max(time) FROM conditions;
 CALL refresh_continuous_aggregate('cond_10', 0, 20);
 
 -- The 1-19 invalidation should be deleted:
 SELECT * FROM cagg_invals;
 
--- Clear everything between 0 and 100 to make way for new
+-- Clear everything between 60 and 100 to make way for new
 -- invalidations
-CALL refresh_continuous_aggregate('cond_10', 0, 100);
+-- Verifies whether the multiple entries were processed correctly.
+CALL refresh_continuous_aggregate('cond_10', 60, 110);
+SELECT * FROM cagg_invals;
+\set QUERY 'SELECT time_bucket( 10, time) AS bucket, device, avg(temp) FROM conditions WHERE time>= 60 and time < 110 GROUP BY 1, 2'
+\set VIEW_QUERY 'SELECT * FROM cond_10 WHERE bucket>= 60 and bucket < 110'
+\ir include/cont_agg_test_equal_query.sql
+
+-------------------------------------------------------
+-- Test all INVAL_CUT code paths with adjacent-chunk
+-- invalidations that merge after bucket expansion.
+-- Refresh window is [20, 60), bucket_width=10,
+-- chunk_time_interval=10.
+-------------------------------------------------------
+
+-- First, clear all existing invalidations so we start clean
+CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
+CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
+SELECT * FROM cagg_invals;
+SELECT * FROM hyper_invals;
+
+-- Test cutting logic after the per chunk invalidation entry change.
+-- Case 1: Left-cut only.
+-- Values in chunks [10,20) and [20,30) merge after bucket expansion
+-- to [10, 29]. Against window [20, 60): lower [10,19], inner [20,29].
+INSERT INTO conditions VALUES (15, 4, 23.7), (25, 1, 23.4);
+
+-- Case 2: Cut both sides.
+-- Values across adjacent chunks [10,20) through [60,70) merge after
+-- bucket expansion to [10, 69]. Against window [20, 60):
+-- lower [10,19], inner [20,59], upper [60,69].
+INSERT INTO conditions VALUES (15, 2, 23.5), (25, 2, 23.5), (35, 2, 23.5), (45, 2, 23.5), (55, 2, 23.5), (65, 2, 23.5);
+
+-- Case 3: Right-cut only (mid-window start).
+-- Values in chunks [50,60) and [60,70) merge after bucket expansion
+-- to [50, 69]. Against window [20, 60): inner [50,59], upper [60,69].
+INSERT INTO conditions VALUES (55, 6, 23.9), (65, 6, 23.9);
+
+SELECT * FROM hyper_invals;
+
+-- Refresh to process the invalidations
+CALL refresh_continuous_aggregate('cond_10', 20, 60);
+
+-- Should see the cut results in the cagg invalidation log
+SELECT * FROM cagg_invals;
+
+-- check the output of raw cagg query and the cagg
+\set QUERY 'SELECT time_bucket( 10, time) AS bucket, device, avg(temp) FROM conditions WHERE time>= 20 and time < 60 GROUP BY 1, 2'
+\set VIEW_QUERY 'SELECT * FROM cond_10 WHERE bucket>= 20 and bucket < 60'
+\ir include/cont_agg_test_equal_query.sql
+
+-- Clean up the remaining invalidations
+--CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
+--CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
+SELECT * FROM cagg_invals;
 
 -- Test refreshing with non-overlapping invalidations
 INSERT INTO conditions VALUES (20, 1, 23.4), (25, 1, 23.4);
@@ -267,8 +342,11 @@ CALL refresh_continuous_aggregate('cond_10', 1, 40);
 SELECT * FROM cagg_invals;
 
 -- Refresh whithout cutting (in area where there are no
--- invalidations). Merging of overlapping entries should still happen:
+-- invalidations).  See another entry for [ 40 49] in the cagg
+-- logs. No merging during 2nd transaction of cagg refresh outside
+-- refresh window.
 INSERT INTO conditions VALUES (15, 1, 23.4), (42, 1, 23.4);
+SELECT * FROM hyper_invals;
 
 CALL refresh_continuous_aggregate('cond_10', 90, 100);
 
@@ -333,6 +411,11 @@ INSERT INTO conditions VALUES
 
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
 CALL refresh_continuous_aggregate('cond_20', NULL, NULL);
+
+-- check the output of raw cagg query and the cagg
+\set QUERY 'SELECT time_bucket( 10, time) AS bucket, device, avg(temp) FROM conditions GROUP BY 1, 2'
+\set VIEW_QUERY 'SELECT * FROM cond_10 '
+\ir include/cont_agg_test_equal_query.sql
 
 -- Should now hold data again
 SELECT * FROM cond_10
@@ -1022,4 +1105,89 @@ WHERE hypertable_id IN (
 
 --clean up
 DROP TABLE test_data CASCADE;
+
+-- Test: threshold misalignment when two caggs with different bucket widths share
+-- a hypertable.
+--
+-- 4h boundaries: 00:00, 04:00, 08:00, 12:00, ...
+-- 6h boundaries: 00:00, 06:00, 12:00, 18:00, ...
+--
+-- With data at 2020-01-01 02:30 UTC:
+--   cagg_4hrs (4h buckets): bucket [00:00, 04:00), computed threshold = 2020-01-01 04:00 UTC
+--   cagg_6hrs (6h buckets): bucket [00:00, 06:00), computed threshold = 2020-01-01 06:00 UTC
+--
+-- After refreshing cagg_6hrs first, the shared threshold advances to
+-- 2020-01-01 06:00 UTC (cagg_6hrs boundary, NOT a cagg_4hrs boundary).
+--
+-- A subsequent NULL,NULL refresh of cagg_4hrs should cap the window end to
+-- cagg_4hrs's own bucket boundary (2020-01-01 04:00 UTC), not use the stored
+-- threshold (2020-01-01 06:00 UTC) which doesn't align with bucket boundaries of cagg_4hrs.
+
+CREATE TABLE test_data  (ts TIMESTAMPTZ, val INT);
+SELECT create_hypertable('test_data', 'ts');
+
+CREATE MATERIALIZED VIEW cagg_4hrs
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('4 hours', ts) AS bucket, max(val)
+FROM test_data
+GROUP BY 1
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW cagg_6hrs
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('6 hours', ts) AS bucket, max(val)
+FROM test_data
+GROUP BY 1
+WITH NO DATA;
+
+-- Insert data whose max timestamp is 2020-01-01 02:30 UTC.
+-- cagg_4hrs bucket: [00:00, 04:00), threshold T4 = 04:00 UTC
+-- cagg_6hrs bucket: [00:00, 06:00), threshold T6 = 06:00 UTC
+INSERT INTO test_data VALUES ('2020-01-01 02:30:00+00', 1);
+
+-- Refresh cagg_6hrs first: sets shared threshold to 2020-01-01 06:00 UTC.
+CALL refresh_continuous_aggregate('cagg_6hrs', NULL, NULL);
+
+-- Stored threshold = 2020-01-01 06:00 UTC (cagg_6hrs boundary, NOT cagg_4hrs boundary).
+SELECT _timescaledb_functions.to_timestamp(watermark) AS threshold
+FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+WHERE hypertable_id = (
+    SELECT raw_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cagg_4hrs');
+
+-- Now refresh cagg_4hrs with NULL,NULL.
+-- cagg_4hrs computes its own threshold = 04:00, but stored threshold = 06:00 > 04:00,
+-- so the stored (misaligned) value is used but capped to the start of the current bucket of cagg_4hrs,
+-- which is 2020-01-01 04:00 UTC.
+SET client_min_messages TO DEBUG1;
+CALL refresh_continuous_aggregate('cagg_4hrs', NULL, NULL);
+RESET client_min_messages;
+
+-- Show invalidations left in cagg_4hrs's invalidation log,
+-- BUG:   lowest = 2020-01-01 06:00 UTC (stored threshold, not cagg_4hrs-aligned)
+-- FIXED: lowest = 2020-01-01 04:00 UTC (at cagg_4hrs bucket boundary)
+SELECT
+    CASE
+        WHEN lowest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
+            THEN '-infinity'::timestamptz
+        WHEN lowest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype)
+            THEN 'infinity'::timestamptz
+        ELSE _timescaledb_functions.to_timestamp(lowest_modified_value)
+    END AS low,
+    CASE
+        WHEN greatest_modified_value <= _timescaledb_functions.get_internal_time_min('timestamptz'::regtype)
+            THEN '-infinity'::timestamptz
+        WHEN greatest_modified_value >= _timescaledb_functions.get_internal_time_max('timestamptz'::regtype)
+            THEN 'infinity'::timestamptz
+        ELSE _timescaledb_functions.to_timestamp(greatest_modified_value)
+    END AS high
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+    SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+    WHERE user_view_name = 'cagg_4hrs'
+)
+ORDER BY 1,2;
+DROP TABLE test_data CASCADE;
+
+
 RESET timezone;

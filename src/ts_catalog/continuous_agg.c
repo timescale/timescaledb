@@ -43,6 +43,7 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_jobs_refresh_ranges.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
@@ -137,21 +138,6 @@ init_materialization_invalidation_log_scan_by_materialization_id(ScanIterator *i
 		Int32GetDatum(materialization_id));
 }
 
-static void
-init_materialization_ranges_scan_by_materialization_id(ScanIterator *iterator,
-													   const int32 materialization_id)
-{
-	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
-											CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
-											CONTINUOUS_AGGS_MATERIALIZATION_RANGES_IDX);
-
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_continuous_aggs_materialization_ranges_materialization_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(materialization_id));
-}
-
 static int32
 number_of_continuous_aggs_attached(int32 raw_hypertable_id)
 {
@@ -236,23 +222,6 @@ ts_materialization_invalidation_log_delete(int32 mat_hypertable_id)
 	}
 }
 
-static void
-ts_materialization_ranges_delete(int32 mat_hypertable_id)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
-													RowExclusiveLock,
-													CurrentMemoryContext);
-
-	elog(DEBUG1, "materialization log delete for hypertable %d", mat_hypertable_id);
-	init_materialization_ranges_scan_by_materialization_id(&iterator, mat_hypertable_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	}
-}
-
 static HeapTuple
 continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc desc)
 {
@@ -267,7 +236,9 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 		Int32GetDatum(fd->raw_hypertable_id);
 
 	if (fd->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)] = true;
+	}
 	else
 	{
 		values[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)] =
@@ -312,10 +283,14 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_continuous_agg_raw_hypertable_id)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)])
+	{
 		fd->parent_mat_hypertable_id = INVALID_HYPERTABLE_ID;
+	}
 	else
+	{
 		fd->parent_mat_hypertable_id = DatumGetInt32(
 			values[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)]);
+	}
 
 	namestrcpy(&fd->user_view_schema,
 			   DatumGetCString(
@@ -341,7 +316,9 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 	fd->materialized_only =
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)]);
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 }
 
 /*
@@ -477,7 +454,9 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggBucket
 		count++;
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 	}
 
 	/*
@@ -500,17 +479,21 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 	Oid nspid = get_namespace_oid(NameStr(fd->user_view_schema), false);
 	Hypertable *cagg_ht = ts_hypertable_get_by_id(fd->mat_hypertable_id);
 	if (!cagg_ht)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("continuous aggregate hypertable with ID %d does not exist",
 						fd->mat_hypertable_id)));
+	}
 	const Dimension *time_dim;
 	time_dim = hyperspace_get_open_dimension(cagg_ht->space, 0);
 	if (!time_dim)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("continuous aggregate hypertable with ID %d has no open dimension",
 						fd->mat_hypertable_id)));
+	}
 	cagg->partition_type = ts_dimension_get_partition_type(time_dim);
 	cagg->relid = get_relname_relid(NameStr(fd->user_view_name), nspid);
 	memcpy(&cagg->data, fd, sizeof(cagg->data));
@@ -563,9 +546,13 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id)
 		continuous_agg_formdata_fill(&data, ti);
 
 		if (data.raw_hypertable_id == hypertable_id)
+		{
 			status |= HypertableIsRawTable;
+		}
 		if (data.mat_hypertable_id == hypertable_id)
+		{
 			status |= HypertableIsMaterialization;
+		}
 
 		if (status == HypertableIsMaterializationAndRaw)
 		{
@@ -695,7 +682,9 @@ continuous_agg_find_by_name(const char *schema, const char *name, ContinuousAggV
 		continuous_agg_formdata_fill(&data, ti);
 
 		if (vtype == ContinuousAggAnyView)
+		{
 			vtype = ts_continuous_agg_view_type(&data, schema, name);
+		}
 
 		if (vtype != ContinuousAggAnyView)
 		{
@@ -717,7 +706,9 @@ ts_continuous_agg_find_by_view_name(const char *schema, const char *name,
 	ContinuousAgg *ca;
 
 	if (!continuous_agg_find_by_name(schema, name, type, &fd))
+	{
 		return NULL;
+	}
 
 	ca = palloc0(sizeof(ContinuousAgg));
 	continuous_agg_init(ca, &fd);
@@ -744,7 +735,9 @@ ts_continuous_agg_find_by_relid(Oid relid)
 	const char *schemaname = get_namespace_name(get_rel_namespace(relid));
 
 	if (NULL == relname || NULL == schemaname)
+	{
 		return NULL;
+	}
 
 	return ts_continuous_agg_find_userview_name(schemaname, relname);
 }
@@ -757,10 +750,14 @@ ts_continuous_agg_find_by_rv(const RangeVar *rv)
 {
 	Oid relid;
 	if (rv == NULL)
+	{
 		return NULL;
+	}
 	relid = RangeVarGetRelid(rv, NoLock, true);
 	if (!OidIsValid(relid))
+	{
 		return NULL;
+	}
 	return ts_continuous_agg_find_by_relid(relid);
 }
 
@@ -774,7 +771,9 @@ get_and_lock_rel_by_name(const Name schema, const Name name, LOCKMODE mode)
 	{
 		relid = get_relname_relid(NameStr(*name), nspid);
 		if (OidIsValid(relid))
+		{
 			LockRelationOid(relid, mode);
+		}
 	}
 	ObjectAddressSet(addr, RelationRelationId, relid);
 	return addr;
@@ -786,7 +785,9 @@ get_and_lock_rel_by_hypertable_id(int32 hypertable_id, LOCKMODE mode)
 	ObjectAddress addr;
 	Oid relid = ts_hypertable_id_to_relid(hypertable_id, true);
 	if (OidIsValid(relid))
+	{
 		LockRelationOid(relid, mode);
+	}
 	ObjectAddressSet(addr, RelationRelationId, relid);
 	return addr;
 }
@@ -853,9 +854,11 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	 * aggregates.
 	 */
 	if (drop_user_view)
+	{
 		user_view = get_and_lock_rel_by_name(&cadata->user_view_schema,
 											 &cadata->user_view_name,
 											 AccessExclusiveLock);
+	}
 	raw_hypertable =
 		get_and_lock_rel_by_hypertable_id(cadata->raw_hypertable_id, AccessExclusiveLock);
 	mat_hypertable =
@@ -911,7 +914,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		}
 
 		ts_materialization_invalidation_log_delete(form.mat_hypertable_id);
-		ts_materialization_ranges_delete(form.mat_hypertable_id);
 
 		if (!raw_hypertable_has_other_caggs)
 		{
@@ -920,13 +922,18 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 
 		/* Delete watermark */
 		ts_cagg_watermark_delete_by_mat_hypertable_id(form.mat_hypertable_id);
+
+		/* Delete any refresh ranges registered for this CAgg */
+		ts_cagg_jobs_refresh_ranges_delete_by_mat_hypertable_id(form.mat_hypertable_id);
 	}
 
 	cagg_bucket_function_delete(cadata->mat_hypertable_id);
 
 	/* Perform actual deletions now */
 	if (OidIsValid(user_view.objectId))
+	{
 		performDeletion(&user_view, DROP_RESTRICT, 0);
+	}
 
 	if (OidIsValid(mat_hypertable.objectId))
 	{
@@ -936,10 +943,14 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	}
 
 	if (OidIsValid(partial_view.objectId))
+	{
 		performDeletion(&partial_view, DROP_RESTRICT, 0);
+	}
 
 	if (OidIsValid(direct_view.objectId))
+	{
 		performDeletion(&direct_view, DROP_RESTRICT, 0);
+	}
 }
 
 /*
@@ -965,13 +976,17 @@ ts_continuous_agg_drop_hypertable_callback(int32 hypertable_id)
 		continuous_agg_formdata_fill(&data, ti);
 
 		if (data.raw_hypertable_id == hypertable_id)
+		{
 			drop_continuous_agg(&data, true);
+		}
 
 		if (data.mat_hypertable_id == hypertable_id)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
 					 errmsg("cannot drop the materialized table because it is required by a "
 							"continuous aggregate")));
+		}
 	}
 }
 
@@ -990,11 +1005,13 @@ drop_internal_view(const FormData_continuous_agg *fd)
 		count++;
 	}
 	if (count > 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST),
 				 errmsg(
 					 "cannot drop the partial/direct view because it is required by a continuous "
 					 "aggregate")));
+	}
 }
 
 /* This gets called when a view gets dropped. */
@@ -1024,7 +1041,9 @@ ts_continuous_agg_drop(const char *view_schema, const char *view_name)
 	bool found = continuous_agg_find_by_name(view_schema, view_name, ContinuousAggAnyView, &fd);
 
 	if (found)
+	{
 		continuous_agg_drop_view_callback(&fd, view_schema, view_name);
+	}
 
 	return found;
 }
@@ -1052,15 +1071,23 @@ ts_continuous_agg_view_type(FormData_continuous_agg *data, const char *schema, c
 {
 	if (CHECK_NAME_MATCH(&data->user_view_schema, schema) &&
 		CHECK_NAME_MATCH(&data->user_view_name, name))
+	{
 		return ContinuousAggUserView;
+	}
 	else if (CHECK_NAME_MATCH(&data->partial_view_schema, schema) &&
 			 CHECK_NAME_MATCH(&data->partial_view_name, name))
+	{
 		return ContinuousAggPartialView;
+	}
 	else if (CHECK_NAME_MATCH(&data->direct_view_schema, schema) &&
 			 CHECK_NAME_MATCH(&data->direct_view_name, name))
+	{
 		return ContinuousAggDirectView;
+	}
 	else
+	{
 		return ContinuousAggAnyView;
+	}
 }
 
 typedef struct CaggRenameCtx
@@ -1112,10 +1139,12 @@ continuous_agg_rename_process_rename_view(FormData_continuous_agg *form, bool *d
 		case ContinuousAggUserView:
 		{
 			if (*ctx->object_type == OBJECT_VIEW)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("cannot alter continuous aggregate using ALTER VIEW"),
 						 errhint("Use ALTER MATERIALIZED VIEW to alter a continuous aggregate.")));
+			}
 
 			Assert(*ctx->object_type == OBJECT_MATVIEW);
 			*ctx->object_type = OBJECT_VIEW;
@@ -1326,15 +1355,23 @@ generic_time_bucket(const ContinuousAggBucketFunction *bf, Datum timestamp)
 		fcinfo->args[2] = (NullableDatum){ .value = CStringGetTextDatum(bf->bucket_time_timezone),
 										   .isnull = false };
 		if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
+		{
 			fcinfo->args[3] = (NullableDatum){ .value = (Datum) 0, .isnull = true };
+		}
 		else
+		{
 			fcinfo->args[3] = (NullableDatum){ .value = TimestampTzGetDatum(bf->bucket_time_origin),
 											   .isnull = false };
+		}
 		if (has_offset)
+		{
 			fcinfo->args[4] = (NullableDatum){ .value = IntervalPGetDatum(bf->bucket_time_offset),
 											   .isnull = false };
+		}
 		else
+		{
 			fcinfo->args[4] = (NullableDatum){ .value = (Datum) 0, .isnull = true };
+		}
 		return ts_timestamptz_timezone_bucket(fcinfo);
 	}
 
@@ -1501,15 +1538,36 @@ ts_compute_beginning_of_the_next_bucket_variable(int64 timeval,
 	return ts_time_value_to_internal(val_new, TIMESTAMPOID);
 }
 
+/*
+ * Calculates the beginning of the current bucket (i.e., floors timeval to the
+ * nearest bucket boundary).
+ *
+ * The algorithm is just:
+ *
+ * val = time_bucket(bucket_size, val)
+ */
+int64
+ts_compute_start_of_current_bucket_variable(int64 timeval, const ContinuousAggBucketFunction *bf)
+{
+	/*
+	 * It's OK to use TIMESTAMPOID here.
+	 * See the comment in ts_compute_inscribed_bucketed_refresh_window_variable()
+	 */
+	Datum val_beg = ts_internal_to_time_value(timeval, TIMESTAMPOID);
+	return ts_time_value_to_internal(generic_time_bucket(bf, val_beg), TIMESTAMPOID);
+}
+
 Oid
 ts_cagg_permissions_check(Oid cagg_oid, Oid userid)
 {
 	Oid ownerid = ts_rel_get_owner(cagg_oid);
 
 	if (!has_privs_of_role(userid, ownerid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("must be owner of continuous aggregate \"%s\"", get_rel_name(cagg_oid))));
+	}
 
 	return ownerid;
 }
@@ -1533,7 +1591,37 @@ ts_continuous_agg_get_query(ContinuousAgg *cagg)
 
 	rule = cagg_view_rules->rules[0];
 	if (rule->event != CMD_SELECT)
+	{
 		ereport(ERROR, (errcode(ERRCODE_TS_UNEXPECTED), errmsg("unexpected rule event for view")));
+	}
+
+	cagg_view_query = (Query *) copyObject(linitial(rule->actions));
+	table_close(cagg_view_rel, NoLock);
+
+	return cagg_view_query;
+}
+
+Query *
+ts_continuous_agg_get_finalized_query(ContinuousAgg *cagg)
+{
+	Oid cagg_view_oid;
+	Relation cagg_view_rel;
+	RuleLock *cagg_view_rules;
+	RewriteRule *rule;
+	Query *cagg_view_query;
+
+	cagg_view_oid = ts_get_relation_relid(NameStr(cagg->data.user_view_schema),
+										  NameStr(cagg->data.user_view_name),
+										  false);
+	cagg_view_rel = table_open(cagg_view_oid, AccessShareLock);
+	cagg_view_rules = cagg_view_rel->rd_rules;
+	Assert(cagg_view_rules && cagg_view_rules->numLocks == 1);
+
+	rule = cagg_view_rules->rules[0];
+	if (rule->event != CMD_SELECT)
+	{
+		ereport(ERROR, (errcode(ERRCODE_TS_UNEXPECTED), errmsg("unexpected rule event for view")));
+	}
 
 	cagg_view_query = (Query *) copyObject(linitial(rule->actions));
 	table_close(cagg_view_rel, NoLock);

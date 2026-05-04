@@ -189,6 +189,17 @@ table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time
 table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:22)
 );
 
+run_queries(
+	qq(SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk'::regclass, TRUE);)
+);
+discard_wal();
+
+query_generates_wal(
+	"delete complete batch from a compressed chunk",
+	qq(DELETE FROM metrics WHERE device_id = 1;),
+	qq(table _timescaledb_internal.compress_hyper_2_3_chunk: DELETE: (no-tuple-data))
+);
+
 # switch to PK on time for insert with PK decompression test
 run_queries(
 	qq/

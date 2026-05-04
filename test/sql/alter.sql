@@ -508,6 +508,15 @@ FROM show_chunks('replid') chid
 INNER JOIN pg_index i ON (i.indrelid = chid) AND indisreplident=true
 ORDER BY index_name;
 
+-- recreate the unique index after drop and insert to create a new chunk.
+-- This is a regression test for a bug where rd_replidindex was stale
+-- after relcache invalidation from chunk index creation, leading to
+-- "could not open relation with OID 0" error.
+CREATE UNIQUE INDEX time_key ON replid (time);
+INSERT INTO replid VALUES ('2023-01-04', 4);
+
+SELECT relname, relreplident FROM show_chunks('replid') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
+
 -- Alter replica identity directly on a chunk is not supported
 SELECT ch AS chunk_name FROM show_chunks('replid') ch ORDER BY chunk_name LIMIT 1 \gset
 \set ON_ERROR_STOP 0

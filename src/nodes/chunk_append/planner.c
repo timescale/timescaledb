@@ -118,7 +118,9 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	 * foreign tables).
 	 */
 	if (root->parse->commandType != CMD_SELECT)
+	{
 		tlist = ts_replace_rowid_vars(root, tlist, rel->relid);
+	}
 
 	cscan->scan.plan.targetlist = tlist;
 
@@ -225,7 +227,9 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 			 */
 			if (IsA(lfirst(lc_plan), Result) &&
 				castNode(Result, lfirst(lc_plan))->resconstantqual == NULL)
+			{
 				lfirst(lc_plan) = ((Plan *) lfirst(lc_plan))->lefttree;
+			}
 
 			/*
 			 * This could be a MergeAppend due to space partitioning, or
@@ -301,7 +305,9 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	}
 
 	if (capath->pushdown_limit && capath->limit_tuples > 0)
+	{
 		limit = capath->limit_tuples;
+	}
 
 	custom_private = list_make1(list_make5_int(capath->startup_exclusion,
 											   capath->runtime_exclusion_parent,
@@ -348,7 +354,9 @@ Scan *
 ts_chunk_append_get_scan_plan(Plan *plan)
 {
 	if (plan == NULL)
+	{
 		return NULL;
+	}
 
 	switch (nodeTag(plan))
 	{

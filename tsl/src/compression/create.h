@@ -18,11 +18,14 @@
 
 #define COMPRESSION_COLUMN_METADATA_PATTERN_V1 "_ts_meta_%s_%d"
 
+typedef struct CompressionSettings CompressionSettings;
+
 bool tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options);
 void tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def);
 void tsl_process_compress_table_drop_column(Hypertable *ht, char *name);
 void tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt);
-Chunk *create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id);
+Chunk *create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
+							 bool skip_segmentby_default, CompressionSettings *settings);
 
 char *column_segment_min_name(int16 column_index);
 char *column_segment_max_name(int16 column_index);
@@ -30,7 +33,6 @@ char *compressed_column_metadata_name_v2(const char *metadata_type, const char *
 										 int num_columns);
 char *compressed_column_metadata_name_list_v2(const char *metadata_type, List *column_names_list);
 
-typedef struct CompressionSettings CompressionSettings;
 int compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_reloid,
 									 AttrNumber chunk_attno, Oid compressed_reloid,
 									 char const *metadata_type);
@@ -38,4 +40,6 @@ int compressed_column_metadata_attno(const CompressionSettings *settings, Oid ch
 void tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options);
 
 void compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
-									   WithClauseResult *with_clause_options);
+									   WithClauseResult *with_clause_options,
+									   bool skip_segmentby_default);
+ArrayType *tsl_compression_setting_segmentby_get_default(const Hypertable *ht);

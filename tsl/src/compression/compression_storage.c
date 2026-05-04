@@ -42,7 +42,7 @@
 	do                                                                                             \
 	{                                                                                              \
 		int ret = snprintf(buf, NAMEDATALEN, prefix, hypertable_id);                               \
-		if (ret < 0 || ret > NAMEDATALEN)                                                          \
+		if (ret < 0 || ret >= NAMEDATALEN)                                                         \
 		{                                                                                          \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INTERNAL_ERROR),                                              \
@@ -195,16 +195,20 @@ set_statistics_on_compressed_chunk(Oid compressed_table_id)
 
 		/* skip system columns */
 		if (col_attr->attnum <= 0)
+		{
 			continue;
+		}
 
 		tuple = SearchSysCacheCopyAttName(RelationGetRelid(table_rel), NameStr(col_attr->attname));
 
 		if (!HeapTupleIsValid(tuple))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
 					 errmsg("column \"%s\" of compressed table \"%s\" does not exist",
 							NameStr(col_attr->attname),
 							RelationGetRelationName(table_rel))));
+		}
 
 		attrtuple = (Form_pg_attribute) GETSTRUCT(tuple);
 
@@ -214,10 +218,14 @@ set_statistics_on_compressed_chunk(Oid compressed_table_id)
 		 * target.
 		 */
 		if (col_attr->atttypid == compressed_data_type)
+		{
 			repl_val[AttrNumberGetAttrOffset(Anum_pg_attribute_attstattarget)] = Int16GetDatum(0);
+		}
 		else
+		{
 			repl_val[AttrNumberGetAttrOffset(Anum_pg_attribute_attstattarget)] =
 				Int16GetDatum(1000);
+		}
 		repl_repl[AttrNumberGetAttrOffset(Anum_pg_attribute_attstattarget)] = true;
 
 		tuple =
@@ -395,7 +403,9 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 	index_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(index_addr.objectId));
 
 	if (!HeapTupleIsValid(index_tuple))
+	{
 		elog(ERROR, "cache lookup failed for index relid %u", index_addr.objectId);
+	}
 	index_name = ((Form_pg_class) GETSTRUCT(index_tuple))->relname;
 
 	elog(DEBUG1,

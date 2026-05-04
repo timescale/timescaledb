@@ -25,7 +25,7 @@ jobs:
 
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -45,10 +45,10 @@ jobs:
         ${{ github.event_name == 'push'
           || (steps.filter.outputs.src == 'true' && !contains(github.event.pull_request.labels.*.name, 'skip-ci'))
          }}
-      run_installcheck: ${{ github.event_name == 'push' || steps.filters.outputs.windows-workflow == 'true' }}
+      run_installcheck: ${{ github.event_name == 'push' || steps.filter.outputs.windows-workflow == 'true' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
           filters: .github/filters.yaml
@@ -68,7 +68,7 @@ jobs:
           - { pg: 17, pg_version: "${{ needs.config.outputs.pg17_latest }}" }
           - { pg: 18, pg_version: "${{ needs.config.outputs.pg18_latest }}" }
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
-        pg_config: ["-cfsync=off -cstatement_timeout=60s"]
+        pg_config: ["-cfsync=off -cstatement_timeout=60s -clisten_addresses=0.0.0.0"]
         event_name: ["${{ github.event_name }}"]
         exclude:
           - versions: { pg: 15, pg_version: "${{ needs.config.outputs.pg15_latest }}" }
@@ -86,6 +86,7 @@ jobs:
         chunk_adaptive
         compress_bloom_sparse_compat
         compress_bloom_sparse_debug
+        compress_compbloom_hash_pushdown
         compress_composite_bloom_debug
         compress_qualpushdown_saop
         compress_sort_transform
@@ -130,11 +131,13 @@ jobs:
         }
 
     - name: Setup WSL
-      uses: Vampire/setup-wsl@v3.1.4
+      if: needs.check_paths.outputs.run_installcheck == 'true'
+      uses: Vampire/setup-wsl@d1da7f2c0322a5ee4f24975344f67fc0f5baf364 # v7.0.0
       with:
-        distribution: Debian
+        distribution: Debian-13
 
     - name: Configure apt retries and timeout in WSL
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       run: |
         echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
@@ -142,12 +145,11 @@ jobs:
         echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
 
     - name: Install additional packages in WSL
+      if: needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       run: |
-        # Workaround for https://github.com/Vampire/setup-wsl/issues/76
-        sed -i 's#ftp.debian.org/debian bullseye-backports#archive.debian.org/debian bullseye-backports#' /etc/apt/sources.list
         apt-get update
-        apt-get install --yes --no-install-recommends cmake gawk gcc git gnupg jq make postgresql-client postgresql-common tree
+        apt-get install --yes --no-install-recommends ca-certificates cmake gawk gcc git gnupg jq make postgresql-client postgresql-common tree
 
     - name: Configure git
       # Since we want to reuse the checkout in the WSL environment
@@ -158,17 +160,15 @@ jobs:
         git config --global core.eol lf
 
     - name: Checkout TimescaleDB source
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
     - name: Get date for build caching
       id: get-date
-      env:
-        WSLENV: GITHUB_OUTPUT/p
-      shell: wsl-bash {0}
+      shell: powershell
       run: |
-        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+        echo "date=$(Get-Date -Format 'dd')" >> $env:GITHUB_OUTPUT
 
       # Use a cache for the PostgreSQL installation to speed things up
       # and avoid unnecessary package downloads. Since we only save
@@ -178,7 +178,7 @@ jobs:
       # --extract-only and launch our own test instance, which is
       # probably better anyway since it gives us more control.
     - name: Cache PostgreSQL installation
-      uses: actions/cache@v4
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       id: cache-postgresql
       with:
         path: C:\Progra~1\PostgreSQL\${{ matrix.versions.pg }}
@@ -235,6 +235,7 @@ jobs:
         icacls ${{ env.TABLESPACE2 }} /grant runneradmin:F /T
         copy build_win/test/postgresql.conf ${{ env.PGDATA }}
         icacls . /grant runneradmin:F /T
+        Add-Content ${{ env.PGDATA }}\pg_hba.conf "host all all 0.0.0.0/0 trust"
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postmaster.log
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_isready -U postgres -d postgres --timeout=60
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
@@ -247,6 +248,8 @@ jobs:
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'SELECT pg_current_logfile();'
         echo "Data directory:"
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'SHOW data_directory;'
+
+        New-NetFirewallRule -DisplayName "Allow PG from WSL" -Direction Inbound -LocalPort 55432 -Protocol TCP -Action Allow
 
     - name: Install postgres for test runner
       if: needs.check_paths.outputs.run_installcheck == 'true'
@@ -266,7 +269,8 @@ jobs:
       run: |
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
-        cmake -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }}
+        WIN_HOST=$(ip route show default | awk '{print $3}')
+        cmake -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }} -DTEST_PGHOST=$WIN_HOST
 
         make -C build_wsl isolationchecklocal | tee -a installcheck.log
         make -C build_wsl regresschecklocal IGNORES="${IGNORES}" SKIPS="${SKIPS}" | tee -a installcheck.log
@@ -279,6 +283,7 @@ jobs:
         Remove-Item -Recurse ${{ env.PGDATA }}
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         copy build_win/tsl/test/postgresql.conf ${{ env.PGDATA }}
+        Add-Content ${{ env.PGDATA }}\pg_hba.conf "host all all 0.0.0.0/0 trust"
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log="postmaster.log"
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
         C:\Progra~1/PostgreSQL/${{ matrix.versions.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
@@ -297,7 +302,7 @@ jobs:
 
     - name: Show regression diffs
       id: collectlogs
-      if: always()
+      if: always() && needs.check_paths.outputs.run_installcheck == 'true'
       env:
         WSLENV: GITHUB_OUTPUT/p
       shell: wsl-bash {0}
@@ -328,7 +333,7 @@ jobs:
 
     - name: Upload crash dumps and stack traces
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: Crash dumps PG${{ matrix.versions.pg }} ${{ matrix.build_type }} windows
         path: |
@@ -337,7 +342,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: Regression ${{ matrix.versions.pg }} diff ${{ matrix.os }} ${{ matrix.build_type }} Build
         path: |
@@ -346,14 +351,14 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: PostgreSQL ${{ matrix.versions.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
         path: ${{ env.PGDATA }}\log\postmaster.log
 
     - name: Upload CMake Logs
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: CMake Logs ${{ matrix.versions.pg }} ${{ matrix.os }} ${{ matrix.build_type }}
         path: |
@@ -369,7 +374,7 @@ jobs:
             build_wsl/compile_commands.json
 
     - name: Upload test results to the database
-      if: always()
+      if: always() && needs.check_paths.outputs.run_installcheck == 'true'
       shell: wsl-bash {0}
       env:
         # Update when adding new variables.

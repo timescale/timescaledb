@@ -23,9 +23,7 @@
 #include "ts_catalog/catalog.h"
 #include "version.h"
 
-#ifdef PG_MODULE_MAGIC
-PG_MODULE_MAGIC;
-#endif
+TS_MODULE_MAGIC("timescaledb");
 
 extern void _hypertable_cache_init(void);
 extern void _hypertable_cache_fini(void);
@@ -107,7 +105,9 @@ _PG_init(void)
 	 * init if we do. */
 
 	if (init_done)
+	{
 		return;
+	}
 
 	_cache_init();
 	_hypertable_cache_init();

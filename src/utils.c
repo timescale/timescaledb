@@ -23,6 +23,7 @@
 #include <fmgr.h>
 #include <funcapi.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_func.h>
 #include <parser/scansup.h>
@@ -58,7 +59,6 @@ typedef struct
 } priv_map;
 
 TS_FUNCTION_INFO_V1(ts_pg_timestamp_to_unix_microseconds);
-TS_FUNCTION_INFO_V1(ts_makeaclitem);
 
 /*
  * Convert a Postgres TIMESTAMP to BIGINT microseconds relative the UNIX epoch.
@@ -69,18 +69,26 @@ ts_pg_timestamp_to_unix_microseconds(PG_FUNCTION_ARGS)
 	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
 
 	if (TIMESTAMP_IS_NOBEGIN(timestamp))
+	{
 		PG_RETURN_INT64(TS_TIME_NOBEGIN);
+	}
 
 	if (TIMESTAMP_IS_NOEND(timestamp))
+	{
 		PG_RETURN_INT64(TS_TIME_NOEND);
+	}
 
 	if (timestamp < TS_TIMESTAMP_MIN)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
+	}
 
 	if (timestamp >= TS_TIMESTAMP_END)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
+	}
 
 	PG_RETURN_INT64(timestamp + TS_EPOCH_DIFF_MICROSECONDS);
 }
@@ -98,10 +106,14 @@ ts_pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS)
 	int64 microseconds = PG_GETARG_INT64(0);
 
 	if (TS_TIME_IS_NOBEGIN(microseconds, TIMESTAMPTZOID))
+	{
 		PG_RETURN_DATUM(ts_time_datum_get_nobegin(TIMESTAMPTZOID));
+	}
 
 	if (TS_TIME_IS_NOEND(microseconds, TIMESTAMPTZOID))
+	{
 		PG_RETURN_DATUM(ts_time_datum_get_noend(TIMESTAMPTZOID));
+	}
 
 	/*
 	 * Test that the UNIX us timestamp is within bounds. Note that an int64 at
@@ -110,8 +122,10 @@ ts_pg_unix_microseconds_to_timestamp(PG_FUNCTION_ARGS)
 	 * natural upper bound for this function.
 	 */
 	if (microseconds < TS_TIMESTAMP_INTERNAL_MIN)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE), errmsg("timestamp out of range")));
+	}
 
 	PG_RETURN_TIMESTAMPTZ(microseconds - TS_EPOCH_DIFF_MICROSECONDS);
 }
@@ -123,10 +137,14 @@ ts_pg_unix_microseconds_to_date(PG_FUNCTION_ARGS)
 	Datum res;
 
 	if (TS_TIME_IS_NOBEGIN(microseconds, DATEOID))
+	{
 		PG_RETURN_DATUM(ts_time_datum_get_nobegin(DATEOID));
+	}
 
 	if (TS_TIME_IS_NOEND(microseconds, DATEOID))
+	{
 		PG_RETURN_DATUM(ts_time_datum_get_noend(DATEOID));
+	}
 
 	res = DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(microseconds));
 	res = DirectFunctionCall1(timestamp_date, res);
@@ -146,7 +164,9 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 	if (!IS_VALID_TIME_TYPE(type_oid))
 	{
 		if (ts_type_is_int8_binary_compatible(type_oid))
+		{
 			return DatumGetInt64(time_val);
+		}
 
 		elog(ERROR, "unknown time type \"%s\"", format_type_be(type_oid));
 	}
@@ -157,17 +177,25 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 		 * infinity. We don't want min and max to be turned into infinity for
 		 * these types so check for those values first. */
 		if (TS_TIME_DATUM_IS_MIN(time_val, type_oid))
+		{
 			return ts_time_get_min(type_oid);
+		}
 
 		if (TS_TIME_DATUM_IS_MAX(time_val, type_oid))
+		{
 			return ts_time_get_max(type_oid);
+		}
 	}
 
 	if (TS_TIME_DATUM_IS_NOBEGIN(time_val, type_oid))
+	{
 		return ts_time_get_nobegin(type_oid);
+	}
 
 	if (TS_TIME_DATUM_IS_NOEND(time_val, type_oid))
+	{
 		return ts_time_get_noend(type_oid);
+	}
 
 	switch (type_oid)
 	{
@@ -235,11 +263,13 @@ ts_interval_value_to_internal(Datum time_val, Oid type_oid)
 		{
 			Interval *interval = DatumGetIntervalP(time_val);
 			if (interval->month != 0)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("months and years not supported"),
 						 errdetail("An interval must be defined as a fixed duration (such as "
 								   "weeks, days, hours, minutes, seconds, etc.).")));
+			}
 			return interval->time + (interval->day * USECS_PER_DAY);
 		}
 		default:
@@ -293,7 +323,9 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 			 * bound since TS_TIMESTAMP_MIN == MIN_TIMESTAMP.
 			 */
 			if (ts >= TS_TIMESTAMP_END)
+			{
 				return PG_INT64_MAX;
+			}
 
 			return ts_time_value_to_internal(time_val, type_oid);
 		}
@@ -314,7 +346,9 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 
 			/* See comment in TIMESTAMPOID case above. */
 			if (ts >= TS_TIMESTAMP_END)
+			{
 				return PG_INT64_MAX;
+			}
 
 			return ts_time_value_to_internal(time_val, type_oid);
 		}
@@ -335,7 +369,9 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 
 			/* See comment in TIMESTAMPOID case above. */
 			if (d >= TS_DATE_END)
+			{
 				return PG_INT64_MAX;
+			}
 
 			return ts_time_value_to_internal(time_val, type_oid);
 		}
@@ -365,10 +401,14 @@ TSDLLEXPORT Datum
 ts_internal_to_time_value(int64 value, Oid type)
 {
 	if (TS_TIME_IS_NOBEGIN(value, type))
+	{
 		return ts_time_datum_get_nobegin(type);
+	}
 
 	if (TS_TIME_IS_NOEND(value, type))
+	{
 		return ts_time_datum_get_noend(type);
+	}
 
 	switch (type)
 	{
@@ -396,7 +436,9 @@ ts_internal_to_time_value(int64 value, Oid type)
 		}
 		default:
 			if (ts_type_is_int8_binary_compatible(type))
+			{
 				return Int64GetDatum(value);
+			}
 			elog(ERROR,
 				 "unknown time type \"%s\" in ts_internal_to_time_value",
 				 format_type_be(type));
@@ -408,10 +450,14 @@ TSDLLEXPORT int64
 ts_internal_to_time_int64(int64 value, Oid type)
 {
 	if (TS_TIME_IS_NOBEGIN(value, type))
+	{
 		return ts_time_datum_get_nobegin(type);
+	}
 
 	if (TS_TIME_IS_NOEND(value, type))
+	{
 		return ts_time_datum_get_noend(type);
+	}
 
 	switch (type)
 	{
@@ -532,7 +578,9 @@ ts_date_trunc_interval_period_approx(text *units)
 	decode_type = DecodeUnits(0, lowunits, &val);
 
 	if (decode_type != UNITS)
+	{
 		return -1;
+	}
 
 	switch (val)
 	{
@@ -589,7 +637,9 @@ ts_inheritance_parent_relid(Oid relid)
 	tuple = systable_getnext(scan);
 
 	if (HeapTupleIsValid(tuple))
+	{
 		parent = ((Form_pg_inherits) GETSTRUCT(tuple))->inhparent;
+	}
 
 	systable_endscan(scan);
 	table_close(catalog, AccessShareLock);
@@ -607,7 +657,9 @@ ts_type_is_int8_binary_compatible(Oid sourcetype)
 	tuple =
 		SearchSysCache2(CASTSOURCETARGET, ObjectIdGetDatum(sourcetype), ObjectIdGetDatum(INT8OID));
 	if (!HeapTupleIsValid(tuple))
+	{
 		return false; /* no cast */
+	}
 	castForm = (Form_pg_cast) GETSTRUCT(tuple);
 	result = castForm->castmethod == COERCION_METHOD_BINARY;
 	ReleaseSysCache(tuple);
@@ -645,7 +697,9 @@ ts_create_struct_from_slot(TupleTableSlot *slot, MemoryContext mctx, size_t allo
 	void *result = ts_create_struct_from_tuple(tuple, mctx, alloc_size, copy_size);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	return result;
 }
@@ -658,7 +712,9 @@ ts_function_types_equal(Oid left[], Oid right[], int nargs)
 	for (arg_index = 0; arg_index < nargs; arg_index++)
 	{
 		if (left[arg_index] != right[arg_index])
+		{
 			return false;
+		}
 	}
 	return true;
 }
@@ -681,7 +737,9 @@ ts_get_function_oid(const char *funcname, const char *schema_name, int nargs, Oi
 	{
 		if (func_candidates->nargs == nargs &&
 			ts_function_types_equal(func_candidates->args, arg_types, nargs))
+		{
 			return func_candidates->oid;
+		}
 		func_candidates = func_candidates->next;
 	}
 
@@ -725,7 +783,9 @@ ts_lookup_proc_filtered(const char *schema, const char *funcname, Oid *rettype, 
 			(filter == NULL || filter(procform, filter_arg)))
 		{
 			if (rettype)
+			{
 				*rettype = procform->prorettype;
+			}
 
 			func = procform->oid;
 			break;
@@ -795,11 +855,15 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 	if (root->append_rel_array)
 	{
 		if (root->append_rel_array[rti])
+		{
 			return root->append_rel_array[rti];
+		}
 		if (!missing_ok)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("no appendrelinfo found for index %d", rti)));
+		}
 		return NULL;
 	}
 
@@ -807,12 +871,16 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 	{
 		AppendRelInfo *appinfo = lfirst(lc);
 		if (appinfo->child_relid == rti)
+		{
 			return appinfo;
+		}
 	}
 	if (!missing_ok)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("no appendrelinfo found for index %d", rti)));
+	}
 	return NULL;
 }
 
@@ -880,7 +948,9 @@ ts_has_row_security(Oid relid)
 	/* Fetch relation's relrowsecurity and relforcerowsecurity flags */
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
 	if (!HeapTupleIsValid(tuple))
+	{
 		elog(ERROR, "cache lookup failed for relid %u", relid);
+	}
 	classform = (Form_pg_class) GETSTRUCT(tuple);
 	relrowsecurity = classform->relrowsecurity;
 	relforcerowsecurity = classform->relforcerowsecurity;
@@ -901,12 +971,16 @@ ts_get_reloptions(Oid relid)
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
 
 	if (!HeapTupleIsValid(tuple))
+	{
 		elog(ERROR, "cache lookup failed for relation %u", relid);
+	}
 
 	datum = SysCacheGetAttr(RELOID, tuple, Anum_pg_class_reloptions, &isnull);
 
 	if (!isnull && PointerIsValid(DatumGetPointer(datum)))
+	{
 		options = untransformRelOptions(datum);
+	}
 
 	ReleaseSysCache(tuple);
 
@@ -931,11 +1005,15 @@ ts_get_integer_now_func(const Dimension *open_dim, bool fail_if_not_found)
 		strlen(NameStr(open_dim->fd.integer_now_func_schema)) == 0)
 	{
 		if (fail_if_not_found)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_FUNCTION),
 					 (errmsg("integer_now function not set"))));
+		}
 		else
+		{
 			return now_func;
+		}
 	}
 
 	List *name = list_make2(makeString((char *) NameStr(open_dim->fd.integer_now_func_schema)),
@@ -943,10 +1021,12 @@ ts_get_integer_now_func(const Dimension *open_dim, bool fail_if_not_found)
 	now_func = LookupFuncName(name, 0, argtypes, false);
 
 	if (get_func_rettype(now_func) != rettype)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_FUNCTION),
 				 (errmsg("invalid integer_now function"),
 				  errhint("return type of function does not match dimension type"))));
+	}
 
 	return now_func;
 }
@@ -972,16 +1052,20 @@ ts_sub_integer_from_now(int64 interval, Oid time_dim_type, Oid now_func)
 		case INT2OID:
 			res = DatumGetInt16(now) - interval;
 			if (res < PG_INT16_MIN || res > PG_INT16_MAX)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW),
 						 errmsg("integer time overflow")));
+			}
 			return res;
 		case INT4OID:
 			res = DatumGetInt32(now) - interval;
 			if (res < PG_INT32_MIN || res > PG_INT32_MAX)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INTERVAL_FIELD_OVERFLOW),
 						 errmsg("integer time overflow")));
+			}
 			return res;
 		case INT8OID:
 		{
@@ -1051,13 +1135,17 @@ ts_relation_size(PG_FUNCTION_ARGS)
 
 	/* Build a tuple descriptor for our result type */
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
+	}
 
 	if (!OidIsValid(relid))
+	{
 		PG_RETURN_NULL();
+	}
 
 	relsize = ts_relation_size_impl(relid);
 
@@ -1085,7 +1173,9 @@ ts_relation_size_impl(Oid relid)
 	rel = try_relation_open(relid, AccessShareLock);
 
 	if (!rel)
+	{
 		return relsize;
+	}
 
 	/* Get to total relation size to be our calculation base */
 	relsize.total_size = DatumGetInt64(DirectFunctionCall1(pg_total_relation_size, reloid));
@@ -1095,11 +1185,15 @@ ts_relation_size_impl(Oid relid)
 
 	/* If exists an associated TOAST calculate the total size (including indexes) */
 	if (OidIsValid(rel->rd_rel->reltoastrelid))
+	{
 		relsize.toast_size =
 			DatumGetInt64(DirectFunctionCall1(pg_total_relation_size,
 											  ObjectIdGetDatum(rel->rd_rel->reltoastrelid)));
+	}
 	else
+	{
 		relsize.toast_size = 0;
+	}
 
 	relation_close(rel, AccessShareLock);
 
@@ -1126,7 +1220,9 @@ ts_try_relation_cached_size(Relation rel, bool verbose)
 	bool cached = true;
 
 	if (!RELKIND_HAS_STORAGE(rel->rd_rel->relkind))
+	{
 		return (int64) nblocks;
+	}
 
 	/* Get heap size, including FSM and VM */
 	for (forkNum = 0; forkNum <= MAX_FORKNUM; forkNum++)
@@ -1148,10 +1244,12 @@ ts_try_relation_cached_size(Relation rel, bool verbose)
 	}
 
 	if (verbose)
+	{
 		ereport(DEBUG2,
 				(errmsg("%s for %s",
 						cached ? "Cached size used" : "Fetching actual size",
 						RelationGetRelationName(rel))));
+	}
 
 	/* convert the size into bytes and return */
 	return (int64) nblocks * BLCKSZ;
@@ -1168,7 +1266,9 @@ ts_relation_approximate_size_impl(Oid relid)
 	rel = try_relation_open(relid, AccessShareLock);
 
 	if (!rel)
+	{
 		return relsize;
+	}
 
 	/* Get the main heap size */
 	relsize.heap_size = ts_try_relation_cached_size(rel, false);
@@ -1236,14 +1336,18 @@ ts_relation_approximate_size(PG_FUNCTION_ARGS)
 
 	/* Build a tuple descriptor for our result type */
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
+	}
 
 	/* check if object exists, return NULL otherwise */
 	if (get_rel_name(relid) == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 
 	relsize = ts_relation_approximate_size_impl(relid);
 
@@ -1295,13 +1399,17 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 
 	/* Build a tuple descriptor for our result type */
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
+	}
 
 	if (!OidIsValid(relid))
+	{
 		PG_RETURN_NULL();
+	}
 
 	/* go ahead only if this is a hypertable or a CAgg */
 	hcache = ts_hypertable_cache_pin();
@@ -1328,7 +1436,9 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 		RelationSize chunk_relsize, compressed_chunk_relsize;
 
 		if (isnull)
+		{
 			continue;
+		}
 
 		chunk_id = DatumGetInt32(id);
 
@@ -1336,7 +1446,9 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 		is_osm_chunk = slot_getattr(ti->slot, Anum_chunk_osm_chunk, &isnull);
 		Assert(!isnull);
 		if (is_osm_chunk)
+		{
 			continue;
+		}
 
 		chunk_relid = ts_chunk_get_relid(chunk_id, false);
 		chunk_relsize = ts_relation_approximate_size_impl(chunk_relid);
@@ -1346,7 +1458,9 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 		/* check if the chunk has a compressed counterpart and add if yes */
 		comp_id = slot_getattr(ti->slot, Anum_chunk_compressed_chunk_id, &isnull);
 		if (isnull)
+		{
 			continue;
+		}
 
 		compressed_chunk_id = DatumGetInt32(comp_id);
 		compressed_chunk_relid = ts_chunk_get_relid(compressed_chunk_id, false);
@@ -1557,7 +1671,9 @@ ts_get_relnatts(Oid relid)
 
 	tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
 	if (!HeapTupleIsValid(tp))
+	{
 		return InvalidAttrNumber;
+	}
 
 	reltup = (Form_pg_class) GETSTRUCT(tp);
 	result = reltup->relnatts;
@@ -1583,7 +1699,9 @@ void
 ts_alter_table_with_event_trigger(Oid relid, Node *cmd, List *cmds, bool recurse)
 {
 	if (cmd == NULL)
+	{
 		cmd = (Node *) cmds;
+	}
 
 	EventTriggerAlterTableStart(cmd);
 	AlterTableInternal(relid, cmds, recurse);
@@ -1680,11 +1798,13 @@ ts_map_attno(Oid src_rel, Oid dst_rel, AttrNumber attno)
 	 * For any chunk mappings we do this should never happen.
 	 */
 	if (dst_attno == InvalidAttrNumber)
+	{
 		elog(ERROR,
 			 "could not map attribute number from relation \"%s\" to \"%s\" for column \"%s\"",
 			 get_rel_name(src_rel),
 			 get_rel_name(dst_rel),
 			 attname);
+	}
 
 	pfree(attname);
 	return dst_attno;
@@ -1711,106 +1831,6 @@ ts_table_has_tuples(Oid table_relid, LOCKMODE lockmode)
 
 	table_close(rel, lockmode);
 	return hastuples;
-}
-
-/*
- * This is copied from PostgreSQL 16.0 since versions before 16.0 does not
- * support lists for privileges.
- */
-static AclMode
-ts_convert_any_priv_string(text *priv_type_text, const priv_map *privileges)
-{
-	AclMode result = 0;
-	char *priv_type = text_to_cstring(priv_type_text);
-	char *chunk;
-	char *next_chunk;
-
-	/* We rely on priv_type being a private, modifiable string */
-	for (chunk = priv_type; chunk; chunk = next_chunk)
-	{
-		int chunk_len;
-		const priv_map *this_priv;
-
-		/* Split string at commas */
-		next_chunk = strchr(chunk, ',');
-		if (next_chunk)
-			*next_chunk++ = '\0';
-
-		/* Drop leading/trailing whitespace in this chunk */
-		while (*chunk && isspace((unsigned char) *chunk))
-			chunk++;
-		chunk_len = strlen(chunk);
-		while (chunk_len > 0 && isspace((unsigned char) chunk[chunk_len - 1]))
-			chunk_len--;
-		chunk[chunk_len] = '\0';
-
-		/* Match to the privileges list */
-		for (this_priv = privileges; this_priv->name; this_priv++)
-		{
-			if (pg_strcasecmp(this_priv->name, chunk) == 0)
-			{
-				result |= this_priv->value;
-				break;
-			}
-		}
-		if (!this_priv->name)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("unrecognized privilege type: \"%s\"", chunk)));
-	}
-
-	pfree(priv_type);
-	return result;
-}
-
-/*
- * This is copied from PostgreSQL 16.0 since versions before 16.0 does not
- * support lists for privileges but we need that.
- */
-Datum
-ts_makeaclitem(PG_FUNCTION_ARGS)
-{
-	Oid grantee = PG_GETARG_OID(0);
-	Oid grantor = PG_GETARG_OID(1);
-	text *privtext = PG_GETARG_TEXT_PP(2);
-	bool goption = PG_GETARG_BOOL(3);
-	AclItem *result;
-	AclMode priv;
-	static const priv_map any_priv_map[] = {
-		{ "SELECT", ACL_SELECT },
-		{ "INSERT", ACL_INSERT },
-		{ "UPDATE", ACL_UPDATE },
-		{ "DELETE", ACL_DELETE },
-		{ "TRUNCATE", ACL_TRUNCATE },
-		{ "REFERENCES", ACL_REFERENCES },
-		{ "TRIGGER", ACL_TRIGGER },
-		{ "EXECUTE", ACL_EXECUTE },
-		{ "USAGE", ACL_USAGE },
-		{ "CREATE", ACL_CREATE },
-		{ "TEMP", ACL_CREATE_TEMP },
-		{ "TEMPORARY", ACL_CREATE_TEMP },
-		{ "CONNECT", ACL_CONNECT },
-#if PG16_GE
-		{ "SET", ACL_SET },
-		{ "ALTER SYSTEM", ACL_ALTER_SYSTEM },
-#endif
-#if PG17_GE
-		{ "MAINTAIN", ACL_MAINTAIN },
-#endif
-		{ "RULE", 0 }, /* ignore old RULE privileges */
-		{ NULL, 0 }
-	};
-
-	priv = ts_convert_any_priv_string(privtext, any_priv_map);
-
-	result = (AclItem *) palloc(sizeof(AclItem));
-
-	result->ai_grantee = grantee;
-	result->ai_grantor = grantor;
-
-	ACLITEM_SET_PRIVS_GOPTIONS(*result, priv, (goption ? priv : ACL_NO_RIGHTS));
-
-	PG_RETURN_ACLITEM_P(result);
 }
 
 /*
@@ -1861,7 +1881,9 @@ ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *reli
 	tuple = SearchSysCache2(RELNAMENSP, PointerGetDatum(relname), ObjectIdGetDatum(namespaceoid));
 
 	if (!HeapTupleIsValid(tuple))
+	{
 		elog(ERROR, "cache lookup failed for relation %s.%s", relnamespace, relname);
+	}
 
 	cform = (Form_pg_class) GETSTRUCT(tuple);
 	*relid = cform->oid;
@@ -1879,7 +1901,9 @@ ts_get_rel_am(Oid relid)
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
 
 	if (!HeapTupleIsValid(tuple))
+	{
 		elog(ERROR, "cache lookup failed for relation %u", relid);
+	}
 
 	cform = (Form_pg_class) GETSTRUCT(tuple);
 	amoid = cform->relam;
@@ -1905,7 +1929,9 @@ relation_set_reloption_impl(Relation rel, List *options, LOCKMODE lockmode)
 	Assert(rel->rd_rel->relkind == RELKIND_RELATION || rel->rd_rel->relkind == RELKIND_TOASTVALUE);
 
 	if (options == NIL)
+	{
 		return; /* nothing to do */
+	}
 
 	TS_DEBUG_LOG("setting reloptions for %s", RelationGetRelationName(rel));
 
@@ -1913,7 +1939,9 @@ relation_set_reloption_impl(Relation rel, List *options, LOCKMODE lockmode)
 	Oid relid = RelationGetRelid(rel);
 	HeapTuple tuple = SearchSysCacheLockedCopy1(RELOID, ObjectIdGetDatum(relid));
 	if (!HeapTupleIsValid(tuple))
+	{
 		elog(ERROR, "cache lookup failed for relation %u", relid);
+	}
 #ifdef SYSCACHE_TUPLE_LOCK_NEEDED
 	ItemPointerData otid = tuple->t_self;
 #endif
@@ -1927,9 +1955,13 @@ relation_set_reloption_impl(Relation rel, List *options, LOCKMODE lockmode)
 	(void) heap_reloptions(rel->rd_rel->relkind, newOptions, true);
 
 	if (newOptions)
+	{
 		repl_val[AttrNumberGetAttrOffset(Anum_pg_class_reloptions)] = newOptions;
+	}
 	else
+	{
 		repl_null[AttrNumberGetAttrOffset(Anum_pg_class_reloptions)] = true;
+	}
 
 	repl_repl[AttrNumberGetAttrOffset(Anum_pg_class_reloptions)] = true;
 
@@ -1983,43 +2015,81 @@ ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name)
 	JsonbParseState *parse_state = NULL;
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	if (edata->sqlerrcode)
+	{
 		ts_jsonb_add_str(parse_state, "sqlerrcode", unpack_sql_state(edata->sqlerrcode));
+	}
 	if (edata->message)
+	{
 		ts_jsonb_add_str(parse_state, "message", edata->message);
+	}
 	if (edata->detail)
+	{
 		ts_jsonb_add_str(parse_state, "detail", edata->detail);
+	}
 	if (edata->hint)
+	{
 		ts_jsonb_add_str(parse_state, "hint", edata->hint);
+	}
 	if (edata->filename)
+	{
 		ts_jsonb_add_str(parse_state, "filename", edata->filename);
+	}
 	if (edata->lineno)
+	{
 		ts_jsonb_add_int32(parse_state, "lineno", edata->lineno);
+	}
 	if (edata->funcname)
+	{
 		ts_jsonb_add_str(parse_state, "funcname", edata->funcname);
+	}
 	if (edata->domain)
+	{
 		ts_jsonb_add_str(parse_state, "domain", edata->domain);
+	}
 	if (edata->context_domain)
+	{
 		ts_jsonb_add_str(parse_state, "context_domain", edata->context_domain);
+	}
 	if (edata->context)
+	{
 		ts_jsonb_add_str(parse_state, "context", edata->context);
+	}
 	if (edata->schema_name)
+	{
 		ts_jsonb_add_str(parse_state, "schema_name", edata->schema_name);
+	}
 	if (edata->table_name)
+	{
 		ts_jsonb_add_str(parse_state, "table_name", edata->table_name);
+	}
 	if (edata->column_name)
+	{
 		ts_jsonb_add_str(parse_state, "column_name", edata->column_name);
+	}
 	if (edata->datatype_name)
+	{
 		ts_jsonb_add_str(parse_state, "datatype_name", edata->datatype_name);
+	}
 	if (edata->constraint_name)
+	{
 		ts_jsonb_add_str(parse_state, "constraint_name", edata->constraint_name);
+	}
 	if (edata->internalquery)
+	{
 		ts_jsonb_add_str(parse_state, "internalquery", edata->internalquery);
+	}
 	if (edata->detail_log)
+	{
 		ts_jsonb_add_str(parse_state, "detail_log", edata->detail_log);
+	}
 	if (strlen(NameStr(*proc_schema)) > 0)
+	{
 		ts_jsonb_add_str(parse_state, "proc_schema", NameStr(*proc_schema));
+	}
 	if (strlen(NameStr(*proc_name)) > 0)
+	{
 		ts_jsonb_add_str(parse_state, "proc_name", NameStr(*proc_name));
+	}
 	/* we add the schema qualified name here as well*/
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	return JsonbValueToJsonb(result);
@@ -2057,14 +2127,74 @@ ts_list_to_string(List *list, append_cell_func append)
 	foreach (lc, list)
 	{
 		if (!lnext(list, lc))
+		{
 			appendStringInfoString(&info, "and ");
+		}
 		append(&info, lc);
 		if (lnext(list, lc))
 		{
 			if (list_length(list) > 2)
+			{
 				appendStringInfoChar(&info, ',');
+			}
 			appendStringInfoChar(&info, ' ');
 		}
 	}
 	return info.data;
+}
+
+typedef struct FindAggrefsContext
+{
+	List *aggrefs; /* all non-nested Aggrefs found in a node */
+} FindAggrefsContext;
+
+static bool
+find_aggrefs_walker(Node *node, FindAggrefsContext *context)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+	if (IsA(node, Aggref))
+	{
+		context->aggrefs = lappend(context->aggrefs, node);
+		/* don't recurse inside Aggrefs */
+		return false;
+	}
+
+	return expression_tree_walker(node, find_aggrefs_walker, context);
+}
+
+List *
+ts_find_aggrefs(Node *node)
+{
+	FindAggrefsContext agg_ctx = { .aggrefs = NULL };
+	find_aggrefs_walker(node, &agg_ctx);
+	return agg_ctx.aggrefs;
+}
+
+bool
+ts_is_time_bucket_function(Expr *node)
+{
+	if (IsA(node, FuncExpr) &&
+		strncmp(get_func_name(castNode(FuncExpr, node)->funcid), "time_bucket", NAMEDATALEN) == 0)
+	{
+		return true;
+	}
+
+	return false;
+}
+
+bool
+ts_get_attnotnull(Oid relid, AttrNumber attno)
+{
+	HeapTuple tp = SearchSysCache2(ATTNUM, ObjectIdGetDatum(relid), Int16GetDatum(attno));
+	if (!HeapTupleIsValid(tp))
+	{
+		return false;
+	}
+	Form_pg_attribute att_tup = (Form_pg_attribute) GETSTRUCT(tp);
+	bool result = att_tup->attnotnull;
+	ReleaseSysCache(tp);
+	return result;
 }

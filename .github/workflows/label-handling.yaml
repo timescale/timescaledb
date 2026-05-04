@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: "PR: upgrade-requires-restart"
         if: github.event.label.name == 'upgrade-requires-restart'
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             github.rest.issues.createComment({
@@ -53,7 +53,7 @@ jobs:
     steps:
       - name: Extract versions from issue body
         id: extract-versions
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issueBody = context.payload.issue.body || '';
@@ -117,7 +117,7 @@ jobs:
           
       - name: Create and add TimescaleDB version label
         if: fromJson(steps.extract-versions.outputs.result).timescaledb.found == true
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           RESULTS: ${{ steps.extract-versions.outputs.result }}
         with:
@@ -164,7 +164,7 @@ jobs:
             
       - name: Create and add PostgreSQL version label
         if: fromJson(steps.extract-versions.outputs.result).postgres.found == true
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           RESULTS: ${{ steps.extract-versions.outputs.result }}
         with:

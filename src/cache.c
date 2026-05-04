@@ -25,7 +25,9 @@ static void
 cache_reset_pinned_caches(void)
 {
 	if (NULL != pinned_caches_mctx)
+	{
 		MemoryContextDelete(pinned_caches_mctx);
+	}
 
 	pinned_caches_mctx =
 		AllocSetContextCreate(CacheMemoryContext, "Cache pins", ALLOCSET_DEFAULT_SIZES);
@@ -64,7 +66,9 @@ cache_destroy(Cache **cache_ptr)
 {
 	Cache *cache = *cache_ptr;
 	if (cache == NULL)
+	{
 		return;
+	}
 	if (cache->refcount > 0)
 	{
 		/* will be destroyed later */
@@ -72,11 +76,18 @@ cache_destroy(Cache **cache_ptr)
 	}
 
 	if (cache->pre_destroy_hook != NULL)
+	{
 		cache->pre_destroy_hook(cache);
+	}
 
-	hash_destroy(cache->htab);
-	MemoryContextDelete(cache->hctl.hcxt);
+	/*
+	 * Save the memory context and NULL out the external pointer before
+	 * deleting. Deleting the parent context recursively frees the hash
+	 * table's child context and all cache allocations.
+	 */
+	MemoryContext hcxt = cache->hctl.hcxt;
 	*cache_ptr = NULL;
+	MemoryContextDelete(hcxt);
 }
 
 void
@@ -84,7 +95,9 @@ ts_cache_invalidate(Cache **cache_ptr)
 {
 	Cache *cache = *cache_ptr;
 	if (cache == NULL)
+	{
 		return;
+	}
 	cache->refcount--;
 	cache_destroy(cache_ptr);
 }
@@ -108,7 +121,9 @@ ts_cache_pin(Cache *cache)
 	cp->cache = cache;
 	cp->subtxnid = GetCurrentSubTransactionId();
 	if (cache->handle_txn_callbacks)
+	{
 		pinned_caches = lappend(pinned_caches, cp);
+	}
 	MemoryContextSwitchTo(old);
 	cache->refcount++;
 	return cache;
@@ -176,14 +191,22 @@ ts_cache_fetch(Cache *cache, CacheQuery *query)
 	bool found;
 
 	if (cache->htab == NULL || cache->valid_result == NULL)
+	{
 		elog(ERROR, "cache \"%s\" is not initialized", cache->name);
+	}
 
 	if (query->flags & CACHE_FLAG_NOCREATE)
+	{
 		action = HASH_FIND;
+	}
 	else if (cache->create_entry == NULL)
+	{
 		elog(ERROR, "cache \"%s\" does not support creating new entries", cache->name);
+	}
 	else
+	{
 		action = HASH_ENTER;
+	}
 
 	query->result = hash_search(cache->htab, cache->get_key(query), action, &found);
 
@@ -192,7 +215,9 @@ ts_cache_fetch(Cache *cache, CacheQuery *query)
 		cache->stats.hits++;
 
 		if (cache->update_entry != NULL)
+		{
 			query->result = cache->update_entry(cache, query);
+		}
 	}
 	else
 	{
@@ -208,9 +233,13 @@ ts_cache_fetch(Cache *cache, CacheQuery *query)
 	if (!(query->flags & CACHE_FLAG_MISSING_OK) && !cache->valid_result(query->result))
 	{
 		if (cache->missing_error != NULL)
+		{
 			cache->missing_error(cache, query);
+		}
 		else
+		{
 			elog(ERROR, "failed to find entry in cache \"%s\"", cache->name);
+		}
 	}
 
 	return query->result;
@@ -318,7 +347,9 @@ cache_xact_end(XactEvent event, void *arg)
 				 * Assert is turned off. In that case, release.
 				 */
 				if (cp->cache->release_on_commit)
+				{
 					ts_cache_release(&cp->cache);
+				}
 			}
 
 			list_free(pinned_caches_copy);

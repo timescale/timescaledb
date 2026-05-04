@@ -1424,6 +1424,9 @@ ALTER TABLE gen_column SET (
 	timescaledb.compress_segmentby = '',
 	timescaledb.compress_orderby='"timestamp"'
 );
+NOTICE:  updated compression settings will only apply to future compressions
+DETAIL:  Existing compressed chunks will not be recompressed.
+HINT:  Use compress_chunk(chunk, recompress => true) to recompress.
 SELECT compress_chunk(show_chunks('gen_column'));
               compress_chunk              
 ------------------------------------------
@@ -1622,11 +1625,13 @@ SELECT * FROM i9314 ORDER BY time;
 SET timescaledb.enable_direct_compress_insert = true;
 -- Insert >= 10 rows to trigger direct compress path
 INSERT INTO i9314 SELECT '2024-02-01'::timestamptz + format('%s day',i)::interval, i + 10 FROM generate_series(1, 10) i;
+-- Should use BatchSortedMerge for unordered chunks with no segmentby and matching orderby
+SET timescaledb.debug_require_batch_sorted_merge = 'force';
 :PREFIX SELECT * FROM i9314 ORDER BY time;
 --- QUERY PLAN ---
- Sort
-   Sort Key: _hyper_50_103_chunk."time"
-   ->  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+ Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+   ->  Sort
+         Sort Key: compress_hyper_51_104_chunk._ts_meta_min_1
          ->  Seq Scan on compress_hyper_51_104_chunk
 
 SELECT * FROM i9314 ORDER BY time;
@@ -1647,6 +1652,7 @@ SELECT * FROM i9314 ORDER BY time;
  Sat Feb 10 00:00:00 2024 PST |    19 |      38
  Sun Feb 11 00:00:00 2024 PST |    20 |      40
 
+RESET timescaledb.debug_require_batch_sorted_merge;
 -- test copy
 COPY i9314 FROM STDIN DELIMITER ',' CSV;
 SELECT compress_chunk(show_chunks('i9314'));
@@ -1654,11 +1660,13 @@ SELECT compress_chunk(show_chunks('i9314'));
 -------------------------------------------
  _timescaledb_internal._hyper_50_103_chunk
 
+-- Should use BatchSortedMerge for unordered chunks with no segmentby and matching orderby
+SET timescaledb.debug_require_batch_sorted_merge = 'force';
 :PREFIX SELECT * FROM i9314 ORDER BY time;
 --- QUERY PLAN ---
- Sort
-   Sort Key: _hyper_50_103_chunk."time"
-   ->  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+ Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+   ->  Sort
+         Sort Key: compress_hyper_51_104_chunk._ts_meta_min_1
          ->  Seq Scan on compress_hyper_51_104_chunk
 
 SELECT * FROM i9314 ORDER BY time;
@@ -1684,19 +1692,22 @@ SELECT * FROM i9314 ORDER BY time;
  Sat Mar 16 00:00:00 2024 PDT |    23 |      46
  Sun Mar 17 00:00:00 2024 PDT |    24 |      48
 
+RESET timescaledb.debug_require_batch_sorted_merge;
 SET timescaledb.enable_direct_compress_copy = true;
 COPY i9314 FROM STDIN DELIMITER ',' CSV;
+-- Should use BatchSortedMerge for unordered chunks with no segmentby and matching orderby
+SET timescaledb.debug_require_batch_sorted_merge = 'force';
 :PREFIX SELECT * FROM i9314 ORDER BY time;
 --- QUERY PLAN ---
  Custom Scan (ChunkAppend) on i9314
    Order: i9314."time"
-   ->  Sort
-         Sort Key: _hyper_50_103_chunk."time"
-         ->  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_50_103_chunk
+         ->  Sort
+               Sort Key: compress_hyper_51_104_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_51_104_chunk
-   ->  Sort
-         Sort Key: _hyper_50_105_chunk."time"
-         ->  Custom Scan (ColumnarScan) on _hyper_50_105_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_50_105_chunk
+         ->  Sort
+               Sort Key: compress_hyper_51_106_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_51_106_chunk
 
 SELECT * FROM i9314 ORDER BY time;
@@ -1727,4 +1738,5 @@ SELECT * FROM i9314 ORDER BY time;
  Tue Apr 16 00:00:00 2024 PDT |    33 |      66
  Wed Apr 17 00:00:00 2024 PDT |    34 |      68
 
+RESET timescaledb.debug_require_batch_sorted_merge;
 RESET timescaledb.enable_direct_compress_insert;

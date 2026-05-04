@@ -62,6 +62,7 @@ select decompress_chunk(show_chunks('segind'));
 
 -- change compression settings to use segmentby column
 alter table segind set (timescaledb.compress, timescaledb.compress_segmentby='a', timescaledb.compress_orderby='time, b');
+NOTICE:  updated compression settings will only apply to future compressions
 -- compress chunk
 -- this should create an index using segmentby and orderby columns
 select compress_chunk(show_chunks('segind'));

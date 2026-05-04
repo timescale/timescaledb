@@ -60,9 +60,11 @@
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
 #include "import/planner.h"
+#include "import/ts_inherit.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner.h"
 #include "time_utils.h"
+#include "utils.h"
 #include "uuid.h"
 
 typedef struct CollectQualCtx
@@ -77,37 +79,6 @@ typedef struct CollectQualCtx
 
 static void propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx);
 
-static bool
-is_time_bucket_function(Expr *node)
-{
-	if (IsA(node, FuncExpr) &&
-		strncmp(get_func_name(castNode(FuncExpr, node)->funcid), "time_bucket", NAMEDATALEN) == 0)
-		return true;
-
-	return false;
-}
-
-static void
-ts_add_append_rel_infos(PlannerInfo *root, List *appinfos)
-{
-	ListCell *lc;
-
-	root->append_rel_list = list_concat(root->append_rel_list, appinfos);
-
-	/* root->append_rel_array is required to be able to hold all the
-	 * additional entries by previous call to expand_planner_arrays */
-	Assert(root->append_rel_array);
-
-	foreach (lc, appinfos)
-	{
-		AppendRelInfo *appinfo = lfirst_node(AppendRelInfo, lc);
-		int child_relid = appinfo->child_relid;
-		Assert(child_relid < root->simple_rel_array_size);
-
-		root->append_rel_array[child_relid] = appinfo;
-	}
-}
-
 /*
  * Pre-check to determine if an expression is eligible for constification.
  * A more thorough check is in constify_timestamptz_op_interval.
@@ -119,13 +90,17 @@ is_timestamptz_op_interval(Expr *expr)
 	Const *c1, *c2;
 
 	if (!IsA(expr, OpExpr))
+	{
 		return false;
+	}
 
 	op = castNode(OpExpr, expr);
 
 	if (op->opresulttype != TIMESTAMPTZOID || op->args->length != 2 ||
 		!IsA(linitial(op->args), Const) || !IsA(llast(op->args), Const))
+	{
 		return false;
+	}
 
 	c1 = linitial_node(Const, op->args);
 	c2 = llast_node(Const, op->args);
@@ -179,7 +154,9 @@ integral_timeval_to_const(int64 value, Oid type)
 			 * the UNIX epoch.
 			 */
 			if (value <= UNIX_EPOCH_AS_TIMESTAMP)
+			{
 				value = UNIX_EPOCH_AS_TIMESTAMP;
+			}
 
 			pg_uuid_t *uuid = ts_create_uuid_v7_from_timestamptz((TimestampTz) value, true);
 			return makeConst(type, -1, InvalidOid, UUID_LEN, UUIDPGetDatum(uuid), false, typbyval);
@@ -270,7 +247,9 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 		op = castNode(OpExpr, left);
 	}
 	else
+	{
 		return constraint;
+	}
 
 	ts_pl_int = ts_get_operator("+", PG_CATALOG_NAMESPACE, TIMESTAMPTZOID, INTERVALOID);
 	ts_mi_int = ts_get_operator("-", PG_CATALOG_NAMESPACE, TIMESTAMPTZOID, INTERVALOID);
@@ -298,7 +277,9 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 		c_ts = llast_node(Const, op->args);
 	}
 	else
+	{
 		return constraint;
+	}
 
 	/*
 	 * arg types should match operator and were checked in precheck
@@ -307,7 +288,9 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 	Assert(c_ts->consttype == TIMESTAMPTZOID);
 	Assert(c_int->consttype == INTERVALOID);
 	if (c_ts->constisnull || c_int->constisnull)
+	{
 		return constraint;
+	}
 
 	interval = DatumGetIntervalP(c_int->constvalue);
 
@@ -316,7 +299,9 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 	 * because month length is variable and calculation depends on local timezone
 	 */
 	if (interval->month != 0)
+	{
 		return constraint;
+	}
 
 	constified = DirectFunctionCall2(opfunc, c_ts->constvalue, c_int->constvalue);
 
@@ -347,16 +332,22 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 		 * If Var is on wrong side reverse the direction.
 		 */
 		if (!var_on_left)
+		{
 			add = !add;
+		}
 
 		/*
 		 * The safety buffer is chosen to be 4 hours because daylight saving time
 		 * changes seem to be in the range between -1 and 2 hours.
 		 */
 		if (add)
+		{
 			constified_tstz += 4 * USECS_PER_HOUR;
+		}
 		else
+		{
 			constified_tstz -= 4 * USECS_PER_HOUR;
+		}
 
 		constified = TimestampTzGetDatum(constified_tstz);
 	}
@@ -365,9 +356,13 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 	c_ts->constvalue = constified;
 
 	if (var_on_left)
+	{
 		right = (Expr *) c_ts;
+	}
 	else
+	{
 		left = (Expr *) c_ts;
+	}
 
 	return (OpExpr *) make_opclause(constraint->opno,
 									constraint->opresulttype,
@@ -409,12 +404,16 @@ static bool
 extract_time_bucket_qual(Expr *node, TimeBucketQual *tbqual)
 {
 	if (!IsA(node, OpExpr))
+	{
 		return false;
+	}
 
 	OpExpr *op = castNode(OpExpr, node);
 
 	if (list_length((op)->args) != 2)
+	{
 		return false;
+	}
 
 	Expr *left = linitial((op)->args);
 	Expr *right = lsecond((op)->args);
@@ -441,15 +440,19 @@ extract_time_bucket_qual(Expr *node, TimeBucketQual *tbqual)
 		return false;
 	}
 
-	if (!is_time_bucket_function((Expr *) time_bucket) || tbqual->value->constisnull)
+	if (!ts_is_time_bucket_function((Expr *) time_bucket) || tbqual->value->constisnull)
+	{
 		return false;
+	}
 
 	Const *width = linitial(time_bucket->args);
 	/* Get the time/partitioning column argument */
 	Node *timearg = lsecond(time_bucket->args);
 
 	if (!IsA(width, Const) || width->constisnull)
+	{
 		return false;
+	}
 
 	tbqual->tb.numargs = list_length(time_bucket->args);
 	tbqual->tb.width = width;
@@ -459,12 +462,16 @@ extract_time_bucket_qual(Expr *node, TimeBucketQual *tbqual)
 
 	/* 3 or more args should have Const 3rd arg */
 	if (list_length(time_bucket->args) > 2 && !IsA(lthird(time_bucket->args), Const))
+	{
 		return false;
+	}
 
 	/* 5 args variants should have Const 4th and 5th arg */
 	if (list_length(time_bucket->args) == 5 &&
 		(!IsA(lfourth(time_bucket->args), Const) || !IsA(lfifth(time_bucket->args), Const)))
+	{
 		return false;
+	}
 
 	Assert(list_length(time_bucket->args) == 2 || list_length(time_bucket->args) == 3 ||
 		   list_length(time_bucket->args) == 5);
@@ -496,7 +503,9 @@ time_bucket_width_to_integral(const Const *width, Oid bucket_type, int64 integra
 			*integral_width = const_to_integral_timeval(width);
 
 			if (integral_value >= ts_time_get_max(bucket_type) - *integral_width)
+			{
 				return false;
+			}
 			break;
 		case INTERVALOID:
 		{
@@ -505,19 +514,25 @@ time_bucket_width_to_integral(const Const *width, Oid bucket_type, int64 integra
 			 * Optimization can't be applied when interval has month component.
 			 */
 			if (interval->month != 0)
+			{
 				return false;
+			}
 
 			if (bucket_type == DATEOID)
 			{
 				/* bail out if interval->time can't be exactly represented as a double */
 				if (interval->time >= 0x3FFFFFFFFFFFFFLL)
+				{
 					return false;
+				}
 
 				*integral_width =
 					interval->day + ceil((double) interval->time / (double) USECS_PER_DAY);
 
 				if (integral_value >= (TS_DATE_END - *integral_width))
+				{
 					return false;
+				}
 			}
 			else if (bucket_type == TIMESTAMPOID || bucket_type == TIMESTAMPTZOID)
 			{
@@ -532,13 +547,17 @@ time_bucket_width_to_integral(const Const *width, Oid bucket_type, int64 integra
 					 * if our transformed restriction would overflow we skip adding it
 					 */
 					if (interval->time >= TS_TIMESTAMP_END - interval->day * USECS_PER_DAY)
+					{
 						return false;
+					}
 
 					*integral_width += interval->day * USECS_PER_DAY;
 				}
 
 				if (integral_value >= (TS_TIMESTAMP_END - *integral_width))
+				{
 					return false;
+				}
 			}
 			else
 			{
@@ -592,7 +611,9 @@ ts_transform_time_bucket_comparison(Expr *node)
 	TimeBucketQual tbqual;
 
 	if (!extract_time_bucket_qual(node, &tbqual))
+	{
 		return NULL;
+	}
 
 	/*
 	 * The qual is an expression <time_bucket OP value> or <value OP time_bucket>. Convert the value
@@ -640,14 +661,20 @@ ts_transform_time_bucket_comparison(Expr *node)
 											   tbqual.tb.rettype,
 											   integral_value,
 											   &integral_width))
+			{
 				return NULL;
+			}
 
 			if (tbqual.strategy == BTLessStrategyNumber && tbqual.tb.numargs == 2 &&
 				integral_value % integral_width == 0)
+			{
 				newvalue = integral_timeval_to_const(integral_value, tbqual.tb.timetype);
+			}
 			else
+			{
 				newvalue =
 					integral_timeval_to_const(integral_value + integral_width, tbqual.tb.timetype);
+			}
 
 			break;
 		}
@@ -703,7 +730,9 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 
 		/* stop processing if not for current rel */
 		if (num_rels != 1 || !bms_is_member(ctx->rel->relid, relids))
+		{
 			continue;
+		}
 
 		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
 		{
@@ -746,8 +775,10 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 		 * the restriction would exclude chunks and thus rows of the outer
 		 * relation when it should show all rows */
 		if (!is_outer_join)
+		{
 			ctx->restrictions =
 				lappend(ctx->restrictions, make_simple_restrictinfo(ctx->root, qual));
+		}
 	}
 	return (Node *) list_concat((List *) quals, additional_quals);
 }
@@ -766,7 +797,9 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 
 		/* stop processing if not for current rel */
 		if (num_rels != 1 || !bms_is_member(ctx->rel->relid, relids))
+		{
 			continue;
+		}
 
 		/*
 		 * check for time_bucket comparisons
@@ -819,10 +852,14 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool can_propagate)
 		 */
 		if (num_rels == 1 && can_propagate && IsA(qual, OpExpr) &&
 			list_length(castNode(OpExpr, qual)->args) == 2)
+		{
 			ctx->all_quals = lappend(ctx->all_quals, qual);
+		}
 
 		if (!bms_is_member(ctx->rel->relid, relids))
+		{
 			continue;
+		}
 
 		/* collect equality JOIN conditions for current rel */
 		if (num_rels == 2 && IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
@@ -841,7 +878,9 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool can_propagate)
 				if (op->opno == tce->eq_opr)
 				{
 					if (can_propagate)
+					{
 						ctx->propagate_conditions = lappend(ctx->propagate_conditions, op);
+					}
 				}
 			}
 			continue;
@@ -853,7 +892,9 @@ static bool
 collect_quals_walker(Node *node, CollectQualCtx *ctx)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	if (IsA(node, FromExpr))
 	{
@@ -887,9 +928,13 @@ chunk_cmp_chunk_reloid(const void *c1, const void *c2)
 	Oid rhs = (*(Chunk **) c2)->table_id;
 
 	if (lhs < rhs)
+	{
 		return -1;
+	}
 	if (lhs > rhs)
+	{
 		return 1;
+	}
 	return 0;
 }
 
@@ -922,14 +967,18 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, int *ord
 	/* check if optimizations are enabled */
 	if (!ts_guc_enable_optimizations || !ts_guc_enable_ordered_append ||
 		!ts_guc_enable_chunk_append)
+	{
 		return false;
+	}
 
 	/*
 	 * only do this optimization for hypertables with 1 dimension and queries
 	 * with an ORDER BY clause
 	 */
 	if (root->parse->sortClause == NIL)
+	{
 		return false;
+	}
 
 	return ts_ordered_append_should_optimize(root, rel, ht, order_attno, reverse);
 }
@@ -1003,7 +1052,8 @@ get_simplified_restrictions(PlannerInfo *root, List *restrictions)
  */
 static Chunk **
 get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
-		   unsigned int *num_chunks, HypertableRestrictInfo **hri_out)
+		   unsigned int *num_chunks, HypertableRestrictInfo **hri_out,
+		   List **quals_proven_true_by_hri_out)
 {
 	bool reverse;
 	int order_attno;
@@ -1014,17 +1064,30 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 	 * This is where the magic happens: use our HypertableRestrictInfo
 	 * infrastructure to deduce the appropriate chunks using our range
 	 * exclusion.
+	 *
+	 * Also keep track of which quals are true everywhere inside the hypertable
+	 * restrictions.
 	 */
-	ts_hypertable_restrict_info_add(hri, root, rel->baserestrictinfo);
+	List *quals_proven_true_by_hri = NIL;
+	ListCell *lc_ri;
+	foreach (lc_ri, rel->baserestrictinfo)
+	{
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc_ri));
+		if (ts_hypertable_restrict_info_add_clause(hri, root, ri->clause))
+		{
+			quals_proven_true_by_hri = lappend(quals_proven_true_by_hri, ri);
+		}
+	}
 
 	List *simplified_restrictions = get_simplified_restrictions(root, rel->baserestrictinfo);
 	ts_hypertable_restrict_info_add(hri, root, simplified_restrictions);
 
 	/* Limit to hypertables without multiple dimensions for now */
-	if (hri->num_base_restrictions >= 1 && hri->num_dimensions == 1 &&
+	if (hri->num_quals_proven_true_by_hri >= 1 && hri->num_dimensions == 1 &&
 		ht->space->num_dimensions == 1)
 	{
 		*hri_out = hri;
+		*quals_proven_true_by_hri_out = quals_proven_true_by_hri;
 	}
 
 	/*
@@ -1046,7 +1109,9 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 		 * time slices of the chunks
 		 */
 		if (ht->space->num_dimensions > 1)
+		{
 			nested_oids = &priv->nested_oids;
+		}
 
 		return ts_hypertable_restrict_info_get_chunks_ordered(hri,
 															  ht,
@@ -1064,7 +1129,9 @@ static bool
 timebucket_annotate_walker(Node *node, CollectQualCtx *ctx)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	if (IsA(node, FromExpr))
 	{
@@ -1095,59 +1162,33 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 	timebucket_annotate_walker((Node *) root->parse->jointree, &ctx);
 
 	if (ctx.propagate_conditions != NIL)
-		propagate_join_quals(root, rel, &ctx);
-}
-
-/*
- * Build a list of baserestrictinfo with any Var OP Const constraints on the primary
- * dimension removed.
- */
-static List *
-filter_baserestrictions(Hypertable *ht, List *base_restrictions)
-{
-	AttrNumber dim_attno = ht->space->dimensions[0].column_attno;
-	List *filtered_restrictions = NIL;
-	ListCell *lc;
-	foreach (lc, base_restrictions)
 	{
-		RestrictInfo *ri = castNode(RestrictInfo, lfirst(lc));
-		Expr *qual = ri->clause;
-		if (IsA(qual, OpExpr))
-		{
-			OpExpr *op = castNode(OpExpr, qual);
-			Node *left = strip_implicit_coercions(linitial(op->args));
-			Node *right = strip_implicit_coercions(lsecond(op->args));
-			if ((IsA(left, Var) && IsA(right, Const) &&
-				 castNode(Var, left)->varattno == dim_attno) ||
-				(IsA(right, Var) && IsA(left, Const) &&
-				 castNode(Var, right)->varattno == dim_attno))
-			{
-				/* only consider simple column to constant comparisons */
-				continue;
-			}
-		}
-
-		filtered_restrictions = lappend(filtered_restrictions, ri);
+		propagate_join_quals(root, rel, &ctx);
 	}
-	return filtered_restrictions;
 }
 
 /*
- * Returns true if the given chunk is fully included by the restrictions
- * on the primary dimension.
+ * Returns true if the given chunk is fully included by the computed
+ * restrictions on the primary dimension.
+ * Even when true, the baserestrictinfos on that chunk can still filter some
+ * rows out. The computed restrictions are an approximation, e.g. we simplify
+ * some timestamp comparisons or scalar array operations to a wider dimension
+ * range that includes the original condition.
  */
 static bool
-chunk_fully_covered(HypertableRestrictInfo *hri, Chunk *chunk)
+chunk_fully_covered(HypertableRestrictInfo *hri, Chunk const *chunk)
 {
 	DimensionRestrictInfoOpen *dri = (DimensionRestrictInfoOpen *) hri->dimension_restriction[0];
 	Ensure(dri->base.dimension->type == DIMENSION_TYPE_OPEN, "primary dimension must be open");
-	Ensure(hri->num_base_restrictions > 0, "must have base restrictions");
+	Ensure(hri->num_quals_proven_true_by_hri > 0, "must have base restrictions");
 
 	if (IS_OSM_CHUNK(chunk) ||
 		(dri->lower_strategy == InvalidStrategy && dri->upper_strategy == InvalidStrategy) ||
 		(chunk->cube->slices[0]->fd.range_start == TS_TIME_NOBEGIN ||
 		 chunk->cube->slices[0]->fd.range_end == TS_TIME_NOEND))
+	{
 		return false;
+	}
 
 	/*
 	 * DimensionRetrictInfo strategy should only be one BTGreaterStrategyNumber
@@ -1163,11 +1204,15 @@ chunk_fully_covered(HypertableRestrictInfo *hri, Chunk *chunk)
 		{
 			case BTGreaterStrategyNumber:
 				if (chunk->cube->slices[0]->fd.range_start <= dri->lower_bound)
+				{
 					return false;
+				}
 				break;
 			case BTGreaterEqualStrategyNumber:
 				if (chunk->cube->slices[0]->fd.range_start < dri->lower_bound)
+				{
 					return false;
+				}
 				break;
 			default:
 				/* Should never happen */
@@ -1180,11 +1225,15 @@ chunk_fully_covered(HypertableRestrictInfo *hri, Chunk *chunk)
 		{
 			case BTLessStrategyNumber:
 				if (chunk->cube->slices[0]->fd.range_end > dri->upper_bound)
+				{
 					return false;
+				}
 				break;
 			case BTLessEqualStrategyNumber:
 				if (chunk->cube->slices[0]->fd.range_end - 1 > dri->upper_bound)
+				{
 					return false;
+				}
 				break;
 			default:
 				/* Should never happen */
@@ -1197,18 +1246,17 @@ chunk_fully_covered(HypertableRestrictInfo *hri, Chunk *chunk)
 /* Inspired by expand_inherited_rtentry but expands
  * a hypertable chunks into an append relation. */
 void
-ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel,
+ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *ht_rel,
 								 bool include_osm)
 {
-	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
-	Oid parent_oid = rte->relid;
-	Relation oldrelation;
 	Query *parse = root->parse;
-	Index rti = rel->relid;
-	List *appinfos = NIL;
+	RangeTblEntry *ht_rte = rt_fetch(ht_rel->relid, parse->rtable);
+	Oid parent_oid = ht_rte->relid;
+	Relation oldrelation;
+	Index ht_relindex = ht_rel->relid;
 	CollectQualCtx ctx = {
 		.root = root,
-		.rel = rel,
+		.rel = ht_rel,
 		.restrictions = NIL,
 		.all_quals = NIL,
 		.propagate_conditions = NIL,
@@ -1217,7 +1265,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	Index first_chunk_index = 0;
 
 	/* double check our permissions are valid */
-	Assert(rti != (Index) parse->resultRelation);
+	Assert(ht_relindex != (Index) parse->resultRelation);
 
 	/* Walk the tree and find restrictions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
@@ -1225,25 +1273,31 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	Assert(ctx.join_level == 0);
 
 	if (ctx.propagate_conditions != NIL)
-		propagate_join_quals(root, rel, &ctx);
+	{
+		propagate_join_quals(root, ht_rel, &ctx);
+	}
 
 	Chunk **chunks = NULL;
 	unsigned int num_chunks = 0;
 
 	HypertableRestrictInfo *hri = NULL;
-	chunks = get_chunks(root, rel, ht, include_osm, &num_chunks, &hri);
+	List *quals_proven_true_by_hri = NIL;
+	chunks =
+		get_chunks(root, ht_rel, ht, include_osm, &num_chunks, &hri, &quals_proven_true_by_hri);
 	/* Can have zero chunks. */
 	Assert(num_chunks == 0 || chunks != NULL);
 
 	/* nothing to do here if we have no chunks */
 	if (!num_chunks)
+	{
 		return;
+	}
 
 	/*
 	 * Handle PlanRowMark for FOR UPDATE/SHARE and FK constraint enforcement.
 	 * This replicates expand_inherited_rtentry() in inherit.c.
 	 */
-	PlanRowMark *oldrc = get_plan_rowmark(root->rowMarks, rti);
+	PlanRowMark *oldrc = get_plan_rowmark(root->rowMarks, ht_relindex);
 	bool old_isParent = false;
 	int old_allMarkTypes = 0;
 	if (oldrc)
@@ -1277,8 +1331,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		Relation newrelation;
 		RangeTblEntry *childrte;
 		Index child_rtindex;
-		AppendRelInfo *appinfo;
-		LOCKMODE chunk_lock = rte->rellockmode;
+		LOCKMODE chunk_lock = ht_rte->rellockmode;
 
 		/* Open rel if needed */
 
@@ -1288,74 +1341,35 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		/* chunks cannot be temp tables */
 		Assert(!RELATION_IS_OTHER_TEMP(newrelation));
 
+		ts_expand_single_inheritance_child(root,
+										   ht_rte,
+										   ht_relindex,
+										   oldrelation,
+										   oldrc,
+										   newrelation,
+										   &childrte,
+										   &child_rtindex);
 		/*
-		 * Build an RTE for the child, and attach to query's rangetable list.
-		 * We copy most fields of the parent's RTE, but replace relation OID
-		 * and relkind, and set inh = false.  Also, set requiredPerms to zero
-		 * since all required permissions checks are done on the original RTE.
-		 * Likewise, set the child's securityQuals to empty, because we only
-		 * want to apply the parent's RLS conditions regardless of what RLS
-		 * properties individual children may have.  (This is an intentional
-		 * choice to make inherited RLS work like regular permissions checks.)
-		 * The parent securityQuals will be propagated to children along with
-		 * other base restriction clauses, so we don't need to do it here.
+		 * For compatibility with the old planner code that didn't create
+		 * per-chunk aliases, use the parent aliases. These aliases have only a
+		 * cosmetic function, and changing them would lead to EXPLAIN changes in
+		 * basically every test.
 		 */
-		childrte = copyObject(rte);
-		childrte->relid = child_oid;
-		childrte->relkind = newrelation->rd_rel->relkind;
-		childrte->inh = false;
-		/* clear the magic bit */
+		childrte->alias = copyObject(ht_rte->alias);
+		childrte->eref = copyObject(ht_rte->eref);
+
 		childrte->ctename = NULL;
-#if PG16_LT
-		childrte->requiredPerms = 0;
-#else
-		/* Since PG16, the permission info is maintained separately. Unlink
-		 * the old perminfo from the RTE to disable permission checking.
-		 */
-		childrte->perminfoindex = 0;
-#endif
-		childrte->securityQuals = NIL;
-		parse->rtable = lappend(parse->rtable, childrte);
-		child_rtindex = list_length(parse->rtable);
 		if (first_chunk_index == 0)
-			first_chunk_index = child_rtindex;
-		root->simple_rte_array[child_rtindex] = childrte;
-		Assert(root->simple_rel_array[child_rtindex] == NULL);
-
-		appinfo = makeNode(AppendRelInfo);
-		appinfo->parent_relid = rti;
-		appinfo->child_relid = child_rtindex;
-		appinfo->parent_reltype = oldrelation->rd_rel->reltype;
-		appinfo->child_reltype = newrelation->rd_rel->reltype;
-		ts_make_inh_translation_list(oldrelation, newrelation, child_rtindex, appinfo);
-		appinfo->parent_reloid = parent_oid;
-		appinfos = lappend(appinfos, appinfo);
-
-		/*
-		 * Create child PlanRowMark if parent has one. This replicates
-		 * expand_single_inheritance_child() in inherit.c.
-		 */
-		if (oldrc)
 		{
-			PlanRowMark *childrc = makeNode(PlanRowMark);
-
-			childrc->rti = child_rtindex;
-			childrc->prti = oldrc->rti;
-			childrc->rowmarkId = oldrc->rowmarkId;
-			childrc->markType = select_rowmark_type(childrte, oldrc->strength);
-			childrc->allMarkTypes = (1 << childrc->markType);
-			childrc->strength = oldrc->strength;
-			childrc->waitPolicy = oldrc->waitPolicy;
-			childrc->isParent = false; /* chunks are never partitioned */
-
-			oldrc->allMarkTypes |= childrc->allMarkTypes;
-
-			root->rowMarks = lappend(root->rowMarks, childrc);
+			first_chunk_index = child_rtindex;
 		}
+		Assert(root->simple_rel_array[child_rtindex] == NULL);
 
 		/* Close child relations, but keep locks */
 		if (child_oid != parent_oid)
+		{
 			table_close(newrelation, NoLock);
+		}
 	}
 
 	table_close(oldrelation, NoLock);
@@ -1417,49 +1431,60 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		add_vars_to_targetlist_compat(root, newvars, bms_make_singleton(0));
 	}
 
-	ts_add_append_rel_infos(root, appinfos);
+	/*
+	 * If applicable, collect the quals that are true everywhere inside the current
+	 * hypertable restriction infos. If every row of a given chunk is fully inside the
+	 * hypertable restrictions, it means we don't have to check these qual on this
+	 * chunk.
+	 */
+	List *orig_ht_baserestrictinfo = ht_rel->baserestrictinfo;
+	List *quals_possibly_false_inside_hri = ht_rel->baserestrictinfo;
+	bool try_remove_quals_proven_true_by_hri =
+		ts_guc_enable_qual_filtering && hri && ht->space->num_dimensions == 1;
 
-	/* PostgreSQL will not set up the child rels for use, due to the games
+	if (try_remove_quals_proven_true_by_hri)
+	{
+		quals_possibly_false_inside_hri =
+			list_difference_ptr(orig_ht_baserestrictinfo, quals_proven_true_by_hri);
+
+		/* Dont try filtering if all restrictions remain after filtering */
+		if (list_length(orig_ht_baserestrictinfo) == list_length(quals_possibly_false_inside_hri))
+		{
+			try_remove_quals_proven_true_by_hri = false;
+		}
+	}
+
+	/*
+	 * PostgreSQL will not set up the child rels for use, due to the games
 	 * we're playing with inheritance, so we must do it ourselves.
 	 * build_simple_rel will look things up in the append_rel_array, so we can
 	 * only use it after that array has been set up.
 	 */
-	List *base_restrictions = rel->baserestrictinfo;
-	List *filtered_restrictions = NIL;
-	bool try_restriction_filtering =
-		ts_guc_enable_qual_filtering && hri && ht->space->num_dimensions == 1;
-
-	if (try_restriction_filtering)
-	{
-		filtered_restrictions = filter_baserestrictions(ht, base_restrictions);
-		/* Dont try filtering if all restrictions remain after filtering */
-		if (list_length(base_restrictions) == list_length(filtered_restrictions))
-			try_restriction_filtering = false;
-	}
-
 	for (unsigned int i = 0; i < num_chunks; i++)
 	{
-		bool can_clear_restrictinfo = false;
-		Index child_rtindex = first_chunk_index + i;
+		const Index child_rtindex = first_chunk_index + i;
 		Chunk *chunk = chunks[i];
-		if (try_restriction_filtering)
-		{
-			can_clear_restrictinfo = chunk_fully_covered(hri, chunk);
-		}
+
+		const bool can_remove_quals_proven_true_by_hri =
+			try_remove_quals_proven_true_by_hri && chunk_fully_covered(hri, chunk);
 
 		/* build_simple_rel will copy baserestrictinfo to the child rel and
 		 * do the necessary attribute mapping. If we can determine that the chunk
 		 * is fully covered by the primary dimension restriction we can remove
 		 * primary dimension restrictions from baserestrictinfo.
 		 */
-		if (can_clear_restrictinfo)
-			rel->baserestrictinfo = filtered_restrictions;
+		if (can_remove_quals_proven_true_by_hri)
+		{
+			ht_rel->baserestrictinfo = quals_possibly_false_inside_hri;
+		}
 
 		/* build_simple_rel will add the child to the relarray */
-		RelOptInfo *child_rel = build_simple_rel(root, child_rtindex, rel);
+		RelOptInfo *child_rel = build_simple_rel(root, child_rtindex, ht_rel);
 
-		if (can_clear_restrictinfo)
-			rel->baserestrictinfo = base_restrictions;
+		if (can_remove_quals_proven_true_by_hri)
+		{
+			ht_rel->baserestrictinfo = orig_ht_baserestrictinfo;
+		}
 
 		/*
 		 * Can't touch fdw_private for OSM chunks, it might be managed by the
@@ -1480,7 +1505,9 @@ restrictinfo_has_qual(List *restrictions, OpExpr *qual)
 	foreach (lc_ri, restrictions)
 	{
 		if (equal(castNode(RestrictInfo, lfirst(lc_ri))->clause, (Expr *) qual))
+		{
 			return true;
+		}
 	}
 	return false;
 }
@@ -1491,7 +1518,9 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 	ListCell *lc;
 
 	if (!ts_guc_enable_qual_propagation)
+	{
 		return;
+	}
 
 	/* propagate join constraints */
 	foreach (lc, ctx->propagate_conditions)
@@ -1522,7 +1551,9 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 			other_var = linitial_node(Var, op->args);
 		}
 		else
+		{
 			continue;
+		}
 
 		foreach (lc_qual, ctx->all_quals)
 		{
@@ -1551,13 +1582,17 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 				propagated->args = list_make2(linitial(propagated->args), rel_var);
 			}
 			else
+			{
 				continue;
+			}
 
 			/*
 			 * check if this is a new qual
 			 */
 			if (restrictinfo_has_qual(ctx->restrictions, propagated))
+			{
 				continue;
+			}
 
 			Relids relids = pull_varnos(ctx->root, (Node *) propagated);
 			RestrictInfo *restrictinfo;
@@ -1585,7 +1620,9 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 			if (bms_num_members(relids) == 1 && bms_is_member(rel->relid, relids))
 			{
 				if (!restrictinfo_has_qual(rel->baserestrictinfo, propagated))
+				{
 					rel->baserestrictinfo = lappend(rel->baserestrictinfo, restrictinfo);
+				}
 			}
 			else
 			{

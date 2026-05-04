@@ -118,8 +118,13 @@ select device, sensor, time from metrics group by device, sensor, time order by 
 :PREFIX select distinct on (device) device, time from metrics order by device, time DESC;
 select distinct on (device) device, time from metrics order by device, time DESC;
 
+-- Can use Batch Sort Merge though as all segmentby keys are pinned to a Const
+SET timescaledb.debug_require_batch_sorted_merge = 'force';
+
 :PREFIX select time, avg(value) from metrics where device = 'd1' and sensor='A' group by time order by time DESC;
 select time, avg(value) from metrics  where device = 'd1' and sensor='A' group by time order by time DESC;
+
+RESET timescaledb.debug_require_batch_sorted_merge;
 
 -- Cannot use compressed sort on unordered chunk when columnstore doesn't have segmentby keys
 CREATE TABLE metrics2(

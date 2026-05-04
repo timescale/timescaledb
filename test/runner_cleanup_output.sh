@@ -12,9 +12,11 @@ sed  -E -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' \
      -e 's! Average  Peak Memory: [0-9]+kB!!' \
      -e 's!ERROR:  permission denied for materialized view!ERROR:  permission denied for view!' \
      -e 's!"*_ts_meta_v2_bl[0-9A-Za-z]+_([_0-9A-Za-z]+)"*!regress-test-bloom_\1!g' \
-	 -e 's/(actual rows=[0-9]+) /\1.00 /' \
-	 -e '/^ ?\([0-9]+ row[s]?\)$/d' \
-	 -e '/ +QUERY PLAN +/{N;s/ +QUERY PLAN +\n-+/--- QUERY PLAN ---/;}' \
+     -e "s!(_timescaledb_functions.bloom1_contains_any_hashes[.(a-z0-9_-]+, ARRAY.)(_[._0-9a-z]+[^,]+, )+([-'0-9]+::bigint)(\].)!\1\2TEST-HASH\4!g" \
+     -e "s!(_timescaledb_functions.bloom1_contains_any_hashes[.(a-z0-9_-]+, )([,'{}0-9\\-]+)(::bigint)!\1TEST-HASHES\3!g" \
+     -e 's/(actual rows=[0-9]+) /\1.00 /' \
+     -e '/^ ?\([0-9]+ row[s]?\)$/d' \
+     -e '/ +QUERY PLAN +/{N;s/ +QUERY PLAN +\n-+/--- QUERY PLAN ---/;}' \
      -e '/Disabled: true/d' \
      -e '/Heap Fetches: [0-9]+/d' \
      -e '/Buckets: [0-9]\+/d' \
@@ -30,7 +32,8 @@ grep -av 'DEBUG:  done creating and filling new WAL file' | \
 grep -av 'DEBUG:  flushed relation because a checkpoint occurred concurrently' | \
 grep -av 'NOTICE:  cancelling the background worker for job' | \
 if [ "${RUNNER}" = "shared" ]; then \
-    sed -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g'; \
+    sed -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g' \
+        -e 's!_materialized_hypertable_[0-9]\{1,\}!_materialized_hypertable_X!g'; \
 else \
     cat; \
 fi | \

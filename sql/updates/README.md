@@ -2,30 +2,27 @@
 
 1. The `search_path` for these scripts will be locked down to
   `pg_catalog, pg_temp`. Locking down `search_path` happens in
-  `pre-update.sql`. Therefore all object references need to be fully
+  `header.sql`. Therefore all object references need to be fully
   qualified unless they reference objects from `pg_catalog`.
   Use `@extschema@` to refer to the target schema of the installation
   (resolves to `public` by default).
-2. Creating objects must not use IF NOT EXISTS as this will
-  introduce privilege escalation vulnerabilities.
-3. All functions should have explicit `search_path`. Setting explicit
+2. All functions should have explicit `search_path`. Setting explicit
   `search_path` will prevent SQL function inlining for functions and
   transaction control for procedures so for some functions/procedures
   it is acceptable to not have explicit `search_path`. Special care
   needs to be taken with those functions/procedures by either setting
   `search_path` in function body or having only fully qualified object
   references including operators.
-4. When generating the install scripts `CREATE OR REPLACE` will be
+3. When generating the install scripts `CREATE OR REPLACE` will be
   changed to `CREATE` to prevent users from precreating extension
   objects. Since we need `CREATE OR REPLACE` for update scripts and
   we don't want to maintain two versions of the sql files containing
   the function definitions we use `CREATE OR REPLACE` in those.
-5. Any object added in a new version needs to have an equivalent
-  `CREATE` statement in the update script without `OR REPLACE` to
-  prevent precreation of the object.
-6. The creation of new metadata tables need to be part of modfiles,
-   similar to `ALTER`s of such tables. Otherwise, later modfiles
-   cannot rely on those tables being present.
+4. When adding or removing columns from catalog tables the tables
+  need to be completely rebuilt as the C code relies on the physical
+  layout of the tables being the same and must not have dropped
+  columns. The catalog tables are mapped to C structs which would break
+  with dropped columns.
 
 ## Extension updates
 
@@ -51,11 +48,6 @@ by using multiple modfiles in order. There are two types of modfiles:
   version, but are no longer present in the transition modfiles.
 
 Notes on post_update.sql
-   We use a special config var (timescaledb.update_script_stage )
-to notify that dependencies have been setup and now timescaledb
-specific queries can be enabled. This is useful if we want to,
-for example, modify objects that need timescaledb specific syntax as
-part of the extension update).
 The scripts in post_update.sql are executed as part of the `ALTER
 EXTENSION` stmt.
 
@@ -96,33 +88,12 @@ variable in the target version of `cmake/ScriptFiles.cmake`.
 The version-specific code is found in the source version of the file
 `sql/updates/reverse-dev.sql`.
 
-The epilog consists of the files in variables `SOURCE_FILES`,
-`SET_POST_UPDATE_STAGE`, `POST_UPDATE_FILES`, and `UNSET_UPDATE_STAGE`
-in that order.
-
-For downgrades to work correctly, some rules need to be followed:
-
-1. If you add new objects in `sql/updates/latest-dev.sql`, you need to
-   remove them in the version-specific downgrade file. The
-   `sql/updates/pre-update.sql` in the target version do not know
-   about objects created in the source version, so they need to be
-   dropped explicitly.
-2. Since `sql/updates/pre-update.sql` can be executed on a later
-   version of the extension, it might be that some objects have been
-   removed and do not exist. Hence `DROP` calls need to use `IF NOT
-   EXISTS`.
+The epilog consists of the files in variables `SOURCE_FILES` and
+`POST_UPDATE_FILES`.
 
 Note that, in contrast to update scripts, downgrade scripts are not
 built by composing several downgrade scripts into a more extensive
-downgrade script. The downgrade scripts are intended to be use only in
-special cases and are not intended to be use to move up and down
-between versions at will, which is why we only generate a downgrade
-script to the immediately preceeding version.
+downgrade script. We only build a downgrade script to the immediate
+preceeding version. To downgrade multiple versions multiple downgrades
+need to be chained.
 
-### When releasing a new version
-
-When releasing a new version, please rename the file `reverse-dev.sql`
-to `<version>--<previous_version>.sql` and add that name to
-`REV_FILES` variable in the `sql/CMakeLists.txt`. This will allow
-generation of downgrade scripts for any version in that list, but it
-is currently not added.

@@ -42,10 +42,14 @@ build_job_info(BgwJob *job)
 	ts_jsonb_add_bool(parse_state, "fixed_schedule", job->fd.fixed_schedule);
 
 	if (job->fd.initial_start)
+	{
 		ts_jsonb_add_interval(parse_state, "initial_start", &job->fd.retry_period);
+	}
 
 	if (job->fd.hypertable_id != INVALID_HYPERTABLE_ID)
+	{
 		ts_jsonb_add_int32(parse_state, "hypertable_id", job->fd.hypertable_id);
+	}
 
 	if (job->fd.config != NULL)
 	{
@@ -56,13 +60,19 @@ build_job_info(BgwJob *job)
 	}
 
 	if (strlen(NameStr(job->fd.check_schema)) > 0)
+	{
 		ts_jsonb_add_str(parse_state, "check_schema", NameStr(job->fd.check_schema));
+	}
 
 	if (strlen(NameStr(job->fd.check_name)) > 0)
+	{
 		ts_jsonb_add_str(parse_state, "check_name", NameStr(job->fd.check_name));
+	}
 
 	if (job->fd.timezone != NULL)
+	{
 		ts_jsonb_add_str(parse_state, "timezone", text_to_cstring(job->fd.timezone));
+	}
 
 	return JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL));
 }
@@ -150,7 +160,9 @@ bgw_job_stat_history_mark_start(BgwJobStatHistoryContext *context)
 {
 	/* Don't mark the start in case of the GUC be disabled */
 	if (!ts_guc_enable_job_execution_logging)
+	{
 		return;
+	}
 
 	bgw_job_stat_history_insert(context, false);
 }
@@ -160,7 +172,9 @@ bgw_job_stat_history_update_entry(int64 bgw_job_history_id, tuple_found_func tup
 								  tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode)
 {
 	if (bgw_job_history_id == INVALID_BGW_JOB_STAT_HISTORY_ID)
+	{
 		return;
+	}
 
 	ScanKeyData scankey[1];
 
@@ -188,14 +202,18 @@ bgw_job_stat_history_update_entry(int64 bgw_job_history_id, tuple_found_func tup
 
 	/* We do not want to raise an error in case there is something wrong with history entries */
 	if (num_found == 0)
+	{
 		/* This might happen due to job history retention deleting entries */
 		ereport(DEBUG1,
 				(errmsg("could not find job stat history entry with id " INT64_FORMAT,
 						bgw_job_history_id)));
+	}
 	else if (num_found > 1)
+	{
 		ereport(DEBUG1,
 				(errmsg("found multiple job stat history entries with id " INT64_FORMAT,
 						bgw_job_history_id)));
+	}
 }
 
 static ScanTupleResult
@@ -254,7 +272,9 @@ bgw_job_stat_history_tuple_update(TupleInfo *ti, void *const data)
 	heap_freetuple(new_tuple);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	return SCAN_DONE;
 }
@@ -266,7 +286,9 @@ bgw_job_stat_history_update(BgwJobStatHistoryContext *context)
 	 * logged
 	 */
 	if (!ts_guc_enable_job_execution_logging && context->result == JOB_SUCCESS)
+	{
 		return;
+	}
 
 	/* Re-read the job information because it can change during the execution by using the
 	 * `alter_job` API inside the function/procedure (i.e. job config) */

@@ -637,7 +637,7 @@ BEGIN
 
   EXECUTE format('SELECT sum(_ts_meta_count) FROM %s', v_compressed_chunk) INTO tuples;
   -- we can optimize the following query if all columns are fixed size
-  EXECUTE format('SELECT ((%s * (%s + %s)) %s) * %s FROM %s', tuples, v_tuple_header, v_tuple_data, v_varlen_query, v_multiplier, v_compressed_chunk) INTO relation_size;
+  EXECUTE format('SELECT (((%s::bigint * (%s::bigint + %s::bigint)) %s) * %s)::bigint FROM %s', tuples, v_tuple_header, v_tuple_data, v_varlen_query, v_multiplier, v_compressed_chunk) INTO relation_size;
 
   index_size := 0;
   FOR v_index, v_varlen_query, v_columns IN
@@ -650,7 +650,7 @@ BEGIN
     v_index_header := 8; -- Index tuple header
 
     -- v_compressed_chunk is a regclass, which will be properly escaped when cast to `text`
-    EXECUTE format('SELECT ((%s * %s) %s) * %s FROM %s', tuples, v_index_header, v_varlen_query, v_index_multiplier, v_compressed_chunk) INTO v_index_size;
+    EXECUTE format('SELECT (((%s::bigint * %s::bigint) %s) * %s)::bigint FROM %s', tuples, v_index_header, v_varlen_query, v_index_multiplier, v_compressed_chunk) INTO v_index_size;
     index_size := index_size + v_index_size;
   END LOOP;
 

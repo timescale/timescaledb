@@ -66,12 +66,16 @@ check_for_system_columns(Bitmapset *attrs_used)
 	{
 		/* we support tableoid so skip that */
 		if (bit == TableOidAttributeNumber - FirstLowInvalidHeapAttributeNumber)
+		{
 			bit = bms_next_member(attrs_used, bit);
+		}
 
 		if (bit > 0 && bit + FirstLowInvalidHeapAttributeNumber < 0)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_COLUMN_REFERENCE),
 					 errmsg("transparent decompression only supports tableoid system column")));
+		}
 	}
 }
 
@@ -99,11 +103,6 @@ typedef struct
 	ColumnarScanPath *decompress_path;
 
 	Bitmapset *uncompressed_attrs_needed;
-
-	/*
-	 * If we produce at least some columns that support bulk decompression.
-	 */
-	bool have_bulk_decompression_columns;
 
 	/*
 	 * Maps the uncompressed chunk attno to the respective column compression
@@ -311,7 +310,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 	 * Go over the scan targetlist and determine to which output column each
 	 * scan column goes, saving other additional info as we do that.
 	 */
-	context->have_bulk_decompression_columns = false;
+	bool bulk_decompression_possible_for_some_columns = false;
 	context->decompression_map = NIL;
 	foreach (lc, compressed_output_tlist)
 	{
@@ -401,7 +400,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 			!is_segment && destination_attno > 0 &&
 			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) !=
 				NULL;
-		context->have_bulk_decompression_columns |= bulk_decompression_possible;
+		bulk_decompression_possible_for_some_columns |= bulk_decompression_possible;
 
 		/*
 		 * Save information about decompressed columns in uncompressed chunk
@@ -420,6 +419,16 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 			.uncompressed_chunk_attno = destination_attno,
 			.is_segmentby = is_segment,
 		};
+	}
+
+	if (!bulk_decompression_possible_for_some_columns)
+	{
+		/*
+		 * This is mostly a cosmetic thing for EXPLAIN -- don't say that we're
+		 * using bulk decompression, if it is enabled but we have no columns
+		 * that support it.
+		 */
+		path->enable_bulk_decompression = false;
 	}
 
 	/*
@@ -533,7 +542,9 @@ static Node *
 replace_compressed_vars(Node *node, const CompressionInfo *info)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 
 	if (IsA(node, Var))
 	{
@@ -544,14 +555,18 @@ replace_compressed_vars(Node *node, const CompressionInfo *info)
 		/* constify tableoid in quals */
 		if ((Index) var->varno == info->chunk_rel->relid &&
 			var->varattno == TableOidAttributeNumber)
+		{
 			return (Node *)
 				makeConst(OIDOID, -1, InvalidOid, 4, (Datum) info->chunk_rte->relid, false, true);
+		}
 
 		/* Upper-level Vars should be long gone at this point */
 		Assert(var->varlevelsup == 0);
 		/* If not to be replaced, we can just return the Var unmodified */
 		if ((Index) var->varno != info->compressed_rel->relid)
+		{
 			return node;
+		}
 
 		/* Create a decompressed Var to replace the compressed one */
 		colname = get_attname(info->compressed_rte->relid, var->varattno, false);
@@ -561,16 +576,18 @@ replace_compressed_vars(Node *node, const CompressionInfo *info)
 						  var->vartypmod,
 						  var->varcollid,
 						  var->varlevelsup);
+#if PG16_GE
+		new_var->varnullingrels = var->varnullingrels;
+#endif
 
 		if (!AttributeNumberIsValid(new_var->varattno))
+		{
 			elog(ERROR, "cannot find column %s on decompressed chunk", colname);
+		}
 
 		/* And return the replacement var */
 		return (Node *) new_var;
 	}
-	if (IsA(node, PlaceHolderVar))
-		elog(ERROR, "ignoring placeholders");
-
 	return expression_tree_mutator(node, replace_compressed_vars, (void *) info);
 }
 
@@ -590,13 +607,17 @@ find_attr_pos_in_tlist(List *targetlist, AttrNumber pos)
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 
 		if (!IsA(target->expr, Var))
+		{
 			elog(ERROR, "compressed scan targetlist entries must be Vars");
+		}
 
 		Var *var = castNode(Var, target->expr);
 		AttrNumber compressed_attno = var->varattno;
 
 		if (compressed_attno == pos)
+		{
 			return target->resno;
+		}
 	}
 
 	elog(ERROR, "Unable to locate var %d in targetlist", pos);
@@ -1276,12 +1297,14 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 												 var->vartype,
 												 pk->pk_cmptype);
 				if (!OidIsValid(sortop)) /* should not happen */
+				{
 					elog(ERROR,
 						 "missing operator %d(%u,%u) in opfamily %u",
 						 pk->pk_cmptype,
 						 var->vartype,
 						 var->vartype,
 						 pk->pk_opfamily);
+				}
 
 				sort_col_idx = lappend_oid(sort_col_idx, decompressed_scan_attno);
 				sort_collations = lappend_oid(sort_collations, var->varcollid);
@@ -1320,7 +1343,9 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 											&opfamily,
 											&opcintype,
 											&strategy))
+			{
 				elog(ERROR, "operator %u is not a valid ordering operator", sortOperators[i]);
+			}
 
 			/*
 			 * This way to determine the matching metadata column works, because
@@ -1336,7 +1361,9 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 				get_attnum(dcpath->info->compressed_rte->relid, meta_col_name);
 
 			if (attr_position == InvalidAttrNumber)
+			{
 				elog(ERROR, "couldn't find metadata column \"%s\"", meta_col_name);
+			}
 
 			/*
 			 * If the the compressed target list is not based on the layout of
@@ -1344,10 +1371,14 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 			 * adjust the position of the attribute.
 			 */
 			if (target_list_compressed_is_physical)
+			{
 				sortColIdx[i] = attr_position;
+			}
 			else
+			{
 				sortColIdx[i] =
 					find_attr_pos_in_tlist(compressed_scan->plan.targetlist, attr_position);
+			}
 
 			sortOperators[i] = sortop;
 			collations[i] = list_nth_oid(sort_collations, i);
@@ -1390,18 +1421,15 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 
 	Assert(list_length(custom_plans) == 1);
 
-	const bool enable_bulk_decompression = !dcpath->batch_sorted_merge &&
-										   ts_guc_enable_bulk_decompression &&
-										   context.have_bulk_decompression_columns;
-
 	/*
 	 * For some predicates, we have more efficient implementation that work on
 	 * the entire compressed batch in one go. They go to this list, and the rest
 	 * goes into the usual scan.plan.qual.
 	 */
 	List *vectorized_quals = NIL;
-	if (enable_bulk_decompression)
+	if (dcpath->enable_bulk_decompression)
 	{
+		Assert(!dcpath->batch_sorted_merge);
 		List *nonvectorized_quals = NIL;
 		find_vectorized_quals(&context,
 							  dcpath,
@@ -1441,7 +1469,8 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 	lfirst_int(list_nth_cell(settings, DCS_ChunkRelid)) = dcpath->info->chunk_rte->relid;
 	lfirst_int(list_nth_cell(settings, DCS_Reverse)) = dcpath->reverse;
 	lfirst_int(list_nth_cell(settings, DCS_BatchSortedMerge)) = dcpath->batch_sorted_merge;
-	lfirst_int(list_nth_cell(settings, DCS_EnableBulkDecompression)) = enable_bulk_decompression;
+	lfirst_int(list_nth_cell(settings, DCS_EnableBulkDecompression)) =
+		dcpath->enable_bulk_decompression;
 	lfirst_int(list_nth_cell(settings, DCS_HasRowMarks)) = root->parse->rowMarks != NIL;
 	lfirst_int(list_nth_cell(settings, DCS_ChunkStatus)) = dcpath->chunk_status;
 

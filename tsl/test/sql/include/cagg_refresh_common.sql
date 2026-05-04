@@ -433,6 +433,9 @@ VALUES
   ('2025-07-04 12:00:00+00', 1, 1),
   ('2025-07-04 12:05:00+00', 1, 1);
 
+SELECT current_setting('timezone') AS original_timezone \gset
+SET timezone TO 'UTC';
+
 CREATE MATERIALIZED VIEW conditions_by_hour
 WITH (timescaledb.continuous) AS
 SELECT
@@ -449,9 +452,83 @@ CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 10:00:00+00'
 -- It should return 2 buckets
 SELECT * FROM conditions_by_hour ORDER BY bucket;
 
+-- Show invalidation log state after initial refresh
+SELECT
+  _timescaledb_functions.to_timestamp(lowest_modified_value) AS start,
+  _timescaledb_functions.to_timestamp(greatest_modified_value) AS end,
+  lowest_modified_value AS start_raw,
+  greatest_modified_value AS end_raw
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'conditions_by_hour')
+ORDER BY 1;
+
+-- Insert below the watermark to generate an invalidation, then run a no-op refresh
+-- to move the invalidation into the cagg invalidation log.
+INSERT INTO conditions VALUES ('2025-07-04 10:30:00+00', 1, 2);
+CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 01:00:00+00'::timestamptz, '2025-07-04 06:00:00+00'::timestamptz);
+
+-- Cagg invalidation log before the force refresh, should have an entry
+-- that contains the bucket from 10:00 to 10:59:59.99
+-- which is 3:00:00 - 3:59:59.99 PDT
+SELECT
+  _timescaledb_functions.to_timestamp(lowest_modified_value) AS start,
+  _timescaledb_functions.to_timestamp(greatest_modified_value) AS end,
+  lowest_modified_value AS start_raw,
+  greatest_modified_value AS end_raw
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'conditions_by_hour')
+ORDER BY 1;
+
+-- generate invalidations that will overlap the force refresh range,
+-- fully contained and fully outside the forced refresh range
+INSERT INTO conditions VALUES ('2025-07-04 09:30:00+00', 1, 2), ('2025-07-04 10:40:00+00', 1, 30);
+INSERT INTO conditions VALUES ('2025-07-04 10:50:00+00', 1, 40), ('2025-07-04 11:20:00+00', 1, 50);
+INSERT INTO conditions VALUES ('2025-07-04 11:50:00+00', 1, 60), ('2025-07-04 12:20:00+00', 1, 70);
 CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 10:00:00+00'::timestamptz, '2025-07-04 12:00:00+00'::timestamptz, force=>true);
--- It should return the same 2 buckets of previous query
+-- It should return the same 2 buckets of previous query (with updated count for 10:00 and 11:00 buckets)
 SELECT * FROM conditions_by_hour ORDER BY bucket;
+
+-- After force refresh: any invalidation range that fall into the refreshed range should be
+-- removed from the invalidation log,
+-- thus there should be no entry that covers the bucket from 10:00 to 11:59:59.99 UTC
+-- And there should be no entry with lowest = highest
+SELECT
+  _timescaledb_functions.to_timestamp(lowest_modified_value) AS start,
+  _timescaledb_functions.to_timestamp(greatest_modified_value) AS end
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'conditions_by_hour')
+ORDER BY 1;
+
+--run another refresh to verify that the 2 inval entries for [ 2025-07-04 12:00 , ..] are consumed
+CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 12:00:00+00'::timestamptz, '2025-07-04 14:00:00+00'::timestamptz);
+SELECT
+  _timescaledb_functions.to_timestamp(lowest_modified_value) AS start,
+  _timescaledb_functions.to_timestamp(greatest_modified_value) AS end
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'conditions_by_hour')
+ORDER BY 1;
+
+--run another refresh to verify that the 2 inval entries for [ ..., 2025-07-04 09:59.59 , ..] are consumed
+CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 06:00:00+00'::timestamptz, '2025-07-04 10:00:00+00'::timestamptz);
+SELECT
+  _timescaledb_functions.to_timestamp(lowest_modified_value) AS start,
+  _timescaledb_functions.to_timestamp(greatest_modified_value) AS end
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (
+  SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'conditions_by_hour')
+ORDER BY 1;
+
+
+SET timezone TO :'original_timezone';
 
 -- Monthly buckets
 INSERT INTO conditions

@@ -148,11 +148,6 @@ class SQLVisitor(Visitor):
                 f"Attempting to CREATE FOREIGN TABLE IF NOT EXISTS {node.base.relation.relname}"
             )
 
-    # CREATE INDEX IF NOT EXISTS ..
-    def visit_IndexStmt(self, ancestors, node):  # pylint: disable=unused-argument
-        if node.if_not_exists:
-            self.error(f"Attempting to CREATE INDEX IF NOT EXISTS {node.idxname}")
-
     # CREATE FUNCTION / PROCEDURE _timescaledb_internal...
     def visit_CreateFunctionStmt(
         self, ancestors, node

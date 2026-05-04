@@ -40,26 +40,19 @@ RETURNS SETOF test LANGUAGE SQL STABLE
 as $f$
    SELECT * FROM test WHERE b >= _ts AND b <= _ts + 2 FOR UPDATE
 $f$;
--- pruning should not be done by TimescaleDb in this case
--- specifically, the parent hypertable must exist in the output plan
+-- pruning can be done by TimescaleDb in this case since it now properly supports row marks
 :PREFIX SELECT * FROM test_f(5);
 --- QUERY PLAN ---
  Subquery Scan on test_f
    ->  LockRows
-         ->  Append
-               ->  Seq Scan on test test_1
-                     Filter: ((b >= '5'::bigint) AND (b <= '7'::bigint))
-               ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk test_2
-                     Index Cond: ((b >= '5'::bigint) AND (b <= '7'::bigint))
+         ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk
+               Index Cond: ((b >= '5'::bigint) AND (b <= '7'::bigint))
 
 :PREFIX SELECT * FROM test WHERE b >= 5 AND b <= 5 + 2 FOR UPDATE;
 --- QUERY PLAN ---
  LockRows
-   ->  Append
-         ->  Seq Scan on test test_1
-               Filter: ((b >= 5) AND (b <= 7))
-         ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk test_2
-               Index Cond: ((b >= 5) AND (b <= 7))
+   ->  Index Scan using _hyper_1_1_chunk_test_b_idx on _hyper_1_1_chunk
+         Index Cond: ((b >= 5) AND (b <= 7))
 
 -- test with CTE
 -- these cases are just to make sure we're everything is alright with

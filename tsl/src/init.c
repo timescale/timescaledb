@@ -12,7 +12,6 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/job_api.h"
 #include "bgw_policy/policies_v2.h"
-#include "bgw_policy/process_hyper_inval_api.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
 #include "chunk.h"
@@ -33,6 +32,7 @@
 #include "continuous_aggs/invalidation.h"
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
+#include "continuous_aggs/rewrite_with_caggs.h"
 #include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
 #include "export.h"
@@ -47,9 +47,7 @@
 #include "process_utility.h"
 #include "reorder.h"
 
-#ifdef PG_MODULE_MAGIC
-PG_MODULE_MAGIC;
-#endif
+TS_MODULE_MAGIC("timescaledb-tsl");
 
 #ifdef APACHE_ONLY
 #error "cannot compile the TSL for ApacheOnly mode"
@@ -85,10 +83,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policy_refresh_cagg_proc = policy_refresh_cagg_proc,
 	.policy_refresh_cagg_check = policy_refresh_cagg_check,
 	.policy_refresh_cagg_remove = policy_refresh_cagg_remove,
-	.policy_process_hyper_inval_add = policy_process_hyper_inval_add,
-	.policy_process_hyper_inval_proc = policy_process_hyper_inval_proc,
-	.policy_process_hyper_inval_check = policy_process_hyper_inval_check,
-	.policy_process_hyper_inval_remove = policy_process_hyper_inval_remove,
 	.policy_reorder_add = policy_reorder_add,
 	.policy_reorder_proc = policy_reorder_proc,
 	.policy_reorder_check = policy_reorder_check,
@@ -134,6 +128,9 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
 	.continuous_agg_update_options = continuous_agg_update_options,
+#if PG16_GE
+	.continuous_agg_apply_rewrites_tsl = continuous_agg_apply_rewrites,
+#endif
 	.continuous_agg_validate_query = continuous_agg_validate_query,
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
@@ -164,6 +161,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.uuid_compressor_finish = tsl_uuid_compressor_finish,
 	.bloom1_contains = bloom1_contains,
 	.bloom1_contains_any = bloom1_contains_any,
+	.bloom1_contains_any_hashes = bloom1_contains_any_hashes,
+	.bloom1_hash = bloom1_hash,
 	.bloom1_get_hash_function = bloom1_get_hash_function,
 	.process_compress_table = tsl_process_compress_table,
 	.process_altertable_cmd = tsl_process_altertable_cmd,

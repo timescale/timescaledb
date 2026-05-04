@@ -15,6 +15,7 @@
 typedef enum
 {
 	VASI_GroupingType = 0,
+	VASI_PostgresQuals,
 	VASI_Count
 } VectorAggSettingsIndex;
 

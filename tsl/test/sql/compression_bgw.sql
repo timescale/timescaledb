@@ -334,6 +334,9 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk
 -- should recompress
 CALL run_job(:JOB_COMPRESS);
 
+-- chunk should be fully compressed now (status = 1) so reindex can run
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
+
 -- index size should decrease due to reindexing (8kB or 16kB)
 VACUUM ANALYZE metrics2;
 SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') <= 16384 as size_empty;
@@ -374,7 +377,7 @@ WITH chunks AS (
   FROM _timescaledb_catalog.chunk c
   INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
   WHERE h.table_name = 'test_compression_policy_errors'
-  ORDER BY c.id LIMIT 20
+  ORDER BY c.id
 )
 UPDATE _timescaledb_catalog.chunk
 SET status = 3
@@ -384,7 +387,7 @@ WHERE chunk.id = chunks.id
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
--- After the mess 20 = status 3 and 11 = status 0
+-- After the mess 30 = status 3
 SELECT c.status, count(*)
 FROM _timescaledb_catalog.chunk c
 INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
@@ -396,7 +399,7 @@ ORDER BY 2 DESC;
 SET client_min_messages TO ERROR;
 \set VERBOSITY default
 -- This should fail with
--- 20 chunks failed to compress and 11 chunks compressed successfully
+-- 31 chunks failed to compress
 CALL run_job(:compressjob_id);
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1

@@ -80,6 +80,7 @@ osm_process_utility_hook(PlannedStmt *pstmt, const char *queryString, bool readO
 	}
 
 	if (prev_ProcessUtility_hook)
+	{
 		prev_ProcessUtility_hook(pstmt,
 								 queryString,
 								 readOnlyTree,
@@ -88,4 +89,5 @@ osm_process_utility_hook(PlannedStmt *pstmt, const char *queryString, bool readO
 								 queryEnv,
 								 dest,
 								 qc);
+	}
 }

@@ -11,6 +11,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
+#include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
 #include <utils/fmgroids.h>
 #include <utils/lsyscache.h>
@@ -46,20 +47,26 @@ static bool
 is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type_out)
 {
 	if (aggref->args == NIL)
+	{
 		return false;
+	}
 
 	/* Get the argument - must be a Var (possibly with implicit coercions) */
 	TargetEntry *arg_te = linitial_node(TargetEntry, aggref->args);
 
 	Node *arg_expr = strip_implicit_coercions((Node *) arg_te->expr);
 	if (!IsA(arg_expr, Var))
+	{
 		return false;
+	}
 
 	Var *var = castNode(Var, arg_expr);
 
 	/* Reject system columns except tableoid */
 	if (var->varattno <= 0 && var->varattno != TableOidAttributeNumber)
+	{
 		return false;
+	}
 
 	switch (aggref->aggfnoid)
 	{
@@ -128,16 +135,22 @@ is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type
 		default:
 			/* Check for first()/last() with both args referencing same column */
 			if (!OidIsValid(ts_first_func_oid) || !OidIsValid(ts_last_func_oid))
+			{
 				ts_func_cache_init();
+			}
 
 			if (aggref->aggfnoid == ts_first_func_oid || aggref->aggfnoid == ts_last_func_oid)
 			{
 				if (list_length(aggref->args) != 2)
+				{
 					return false;
+				}
 				TargetEntry *tle2 = castNode(TargetEntry, lsecond(aggref->args));
 				Node *arg2_expr = strip_implicit_coercions((Node *) tle2->expr);
 				if (!equal(var, arg2_expr))
+				{
 					return false;
+				}
 				*meta_type_out = (aggref->aggfnoid == ts_first_func_oid) ? "min" : "max";
 				*arg_var_out = var;
 				return true;
@@ -146,6 +159,76 @@ is_supported_aggregate(Aggref *aggref, Var **arg_var_out, const char **meta_type
 	}
 
 	return false;
+}
+
+/*
+ * Check if all quals reference only segmentby columns.
+ *
+ * This function is only relevant for partial chunks.  For fully compressed
+ * chunks, segmentby quals are pushed to the compressed scan and removed from
+ * plan->qual, so plan->qual is NIL and this function is never called.
+ * For partial chunks, segmentby quals remain on plan->qual because they must
+ * also be checked against the uncompressed portion, but they have already been
+ * pushed to the compressed scan as well.  ColumnarIndexScan only reads
+ * compressed metadata, so these quals are already handled.
+ *
+ * Uses the decompression_map and is_segmentby_column lists from the
+ * ColumnarScan's custom_private to build a set of custom_scan_tlist
+ * positions that are segmentby columns, then checks each qual's Vars
+ * against that set.
+ *
+ * Returns false for quals containing no Vars (e.g. constified tableoid),
+ * since those constant expressions are not handled by the compressed scan
+ * and must still be evaluated.  In practice these only appear on partial
+ * chunks from constraint exclusion checks (e.g. tableoid comparisons for
+ * hypertable expansion) and should be uncommon.
+ */
+static bool
+quals_only_reference_segmentby(List *quals, CustomScan *cscan)
+{
+	List *decompression_map = list_nth(cscan->custom_private, DCP_DecompressionMap);
+	List *is_segmentby = list_nth(cscan->custom_private, DCP_IsSegmentbyColumn);
+
+	Bitmapset *segmentby_positions = NULL;
+	ListCell *lc_map, *lc_seg;
+	forboth (lc_map, decompression_map, lc_seg, is_segmentby)
+	{
+		int tlist_pos = lfirst_int(lc_map);
+		if (lfirst_int(lc_seg) && tlist_pos > 0)
+		{
+			segmentby_positions = bms_add_member(segmentby_positions, tlist_pos);
+		}
+	}
+
+	bool result = true;
+	ListCell *lc;
+	foreach (lc, quals)
+	{
+		List *vars = pull_var_clause(lfirst(lc), 0);
+		if (vars == NIL)
+		{
+			result = false;
+			break;
+		}
+
+		ListCell *lc2;
+		foreach (lc2, vars)
+		{
+			Var *var = lfirst_node(Var, lc2);
+			if (!bms_is_member(var->varattno, segmentby_positions))
+			{
+				result = false;
+				break;
+			}
+		}
+		if (!result)
+		{
+			break;
+		}
+	}
+
+	bms_free(segmentby_positions);
+	return result;
 }
 
 /*
@@ -159,9 +242,13 @@ columnar_scan_has_no_vector_quals(CustomScan *cscan)
 	 * or the first element is NIL, there are no vectorized quals.
 	 */
 	if (cscan->custom_exprs == NIL)
+	{
 		return true;
+	}
 	if (linitial(cscan->custom_exprs) == NIL)
+	{
 		return true;
+	}
 	return false;
 }
 
@@ -180,7 +267,9 @@ find_resno_by_compressed_attno(Plan *leaf_plan, AttrNumber compressed_attno)
 		{
 			Var *var = castNode(Var, tle->expr);
 			if (var->varattno == compressed_attno)
+			{
 				return tle->resno;
+			}
 		}
 	}
 	return InvalidAttrNumber;
@@ -227,7 +316,9 @@ validate_entries_walker(Node *node, void *context)
 	ValidateContext *ctx = (ValidateContext *) context;
 
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	if (IsA(node, Var))
 	{
@@ -246,20 +337,28 @@ validate_entries_walker(Node *node, void *context)
 		}
 
 		if (var->varattno <= 0)
+		{
 			return true;
+		}
 
 		char *col_name = get_attname(ctx->uncompressed_relid, var->varattno, false);
 
 		if (ctx->settings == NULL || !ts_array_is_member(ctx->settings->fd.segmentby, col_name))
+		{
 			return true;
+		}
 
 		AttrNumber compressed_attno = get_attnum(ctx->compressed_relid, col_name);
 		if (compressed_attno == InvalidAttrNumber)
+		{
 			return true;
+		}
 
 		AttrNumber child_resno = find_resno_by_compressed_attno(ctx->leaf_plan, compressed_attno);
 		if (child_resno == InvalidAttrNumber)
+		{
 			return true;
+		}
 
 		add_scan_output(ctx,
 						child_resno,
@@ -277,19 +376,25 @@ validate_entries_walker(Node *node, void *context)
 
 		/* No DISTINCT, ORDER BY, or FILTER on the Aggref */
 		if (aggref->aggdistinct != NIL || aggref->aggorder != NIL || aggref->aggfilter != NULL)
+		{
 			return true;
+		}
 
 		if (aggref->aggfnoid == F_COUNT_)
 		{
 			AttrNumber meta_count_attno =
 				get_attnum(ctx->compressed_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 			if (meta_count_attno == InvalidAttrNumber)
+			{
 				return true;
+			}
 
 			AttrNumber child_resno =
 				find_resno_by_compressed_attno(ctx->leaf_plan, meta_count_attno);
 			if (child_resno == InvalidAttrNumber)
+			{
 				return true;
+			}
 
 			add_scan_output(ctx,
 							child_resno,
@@ -304,7 +409,9 @@ validate_entries_walker(Node *node, void *context)
 			Var *arg_var = NULL;
 			const char *meta_type = NULL;
 			if (!is_supported_aggregate(aggref, &arg_var, &meta_type))
+			{
 				return true;
+			}
 
 			if (arg_var->varattno == TableOidAttributeNumber)
 			{
@@ -329,11 +436,15 @@ validate_entries_walker(Node *node, void *context)
 																		 ctx->compressed_relid,
 																		 meta_type);
 				if (meta_attno == InvalidAttrNumber)
+				{
 					return true;
+				}
 
 				AttrNumber child_resno = find_resno_by_compressed_attno(ctx->leaf_plan, meta_attno);
 				if (child_resno == InvalidAttrNumber)
+				{
 					return true;
+				}
 
 				add_scan_output(ctx,
 								child_resno,
@@ -373,7 +484,9 @@ rewrite_agg_tlist_mutator(Node *node, void *context)
 	RewriteContext *ctx = (RewriteContext *) context;
 
 	if (node == NULL)
+	{
 		return NULL;
+	}
 
 	if (IsA(node, Var) && ((Var *) node)->varno == OUTER_VAR)
 	{
@@ -384,7 +497,9 @@ rewrite_agg_tlist_mutator(Node *node, void *context)
 		for (int k = 0; k < ctx->agg->numCols; k++)
 		{
 			if (ctx->agg->grpColIdx[k] == var->varattno)
+			{
 				ctx->agg->grpColIdx[k] = resno;
+			}
 		}
 
 		return (Node *) makeVar(OUTER_VAR,
@@ -491,7 +606,9 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *cscan, List *rtable)
 
 	Plan *leaf_plan = compressed_scan_subtree;
 	if (IsA(leaf_plan, Sort))
+	{
 		leaf_plan = leaf_plan->lefttree;
+	}
 
 	Scan *compressed_scan = (Scan *) leaf_plan;
 	RangeTblEntry *compressed_rte = rt_fetch(compressed_scan->scanrelid, rtable);
@@ -521,20 +638,26 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *cscan, List *rtable)
 	Node *resolved_targetlist =
 		ts_resolve_outer_special_vars((Node *) agg->plan.targetlist, childplan);
 	if (validate_entries_walker(resolved_targetlist, &validate_ctx))
+	{
 		return NULL;
+	}
 
 	if (agg->plan.qual)
 	{
 		Node *resolved_qual = ts_resolve_outer_special_vars((Node *) agg->plan.qual, childplan);
 		if (validate_entries_walker(resolved_qual, &validate_ctx))
+		{
 			return NULL;
+		}
 	}
 
 	List *custom_scan_tlist = validate_ctx.custom_scan_tlist;
 	List *output_map = validate_ctx.output_map;
 
 	if (custom_scan_tlist == NIL)
+	{
 		return NULL;
+	}
 
 	/*
 	 * Rewrite pass: walk the Agg's targetlist with a mutator that rewrites
@@ -550,8 +673,10 @@ columnar_index_scan_plan_create(Agg *agg, CustomScan *cscan, List *rtable)
 		castNode(List, rewrite_agg_tlist_mutator((Node *) agg->plan.targetlist, &rewrite_ctx));
 
 	if (agg->plan.qual)
+	{
 		agg->plan.qual =
 			castNode(List, rewrite_agg_tlist_mutator((Node *) agg->plan.qual, &rewrite_ctx));
+	}
 
 	/* Build ColumnarIndexScan CustomScan */
 	CustomScan *columnar_index_scan = (CustomScan *) makeNode(CustomScan);
@@ -598,7 +723,9 @@ insert_columnar_index_scan(Plan *plan, void *context)
 	List *rtable = (List *) context;
 
 	if (plan->type != T_Agg)
+	{
 		return plan;
+	}
 
 	Agg *agg = castNode(Agg, plan);
 
@@ -607,7 +734,9 @@ insert_columnar_index_scan(Plan *plan, void *context)
 	 * partial/finalize aggregate or non-partial aggregates (AGGSPLIT_SIMPLE).
 	 */
 	if (agg->aggsplit != AGGSPLIT_INITIAL_SERIAL && agg->aggsplit != AGGSPLIT_SIMPLE)
+	{
 		return plan;
+	}
 
 	Plan *childplan = agg->plan.lefttree;
 
@@ -615,25 +744,35 @@ insert_columnar_index_scan(Plan *plan, void *context)
 	 * The child must be a ColumnarScan.
 	 */
 	if (!ts_is_columnar_scan_plan(childplan))
+	{
 		return plan;
+	}
 
 	CustomScan *cscan = castNode(CustomScan, childplan);
 
 	/*
-	 * No Postgres quals on the ColumnarScan.
+	 * No Postgres quals on the ColumnarScan, or quals only on segmentby
+	 * columns. Segmentby filters are pushed to the compressed scan so
+	 * ColumnarIndexScan can skip them.
 	 */
-	if (childplan->qual != NIL)
+	if (childplan->qual != NIL && !quals_only_reference_segmentby(childplan->qual, cscan))
+	{
 		return plan;
+	}
 
 	/*
 	 * No vectorized quals on the ColumnarScan.
 	 */
 	if (!columnar_scan_has_no_vector_quals(cscan))
+	{
 		return plan;
+	}
 
 	Plan *result = columnar_index_scan_plan_create(agg, cscan, rtable);
 	if (result == NULL)
+	{
 		return plan;
+	}
 
 	return result;
 }

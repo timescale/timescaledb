@@ -225,10 +225,14 @@ extern void *
 uuid_compressor_finish(UuidCompressor *compressor)
 {
 	if (compressor == NULL)
+	{
 		return NULL;
+	}
 
 	if (compressor->num_values == 0)
+	{
 		return NULL;
+	}
 
 	size_t nulls_compressed_size = 0;
 	size_t timestamp_compressed_size =
@@ -339,9 +343,11 @@ uuid_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 	UuidType *uuid_values = (UuidType *) uuid_iter->uuid_buffer->buffers[1];
 
 	if (uuid_iter->position >= uuid_iter->total_elements)
+	{
 		return (DecompressResult){
 			.is_done = true,
 		};
+	}
 
 	/* check nulls */
 	if (validity_bitmap != NULL)
@@ -391,9 +397,11 @@ uuid_decompression_iterator_try_next_reverse(DecompressionIterator *iter)
 	UuidType *uuid_values = (UuidType *) uuid_iter->uuid_buffer->buffers[1];
 
 	if (uuid_iter->position < 0)
+	{
 		return (DecompressResult){
 			.is_done = true,
 		};
+	}
 
 	/* check nulls */
 	if (validity_bitmap != NULL)
@@ -445,7 +453,9 @@ uuid_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 	uint64 *rand_b_and_variant = (uint64 *) ptr;
 	uint32 num_elements = data->rand_b_and_variant_size / sizeof(uint64);
 	for (uint32 i = 0; i < num_elements; i++)
+	{
 		pq_sendint64(buffer, rand_b_and_variant[i]);
+	}
 }
 
 extern Datum
@@ -495,7 +505,9 @@ uuid_compressed_recv(StringInfo buffer)
 		(uint64 *) (result + sizeof(UuidCompressed) + delta_delta_compressed_size);
 	uint32 num_elements = rand_b_and_variant_size / sizeof(uint64);
 	for (uint32 i = 0; i < num_elements; i++)
+	{
 		rand_b_and_variant[i] = pq_getmsgint64(buffer);
+	}
 
 	PG_RETURN_POINTER(result);
 }
@@ -538,11 +550,15 @@ tsl_uuid_compressor_append(PG_FUNCTION_ARGS)
 	{
 		compressor = uuid_compressor_alloc();
 		if (PG_NARGS() > 2)
+		{
 			elog(ERROR, "append expects two arguments");
+		}
 	}
 
 	if (PG_ARGISNULL(1))
+	{
 		uuid_compressor_append_null(compressor);
+	}
 	else
 	{
 		pg_uuid_t *uuid = DatumGetUUIDP(PG_GETARG_DATUM(1));
@@ -560,11 +576,15 @@ tsl_uuid_compressor_finish(PG_FUNCTION_ARGS)
 	UuidCompressor *compressor = PG_ARGISNULL(0) ? NULL : (UuidCompressor *) PG_GETARG_POINTER(0);
 	void *compressed;
 	if (compressor == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 
 	compressed = uuid_compressor_finish(compressor);
 	if (compressed == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 	PG_RETURN_POINTER(compressed);
 }
 
@@ -575,10 +595,12 @@ uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 
 	MemoryContext old_context;
 	ArrowArray *timestamp_array = NULL;
-	CheckCompressedData(DatumGetPointer(compressed) != NULL);
 
-	void *detoasted = PG_DETOAST_DATUM(compressed);
-	StringInfoData si = { .data = detoasted, .len = VARSIZE_ANY(compressed) };
+	CheckCompressedData(DatumGetPointer(compressed) != NULL);
+	/* detoasting is caller responsibility */
+	CheckCompressedData(!VARATT_IS_EXTERNAL(compressed));
+
+	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE_ANY(compressed) };
 	UuidCompressed *header = consumeCompressedData(&si, sizeof(UuidCompressed));
 	char *timestamp_compressed_data = NULL;
 	char *rand_b_and_variant_compressed_data;
@@ -683,7 +705,9 @@ uuid_compressor_append_uuid(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = uuid_compressor_alloc();
+	}
 
 	pg_uuid_t *uuid = DatumGetUUIDP(val);
 	Ensure(uuid != NULL, "invalid UUID");
@@ -695,7 +719,9 @@ uuid_compressor_append_null_value(Compressor *compressor)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = uuid_compressor_alloc();
+	}
 
 	uuid_compressor_append_null(extended->internal);
 }

@@ -20,6 +20,8 @@
 #include "annotations.h"
 #include "export.h"
 
+#include "compat/compat.h"
+
 TS_FUNCTION_INFO_V1(ts_debug_point_enable);
 TS_FUNCTION_INFO_V1(ts_debug_point_release);
 TS_FUNCTION_INFO_V1(ts_debug_point_id);
@@ -103,9 +105,11 @@ debug_point_release(const DebugPoint *point)
 	ereport(DEBUG1, (errmsg("releasing debug point \"%s\"", point->name)));
 
 	if (!LockRelease(&point->tag, ExclusiveLock, true))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("cannot release debug point \"%s\"", point->name)));
+	}
 }
 
 /*
@@ -118,11 +122,13 @@ debug_point_release(const DebugPoint *point)
 Datum
 ts_debug_point_enable(PG_FUNCTION_ARGS)
 {
+	if (PG_ARGISNULL(0))
+	{
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
+	}
+
 	text *name = PG_GETARG_TEXT_PP(0);
 	DebugPoint point;
-
-	if (PG_ARGISNULL(0))
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
 
 	debug_point_init(&point, text_to_cstring(name));
 	debug_point_enable(&point);
@@ -136,11 +142,13 @@ ts_debug_point_enable(PG_FUNCTION_ARGS)
 Datum
 ts_debug_point_release(PG_FUNCTION_ARGS)
 {
+	if (PG_ARGISNULL(0))
+	{
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
+	}
+
 	text *name = PG_GETARG_TEXT_PP(0);
 	DebugPoint point;
-
-	if (PG_ARGISNULL(0))
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
 
 	debug_point_init(&point, text_to_cstring(name));
 	debug_point_release(&point);
@@ -154,10 +162,12 @@ ts_debug_point_release(PG_FUNCTION_ARGS)
 Datum
 ts_debug_point_id(PG_FUNCTION_ARGS)
 {
-	text *name = PG_GETARG_TEXT_PP(0);
-
 	if (PG_ARGISNULL(0))
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
+	}
+
+	text *name = PG_GETARG_TEXT_PP(0);
 
 	PG_RETURN_UINT64(debug_point_name_to_id(text_to_cstring(name)));
 }
@@ -184,14 +194,18 @@ ts_debug_point_wait(const char *name, bool blocking)
 
 	/* Ensure that we are in a transaction before trying for locks */
 	if (!IsTransactionState())
+	{
 		return;
+	}
 
 	debug_point_init(&point, name);
 
 	ereport(DEBUG3, (errmsg("waiting on debug point '%s'", point.name)));
 
 	if (blocking)
+	{
 		lock_acquire_result = LockAcquire(&point.tag, ShareLock, true, false);
+	}
 	else
 	{
 		/*
@@ -213,11 +227,15 @@ ts_debug_point_wait(const char *name, bool blocking)
 			lock_acquire_result = LockAcquire(&point.tag, ShareLock, true, true);
 
 			if (lock_acquire_result == LOCKACQUIRE_OK)
+			{
 				break;
+			}
 
 			/* don't dare to take a lock when the proc is exiting! */
 			if (proc_exit_inprogress || ProcDiePending)
+			{
 				return;
+			}
 
 			if (retry_count == 0)
 			{
@@ -243,9 +261,16 @@ ts_debug_point_wait(const char *name, bool blocking)
  * Produce an error in case if the debug point is enabled.
  *
  * The idea is to enable the debug point separately first which
- * acquires a ShareLock on this tag. With the debug point enabled, this function
- * when invoked will not get the exclusive lock and will be able to raise
+ * acquires an ExclusiveLock on this tag. With the debug point enabled, this function
+ * when invoked will not get the ShareLock and will be able to raise
  * the error as desired.
+ *
+ * ShareLock is used instead of an ExclusiveLock to prevent concurrent sessions reaching
+ * the same injection point from raising false conflicts.
+ *
+ * A ShareLock request from the same session that holds an ExclusiveLock
+ * always succeeds since a session never conflicts with itself, so we
+ * additionally check with LockHeldByMe to detect same-session injection.
  */
 void
 ts_debug_point_raise_error_if_enabled(const char *name)
@@ -255,17 +280,23 @@ ts_debug_point_raise_error_if_enabled(const char *name)
 
 	debug_point_init(&point, name);
 
-	lock_acquire_result = LockAcquire(&point.tag, ExclusiveLock, true, true);
+	lock_acquire_result = LockAcquire(&point.tag, ShareLock, true, true);
 	switch (lock_acquire_result)
 	{
 		case LOCKACQUIRE_OK:
+			/* ShareLock granted means no other session holds ExclusiveLock.
+			 * But we still need to check whether this session itself enabled
+			 * the injection. */
+			LockRelease(&point.tag, ShareLock, true);
+			if (LockHeldByMeCompat(&point.tag, ExclusiveLock, false))
+			{
+				break;
+			}
+			return;
 		case LOCKACQUIRE_ALREADY_HELD:
 		case LOCKACQUIRE_ALREADY_CLEAR:
-			/* Release/decrement lock count */
-			LockRelease(&point.tag, ExclusiveLock, true);
-			if (lock_acquire_result == LOCKACQUIRE_OK)
-				return;
-			break;
+			LockRelease(&point.tag, ShareLock, true);
+			return;
 		case LOCKACQUIRE_NOT_AVAIL:
 			break;
 	}

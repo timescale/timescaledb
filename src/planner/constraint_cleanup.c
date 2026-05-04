@@ -39,7 +39,9 @@ restrictinfo_cleanup(List *restrictinfos, bool *pfiltered)
 	ListCell *lc;
 	bool filtered = false;
 	if (!restrictinfos)
+	{
 		return NULL;
+	}
 
 	foreach (lc, restrictinfos)
 	{
@@ -53,7 +55,9 @@ restrictinfo_cleanup(List *restrictinfos, bool *pfiltered)
 	}
 
 	if (pfiltered)
+	{
 		*pfiltered = filtered;
+	}
 
 	return filtered ? filtered_ri : restrictinfos;
 }
@@ -72,7 +76,9 @@ indexpath_cleanup(IndexPath *path)
 	{
 		IndexClause *iclause = lfirst_node(IndexClause, lc);
 		if (restrictinfo_is_marked(iclause->rinfo))
+		{
 			continue;
+		}
 
 		filtered_ic = lappend(filtered_ic, iclause);
 	}
@@ -85,7 +91,9 @@ ts_planner_constraint_cleanup(PlannerInfo *root, RelOptInfo *rel)
 	ListCell *lc;
 	bool filtered = false;
 	if (rel->baserestrictinfo)
+	{
 		rel->baserestrictinfo = restrictinfo_cleanup(rel->baserestrictinfo, &filtered);
+	}
 
 	/*
 	 * If we added constraints those will be present in baserestrictinfo.
@@ -106,7 +114,9 @@ ts_planner_constraint_cleanup(PlannerInfo *root, RelOptInfo *rel)
 				{
 					BitmapHeapPath *path = lfirst_node(BitmapHeapPath, lc);
 					if (IsA(path->bitmapqual, IndexPath))
+					{
 						indexpath_cleanup(castNode(IndexPath, path->bitmapqual));
+					}
 
 					break;
 				}

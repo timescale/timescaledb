@@ -45,7 +45,9 @@ static bool
 hypertable_cache_valid_result(const void *result)
 {
 	if (result == NULL)
+	{
 		return false;
+	}
 	return ((HypertableCacheEntry *) result)->hypertable != NULL;
 }
 
@@ -99,10 +101,14 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 	int number_found;
 
 	if (NULL == hq->schema)
+	{
 		hq->schema = get_namespace_name(get_rel_namespace(hq->relid));
+	}
 
 	if (NULL == hq->table)
+	{
 		hq->table = get_rel_name(hq->relid);
+	}
 
 	number_found = ts_hypertable_scan_with_memory_context(hq->schema,
 														  hq->table,
@@ -140,13 +146,17 @@ hypertable_cache_missing_error(const Cache *cache, const CacheQuery *query)
 	const char *const rel_name = get_rel_name(hq->relid);
 
 	if (rel_name == NULL)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_TABLE),
 				 errmsg("OID %u does not refer to a table", hq->relid)));
+	}
 	else
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("table \"%s\" is not a hypertable", rel_name)));
+	}
 }
 
 void
@@ -177,9 +187,13 @@ ts_hypertable_cache_get_entry(Cache *const cache, const Oid relid, const unsigne
 	if (!OidIsValid(relid))
 	{
 		if (flags & CACHE_FLAG_MISSING_OK)
+		{
 			return NULL;
+		}
 		else
+		{
 			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid Oid")));
+		}
 	}
 
 	return ts_hypertable_cache_get_entry_with_table(cache, relid, NULL, NULL, flags);

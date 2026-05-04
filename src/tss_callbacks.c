@@ -46,7 +46,9 @@ ts_get_tss_store_hook(void)
 	TSSCallbacks *ptr = ts_get_tss_callbacks();
 
 	if (ptr && ptr->version_num == TSS_CALLBACKS_VERSION)
+	{
 		return ptr->tss_store_hook;
+	}
 
 	return NULL;
 }
@@ -63,7 +65,7 @@ ts_is_tss_enabled(void)
 			if (ptr->version_num != TSS_CALLBACKS_VERSION)
 			{
 				ereport(WARNING,
-						(errcode(ERRCODE_INTERNAL_ERROR),
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("version mismatch between timescaledb and ts_stat_statements "
 								"callbacks"),
 						 errdetail("Callbacks versions: TimescaleDB (%d) and ts_stat_statements "
@@ -84,7 +86,9 @@ void
 ts_begin_tss_store_callback(void)
 {
 	if (!ts_is_tss_enabled())
+	{
 		return;
+	}
 
 	tss_callback_start_bufusage = pgBufferUsage;
 	tss_callback_start_walusage = pgWalUsage;
@@ -101,12 +105,16 @@ ts_end_tss_store_callback(const char *query, int query_location, int query_len, 
 	tss_store_hook_type hook;
 
 	if (!ts_is_tss_enabled())
+	{
 		return;
+	}
 
 	hook = ts_get_tss_store_hook();
 
 	if (!hook)
+	{
 		return;
+	}
 
 	INSTR_TIME_SET_CURRENT(duration);
 	INSTR_TIME_SUBTRACT(duration, tss_callback_start_time);

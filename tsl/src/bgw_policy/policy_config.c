@@ -22,9 +22,11 @@ policy_config_get_hypertable_id(const Jsonb *config)
 	int32 hypertable_id = ts_jsonb_get_int32_field(config, POLICY_CONFIG_KEY_HYPERTABLE_ID, &found);
 
 	if (!found)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_SQL_JSON_MEMBER_NOT_FOUND),
 				 errmsg("could not find hypertable_id in config for job")));
+	}
 
 	return hypertable_id;
 }
@@ -61,15 +63,21 @@ policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_labe
 		int64 config_value = ts_jsonb_get_int64_field(config, json_label, &found);
 
 		if (!found && !null_ok)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("could not find %s in config for existing job", json_label)));
+		}
 
 		if (!found && isnull)
+		{
 			return true;
+		}
 
 		if ((!found && !isnull) || (found && isnull))
+		{
 			return false;
+		}
 
 		switch (lag_type)
 		{
@@ -86,18 +94,26 @@ policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_labe
 	else
 	{
 		if (lag_type != INTERVALOID)
+		{
 			return false;
+		}
 		Interval *config_value = ts_jsonb_get_interval_field(config, json_label);
 		if (config_value == NULL && !null_ok)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("could not find %s in config for job", json_label)));
+		}
 
 		if (config_value == NULL && isnull)
+		{
 			return true;
+		}
 
 		if ((config_value == NULL && !isnull) || (config_value != NULL && isnull))
+		{
 			return false;
+		}
 
 		return DatumGetBool(
 			DirectFunctionCall2(interval_eq, IntervalPGetDatum(config_value), lag_datum));

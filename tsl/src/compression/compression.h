@@ -85,6 +85,8 @@ typedef struct SegmentInfo
 	Datum val;
 	FmgrInfo eq_fn;
 	FunctionCallInfo eq_fcinfo;
+	AttrNumber attnum;
+	const char *attname;
 	int16 typlen;
 	bool is_null;
 	bool typ_by_val;
@@ -99,6 +101,30 @@ typedef struct CompressedSegmentInfo
 	SegmentInfo *segment_info;
 	int16 chunk_offset;
 } CompressedSegmentInfo;
+
+/*
+ * Segmentby analysis uses three nested linear scans: over every row,
+ * every candidate column, and every distinct value per column.
+ * These constants cap the inner two loops. Raising either increases
+ * direct compression overhead.
+ */
+#define MAX_SEGMENTBY_CANDIDATES 10
+#define MAX_SEGMENTBY_DISTINCT 20
+
+typedef struct DistinctEntry
+{
+	Datum value;
+	bool is_null;
+	int64 count;
+} DistinctEntry;
+
+typedef struct ColumnAnalysis
+{
+	SegmentInfo *seg_info;
+	int n_distinct;
+	bool rejected;
+	DistinctEntry entries[MAX_SEGMENTBY_DISTINCT];
+} ColumnAnalysis;
 
 typedef struct PerCompressedColumn
 {
@@ -274,6 +300,8 @@ typedef struct RowCompressor
 	int64 tuples_to_sort;	/* number of tuples to sort with tuplesort */
 	int64 tuple_sort_limit; /* number of tuples to flush the compressor on */
 
+	bool needs_analyze_segmentby;
+
 	List *metadata_builders; /* List of BatchMetadataBuilder */
 } RowCompressor;
 
@@ -356,16 +384,9 @@ extern void decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot 
 extern void init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot);
 typedef struct ModifyHypertableState ModifyHypertableState;
 extern bool decompress_target_segments(ModifyHypertableState *ht_state);
-/* CompressSingleRowState methods */
-struct CompressSingleRowState;
-typedef struct CompressSingleRowState CompressSingleRowState;
 
-extern CompressSingleRowState *compress_row_init(int srcht_id, Relation in_rel, Relation out_rel);
 extern SegmentInfo *segment_info_new(Form_pg_attribute column_attr);
 extern bool segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_null);
-extern TupleTableSlot *compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot);
-extern void compress_row_end(CompressSingleRowState *cr);
-extern void compress_row_destroy(CompressSingleRowState *cr);
 extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor,
 													BulkWriter *writer);
 extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
@@ -375,13 +396,15 @@ extern void compress_chunk_populate_sort_info_for_column(const CompressionSettin
 														 AttrNumber *att_nums, Oid *sort_operator,
 														 Oid *collation, bool *nulls_first);
 extern Tuplesortstate *compression_create_tuplesort_state(CompressionSettings *settings,
-														  Relation rel);
+														  Relation rel, bool random_access);
 extern void row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *settings,
 								const TupleDesc noncompressed_tupdesc,
 								const TupleDesc compressed_tupdesc);
 
 extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort,
-										  int tuple_sort_limit);
+										  int tuple_sort_limit, bool created_compressed_chunk);
+extern void tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *compressor,
+													   BulkWriter *bulk_writer);
 extern void tsl_compressor_set_invalidation(RowCompressor *compressor, Hypertable *ht,
 											Oid chunk_relid);
 extern void tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer,
@@ -409,7 +432,6 @@ extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDe
 
 extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);
-extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
 extern int decompress_batch(RowDecompressor *decompressor);
 extern bool decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos,
 									  int num_attnos);
@@ -448,8 +470,14 @@ const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm 
 struct decompress_batches_stats
 {
 	int64 batches_deleted;
-	int64 batches_filtered;
 	int64 batches_decompressed;
+	int64 batches_scanned;
+	int64 batches_checked_by_bloom;
+	int64 batches_pruned_by_bloom;
+	int64 batches_without_bloom;
+	int64 batches_bloom_false_positives;
 	int64 tuples_decompressed;
 	int64 tuples_deleted;
+	int64 batches_filtered_compressed;
+	int64 batches_filtered_decompressed;
 };

@@ -23,6 +23,7 @@
 #include <commands/defrem.h>
 #include <commands/event_trigger.h>
 #include <commands/prepare.h>
+#include <commands/progress.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <commands/trigger.h>
@@ -43,6 +44,7 @@
 #include <storage/lockdefs.h>
 #include <tcop/utility.h>
 #include <utils/acl.h>
+#include <utils/backend_progress.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/guc.h>
@@ -142,7 +144,9 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 	const Chunk *chunk;
 
 	if (expect_chunk_modification)
+	{
 		return;
+	}
 
 	chunk = ts_chunk_get_by_relid(relid, false /* fail_if_not_found */);
 
@@ -209,10 +213,12 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 						ChunkConstraint *cc = &ccs->constraints[i];
 
 						if (namestrcmp(&cc->fd.constraint_name, cmd->name) == 0)
+						{
 							ereport(ERROR,
 									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 									 errmsg("cannot drop inherited constraint"),
 									 errhint("Drop the constraint on the hypertable instead.")));
+						}
 					}
 					break;
 				}
@@ -224,9 +230,11 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 		}
 
 		if (!all_allowed)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("operation not supported on chunk tables")));
+		}
 	}
 }
 
@@ -238,7 +246,9 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 	ListCell *lc;
 	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
 	if ((status & HypertableIsMaterialization) == 0)
+	{
 		return;
+	}
 
 	/* only allow if all commands are allowed */
 	foreach (lc, stmt->cmds)
@@ -250,6 +260,7 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 			case AT_AddIndex:
 			case AT_ReAddIndex:
 			case AT_SetRelOptions:
+			case AT_ResetRelOptions:
 			case AT_ReplicaIdentity:
 				/* allowed on materialization tables */
 				continue;
@@ -268,7 +279,9 @@ static bool
 ts_hypertable_has_compressed_chunks(const Hypertable *ht)
 {
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+	{
 		return false;
+	}
 
 	return ts_chunk_exists_with_compression(ht->fd.id);
 }
@@ -278,7 +291,9 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 {
 	ListCell *lc;
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+	{
 		return;
+	}
 
 	/* only allow if all commands are allowed */
 	foreach (lc, stmt->cmds)
@@ -327,7 +342,9 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_AlterColumnType:
 				/* Allow AT_AlterColumnType when no compressed chunks exist */
 				if (!ts_hypertable_has_compressed_chunks(ht))
+				{
 					continue;
+				}
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("operation not supported on hypertables with compressed chunks")));
@@ -445,9 +462,11 @@ static void
 relation_not_only(RangeVar *rv)
 {
 	if (!rv->inh)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("ONLY option not supported on hypertable operations")));
+	}
 }
 
 static bool
@@ -461,7 +480,9 @@ check_table_in_rangevar_list(List *rvlist, Name schema_name, Name table_name)
 
 		if (strcmp(rvar->relname, NameStr(*table_name)) == 0 &&
 			strcmp(rvar->schemaname, NameStr(*schema_name)) == 0)
+		{
 			return true;
+		}
 	}
 
 	return false;
@@ -472,7 +493,12 @@ add_chunk_oid(Hypertable *ht, Oid chunk_relid, void *vargs)
 {
 	ProcessUtilityArgs *args = vargs;
 	GrantStmt *stmt = castNode(GrantStmt, args->parsetree);
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	Chunk *chunk;
+
+	/* Switch to the parent context for persistent allocations */
+	MemoryContext per_chunk_mcxt = MemoryContextSwitchTo(GetMemoryChunkContext(stmt));
+
+	chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	/*
 	 * If chunk is in the same schema as the hypertable it could already be part of
 	 * the objects list in the case of "GRANT ALL IN SCHEMA" for example
@@ -483,6 +509,7 @@ add_chunk_oid(Hypertable *ht, Oid chunk_relid, void *vargs)
 			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
 		stmt->objects = lappend(stmt->objects, rv);
 	}
+	MemoryContextSwitchTo(per_chunk_mcxt);
 }
 
 static DDLResult
@@ -493,7 +520,9 @@ process_drop_schema_start(DropStmt *stmt)
 	 * background worker, so there is no point in doing anything here.
 	 */
 	if (stmt->behavior == DROP_RESTRICT)
+	{
 		return DDL_CONTINUE;
+	}
 
 	/*
 	 * Here we are relying on that if we fail to drop one of the
@@ -650,7 +679,9 @@ ts_bgw_job_rename_schema_name(const char *old_schema_name, const char *new_schem
 								   NameStr(*curr_proc_name));
 
 			if (should_free)
+			{
 				heap_freetuple(tuple);
+			}
 		}
 	}
 }
@@ -682,7 +713,9 @@ ts_bgw_job_rename_proc(ObjectAddress address, const char *newschema, const char 
 								   newname);
 
 			if (should_free)
+			{
 				heap_freetuple(tuple);
+			}
 		}
 	}
 	return DDL_CONTINUE;
@@ -712,11 +745,15 @@ process_alterviewschema(ProcessUtilityArgs *args)
 	Assert(stmt->objectType == OBJECT_MATVIEW || stmt->objectType == OBJECT_VIEW);
 
 	if (NULL == stmt->relation)
+	{
 		return;
+	}
 
 	relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 	if (!OidIsValid(relid))
+	{
 		return;
+	}
 
 	schema = get_namespace_name(get_rel_namespace(relid));
 	name = get_rel_name(relid);
@@ -735,12 +772,16 @@ process_altertableschema(ProcessUtilityArgs *args)
 	Assert(alterstmt->objectType == OBJECT_TABLE);
 
 	if (NULL == alterstmt->relation)
+	{
 		return;
+	}
 
 	relid = RangeVarGetRelid(alterstmt->relation, NoLock, true);
 
 	if (!OidIsValid(relid))
+	{
 		return;
+	}
 
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 
@@ -759,7 +800,9 @@ process_altertableschema(ProcessUtilityArgs *args)
 		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 
 		if (NULL != chunk)
+		{
 			ts_chunk_set_schema(chunk, alterstmt->newschema);
+		}
 	}
 	else
 	{
@@ -814,7 +857,9 @@ process_copy(ProcessUtilityArgs *args)
 		relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 
 		if (!OidIsValid(relid))
+		{
 			return DDL_CONTINUE;
+		}
 
 		ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 
@@ -839,10 +884,12 @@ process_copy(ProcessUtilityArgs *args)
 				 */
 				Chunk *uncompressed = ts_chunk_get_compressed_chunk_parent(chunk);
 				if (ts_chunk_is_frozen(uncompressed))
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 							 errmsg("cannot COPY into chunk belonging to a frozen "
 									"chunk")));
+				}
 
 				ts_cache_release(&hcache);
 				return DDL_CONTINUE;
@@ -857,14 +904,18 @@ process_copy(ProcessUtilityArgs *args)
 	if (!stmt->is_from || !stmt->relation)
 	{
 		if (ht && stmt->relation)
+		{
 			ereport(NOTICE,
 					(errmsg("hypertable data are in the chunks, no data will be copied"),
 					 errdetail("Data for hypertables are stored in the chunks of a hypertable so "
 							   "COPY TO of a hypertable will not copy any data."),
 					 errhint("Use \"COPY (SELECT * FROM <hypertable>) TO ...\" to copy all data in "
 							 "hypertable, or copy each chunk individually.")));
+		}
 		if (hcache)
+		{
 			ts_cache_release(&hcache);
+		}
 
 		return DDL_CONTINUE;
 	}
@@ -903,17 +954,33 @@ foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
 	List *chunks;
 	ListCell *lc;
 	int n = 0;
+	MemoryContext orig_mcxt = CurrentMemoryContext;
+	MemoryContext chunk_mcxt;
 
 	if (NULL == ht)
+	{
 		return -1;
+	}
 
 	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 
+	/*
+	 * Use a per-iteration temporary memory context to avoid accumulating
+	 * allocations when processing hypertables with many chunks. Callbacks
+	 * that need persistent allocations should switch to the parent context.
+	 */
+	chunk_mcxt = AllocSetContextCreate(orig_mcxt, "foreach_chunk", ALLOCSET_DEFAULT_SIZES);
 	foreach (lc, chunks)
 	{
+		MemoryContextSwitchTo(chunk_mcxt);
 		process_chunk(ht, lfirst_oid(lc), arg);
+		MemoryContextSwitchTo(orig_mcxt);
+		MemoryContextReset(chunk_mcxt);
 		n++;
 	}
+
+	MemoryContextDelete(chunk_mcxt);
+	list_free(chunks);
 
 	return n;
 }
@@ -930,18 +997,29 @@ foreach_compressed_chunk(Hypertable *ht, process_chunk_t process_chunk, void *ar
 	List *chunks;
 	ListCell *lc;
 	int n = 0;
+	MemoryContext orig_mcxt = CurrentMemoryContext;
+	MemoryContext chunk_mcxt;
 
 	if (!ht || !ht->fd.compressed_hypertable_id)
+	{
 		return -1;
+	}
 
 	chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
 
+	chunk_mcxt = AllocSetContextCreate(orig_mcxt, "foreach_chunk", ALLOCSET_DEFAULT_SIZES);
 	foreach (lc, chunks)
 	{
 		Chunk *chunk = lfirst(lc);
+		MemoryContextSwitchTo(chunk_mcxt);
 		process_chunk(ht, chunk->table_id, arg);
+		MemoryContextReset(chunk_mcxt);
 		n++;
 	}
+
+	MemoryContextSwitchTo(orig_mcxt);
+	MemoryContextDelete(chunk_mcxt);
+	list_free(chunks);
 
 	return n;
 }
@@ -976,6 +1054,7 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	CommitTransactionCommand();
 
 	num_chunks = list_length(chunks);
+	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_TOTAL, num_chunks);
 	foreach (lc, chunks)
 	{
 		process_chunk(hypertable_id, lfirst_oid(lc), arg);
@@ -1023,11 +1102,15 @@ register_chunk_for_rebuild_if_needed(Oid chunk_relid, VacuumCtx *ctx)
 {
 	/* Only VACUUM FULL does a complete table rewrite */
 	if (!ctx->is_vacuumfull)
+	{
 		return;
+	}
 
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, false);
 	if (!chunk)
+	{
 		return;
+	}
 
 	/*
 	 * VACUUM FULL will materialize missing attributes. Propagate
@@ -1052,9 +1135,14 @@ static void
 add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	VacuumCtx *ctx = (VacuumCtx *) arg;
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	Chunk *chunk;
 	VacuumRelation *chunk_vacuum_rel;
 	RangeVar *chunk_range_var;
+
+	/* Switch to the parent context for persistent allocations */
+	MemoryContext per_chunk_mcxt = MemoryContextSwitchTo(GetMemoryChunkContext(ctx->ht_vacuum_rel));
+
+	chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
 	chunk_range_var = copyObject(ctx->ht_vacuum_rel->relation);
 	chunk_range_var->relname = NameStr(chunk->fd.table_name);
@@ -1076,6 +1164,7 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 	}
 
 	register_chunk_for_rebuild_if_needed(chunk_relid, ctx);
+	MemoryContextSwitchTo(per_chunk_mcxt);
 }
 
 /*
@@ -1107,7 +1196,9 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd, VacuumCtx *ctx)
 		if (!vacuum_is_permitted_for_relation_compat(relid,
 													 classform,
 													 is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
+		{
 			continue;
+		}
 
 		/*
 		 * We include partitioned tables here; depending on which operation is
@@ -1116,7 +1207,9 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd, VacuumCtx *ctx)
 		 */
 		if (classform->relkind != RELKIND_RELATION && classform->relkind != RELKIND_MATVIEW &&
 			classform->relkind != RELKIND_PARTITIONED_TABLE)
+		{
 			continue;
+		}
 
 		/*
 		 * Build VacuumRelation(s) specifying the table OIDs to be processed.
@@ -1164,14 +1257,20 @@ process_vacuum(ProcessUtilityArgs *args)
 		/* if "only_database_stats" is defined then don't execute our custom code and return to
 		 * the postgres execution for the proper validations */
 		if (is_vacuumcmd && strcmp(opt->defname, "only_database_stats") == 0)
+		{
 			return DDL_CONTINUE;
+		}
 #endif
 		if (strcmp(opt->defname, "full") == 0)
+		{
 			ctx.is_vacuumfull = defGetBoolean(opt);
+		}
 	}
 
 	if (stmt->rels == NIL)
+	{
 		vacuum_rels = ts_get_all_vacuum_rels(is_vacuumcmd, &ctx);
+	}
 	else
 	{
 		Cache *hcache = ts_hypertable_cache_pin();
@@ -1182,7 +1281,9 @@ process_vacuum(ProcessUtilityArgs *args)
 			Oid table_relid = vacuum_rel->oid;
 
 			if (!OidIsValid(table_relid) && vacuum_rel->relation != NULL)
+			{
 				table_relid = RangeVarGetRelid(vacuum_rel->relation, NoLock, true);
+			}
 
 			if (OidIsValid(table_relid))
 			{
@@ -1283,7 +1384,9 @@ process_truncate(ProcessUtilityArgs *args)
 		bool list_append = false;
 
 		if (!rv)
+		{
 			continue;
+		}
 
 		/* Grab AccessExclusiveLock, same as regular TRUNCATE processing grabs
 		 * below. We just do it preemptively here. */
@@ -1308,9 +1411,11 @@ process_truncate(ProcessUtilityArgs *args)
 						Hypertable *mat_ht, *raw_ht;
 
 						if (!relation_should_recurse(rv))
+						{
 							ereport(ERROR,
 									(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 									 errmsg("cannot truncate only a continuous aggregate")));
+						}
 
 						mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 						Assert(mat_ht != NULL);
@@ -1338,9 +1443,11 @@ process_truncate(ProcessUtilityArgs *args)
 
 						agg_status = ts_continuous_agg_hypertable_status(mat_ht->fd.id);
 						if (agg_status & HypertableIsRawTable)
+						{
 							ts_cm_functions->continuous_agg_invalidate_raw_ht(mat_ht,
 																			  TS_TIME_NOBEGIN,
 																			  TS_TIME_NOEND);
+						}
 
 						/* mark list as changed because we'll add the materialization hypertable */
 						list_changed = true;
@@ -1372,11 +1479,13 @@ process_truncate(ProcessUtilityArgs *args)
 						agg_status = ts_continuous_agg_hypertable_status(ht->fd.id);
 
 						if ((agg_status & HypertableIsMaterialization) != 0)
+						{
 							ereport(ERROR,
 									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 									 errmsg("cannot TRUNCATE a hypertable underlying a continuous "
 											"aggregate"),
 									 errhint("TRUNCATE the continuous aggregate instead.")));
+						}
 
 						if (agg_status == HypertableIsRawTable)
 						{
@@ -1387,11 +1496,13 @@ process_truncate(ProcessUtilityArgs *args)
 						}
 
 						if (!relation_should_recurse(rv))
+						{
 							ereport(ERROR,
 									(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 									 errmsg("cannot truncate only a hypertable"),
 									 errhint("Do not specify the ONLY keyword, or use truncate"
 											 " only on the chunks directly.")));
+						}
 
 						hypertables = lappend(hypertables, ht);
 						break;
@@ -1408,18 +1519,22 @@ process_truncate(ProcessUtilityArgs *args)
 						 * Block direct TRUNCATE on frozen chunk.
 						 */
 						if (ts_chunk_is_frozen(chunk))
+						{
 							ereport(ERROR,
 									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 									 errmsg("cannot TRUNCATE frozen chunk \"%s\"",
 											get_rel_name(relid)),
 									 errhint("Unfreeze the chunk to TRUNCATE it.")));
+						}
 
 						Assert(ht != NULL);
 
 						/* If the hypertable has continuous aggregates, then invalidate
 						 * the truncated region. */
 						if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
+						{
 							ts_continuous_agg_invalidate_chunk(ht, chunk);
+						}
 						/* Truncate the compressed chunk too */
 						if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 						{
@@ -1464,7 +1579,9 @@ process_truncate(ProcessUtilityArgs *args)
 	 * that hold data.
 	 */
 	if (list_changed)
+	{
 		stmt->relations = relations;
+	}
 
 	if (stmt->relations != NIL)
 	{
@@ -1551,7 +1668,9 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 		Chunk *chunk;
 
 		if (NULL == relation)
+		{
 			continue;
+		}
 
 		chunk = ts_chunk_get_by_name_with_memory_context(relation->schemaname,
 														 relation->relname,
@@ -1565,11 +1684,13 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 			Hypertable *ht;
 
 			if (ts_chunk_contains_compressed_data(chunk))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("dropping columnstore chunks not supported"),
 						 errhint("Please drop the corresponding chunk on the rowstore hypertable "
 								 "instead.")));
+			}
 
 			/* if cascade is enabled, delete the compressed chunk with cascade too. Otherwise
 			 *  it would be blocked if there are dependent objects */
@@ -1582,7 +1703,9 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 													   false);
 				/* The chunk may have been delete by a CASCADE */
 				if (compressed_chunk != NULL)
+				{
 					ts_chunk_drop(compressed_chunk, stmt->behavior, DEBUG1);
+				}
 			}
 
 			ht = ts_hypertable_cache_get_entry(hcache, chunk->hypertable_relid, CACHE_FLAG_NONE);
@@ -1592,7 +1715,9 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 			/* If the hypertable has continuous aggregates, then invalidate
 			 * the dropped region. */
 			if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
+			{
 				ts_continuous_agg_invalidate_chunk(ht, chunk);
+			}
 		}
 	}
 
@@ -1618,7 +1743,9 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 		Oid relid;
 
 		if (NULL == relation)
+		{
 			continue;
+		}
 
 		relid = RangeVarGetRelid(relation, NoLock, true);
 
@@ -1631,11 +1758,13 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 			if (ht)
 			{
 				if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("dropping columnstore hypertables not supported"),
 							 errhint("Please drop the corresponding rowstore hypertable "
 									 "instead.")));
+				}
 
 				/*
 				 *  We need to drop hypertable chunks before the hypertable to avoid the need
@@ -1698,15 +1827,21 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 		Hypertable *ht;
 
 		if (NULL == relation)
+		{
 			continue;
+		}
 
 		index_relid = RangeVarGetRelid(relation, NoLock, true);
 		if (!OidIsValid(index_relid))
+		{
 			continue;
+		}
 
 		ht_relid = IndexGetRelation(index_relid, true);
 		if (!OidIsValid(ht_relid))
+		{
 			continue;
+		}
 
 		ht = ts_hypertable_cache_get_entry(hcache, ht_relid, CACHE_FLAG_MISSING_OK);
 		if (ht)
@@ -1737,12 +1872,14 @@ process_drop_tablespace(ProcessUtilityArgs *args)
 	int count = ts_tablespace_count_attached(stmt->tablespacename);
 
 	if (count > 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("tablespace \"%s\" is still attached to %d hypertables",
 						stmt->tablespacename,
 						count),
 				 errhint("Detach the tablespace from all hypertables before removing it.")));
+	}
 
 	return DDL_CONTINUE;
 }
@@ -1765,11 +1902,15 @@ process_grant_add_by_name(GrantStmt *stmt, bool was_schema_op, Name schema_name,
 	bool already_added = false;
 
 	if (was_schema_op)
+	{
 		already_added = check_table_in_rangevar_list(stmt->objects, schema_name, table_name);
+	}
 
 	if (!already_added)
+	{
 		process_grant_add_by_rel(stmt,
 								 makeRangeVar(NameStr(*schema_name), NameStr(*table_name), -1));
+	}
 }
 
 static void
@@ -1865,7 +2006,9 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 	/* We let the calling function handle anything that is not
 	 * ACL_TARGET_OBJECT or ACL_TARGET_ALL_IN_SCHEMA */
 	if (stmt->targtype != ACL_TARGET_OBJECT && stmt->targtype != ACL_TARGET_ALL_IN_SCHEMA)
+	{
 		return DDL_CONTINUE;
+	}
 
 	switch (stmt->objtype)
 	{
@@ -1973,7 +2116,9 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 
 				result = DDL_DONE;
 				if (stmt->objects != NIL)
+				{
 					prev_ProcessUtility(args);
+				}
 
 				/* Restore ALL IN SCHEMA command type and it's objects */
 				if (was_schema_op)
@@ -2004,7 +2149,9 @@ process_grant_and_revoke_role(ProcessUtilityArgs *args)
 
 	/* We only care about revokes and setting privileges on a specific object */
 	if (stmt->is_grant)
+	{
 		return DDL_DONE;
+	}
 
 	ts_tablespace_validate_revoke_role(stmt);
 
@@ -2022,10 +2169,12 @@ process_drop_view_start(ProcessUtilityArgs *args, DropStmt *stmt)
 		ContinuousAgg *const cagg = ts_continuous_agg_find_by_rv(rv);
 
 		if (cagg)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot drop continuous aggregate using DROP VIEW"),
 					 errhint("Use DROP MATERIALIZED VIEW to drop a continuous aggregate.")));
+		}
 	}
 }
 
@@ -2054,10 +2203,12 @@ process_drop_continuous_aggregates(ProcessUtilityArgs *args, DropStmt *stmt)
 	   no continuous aggregates. Otherwise, we have a mixture of tables and
 	   views and are looking for views only.*/
 	if (caggs_count > 0 && caggs_count < list_length(stmt->objects))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("mixing continuous aggregates and other objects not allowed"),
 				 errhint("Drop continuous aggregates and other objects in separate statements.")));
+	}
 }
 
 static bool
@@ -2066,14 +2217,18 @@ fetch_role_info(RoleSpec *rolespec, Oid *roleid)
 	/* Special role specifiers should not be present when dropping a role,
 	 * but if they are, we just ignore them */
 	if (rolespec->roletype != ROLESPEC_CSTRING)
+	{
 		return false;
+	}
 
 	/* Fetch the heap tuple from system table. If heaptuple is not valid it
 	 * means we did not find a role. We ignore it since the real execution
 	 * will handle this. */
 	HeapTuple tuple = SearchSysCache1(AUTHNAME, PointerGetDatum(rolespec->rolename));
 	if (!HeapTupleIsValid(tuple))
+	{
 		return false;
+	}
 
 	Form_pg_authid roleform = (Form_pg_authid) GETSTRUCT(tuple);
 	*roleid = roleform->oid;
@@ -2092,7 +2247,9 @@ process_drop_role(ProcessUtilityArgs *args)
 		Oid roleid;
 
 		if (!fetch_role_info(rolespec, &roleid))
+		{
 			continue;
+		}
 
 		ScanIterator iterator =
 			ts_scan_iterator_create(BGW_JOB, AccessShareLock, CurrentMemoryContext);
@@ -2190,13 +2347,17 @@ process_reindex(ProcessUtilityArgs *args)
 	DDLResult result = DDL_CONTINUE;
 
 	if (NULL == stmt->relation)
+	{
 		/* Not a case we are interested in */
 		return DDL_CONTINUE;
+	}
 
 	relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 
 	if (!OidIsValid(relid))
+	{
 		return DDL_CONTINUE;
+	}
 
 	hcache = ts_hypertable_cache_pin();
 
@@ -2210,12 +2371,16 @@ process_reindex(ProcessUtilityArgs *args)
 				PreventCommandDuringRecovery("REINDEX");
 				ts_hypertable_permissions_check_by_id(ht->fd.id);
 				if (get_reindex_options(stmt) & REINDEXOPT_CONCURRENTLY)
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("concurrent index creation on hypertables is not supported")));
+				}
 
 				if (foreach_chunk(ht, reindex_chunk, args) >= 0)
+				{
 					result = DDL_DONE;
+				}
 			}
 			break;
 
@@ -2280,7 +2445,9 @@ process_rename_table(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 
 		if (NULL != chunk)
+		{
 			ts_chunk_set_name(chunk, stmt->newname);
+		}
 	}
 	else
 	{
@@ -2300,12 +2467,14 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 
 		if (chunk)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot rename column \"%s\" of hypertable chunk \"%s\"",
 							stmt->subname,
 							get_rel_name(relid)),
 					 errhint("Rename the hypertable column instead.")));
+		}
 
 		/* This was not a hypertable and not a chunk, but it could be a
 		 * continuous aggregate.
@@ -2363,6 +2532,7 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 		 * agg, but only if this was an explicit request for rename on a
 		 * materialization table. */
 		if ((ts_continuous_agg_hypertable_status(ht->fd.id) & HypertableIsMaterialization) != 0)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("renaming columns on materialization tables is not supported"),
@@ -2370,6 +2540,7 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 							   stmt->subname,
 							   get_rel_name(relid)),
 					 errhint("Rename the column on the continuous aggregate instead.")));
+		}
 	}
 
 	/*
@@ -2387,7 +2558,9 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 		 * and this comes from the compression settings.
 		 */
 		if (ts_cm_functions->process_rename_cmd)
+		{
 			ts_cm_functions->process_rename_cmd(relid, hcache, stmt);
+		}
 
 		/* The compression settings update can only proceed after the columns are renamed */
 		ts_compression_settings_rename_column_cascade(ht->main_table_relid,
@@ -2398,7 +2571,9 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 														  stmt->subname);
 
 		if (dim)
+		{
 			ts_dimension_set_name(dim, stmt->newname);
+		}
 		else
 		{
 			Form_chunk_column_stats form =
@@ -2409,7 +2584,9 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 
 				/* refresh the ht entry to accommodate this rename */
 				if (ht->range_space)
+				{
 					pfree(ht->range_space);
+				}
 				ht->range_space =
 					ts_chunk_column_stats_range_space_scan(ht->fd.id,
 														   ht->main_table_relid,
@@ -2433,7 +2610,9 @@ process_rename_index(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 	Hypertable *ht;
 
 	if (!OidIsValid(tablerelid))
+	{
 		return;
+	}
 
 	ht = ts_hypertable_cache_get_entry(hcache, tablerelid, CACHE_FLAG_MISSING_OK);
 	if (ht)
@@ -2529,7 +2708,9 @@ validate_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 		ts_chunk_constraint_get_name_from_hypertable_constraint(chunk_relid, cmd->name);
 
 	if (chunk_cmd->name == NULL)
+	{
 		return;
+	}
 
 	/* do not pass down the VALIDATE RECURSE subtype */
 	chunk_cmd->subtype = AT_ValidateConstraint;
@@ -2561,18 +2742,24 @@ process_rename_constraint_or_trigger(ProcessUtilityArgs *args, Cache *hcache, Oi
 		relation_not_only(stmt->relation);
 
 		if (stmt->renameType == OBJECT_TABCONSTRAINT)
+		{
 			foreach_chunk(ht, rename_hypertable_constraint, stmt);
+		}
 		else if (stmt->renameType == OBJECT_TRIGGER)
+		{
 			foreach_chunk(ht, rename_hypertable_trigger, stmt);
+		}
 	}
 	else if (stmt->renameType == OBJECT_TABCONSTRAINT)
 	{
 		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 
 		if (NULL != chunk)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("renaming constraints on chunks is not supported")));
+		}
 	}
 }
 
@@ -2588,7 +2775,9 @@ process_rename(ProcessUtilityArgs *args)
 	{
 		relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 		if (!OidIsValid(relid))
+		{
 			return DDL_CONTINUE;
+		}
 	}
 
 	hcache = ts_hypertable_cache_pin();
@@ -2653,7 +2842,9 @@ process_altertable_change_owner_bgw_jobs(int32 hypertable_id, Oid newrole_oid)
 			HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 			ts_bgw_job_update_owner(ti->scanrel, tuple, ts_scanner_get_tupledesc(ti), newrole_oid);
 			if (should_free)
+			{
 				heap_freetuple(tuple);
+			}
 		}
 	}
 }
@@ -2732,7 +2923,9 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 									 quote_identifier(elem->name) :
 									 deparse_expression(elem->expr, dpcontext, false, false));
 				if (i < list_length(stmt->indexParams))
+				{
 					appendStringInfo(&command, " AND ");
+				}
 			}
 			Assert(i > 0);
 		}
@@ -2748,7 +2941,9 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 							 elem->name ? quote_identifier(elem->name) :
 										  deparse_expression(elem->expr, dpcontext, false, false));
 			if (j < list_length(stmt->indexParams))
+			{
 				appendStringInfo(&command, ",");
+			}
 		}
 		Assert(j > 0);
 
@@ -2757,7 +2952,9 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 		appendStringInfo(&command, ")");
 
 		if (SPI_connect() != SPI_OK_CONNECT)
+		{
 			elog(ERROR, "could not connect to SPI");
+		}
 
 		/* Lock down search_path */
 		int save_nestlevel = NewGUCNestLevel();
@@ -2766,10 +2963,12 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
 		if (res < 0)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 (errmsg("could not verify unique constraint on \"%s\"",
 							 get_rel_name(chunk->table_id)))));
+		}
 
 		bool isnull;
 		Datum has_conflicts =
@@ -2777,16 +2976,20 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 		Assert(!isnull);
 
 		if (isnull || DatumGetBool(has_conflicts))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNIQUE_VIOLATION),
 					 (errmsg("duplicate key value violates unique constraint"))));
+		}
 
 		/* Restore search_path */
 		AtEOXact_GUC(false, save_nestlevel);
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
+		{
 			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+		}
 	}
 }
 
@@ -2815,7 +3018,9 @@ validate_check_constraint(Chunk *chunk, Constraint *con)
 						 deparsed);
 
 		if (SPI_connect() != SPI_OK_CONNECT)
+		{
 			elog(ERROR, "could not connect to SPI");
+		}
 
 		/* Lock down search_path */
 		int save_nestlevel = NewGUCNestLevel();
@@ -2824,10 +3029,12 @@ validate_check_constraint(Chunk *chunk, Constraint *con)
 		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
 		if (res < 0)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 (errmsg("could not verify check constraint on \"%s\"",
 							 get_rel_name(chunk->table_id)))));
+		}
 
 		bool isnull;
 		Datum has_conflicts =
@@ -2835,12 +3042,14 @@ validate_check_constraint(Chunk *chunk, Constraint *con)
 		Assert(!isnull);
 
 		if (isnull || DatumGetBool(has_conflicts))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_CHECK_VIOLATION),
 					 errmsg("check constraint \"%s\" of relation \"%s\" is violated by some row",
 							con->conname,
 							RelationGetRelationName(rel)),
 					 errtableconstraint(rel, con->conname)));
+		}
 
 		table_close(rel, NoLock);
 		/* Restore search_path */
@@ -2848,7 +3057,9 @@ validate_check_constraint(Chunk *chunk, Constraint *con)
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
+		{
 			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+		}
 	}
 }
 
@@ -2862,7 +3073,9 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	{
 		case AT_AddIndex:
 			if (ts_chunk_is_compressed(chunk))
+			{
 				validate_index_constraints(chunk, castNode(IndexStmt, info->cmd->def));
+			}
 
 			break;
 		case AT_AddConstraint:
@@ -2904,6 +3117,7 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 				}
 				default:
 					if (ts_chunk_is_compressed(chunk))
+					{
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg(
@@ -2911,6 +3125,7 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 									 "data"),
 								 errhint("Convert the data to rowstore before retrying the "
 										 "operation.")));
+					}
 			}
 			break;
 			/* Other AT commands might not be allowed on compressed chunks, but
@@ -2983,45 +3198,57 @@ validate_set_not_null(Hypertable *ht, Oid chunk_relid, void *arg)
 			Form_pg_attribute attform = ((Form_pg_attribute) GETSTRUCT(atttuple));
 
 			if (attform->atthasdef)
+			{
 				appendStringInfo(&command,
 								 "%s IS NOT NULL AND "
 								 "_timescaledb_functions.compressed_data_has_nulls(%s)",
 								 quote_identifier(cmd->name),
 								 quote_identifier(cmd->name));
+			}
 			else
+			{
 				appendStringInfo(&command,
 								 "%s IS NULL OR "
 								 "_timescaledb_functions.compressed_data_has_nulls(%s)",
 								 quote_identifier(cmd->name),
 								 quote_identifier(cmd->name));
+			}
 			ReleaseSysCache(atttuple);
 		}
 		appendStringInfo(&command, ")");
 
 		if (SPI_connect() != SPI_OK_CONNECT)
+		{
 			elog(ERROR, "could not connect to SPI");
+		}
 
 		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
 		if (res < 0)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 (errmsg("could not verify presence of NULL values on \"%s\"",
 							 get_rel_name(chunk_relid)))));
+		}
 
 		bool isnull;
 		Datum has_nulls = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
 
 		if (isnull || DatumGetBool(has_nulls))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_NOT_NULL_VIOLATION),
 					 (errmsg("column \"%s\" of relation \"%s\" contains null values",
 							 cmd->name,
 							 get_rel_name(chunk_relid)))));
+		}
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
+		{
 			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+		}
 	}
 }
 
@@ -3033,7 +3260,9 @@ static void
 process_altertable_alter_not_null(Hypertable *ht, AlterTableCmd *cmd)
 {
 	if (cmd->subtype == AT_SetNotNull)
+	{
 		foreach_chunk(ht, validate_set_not_null, cmd);
+	}
 
 	if (cmd->subtype == AT_DropNotNull)
 	{
@@ -3043,9 +3272,11 @@ process_altertable_alter_not_null(Hypertable *ht, AlterTableCmd *cmd)
 
 			if (IS_OPEN_DIMENSION(dim) &&
 				strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 						 errmsg("cannot drop not-null constraint from a time-partitioned column")));
+			}
 		}
 	}
 }
@@ -3061,11 +3292,13 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 		Dimension *dim = &ht->space->dimensions[i];
 
 		if (namestrcmp(&dim->fd.column_name, cmd->name) == 0)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 					 errmsg("cannot drop column named in partition key"),
 					 errdetail("Cannot drop column that is a hypertable partitioning (space or "
 							   "time) dimension.")));
+		}
 	}
 
 	/* Delete dimension range entries on this column, if any.  */
@@ -3094,18 +3327,22 @@ verify_constraint_hypertable(Hypertable *ht, Node *constr_node)
 		{
 			Oid confrelid = ts_hypertable_relid(constr->pktable);
 			if (OidIsValid(confrelid) && !is_partitioning_allowed(ht->main_table_relid))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("hypertables cannot be used as foreign key references of "
 								"hypertables")));
+			}
 		}
 
 		/* NO INHERIT constraints do not really make sense on a hypertable */
 		if (constr->is_no_inherit)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 					 errmsg("cannot have NO INHERIT constraints on hypertable \"%s\"",
 							get_rel_name(ht->main_table_relid))));
+		}
 	}
 	else if (IsA(constr_node, IndexStmt))
 	{
@@ -3133,7 +3370,9 @@ verify_constraint_hypertable(Hypertable *ht, Node *constr_node)
 			 * not re-verify it's columns
 			 */
 			if (indexname != NULL)
+			{
 				return;
+			}
 
 			ts_indexing_verify_columns(ht->space, keys);
 			break;
@@ -3152,7 +3391,9 @@ verify_constraint(RangeVar *relation, Constraint *constr)
 	Hypertable *ht = ts_hypertable_cache_get_entry_rv(hcache, relation);
 
 	if (ht)
+	{
 		verify_constraint_hypertable(ht, (Node *) constr);
+	}
 
 	ts_cache_release(&hcache);
 }
@@ -3202,6 +3443,7 @@ typedef struct CreateIndexInfo
 	Oid main_table_relid;
 	HypertableIndexOptions extended_options;
 	MemoryContext mctx;
+	int64 partitions_done; /* for tracking chunk progress on PG15 */
 } CreateIndexInfo;
 
 /*
@@ -3233,7 +3475,9 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	indexinfo = BuildIndexInfo(hypertable_index_rel);
 
 	if (chunk_index_columns_changed(info->extended_options.n_ht_atts, RelationGetDescr(chunk_rel)))
+	{
 		ts_adjust_indexinfo_attnos(indexinfo, info->main_table_relid, chunk_rel);
+	}
 
 	ts_chunk_index_create_from_adjusted_index_info(ht->fd.id,
 												   hypertable_index_rel,
@@ -3243,6 +3487,14 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 
 	index_close(hypertable_index_rel, NoLock);
 	table_close(chunk_rel, NoLock);
+
+#if PG16_GE
+	pgstat_progress_incr_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, 1);
+#else
+	/* pgstat_progress_incr_param is not available before PG16 */
+	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, ++info->partitions_done);
+#endif
+	DEBUG_WAITPOINT("process_index_chunk_done");
 }
 
 static void
@@ -3275,7 +3527,9 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	 * marked as invalid
 	 */
 	if (info->extended_options.max_chunks > 0)
+	{
 		info->extended_options.max_chunks -= 1;
+	}
 
 	if (OidIsValid(info->extended_options.barrier_table))
 	{
@@ -3322,7 +3576,9 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 		indexinfo = BuildIndexInfo(hypertable_index_rel);
 		if (chunk_index_columns_changed(info->extended_options.n_ht_atts,
 										RelationGetDescr(chunk_rel)))
+		{
 			ts_adjust_indexinfo_attnos(indexinfo, info->main_table_relid, chunk_rel);
+		}
 
 		ts_chunk_index_create_from_adjusted_index_info(hypertable_id,
 													   hypertable_index_rel,
@@ -3342,6 +3598,14 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	table_close(chunk_rel, NoLock);
 
 	ts_catalog_restore_user(&sec_ctx);
+
+#if PG16_GE
+	pgstat_progress_incr_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, 1);
+#else
+	/* pgstat_progress_incr_param is not available before PG16 */
+	pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_DONE, ++info->partitions_done);
+#endif
+	DEBUG_WAITPOINT("process_index_chunk_multitransaction_done");
 
 	PopActiveSnapshot();
 	CommitTransactionCommand();
@@ -3414,7 +3678,9 @@ process_index_start(ProcessUtilityArgs *args)
 	 * we don't deal with them so we will just return immediately
 	 */
 	if (NULL == stmt->relation)
+	{
 		return DDL_CONTINUE;
+	}
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
@@ -3436,9 +3702,11 @@ process_index_start(ProcessUtilityArgs *args)
 		}
 
 		if (stmt->unique)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("continuous aggregates do not support UNIQUE indexes")));
+		}
 
 		/* Make the RangeVar for the underlying materialization hypertable */
 		stmt->relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1);
@@ -3465,23 +3733,29 @@ process_index_start(ProcessUtilityArgs *args)
 
 	/* Make sure this index is allowed */
 	if (stmt->concurrent)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertables do not support concurrent "
 						"index creation")));
+	}
 
 	if (info.extended_options.multitransaction &&
 		(stmt->unique || stmt->primary || stmt->isconstraint))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg(
 					 "cannot use timescaledb.transaction_per_chunk with UNIQUE or PRIMARY KEY")));
+	}
 
 	ts_indexing_verify_index(ht->space, stmt);
 
 	if (info.extended_options.multitransaction)
+	{
 		PreventInTransactionBlock(true,
 								  "CREATE INDEX ... WITH (timescaledb.transaction_per_chunk)");
+	}
 
 	if (cagg)
 	{
@@ -3501,7 +3775,9 @@ process_index_start(ProcessUtilityArgs *args)
 														   info.extended_options.multitransaction);
 
 	if (cagg)
+	{
 		RESTORE_USER(uid, saved_uid, sec_ctx);
+	}
 
 	/* root_table_index will have 0 objectId if the index already exists
 	 * and if_not_exists is true. In that case there is nothing else
@@ -3534,22 +3810,38 @@ process_index_start(ProcessUtilityArgs *args)
 	index_close(main_table_index_relation, NoLock);
 	table_close(main_table_relation, NoLock);
 
+	/*
+	 * Start progress reporting for chunk index creation. The root table's
+	 * DefineIndex already started and ended its own progress command, so we
+	 * start a new one to track progress across chunks.
+	 */
+	pgstat_progress_start_command(PROGRESS_COMMAND_CREATE_INDEX, ht->main_table_relid);
+	pgstat_progress_update_param(PROGRESS_CREATEIDX_COMMAND, PROGRESS_CREATEIDX_COMMAND_CREATE);
+	pgstat_progress_update_param(PROGRESS_CREATEIDX_INDEX_OID, info.obj.objectId);
+
 	/* create chunk indexes using the same transaction for all the chunks */
 	if (!info.extended_options.multitransaction)
 	{
 		CatalogSecurityContext sec_ctx;
+		List *chunks;
 		/*
 		 * Change user since chunk's are typically located in an internal
 		 * schema and chunk indexes require metadata changes. In the
 		 * multi-transaction case, we do this once per chunk.
 		 */
 		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+
+		chunks = find_inheritance_children(ht->main_table_relid, NoLock);
+		pgstat_progress_update_param(PROGRESS_CREATEIDX_PARTITIONS_TOTAL, list_length(chunks));
+		list_free(chunks);
+
 		/* Recurse to each chunk and create a corresponding index. */
 		foreach_chunk(ht, process_index_chunk, &info);
 
 		ts_catalog_restore_user(&sec_ctx);
 		ts_cache_release(&hcache);
 
+		pgstat_progress_end_command();
 		return DDL_DONE;
 	}
 
@@ -3589,6 +3881,8 @@ process_index_start(ProcessUtilityArgs *args)
 								   process_index_chunk_multitransaction,
 								   &info);
 
+	pgstat_progress_end_command();
+
 	StartTransactionCommand();
 	PushActiveSnapshot(GetTransactionSnapshot());
 	MemoryContextSwitchTo(info.mctx);
@@ -3620,9 +3914,13 @@ chunk_index_mappings_cmp(const void *p1, const void *p2)
 	const ChunkIndexMapping *rhs = *((ChunkIndexMapping *const *) p2);
 
 	if (lhs->chunkoid < rhs->chunkoid)
+	{
 		return -1;
+	}
 	if (lhs->chunkoid > rhs->chunkoid)
+	{
 		return 1;
+	}
 	return 0;
 }
 
@@ -3647,7 +3945,9 @@ process_cluster_start(ProcessUtilityArgs *args)
 
 	/* If this is a re-cluster on all tables, there is nothing we need to do */
 	if (NULL == stmt->relation)
+	{
 		return DDL_CONTINUE;
+	}
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
@@ -3676,14 +3976,18 @@ process_cluster_start(ProcessUtilityArgs *args)
 		{
 			index_relid = ts_indexing_find_clustered_index(ht->main_table_relid);
 			if (!OidIsValid(index_relid))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
 						 errmsg("there is no previously clustered index for table \"%s\"",
 								get_rel_name(ht->main_table_relid))));
+			}
 		}
 		else
+		{
 			index_relid =
 				get_relname_relid(stmt->indexname, get_rel_namespace(ht->main_table_relid));
+		}
 
 		if (!OidIsValid(index_relid))
 		{
@@ -3739,7 +4043,9 @@ process_cluster_start(ProcessUtilityArgs *args)
 
 			i = 0;
 			foreach (lc, chunk_indexes)
+			{
 				mappings[i++] = lfirst(lc);
+			}
 
 			qsort((void *) mappings,
 				  list_length(chunk_indexes),
@@ -3834,7 +4140,9 @@ get_default_partition_column(Oid relid)
 		Form_pg_attribute att = TupleDescAttr(tupdesc, i);
 
 		if (att->attisdropped)
+		{
 			continue;
+		}
 
 		if (att->atttypid == TIMESTAMPOID || att->atttypid == TIMESTAMPTZOID)
 		{
@@ -3904,22 +4212,28 @@ process_create_table_end(Node *parsetree)
 		{
 			time_column = get_default_partition_column(table_relid);
 			if (time_column)
+			{
 				ereport(NOTICE,
 						(errmsg("using column \"%s\" as partitioning column", time_column),
 						 errhint("Use \"timescaledb.partition_column\" to specify a different "
 								 "column to use as "
 								 "partitioning column.")));
+			}
 			else
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_COLUMN),
 						 errmsg("partition column could not be determined"),
 						 errhint(
 							 "Use \"timescaledb.partition_column\" to specify the column to use as "
 							 "partitioning column.")));
+			}
 		}
 		else
+		{
 			time_column = TextDatumGetCString(
 				create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
+		}
 
 		NameData time_column_name;
 		NameData associated_schema_name;
@@ -3930,9 +4244,11 @@ process_create_table_end(Node *parsetree)
 		bool has_associated_table_prefix = false;
 
 		if (get_attnum(table_relid, time_column) == InvalidAttrNumber)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
 					 errmsg("column \"%s\" does not exist", time_column)));
+		}
 
 		Oid interval_type = InvalidOid;
 		Datum interval = UnassignedDatum;
@@ -3953,7 +4269,9 @@ process_create_table_end(Node *parsetree)
 		{
 			if (!DatumGetBool(
 					create_table_info.with_clauses[CreateTableFlagCreateDefaultIndexes].parsed))
+			{
 				flags |= HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES;
+			}
 		}
 
 		if (!create_table_info.with_clauses[CreateTableFlagAssociatedSchema].is_default)
@@ -4005,10 +4323,14 @@ process_create_table_end(Node *parsetree)
 			bool enable_columnstore;
 			if (ts_license_is_apache() &&
 				create_table_info.with_clauses[CreateTableFlagColumnstore].is_default)
+			{
 				enable_columnstore = false;
+			}
 			else
+			{
 				enable_columnstore =
 					DatumGetBool(create_table_info.with_clauses[CreateTableFlagColumnstore].parsed);
+			}
 
 			if (enable_columnstore)
 			{
@@ -4037,16 +4359,20 @@ process_alter_column_type_start(ParseState *pstate, Hypertable *ht, AlterTableCm
 
 		if (IS_CLOSED_DIMENSION(dim) &&
 			strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 					 errmsg("cannot change the type of a hash-partitioned column")));
+		}
 
 		if (dim->partitioning != NULL &&
 			strncmp(NameStr(dim->fd.column_name), cmd->name, NAMEDATALEN) == 0)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 					 errmsg("cannot change the type of a column with a custom partitioning "
 							"function")));
+		}
 	}
 
 	/*
@@ -4100,7 +4426,9 @@ process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
 		ts_hyperspace_get_mutable_dimension_by_name(ht->space, DIMENSION_TYPE_ANY, cmd->name);
 
 	if (NULL == dim)
+	{
 		return;
+	}
 
 	ts_dimension_set_type(dim, new_type);
 	ts_process_utility_set_expect_chunk_modification(true);
@@ -4117,7 +4445,9 @@ process_altertable_clusteron_end(Hypertable *ht, AlterTableCmd *cmd)
 	 * the above lookup might fail. But in this case we don't need to mark the index clustered
 	 * as postgres takes care of that already */
 	if (!OidIsValid(index_relid))
+	{
 		return;
+	}
 
 	List *chunk_indexes = ts_chunk_index_get_mappings(ht, index_relid);
 	ListCell *lc;
@@ -4145,7 +4475,9 @@ process_altertable_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		(cmd->subtype == AT_SetOptions || cmd->subtype == AT_ResetOptions ||
 		 cmd->subtype == AT_SetRelOptions || cmd->subtype == AT_ReplaceRelOptions ||
 		 cmd->subtype == AT_ResetRelOptions))
+	{
 		return;
+	}
 
 	AlterTableInternal(chunk_relid, list_make1(cmd), false);
 }
@@ -4160,7 +4492,9 @@ process_altertable_chunk_replica_identity(Hypertable *ht, Oid chunk_relid, void 
 	/* If this is not a local chunk (e.g., it is foreign table representing a
 	 * data node or OSM chunk), then we don't set replica identity locally */
 	if (relkind != RELKIND_RELATION)
+	{
 		return;
+	}
 
 	if (stmt->identity_type == REPLICA_IDENTITY_INDEX)
 	{
@@ -4175,11 +4509,13 @@ process_altertable_chunk_replica_identity(Hypertable *ht, Oid chunk_relid, void 
 			ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, hyper_index_oid);
 		table_close(chunk_rel, NoLock);
 		if (!OidIsValid(chunk_index_relid))
+		{
 			elog(ERROR,
 				 "chunk \"%s.%s\" has no index corresponding to hypertable index \"%s\"",
 				 NameStr(chunk->fd.schema_name),
 				 NameStr(chunk->fd.table_name),
 				 stmt->name);
+		}
 
 		stmt->name = get_rel_name(chunk_index_relid);
 	}
@@ -4200,12 +4536,14 @@ process_altertable_replica_identity(Hypertable *ht, AlterTableCmd *cmd)
 		hyper_index_oid = get_relname_relid(stmt->name, hyper_schema_oid);
 
 		if (!OidIsValid(hyper_index_oid))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("index \"%s\" for table \"%s.%s\" does not exist",
 							stmt->name,
 							NameStr(ht->fd.schema_name),
 							NameStr(ht->fd.table_name))));
+		}
 	}
 
 	foreach_chunk(ht, process_altertable_chunk_replica_identity, cmd);
@@ -4222,12 +4560,14 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 	tspcs = ts_tablespace_scan(ht->fd.id);
 
 	if (tspcs->num_tablespaces > 1)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("cannot set new tablespace when multiple tablespaces are attached to "
 						"hypertable \"%s\"",
 						get_rel_name(ht->main_table_relid)),
 				 errhint("Detach tablespaces before altering the hypertable.")));
+	}
 
 	if (tspcs->num_tablespaces == 1)
 	{
@@ -4266,7 +4606,9 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 	Hypertable *ht;
 
 	if (!OidIsValid(tablerelid))
+	{
 		return;
+	}
 
 	ht = ts_hypertable_cache_get_cache_and_entry(tablerelid, CACHE_FLAG_MISSING_OK, &hcache);
 
@@ -4298,14 +4640,18 @@ process_altertable_chunk_propagate_to_compressed(AlterTableCmd *cmd, Oid relid)
 	Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 
 	if (chunk == NULL)
+	{
 		return;
+	}
 
 	if (ts_chunk_contains_compressed_data(chunk))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("changing tablespace of columnstore chunk is not supported"),
 				 errhint("Please use the corresponding chunk on the rowstore hypertable "
 						 "instead.")));
+	}
 
 	/* set tablespace for compressed chunk */
 	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
@@ -4326,7 +4672,9 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 	ListCell *lc;
 
 	if (!OidIsValid(reloid))
+	{
 		return DDL_CONTINUE;
+	}
 
 	check_chunk_alter_table_operation_allowed(reloid, stmt);
 
@@ -4372,13 +4720,17 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				Assert(IsA(cmd->def, IndexStmt));
 
 				if (NULL != ht && istmt->isconstraint)
+				{
 					verify_constraint_hypertable(ht, cmd->def);
+				}
 			}
 			break;
 			case AT_SetNotNull:
 			case AT_DropNotNull:
 				if (ht)
+				{
 					process_altertable_alter_not_null(ht, cmd);
+				}
 				break;
 			case AT_AddColumn:
 #if PG16_LT
@@ -4391,10 +4743,16 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				Assert(IsA(cmd->def, ColumnDef));
 				col = (ColumnDef *) cmd->def;
 				if (ht && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+				{
 					check_altertable_add_column_for_compressed(args->parse_state, ht, col);
+				}
 				if (ht)
+				{
 					foreach (constraint_lc, col->constraints)
+					{
 						verify_constraint_hypertable(ht, lfirst(constraint_lc));
+					}
+				}
 				break;
 			}
 			case AT_DropColumn:
@@ -4402,7 +4760,9 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 			case AT_DropColumnRecurse:
 #endif
 				if (ht)
+				{
 					process_altertable_drop_column(ht, cmd);
+				}
 				break;
 			case AT_AddConstraint:
 #if PG16_LT
@@ -4411,13 +4771,17 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				Assert(IsA(cmd->def, Constraint));
 
 				if (ht)
+				{
 					verify_constraint_hypertable(ht, cmd->def);
+				}
 				break;
 			case AT_AlterColumnType:
 				Assert(IsA(cmd->def, ColumnDef));
 
 				if (ht)
+				{
 					process_alter_column_type_start(args->parse_state, ht, cmd);
+				}
 				break;
 			case AT_AttachPartition:
 			{
@@ -4447,7 +4811,9 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 					 * list. We do not set the result variable since there
 					 * could be other options that are not dealt with. */
 					if (process_altertable_set_options(cmd, ht) == DDL_DONE)
+					{
 						stmt->cmds = foreach_delete_current(stmt->cmds, lc);
+					}
 				}
 				else
 				{
@@ -4470,7 +4836,9 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 			case AT_SetLogged:
 			case AT_SetUnLogged:
 				if (!ht)
+				{
 					process_altertable_chunk_propagate_to_compressed(cmd, reloid);
+				}
 				break;
 			default:
 				break;
@@ -4490,9 +4858,11 @@ continuous_agg_with_clause_perm_check(ContinuousAgg *cagg, Oid view_relid)
 	Oid ownerid = ts_rel_get_owner(view_relid);
 
 	if (!has_privs_of_role(GetUserId(), ownerid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("must be owner of continuous aggregate \"%s\"", get_rel_name(view_relid))));
+	}
 }
 
 static List *
@@ -4506,10 +4876,12 @@ process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const L
 	ts_with_clause_filter(defelems, &cagg_options, &other_namespace_options, &pg_options);
 
 	if (list_length(pg_options) > 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("only timescaledb parameters allowed in WITH clause for continuous "
 						"aggregate")));
+	}
 
 	if (list_length(cagg_options) > 0)
 	{
@@ -4521,7 +4893,9 @@ process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const L
 		return other_namespace_options;
 	}
 	else
+	{
 		return NIL;
+	}
 }
 
 /* Run an alter table command on a relation */
@@ -4565,12 +4939,16 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 
 	DDLResult ddl_res = DDL_DONE;
 	if (!OidIsValid(view_relid))
+	{
 		return DDL_CONTINUE;
+	}
 
 	cagg = ts_continuous_agg_find_by_relid(view_relid);
 
 	if (cagg == NULL)
+	{
 		return DDL_CONTINUE;
+	}
 
 	continuous_agg_with_clause_perm_check(cagg, view_relid);
 
@@ -4582,9 +4960,11 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 		{
 			case AT_SetRelOptions:
 				if (!IsA(cmd->def, List))
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 							 errmsg("expected set options to contain a list")));
+				}
 				List *other_namespace_opt =
 					process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
 				/* pass on SET options to other extensions like timescaledb-lake. only if
@@ -4642,10 +5022,12 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 	cagg = ts_continuous_agg_find_by_relid(relid);
 
 	if (cagg)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot alter continuous aggregate using ALTER VIEW"),
 				 errhint("Use ALTER MATERIALIZED VIEW to alter a continuous aggregate.")));
+	}
 
 	/* Check if this is an internal view of a continuous aggregate and give
 	 * error if attempts are made to alter them. */
@@ -4654,14 +5036,18 @@ process_altertable_start_view(ProcessUtilityArgs *args)
 	cagg = ts_continuous_agg_find_by_view_name(view_schema, view_name, ContinuousAggAnyView);
 
 	if (cagg == NULL)
+	{
 		return DDL_CONTINUE;
+	}
 
 	vtyp = ts_continuous_agg_view_type(&cagg->data, view_schema, view_name);
 
 	if (vtyp == ContinuousAggPartialView || vtyp == ContinuousAggDirectView)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot alter the internal view of a continuous aggregate")));
+	}
 
 	return DDL_DONE;
 }
@@ -4711,7 +5097,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			Assert(stmt->isconstraint);
 
 			if (idxname == NULL)
+			{
 				idxname = get_rel_name(obj->objectId);
+			}
 
 			process_altertable_add_constraint(ht, cmd, idxname);
 		}
@@ -4727,7 +5115,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			Assert(IsA(cmd->def, Constraint));
 
 			if (conname == NULL)
+			{
 				conname = get_rel_name(obj->objectId);
+			}
 
 			/*
 			 * Implicit constraints (e.g., those created by PRIMARY KEY or UNIQUE
@@ -4736,7 +5126,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			 * function and no conname.
 			 */
 			if (conname)
+			{
 				process_altertable_add_constraint(ht, cmd, conname);
+			}
 		}
 		break;
 		case AT_AlterColumnType:
@@ -4751,11 +5143,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DisableTrigAll:
 		case AT_EnableTrigUser:
 		case AT_DisableTrigUser:
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("hypertables do not support  "
-							"enabling or disabling triggers.")));
-			/* Break here to silence compiler */
+			foreach_chunk(ht, process_altertable_chunk, cmd);
 			break;
 		case AT_ClusterOn:
 			process_altertable_clusteron_end(ht, cmd);
@@ -4877,7 +5265,9 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			break;
 	}
 	if (ts_cm_functions->process_altertable_cmd)
+	{
 		ts_cm_functions->process_altertable_cmd(ht, cmd);
+	}
 }
 
 static void
@@ -4906,7 +5296,9 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 	relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 
 	if (!OidIsValid(relid))
+	{
 		return;
+	}
 
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 
@@ -4942,7 +5334,9 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 
 			if (subcmd->subtype != AT_AddConstraint ||
 				castNode(Constraint, subcmd->def)->contype != CONSTR_FOREIGN)
+			{
 				continue;
+			}
 
 			Constraint *c = castNode(Constraint, subcmd->def);
 			Oid confrelid = RangeVarGetRelid(c->pktable, AccessShareLock, true);
@@ -4951,10 +5345,12 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 			if (pk)
 			{
 				if (ht && !is_partitioning_allowed(ht->main_table_relid))
+				{
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("hypertables cannot be used as foreign key references of "
 									"hypertables")));
+				}
 				ts_fk_propagate(relid, pk);
 			}
 		}
@@ -4993,7 +5389,9 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 
 	TRIGGER_CLEAR_TYPE(tgtype);
 	if (stmt->row)
+	{
 		TRIGGER_SETT_ROW(tgtype);
+	}
 	tgtype |= stmt->timing;
 	tgtype |= stmt->events;
 
@@ -5004,16 +5402,22 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 		ts_cache_release(&hcache);
 		/* check if it's a cagg. We don't support triggers on them yet */
 		if (ts_continuous_agg_find_by_relid(relid) != NULL)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("triggers are not supported on continuous aggregate")));
+		}
 
 		if (stmt->transitionRels)
+		{
 			if (ts_chunk_get_by_relid(relid, false) != NULL)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("triggers with transition tables are not supported on "
 								"hypertable chunks")));
+			}
+		}
 		return DDL_CONTINUE;
 	}
 
@@ -5068,7 +5472,9 @@ process_create_rule_start(ProcessUtilityArgs *args)
 	RuleStmt *stmt = (RuleStmt *) args->parsetree;
 
 	if (!OidIsValid(ts_hypertable_relid(stmt->relation)))
+	{
 		return DDL_CONTINUE;
+	}
 
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("hypertables do not support rules")));
@@ -5124,7 +5530,9 @@ process_reassign_owned_start(ProcessUtilityArgs *args)
 			ts_bgw_job_update_owner(ti->scanrel, tuple, ts_scanner_get_tupledesc(ti), newrole_oid);
 
 			if (should_free)
+			{
 				heap_freetuple(tuple);
+			}
 		}
 	}
 	return DDL_CONTINUE;
@@ -5158,7 +5566,9 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, NULL, &pg_options);
 
 	if (!tsdb_options)
+	{
 		return DDL_CONTINUE;
+	}
 
 	parse_results = ts_alter_table_with_clause_parse(tsdb_options);
 
@@ -5183,7 +5593,9 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		!parse_results[AlterTableFlagSegmentBy].is_default ||
 		!parse_results[AlterTableFlagCompressChunkTimeInterval].is_default ||
 		!parse_results[AlterTableFlagIndex].is_default)
+	{
 		ts_cm_functions->process_compress_table(ht, parse_results);
+	}
 
 	cmd->def = (Node *) pg_options;
 
@@ -5200,7 +5612,9 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, NULL, &pg_options);
 
 	if (!tsdb_options)
+	{
 		return DDL_CONTINUE;
+	}
 
 	parse_results = ts_alter_table_reset_with_clause_parse(tsdb_options);
 	if (parse_results[AlterTableFlagOrderBy].is_default &&
@@ -5253,10 +5667,12 @@ process_viewstmt(ProcessUtilityArgs *args)
 	 * useful error message if that is the case. */
 	ts_with_clause_filter(stmt->options, &cagg_options, NULL, &pg_options);
 	if (cagg_options)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot create continuous aggregate with CREATE VIEW"),
 				 errhint("Use CREATE MATERIALIZED VIEW to create a continuous aggregate.")));
+	}
 	return DDL_CONTINUE;
 }
 
@@ -5283,9 +5699,12 @@ process_create_table_as(ProcessUtilityArgs *args)
 		}
 
 		if (!is_cagg)
+		{
 			return DDL_CONTINUE;
+		}
 
 		if (pg_options != NIL)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("unsupported combination of storage parameters"),
@@ -5293,6 +5712,7 @@ process_create_table_as(ProcessUtilityArgs *args)
 							   "parameters."),
 					 errhint("Use only parameters with the \"timescaledb.\" prefix when "
 							 "creating a continuous aggregate.")));
+		}
 		if (other_namespace_options)
 		{
 			ereport(ERROR,
@@ -5300,8 +5720,10 @@ process_create_table_as(ProcessUtilityArgs *args)
 					 errmsg("non \"timescaledb\" namespace options can be set only via ALTER")));
 		}
 		if (!stmt->into->skipData)
+		{
 			PreventInTransactionBlock(args->context == PROCESS_UTILITY_TOPLEVEL,
 									  "CREATE MATERIALIZED VIEW ... WITH DATA");
+		}
 
 		return ts_cm_functions->process_cagg_viewstmt(args->parsetree,
 													  args->query_string,
@@ -5326,12 +5748,16 @@ get_default_partition_column_by_definitions(List *definitions)
 	{
 		Node *node = lfirst(lc);
 		if (!IsA(node, ColumnDef))
+		{
 			continue;
+		}
 
 		ColumnDef *coldef = castNode(ColumnDef, node);
 
 		if (coldef->typeName->names == NIL)
+		{
 			continue;
+		}
 
 		foreach (lc2, coldef->typeName->names)
 		{
@@ -5370,10 +5796,12 @@ process_create_stmt(ProcessUtilityArgs *args)
 			DatumGetBool(create_table_info.with_clauses[CreateTableFlagHypertable].parsed);
 
 		if (!create_table_info.hypertable)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
 					 errmsg("timescaledb options requires hypertable option"),
 					 errhint("Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
+		}
 
 		if (ts_guc_enable_partitioned_hypertables)
 		{
@@ -5390,23 +5818,29 @@ process_create_stmt(ProcessUtilityArgs *args)
 				{
 					time_column = get_default_partition_column_by_definitions(stmt->tableElts);
 					if (time_column)
+					{
 						ereport(NOTICE,
 								(errmsg("using column \"%s\" as partitioning column", time_column),
 								 errhint(
 									 "Use \"timescaledb.partition_column\" to specify a different "
 									 "column to use as "
 									 "partitioning column.")));
+					}
 					else
+					{
 						ereport(ERROR,
 								(errcode(ERRCODE_UNDEFINED_COLUMN),
 								 errmsg("partition column could not be determined"),
 								 errhint("Use \"timescaledb.partition_column\" to specify the "
 										 "column to use as "
 										 "partitioning column.")));
+					}
 				}
 				else
+				{
 					time_column = TextDatumGetCString(
 						create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
+				}
 
 				PartitionElem *pelem = makeNode(PartitionElem);
 				pelem->name = time_column;
@@ -5466,17 +5900,21 @@ process_refresh_mat_view_start(ProcessUtilityArgs *args)
 	const ContinuousAgg *cagg;
 
 	if (!OidIsValid(view_relid))
+	{
 		return DDL_CONTINUE;
+	}
 
 	cagg = ts_continuous_agg_find_by_relid(view_relid);
 
 	if (cagg)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("operation not supported on continuous aggregate"),
 				 errdetail("A continuous aggregate does not support REFRESH MATERIALIZED VIEW."),
 				 errhint("Use \"refresh_continuous_aggregate\" or set up a policy to refresh the "
 						 "continuous aggregate.")));
+	}
 
 	return DDL_CONTINUE;
 }
@@ -5489,7 +5927,9 @@ preprocess_execute(ProcessUtilityArgs *args)
 	ExecuteStmt *stmt = (ExecuteStmt *) args->parsetree;
 	PreparedStatement *entry = FetchPreparedStatement(stmt->name, false);
 	if (!entry)
+	{
 		return DDL_CONTINUE;
+	}
 
 	foreach (lc, entry->plansource->query_list)
 	{
@@ -5593,10 +6033,14 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 	}
 
 	if (handler == NULL)
+	{
 		return DDL_CONTINUE;
+	}
 
 	if (check_read_only)
+	{
 		PreventCommandIfReadOnly(CreateCommandName(args->parsetree));
+	}
 
 	return handler(args);
 }
@@ -5660,7 +6104,9 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 		bool found = ts_chunk_get_id(constraint->schema, constraint->table, &chunk_id, true);
 
 		if (found)
+		{
 			ts_chunk_constraint_delete_by_constraint_name(chunk_id, constraint->constraint_name);
+		}
 	}
 }
 
@@ -5694,10 +6140,12 @@ process_sql_drop_schema(EventTriggerDropObject *obj)
 	Assert(obj->type == EVENT_TRIGGER_DROP_SCHEMA);
 
 	if (strcmp(schema->schema, INTERNAL_SCHEMA_NAME) == 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot drop the internal schema for extension \"%s\"", EXTENSION_NAME),
 				 errhint("Use DROP EXTENSION to remove the extension and the schema.")));
+	}
 
 	/*
 	 * Check for any remaining hypertables that use the schema as its
@@ -5707,11 +6155,13 @@ process_sql_drop_schema(EventTriggerDropObject *obj)
 	count = ts_hypertable_reset_associated_schema_name(schema->schema);
 
 	if (count > 0)
+	{
 		ereport(NOTICE,
 				(errmsg("the chunk storage schema changed to \"%s\" for %d hypertable%c",
 						INTERNAL_SCHEMA_NAME,
 						count,
 						(count > 1) ? 's' : '\0')));
+	}
 }
 
 static void
@@ -5821,7 +6271,9 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 	result = process_ddl_command_start(&args);
 
 	if (result == DDL_CONTINUE)
+	{
 		prev_ProcessUtility(&args);
+	}
 }
 
 static void
@@ -5839,7 +6291,9 @@ process_ddl_event_command_end(EventTriggerData *trigdata)
 		case T_CreateStmt:
 		case T_IndexStmt:
 			foreach (lc, ts_event_trigger_ddl_commands())
+			{
 				process_ddl_command_end(lfirst(lc));
+			}
 			break;
 		default:
 			break;
@@ -5855,7 +6309,9 @@ process_ddl_event_sql_drop(EventTriggerData *trigdata)
 	List *dropped_objects = ts_event_trigger_dropped_objects();
 
 	foreach (lc, dropped_objects)
+	{
 		process_ddl_sql_drop(lfirst(lc));
+	}
 }
 
 TS_FUNCTION_INFO_V1(ts_timescaledb_process_ddl_event);
@@ -5870,15 +6326,23 @@ ts_timescaledb_process_ddl_event(PG_FUNCTION_ARGS)
 	EventTriggerData *trigdata = (EventTriggerData *) fcinfo->context;
 
 	if (!CALLED_AS_EVENT_TRIGGER(fcinfo))
+	{
 		elog(ERROR, "not fired by event trigger manager");
+	}
 
 	if (!ts_extension_is_loaded_and_not_upgrading())
+	{
 		PG_RETURN_NULL();
+	}
 
 	if (strcmp("ddl_command_end", trigdata->event) == 0)
+	{
 		process_ddl_event_command_end(trigdata);
+	}
 	else if (strcmp("sql_drop", trigdata->event) == 0)
+	{
 		process_ddl_event_sql_drop(trigdata);
+	}
 
 	PG_RETURN_NULL();
 }

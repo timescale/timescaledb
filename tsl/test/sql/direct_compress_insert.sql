@@ -208,6 +208,34 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
 ROLLBACK;
 
+-- cagg + direct compress where the cagg time column is segmentby.
+-- segmentby columns don't get _ts_meta_min/max columns, so no MINMAX builder
+-- is created for them; the flush path must still derive an invalidation range
+-- from the segmentby value rather than crashing.
+BEGIN;
+CREATE TABLE metrics_segmentby_time (time TIMESTAMPTZ NOT NULL, device TEXT, value float)
+    WITH (tsdb.hypertable);
+CREATE MATERIALIZED VIEW metrics_segmentby_time_cagg WITH (tsdb.continuous) AS
+    SELECT time_bucket('1 hour', time) AS bucket, device, avg(value) AS avg_value
+    FROM metrics_segmentby_time GROUP BY bucket, device WITH NO DATA;
+ALTER TABLE metrics_segmentby_time SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'time'
+);
+INSERT INTO metrics_segmentby_time
+SELECT '2025-01-01'::timestamptz + (i * interval '5 minutes'), 'd1', random()
+FROM generate_series(1, 50) i;
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO metrics_segmentby_time
+SELECT '2025-02-01'::timestamptz + (i * interval '1 second'), 'd1', random()
+FROM generate_series(1, 5000) i;
+-- The new chunk should be in COMPRESSED state, confirming the flush path ran.
+SELECT _timescaledb_functions.chunk_status_text(chunk)
+  FROM show_chunks('metrics_segmentby_time') chunk
+ WHERE chunk::text LIKE '%hyper_%'
+ ORDER BY chunk::text;
+ROLLBACK;
+
 -- test chunk status handling
 CREATE TABLE metrics_status(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time');
 
@@ -374,3 +402,97 @@ RESET timescaledb.enable_direct_compress_insert_client_sorted;
 
 DROP TABLE compress_src;
 DROP TABLE compress_tgt;
+
+-- simple test to check default segmentby does not get set for direct compress
+BEGIN;
+RESET timescaledb.enable_direct_compress_insert;
+CREATE TABLE test_segmentby_stats (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INT NOT NULL,
+    value FLOAT
+) WITH (tsdb.hypertable, tsdb.compress);
+
+INSERT INTO test_segmentby_stats
+SELECT t, (i % 5), random()
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 second') t,
+     generate_series(1, 5) i;
+
+ANALYZE test_segmentby_stats;
+SELECT compress_chunk(c) FROM show_chunks('test_segmentby_stats') c;
+
+-- will have devide_id as default segmentby for compressed chunk;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
+
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO test_segmentby_stats
+SELECT t, (i % 5), random()
+FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 second') t,
+     generate_series(1, 5) i;
+ANALYZE test_segmentby_stats;
+-- will have default segmentby set for a newly created direct compressed chunk (should observe a skipped chunk id);
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
+ROLLBACK;
+
+BEGIN;
+RESET timescaledb.enable_direct_compress_insert;
+CREATE TABLE test_segmentby_stats (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INT NOT NULL,
+    value FLOAT
+) WITH (tsdb.hypertable, tsdb.compress, tsdb.segmentby='device_id');
+
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO test_segmentby_stats
+SELECT t, (i % 5), random()
+FROM generate_series('2024-01-06'::timestamptz, '2024-01-07'::timestamptz, '1 second') t,
+     generate_series(1, 5) i;
+ANALYZE test_segmentby_stats;
+-- will have device_id by as configured segmentby for direct compressed chunk (should not observe skipped chunk id);
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
+ROLLBACK;
+
+-- Direct compress on a hypertable with a dropped column before the time
+-- dimension. Chunks created after the drop have a different TupleDesc than
+-- the hypertable, so the slot must be converted to chunk format before being
+-- passed to the compressor. Cover both INSERT and COPY entry points.
+BEGIN;
+RESET timescaledb.enable_direct_compress_insert;
+CREATE TABLE test_dropcol(col1 int, time timestamptz NOT NULL, device text, value float);
+SELECT create_hypertable('test_dropcol', 'time');
+ALTER TABLE test_dropcol DROP COLUMN col1;
+INSERT INTO test_dropcol(time, device, value)
+SELECT '2025-01-01'::timestamptz + (i * interval '5 minutes'), 'd1', i::float
+FROM generate_series(1, 50) i;
+ALTER TABLE test_dropcol SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+SELECT count(compress_chunk(c)) FROM show_chunks('test_dropcol') c;
+SET timescaledb.enable_direct_compress_insert = true;
+INSERT INTO test_dropcol(time, device, value)
+SELECT '2025-02-01'::timestamptz + (i * interval '1 second'), 'd2', i::float
+FROM generate_series(1, 5000) i;
+SELECT count(*), min(time), max(time), min(value), max(value) FROM test_dropcol WHERE device = 'd2';
+RESET timescaledb.enable_direct_compress_insert;
+SET timescaledb.enable_direct_compress_copy = true;
+COPY test_dropcol(time, device, value) FROM STDIN WITH (FORMAT csv);
+2025-03-01 00:00:01+00,d3,1.0
+2025-03-01 00:00:02+00,d3,2.0
+2025-03-01 00:00:03+00,d3,3.0
+\.
+SELECT count(*), min(time), max(time), min(value), max(value) FROM test_dropcol WHERE device = 'd3';
+ROLLBACK;
+
+-- Test orderby columns are not selected by DC segmentby default
+BEGIN;
+RESET timescaledb.enable_direct_compress_insert;
+CREATE TABLE test_orderby_not_segmentby(time timestamptz NOT NULL, device_id int NOT NULL,
+    value float) WITH (tsdb.hypertable);
+CREATE INDEX ON test_orderby_not_segmentby(device_id);
+INSERT INTO test_orderby_not_segmentby SELECT '2024-01-01'::timestamptz + (i||' min')::interval,
+    (i%5)+1, random() FROM generate_series(1,500) i;
+ANALYZE test_orderby_not_segmentby;
+ALTER TABLE test_orderby_not_segmentby SET (timescaledb.compress);
+SET timescaledb.enable_direct_compress_insert = on;
+INSERT INTO test_orderby_not_segmentby SELECT '2024-06-01'::timestamptz + (i||' min')::interval,
+    (i%5)+1, random() FROM generate_series(1,2000) i;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
+ROLLBACK;
+
