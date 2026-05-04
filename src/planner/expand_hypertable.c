@@ -119,34 +119,35 @@ static void propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQual
 static void
 ts_fixup_row_identity_for_dml(PlannerInfo *root, RelOptInfo *rel, Index rti)
 {
-	ListCell *lc;
+	ListCell *lc = NULL;
+	(void) lc;
 
-//	/* Remove parent's direct ctid from processed_tlist. */
-//	List *new_tlist = NIL;
-//	int resno = 1;
-//	foreach (lc, root->processed_tlist)
-//	{
-//		TargetEntry *tle = lfirst_node(TargetEntry, lc);
-//		Var *var = (Var *) tle->expr;
-//		if (tle->resjunk && IsA(var, Var) && var->varno == (int) rti &&
-//			var->varattno == SelfItemPointerAttributeNumber)
-//			continue;
-//		tle->resno = resno++;
-//		new_tlist = lappend(new_tlist, tle);
-//	}
-//	root->processed_tlist = new_tlist;
+	/* Remove parent's direct ctid from processed_tlist. */
+	//	List *new_tlist = NIL;
+	//	int resno = 1;
+	//	foreach (lc, root->processed_tlist)
+	//	{
+	//		TargetEntry *tle = lfirst_node(TargetEntry, lc);
+	//		Var *var = (Var *) tle->expr;
+	//		if (tle->resjunk && IsA(var, Var) && var->varno == (int) rti &&
+	//			var->varattno == SelfItemPointerAttributeNumber)
+	//			continue;
+	//		tle->resno = resno++;
+	//		new_tlist = lappend(new_tlist, tle);
+	//	}
+	//	root->processed_tlist = new_tlist;
 
-//	/* Remove parent's direct ctid from reltarget. */
-//	List *new_exprs = NIL;
-//	foreach (lc, rel->reltarget->exprs)
-//	{
-//		Var *var = (Var *) lfirst(lc);
-//		if (IsA(var, Var) && var->varno == (int) rti &&
-//			var->varattno == SelfItemPointerAttributeNumber)
-//			continue;
-//		new_exprs = lappend(new_exprs, var);
-//	}
-//	rel->reltarget->exprs = new_exprs;
+	//	/* Remove parent's direct ctid from reltarget. */
+	//	List *new_exprs = NIL;
+	//	foreach (lc, rel->reltarget->exprs)
+	//	{
+	//		Var *var = (Var *) lfirst(lc);
+	//		if (IsA(var, Var) && var->varno == (int) rti &&
+	//			var->varattno == SelfItemPointerAttributeNumber)
+	//			continue;
+	//		new_exprs = lappend(new_exprs, var);
+	//	}
+	//	rel->reltarget->exprs = new_exprs;
 
 	/*
 	 * Undo the marking as "leaf" result relid that would be done during the
@@ -166,9 +167,9 @@ ts_fixup_row_identity_for_dml(PlannerInfo *root, RelOptInfo *rel, Index rti)
 		}
 	}
 
-//	mybt();
-//	fprintf(stderr, "reltarget after row identity fix:\n");
-//	my_print(rel->reltarget->exprs);
+	//	mybt();
+	//	fprintf(stderr, "reltarget after row identity fix:\n");
+	//	my_print(rel->reltarget->exprs);
 }
 
 /*

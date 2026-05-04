@@ -448,8 +448,7 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
 							rte->inh)
 						{
-							if (rti == (Index) query->resultRelation &&
-								IS_UPDL_CMD(query) &&
+							if (rti == (Index) query->resultRelation && IS_UPDL_CMD(query) &&
 								ts_guc_enable_hypertable_expansion_for_dml)
 							{
 								rte_mark_for_expansion(rte);
@@ -1460,7 +1459,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 				rte->ctename == NULL)
 			{
 				if (rel->relid == (Index) query->resultRelation && IS_UPDL_CMD(query) &&
-						ts_guc_enable_hypertable_expansion_for_dml)
+					ts_guc_enable_hypertable_expansion_for_dml)
 				{
 					rte_mark_for_expansion(rte);
 				}
