@@ -343,10 +343,14 @@ SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') <= 16384 as size_empty;
 -- DEBUG (probe_compbgw_flake): emit extra diagnostics so that when the
 -- size_empty assertion above flips to false on CI we can see what state
 -- the chunk and its indexes were actually in. Remove before merging.
--- Avoid printing chunk identifiers since chunk IDs are unstable across runs.
-SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') AS probe_actual_size;
-SELECT count(*) AS probe_index_count,
-       sum(pg_relation_size(format('%I.%I', schemaname, indexname)::regclass)) AS probe_index_sz_sum
+-- Avoid printing chunk identifiers (unstable IDs) and raw sizes
+-- (i386 has 16384, x86_64 has 8192 even on success). Print the actual
+-- size only when above threshold, otherwise print 0.
+SELECT CASE WHEN pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') <= 16384
+            THEN 0
+            ELSE pg_indexes_size(:'RECOMPRESS_CHUNK_NAME')
+       END AS probe_size_if_bloated;
+SELECT count(*) AS probe_index_count
 FROM pg_indexes
 WHERE schemaname = :'chunk_schema' AND tablename = :'chunk_name';
 SELECT status AS probe_chunk_status
