@@ -1,1 +1,0 @@
-Fixes: #9482 Forbid Batch Sort Merge on nullable orderby columns
