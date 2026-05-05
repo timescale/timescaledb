@@ -1,0 +1,1 @@
+Fixes: #9720 Reject CREATE UNIQUE INDEX and ADD UNIQUE/PRIMARY KEY on chunk relations when the underlying compressed data contains duplicates

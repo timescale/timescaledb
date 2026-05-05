@@ -2993,6 +2993,69 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 	}
 }
 
+/*
+ * Run the unique-constraint check when CREATE UNIQUE INDEX or
+ * ALTER TABLE ADD UNIQUE/PRIMARY KEY targets a chunk relation directly.
+ *
+ * Without this, postgres builds the index over the empty user-facing chunk
+ * heap (data lives in compress_hyper_*) and silently records the index as
+ * unique even when the underlying data has duplicates. See issue #9720.
+ *
+ * validate_index_constraints itself only acts on compressed chunks; for
+ * uncompressed chunks postgres' own scan of the chunk heap is sufficient.
+ */
+static void
+validate_chunk_index_constraints(Oid relid, const IndexStmt *stmt)
+{
+	Chunk *chunk;
+
+	if (!OidIsValid(relid))
+	{
+		return;
+	}
+	if (!stmt->unique && !stmt->primary)
+	{
+		return;
+	}
+
+	chunk = ts_chunk_get_by_relid(relid, false /* fail_if_not_found */);
+	if (chunk != NULL)
+	{
+		validate_index_constraints(chunk, stmt);
+	}
+}
+
+/*
+ * Variant for ALTER TABLE ADD CONSTRAINT, where we receive a Constraint node
+ * instead of an IndexStmt. Synthesize the minimal IndexStmt that
+ * validate_index_constraints needs.
+ */
+static void
+validate_chunk_constraint_uniqueness(Oid relid, const Constraint *con)
+{
+	IndexStmt synth = { 0 };
+	ListCell *lc;
+
+	if (con->contype != CONSTR_PRIMARY && con->contype != CONSTR_UNIQUE)
+	{
+		return;
+	}
+
+	synth.type = T_IndexStmt;
+	synth.primary = (con->contype == CONSTR_PRIMARY);
+	synth.unique = (con->contype == CONSTR_UNIQUE);
+	synth.nulls_not_distinct = con->nulls_not_distinct;
+
+	foreach (lc, con->keys)
+	{
+		IndexElem *elem = makeNode(IndexElem);
+		elem->name = strVal(lfirst(lc));
+		synth.indexParams = lappend(synth.indexParams, elem);
+	}
+
+	validate_chunk_index_constraints(relid, &synth);
+}
+
 static void
 validate_check_constraint(Chunk *chunk, Constraint *con)
 {
@@ -3698,6 +3761,7 @@ process_index_start(ProcessUtilityArgs *args)
 		if (!ht)
 		{
 			ts_cache_release(&hcache);
+			validate_chunk_index_constraints(RangeVarGetRelid(stmt->relation, NoLock, true), stmt);
 			return DDL_CONTINUE;
 		}
 
@@ -4773,6 +4837,10 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				if (ht)
 				{
 					verify_constraint_hypertable(ht, cmd->def);
+				}
+				else
+				{
+					validate_chunk_constraint_uniqueness(reloid, castNode(Constraint, cmd->def));
 				}
 				break;
 			case AT_AlterColumnType:

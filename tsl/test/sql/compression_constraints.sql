@@ -102,6 +102,28 @@ CREATE UNIQUE INDEX metrics_pk ON metrics(time);
 CREATE UNIQUE INDEX metrics_pk ON metrics(time,device);
 \set ON_ERROR_STOP 1
 
+-- chunk-level direct paths must reject too: without this check, CREATE UNIQUE
+-- INDEX or ALTER TABLE ADD CONSTRAINT on a compressed chunk would silently
+-- record a unique constraint over data that contains duplicates (see #9720).
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT format('%I.%I', chunk_schema, chunk_name) AS chunk
+FROM timescaledb_information.chunks
+WHERE hypertable_name='metrics' \gset
+
+\set ON_ERROR_STOP 0
+BEGIN; CREATE UNIQUE INDEX metrics_chunk_pk ON :chunk (time); ROLLBACK;
+BEGIN; CREATE UNIQUE INDEX metrics_chunk_pk ON :chunk (time, device); ROLLBACK;
+BEGIN; ALTER TABLE :chunk ADD CONSTRAINT metrics_chunk_pk PRIMARY KEY (time); ROLLBACK;
+BEGIN; ALTER TABLE :chunk ADD CONSTRAINT metrics_chunk_pk PRIMARY KEY (time, device); ROLLBACK;
+BEGIN; ALTER TABLE :chunk ADD CONSTRAINT metrics_chunk_pk UNIQUE (time); ROLLBACK;
+BEGIN; ALTER TABLE :chunk ADD CONSTRAINT metrics_chunk_pk UNIQUE (time, device); ROLLBACK;
+\set ON_ERROR_STOP 1
+
+-- non-unique CREATE INDEX on the chunk is fine even with duplicates
+CREATE INDEX metrics_chunk_idx ON :chunk (time);
+DROP INDEX _timescaledb_internal.metrics_chunk_idx;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 DROP TABLE metrics;
 
 -- test NULL behaviour
