@@ -1217,7 +1217,8 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 		(indexed_rel == chunk_rel ? chunk_rte : planner_rt_fetch(indexed_rel->relid, root));
 
 	/* Check for hypertable */
-	if (!ts_is_hypertable(ht_rte->relid) || !bms_is_member(var->varno, chunk_rel->top_parent_relids))
+	if (!ts_is_hypertable(ht_rte->relid) ||
+		!bms_is_member(var->varno, chunk_rel->top_parent_relids))
 	{
 		return NULL;
 	}
