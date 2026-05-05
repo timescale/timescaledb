@@ -5,15 +5,14 @@ This page lists all the latest features and updates to TimescaleDB. When
 you use psql to update your database, use the -X flag and prevent any .psqlrc
 commands from accidentally triggering the load of a previous DB version.**
 
-## 2.27.0 (2026-05-05)
+## 2.27.0 (2026-05-12)
 
 This release contains performance improvements and bug fixes since the 2.26.4 release. We recommend that you upgrade at the next available opportunity.
 
 **Highlighted features in TimescaleDB v2.27.0**
-*
-
-**Backward-Incompatible Changes**
-* [#9579](https://github.com/timescale/timescaledb/pull/9579) The bloom filter sparse indexes on compressed `int2` columns could lead to `SELECT` queries not returning the rows that actually match the `WHERE` condition. The upgrade is blocked for the affected databases, and the incorrect indexes have to be dropped manually before the upgrade.
+* The Hypercore engine now supports a vectorized implementation of filters by evaluating them inline through the standard Postgres function path. This expands the set of queries (including continuous aggregate refreshes) that can take the faster path through the columnstore, yielding speedups ranging from 30% up to 2x in benchmarks.
+* `UPDATE` and `DELETE` statements with equality predicates can now use bloom filters to skip decompressing batches whose compressed rows can't match. When multiple bloom filters apply, they are evaluated in decreasing order of column count (most selective first), and EXPLAIN now reports filtering activity via the new "Compressed batches filtered" and "Batches filtered after decompression counters". The query performance increases in some case up to 160 times.
+* `UPSERT` queries can now leverage bloom filters (including composite ones) to skip decompressing batches when the arbiter values are guaranteed not to be present, with the most-selective filter chosen automatically when multiple apply. EXPLAIN output adds new statistics — batches checked by bloom, batches pruned by bloom, batches without bloom, and bloom false positives — for visibility into pruning effectiveness.
 
 **Features**
 * [#8868](https://github.com/timescale/timescaledb/pull/8868) Use `PG_MODULE_MAGIC_EXT` for `PG18`
@@ -62,6 +61,9 @@ This release contains performance improvements and bug fixes since the 2.26.4 re
 * [#9709](https://github.com/timescale/timescaledb/pull/9709) Reject mismatched element type in `bool`/`uuid` decompression
 * [#9710](https://github.com/timescale/timescaledb/pull/9710) Return `bigint` from `compressed_data_column_size`
 * [#9711](https://github.com/timescale/timescaledb/pull/9711) Fix registration row leak when continuous aggregate refresh fails
+
+**Backward-Incompatible Changes**
+* [#9579](https://github.com/timescale/timescaledb/pull/9579) The bloom filter sparse indexes on compressed `int2` columns could lead to `SELECT` queries not returning the rows that actually match the `WHERE` condition. The upgrade is blocked for the affected databases, and the incorrect indexes have to be dropped manually before the upgrade.
 
 **New Settings**
 * `enable_cagg_rewrites`: enables rewriting queries with CAggs. Off by default. `cagg_rewrites_debug_info`: prints CAgg rewrites diagnostics. Off by default.
