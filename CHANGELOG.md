@@ -14,6 +14,9 @@ This release contains performance improvements and bug fixes since the 2.26.4 re
 * `UPDATE` and `DELETE` statements with equality predicates can now use bloom filters to skip decompressing batches whose compressed rows can't match. When multiple bloom filters apply, they are evaluated in decreasing order of column count (most selective first), and EXPLAIN now reports filtering activity via the new "Compressed batches filtered" and "Batches filtered after decompression counters". The query performance increases in some case up to 160 times.
 * `UPSERT` queries can now leverage bloom filters (including composite ones) to skip decompressing batches when the arbiter values are guaranteed not to be present, with the most-selective filter chosen automatically when multiple apply. EXPLAIN output adds new statistics — batches checked by bloom, batches pruned by bloom, batches without bloom, and bloom false positives — for visibility into pruning effectiveness.
 
+**Backward-Incompatible Changes**
+* [#9579](https://github.com/timescale/timescaledb/pull/9579) The bloom filter sparse indexes on compressed `int2` columns could lead to `SELECT` queries not returning the rows that actually match the `WHERE` condition. The upgrade is blocked for the affected databases, and the incorrect indexes have to be dropped manually before the upgrade.
+
 **Features**
 * [#8868](https://github.com/timescale/timescaledb/pull/8868) Use `PG_MODULE_MAGIC_EXT` for `PG18`
 * [#8967](https://github.com/timescale/timescaledb/pull/8967) Rewriting queries with continuous aggregates exactly matching query aggregation
@@ -62,9 +65,6 @@ This release contains performance improvements and bug fixes since the 2.26.4 re
 * [#9710](https://github.com/timescale/timescaledb/pull/9710) Return `bigint` from `compressed_data_column_size`
 * [#9711](https://github.com/timescale/timescaledb/pull/9711) Fix registration row leak when continuous aggregate refresh fails
 * [#9697](https://github.com/timescale/timescaledb/pull/9697) Improve `pathkey` handling for compressed sub-paths during sort transformation
-
-**Backward-Incompatible Changes**
-* [#9579](https://github.com/timescale/timescaledb/pull/9579) The bloom filter sparse indexes on compressed `int2` columns could lead to `SELECT` queries not returning the rows that actually match the `WHERE` condition. The upgrade is blocked for the affected databases, and the incorrect indexes have to be dropped manually before the upgrade.
 
 **New Settings**
 * `enable_cagg_rewrites`: enables rewriting queries with CAggs. Off by default. `cagg_rewrites_debug_info`: prints CAgg rewrites diagnostics. Off by default.
