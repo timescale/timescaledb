@@ -1481,7 +1481,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			break;
 
 		case TS_REL_HYPERTABLE:
-			if (!rel->inh)
+			if (!rte->inh)
 			{
 				/*
 				 * We get here with SELECT FROM ONLY hypertable. Mark it as
