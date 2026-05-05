@@ -1744,7 +1744,7 @@ DROP INDEX :INDEX_NAME;
  Limit (actual rows=3.00 loops=1)
    ->  Merge Join (actual rows=3.00 loops=1)
          Merge Cond: (m2."time" = m1."time")
-         Join Filter: (m2.device_id = m1.device_id)
+         Join Filter: (m1.device_id = m2.device_id)
          Rows Removed by Join Filter: 4
          ->  Custom Scan (ChunkAppend) on join_limit m2 (actual rows=3.00 loops=1)
                Order: m2."time", m2.device_id

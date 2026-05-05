@@ -1148,7 +1148,7 @@ ORDER BY "time", mt.device_id limit 5;
 --- QUERY PLAN ---
  Limit (actual rows=5.00 loops=1)
    ->  Nested Loop (actual rows=5.00 loops=1)
-         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (nd.node = mt.device_id))
+         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (mt.device_id = nd.node))
          Rows Removed by Join Filter: 1488
          ->  Custom Scan (ChunkAppend) on metrics_ordered_idx mt (actual rows=1493.00 loops=1)
                Order: mt."time", mt.device_id
@@ -1193,7 +1193,7 @@ ORDER BY "time", mt.device_id limit 5;
 --- QUERY PLAN ---
  Limit (actual rows=5.00 loops=1)
    ->  Nested Loop (actual rows=5.00 loops=1)
-         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (nd.node = mt.device_id))
+         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (mt.device_id = nd.node))
          Rows Removed by Join Filter: 1488
          ->  Custom Scan (ChunkAppend) on metrics_ordered_idx mt (actual rows=1493.00 loops=1)
                Order: mt."time", mt.device_id
