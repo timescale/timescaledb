@@ -15,3 +15,5 @@ INSERT INTO btest VALUES('2017-01-20T09:00:43', '2017-01-20T09:01:55', 2, 20.1, 
 CREATE TABLE btest_numeric (time timestamp NOT NULL, quantity numeric);
 SELECT schema_name, table_name, created FROM create_hypertable('btest_numeric', 'time');
 
+/* FIXME */
+
