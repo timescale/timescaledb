@@ -244,7 +244,9 @@ continuous_agg_update_materialization_for_tenant(Hypertable *mat_ht, const Conti
 	RestrictSearchPath();
 
 	if (materialization_range.start > materialization_range.end)
+	{
 		materialization_range.start = materialization_range.end;
+	}
 
 	context.materialization_range = internal_time_range_to_time_range(materialization_range);
 	execute_materializations_by_tenant(&context);
@@ -749,9 +751,11 @@ create_materialization_plan_argtypes(MaterializationContext *context,
 		 */
 		Oid array_type = get_array_type(context->tenant_type);
 		if (!OidIsValid(array_type))
+		{
 			elog(ERROR,
 				 "no array type found for tenant column element type %u",
 				 context->tenant_type);
+		}
 		argtypes[2] = array_type;
 	}
 
@@ -794,7 +798,9 @@ create_materialization_plan(MaterializationContext *context, MaterializationPlan
 
 		SPI_keepplan(materialization->plan);
 		if (is_by_tenant)
+		{
 			materialization->last_tenant_type = context->tenant_type;
+		}
 
 		pfree(query);
 		pfree(argtypes);
@@ -1046,5 +1052,7 @@ execute_materializations_by_tenant(MaterializationContext *context)
 	PG_END_TRY();
 
 	if (rows_processed > 0)
+	{
 		update_watermark(context);
+	}
 }

@@ -350,6 +350,7 @@ continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 {
 	/* Return quickly if we never initialized either hashtable */
 	if (!continuous_aggs_cache_inval_htab && !backfill_tracker_htab)
+	{
 		return;
 	}
 
@@ -359,7 +360,9 @@ continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 		case XACT_EVENT_PRE_COMMIT:
 		case XACT_EVENT_PARALLEL_PRE_COMMIT:
 			if (continuous_aggs_cache_inval_htab)
+			{
 				cache_inval_htab_write();
+			}
 			backfill_tracker_flush();
 			break;
 		case XACT_EVENT_PREPARE:
@@ -368,7 +371,9 @@ continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 		case XACT_EVENT_ABORT:
 		case XACT_EVENT_PARALLEL_ABORT:
 			if (continuous_aggs_cache_inval_htab)
+			{
 				cache_inval_cleanup();
+			}
 			backfill_tracker_cleanup();
 			break;
 		default:
@@ -570,11 +575,15 @@ static bool
 is_backfill_chunk(int64 chunk_range_end, const Hypertable *ht)
 {
 	if (!backfill_tracker_htab)
+	{
 		backfill_tracker_init();
+	}
 
 	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
 	if (!open_dim)
+	{
 		return false;
+	}
 
 	int64 chunk_interval = open_dim->fd.interval_length;
 	int64 one_day_usec = 86400LL * 1000000LL; /* USECS_PER_DAY */
@@ -599,33 +608,45 @@ continuous_agg_backfill_check(int32 hypertable_id, int64 chunk_range_end, TupleT
 							  const Hypertable *ht, const char *tenant_column_name)
 {
 	if (!is_backfill_chunk(chunk_range_end, ht))
+	{
 		return false;
+	}
 
 	if (tenant_column_name == NULL)
+	{
 		return false;
+	}
 
 	/* Get the tenant column attribute number from the hypertable relation.
 	 * We use the hypertable's tuple descriptor since slot is in hypertable format. */
 	AttrNumber device_attno = get_attnum(ht->main_table_relid, tenant_column_name);
 	if (device_attno == InvalidAttrNumber)
+	{
 		return false; /* device column not found — skip tracking */
+	}
 
 	/* Extract the device value from the tuple */
 	bool isnull;
 	Datum device_datum = slot_getattr(slot, device_attno, &isnull);
 	if (isnull)
+	{
 		return false;
+	}
 
 	/* Get the time dimension value for this row */
 	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
 	if (!open_dim)
+	{
 		return false;
+	}
 
 	AttrNumber time_attno = get_attnum(ht->main_table_relid, NameStr(open_dim->fd.column_name));
 	bool time_isnull;
 	Datum time_datum = slot_getattr(slot, time_attno, &time_isnull);
 	if (time_isnull)
+	{
 		return false;
+	}
 
 	Oid time_type = ts_dimension_get_partition_type(open_dim);
 	int64 timeval = ts_time_value_to_internal(time_datum, time_type);
@@ -662,9 +683,13 @@ continuous_agg_backfill_check(int32 hypertable_id, int64 chunk_range_end, TupleT
 	{
 		/* Update min/max */
 		if (timeval < entry->lowest_modified_value)
+		{
 			entry->lowest_modified_value = timeval;
+		}
 		if (timeval > entry->greatest_modified_value)
+		{
 			entry->greatest_modified_value = timeval;
+		}
 	}
 
 	pfree(device_str);
@@ -682,7 +707,9 @@ backfill_tracker_flush(void)
 	BackfillTrackerEntry *entry;
 
 	if (!backfill_tracker_htab || hash_get_num_entries(backfill_tracker_htab) == 0)
+	{
 		return;
+	}
 
 	Catalog *catalog = ts_catalog_get();
 	Relation rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_BACKFILL_TRACKER),
@@ -736,7 +763,9 @@ static void
 backfill_tracker_cleanup(void)
 {
 	if (!backfill_tracker_htab)
+	{
 		return;
+	}
 
 	hash_destroy(backfill_tracker_htab);
 	MemoryContextDelete(backfill_tracker_mctx);

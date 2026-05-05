@@ -516,8 +516,8 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 			/*
 			 * Backfill-chunk + tenant rows go into the tracker and bypass
 			 * inval log; everything else falls through to inval log.
-                         * TODO/FIX: does not work when we have multiple caggs on the same ht.
-                         * we could have  amix of caggs with tenant + without tenant
+			 * TODO/FIX: does not work when we have multiple caggs on the same ht.
+			 * we could have  amix of caggs with tenant + without tenant
 			 */
 			bool tracked =
 				ts_cm_functions->continuous_agg_backfill_check(miinfo->ht->fd.id,
@@ -536,7 +536,9 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 															   NULL,
 															   false);
 				if (should_free)
+				{
 					heap_freetuple(tuple);
+				}
 			}
 		}
 

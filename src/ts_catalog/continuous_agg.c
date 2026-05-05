@@ -264,10 +264,14 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 		BoolGetDatum(fd->materialized_only);
 
 	if (strlen(NameStr(fd->tenant_column_name)) == 0)
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)] = true;
+	}
 	else
+	{
 		values[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)] =
 			NameGetDatum(&fd->tenant_column_name);
+	}
 
 	return heap_form_tuple(desc, values, nulls);
 }
@@ -323,11 +327,15 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)])
+	{
 		namestrcpy(&fd->tenant_column_name, "");
+	}
 	else
+	{
 		namestrcpy(&fd->tenant_column_name,
 				   DatumGetCString(
 					   values[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)]));
+	}
 
 	if (should_free)
 	{
@@ -631,10 +639,14 @@ ts_continuous_agg_get_tenant_column_name(int32 raw_hypertable_id)
 
 		const char *tenant = NameStr(data.tenant_column_name);
 		if (tenant[0] == '\0')
+		{
 			continue;
+		}
 
 		if (result == NULL)
+		{
 			result = pstrdup(tenant);
+		}
 		else if (strcmp(result, tenant) != 0)
 		{
 			ts_scan_iterator_close(&iterator);

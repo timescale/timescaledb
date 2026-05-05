@@ -1316,9 +1316,13 @@ tracker_raw_entry_cmp(const void *a, const void *b)
 	const TrackerRawEntry *ea = *(const TrackerRawEntry *const *) a;
 	const TrackerRawEntry *eb = *(const TrackerRawEntry *const *) b;
 	if (ea->bucket_start < eb->bucket_start)
+	{
 		return -1;
+	}
 	if (ea->bucket_start > eb->bucket_start)
+	{
 		return 1;
+	}
 	return strcmp(ea->device_value_text, eb->device_value_text);
 }
 
@@ -1365,17 +1369,21 @@ collect_and_delete_tracker_entries_in_window(const ContinuousAgg *cagg,
 {
 	/* Tenant column not configured -> tracker is irrelevant for this cagg. */
 	if (NameStr(cagg->data.tenant_column_name)[0] == '\0')
+	{
 		return NULL;
+	}
 
 	int32 raw_ht_id = cagg->data.raw_hypertable_id;
 	Oid raw_ht_relid = ts_hypertable_id_to_relid(raw_ht_id, false);
 	AttrNumber tenant_attno = get_attnum(raw_ht_relid, NameStr(cagg->data.tenant_column_name));
 	if (tenant_attno == InvalidAttrNumber)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_COLUMN),
 				 errmsg("tenant column \"%s\" not found on hypertable %u",
 						NameStr(cagg->data.tenant_column_name),
 						raw_ht_relid)));
+	}
 	Oid tenant_type = get_atttype(raw_ht_relid, tenant_attno);
 
 	Oid typinput;
@@ -1449,7 +1457,9 @@ collect_and_delete_tracker_entries_in_window(const ContinuousAgg *cagg,
 	ts_scan_iterator_close(&iterator);
 
 	if (raw_entries == NIL)
+	{
 		return NULL;
+	}
 
 	/* Phase 2: sort by (bucket_start, device_value_text). */
 	int n = list_length(raw_entries);
@@ -1457,7 +1467,9 @@ collect_and_delete_tracker_entries_in_window(const ContinuousAgg *cagg,
 	int i = 0;
 	ListCell *lc;
 	foreach (lc, raw_entries)
+	{
 		arr[i++] = lfirst(lc);
+	}
 	qsort(arr, n, sizeof(TrackerRawEntry *), tracker_raw_entry_cmp);
 
 	/* Phase 3: dedup adjacent texts within a bucket; parse to Datums; group. */
@@ -1468,7 +1480,9 @@ collect_and_delete_tracker_entries_in_window(const ContinuousAgg *cagg,
 		int64 cur_bucket = arr[idx]->bucket_start;
 		int span_end = idx;
 		while (span_end < n && arr[span_end]->bucket_start == cur_bucket)
+		{
 			span_end++;
+		}
 
 		Datum *values = palloc(sizeof(Datum) * (span_end - idx));
 		int unique_count = 0;
@@ -1477,7 +1491,9 @@ collect_and_delete_tracker_entries_in_window(const ContinuousAgg *cagg,
 		{
 			const char *t = arr[j]->device_value_text;
 			if (prev_text != NULL && strcmp(prev_text, t) == 0)
+			{
 				continue;
+			}
 			values[unique_count++] = OidInputFunctionCall(typinput, (char *) t, typioparam, -1);
 			prev_text = t;
 		}
@@ -1523,7 +1539,9 @@ tracker_store_free(TrackerStore *store)
 		if (!store->tenant_typbyval)
 		{
 			for (int i = 0; i < g->tenant_count; i++)
+			{
 				pfree(DatumGetPointer(g->tenant_values[i]));
+			}
 		}
 		pfree(g->tenant_values);
 		pfree(g);

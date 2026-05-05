@@ -84,6 +84,7 @@ cagg_add_tenant_column(ContinuousAgg *agg, const char *tenant_column)
 {
 	/* Error if tenant column is already set on this cagg */
 	if (tenant_column != NULL && strlen(NameStr(agg->data.tenant_column_name)) > 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_DUPLICATE_OBJECT),
 				 errmsg("tenant column \"%s\" is already set on continuous aggregate \"%s\"",
@@ -91,6 +92,7 @@ cagg_add_tenant_column(ContinuousAgg *agg, const char *tenant_column)
 						NameStr(agg->data.user_view_name)),
 				 errhint(
 					 "Drop and recreate the continuous aggregate to change the tenant column.")));
+	}
 
 	/* Validate: check the column exists on the raw hypertable */
 	if (tenant_column != NULL)
@@ -118,12 +120,14 @@ cagg_add_tenant_column(ContinuousAgg *agg, const char *tenant_column)
 			}
 		}
 		if (!found)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("tenant column \"%s\" must be a GROUP BY column of "
 							"continuous aggregate \"%s\"",
 							tenant_column,
 							NameStr(agg->data.user_view_name))));
+		}
 
 		/*
 		 * Validate: all other caggs on the same raw hypertable must use the
@@ -134,10 +138,13 @@ cagg_add_tenant_column(ContinuousAgg *agg, const char *tenant_column)
 		{
 			ContinuousAgg *sibling = (ContinuousAgg *) lfirst(lc);
 			if (sibling->data.mat_hypertable_id == agg->data.mat_hypertable_id)
+			{
 				continue; /* skip self */
+			}
 
 			const char *sibling_col = NameStr(sibling->data.tenant_column_name);
 			if (strlen(sibling_col) > 0 && strcmp(sibling_col, tenant_column) != 0)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("all continuous aggregates on the same hypertable must "
@@ -146,6 +153,7 @@ cagg_add_tenant_column(ContinuousAgg *agg, const char *tenant_column)
 								   "tenant_column \"%s\".",
 								   NameStr(sibling->data.user_view_name),
 								   sibling_col)));
+			}
 		}
 	}
 
@@ -192,7 +200,9 @@ cagg_add_tenant_column(ContinuousAgg *agg, const char *tenant_column)
 		heap_freetuple(new_tuple);
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 
 		break;
 	}
