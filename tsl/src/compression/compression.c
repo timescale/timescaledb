@@ -960,6 +960,31 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 																	 bloom_attr_offset));
 				}
 
+				const AttrNumber first_attr_number =
+					compressed_column_metadata_attno(settings,
+													 settings->fd.relid,
+													 attr->attnum,
+													 settings->fd.compress_relid,
+													 "first");
+				const AttrNumber last_attr_number =
+					compressed_column_metadata_attno(settings,
+													 settings->fd.relid,
+													 attr->attnum,
+													 settings->fd.compress_relid,
+													 "last");
+				if (AttributeNumberIsValid(first_attr_number) &&
+					AttributeNumberIsValid(last_attr_number))
+				{
+					const int16 first_attr_offset = AttrNumberGetAttrOffset(first_attr_number);
+					const int16 last_attr_offset = AttrNumberGetAttrOffset(last_attr_number);
+					metadata_builders =
+						lappend(metadata_builders,
+								batch_metadata_builder_firstlast_create(attr->atttypid,
+																		attr->attnum,
+																		first_attr_offset,
+																		last_attr_offset));
+				}
+
 				*column = (PerColumn){
 					.compressor = compressor_for_type(attr->atttypid),
 					.segmentby_column_index = -1,
