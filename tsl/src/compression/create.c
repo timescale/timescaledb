@@ -156,6 +156,80 @@ column_segment_max_name(int16 column_index)
 	return compression_column_segment_metadata_name("max", column_index);
 }
 
+OrderbySparseKind
+orderby_sparse_kind(const CompressionSettings *settings, int orderby_pos)
+{
+	Assert(settings != NULL);
+	Assert(orderby_pos >= 1 && orderby_pos <= ts_array_length(settings->fd.orderby));
+
+	if (settings->fd.index == NULL)
+	{
+		return ORDERBY_SPARSE_MINMAX;
+	}
+
+	const char *col_name = ts_array_get_element_text(settings->fd.orderby, orderby_pos);
+
+	SparseIndexSettings *parsed = ts_convert_to_sparse_index_settings(settings->fd.index);
+	List *per_col = ts_get_per_column_compression_settings(parsed);
+	PerColumnCompressionSettings *col_settings =
+		ts_get_per_column_compression_settings_by_column_name(per_col, col_name);
+
+	OrderbySparseKind kind = ORDERBY_SPARSE_MINMAX;
+	if (col_settings != NULL && col_settings->firstlast_obj_id >= 0 &&
+		col_settings->minmax_obj_id < 0)
+	{
+		kind = ORDERBY_SPARSE_FIRSTLAST;
+	}
+
+	ts_free_sparse_index_settings(parsed);
+	return kind;
+}
+
+void
+orderby_sparse_metadata_names(const CompressionSettings *settings, int orderby_pos,
+							  const char **lower_name, const char **upper_name)
+{
+	Assert(lower_name != NULL && upper_name != NULL);
+
+	OrderbySparseKind kind = orderby_sparse_kind(settings, orderby_pos);
+
+	if (kind == ORDERBY_SPARSE_MINMAX)
+	{
+		*lower_name = column_segment_min_name(orderby_pos);
+		*upper_name = column_segment_max_name(orderby_pos);
+		return;
+	}
+
+	const char *col_name = ts_array_get_element_text(settings->fd.orderby, orderby_pos);
+	const char *col_names[1] = { col_name };
+	bool desc = ts_array_get_element_bool(settings->fd.orderby_desc, orderby_pos);
+
+	if (!desc)
+	{
+		*lower_name = compressed_column_metadata_name_v2("first", col_names, 1);
+		*upper_name = compressed_column_metadata_name_v2("last", col_names, 1);
+	}
+	else
+	{
+		/* DESC sort puts the largest value at the first row of each batch. */
+		*lower_name = compressed_column_metadata_name_v2("last", col_names, 1);
+		*upper_name = compressed_column_metadata_name_v2("first", col_names, 1);
+	}
+}
+
+void
+orderby_sparse_metadata_attnos(const CompressionSettings *settings, Oid compressed_relid,
+							   int orderby_pos, AttrNumber *lower_attno, AttrNumber *upper_attno)
+{
+	Assert(lower_attno != NULL && upper_attno != NULL);
+
+	const char *lower_name;
+	const char *upper_name;
+	orderby_sparse_metadata_names(settings, orderby_pos, &lower_name, &upper_name);
+	*lower_attno = get_attnum(compressed_relid, lower_name);
+	*upper_attno = get_attnum(compressed_relid, upper_name);
+}
+
 /*
  * Get metadata name for a given column name and metadata type, format version 2.
  * We can't reference the attribute numbers, because they can change after
