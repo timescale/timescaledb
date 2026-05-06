@@ -61,6 +61,7 @@ This release contains performance improvements and bug fixes since the 2.26.4 re
 * [#9709](https://github.com/timescale/timescaledb/pull/9709) Reject mismatched element type in `bool`/`uuid` decompression
 * [#9710](https://github.com/timescale/timescaledb/pull/9710) Return `bigint` from `compressed_data_column_size`
 * [#9711](https://github.com/timescale/timescaledb/pull/9711) Fix registration row leak when continuous aggregate refresh fails
+* [#9697](https://github.com/timescale/timescaledb/pull/9697) Improve `pathkey` handling for compressed sub-paths during sort transformation
 
 **Backward-Incompatible Changes**
 * [#9579](https://github.com/timescale/timescaledb/pull/9579) The bloom filter sparse indexes on compressed `int2` columns could lead to `SELECT` queries not returning the rows that actually match the `WHERE` condition. The upgrade is blocked for the affected databases, and the incorrect indexes have to be dropped manually before the upgrade.
