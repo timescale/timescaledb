@@ -799,8 +799,6 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 		return false;
 	}
 
-	/* FIXME */
-
 	/*
 	 * The path might not return exactly what we want, so fix that.  (We
 	 * assume that this won't change any conclusions about which was the
