@@ -369,7 +369,7 @@ bool_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 	BoolCompressed *header = consumeCompressedData(&si, sizeof(BoolCompressed));
 
 	Assert(header->has_nulls == 0 || header->has_nulls == 1);
-	Assert(element_type == BOOLOID);
+	CheckCompressedData(element_type == BOOLOID);
 
 	serialized_values = bytes_deserialize_simple8b_and_advance(&si);
 	const bool has_nulls = header->has_nulls == 1;
@@ -499,7 +499,7 @@ decompression_iterator_init(BoolDecompressionIterator *iter, void *compressed, O
 	Simple8bRleSerialized *values = bytes_deserialize_simple8b_and_advance(&si);
 
 	Assert(header->has_nulls == 0 || header->has_nulls == 1);
-	Assert(element_type == BOOLOID);
+	CheckCompressedData(element_type == BOOLOID);
 
 	const bool has_nulls = header->has_nulls == 1;
 
