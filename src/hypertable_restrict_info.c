@@ -728,7 +728,7 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 				const DimensionRestrictInfoOpen *open = (const DimensionRestrictInfoOpen *) dri;
 
 				/*
-				 * Filter out contradictory dimention restrictions. If
+				 * Filter out contradictory dimension restrictions. If
 				 * lower_bound > upper_bound, no row can match, but some slices
 				 * still can, because we're checking the slice ends separately:
 				 * slice_start <= upper_bound <= lower_bound <= slice_end
