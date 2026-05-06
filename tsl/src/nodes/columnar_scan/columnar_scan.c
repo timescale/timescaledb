@@ -326,9 +326,14 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 
 				column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
 				int16 orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
-				varattno =
-					get_attnum(info->compressed_rte->relid, column_segment_min_name(orderby_index));
 				Assert(orderby_index != 0);
+				AttrNumber lower_attno;
+				AttrNumber upper_attno;
+				orderby_sparse_metadata_attnos(info->settings,
+											   info->compressed_rte->relid,
+											   orderby_index,
+											   &lower_attno,
+											   &upper_attno);
 				bool orderby_desc =
 					ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
 				bool orderby_nullsfirst =
@@ -349,35 +354,33 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 				}
 
 				Var *metadata_var = makeVar(info->compressed_rel->relid,
-											varattno,
+											lower_attno,
 											var->vartype,
 											var->vartypmod,
 											var->varcollid,
 											var->varlevelsup);
-				Expr *min_expr =
+				Expr *lower_expr =
 					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-				EquivalenceClass *min_ec =
-					append_ec_for_metadata_col(root, info, min_expr, pk, opcintype);
-				PathKey *min =
-					make_canonical_pathkey(root, min_ec, pk->pk_opfamily, strategy, nulls_first);
-				required_compressed_pathkeys = lappend(required_compressed_pathkeys, min);
+				EquivalenceClass *lower_ec =
+					append_ec_for_metadata_col(root, info, lower_expr, pk, opcintype);
+				PathKey *lower_pk =
+					make_canonical_pathkey(root, lower_ec, pk->pk_opfamily, strategy, nulls_first);
+				required_compressed_pathkeys = lappend(required_compressed_pathkeys, lower_pk);
 
-				varattno =
-					get_attnum(info->compressed_rte->relid, column_segment_max_name(orderby_index));
 				metadata_var = makeVar(info->compressed_rel->relid,
-									   varattno,
+									   upper_attno,
 									   var->vartype,
 									   var->vartypmod,
 									   var->varcollid,
 									   var->varlevelsup);
-				Expr *max_expr =
+				Expr *upper_expr =
 					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-				EquivalenceClass *max_ec =
-					append_ec_for_metadata_col(root, info, max_expr, pk, opcintype);
-				PathKey *max =
-					make_canonical_pathkey(root, max_ec, pk->pk_opfamily, strategy, nulls_first);
+				EquivalenceClass *upper_ec =
+					append_ec_for_metadata_col(root, info, upper_expr, pk, opcintype);
+				PathKey *upper_pk =
+					make_canonical_pathkey(root, upper_ec, pk->pk_opfamily, strategy, nulls_first);
 
-				required_compressed_pathkeys = lappend(required_compressed_pathkeys, max);
+				required_compressed_pathkeys = lappend(required_compressed_pathkeys, upper_pk);
 			}
 		}
 	}
@@ -1815,17 +1818,20 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 													column_name,
 													&attrs_used);
 
-			/* if the column is an orderby, add it's metadata columns too */
+			/* if the column is an orderby, add its metadata columns too */
 			int16 index = ts_array_position(info->settings->fd.orderby, column_name);
 			if (index != 0)
 			{
+				char *lower_name;
+				char *upper_name;
+				orderby_sparse_metadata_names(info->settings, index, &lower_name, &upper_name);
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														column_segment_min_name(index),
+														lower_name,
 														&attrs_used);
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														column_segment_max_name(index),
+														upper_name,
 														&attrs_used);
 			}
 		}
@@ -1851,13 +1857,16 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 		{
 			for (int i = 1; i <= ts_array_length(info->settings->fd.orderby); i++)
 			{
+				char *lower_name;
+				char *upper_name;
+				orderby_sparse_metadata_names(info->settings, i, &lower_name, &upper_name);
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														column_segment_min_name(i),
+														lower_name,
 														&attrs_used);
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														column_segment_max_name(i),
+														upper_name,
 														&attrs_used);
 			}
 		}

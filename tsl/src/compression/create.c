@@ -187,7 +187,7 @@ orderby_sparse_kind(const CompressionSettings *settings, int orderby_pos)
 
 void
 orderby_sparse_metadata_names(const CompressionSettings *settings, int orderby_pos,
-							  const char **lower_name, const char **upper_name)
+							  char **lower_name, char **upper_name)
 {
 	Assert(lower_name != NULL && upper_name != NULL);
 
@@ -223,8 +223,8 @@ orderby_sparse_metadata_attnos(const CompressionSettings *settings, Oid compress
 {
 	Assert(lower_attno != NULL && upper_attno != NULL);
 
-	const char *lower_name;
-	const char *upper_name;
+	char *lower_name;
+	char *upper_name;
 	orderby_sparse_metadata_names(settings, orderby_pos, &lower_name, &upper_name);
 	*lower_attno = get_attnum(compressed_relid, lower_name);
 	*upper_attno = get_attnum(compressed_relid, upper_name);

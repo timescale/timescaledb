@@ -59,7 +59,7 @@ typedef enum OrderbySparseKind
 
 OrderbySparseKind orderby_sparse_kind(const CompressionSettings *settings, int orderby_pos);
 void orderby_sparse_metadata_names(const CompressionSettings *settings, int orderby_pos,
-								   const char **lower_name, const char **upper_name);
+								   char **lower_name, char **upper_name);
 void orderby_sparse_metadata_attnos(const CompressionSettings *settings, Oid compressed_relid,
 									int orderby_pos, AttrNumber *lower_attno,
 									AttrNumber *upper_attno);

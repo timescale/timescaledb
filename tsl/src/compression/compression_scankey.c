@@ -225,9 +225,12 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 				}
 
 				int16 index = ts_array_position(settings->fd.orderby, attname);
+				char *lower_name;
+				char *upper_name;
+				orderby_sparse_metadata_names(settings, index, &lower_name, &upper_name);
 
 				if (create_segment_filter_scankey(in_rel,
-												  column_segment_min_name(index),
+												  lower_name,
 												  BTLessEqualStrategyNumber,
 												  InvalidOid,
 												  InvalidOid,
@@ -243,7 +246,7 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 				}
 
 				if (create_segment_filter_scankey(in_rel,
-												  column_segment_max_name(index),
+												  upper_name,
 												  BTGreaterEqualStrategyNumber,
 												  InvalidOid,
 												  InvalidOid,
