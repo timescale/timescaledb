@@ -105,7 +105,9 @@ _PG_init(void)
 	 * init if we do. */
 
 	if (init_done)
+	{
 		return;
+	}
 
 	_cache_init();
 	_hypertable_cache_init();

@@ -105,14 +105,20 @@ extern void *
 bool_compressor_finish(BoolCompressor *compressor)
 {
 	if (compressor == NULL)
+	{
 		return NULL;
+	}
 
 	Simple8bRleSerialized *values = simple8brle_compressor_finish(&compressor->values);
 	if (values == NULL)
+	{
 		return NULL;
+	}
 
 	if (compressor->num_nulls == compressor->values.num_elements)
+	{
 		return NULL;
+	}
 
 	Simple8bRleSerialized *validity_bitmap =
 		simple8brle_compressor_finish(&compressor->validity_bitmap);
@@ -140,9 +146,11 @@ bool_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 	BoolDecompressionIterator *bool_iter = (BoolDecompressionIterator *) iter;
 
 	if (bool_iter->position >= bool_iter->values.num_elements)
+	{
 		return (DecompressResult){
 			.is_done = true,
 		};
+	}
 
 	/* check nulls */
 	if (bool_iter->validity_bitmap.num_elements > 0)
@@ -186,9 +194,11 @@ bool_decompression_iterator_try_next_reverse(DecompressionIterator *iter)
 	BoolDecompressionIterator *bool_iter = (BoolDecompressionIterator *) iter;
 
 	if (bool_iter->position < 0)
+	{
 		return (DecompressResult){
 			.is_done = true,
 		};
+	}
 
 	/* check nulls */
 	if (bool_iter->validity_bitmap.num_elements > 0)
@@ -253,7 +263,9 @@ bool_compressed_recv(StringInfo buffer)
 
 	values = simple8brle_serialized_recv(buffer);
 	if (has_nulls)
+	{
 		validity_bitmap = simple8brle_serialized_recv(buffer);
+	}
 
 	compressed = bool_compressed_from_parts(values, validity_bitmap);
 
@@ -298,11 +310,15 @@ tsl_bool_compressor_append(PG_FUNCTION_ARGS)
 	{
 		compressor = bool_compressor_alloc();
 		if (PG_NARGS() > 2)
+		{
 			elog(ERROR, "append expects two arguments");
+		}
 	}
 
 	if (PG_ARGISNULL(1))
+	{
 		bool_compressor_append_null(compressor);
+	}
 	else
 	{
 		bool next_val = PG_GETARG_BOOL(1);
@@ -319,11 +335,15 @@ tsl_bool_compressor_finish(PG_FUNCTION_ARGS)
 	BoolCompressor *compressor = PG_ARGISNULL(0) ? NULL : (BoolCompressor *) PG_GETARG_POINTER(0);
 	void *compressed;
 	if (compressor == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 
 	compressed = bool_compressor_finish(compressor);
 	if (compressed == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 	PG_RETURN_POINTER(compressed);
 }
 
@@ -349,7 +369,7 @@ bool_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 	BoolCompressed *header = consumeCompressedData(&si, sizeof(BoolCompressed));
 
 	Assert(header->has_nulls == 0 || header->has_nulls == 1);
-	Assert(element_type == BOOLOID);
+	CheckCompressedData(element_type == BOOLOID);
 
 	serialized_values = bytes_deserialize_simple8b_and_advance(&si);
 	const bool has_nulls = header->has_nulls == 1;
@@ -387,7 +407,9 @@ bool_compressor_append_bool(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = bool_compressor_alloc();
+	}
 
 	bool_compressor_append_value(extended->internal, DatumGetBool(val) ? true : false);
 }
@@ -397,7 +419,9 @@ bool_compressor_append_null_value(Compressor *compressor)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = bool_compressor_alloc();
+	}
 
 	bool_compressor_append_null(extended->internal);
 }
@@ -427,17 +451,23 @@ bool_compressed_from_parts(Simple8bRleSerialized *values, Simple8bRleSerialized 
 	uint32 values_size = values != NULL ? simple8brle_serialized_total_size(values) : 0;
 
 	if (num_values == 0)
+	{
 		return NULL;
+	}
 
 	if (validity_bitmap != NULL)
+	{
 		validity_bitmap_size = simple8brle_serialized_total_size(validity_bitmap);
+	}
 
 	compressed_size = sizeof(BoolCompressed) + values_size + validity_bitmap_size;
 
 	if (!AllocSizeIsValid(compressed_size))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
+	}
 
 	compressed_data = palloc(compressed_size);
 	compressed = (BoolCompressed *) compressed_data;
@@ -469,7 +499,7 @@ decompression_iterator_init(BoolDecompressionIterator *iter, void *compressed, O
 	Simple8bRleSerialized *values = bytes_deserialize_simple8b_and_advance(&si);
 
 	Assert(header->has_nulls == 0 || header->has_nulls == 1);
-	Assert(element_type == BOOLOID);
+	CheckCompressedData(element_type == BOOLOID);
 
 	const bool has_nulls = header->has_nulls == 1;
 

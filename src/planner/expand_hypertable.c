@@ -90,13 +90,17 @@ is_timestamptz_op_interval(Expr *expr)
 	Const *c1, *c2;
 
 	if (!IsA(expr, OpExpr))
+	{
 		return false;
+	}
 
 	op = castNode(OpExpr, expr);
 
 	if (op->opresulttype != TIMESTAMPTZOID || op->args->length != 2 ||
 		!IsA(linitial(op->args), Const) || !IsA(llast(op->args), Const))
+	{
 		return false;
+	}
 
 	c1 = linitial_node(Const, op->args);
 	c2 = llast_node(Const, op->args);
@@ -150,7 +154,9 @@ integral_timeval_to_const(int64 value, Oid type)
 			 * the UNIX epoch.
 			 */
 			if (value <= UNIX_EPOCH_AS_TIMESTAMP)
+			{
 				value = UNIX_EPOCH_AS_TIMESTAMP;
+			}
 
 			pg_uuid_t *uuid = ts_create_uuid_v7_from_timestamptz((TimestampTz) value, true);
 			return makeConst(type, -1, InvalidOid, UUID_LEN, UUIDPGetDatum(uuid), false, typbyval);
@@ -241,7 +247,9 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 		op = castNode(OpExpr, left);
 	}
 	else
+	{
 		return constraint;
+	}
 
 	ts_pl_int = ts_get_operator("+", PG_CATALOG_NAMESPACE, TIMESTAMPTZOID, INTERVALOID);
 	ts_mi_int = ts_get_operator("-", PG_CATALOG_NAMESPACE, TIMESTAMPTZOID, INTERVALOID);
@@ -269,7 +277,9 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 		c_ts = llast_node(Const, op->args);
 	}
 	else
+	{
 		return constraint;
+	}
 
 	/*
 	 * arg types should match operator and were checked in precheck
@@ -278,7 +288,9 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 	Assert(c_ts->consttype == TIMESTAMPTZOID);
 	Assert(c_int->consttype == INTERVALOID);
 	if (c_ts->constisnull || c_int->constisnull)
+	{
 		return constraint;
+	}
 
 	interval = DatumGetIntervalP(c_int->constvalue);
 
@@ -287,7 +299,9 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 	 * because month length is variable and calculation depends on local timezone
 	 */
 	if (interval->month != 0)
+	{
 		return constraint;
+	}
 
 	constified = DirectFunctionCall2(opfunc, c_ts->constvalue, c_int->constvalue);
 
@@ -318,16 +332,22 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 		 * If Var is on wrong side reverse the direction.
 		 */
 		if (!var_on_left)
+		{
 			add = !add;
+		}
 
 		/*
 		 * The safety buffer is chosen to be 4 hours because daylight saving time
 		 * changes seem to be in the range between -1 and 2 hours.
 		 */
 		if (add)
+		{
 			constified_tstz += 4 * USECS_PER_HOUR;
+		}
 		else
+		{
 			constified_tstz -= 4 * USECS_PER_HOUR;
+		}
 
 		constified = TimestampTzGetDatum(constified_tstz);
 	}
@@ -336,9 +356,13 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 	c_ts->constvalue = constified;
 
 	if (var_on_left)
+	{
 		right = (Expr *) c_ts;
+	}
 	else
+	{
 		left = (Expr *) c_ts;
+	}
 
 	return (OpExpr *) make_opclause(constraint->opno,
 									constraint->opresulttype,
@@ -380,12 +404,16 @@ static bool
 extract_time_bucket_qual(Expr *node, TimeBucketQual *tbqual)
 {
 	if (!IsA(node, OpExpr))
+	{
 		return false;
+	}
 
 	OpExpr *op = castNode(OpExpr, node);
 
 	if (list_length((op)->args) != 2)
+	{
 		return false;
+	}
 
 	Expr *left = linitial((op)->args);
 	Expr *right = lsecond((op)->args);
@@ -413,14 +441,18 @@ extract_time_bucket_qual(Expr *node, TimeBucketQual *tbqual)
 	}
 
 	if (!ts_is_time_bucket_function((Expr *) time_bucket) || tbqual->value->constisnull)
+	{
 		return false;
+	}
 
 	Const *width = linitial(time_bucket->args);
 	/* Get the time/partitioning column argument */
 	Node *timearg = lsecond(time_bucket->args);
 
 	if (!IsA(width, Const) || width->constisnull)
+	{
 		return false;
+	}
 
 	tbqual->tb.numargs = list_length(time_bucket->args);
 	tbqual->tb.width = width;
@@ -430,12 +462,16 @@ extract_time_bucket_qual(Expr *node, TimeBucketQual *tbqual)
 
 	/* 3 or more args should have Const 3rd arg */
 	if (list_length(time_bucket->args) > 2 && !IsA(lthird(time_bucket->args), Const))
+	{
 		return false;
+	}
 
 	/* 5 args variants should have Const 4th and 5th arg */
 	if (list_length(time_bucket->args) == 5 &&
 		(!IsA(lfourth(time_bucket->args), Const) || !IsA(lfifth(time_bucket->args), Const)))
+	{
 		return false;
+	}
 
 	Assert(list_length(time_bucket->args) == 2 || list_length(time_bucket->args) == 3 ||
 		   list_length(time_bucket->args) == 5);
@@ -467,7 +503,9 @@ time_bucket_width_to_integral(const Const *width, Oid bucket_type, int64 integra
 			*integral_width = const_to_integral_timeval(width);
 
 			if (integral_value >= ts_time_get_max(bucket_type) - *integral_width)
+			{
 				return false;
+			}
 			break;
 		case INTERVALOID:
 		{
@@ -476,19 +514,25 @@ time_bucket_width_to_integral(const Const *width, Oid bucket_type, int64 integra
 			 * Optimization can't be applied when interval has month component.
 			 */
 			if (interval->month != 0)
+			{
 				return false;
+			}
 
 			if (bucket_type == DATEOID)
 			{
 				/* bail out if interval->time can't be exactly represented as a double */
 				if (interval->time >= 0x3FFFFFFFFFFFFFLL)
+				{
 					return false;
+				}
 
 				*integral_width =
 					interval->day + ceil((double) interval->time / (double) USECS_PER_DAY);
 
 				if (integral_value >= (TS_DATE_END - *integral_width))
+				{
 					return false;
+				}
 			}
 			else if (bucket_type == TIMESTAMPOID || bucket_type == TIMESTAMPTZOID)
 			{
@@ -503,13 +547,17 @@ time_bucket_width_to_integral(const Const *width, Oid bucket_type, int64 integra
 					 * if our transformed restriction would overflow we skip adding it
 					 */
 					if (interval->time >= TS_TIMESTAMP_END - interval->day * USECS_PER_DAY)
+					{
 						return false;
+					}
 
 					*integral_width += interval->day * USECS_PER_DAY;
 				}
 
 				if (integral_value >= (TS_TIMESTAMP_END - *integral_width))
+				{
 					return false;
+				}
 			}
 			else
 			{
@@ -563,7 +611,9 @@ ts_transform_time_bucket_comparison(Expr *node)
 	TimeBucketQual tbqual;
 
 	if (!extract_time_bucket_qual(node, &tbqual))
+	{
 		return NULL;
+	}
 
 	/*
 	 * The qual is an expression <time_bucket OP value> or <value OP time_bucket>. Convert the value
@@ -611,14 +661,20 @@ ts_transform_time_bucket_comparison(Expr *node)
 											   tbqual.tb.rettype,
 											   integral_value,
 											   &integral_width))
+			{
 				return NULL;
+			}
 
 			if (tbqual.strategy == BTLessStrategyNumber && tbqual.tb.numargs == 2 &&
 				integral_value % integral_width == 0)
+			{
 				newvalue = integral_timeval_to_const(integral_value, tbqual.tb.timetype);
+			}
 			else
+			{
 				newvalue =
 					integral_timeval_to_const(integral_value + integral_width, tbqual.tb.timetype);
+			}
 
 			break;
 		}
@@ -674,7 +730,9 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 
 		/* stop processing if not for current rel */
 		if (num_rels != 1 || !bms_is_member(ctx->rel->relid, relids))
+		{
 			continue;
+		}
 
 		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
 		{
@@ -717,8 +775,10 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 		 * the restriction would exclude chunks and thus rows of the outer
 		 * relation when it should show all rows */
 		if (!is_outer_join)
+		{
 			ctx->restrictions =
 				lappend(ctx->restrictions, make_simple_restrictinfo(ctx->root, qual));
+		}
 	}
 	return (Node *) list_concat((List *) quals, additional_quals);
 }
@@ -737,7 +797,9 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 
 		/* stop processing if not for current rel */
 		if (num_rels != 1 || !bms_is_member(ctx->rel->relid, relids))
+		{
 			continue;
+		}
 
 		/*
 		 * check for time_bucket comparisons
@@ -790,10 +852,14 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool can_propagate)
 		 */
 		if (num_rels == 1 && can_propagate && IsA(qual, OpExpr) &&
 			list_length(castNode(OpExpr, qual)->args) == 2)
+		{
 			ctx->all_quals = lappend(ctx->all_quals, qual);
+		}
 
 		if (!bms_is_member(ctx->rel->relid, relids))
+		{
 			continue;
+		}
 
 		/* collect equality JOIN conditions for current rel */
 		if (num_rels == 2 && IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
@@ -812,7 +878,9 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool can_propagate)
 				if (op->opno == tce->eq_opr)
 				{
 					if (can_propagate)
+					{
 						ctx->propagate_conditions = lappend(ctx->propagate_conditions, op);
+					}
 				}
 			}
 			continue;
@@ -824,7 +892,9 @@ static bool
 collect_quals_walker(Node *node, CollectQualCtx *ctx)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	if (IsA(node, FromExpr))
 	{
@@ -858,9 +928,13 @@ chunk_cmp_chunk_reloid(const void *c1, const void *c2)
 	Oid rhs = (*(Chunk **) c2)->table_id;
 
 	if (lhs < rhs)
+	{
 		return -1;
+	}
 	if (lhs > rhs)
+	{
 		return 1;
+	}
 	return 0;
 }
 
@@ -893,14 +967,18 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, int *ord
 	/* check if optimizations are enabled */
 	if (!ts_guc_enable_optimizations || !ts_guc_enable_ordered_append ||
 		!ts_guc_enable_chunk_append)
+	{
 		return false;
+	}
 
 	/*
 	 * only do this optimization for hypertables with 1 dimension and queries
 	 * with an ORDER BY clause
 	 */
 	if (root->parse->sortClause == NIL)
+	{
 		return false;
+	}
 
 	return ts_ordered_append_should_optimize(root, rel, ht, order_attno, reverse);
 }
@@ -1031,7 +1109,9 @@ get_chunks(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, bool include_osm,
 		 * time slices of the chunks
 		 */
 		if (ht->space->num_dimensions > 1)
+		{
 			nested_oids = &priv->nested_oids;
+		}
 
 		return ts_hypertable_restrict_info_get_chunks_ordered(hri,
 															  ht,
@@ -1049,7 +1129,9 @@ static bool
 timebucket_annotate_walker(Node *node, CollectQualCtx *ctx)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	if (IsA(node, FromExpr))
 	{
@@ -1080,7 +1162,9 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 	timebucket_annotate_walker((Node *) root->parse->jointree, &ctx);
 
 	if (ctx.propagate_conditions != NIL)
+	{
 		propagate_join_quals(root, rel, &ctx);
+	}
 }
 
 /*
@@ -1102,7 +1186,9 @@ chunk_fully_covered(HypertableRestrictInfo *hri, Chunk const *chunk)
 		(dri->lower_strategy == InvalidStrategy && dri->upper_strategy == InvalidStrategy) ||
 		(chunk->cube->slices[0]->fd.range_start == TS_TIME_NOBEGIN ||
 		 chunk->cube->slices[0]->fd.range_end == TS_TIME_NOEND))
+	{
 		return false;
+	}
 
 	/*
 	 * DimensionRetrictInfo strategy should only be one BTGreaterStrategyNumber
@@ -1118,11 +1204,15 @@ chunk_fully_covered(HypertableRestrictInfo *hri, Chunk const *chunk)
 		{
 			case BTGreaterStrategyNumber:
 				if (chunk->cube->slices[0]->fd.range_start <= dri->lower_bound)
+				{
 					return false;
+				}
 				break;
 			case BTGreaterEqualStrategyNumber:
 				if (chunk->cube->slices[0]->fd.range_start < dri->lower_bound)
+				{
 					return false;
+				}
 				break;
 			default:
 				/* Should never happen */
@@ -1135,11 +1225,15 @@ chunk_fully_covered(HypertableRestrictInfo *hri, Chunk const *chunk)
 		{
 			case BTLessStrategyNumber:
 				if (chunk->cube->slices[0]->fd.range_end > dri->upper_bound)
+				{
 					return false;
+				}
 				break;
 			case BTLessEqualStrategyNumber:
 				if (chunk->cube->slices[0]->fd.range_end - 1 > dri->upper_bound)
+				{
 					return false;
+				}
 				break;
 			default:
 				/* Should never happen */
@@ -1179,7 +1273,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	Assert(ctx.join_level == 0);
 
 	if (ctx.propagate_conditions != NIL)
+	{
 		propagate_join_quals(root, ht_rel, &ctx);
+	}
 
 	Chunk **chunks = NULL;
 	unsigned int num_chunks = 0;
@@ -1193,7 +1289,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 	/* nothing to do here if we have no chunks */
 	if (!num_chunks)
+	{
 		return;
+	}
 
 	/*
 	 * Handle PlanRowMark for FOR UPDATE/SHARE and FK constraint enforcement.
@@ -1262,12 +1360,16 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 		childrte->ctename = NULL;
 		if (first_chunk_index == 0)
+		{
 			first_chunk_index = child_rtindex;
+		}
 		Assert(root->simple_rel_array[child_rtindex] == NULL);
 
 		/* Close child relations, but keep locks */
 		if (child_oid != parent_oid)
+		{
 			table_close(newrelation, NoLock);
+		}
 	}
 
 	table_close(oldrelation, NoLock);
@@ -1347,7 +1449,9 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 
 		/* Dont try filtering if all restrictions remain after filtering */
 		if (list_length(orig_ht_baserestrictinfo) == list_length(quals_possibly_false_inside_hri))
+		{
 			try_remove_quals_proven_true_by_hri = false;
+		}
 	}
 
 	/*
@@ -1401,7 +1505,9 @@ restrictinfo_has_qual(List *restrictions, OpExpr *qual)
 	foreach (lc_ri, restrictions)
 	{
 		if (equal(castNode(RestrictInfo, lfirst(lc_ri))->clause, (Expr *) qual))
+		{
 			return true;
+		}
 	}
 	return false;
 }
@@ -1412,7 +1518,9 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 	ListCell *lc;
 
 	if (!ts_guc_enable_qual_propagation)
+	{
 		return;
+	}
 
 	/* propagate join constraints */
 	foreach (lc, ctx->propagate_conditions)
@@ -1443,7 +1551,9 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 			other_var = linitial_node(Var, op->args);
 		}
 		else
+		{
 			continue;
+		}
 
 		foreach (lc_qual, ctx->all_quals)
 		{
@@ -1472,13 +1582,17 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 				propagated->args = list_make2(linitial(propagated->args), rel_var);
 			}
 			else
+			{
 				continue;
+			}
 
 			/*
 			 * check if this is a new qual
 			 */
 			if (restrictinfo_has_qual(ctx->restrictions, propagated))
+			{
 				continue;
+			}
 
 			Relids relids = pull_varnos(ctx->root, (Node *) propagated);
 			RestrictInfo *restrictinfo;
@@ -1506,7 +1620,9 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 			if (bms_num_members(relids) == 1 && bms_is_member(rel->relid, relids))
 			{
 				if (!restrictinfo_has_qual(rel->baserestrictinfo, propagated))
+				{
 					rel->baserestrictinfo = lappend(rel->baserestrictinfo, restrictinfo);
+				}
 			}
 			else
 			{

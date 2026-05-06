@@ -441,7 +441,9 @@ SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress')
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('segwise_unordered') chunk;
 
 -- Output would be incorrectly ordered if the flag was cleared
--- We have to see a sort on top of the ColumnarScan node due to UNORDERED flag
+-- We can use BatchSortedMerge for UNORDERED chunk because segmentby is pinned to a Const i.e. we are dealing with 1 segment only
+SET timescaledb.debug_require_batch_sorted_merge = 'force';
 EXPLAIN (COSTS OFF) SELECT a, time FROM segwise_unordered WHERE a = 2 ORDER BY a, time;
+RESET timescaledb.debug_require_batch_sorted_merge;
 
 DROP TABLE segwise_unordered;

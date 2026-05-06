@@ -28,6 +28,7 @@ set(TEST_FILES
     drop_rename_hypertable.sql
     drop_schema.sql
     dump_meta.sql
+    expand_hypertable_target.sql
     extension_scripts.sql
     generated_as_identity.sql
     hash.sql
@@ -132,7 +133,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "18"))
-  list(APPEND TEST_FILES insert_returning_old_new.sql)
+  list(APPEND TEST_FILES insert_returning_old_new.sql dml_system_columns.sql)
 endif()
 
 # only test custom type if we are in 64-bit architecture

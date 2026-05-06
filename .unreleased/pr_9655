@@ -1,1 +1,0 @@
-Fixes: #9655 Reject merge_chunks across chunks with different compression settings to prevent data corruption

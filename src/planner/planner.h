@@ -123,7 +123,9 @@ ts_planner_chunk_fetch(const PlannerInfo *root, RelOptInfo *rel)
 	 * (RELOPT_OTHER_MEMBER_REL) or a directly query on the chunk
 	 * (RELOPT_BASEREL) */
 	if (rel->reloptkind != RELOPT_OTHER_MEMBER_REL && rel->reloptkind != RELOPT_BASEREL)
+	{
 		return NULL;
+	}
 
 	/* The rel_private entry should have been created as part of classifying
 	 * the relation in timescaledb_get_relation_info_hook(). Therefore,

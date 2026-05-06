@@ -27,13 +27,17 @@ ts_http_header_create(const char *name, size_t name_len, const char *value, size
 	memset(new_header, 0, sizeof(*new_header));
 	new_header->name = palloc(name_len + 1);
 	if (name_len > 0)
+	{
 		memcpy(new_header->name, name, name_len);
+	}
 	new_header->name[name_len] = '\0';
 	new_header->name_len = name_len;
 
 	new_header->value = palloc(value_len + 1);
 	if (value_len > 0)
+	{
 		memcpy(new_header->value, value, value_len);
+	}
 	new_header->value[value_len] = '\0';
 	new_header->value_len = value_len;
 
@@ -66,7 +70,9 @@ static void
 appendOptionalBinaryStringInfo(StringInfo str, const char *data, int datalen)
 {
 	if (datalen <= 0)
+	{
 		return;
+	}
 
 	Assert(data != NULL);
 	appendBinaryStringInfo(str, data, datalen);
@@ -201,7 +207,9 @@ http_header_get_content_length(HttpHeader *header)
 	int content_length = -1;
 
 	if (!strncmp(header->name, HTTP_CONTENT_LENGTH, header->name_len))
+	{
 		sscanf(header->value, "%d", &content_length);
+	}
 	return content_length;
 }
 
@@ -239,7 +247,9 @@ ts_http_request_build(HttpRequest *req, size_t *buf_size)
 				return NULL;
 			}
 			else
+			{
 				verified_content_length = true;
+			}
 		}
 		http_header_serialize(cur_header, &buf);
 		http_request_serialize_char(CARRIAGE, &buf);
@@ -262,6 +272,8 @@ ts_http_request_build(HttpRequest *req, size_t *buf_size)
 	http_request_serialize_body(req, &buf);
 	/* Now everything lives in buf.data */
 	if (buf_size != NULL)
+	{
 		*buf_size = buf.len;
+	}
 	return buf.data;
 }

@@ -61,10 +61,14 @@ subspace_store_internal_node_descendants(SubspaceStoreInternalNode *node, int in
 	const DimensionSlice *slice = ts_dimension_vec_get(node->vector, index);
 
 	if (slice == NULL)
+	{
 		return 0;
+	}
 
 	if (node->last_internal_node)
+	{
 		return 1;
+	}
 
 	return ((SubspaceStoreInternalNode *) slice->storage)->descendants;
 }
@@ -203,14 +207,18 @@ ts_subspace_store_get(const SubspaceStore *subspace_store, const Point *target)
 	 * chunks are created explicitly by compress_chunk and linked
 	 * to the source chunk. */
 	if (subspace_store->num_dimensions == 0)
+	{
 		return NULL;
+	}
 
 	for (i = 0; i < target->cardinality; i++)
 	{
 		match = ts_dimension_vec_find_slice(vec, target->coordinates[i]);
 
 		if (NULL == match)
+		{
 			return NULL;
+		}
 
 		vec = ((SubspaceStoreInternalNode *) match->storage)->vector;
 	}

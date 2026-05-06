@@ -391,11 +391,72 @@ SELECT * FROM color;
 
 -- switch back to default user to run some dropping tests
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER;
-\set ON_ERROR_STOP 0
--- test that disable trigger is disallowed
+-- test that ENABLE/DISABLE TRIGGER is propagated to chunks
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'create_vehicle_trigger'
+  AND tgrelid = 'location'::regclass;
+ tgenabled 
+-----------
+ O
+
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+ tgenabled 
+-----------
+ O
+
 ALTER TABLE location DISABLE TRIGGER create_vehicle_trigger;
-ERROR:  hypertables do not support  enabling or disabling triggers.
-\set ON_ERROR_STOP 1
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'create_vehicle_trigger'
+  AND tgrelid = 'location'::regclass;
+ tgenabled 
+-----------
+ D
+
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+ tgenabled 
+-----------
+ D
+
+ALTER TABLE location ENABLE TRIGGER create_vehicle_trigger;
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'create_vehicle_trigger'
+  AND tgrelid = 'location'::regclass;
+ tgenabled 
+-----------
+ O
+
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+ tgenabled 
+-----------
+ O
+
+ALTER TABLE location ENABLE ALWAYS TRIGGER create_vehicle_trigger;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+ tgenabled 
+-----------
+ A
+
+ALTER TABLE location DISABLE TRIGGER USER;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+ tgenabled 
+-----------
+ D
+
+ALTER TABLE location ENABLE TRIGGER USER;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+ tgenabled 
+-----------
+ O
+
 -- test that drop trigger works
 DROP TRIGGER create_color_trigger ON location;
 DROP TRIGGER create_vehicle_trigger ON location;

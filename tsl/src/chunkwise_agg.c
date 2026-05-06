@@ -29,7 +29,9 @@ find_node(const RelOptInfo *relation, NodeTag type)
 	{
 		Node *node = lfirst(lc);
 		if (nodeTag(node) == type)
+		{
 			return node;
+		}
 	}
 
 	return NULL;
@@ -540,7 +542,9 @@ contains_path_plain_or_sorted_agg(Path *path)
 		Path *subpath = lfirst(lc);
 
 		if (IsA(subpath, AggPath))
+		{
 			return is_path_sorted_or_plain_agg_path(subpath);
+		}
 	}
 
 	/*
@@ -593,16 +597,22 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 
 	/* We are only interested in hypertables */
 	if (!ht)
+	{
 		return;
+	}
 
 	/* Grouping sets are not supported by the partial aggregation pushdown */
 	if (parse->groupingSets)
+	{
 		return;
+	}
 
 	/* Don't replan aggregation if we already have a MinMaxAggPath (e.g., created by
 	 * ts_preprocess_first_last_aggregates) */
 	if (has_min_max_agg_path(output_rel))
+	{
 		return;
+	}
 
 	Assert(extra != NULL);
 	GroupPathExtraData *extra_data = (GroupPathExtraData *) extra;
@@ -616,7 +626,9 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 
 	/* Don't replan aggregation if it contains already partials or non-serializable aggregates */
 	if (root->hasNonPartialAggs || root->hasNonSerialAggs)
+	{
 		return;
+	}
 
 	double d_num_groups = existing_agg_path->numGroups;
 	Assert(d_num_groups > 0);
@@ -687,7 +699,9 @@ tsl_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_re
 	List *partially_grouped_paths =
 		list_concat(partially_grouped_rel->pathlist, partially_grouped_rel->partial_pathlist);
 	if (partially_grouped_paths == NIL)
+	{
 		return;
+	}
 
 	/* Prefer our paths */
 	output_rel->pathlist = NIL;

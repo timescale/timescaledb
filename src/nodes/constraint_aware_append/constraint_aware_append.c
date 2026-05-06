@@ -252,7 +252,9 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 					 * for the RestrictInfos if they are not equal.
 					 */
 					if (lfirst_oid(lc_relid) != scanrelid)
+					{
 						ChangeVarNodes((Node *) ri->clause, lfirst_oid(lc_relid), scanrelid, 0);
+					}
 
 					restrictinfos = lappend(restrictinfos, ri);
 				}
@@ -269,7 +271,9 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 				restrictinfos = constify_restrictinfos(&root, restrictinfos);
 
 				if (can_exclude_chunk(&root, rte, scanrelid, restrictinfos))
+				{
 					continue;
+				}
 
 				*appendplans = lappend(*appendplans, lfirst(lc_plan));
 				break;
@@ -285,7 +289,9 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 	state->num_append_subplans = list_length(*appendplans);
 	state->num_chunks_excluded = list_length(old_appendplans) - state->num_append_subplans;
 	if (state->num_append_subplans > 0)
+	{
 		node->custom_ps = list_make1(ExecInitNode(subplan, estate, eflags));
+	}
 }
 
 static TupleTableSlot *
@@ -300,7 +306,9 @@ ca_append_exec(CustomScanState *node)
 	 * to do.
 	 */
 	if (state->num_append_subplans == 0)
+	{
 		return NULL;
+	}
 
 	ResetExprContext(econtext);
 
@@ -309,10 +317,14 @@ ca_append_exec(CustomScanState *node)
 		subslot = ExecProcNode(linitial(node->custom_ps));
 
 		if (TupIsNull(subslot))
+		{
 			return NULL;
+		}
 
 		if (!node->ss.ps.ps_ProjInfo)
+		{
 			return subslot;
+		}
 
 		econtext->ecxt_scantuple = subslot;
 
@@ -400,7 +412,9 @@ constraint_aware_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPa
 		Result *result = castNode(Result, linitial(custom_plans));
 
 		if (result->plan.righttree != NULL)
+		{
 			elog(ERROR, "unexpected right tree below result node in constraint aware append");
+		}
 
 		custom_plans = list_make1(result->plan.lefttree);
 	}
@@ -555,7 +569,9 @@ ts_constraint_aware_append_possible(Path *path)
 
 	if (!ts_guc_enable_optimizations || !ts_guc_enable_constraint_aware_append ||
 		constraint_exclusion == CONSTRAINT_EXCLUSION_OFF)
+	{
 		return false;
+	}
 
 	switch (nodeTag(path))
 	{
@@ -573,7 +589,9 @@ ts_constraint_aware_append_possible(Path *path)
 	 * will later prune the (Merge)Append node from such plans, leaving us with
 	 * an unexpected child node. */
 	if (num_children <= 1)
+	{
 		return false;
+	}
 
 	/*
 	 * If there are clauses that have mutable functions, this path is ripe for
@@ -584,7 +602,9 @@ ts_constraint_aware_append_possible(Path *path)
 		RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
 
 		if (contain_mutable_functions((Node *) rinfo->clause))
+		{
 			return true;
+		}
 	}
 	return false;
 }

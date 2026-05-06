@@ -362,13 +362,15 @@ select distinct on (device) device, time from metrics order by device, time DESC
  d1     | Wed Jan 01 03:30:00 2025 UTC
  d2     | Wed Jan 01 03:30:00 2025 UTC
 
+-- Can use Batch Sort Merge though as all segmentby keys are pinned to a Const
+SET timescaledb.debug_require_batch_sorted_merge = 'force';
 :PREFIX select time, avg(value) from metrics where device = 'd1' and sensor='A' group by time order by time DESC;
 --- QUERY PLAN ---
- Sort
-   Sort Key: _hyper_1_1_chunk."time" DESC
-   ->  HashAggregate
-         Group Key: _hyper_1_1_chunk."time"
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+ GroupAggregate
+   Group Key: _hyper_1_1_chunk."time"
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Sort
+               Sort Key: compress_hyper_2_2_chunk._ts_meta_max_1 DESC
                ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
                      Index Cond: ((device = 'd1'::text) AND (sensor = 'A'::text))
 
@@ -380,6 +382,7 @@ select time, avg(value) from metrics  where device = 'd1' and sensor='A' group b
  Wed Jan 01 01:00:00 2025 UTC |  20.5
  Wed Jan 01 00:00:00 2025 UTC |    10
 
+RESET timescaledb.debug_require_batch_sorted_merge;
 -- Cannot use compressed sort on unordered chunk when columnstore doesn't have segmentby keys
 CREATE TABLE metrics2(
     time timestamptz NOT NULL,

@@ -754,6 +754,12 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk
 
 -- should recompress
 CALL run_job(:JOB_COMPRESS);
+-- chunk should be fully compressed now (status = 1) so reindex can run
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
+ chunk_status 
+--------------
+            1
+
 -- index size should decrease due to reindexing (8kB or 16kB)
 VACUUM ANALYZE metrics2;
 SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') <= 16384 as size_empty;

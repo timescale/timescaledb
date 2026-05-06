@@ -60,7 +60,7 @@
 
 #include "bgw_policy/compression_api.h"
 
-static const char *sparse_index_types[] = { "min", "max" };
+static const char *sparse_index_types[] = { "min", "max", "first", "last" };
 
 #ifdef USE_ASSERT_CHECKING
 static bool
@@ -133,6 +133,7 @@ validate_compression_index_key_limit(CompressionSettings *settings)
 	int num_segmentby_keys = ts_array_length(settings->fd.segmentby);
 	int num_orderby_keys = 2 * ts_array_length(settings->fd.orderby);
 	if ((num_segmentby_keys + num_orderby_keys) > INDEX_MAX_KEYS)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_TOO_MANY_COLUMNS),
 				 errmsg("too many segmentby and orderby columns"),
@@ -140,6 +141,7 @@ validate_compression_index_key_limit(CompressionSettings *settings)
 						   num_segmentby_keys,
 						   num_orderby_keys,
 						   INDEX_MAX_KEYS)));
+	}
 }
 
 char *
@@ -183,7 +185,9 @@ compressed_column_metadata_name_v2(const char *metadata_type, const char **colum
 #endif
 		Assert(col_len > 0 && col_len < NAMEDATALEN);
 		if (i > 0)
+		{
 			appendStringInfoChar(&buf, '_');
+		}
 		appendStringInfo(&buf, "%s", column_names[i]);
 	}
 
@@ -361,12 +365,14 @@ create_sparse_index_column_def(List *attributes, const char *metadata_type)
 			Form_pg_attribute attr = (Form_pg_attribute) lfirst(cell);
 			FmgrInfo *finfo = NULL;
 			if (bloom1_get_hash_function(attr->atttypid, &finfo) == NULL)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_FUNCTION),
 						 errmsg("invalid bloom filter column type %s, name: %s",
 								format_type_be(attr->atttypid),
 								NameStr(attr->attname)),
 						 errdetail("Could not identify a hashing function for the type.")));
+			}
 		}
 
 		column_def =
@@ -387,19 +393,27 @@ create_sparse_index_column_def(List *attributes, const char *metadata_type)
 			column_def->storage = TYPSTORAGE_MAIN;
 		}
 	}
-	else /* either min or max */
+	else /* min, max, first, or last */
 	{
 		Form_pg_attribute attr = (Form_pg_attribute) lfirst(list_head(attributes));
-		TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
+		const bool is_minmax =
+			strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0;
 
-		/*
-		 * a comparison operator if required for min max operations
-		 */
-		if (!OidIsValid(type->lt_opr))
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_FUNCTION),
-					 errmsg("invalid minmax column type %s", format_type_be(attr->atttypid)),
-					 errdetail("Could not identify a less-than operator for the type.")));
+		if (is_minmax)
+		{
+			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
+
+			/*
+			 * a comparison operator is required for min max operations
+			 */
+			if (!OidIsValid(type->lt_opr))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_FUNCTION),
+						 errmsg("invalid minmax column type %s", format_type_be(attr->atttypid)),
+						 errdetail("Could not identify a less-than operator for the type.")));
+			}
+		}
 
 		column_def =
 			makeColumnDef(compressed_column_metadata_name_list_v2(metadata_type, column_names),
@@ -456,14 +470,18 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 	{
 		Form_pg_attribute attr = TupleDescAttr(tupdesc, attoffset);
 		if (attr->attisdropped)
+		{
 			continue;
+		}
 		if (strncmp(NameStr(attr->attname),
 					COMPRESSION_COLUMN_METADATA_PREFIX,
 					strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_RESERVED_NAME),
 					 errmsg("cannot convert tables with reserved column prefix '%s'",
 							COMPRESSION_COLUMN_METADATA_PREFIX)));
+		}
 
 		bool is_segmentby = ts_array_is_member(segmentby, NameStr(attr->attname));
 		if (is_segmentby)
@@ -491,6 +509,16 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 				Assert(list_length(composite_attr_lists[per_column_setting->minmax_obj_id]) == 0);
 				composite_attr_lists[per_column_setting->minmax_obj_id] =
 					lappend(composite_attr_lists[per_column_setting->minmax_obj_id], attr);
+			}
+
+			if (per_column_setting->firstlast_obj_id != -1 &&
+				per_column_setting->firstlast_obj_id < num_sparse_index_objects)
+			{
+				/* Firstlast index configuration objects will have a single element list */
+				Assert(list_length(composite_attr_lists[per_column_setting->firstlast_obj_id]) ==
+					   0);
+				composite_attr_lists[per_column_setting->firstlast_obj_id] =
+					lappend(composite_attr_lists[per_column_setting->firstlast_obj_id], attr);
 			}
 
 			if (per_column_setting->single_bloom_obj_id != -1 &&
@@ -539,10 +567,12 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 			 * because it is required for sorting.
 			 */
 			if (!OidIsValid(type->lt_opr))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_FUNCTION),
 						 errmsg("invalid ordering column type %s", format_type_be(attr->atttypid)),
 						 errdetail("Could not identify a less-than operator for the type.")));
+			}
 
 			/* segment_meta min and max columns */
 			ColumnDef *def = makeColumnDef(column_segment_min_name(index),
@@ -563,6 +593,7 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 			/* check sparse index columndefs is applicable */
 			bool is_bloom = per_column_setting->single_bloom_obj_id != -1;
 			bool is_minmax = per_column_setting->minmax_obj_id != -1;
+			bool is_firstlast = per_column_setting->firstlast_obj_id != -1;
 
 			/*
 			 * We allow only one sparse index per column. Columns used in the ORDER BY
@@ -612,6 +643,24 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 				def = create_sparse_index_column_def(composite_attr_lists[per_column_setting
 																			  ->minmax_obj_id],
 													 "max");
+				compressed_column_defs = lappend(compressed_column_defs, def);
+			}
+
+			if (is_firstlast)
+			{
+				/*
+				 * Add firstlast sparse index for this column.
+				 * Uses the source column's type, like minmax.
+				 */
+				ColumnDef *def =
+					create_sparse_index_column_def(composite_attr_lists[per_column_setting
+																			->firstlast_obj_id],
+												   "first");
+				compressed_column_defs = lappend(compressed_column_defs, def);
+
+				def = create_sparse_index_column_def(composite_attr_lists[per_column_setting
+																			  ->firstlast_obj_id],
+													 "last");
 				compressed_column_defs = lappend(compressed_column_defs, def);
 			}
 		}
@@ -676,10 +725,12 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
 	if (strncmp(colname,
 				COMPRESSION_COLUMN_METADATA_PREFIX,
 				strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_RESERVED_NAME),
 				 errmsg("cannot convert tables with reserved column prefix '%s'",
 						COMPRESSION_COLUMN_METADATA_PREFIX)));
+	}
 
 	return makeColumnDef(colname, compresseddata_oid, -1 /*typmod*/, 0 /*collation*/);
 }
@@ -730,11 +781,13 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
 						   compress_chunk->fd.id);
 
 		if (namelen >= NAMEDATALEN)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("invalid name \"%s\" for compressed chunk",
 							NameStr(compress_chunk->fd.table_name)),
 					 errdetail("The associated table prefix is too long.")));
+		}
 	}
 
 	/* Insert chunk */
@@ -778,7 +831,9 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
 	}
 
 	if (OidIsValid(table_id))
+	{
 		compress_chunk->table_id = table_id;
+	}
 	else
 	{
 		List *column_defs = build_columndefs(settings, src_chunk->table_id);
@@ -790,7 +845,9 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id,
 	}
 
 	if (!OidIsValid(compress_chunk->table_id))
+	{
 		elog(ERROR, "could not create columnstore chunk table");
+	}
 
 	/* Materialize current compression settings for this chunk */
 	if (!settings_provided)
@@ -831,15 +888,21 @@ add_time_to_order_by_if_not_included(OrderBySettings obs, ArrayType *segmentby, 
 
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 	if (!time_dim)
+	{
 		return obs;
+	}
 
 	time_col_name = get_attname(ht->main_table_relid, time_dim->column_attno, false);
 
 	if (ts_array_is_member(obs.orderby, time_col_name))
+	{
 		found = true;
+	}
 
 	if (ts_array_is_member(segmentby, time_col_name))
+	{
 		found = true;
+	}
 
 	if (!found)
 	{
@@ -930,9 +993,11 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings)
 				if (!form->conindid && (settings->fd.segmentby && settings->fd.orderby) &&
 					!ts_array_is_member(settings->fd.segmentby, attname) &&
 					!ts_array_is_member(settings->fd.orderby, attname))
+				{
 					ereport(WARNING,
 							(errmsg("column \"%s\" should be used for segmenting or ordering",
 									attname)));
+				}
 			}
 		}
 	}
@@ -974,7 +1039,9 @@ validate_existing_indexes(Hypertable *ht, CompressionSettings *settings)
 		 * checking. We can also skip checks below if the index is not a
 		 * unique index. */
 		if (!index->indislive || !index->indisvalid || index->indisexclusion || !index->indisunique)
+		{
 			continue;
+		}
 
 		/* Now we check that all columns of the unique index are part of the
 		 * segmentby columns. */
@@ -982,14 +1049,18 @@ validate_existing_indexes(Hypertable *ht, CompressionSettings *settings)
 		{
 			int attno = index->indkey.values[i];
 			if (attno == 0)
+			{
 				continue; /* skip check for expression column */
+			}
 			const char *attname = get_attname(ht->main_table_relid, attno, false);
 			if ((settings->fd.segmentby && settings->fd.orderby) &&
 				!ts_array_is_member(settings->fd.segmentby, attname) &&
 				!ts_array_is_member(settings->fd.orderby, attname))
+			{
 				ereport(WARNING,
 						(errmsg("column \"%s\" should be used for segmenting or ordering",
 								attname)));
+			}
 		}
 	}
 	systable_endscan(indscan);
@@ -1000,18 +1071,22 @@ static void
 drop_existing_compression_table(Hypertable *ht)
 {
 	if (ts_chunk_exists_with_compression(ht->fd.id))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot drop columnstore-enabled hypertable with columnstore chunks")));
+	}
 
 	Hypertable *compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 	if (compressed == NULL)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("columnstore-enabled hypertable not found"),
 				 errdetail("columnstore was enabled on \"%s\", but its internal"
 						   " columnstore hypertable could not be found.",
 						   NameStr(ht->fd.table_name))));
+	}
 
 	/* need to drop the old compressed hypertable in case the segment by columns changed (and
 	 * thus the column types of compressed hypertable need to change) */
@@ -1023,16 +1098,22 @@ static bool
 disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+	{
 		/* compression is not enabled, so just return */
 		return false;
+	}
 
 	if (ts_chunk_exists_with_compression(ht->fd.id))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot disable columnstore on hypertable with columnstore chunks")));
+	}
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	{
 		drop_existing_compression_table(ht);
+	}
 	else
 	{
 		ts_hypertable_unset_compressed(ht);
@@ -1125,7 +1206,9 @@ drop_column_from_compression_table(CompressionSettings *comp_settings, char *nam
 							Assert(bloom_column_name != NULL);
 							/* No need to remove if its not there */
 							if (get_attnum(relid, bloom_column_name) == InvalidAttrNumber)
+							{
 								bloom_column_name = NULL;
+							}
 							break;
 						}
 					}
@@ -1170,7 +1253,9 @@ update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_claus
 {
 	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
 	if (!time_dim)
+	{
 		return false;
+	}
 
 	Interval *compress_interval =
 		ts_compress_hypertable_parse_chunk_time_interval(with_clause_options, ht);
@@ -1181,9 +1266,11 @@ update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_claus
 	int64 compress_interval_usec =
 		ts_interval_value_to_internal(IntervalPGetDatum(compress_interval), INTERVALOID);
 	if (compress_interval_usec % time_dim->fd.interval_length > 0)
+	{
 		elog(WARNING,
 			 "compress chunk interval is not a multiple of chunk interval, you should use a "
 			 "factor of chunk interval to merge as much as possible");
+	}
 	return ts_hypertable_set_compress_interval(ht, compress_interval_usec);
 }
 
@@ -1310,9 +1397,11 @@ validate_hypertable_for_compression(Hypertable *ht)
 
 	/*check row security settings for the table */
 	if (ts_has_row_security(ht->main_table_relid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("columnstore cannot be used on table with row security")));
+	}
 
 	Relation rel = table_open(ht->main_table_relid, AccessShareLock);
 	TupleDesc tupdesc = RelationGetDescr(rel);
@@ -1331,17 +1420,21 @@ validate_hypertable_for_compression(Hypertable *ht)
 		Form_pg_attribute attr = TupleDescAttr(tupdesc, attno);
 
 		if (attr->attisdropped)
+		{
 			continue;
+		}
 
 		row_size += 18; /* assume 18 bytes for each compressed column (varlena) */
 
 		if (strncmp(NameStr(attr->attname),
 					COMPRESSION_COLUMN_METADATA_PREFIX,
 					strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_RESERVED_NAME),
 					 errmsg("cannot convert tables with reserved column prefix '%s' to columnstore",
 							COMPRESSION_COLUMN_METADATA_PREFIX)));
+		}
 	}
 
 	if (row_size > MaxHeapTupleSize)
@@ -1384,9 +1477,11 @@ validate_hypertable_for_compression(Hypertable *ht)
 		fastgetattr(tuple, Anum_pg_trigger_tgoldtable, pg_trigger->rd_att, &oldtable_isnull);
 		if (!oldtable_isnull && !TRIGGER_FOR_ROW(trigrec->tgtype) &&
 			TRIGGER_FOR_DELETE(trigrec->tgtype))
+		{
 			ereport(ERROR,
 					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					errmsg("DELETE triggers with transition tables not supported"));
+		}
 	}
 
 	systable_endscan(scan);
@@ -1437,20 +1532,26 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 					 ht->main_table_relid);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
+	{
 		elog(ERROR, "could not connect to SPI");
+	}
 
 	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
 	if (res < 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 (errmsg("could not get the default segment by for a hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
+	}
 
 	old = MemoryContextSwitchTo(upper);
 	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
 	if (!isnull)
+	{
 		column_res = DatumGetArrayTypePCopy(datum);
+	}
 	MemoryContextSwitchTo(old);
 
 	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull);
@@ -1476,7 +1577,9 @@ tsl_compression_setting_segmentby_get_default(const Hypertable *ht)
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
+	{
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+	}
 
 	initStringInfo(&result);
 	ts_array_append_stringinfo(column_res, &result);
@@ -1543,7 +1646,9 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 					 ht->main_table_relid);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
+	{
 		elog(ERROR, "could not connect to SPI");
+	}
 
 	res = SPI_execute_with_args(command.data,
 								1,
@@ -1553,16 +1658,20 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 								true /* read_only */,
 								0 /*count*/);
 	if (res < 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 (errmsg("could not get the default order by for a hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
+	}
 
 	old = MemoryContextSwitchTo(upper);
 	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
 
 	if (!isnull)
+	{
 		column_res = DatumGetTextPCopy(datum);
+	}
 	MemoryContextSwitchTo(old);
 
 	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull);
@@ -1587,12 +1696,18 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
+	{
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+	}
 
 	if (column_res != NULL)
+	{
 		orderby = TextDatumGetCString(PointerGetDatum(column_res));
+	}
 	else
+	{
 		orderby = "";
+	}
 
 	elog(LOG_SERVER_ONLY,
 		 "order_by default: hypertable=\"%s\" clauses=\"%s\" function=\"%s.%s\" confidence=%d",
@@ -1608,17 +1723,6 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	}
 
 	return ts_compress_parse_order_collist(orderby, ht);
-}
-
-/* sparse indexes will only be set by default if there was no configuration */
-static bool
-can_set_default_sparse_index(CompressionSettings *settings)
-{
-	return (settings->fd.index == NULL) ||
-		   !ts_jsonb_has_key_value_str_field(settings->fd.index,
-											 ts_sparse_index_common_keys[SparseIndexKeySource],
-											 ts_sparse_index_source_names
-												 [_SparseIndexSourceEnumConfig]);
 }
 
 static void
@@ -1660,27 +1764,35 @@ create_default_composite_bloom(IndexInfo *index_info, Hypertable *ht, Compressio
 
 		/* Skip expression indexes */
 		if (attno == InvalidAttrNumber)
+		{
 			continue;
+		}
 
 		char *attname = get_attname(ht->main_table_relid, attno, false);
 
 		/* Skip segmentby columns but continue processing other columns */
 		if (ts_array_is_member(settings->fd.segmentby, attname))
+		{
 			continue;
+		}
 
 		Oid atttypid = get_atttype(ht->main_table_relid, attno);
 
 		/* Check if hashable */
 		FmgrInfo *finfo = NULL;
 		if (bloom1_get_hash_function(atttypid, &finfo) == NULL)
+		{
 			continue;
+		}
 
 		TypeCacheEntry *type = lookup_type_cache(atttypid, TYPECACHE_HASH_EXTENDED_PROC);
 		total_width += (type->typlen > 0 ? type->typlen : 4);
 
 		/* Equality queries are unlikely for floating-point types, so we skip them. */
 		if (atttypid == FLOAT4OID || atttypid == FLOAT8OID)
+		{
 			continue;
+		}
 
 		/* Add to bloom config */
 		bloom_config.columns[valid_columns].attnum = attno;
@@ -1736,8 +1848,10 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 	/*
 	 * Sparse indexes are only created automatically if they are not set in compression settings
 	 */
-	if (!ts_guc_auto_sparse_indexes || !can_set_default_sparse_index(settings))
+	if (!ts_guc_auto_sparse_indexes || !ts_can_set_default_sparse_index(settings))
+	{
 		return NULL;
+	}
 
 	/*
 	 * Check which columns have btree indexes. We will create sparse minmax
@@ -1803,7 +1917,9 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 			if (ts_array_is_member(settings->fd.orderby, attname) ||
 				ts_array_is_member(settings->fd.segmentby, attname) ||
 				ts_bmslist_contains_items(sparse_index_columns, &attno, 1))
+			{
 				continue;
+			}
 
 			atttypid = get_atttype(ht->main_table_relid, attno);
 
@@ -1828,7 +1944,9 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 				minmax_config.col = attname;
 			}
 			else
+			{
 				continue;
+			}
 
 			config->source = _SparseIndexSourceEnumDefault;
 
@@ -1870,7 +1988,7 @@ compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 		add_orderby_sparse_index = true;
 	}
 
-	if (ts_guc_auto_sparse_indexes && can_set_default_sparse_index(settings))
+	if (ts_guc_auto_sparse_indexes && ts_can_set_default_sparse_index(settings))
 	{
 		settings->fd.index = compression_setting_sparse_index_get_default(ht, settings);
 		settings->fd.index = ts_add_orderby_sparse_index(settings);
@@ -1896,7 +2014,9 @@ compression_settings_set_manually_for_alter(Hypertable *ht, CompressionSettings 
 	if (with_clause_options[AlterTableFlagSegmentBy].is_default &&
 		with_clause_options[AlterTableFlagOrderBy].is_default &&
 		with_clause_options[AlterTableFlagIndex].is_default)
+	{
 		return;
+	}
 
 	bool add_orderby_sparse_index = false;
 	if (!with_clause_options[AlterTableFlagSegmentBy].is_default)
@@ -1950,7 +2070,9 @@ compression_settings_set_manually_for_create(Hypertable *ht, CompressionSettings
 	if (with_clause_options[CreateTableFlagSegmentBy].is_default &&
 		with_clause_options[CreateTableFlagOrderBy].is_default &&
 		with_clause_options[CreateTableFlagIndex].is_default)
+	{
 		return;
+	}
 
 	bool add_orderby_sparse_index = false;
 	if (!with_clause_options[CreateTableFlagSegmentBy].is_default)
@@ -2050,10 +2172,12 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 	/* check if the column is a segmentby or orderby column */
 	if (settings && (ts_array_is_member(settings->fd.segmentby, name) ||
 					 ts_array_is_member(settings->fd.orderby, name)))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot drop orderby or segmentby column from a hypertable with "
 						"columnstore enabled")));
+	}
 
 	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
 	ListCell *lc;
@@ -2069,10 +2193,12 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 		chunk_settings[i++] = settings;
 		if (ts_array_is_member(settings->fd.segmentby, name) ||
 			ts_array_is_member(settings->fd.orderby, name))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot drop orderby or segmentby column from a chunk with "
 							"columnstore enabled")));
+		}
 	}
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
@@ -2157,10 +2283,12 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 	if (strncmp(stmt->newname,
 				COMPRESSION_COLUMN_METADATA_PREFIX,
 				strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_RESERVED_NAME),
 				 errmsg("cannot convert tables with reserved column prefix '%s' to columnstore",
 						COMPRESSION_COLUMN_METADATA_PREFIX)));
+	}
 
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
@@ -2341,7 +2469,9 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 		Oid compress_after_type = ts_dimension_get_partition_type(time_dim);
 		Datum compress_after_datum;
 		if (IS_TIMESTAMP_TYPE(compress_after_type) || IS_UUID_TYPE(compress_after_type))
+		{
 			compress_after_type = INTERVALOID;
+		}
 
 		compress_after_datum =
 			ts_internal_to_interval_value(time_dim->fd.interval_length, compress_after_type);

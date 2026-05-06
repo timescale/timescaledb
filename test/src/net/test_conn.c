@@ -45,13 +45,17 @@ ts_test_conn(PG_FUNCTION_ARGS)
 	ret = ts_connection_connect(conn, host, NULL, port);
 
 	if (ret < 0)
+	{
 		elog(ERROR, "%s", ts_connection_get_and_clear_error(conn));
+	}
 
 	/* should timeout */
 	ret = ts_connection_read(conn, response, 1);
 
 	if (ret == 0)
+	{
 		elog(ERROR, "Expected timeout");
+	}
 
 	ts_connection_close(conn);
 	ts_connection_destroy(conn);
@@ -65,12 +69,16 @@ ts_test_conn(PG_FUNCTION_ARGS)
 	ret = ts_connection_connect(conn, host, NULL, ssl_port);
 
 	if (ret < 0)
+	{
 		elog(ERROR, "%s", ts_connection_get_and_clear_error(conn));
+	}
 
 	ret = ts_connection_read(conn, response, 1);
 
 	if (ret == 0)
+	{
 		elog(ERROR, "Expected timeout");
+	}
 
 	ts_connection_close(conn);
 	ts_connection_destroy(conn);
