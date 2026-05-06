@@ -692,6 +692,12 @@ scan_and_append_slices(ScanIterator *it, int old_nkeys, DimensionVec **dv, bool 
 			{
 				*dv = ts_dimension_vec_add_slice(dv, slice);
 			}
+
+//			fprintf(stderr,
+//					"matched slice %d %ld-%ld\n",
+//					slice->fd.dimension_id,
+//					slice->fd.range_start,
+//					slice->fd.range_end);
 		}
 	}
 
@@ -726,6 +732,57 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 			case DIMENSION_TYPE_OPEN:
 			{
 				const DimensionRestrictInfoOpen *open = (const DimensionRestrictInfoOpen *) dri;
+
+				/*
+				 * Filter out contradictory dimension slices. If lower_bound >
+				 * upper_bound, no row can match, but some slices still can
+				 * match, because we're checking the slice ends separately:
+				 * slice_start <= upper_bound <= lower_bound <= slice_end
+				 * The chunk will pass our hypertable expansion and will later
+				 * be excluded by the Postgres constraint exclusion that handles
+				 * contradictory clauses. This is extra work that we can easily
+				 * avoid now. Return early when the search intervals for slice
+				 * start and slice end do not overlap. These are given by the
+				 * upper/lower bound/strategy in the dimension slice.
+				 */
+//				fprintf(stderr,
+//						"lower %ld strategy %d uppper %ld strategy %d\n",
+//						open->lower_bound,
+//						open->lower_strategy,
+//						open->upper_bound,
+//						open->upper_strategy);
+
+				if (open->upper_strategy != InvalidStrategy &&
+					open->lower_strategy != InvalidStrategy)
+				{
+					Assert(open->upper_strategy == BTLessEqualStrategyNumber ||
+						   open->upper_strategy == BTLessStrategyNumber);
+					Assert(open->lower_strategy == BTGreaterEqualStrategyNumber ||
+						   open->lower_strategy == BTGreaterStrategyNumber);
+
+					if (open->lower_bound > open->upper_bound)
+					{
+						/* No overlap. */
+//						fprintf(stderr, "no overlap 1\n");
+						break;
+					}
+					else if (open->lower_bound == open->upper_bound)
+					{
+						/* Overlap if both intervals are inclusive. */
+						if (open->upper_strategy != BTLessEqualStrategyNumber ||
+							open->lower_strategy != BTGreaterEqualStrategyNumber)
+						{
+//							fprintf(stderr, "no overlap 2\n");
+							break;
+						}
+//						fprintf(stderr, "overlap 2\n");
+					}
+					else
+					{
+//						fprintf(stderr, "overlap 3\n");
+					}
+					/* Overlap, proceed with finding the actual matching slices. */
+				}
 
 				ts_dimension_slice_scan_iterator_set_range(&it,
 														   open->base.dimension->fd.id,
