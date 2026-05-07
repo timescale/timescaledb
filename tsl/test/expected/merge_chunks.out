@@ -1054,3 +1054,102 @@ FROM concurrent_compressed_merge,
           2 |            1
 
 DROP TABLE concurrent_compressed_merge;
+-- Test merging compressed chunks whose sparse indexes are logically the same
+-- but the JSONB entries mismatch
+CREATE TABLE merge_sparse_order(
+    time timestamptz NOT NULL,
+    device int,
+    temp float8,
+    val int
+);
+SELECT create_hypertable('merge_sparse_order', 'time', chunk_time_interval => INTERVAL '1 day');
+        create_hypertable         
+----------------------------------
+ (11,public,merge_sparse_order,t)
+
+INSERT INTO merge_sparse_order
+SELECT t, (i % 10) + 1, random() * 100, (i * 7) % 13
+FROM generate_series('2024-01-01 2:00'::timestamptz, '2024-01-01 23:59', '1 minute') t,
+     generate_series(1, 5) i;
+INSERT INTO merge_sparse_order
+SELECT t, (i % 10) + 1, random() * 100, (i * 7) % 13
+FROM generate_series('2024-01-02 2:00'::timestamptz, '2024-01-02 23:59', '1 minute') t,
+     generate_series(1, 5) i;
+SELECT format('%I.%I', schema_name, table_name) AS mso_c1
+  FROM _timescaledb_catalog.chunk
+ WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable
+                         WHERE table_name = 'merge_sparse_order')
+ ORDER BY id LIMIT 1 \gset
+SELECT format('%I.%I', schema_name, table_name) AS mso_c2
+  FROM _timescaledb_catalog.chunk
+ WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable
+                         WHERE table_name = 'merge_sparse_order')
+ ORDER BY id OFFSET 1 LIMIT 1 \gset
+ALTER TABLE merge_sparse_order SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'time',
+    timescaledb.compress_index = 'bloom("device"), minmax("temp"), bloom("device","val")'
+);
+SELECT compress_chunk(:'mso_c1');
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_32_chunk
+
+ALTER TABLE merge_sparse_order SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'time',
+    timescaledb.compress_index = 'minmax("temp"), bloom("device")'
+);
+NOTICE:  updated compression settings will only apply to future compressions
+SELECT compress_chunk(:'mso_c2');
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_33_chunk
+
+-- have different sparse indexes
+SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
+                  relid                   |                                                                                                                        index                                                                                                                         
+------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_11_33_chunk | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ merge_sparse_order                       | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}]
+
+-- Merge should not succeed
+\set ON_ERROR_STOP 0
+CALL merge_chunks(:'mso_c1'::regclass, :'mso_c2'::regclass);
+ERROR:  cannot merge compressed chunks with different compression settings
+\set ON_ERROR_STOP 1
+ALTER TABLE merge_sparse_order SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'time',
+    timescaledb.compress_index = 'bloom("val","device"), minmax("temp"), bloom("device")'
+);
+NOTICE:  updated compression settings will only apply to future compressions
+SELECT compress_chunk(decompress_chunk(:'mso_c2'));
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_11_33_chunk
+
+-- have different JSONB but same logical sparse indexes
+SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
+                  relid                   |                                                                                                                        index                                                                                                                         
+------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_11_33_chunk | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ merge_sparse_order                       | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}]
+
+-- Merge should succeed
+CALL merge_chunks(:'mso_c1'::regclass, :'mso_c2'::regclass);
+SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
+                  relid                   |                                                                                                                        index                                                                                                                         
+------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ merge_sparse_order                       | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}]
+
+DROP TABLE merge_sparse_order;
