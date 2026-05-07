@@ -1175,6 +1175,27 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	chunk_rel->pathlist = NIL;
 	chunk_rel->partial_pathlist = NIL;
 
+	/*
+	 * We want to consider startup costs so that IndexScan is preferred to
+	 * sorted SeqScan when we may have a chance to use SkipScan. We consider
+	 * startup costs for LIMIT queries, and SkipScan is basically a
+	 * "LIMIT 1" query run "ndistinct" times. At this point we don't have
+	 * all information to check if SkipScan can be used, but we can narrow
+	 * it down.
+	 *
+	 * First, check if this query is candidate for SELECT DISTINCT SkipScan.
+	 */
+	const bool potential_select_distinct = list_length(root->distinct_pathkeys) == 1;
+
+	/* Next, candidate for DISTINCT aggregate SkipScan */
+	const bool potential_distinct_aggregate =
+		root->numOrderedAggs >= 1 && list_length(root->group_pathkeys) == 1;
+
+	if (potential_select_distinct || potential_distinct_aggregate)
+	{
+		chunk_rel->consider_startup = true;
+	}
+
 	/* add RangeTblEntry and RelOptInfo for compressed chunk */
 	columnar_scan_add_plannerinfo(root,
 								  compression_info,
@@ -1192,8 +1213,6 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	}
 
 	RelOptInfo *compressed_rel = compression_info->compressed_rel;
-
-	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 
 	/* translate chunk_rel->baserestrictinfo */
 	if (ts_guc_enable_columnar_scan_filter_pushdown)
@@ -1266,25 +1285,6 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 																   uncompressed_table_pathlist,
 																   &sort_info,
 																   compression_info);
-
-		/*
-		 * We want to consider startup costs so that IndexScan is preferred to
-		 * sorted SeqScan when we may have a chance to use SkipScan. We consider
-		 * startup costs for LIMIT queries, and SkipScan is basically a
-		 * "LIMIT 1" query run "ndistinct" times. At this point we don't have
-		 * all information to check if SkipScan can be used, but we can narrow
-		 * it down.
-		 */
-		if (!chunk_rel->consider_startup && IsA(compressed_path, IndexPath))
-		{
-			/* Candidate for SELECT DISTINCT SkipScan */
-			if (list_length(root->distinct_pathkeys) == 1
-				/* Candidate for DISTINCT aggregate SkipScan */
-				|| (root->numOrderedAggs >= 1 && list_length(root->group_pathkeys) == 1))
-			{
-				chunk_rel->consider_startup = true;
-			}
-		}
 
 		/*
 		 * Add the paths to the chunk relation.
@@ -1450,6 +1450,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 */
 	if (sort_info->use_compressed_sort)
 	{
+		ColumnarScanPath *columnar_scan_with_compressed_sort = NULL;
 		if (pathkeys_contained_in(sort_info->required_compressed_pathkeys,
 								  compressed_path->pathkeys))
 		{
@@ -1462,6 +1463,8 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			path->needs_sequence_num = sort_info->needs_sequence_num;
 			path->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
 			path->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
+
+			columnar_scan_with_compressed_sort = path;
 		}
 		else
 		{
@@ -1499,6 +1502,28 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 					  -1);
 
 			cost_columnar_scan(compression_info, path_copy, &sort_path);
+
+			decompressed_paths = lappend(decompressed_paths, path_copy);
+
+			columnar_scan_with_compressed_sort = path_copy;
+		}
+
+		if (chunk_rel->consider_startup &&
+			columnar_scan_with_compressed_sort->enable_bulk_decompression)
+		{
+			/*
+			 * Try a version with row-by-row decompression too, if we care about
+			 * the startup cost. Typically it happens in ORDER BY + LIMIT
+			 * sutiation. Another condition for it to be useful is that there is
+			 * no sort above the columnar scan.
+			 */
+			ColumnarScanPath *path_copy =
+				copy_columnar_scan_path(columnar_scan_with_compressed_sort);
+			path_copy->enable_bulk_decompression = false;
+
+			cost_columnar_scan(compression_info,
+							   path_copy,
+							   linitial(path_copy->custom_path.custom_paths));
 
 			decompressed_paths = lappend(decompressed_paths, path_copy);
 		}
@@ -2403,6 +2428,9 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	compressed_rel_setup_equivalence_classes(root, info);
 	/* translate chunk_rel->joininfo for compressed_rel */
 	compressed_rel_setup_joininfo(compressed_rel, info);
+
+	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
+	compressed_rel->consider_startup = chunk_rel->consider_startup;
 
 	/*
 	 * Force parallel plan creation, see compute_parallel_worker().
