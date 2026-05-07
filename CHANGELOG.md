@@ -14,6 +14,9 @@ This release contains performance improvements and bug fixes since the 2.26.4 re
 * `UPDATE` and `DELETE` statements with equality predicates can now use bloom filters to skip decompressing batches whose compressed rows can't match. When multiple bloom filters apply, they are evaluated in decreasing order of column count (most selective first), and EXPLAIN now reports filtering activity via the new "Compressed batches filtered" and "Batches filtered after decompression counters". The query performance increases in some case up to 160 times.
 * `UPSERT` queries can now leverage bloom filters (including composite ones) to skip decompressing batches when the arbiter values are guaranteed not to be present, with the most-selective filter chosen automatically when multiple apply. EXPLAIN output adds new statistics — batches checked by bloom, batches pruned by bloom, batches without bloom, and bloom false positives — for visibility into pruning effectiveness.
 
+**Upcoming PostgreSQL 15 EOL announcement** 
+As a reminder, the upcoming TimescaleDB release in June 2026 will officially end support for PostgreSQL 15. This deprecation was initially announced in the [v2.23.0 changelog](https://github.com/timescale/timescaledb/releases/tag/2.23.0) on October 29, 2025, to provide users ample time to prepare. To ensure uninterrupted access to new features and performance enhancements, all instances should be upgraded to PostgreSQL 16 or newer prior to the June release.
+
 **Backward-Incompatible Changes**
 * [#9579](https://github.com/timescale/timescaledb/pull/9579) The bloom filter sparse indexes on compressed `int2` columns could lead to `SELECT` queries not returning the rows that actually match the `WHERE` condition. The upgrade is blocked for the affected databases, and the incorrect indexes have to be dropped manually before the upgrade.
 
