@@ -28,18 +28,13 @@
 #include <utils/typcache.h>
 
 #include <compat/compat.h>
+#include "estimate.h"
 #include "gapfill.h"
 #include "gapfill_internal.h"
 #include "interpolate.h"
 #include "locf.h"
 #include "time_bucket.h"
 #include <annotations.h>
-
-typedef enum GapFillBoundary
-{
-	GAPFILL_START,
-	GAPFILL_END,
-} GapFillBoundary;
 
 typedef union GapFillColumnStateUnion
 {
@@ -175,8 +170,8 @@ get_timezone_arg(GapFillState *state)
 	return lthird(state->args);
 }
 
-static inline int64
-gapfill_period_get_internal(Oid timetype, Oid argtype, Datum arg, Interval **interval)
+int64
+gapfill_bucket_width_get_internal(Oid timetype, Oid argtype, Datum arg, Interval **interval)
 {
 	switch (timetype)
 	{
@@ -240,8 +235,8 @@ gapfill_state_create(CustomScan *cscan)
 	return (Node *) state;
 }
 
-static bool
-is_const_null(Expr *expr)
+bool
+gapfill_is_const_null(Expr *expr)
 {
 	return IsA(expr, Const) && castNode(Const, expr)->constisnull;
 }
@@ -288,7 +283,7 @@ var_equal(Var *v1, Var *v2)
 }
 
 static bool
-is_simple_expr_walker(Node *node, void *context)
+gapfill_is_simple_expr_walker(Node *node, void *context)
 {
 	if (node == NULL)
 	{
@@ -328,22 +323,22 @@ is_simple_expr_walker(Node *node, void *context)
 		default:
 			return true;
 	}
-	return expression_tree_walker(node, is_simple_expr_walker, context);
+	return expression_tree_walker(node, gapfill_is_simple_expr_walker, context);
 }
 
 /*
  * check if expression is simple expression and contains only simple
  * subexpressions
  */
-static bool
-is_simple_expr(Expr *node)
+bool
+gapfill_is_simple_expr(Expr *node)
 {
 	/*
 	 * since expression_tree_walker does early exit on true and we use that to
 	 * skip processing on first non-simple expression we invert return value
 	 * from expression_tree_walker here
 	 */
-	return !is_simple_expr_walker((Node *) node, NULL);
+	return !gapfill_is_simple_expr_walker((Node *) node, NULL);
 }
 
 /*
@@ -360,7 +355,7 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 	Datum value;
 	bool isnull;
 
-	if (!is_simple_expr(expr))
+	if (!gapfill_is_simple_expr(expr))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -399,28 +394,42 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 	return gapfill_datum_get_internal(value, state->gapfill_typid);
 }
 
+/* Can be called either with PlannerInfo to estimate boundary value at planning time
+ * or with GapFillState to evaluate boundary value at execution time.
+ */
 static int64
-get_boundary_expr_value(GapFillState *state, GapFillBoundary boundary, Expr *expr)
+get_boundary_expr_value(GapFillArgEvalContext *gapfill_ctx, GapFillBoundary boundary, Expr *expr)
 {
-	Datum arg_value;
-	bool isnull;
+	Oid gapfill_typid = gapfill_ctx->typid;
 
+	Datum arg_value;
+	bool isnull = false;
 	/*
 	 * add an explicit cast here if types do not match
 	 */
-	if (exprType((Node *) expr) != state->gapfill_typid)
+	if (exprType((Node *) expr) != gapfill_typid)
 	{
-		Oid cast_oid = get_cast_func(exprType((Node *) expr), state->gapfill_typid);
+		Oid cast_oid = get_cast_func(exprType((Node *) expr), gapfill_typid);
 
-		expr = (Expr *) makeFuncExpr(cast_oid,
-									 state->gapfill_typid,
-									 list_make1(expr),
-									 InvalidOid,
-									 InvalidOid,
-									 0);
+		expr = (Expr *)
+			makeFuncExpr(cast_oid, gapfill_typid, list_make1(expr), InvalidOid, InvalidOid, 0);
 	}
 
-	arg_value = gapfill_exec_expr(state, state->scanslot, expr, &isnull);
+	if (gapfill_ctx->state)
+	{
+		GapFillState *state = (GapFillState *) gapfill_ctx->state;
+		arg_value = gapfill_exec_expr(state, state->scanslot, expr, &isnull);
+	}
+	else
+	{
+		/* Estimating start/end boundary at planning time:
+		 * bail out with no error if cannot estimate. */
+		arg_value = gapfill_estimate_arg(gapfill_ctx, (Node *) expr);
+		if (gapfill_ctx->estimate_failed)
+		{
+			return INVALID_ESTIMATE;
+		}
+	}
 
 	if (isnull)
 	{
@@ -431,7 +440,7 @@ get_boundary_expr_value(GapFillState *state, GapFillBoundary boundary, Expr *exp
 				 errhint("Specify start and finish as arguments or in the WHERE clause.")));
 	}
 
-	return gapfill_datum_get_internal(arg_value, state->gapfill_typid);
+	return gapfill_datum_get_internal(arg_value, gapfill_typid);
 }
 
 typedef struct CollectBoundaryContext
@@ -543,15 +552,20 @@ collect_boundary_expressions(Node *node, Var *ts_var)
 	return context.quals;
 }
 
-static int64
-infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
+/* Generic method to collect WHERE quals and obtain suitable start/end gapfill boundaries.
+ * Can be called from the planner with PlannerInfo to estimate boundaries
+ * or with GapFillState to evaluate boundaries at execution time.
+ */
+int64
+infer_gapfill_boundary(GapFillArgEvalContext *gapfill_ctx, GapFillBoundary boundary)
 {
-	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
-	FuncExpr *func = list_nth(cscan->custom_private, GFP_GapfillFunc);
-	FromExpr *jt = list_nth(cscan->custom_private, GFP_JoinTree);
+	Oid gapfill_typid = gapfill_ctx->typid;
+	List *args = gapfill_ctx->args;
+	FromExpr *jt = gapfill_ctx->jt;
+
 	ListCell *lc;
 	Var *ts_var;
-	TypeCacheEntry *tce = lookup_type_cache(state->gapfill_typid, TYPECACHE_BTREE_OPFAMILY);
+	TypeCacheEntry *tce = lookup_type_cache(gapfill_typid, TYPECACHE_BTREE_OPFAMILY);
 	int strategy;
 	Oid lefttype, righttype;
 	List *quals;
@@ -563,7 +577,7 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 	 * if the second argument to time_bucket_gapfill is not a column reference
 	 * we cannot match WHERE clause to the time column
 	 */
-	if (!IsA(lsecond(func->args), Var))
+	if (!IsA(lsecond(args), Var))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -572,7 +586,7 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 				 errhint("Specify start and finish as arguments or in the WHERE clause.")));
 	}
 
-	ts_var = castNode(Var, lsecond(func->args));
+	ts_var = castNode(Var, lsecond(args));
 
 	quals = collect_boundary_expressions((Node *) jt, ts_var);
 
@@ -613,7 +627,7 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 		 * at this stage and Vars will not work either because we execute in
 		 * separate execution context
 		 */
-		if (!is_simple_expr(expr) || !var_equal(ts_var, var))
+		if (!gapfill_is_simple_expr(expr) || !var_equal(ts_var, var))
 		{
 			continue;
 		}
@@ -631,7 +645,11 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 			continue;
 		}
 
-		value = get_boundary_expr_value(state, boundary, expr);
+		value = get_boundary_expr_value(gapfill_ctx, boundary, expr);
+		if (gapfill_ctx->estimate_failed)
+		{
+			return INVALID_ESTIMATE;
+		}
 
 		/*
 		 * if the boundary expression operator does not match the operator
@@ -669,6 +687,13 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 		return boundary_value;
 	}
 
+	/* called at planning time: cannot estimate but can still plan */
+	if (gapfill_ctx->root)
+	{
+		gapfill_ctx->estimate_failed = true;
+		return INVALID_ESTIMATE;
+	}
+
 	ereport(ERROR,
 			(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 			 errmsg("missing time_bucket_gapfill argument: could not infer %s from WHERE clause",
@@ -677,7 +702,7 @@ infer_gapfill_boundary(GapFillState *state, GapFillBoundary boundary)
 	pg_unreachable();
 }
 
-static Const *
+Const *
 make_const_value_for_gapfill_internal(Oid typid, int64 value)
 {
 	TypeCacheEntry *tce = lookup_type_cache(typid, 0);
@@ -807,7 +832,7 @@ gapfill_initialize_arguments(GapFillState *state)
 	Datum arg_value;
 
 	/* bucket_width */
-	if (!is_simple_expr(linitial(state->args)))
+	if (!gapfill_is_simple_expr(linitial(state->args)))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -823,10 +848,10 @@ gapfill_initialize_arguments(GapFillState *state)
 				 errmsg("invalid time_bucket_gapfill argument: bucket_width cannot be NULL")));
 	}
 
-	state->gapfill_period = gapfill_period_get_internal(state->gapfill_typid,
-														exprType(linitial(state->args)),
-														arg_value,
-														&state->gapfill_interval);
+	state->gapfill_period = gapfill_bucket_width_get_internal(state->gapfill_typid,
+															  exprType(linitial(state->args)),
+															  arg_value,
+															  &state->gapfill_interval);
 
 	/*
 	 * this would error when trying to align start and stop to bucket_width as well below
@@ -844,9 +869,19 @@ gapfill_initialize_arguments(GapFillState *state)
 	 * check if gapfill start was left out so we have to infer from WHERE
 	 * clause
 	 */
-	if (is_const_null(get_start_arg(state)))
+	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
+	GapFillArgEvalContext gapfill_exec_ctx = {
+		.root = NULL,
+		.state = (CustomScanState *) state,
+		.typid = state->gapfill_typid,
+		.args = state->args,
+		.jt = list_nth(cscan->custom_private, GFP_JoinTree),
+		.estimate_failed = false,
+	};
+
+	if (gapfill_is_const_null(get_start_arg(state)))
 	{
-		int64 start = infer_gapfill_boundary(state, GAPFILL_START);
+		int64 start = infer_gapfill_boundary(&gapfill_exec_ctx, GAPFILL_START);
 		Const *expr = make_const_value_for_gapfill_internal(state->gapfill_typid, start);
 
 		state->gapfill_start = align_with_time_bucket(state, (Expr *) expr);
@@ -863,13 +898,13 @@ gapfill_initialize_arguments(GapFillState *state)
 	state->next_offset = state->gapfill_interval;
 
 	/* gap fill end */
-	if (is_const_null(get_finish_arg(state)))
+	if (gapfill_is_const_null(get_finish_arg(state)))
 	{
-		state->gapfill_end = infer_gapfill_boundary(state, GAPFILL_END);
+		state->gapfill_end = infer_gapfill_boundary(&gapfill_exec_ctx, GAPFILL_END);
 	}
 	else
 	{
-		if (!is_simple_expr(get_finish_arg(state)))
+		if (!gapfill_is_simple_expr(get_finish_arg(state)))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),

@@ -3754,3 +3754,337 @@ HINT:  Specify start and finish as arguments or in the WHERE clause.
 \set ON_ERROR_STOP 1
 reset enable_indexscan;
 reset enable_bitmapscan;
+-- Gapfill row count estimate should be ~((finish - start)/period + 1) instead of subpath row count,
+-- otherwise Gapfill can have row count = 0 if range is outside of known data.
+CREATE TABLE metrics_int_loc(
+    time int NOT NULL,
+    device_id int,
+    sensor_id int,
+    value float);
+INSERT INTO metrics_int_loc VALUES
+    (-100,1,1,0.0),
+    (-100,1,2,-100.0),
+    (0,1,1,5.0),
+    (5,1,2,10.0),
+    (100,1,1,0.0),
+    (100,1,2,-100.0);
+ANALYZE metrics_int_loc;
+CREATE TABLE metrics_tstz_loc(time timestamptz, device_id INT, v1 float, v2 int);
+INSERT INTO metrics_tstz_loc VALUES
+    (timestamptz '2018-01-01 05:00:00 PST', 1, 0.5, 10),
+    (timestamptz '2018-01-01 05:00:00 PST', 2, 0.7, 20),
+    (timestamptz '2018-01-01 05:00:00 PST', 3, 0.9, 30),
+    (timestamptz '2018-01-01 07:00:00 PST', 1, 0.0, 0),
+    (timestamptz '2018-01-01 07:00:00 PST', 2, 1.4, 40),
+    (timestamptz '2018-01-01 07:00:00 PST', 3, 0.9, 30)
+;
+ANALYZE metrics_tstz_loc;
+\set PREFIX 'EXPLAIN (analyze, timing off, summary off, buffers off)'
+-- Date/time period
+-- gapfill inside known data
+-- subpath row count > gapfill row count
+:PREFIX SELECT
+  time_bucket_gapfill(interval '1h',time,timestamptz '2018-01-01 05:00:00-8', timestamptz '2018-01-01 07:00:00-8'),
+  locf(avg(v1)) AS locf_v1
+FROM metrics_tstz_loc
+GROUP BY 1
+ORDER BY 1;
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.14..1.15 rows=4 width=0) (actual rows=3.00 loops=1)
+   ->  Sort  (cost=1.14..1.15 rows=2 width=0) (actual rows=2.00 loops=1)
+         Sort Key: (time_bucket_gapfill('@ 1 hour'::interval, "time", 'Mon Jan 01 05:00:00 2018 PST'::timestamp with time zone, 'Mon Jan 01 07:00:00 2018 PST'::timestamp with time zone))
+         Sort Method: quicksort 
+         ->  HashAggregate  (cost=1.10..1.13 rows=2 width=0) (actual rows=2.00 loops=1)
+               Group Key: time_bucket_gapfill('@ 1 hour'::interval, "time", 'Mon Jan 01 05:00:00 2018 PST'::timestamp with time zone, 'Mon Jan 01 07:00:00 2018 PST'::timestamp with time zone)
+               ->  Seq Scan on metrics_tstz_loc  (cost=0.00..1.07 rows=6 width=16) (actual rows=6.00 loops=1)
+
+-- subpath row count < gapfill row count
+:PREFIX SELECT
+  time_bucket_gapfill(interval '5sec',time,timestamptz '2018-01-01 05:00:00-8', timestamptz '2018-01-01 07:00:00-8'),
+  locf(avg(v1)) AS locf_v1
+FROM metrics_tstz_loc
+GROUP BY 1
+ORDER BY 1;
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.14..1.15 rows=1442 width=0) (actual rows=1441.00 loops=1)
+   ->  Sort  (cost=1.14..1.15 rows=2 width=0) (actual rows=2.00 loops=1)
+         Sort Key: (time_bucket_gapfill('@ 5 secs'::interval, "time", 'Mon Jan 01 05:00:00 2018 PST'::timestamp with time zone, 'Mon Jan 01 07:00:00 2018 PST'::timestamp with time zone))
+         Sort Method: quicksort 
+         ->  HashAggregate  (cost=1.10..1.13 rows=2 width=0) (actual rows=2.00 loops=1)
+               Group Key: time_bucket_gapfill('@ 5 secs'::interval, "time", 'Mon Jan 01 05:00:00 2018 PST'::timestamp with time zone, 'Mon Jan 01 07:00:00 2018 PST'::timestamp with time zone)
+               ->  Seq Scan on metrics_tstz_loc  (cost=0.00..1.07 rows=6 width=16) (actual rows=6.00 loops=1)
+
+-- Estimate boundaries in WHERE
+:PREFIX SELECT
+  time_bucket_gapfill(interval '5sec',time),
+  locf(avg(v1)) AS locf_v1
+FROM metrics_tstz_loc WHERE time >= '2018-01-01 06:00:00-8' AND time < '2018-01-01 06:30:00-8'
+GROUP BY 1
+ORDER BY 1;
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.10..1.13 rows=361 width=0) (actual rows=360.00 loops=1)
+   ->  GroupAggregate  (cost=1.10..1.13 rows=1 width=0) (actual rows=0.00 loops=1)
+         Group Key: (time_bucket_gapfill('@ 5 secs'::interval, "time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+         ->  Sort  (cost=1.10..1.11 rows=1 width=16) (actual rows=0.00 loops=1)
+               Sort Key: (time_bucket_gapfill('@ 5 secs'::interval, "time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+               Sort Method: quicksort 
+               ->  Seq Scan on metrics_tstz_loc  (cost=0.00..1.09 rows=1 width=16) (actual rows=0.00 loops=1)
+                     Filter: (("time" >= 'Mon Jan 01 06:00:00 2018 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 06:30:00 2018 PST'::timestamp with time zone))
+                     Rows Removed by Filter: 6
+
+-- gapfill outside known data
+-- includes known data
+:PREFIX SELECT
+  time_bucket_gapfill(interval '1min',time, timestamptz '2018-01-02 06:00:00-8', timestamptz '2018-01-02 06:30:00-8'),
+  locf(avg(v1)) AS locf_v1
+FROM metrics_tstz_loc
+GROUP BY 1
+ORDER BY 1;
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.14..1.15 rows=32 width=0) (actual rows=32.00 loops=1)
+   ->  Sort  (cost=1.14..1.15 rows=2 width=0) (actual rows=2.00 loops=1)
+         Sort Key: (time_bucket_gapfill('@ 1 min'::interval, "time", 'Tue Jan 02 06:00:00 2018 PST'::timestamp with time zone, 'Tue Jan 02 06:30:00 2018 PST'::timestamp with time zone))
+         Sort Method: quicksort 
+         ->  HashAggregate  (cost=1.10..1.13 rows=2 width=0) (actual rows=2.00 loops=1)
+               Group Key: time_bucket_gapfill('@ 1 min'::interval, "time", 'Tue Jan 02 06:00:00 2018 PST'::timestamp with time zone, 'Tue Jan 02 06:30:00 2018 PST'::timestamp with time zone)
+               ->  Seq Scan on metrics_tstz_loc  (cost=0.00..1.07 rows=6 width=16) (actual rows=6.00 loops=1)
+
+-- excludes known data
+:PREFIX SELECT
+  time_bucket_gapfill(interval '1min',time),
+  locf(avg(v1)) AS locf_v1
+FROM metrics_tstz_loc WHERE time >= '2018-01-02 06:00:00-8' AND time < '2018-01-02 06:30:00-8'
+GROUP BY 1
+ORDER BY 1;
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.10..1.13 rows=31 width=0) (actual rows=30.00 loops=1)
+   ->  GroupAggregate  (cost=1.10..1.13 rows=1 width=0) (actual rows=0.00 loops=1)
+         Group Key: (time_bucket_gapfill('@ 1 min'::interval, "time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+         ->  Sort  (cost=1.10..1.11 rows=1 width=16) (actual rows=0.00 loops=1)
+               Sort Key: (time_bucket_gapfill('@ 1 min'::interval, "time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+               Sort Method: quicksort 
+               ->  Seq Scan on metrics_tstz_loc  (cost=0.00..1.09 rows=1 width=16) (actual rows=0.00 loops=1)
+                     Filter: (("time" >= 'Tue Jan 02 06:00:00 2018 PST'::timestamp with time zone) AND ("time" < 'Tue Jan 02 06:30:00 2018 PST'::timestamp with time zone))
+                     Rows Removed by Filter: 6
+
+-- start > finish: should estimate as subplan rows
+:PREFIX SELECT
+  time_bucket_gapfill(interval '1min',time),
+  locf(avg(v1)) AS locf_v1
+FROM metrics_tstz_loc WHERE time >= '2018-01-01 07:00:00-8' AND time < '2018-01-01 05:30:00-8'
+GROUP BY 1
+ORDER BY 1;
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.10..1.13 rows=1 width=0) (actual rows=0.00 loops=1)
+   ->  GroupAggregate  (cost=1.10..1.13 rows=1 width=0) (actual rows=0.00 loops=1)
+         Group Key: (time_bucket_gapfill('@ 1 min'::interval, "time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+         ->  Sort  (cost=1.10..1.11 rows=1 width=16) (actual rows=0.00 loops=1)
+               Sort Key: (time_bucket_gapfill('@ 1 min'::interval, "time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+               Sort Method: quicksort 
+               ->  Seq Scan on metrics_tstz_loc  (cost=0.00..1.09 rows=1 width=16) (actual rows=0.00 loops=1)
+                     Filter: (("time" >= 'Mon Jan 01 07:00:00 2018 PST'::timestamp with time zone) AND ("time" < 'Mon Jan 01 05:30:00 2018 PST'::timestamp with time zone))
+                     Rows Removed by Filter: 6
+
+-- multiple groups: estimation should be multiplied by number of groups
+:PREFIX SELECT
+  time_bucket_gapfill(interval '5sec',time,timestamptz '2018-01-01 05:00:00-8', timestamptz '2018-01-01 07:00:00-8'),
+  device_id,
+  locf(avg(v1)) AS locf_v1
+FROM metrics_tstz_loc
+GROUP BY 1, 2
+ORDER BY 1;
+--- QUERY PLAN ---
+ Sort  (cost=262.26..273.07 rows=4323 width=0) (actual rows=4323.00 loops=1)
+   Sort Key: (time_bucket_gapfill('@ 5 secs'::interval, "time", 'Mon Jan 01 05:00:00 2018 PST'::timestamp with time zone, 'Mon Jan 01 07:00:00 2018 PST'::timestamp with time zone))
+   Sort Method: quicksort 
+   ->  Custom Scan (GapFill)  (cost=1.19..1.20 rows=4323 width=0) (actual rows=4323.00 loops=1)
+         ->  Sort  (cost=1.19..1.20 rows=3 width=0) (actual rows=6.00 loops=1)
+               Sort Key: device_id, (time_bucket_gapfill('@ 5 secs'::interval, "time", 'Mon Jan 01 05:00:00 2018 PST'::timestamp with time zone, 'Mon Jan 01 07:00:00 2018 PST'::timestamp with time zone))
+               Sort Method: quicksort 
+               ->  HashAggregate  (cost=1.12..1.17 rows=3 width=0) (actual rows=6.00 loops=1)
+                     Group Key: time_bucket_gapfill('@ 5 secs'::interval, "time", 'Mon Jan 01 05:00:00 2018 PST'::timestamp with time zone, 'Mon Jan 01 07:00:00 2018 PST'::timestamp with time zone), device_id
+                     ->  Seq Scan on metrics_tstz_loc  (cost=0.00..1.07 rows=6 width=20) (actual rows=6.00 loops=1)
+
+-- Integer period
+-- gapfill inside known data
+-- subpath row count > gapfill row count
+:PREFIX SELECT
+  time_bucket_gapfill(5,time,0,5),
+  locf(avg(value)) AS locf_v1
+FROM metrics_int_loc
+GROUP BY 1
+ORDER BY 1;
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.20..1.21 rows=5 width=0) (actual rows=4.00 loops=1)
+   ->  Sort  (cost=1.20..1.21 rows=4 width=0) (actual rows=4.00 loops=1)
+         Sort Key: (time_bucket_gapfill(5, "time", 0, 5))
+         Sort Method: quicksort 
+         ->  HashAggregate  (cost=1.10..1.16 rows=4 width=0) (actual rows=4.00 loops=1)
+               Group Key: time_bucket_gapfill(5, "time", 0, 5)
+               ->  Seq Scan on metrics_int_loc  (cost=0.00..1.07 rows=6 width=12) (actual rows=6.00 loops=1)
+
+-- subpath row count < gapfill row count
+:PREFIX SELECT
+  time_bucket_gapfill(1,time,-100,100),
+  locf(avg(value)) AS locf_v1
+FROM metrics_int_loc
+GROUP BY 1
+ORDER BY 1;
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.20..1.21 rows=204 width=0) (actual rows=201.00 loops=1)
+   ->  Sort  (cost=1.20..1.21 rows=4 width=0) (actual rows=4.00 loops=1)
+         Sort Key: (time_bucket_gapfill(1, "time", '-100'::integer, 100))
+         Sort Method: quicksort 
+         ->  HashAggregate  (cost=1.10..1.16 rows=4 width=0) (actual rows=4.00 loops=1)
+               Group Key: time_bucket_gapfill(1, "time", '-100'::integer, 100)
+               ->  Seq Scan on metrics_int_loc  (cost=0.00..1.07 rows=6 width=12) (actual rows=6.00 loops=1)
+
+-- Estimate boundaries in WHERE
+:PREFIX SELECT
+  time_bucket_gapfill(1,time),
+  locf(avg(value)) AS locf_v1
+FROM metrics_int_loc WHERE time >= 0 AND time < 50 AND time >= 2*5
+GROUP BY 1
+ORDER BY 1;
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.12..1.14 rows=41 width=0) (actual rows=40.00 loops=1)
+   ->  GroupAggregate  (cost=1.12..1.14 rows=1 width=0) (actual rows=0.00 loops=1)
+         Group Key: (time_bucket_gapfill(1, "time", NULL::integer, NULL::integer))
+         ->  Sort  (cost=1.12..1.12 rows=1 width=12) (actual rows=0.00 loops=1)
+               Sort Key: (time_bucket_gapfill(1, "time", NULL::integer, NULL::integer))
+               Sort Method: quicksort 
+               ->  Seq Scan on metrics_int_loc  (cost=0.00..1.11 rows=1 width=12) (actual rows=0.00 loops=1)
+                     Filter: (("time" >= 0) AND ("time" < 50) AND ("time" >= 10))
+                     Rows Removed by Filter: 6
+
+-- gapfill outside known data
+-- includes known data
+:PREFIX SELECT
+  time_bucket_gapfill(5,time,200,300),
+  locf(avg(value)) AS locf_v1
+FROM metrics_int_loc
+GROUP BY 1
+ORDER BY 1;
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.20..1.21 rows=24 width=0) (actual rows=24.00 loops=1)
+   ->  Sort  (cost=1.20..1.21 rows=4 width=0) (actual rows=4.00 loops=1)
+         Sort Key: (time_bucket_gapfill(5, "time", 200, 300))
+         Sort Method: quicksort 
+         ->  HashAggregate  (cost=1.10..1.16 rows=4 width=0) (actual rows=4.00 loops=1)
+               Group Key: time_bucket_gapfill(5, "time", 200, 300)
+               ->  Seq Scan on metrics_int_loc  (cost=0.00..1.07 rows=6 width=12) (actual rows=6.00 loops=1)
+
+-- excludes known data
+:PREFIX SELECT
+  time_bucket_gapfill(5,time),
+  locf(avg(value)) AS locf_v1
+FROM metrics_int_loc WHERE time >= 200 AND time < 300
+GROUP BY 1
+ORDER BY 1;
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.10..1.13 rows=21 width=0) (actual rows=20.00 loops=1)
+   ->  GroupAggregate  (cost=1.10..1.13 rows=1 width=0) (actual rows=0.00 loops=1)
+         Group Key: (time_bucket_gapfill(5, "time", NULL::integer, NULL::integer))
+         ->  Sort  (cost=1.10..1.11 rows=1 width=12) (actual rows=0.00 loops=1)
+               Sort Key: (time_bucket_gapfill(5, "time", NULL::integer, NULL::integer))
+               Sort Method: quicksort 
+               ->  Seq Scan on metrics_int_loc  (cost=0.00..1.09 rows=1 width=12) (actual rows=0.00 loops=1)
+                     Filter: (("time" >= 200) AND ("time" < 300))
+                     Rows Removed by Filter: 6
+
+-- start > finish: should estimate as subplan rows
+:PREFIX SELECT
+  time_bucket_gapfill(1,time,100,-100),
+  locf(avg(value)) AS locf_v1
+FROM metrics_int_loc
+GROUP BY 1
+ORDER BY 1;
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.20..1.21 rows=4 width=0) (actual rows=4.00 loops=1)
+   ->  Sort  (cost=1.20..1.21 rows=4 width=0) (actual rows=4.00 loops=1)
+         Sort Key: (time_bucket_gapfill(1, "time", 100, '-100'::integer))
+         Sort Method: quicksort 
+         ->  HashAggregate  (cost=1.10..1.16 rows=4 width=0) (actual rows=4.00 loops=1)
+               Group Key: time_bucket_gapfill(1, "time", 100, '-100'::integer)
+               ->  Seq Scan on metrics_int_loc  (cost=0.00..1.07 rows=6 width=12) (actual rows=6.00 loops=1)
+
+-- multiple groups: estimation should be multiplied by number of groups
+:PREFIX SELECT
+  time_bucket_gapfill(1,time,-100,100), sensor_id,
+  locf(avg(value)) AS locf_v1
+FROM metrics_int_loc
+GROUP BY 1, 2
+ORDER BY 1;
+--- QUERY PLAN ---
+ Sort  (cost=18.72..19.73 rows=404 width=0) (actual rows=402.00 loops=1)
+   Sort Key: (time_bucket_gapfill(1, "time", '-100'::integer, 100))
+   Sort Method: quicksort 
+   ->  Custom Scan (GapFill)  (cost=1.22..1.23 rows=404 width=0) (actual rows=402.00 loops=1)
+         ->  Sort  (cost=1.22..1.23 rows=4 width=0) (actual rows=6.00 loops=1)
+               Sort Key: sensor_id, (time_bucket_gapfill(1, "time", '-100'::integer, 100))
+               Sort Method: quicksort 
+               ->  HashAggregate  (cost=1.12..1.18 rows=4 width=0) (actual rows=6.00 loops=1)
+                     Group Key: time_bucket_gapfill(1, "time", '-100'::integer, 100), sensor_id
+                     ->  Seq Scan on metrics_int_loc  (cost=0.00..1.07 rows=6 width=16) (actual rows=6.00 loops=1)
+
+-- Gapfill row count estimate is not done when Consts are not set at planning time
+SET plan_cache_mode TO 'force_generic_plan';
+PREPARE prep_int1(int) AS
+SELECT
+  time_bucket_gapfill($1,time,0,100),
+  locf(avg(value)) AS locf_v1
+FROM metrics_int_loc
+GROUP BY 1
+ORDER BY 1;
+:PREFIX EXECUTE prep_int1(1);
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.20..1.21 rows=4 width=0) (actual rows=102.00 loops=1)
+   ->  Sort  (cost=1.20..1.21 rows=4 width=0) (actual rows=4.00 loops=1)
+         Sort Key: (time_bucket_gapfill($1, "time", 0, 100))
+         Sort Method: quicksort 
+         ->  HashAggregate  (cost=1.10..1.16 rows=4 width=0) (actual rows=4.00 loops=1)
+               Group Key: time_bucket_gapfill($1, "time", 0, 100)
+               ->  Seq Scan on metrics_int_loc  (cost=0.00..1.07 rows=6 width=12) (actual rows=6.00 loops=1)
+
+PREPARE prep_int2(int,int) AS
+SELECT
+  time_bucket_gapfill(1,time,$1,$2),
+  locf(avg(value)) AS locf_v1
+FROM metrics_int_loc
+GROUP BY 1
+ORDER BY 1;
+:PREFIX EXECUTE prep_int2(0,100);
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.20..1.21 rows=4 width=0) (actual rows=102.00 loops=1)
+   ->  Sort  (cost=1.20..1.21 rows=4 width=0) (actual rows=4.00 loops=1)
+         Sort Key: (time_bucket_gapfill(1, "time", $1, $2))
+         Sort Method: quicksort 
+         ->  HashAggregate  (cost=1.10..1.16 rows=4 width=0) (actual rows=4.00 loops=1)
+               Group Key: time_bucket_gapfill(1, "time", $1, $2)
+               ->  Seq Scan on metrics_int_loc  (cost=0.00..1.07 rows=6 width=12) (actual rows=6.00 loops=1)
+
+PREPARE prep_int3(int,int,int) AS
+SELECT
+  time_bucket_gapfill($1,time),
+  locf(avg(value)) AS locf_v1
+FROM metrics_int_loc WHERE time >= $2 AND time < $3
+GROUP BY 1
+ORDER BY 1;
+:PREFIX EXECUTE prep_int3(1,0,100);
+--- QUERY PLAN ---
+ Custom Scan (GapFill)  (cost=1.10..1.13 rows=1 width=0) (actual rows=100.00 loops=1)
+   ->  GroupAggregate  (cost=1.10..1.13 rows=1 width=0) (actual rows=2.00 loops=1)
+         Group Key: (time_bucket_gapfill($1, "time", NULL::integer, NULL::integer))
+         ->  Sort  (cost=1.10..1.11 rows=1 width=12) (actual rows=2.00 loops=1)
+               Sort Key: (time_bucket_gapfill($1, "time", NULL::integer, NULL::integer))
+               Sort Method: quicksort 
+               ->  Seq Scan on metrics_int_loc  (cost=0.00..1.09 rows=1 width=12) (actual rows=2.00 loops=1)
+                     Filter: (("time" >= $2) AND ("time" < $3))
+                     Rows Removed by Filter: 4
+
+DEALLOCATE prep_int1;
+DEALLOCATE prep_int2;
+DEALLOCATE prep_int3;
+RESET plan_cache_mode;
+DROP TABLE metrics_int_loc cascade;
+DROP TABLE metrics_tstz_loc cascade;
