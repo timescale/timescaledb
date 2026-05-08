@@ -8,6 +8,7 @@
 #include <utils/builtins.h>
 #include <utils/catcache.h>
 #include <utils/lsyscache.h>
+#include <utils/memutils.h>
 
 #include "cache.h"
 #include "dimension.h"
@@ -20,6 +21,8 @@
 
 static void *hypertable_cache_create_entry(Cache *cache, CacheQuery *query);
 static void hypertable_cache_missing_error(const Cache *cache, const CacheQuery *query);
+
+#include "debug_point.h"
 
 typedef struct HypertableCacheQuery
 {
@@ -54,6 +57,7 @@ hypertable_cache_valid_result(const void *result)
 static Cache *
 hypertable_cache_create()
 {
+	DEBUG_ERROR_INJECTION_ONESHOT("hypertable-cache-create");
 	MemoryContext ctx =
 		AllocSetContextCreate(CacheMemoryContext, "Hypertable cache", ALLOCSET_DEFAULT_SIZES);
 
