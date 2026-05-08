@@ -74,15 +74,15 @@ select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,in
 
 -- Check the auto generated compressed columns
 select relname,attname from compressedcols order by 1,2;
-         relname          |         attname          
---------------------------+--------------------------
+         relname          |            attname            
+--------------------------+-------------------------------
  compress_hyper_4_2_chunk | _ts_meta_count
  compress_hyper_4_2_chunk | _ts_meta_max_1
  compress_hyper_4_2_chunk | _ts_meta_max_2
  compress_hyper_4_2_chunk | _ts_meta_min_1
  compress_hyper_4_2_chunk | _ts_meta_min_2
- compress_hyper_4_2_chunk | regress-test-bloom_a_b_c
  compress_hyper_4_2_chunk | regress-test-bloom_c
+ compress_hyper_4_2_chunk | regress-test-bloom_ed4b_a_b_c
  compress_hyper_4_2_chunk | a
  compress_hyper_4_2_chunk | b
  compress_hyper_4_2_chunk | c
@@ -148,9 +148,9 @@ select relname,attname from compressedcols order by 1,2;
  compress_hyper_6_4_chunk | _ts_meta_max_2
  compress_hyper_6_4_chunk | _ts_meta_min_1
  compress_hyper_6_4_chunk | _ts_meta_min_2
+ compress_hyper_6_4_chunk | regress-test-bloom_76d9_a_01234567890123456789_b_01234567890123
  compress_hyper_6_4_chunk | regress-test-bloom_c_01234567890123456789
  compress_hyper_6_4_chunk | regress-test-bloom_d_01234567890123456789
- compress_hyper_6_4_chunk | regress-test-bloom_ddd4_a_01234567890123456789_b_01234567890123
  compress_hyper_6_4_chunk | regress-test-bloom_e_01234567890123456789
  compress_hyper_6_4_chunk | a_01234567890123456789
  compress_hyper_6_4_chunk | b_01234567890123456789

@@ -31,6 +31,7 @@ set(TEST_FILES
     compress_compbloom_index_add.sql
     compress_compbloom_index_drop.sql
     compress_compbloom_manual_config.sql
+    compress_compbloom_naming.sql
     compress_compbloom_upsert.sql
     compress_default.sql
     compress_dml_copy.sql

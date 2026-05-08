@@ -174,8 +174,10 @@ compressed_column_metadata_name_v2(const char *metadata_type, const char **colum
 	Assert(num_columns <= MAX_BLOOM_FILTER_COLUMNS);
 
 	int len = 0;
-	StringInfoData buf = { 0 };
+	/* Use a separate buffer for the hash computation */
+	StringInfoData buf = { 0 }, hash_buf = { 0 };
 	initStringInfo(&buf);
+	initStringInfo(&hash_buf);
 
 	for (int i = 0; i < num_columns; i++)
 	{
@@ -187,8 +189,12 @@ compressed_column_metadata_name_v2(const char *metadata_type, const char **colum
 		if (i > 0)
 		{
 			appendStringInfoChar(&buf, '_');
+			/* The separator for hash purposes needs to be something
+			 * that is not valid in Postgres, hence the zero byte */
+			appendStringInfoChar(&hash_buf, '\0');
 		}
 		appendStringInfo(&buf, "%s", column_names[i]);
+		appendBinaryStringInfo(&hash_buf, column_names[i], strlen(column_names[i]));
 	}
 
 	len = buf.len;
@@ -197,14 +203,16 @@ compressed_column_metadata_name_v2(const char *metadata_type, const char **colum
 	 * We have to fit the name into NAMEDATALEN - 1 which is 63 bytes:
 	 * 12 (_ts_meta_v2_) + 6 (metadata_type) + [1 (_) + x (column_name)]x num_columns  + 1 (_) + 4
 	 * (hash) = 63; x = 63 - 24 = 39.
+	 *
+	 * Fix for bug #9578: we need to differentiate between ('a_b', 'c') and ('a', 'b_c') composite
+	 * column names, for this reason we always go through the hash path for composite column names.
 	 */
-
 	char *result;
-	if (len > 39)
+	if (len > 39 || num_columns > 1)
 	{
 		const char *errstr = NULL;
 		char hash[33];
-		Ensure(pg_md5_hash(buf.data, len, hash, &errstr), "md5 computation failure");
+		Ensure(pg_md5_hash(hash_buf.data, hash_buf.len, hash, &errstr), "md5 computation failure");
 		result = psprintf("_ts_meta_v2_%.6s_%.4s_%.39s", metadata_type, hash, buf.data);
 	}
 	else
