@@ -301,6 +301,12 @@ ts_debug_point_raise_error_if_enabled(const char *name)
 			break;
 	}
 
+	/*
+	 * Drop error context, so that the error description doesn't inherit details
+	 * from the surrounding context (i.e. parse location).
+	 */
+	error_context_stack = NULL;
+
 	ereport(ERROR,
 			(errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION),
 			 errmsg("error injected at debug point '%s'", point.name)));
@@ -338,6 +344,13 @@ ts_debug_point_raise_error_oneshot(const char *name)
 	}
 
 	debug_point_release(&point);
+
+	/*
+	 * Drop error context, so that the error description doesn't inherit details
+	 * from the surrounding context (i.e. parse location).
+	 */
+	error_context_stack = NULL;
+
 	ereport(ERROR,
 			(errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION),
 			 errmsg("error injected at debug point '%s'", point.name)));
