@@ -105,9 +105,11 @@ debug_point_release(const DebugPoint *point)
 	ereport(DEBUG1, (errmsg("releasing debug point \"%s\"", point->name)));
 
 	if (!LockRelease(&point->tag, ExclusiveLock, true))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("cannot release debug point \"%s\"", point->name)));
+	}
 }
 
 /*
@@ -121,7 +123,9 @@ Datum
 ts_debug_point_enable(PG_FUNCTION_ARGS)
 {
 	if (PG_ARGISNULL(0))
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
+	}
 
 	text *name = PG_GETARG_TEXT_PP(0);
 	DebugPoint point;
@@ -139,7 +143,9 @@ Datum
 ts_debug_point_release(PG_FUNCTION_ARGS)
 {
 	if (PG_ARGISNULL(0))
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
+	}
 
 	text *name = PG_GETARG_TEXT_PP(0);
 	DebugPoint point;
@@ -157,7 +163,9 @@ Datum
 ts_debug_point_id(PG_FUNCTION_ARGS)
 {
 	if (PG_ARGISNULL(0))
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("no name provided")));
+	}
 
 	text *name = PG_GETARG_TEXT_PP(0);
 
@@ -186,14 +194,18 @@ ts_debug_point_wait(const char *name, bool blocking)
 
 	/* Ensure that we are in a transaction before trying for locks */
 	if (!IsTransactionState())
+	{
 		return;
+	}
 
 	debug_point_init(&point, name);
 
 	ereport(DEBUG3, (errmsg("waiting on debug point '%s'", point.name)));
 
 	if (blocking)
+	{
 		lock_acquire_result = LockAcquire(&point.tag, ShareLock, true, false);
+	}
 	else
 	{
 		/*
@@ -215,11 +227,15 @@ ts_debug_point_wait(const char *name, bool blocking)
 			lock_acquire_result = LockAcquire(&point.tag, ShareLock, true, true);
 
 			if (lock_acquire_result == LOCKACQUIRE_OK)
+			{
 				break;
+			}
 
 			/* don't dare to take a lock when the proc is exiting! */
 			if (proc_exit_inprogress || ProcDiePending)
+			{
 				return;
+			}
 
 			if (retry_count == 0)
 			{
@@ -285,6 +301,41 @@ ts_debug_point_raise_error_if_enabled(const char *name)
 			break;
 	}
 
+	ereport(ERROR,
+			(errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION),
+			 errmsg("error injected at debug point '%s'", point.name)));
+}
+
+/*
+ * One-shot variant: release the debug point before raising the error.
+ * This allows error recovery code paths to call the same function
+ * without hitting the injection again.
+ */
+void
+ts_debug_point_raise_error_oneshot(const char *name)
+{
+	DebugPoint point;
+	LockAcquireResult lock_acquire_result;
+
+	debug_point_init(&point, name);
+
+	lock_acquire_result = LockAcquire(&point.tag, ShareLock, true, true);
+	switch (lock_acquire_result)
+	{
+		case LOCKACQUIRE_OK:
+			LockRelease(&point.tag, ShareLock, true);
+			if (LockHeldByMeCompat(&point.tag, ExclusiveLock, false))
+				break;
+			return;
+		case LOCKACQUIRE_ALREADY_HELD:
+		case LOCKACQUIRE_ALREADY_CLEAR:
+			LockRelease(&point.tag, ShareLock, true);
+			return;
+		case LOCKACQUIRE_NOT_AVAIL:
+			break;
+	}
+
+	debug_point_release(&point);
 	ereport(ERROR,
 			(errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION),
 			 errmsg("error injected at debug point '%s'", point.name)));

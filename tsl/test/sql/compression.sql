@@ -1299,3 +1299,22 @@ COMMIT;
 
 DROP TABLE test_xid_compressed;
 
+-- Compress a chunk that has externally stored TOAST values when the
+-- DELETE-after-compression path is taken. The main heap delete also
+-- removes TOAST chunks via heap_toast_delete, so the cleanup must not
+-- visit the TOAST relation a second time (would fail with
+-- "tuple already updated by self").
+CREATE TABLE hyper_toast_delete(time timestamptz NOT NULL, data text);
+SELECT create_hypertable('hyper_toast_delete', 'time');
+ALTER TABLE hyper_toast_delete SET (timescaledb.compress, timescaledb.compress_orderby = 'time');
+INSERT INTO hyper_toast_delete
+SELECT t, string_agg(md5(random()::text), '')
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-01 01:00:00'::timestamptz, '1 minute') t,
+     generate_series(1, 100) s
+GROUP BY t;
+
+SET timescaledb.compress_truncate_behaviour TO truncate_disabled;
+SELECT count(*) FROM (SELECT compress_chunk(c) FROM show_chunks('hyper_toast_delete') c) s;
+RESET timescaledb.compress_truncate_behaviour;
+DROP TABLE hyper_toast_delete;
+

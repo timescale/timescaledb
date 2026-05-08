@@ -70,7 +70,9 @@ tsl_process_rename_cmd(Oid relid, Cache *hcache, const RenameStmt *stmt)
 		{
 			ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id, true);
 			if (cagg)
+			{
 				cagg_rename_view_columns(cagg);
+			}
 		}
 
 		if (ht &&

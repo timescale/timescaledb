@@ -1,0 +1,2 @@
+Fixes: #9705 Only freeze compressed rows when truncating uncompressed chunk
+Fixes: #9705 Avoid double TOAST delete when DELETE-after-compression is enabled

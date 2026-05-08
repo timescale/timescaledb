@@ -45,50 +45,22 @@ setup
         pid INTEGER NOT NULL PRIMARY KEY
     );
 
-    -- Cancel backend procedure (waits for process to become inactive)
+    -- Signal cancel to registered backends. The isolation tester's
+    -- (blocked_step) annotation synchronizes step completion, so no polling
+    -- on pg_stat_activity is required here.
     CREATE OR REPLACE PROCEDURE cancelpids() AS
     $$
-    DECLARE
-        max_attempts INT := 100;
-        attempts INT := 0;
-        remaining_pids INT;
     BEGIN
         PERFORM pg_cancel_backend(pid) FROM cancelpid;
-        WHILE EXISTS (SELECT FROM pg_stat_activity WHERE pid IN (SELECT pid FROM cancelpid) AND state = 'active') AND attempts < max_attempts
-        LOOP
-            PERFORM pg_sleep(0.02);
-            attempts := attempts + 1;
-        END LOOP;
-        SELECT COUNT(*) INTO remaining_pids
-        FROM pg_stat_activity
-        WHERE pid IN (SELECT pid FROM cancelpid) AND state = 'active';
-        IF remaining_pids > 0 THEN
-            RAISE EXCEPTION 'Timeout waiting for % process(es) to become inactive after cancellation', remaining_pids;
-        END IF;
         DELETE FROM cancelpid;
     END;
     $$ LANGUAGE plpgsql;
 
-    -- Terminate backend procedure (waits for process to disappear from pg_stat_activity)
+    -- Signal terminate to registered backends. Same rationale as cancelpids().
     CREATE OR REPLACE PROCEDURE terminatepids() AS
     $$
-    DECLARE
-        max_attempts INT := 100;
-        attempts INT := 0;
-        remaining_pids INT;
     BEGIN
         PERFORM pg_terminate_backend(pid) FROM cancelpid;
-        WHILE EXISTS (SELECT FROM pg_stat_activity WHERE pid IN (SELECT pid FROM cancelpid)) AND attempts < max_attempts
-        LOOP
-            PERFORM pg_sleep(0.02);
-            attempts := attempts + 1;
-        END LOOP;
-        SELECT COUNT(*) INTO remaining_pids
-        FROM pg_stat_activity
-        WHERE pid IN (SELECT pid FROM cancelpid);
-        IF remaining_pids > 0 THEN
-            RAISE EXCEPTION 'Timeout waiting for % process(es) to terminate', remaining_pids;
-        END IF;
         DELETE FROM cancelpid;
     END;
     $$ LANGUAGE plpgsql;

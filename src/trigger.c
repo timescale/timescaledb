@@ -98,7 +98,9 @@ for_each_trigger(Oid relid, trigger_handler on_trigger, void *arg)
 			Trigger *trigger = &rel->trigdesc->triggers[i];
 
 			if (!on_trigger(trigger, arg))
+			{
 				break;
+			}
 		}
 	}
 
@@ -113,15 +115,19 @@ create_trigger_handler(const Trigger *trigger, void *arg)
 	if ((TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable) ||
 		 TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable)) &&
 		TRIGGER_FOR_ROW(trigger->tgtype))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("ROW triggers with transition tables are not supported on hypertable "
 						"chunks")));
+	}
 
 	if (trigger && TRIGGER_FOR_ROW(trigger->tgtype) && !trigger->tgisinternal)
+	{
 		ts_trigger_create_on_chunk(trigger->tgoid,
 								   NameStr(chunk->fd.schema_name),
 								   NameStr(chunk->fd.table_name));
+	}
 
 	return true;
 }
@@ -147,7 +153,9 @@ ts_trigger_create_all_on_chunk(const Chunk *chunk)
 
 	/* We do not create triggers on foreign table chunks */
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+	{
 		return;
+	}
 
 	Assert(chunk->relkind == RELKIND_RELATION);
 	owner = ts_rel_get_owner(chunk->hypertable_relid);
@@ -155,12 +163,16 @@ ts_trigger_create_all_on_chunk(const Chunk *chunk)
 	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
 
 	if (saved_uid != owner)
+	{
 		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+	}
 
 	for_each_trigger(chunk->hypertable_relid, create_trigger_handler, (Chunk *) chunk);
 
 	if (saved_uid != owner)
+	{
 		SetUserIdAndSecContext(saved_uid, sec_ctx);
+	}
 }
 
 static bool

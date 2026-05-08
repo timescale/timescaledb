@@ -247,16 +247,20 @@ simple8brle_serialized_recv(StringInfo buffer)
 	Size compressed_size =
 		sizeof(Simple8bRleSerialized) + (num_blocks + num_selector_slots) * sizeof(uint64);
 	if (!AllocSizeIsValid(compressed_size))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
+	}
 
 	data = palloc(compressed_size);
 	data->num_elements = num_elements;
 	data->num_blocks = num_blocks;
 
 	for (i = 0; i < num_blocks + num_selector_slots; i++)
+	{
 		data->slots[i] = pq_getmsgint64(buffer);
+	}
 
 	return data;
 }
@@ -274,16 +278,20 @@ simple8brle_serialized_recv_into(StringInfo buffer, void *dest, Simple8bRleSeria
 	Size compressed_size =
 		sizeof(Simple8bRleSerialized) + (num_blocks + num_selector_slots) * sizeof(uint64);
 	if (!AllocSizeIsValid(compressed_size))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
+	}
 
 	*data_out = (Simple8bRleSerialized *) dest;
 	(*data_out)->num_elements = num_elements;
 	(*data_out)->num_blocks = num_blocks;
 
 	for (i = 0; i < num_blocks + num_selector_slots; i++)
+	{
 		(*data_out)->slots[i] = pq_getmsgint64(buffer);
+	}
 
 	return (char *) *data_out + compressed_size;
 }
@@ -297,7 +305,9 @@ simple8brle_serialized_send(StringInfo buffer, const Simple8bRleSerialized *data
 	pq_sendint32(buffer, data->num_elements);
 	pq_sendint32(buffer, data->num_blocks);
 	for (i = 0; i < data->num_blocks + num_selector_slots; i++)
+	{
 		pq_sendint64(buffer, data->slots[i]);
+	}
 }
 
 static char *
@@ -307,7 +317,9 @@ bytes_serialize_simple8b_and_advance(char *dest, size_t expected_size,
 	size_t size = simple8brle_serialized_total_size(data);
 
 	if (expected_size != size)
+	{
 		elog(ERROR, "the size to serialize does not match simple8brle");
+	}
 
 	memcpy(dest, data, size);
 	return dest + size;
@@ -331,7 +343,9 @@ static size_t
 simple8brle_serialized_slot_size(const Simple8bRleSerialized *data)
 {
 	if (data == NULL)
+	{
 		return 0;
+	}
 
 	int total_slots =
 		data->num_blocks + simple8brle_num_selector_slots_for_num_blocks(data->num_blocks);
@@ -443,7 +457,9 @@ simple8brle_compressor_partial_flush(Simple8bRleCompressor *compressor)
 				++selector;
 				mask = simple8brle_selector_get_bitmask(selector);
 				if (num_packed >= SIMPLE8B_NUM_ELEMENTS[selector])
+				{
 					break;
+				}
 			}
 
 			max_pack = SIMPLE8B_NUM_ELEMENTS[selector];
@@ -482,7 +498,9 @@ simple8brle_compressor_partial_flush(Simple8bRleCompressor *compressor)
 			current_entry->repcount = entry_repcount;
 
 			if (entry_repcount > 0)
+			{
 				break;
+			}
 			++num_buffer_taken;
 		}
 
@@ -603,7 +621,9 @@ simple8brle_compressor_full_flush(Simple8bRleCompressor *compressor)
 				++selector;
 				mask = simple8brle_selector_get_bitmask(selector);
 				if (num_packed >= SIMPLE8B_NUM_ELEMENTS[selector])
+				{
 					break;
+				}
 			}
 
 			max_pack = SIMPLE8B_NUM_ELEMENTS[selector];
@@ -633,7 +653,9 @@ simple8brle_compressor_full_flush(Simple8bRleCompressor *compressor)
 				buffer_base[num_buffer_taken].repcount--;
 			}
 			if (buffer_base[num_buffer_taken].repcount > 0)
+			{
 				break;
+			}
 			++num_buffer_taken;
 		}
 
@@ -738,7 +760,9 @@ simple8brle_compressor_compressed_const_size(const Simple8bRleCompressor *compre
 
 	/* If the compressor is empty, we can return 0, similar to finish. */
 	if (temp_compressor.num_elements == 0)
+	{
 		return 0;
+	}
 
 	/*
 	 * If the compressor has no uncompressed data, we can use the original size calculation.
@@ -747,7 +771,9 @@ simple8brle_compressor_compressed_const_size(const Simple8bRleCompressor *compre
 	 * or finish was called, so we can use the original size calculation.
 	 */
 	if (compressor->num_buffered_elements == 0)
+	{
 		return simple8brle_compressor_compressed_size(compressor);
+	}
 
 	/* Because the buffering allows RLE entries to be stored, the worst case scenario for
 	 * the buffer size is determined by the repcounts in the buffered elements.
@@ -819,7 +845,9 @@ simple8brle_compressor_finish(Simple8bRleCompressor *compressor)
 	uint64 bits;
 
 	if (compressor->num_elements == 0)
+	{
 		return NULL;
+	}
 
 	/* Flush any remaining state */
 	if (compressor->num_buffered_elements > 0)
@@ -875,7 +903,9 @@ simple8brle_compressor_finish_into(Simple8bRleCompressor *compressor, char *dest
 	uint64 bits;
 
 	if (compressor->num_elements == 0)
+	{
 		return NULL;
+	}
 
 	Ensure(dest != NULL, "dest is NULL");
 
@@ -972,7 +1002,9 @@ simple8brle_decompression_iterator_max_elements(Simple8bRleDecompressionIterator
 	{
 		uint8 selector = bit_array_iter_next(&selectors, SIMPLE8B_BITS_PER_SELECTOR);
 		if (selector == 0)
+		{
 			elog(ERROR, "invalid selector 0");
+		}
 
 		if (simple8brle_selector_is_rle(selector) && iter->compressed_data)
 		{
@@ -1019,9 +1051,11 @@ simple8brle_decompression_iterator_try_next_forward(Simple8bRleDecompressionIter
 {
 	uint64 uncompressed;
 	if (iter->num_elements_returned >= iter->num_elements)
+	{
 		return (Simple8bRleDecompressResult){
 			.is_done = true,
 		};
+	}
 
 	if ((uint32) iter->current_in_compressed_pos >= iter->current_block.num_elements_compressed)
 	{
@@ -1053,9 +1087,11 @@ simple8brle_decompression_iterator_try_next_reverse(Simple8bRleDecompressionIter
 {
 	uint64 uncompressed;
 	if (iter->num_elements_returned >= iter->num_elements)
+	{
 		return (Simple8bRleDecompressResult){
 			.is_done = true,
 		};
+	}
 
 	if (iter->current_in_compressed_pos < 0)
 	{
@@ -1174,7 +1210,9 @@ static inline uint32
 simple8brle_bits_for_value(uint64 v)
 {
 	if (v == 0)
+	{
 		return 0;
+	}
 	return 64 - __builtin_clzll(v);
 }
 #else

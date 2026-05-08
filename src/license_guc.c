@@ -68,11 +68,17 @@ static LicenseType
 license_type_of(const char *string)
 {
 	if (string == NULL)
+	{
 		return LICENSE_UNDEF;
+	}
 	if (strcmp(string, TS_LICENSE_TIMESCALE) == 0)
+	{
 		return LICENSE_TIMESCALE;
+	}
 	if (strcmp(string, TS_LICENSE_APACHE) == 0)
+	{
 		return LICENSE_APACHE;
+	}
 	return LICENSE_UNDEF;
 }
 
@@ -88,7 +94,9 @@ ts_license_enable_module_loading(void)
 	int result;
 
 	if (load_enabled)
+	{
 		return;
+	}
 
 	load_enabled = true;
 
@@ -103,7 +111,9 @@ ts_license_enable_module_loading(void)
 							   false);
 
 	if (result <= 0)
+	{
 		elog(ERROR, "invalid value for timescaledb.license: \"%s\"", ts_guc_license);
+	}
 }
 
 /*
@@ -122,11 +132,15 @@ tsl_module_load(void)
 	void *handle;
 
 	if (tsl_handle != NULL)
+	{
 		return true;
+	}
 
 	function = load_external_function(EXTENSION_TSL_SO, "ts_module_init", false, &handle);
 	if (function == NULL || handle == NULL)
+	{
 		return false;
+	}
 	tsl_init_fn = function;
 	tsl_handle = handle;
 	/* the on_proc_exit callback is registered by the tsl_init_fn after load */
@@ -142,7 +156,9 @@ tsl_module_init(void)
 	DirectFunctionCall1(tsl_init_fn, BoolGetDatum(tsl_register_proc_exit));
 	/* register the on_proc_exit only when the module is reloaded */
 	if (tsl_register_proc_exit)
+	{
 		tsl_register_proc_exit = false;
+	}
 }
 
 /*
@@ -163,7 +179,9 @@ ts_license_guc_check_hook(char **newval, void **extra, GucSource source)
 		case LICENSE_APACHE:
 		case LICENSE_TIMESCALE:
 			if (source == PGC_S_FILE || source == PGC_S_ARGV || source == PGC_S_DEFAULT)
+			{
 				break;
+			}
 			GUC_check_errdetail("Cannot change a license in a running session.");
 			GUC_check_errhint(
 				"Change the license in the configuration file or server command line.");
@@ -203,5 +221,7 @@ void
 ts_license_guc_assign_hook(const char *newval, void *extra)
 {
 	if (load_enabled && license_type_of(newval) == LICENSE_TIMESCALE)
+	{
 		tsl_module_init();
+	}
 }

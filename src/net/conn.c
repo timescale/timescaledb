@@ -22,7 +22,9 @@ connection_internal_create(ConnectionType type, ConnOps *ops)
 	Connection *conn = palloc(ops->size);
 
 	if (NULL == conn)
+	{
 		return NULL;
+	}
 
 	memset(conn, 0, ops->size);
 	conn->ops = ops;
@@ -43,20 +45,26 @@ ts_connection_create(ConnectionType type)
 	}
 
 	if (NULL == conn_ops[type])
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("%s connections are not supported", conn_names[type]),
 				 errhint("Enable %s support when compiling the extension.", conn_names[type])));
+	}
 
 	conn = connection_internal_create(type, conn_ops[type]);
 
 	Ensure(conn, "unable to create connection");
 
 	if (NULL != conn->ops->init)
+	{
 		if (conn->ops->init(conn) < 0)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("%s connection could not be initialized", conn_names[type])));
+		}
+	}
 
 	return conn;
 }
@@ -93,14 +101,18 @@ void
 ts_connection_close(Connection *conn)
 {
 	if (NULL != conn->ops)
+	{
 		conn->ops->close(conn);
+	}
 }
 
 int
 ts_connection_set_timeout_millis(Connection *conn, unsigned long millis)
 {
 	if (NULL != conn->ops->set_timeout)
+	{
 		return conn->ops->set_timeout(conn, millis);
+	}
 
 	return -1;
 }
@@ -109,7 +121,9 @@ void
 ts_connection_destroy(Connection *conn)
 {
 	if (conn == NULL)
+	{
 		return;
+	}
 
 	ts_connection_close(conn);
 	conn->ops = NULL;
@@ -120,7 +134,9 @@ int
 ts_connection_register(ConnectionType type, ConnOps *ops)
 {
 	if (type == _CONNECTION_MAX)
+	{
 		return -1;
+	}
 
 	conn_ops[type] = ops;
 
@@ -131,7 +147,9 @@ const char *
 ts_connection_get_and_clear_error(Connection *conn)
 {
 	if (NULL != conn->ops->errmsg)
+	{
 		return conn->ops->errmsg(conn);
+	}
 
 	return "unknown connection error";
 }

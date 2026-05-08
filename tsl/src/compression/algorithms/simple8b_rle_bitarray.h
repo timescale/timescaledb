@@ -204,7 +204,9 @@ simple8brle_bitarray_decompress(Simple8bRleSerialized *compressed, bool inverted
 			result.num_ones += __builtin_popcountll(block_data);
 #else
 			for (uint16 i = 0; i < 64; i++)
+			{
 				result.num_ones += ((block_data >> i) & 1);
+			}
 #endif
 			decompressed_index += 64;
 			bit_position = decompressed_index % 64;

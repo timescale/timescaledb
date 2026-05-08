@@ -307,6 +307,47 @@ FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 mi
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ROLLBACK;
 
+-- Test recompress preserves auto-discovered segmentby
+BEGIN;
+CREATE TABLE test_recompress_segmentby (
+    time TIMESTAMPTZ NOT NULL,
+    time2 TIMESTAMPTZ NOT NULL,
+    device_id INT NOT NULL,
+    value FLOAT
+) WITH (tsdb.hypertable, tsdb.partition_column='time');
+
+-- Large insert triggers direct compress and auto-segmentby analysis
+INSERT INTO test_recompress_segmentby
+SELECT t, t, (i % 5), random()
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-02'::timestamptz, '1 minute') t,
+     generate_series(1, 5) i;
+
+-- device_id should be auto-selected as segmentby
+SELECT * FROM _timescaledb_catalog.compression_settings;
+
+-- Small insert into the same chunk range makes it partial
+INSERT INTO test_recompress_segmentby VALUES
+    ('2024-01-01 12:00:00', '2024-01-01 12:00:00', 1, 99.9),
+    ('2024-01-01 12:01:00', '2024-01-01 12:01:00', 2, 88.8),
+    ('2024-01-01 12:02:00', '2024-01-01 12:02:00', 3, 77.7);
+
+-- Recompress should preserve the auto-discovered segmentby
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('test_recompress_segmentby') chunk; -- unordered, partial
+SELECT compress_chunk(ch, recompress := true) FROM show_chunks('test_recompress_segmentby') ch;
+SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('test_recompress_segmentby') chunk; -- unordered
+SELECT compress_chunk(ch, recompress := true) FROM show_chunks('test_recompress_segmentby') ch;
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('test_recompress_segmentby') chunk; -- compressed
+SELECT * FROM _timescaledb_catalog.compression_settings;
+
+-- Recompress should overwrite settings
+ALTER TABLE test_recompress_segmentby SET (tsdb.segment_by = '', tsdb.order_by = 'time2');
+SELECT compress_chunk(ch, recompress := true) FROM show_chunks('test_recompress_segmentby') ch;
+
+
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+
 -- Test default segmentby gets set via COPY path
 BEGIN;
 SET timescaledb.enable_direct_compress_insert = false;

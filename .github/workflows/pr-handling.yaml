@@ -37,4 +37,4 @@ jobs:
         shell: bash
         run: |
           PR_URL="https://github.com/${OWNER}/${REPO}/pull/${PULL_REQUEST_NUMBER}"
-          docker run ghcr.io/imsky/pull-review "$PR_URL" --github-token "${GITHUB_TOKEN}"
+          docker run ghcr.io/imsky/pull-review@sha256:80d099c92a3259322900b2d2d75ced5d628d1a182f917682c8fc411a750d650a "$PR_URL" --github-token "${GITHUB_TOKEN}"

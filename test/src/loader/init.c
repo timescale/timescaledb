@@ -39,7 +39,9 @@ static void
 cache_invalidate_callback(Datum arg, Oid relid)
 {
 	if (ts_extension_is_proxy_table_relid(relid))
+	{
 		ts_extension_invalidate();
+	}
 }
 
 void
@@ -63,7 +65,9 @@ _PG_init(void)
 	 */
 #ifndef WIN32
 	if (post_parse_analyze_hook != NULL && !IsParallelWorker())
+	{
 		elog(ERROR, "the extension called with a loader should always have a NULL prev hook");
+	}
 #endif
 	CacheRegisterRelcacheCallback(cache_invalidate_callback, PointerGetDatum(NULL));
 }

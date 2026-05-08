@@ -27,7 +27,9 @@ extern TSDLLEXPORT int
 ts_array_length(ArrayType *arr)
 {
 	if (!arr || ARR_NDIM(arr) == 0)
+	{
 		return 0;
+	}
 
 	Assert(ARR_NDIM(arr) == 1);
 
@@ -39,17 +41,25 @@ ts_array_equal(ArrayType *left, ArrayType *right)
 {
 	/* Quick exit if both are NULL or point to same thing. */
 	if (left == right)
+	{
 		return true;
+	}
 
 	if (left == NULL || right == NULL)
+	{
 		return false;
+	}
 
 	if (ARR_NDIM(left) == 0 || ARR_NDIM(right) == 0)
 	{
 		if (ARR_NDIM(left) == 0 && ARR_NDIM(right) == 0)
+		{
 			return true;
+		}
 		else
+		{
 			return false;
+		}
 	}
 
 	Assert(left != NULL && right != NULL && ARR_NDIM(left) == 1 && ARR_NDIM(right) == 1);
@@ -69,7 +79,9 @@ ts_array_is_member(ArrayType *arr, const char *name)
 	Datum datum;
 	bool null;
 	if (!arr || ARR_NDIM(arr) == 0)
+	{
 		return ret;
+	}
 
 	Assert(ARR_NDIM(arr) == 1);
 	Assert(arr->elemtype == TEXTOID);
@@ -106,7 +118,9 @@ ts_array_append_stringinfo(ArrayType *arr, StringInfo info)
 	bool null;
 
 	if (!arr)
+	{
 		return;
+	}
 
 	Assert(ARR_NDIM(arr) <= 1);
 	Assert(arr->elemtype == TEXTOID);
@@ -124,9 +138,13 @@ ts_array_append_stringinfo(ArrayType *arr, StringInfo info)
 		 */
 		Ensure(!null, "array element was NULL");
 		if (!first)
+		{
 			appendStringInfoString(info, ", ");
+		}
 		else
+		{
 			first = false;
+		}
 
 		appendStringInfo(info, "%s", TextDatumGetCString(datum));
 	}
@@ -142,7 +160,9 @@ ts_array_position(ArrayType *arr, const char *name)
 	bool found = false;
 	bool null;
 	if (!arr || ARR_NDIM(arr) == 0)
+	{
 		return pos;
+	}
 
 	Assert(ARR_NDIM(arr) == 1);
 	Assert(arr->elemtype == TEXTOID);
@@ -174,7 +194,9 @@ extern TSDLLEXPORT ArrayType *
 ts_array_replace_text(ArrayType *arr, const char *old, const char *new)
 {
 	if (!arr || ARR_NDIM(arr) == 0)
+	{
 		return NULL;
+	}
 
 	Assert(ARR_NDIM(arr) == 1);
 	Assert(arr->elemtype == TEXTOID);

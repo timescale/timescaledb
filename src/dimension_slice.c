@@ -54,7 +54,9 @@ dimension_slice_from_slot(TupleTableSlot *slot)
 	slice = dimension_slice_from_form_data((Form_dimension_slice) GETSTRUCT(tuple));
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 
 	return slice;
 }
@@ -101,7 +103,9 @@ dimension_slice_formdata_fill(FormData_dimension_slice *fd, const TupleInfo *ti)
 	fd->range_end = DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_slice_range_end)]);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 }
 
 static bool
@@ -238,7 +242,9 @@ ts_dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right)
 	int res = DIMENSION_SLICE_RANGE_START_CMP(left, right);
 
 	if (res == 0)
+	{
 		res = DIMENSION_SLICE_RANGE_END_CMP(left, right);
+	}
 
 	return res;
 }
@@ -248,10 +254,14 @@ ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord)
 {
 	coord = REMAP_LAST_COORDINATE(coord);
 	if (coord < slice->fd.range_start)
+	{
 		return -1;
+	}
 
 	if (coord >= slice->fd.range_end)
+	{
 		return 1;
+	}
 
 	return 0;
 }
@@ -261,7 +271,9 @@ tuple_is_deleted(TupleInfo *ti)
 {
 #ifdef USE_ASSERT_CHECKING
 	if (ti->lockresult == TM_Deleted)
+	{
 		Assert(ItemPointerEquals(ts_scanner_get_tuple_tid(ti), &ti->lockfd.ctid));
+	}
 #endif
 	return ti->lockresult == TM_Deleted;
 }
@@ -779,7 +791,9 @@ dimension_slice_tuple_delete(TupleInfo *ti, void *data)
 
 	/* delete chunk constraints */
 	if (NULL != delete_constraints && *delete_constraints)
+	{
 		ts_chunk_constraint_delete_by_dimension_slice_id(DatumGetInt32(dimension_slice_id));
+	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
@@ -844,7 +858,9 @@ dimension_slice_fill(TupleInfo *ti, void *data)
 			memcpy(&(*slice)->fd, GETSTRUCT(tuple), sizeof(FormData_dimension_slice));
 
 			if (should_free)
+			{
 				heap_freetuple(tuple);
+			}
 			break;
 		}
 		case TM_Deleted:
@@ -986,7 +1002,9 @@ ts_dimension_slice_scan_iterator_get_by_id(ScanIterator *it, int32 slice_id)
 	ti = ts_scan_iterator_next(it);
 
 	if (!ti)
+	{
 		return NULL;
+	}
 
 	DimensionSlice *slice = ts_dimension_slice_from_tuple(ti);
 	/* There should be only one slice with the given id */
@@ -1084,7 +1102,9 @@ void
 ts_dimension_slice_free(DimensionSlice *slice)
 {
 	if (slice->storage_free != NULL)
+	{
 		slice->storage_free(slice->storage);
+	}
 	pfree(slice);
 }
 
@@ -1097,8 +1117,10 @@ dimension_slice_insert_relation(const Relation rel, DimensionSlice *slice)
 	CatalogSecurityContext sec_ctx;
 
 	if (slice->fd.id > 0)
+	{
 		/* Slice already exists in table */
 		return false;
+	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	memset(values, 0, sizeof(values));
@@ -1203,7 +1225,9 @@ ts_dimension_slice_nth_latest_slice(int32 dimension_id, int n)
 		NULL,
 		CurrentMemoryContext);
 	if (num_tuples < n)
+	{
 		return NULL;
+	}
 
 	return ret;
 }
@@ -1233,7 +1257,9 @@ ts_dimension_slice_nth_earliest_slice(int32 dimension_id, int n)
 		NULL,
 		CurrentMemoryContext);
 	if (num_tuples < n)
+	{
 		return NULL;
+	}
 
 	return ret;
 }
@@ -1263,7 +1289,9 @@ ts_dimension_slice_oldest_valid_chunk_for_reorder(int32 job_id, int32 dimension_
 		List *chunk_ids = NIL;
 
 		if (NULL == ti)
+		{
 			break;
+		}
 
 		slice = dimension_slice_from_slot(ti->slot);
 		ts_chunk_constraint_scan_by_dimension_slice_to_list(slice,
@@ -1322,7 +1350,9 @@ ts_dimension_slice_get_chunkids_to_compress(int32 dimension_id, StrategyNumber s
 		ti = ts_scan_iterator_next(&it);
 
 		if (NULL == ti)
+		{
 			break;
+		}
 
 		slice = dimension_slice_from_slot(ti->slot);
 		ts_chunk_constraint_scan_by_dimension_slice_to_list(slice,
@@ -1370,9 +1400,13 @@ ts_osm_chunk_range_overlaps(int32 osm_dimension_slice_id, int32 dimension_id, in
 	 */
 	if (vec->num_slices >= 2 ||
 		(vec->num_slices == 1 && vec->slices[0]->fd.id != osm_dimension_slice_id))
+	{
 		res = true;
+	}
 	else
+	{
 		res = false;
+	}
 	pfree(vec);
 	return res;
 }

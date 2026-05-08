@@ -1,0 +1,29 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+-- Test a case of hypertable expansion in a DML query where it is not a target
+-- relation.
+CREATE TABLE ht_target (time timestamptz NOT NULL, val int);
+SELECT create_hypertable('ht_target', 'time');
+   create_hypertable    
+------------------------
+ (1,public,ht_target,t)
+
+INSERT INTO ht_target VALUES ('2024-03-15', 1);
+CREATE TABLE ht_empty (time timestamptz NOT NULL, val int);
+SELECT create_hypertable('ht_empty', 'time');
+   create_hypertable   
+-----------------------
+ (2,public,ht_empty,t)
+
+EXPLAIN (costs off)
+UPDATE ht_target SET val = ht_empty.val
+FROM ht_empty
+WHERE ht_target.time = ht_empty.time;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable)
+   ->  Update on ht_target
+         Update on _hyper_1_1_chunk ht_target
+         ->  Result
+               One-Time Filter: false
+

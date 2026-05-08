@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [config, check_paths]
     container:
-      image: i386/debian:bookworm-slim@sha256:b45825d32fec7adab4c4ea5987b5154c5f6f24f98f904e2625f81f03fd54ca79
+      image: i386/debian:bookworm-slim@sha256:8665d1820386db07d0e28d67c08785778ee9bbb5b563e9bc91ff214cbedeea79
       options: --privileged --ulimit core=-1:-1 --ulimit fsize=-1:-1
       env:
         PG_SRC_DIR: pgbuild
@@ -131,7 +131,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       id: cache-postgresql
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "linux-32-bit-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
@@ -168,7 +168,7 @@ jobs:
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: config.log linux-i386 PG${{ matrix.pg }}
         path: ~/${{ env.PG_SRC_DIR }}/config.log
@@ -189,7 +189,7 @@ jobs:
 
     - name: Upload CMake Logs
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: CMake Logs linux-i386 PG${{ matrix.pg }}
         path: |
@@ -236,7 +236,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: Regression diff linux-i386 PG${{ matrix.pg }}
         path: |
@@ -245,7 +245,7 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: PostgreSQL log linux-i386 PG${{ matrix.pg }}
         path: postmaster.*
@@ -287,21 +287,21 @@ jobs:
 
     - name: Coredumps
       if: always() && steps.coredumps.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: Coredumps linux-i386 PG${{ matrix.pg }}
         path: coredumps
 
     - name: Save stacktraces
       if: always() && steps.coredumps.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: Stacktraces linux-i386 PG${{ matrix.pg }}
         path: stacktrace.log
 
     - name: Save TAP test logs
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |

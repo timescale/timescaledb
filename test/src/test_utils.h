@@ -19,7 +19,9 @@ strip_path(const char *filename)
 	while (filename[i] != '\0')
 	{
 		if (filename[i] == '/' || filename[i] == '\\')
+		{
 			slash = i;
+		}
 		i++;
 	}
 
