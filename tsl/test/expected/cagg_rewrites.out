@@ -740,6 +740,18 @@ psql:include/cagg_rewrites_error.sql:110: INFO:  Query cannot be rewritten with 
 ------------------------------+---------------------+-------
  Fri Feb 23 08:00:00 2018 PST | 31.0000000000000000 |     1
 
+-- NULL bucket width must not be rewritten (and must not crash, see issue
+-- found by the LLM fuzzer)
+SELECT time_bucket(NULL::interval, day) AS bucket,
+   count(*)
+FROM conditions
+GROUP BY bucket
+ORDER BY 1 LIMIT 1;
+psql:include/cagg_rewrites_error.sql:118: INFO:  Query cannot be rewritten with CAggs: 
+ bucket | count 
+--------+-------
+        |    14
+
 -- infinity origin
 SELECT time_bucket(INTERVAL '3 days', day, 'infinity'::timestamptz) AS bucket,
    AVG(temperature),
@@ -747,7 +759,7 @@ SELECT time_bucket(INTERVAL '3 days', day, 'infinity'::timestamptz) AS bucket,
 FROM conditions
 GROUP BY bucket
 ORDER BY 1 LIMIT 1;
-psql:include/cagg_rewrites_error.sql:118: INFO:  Query cannot be rewritten with CAggs: invalid time bucket origin value: infinity
+psql:include/cagg_rewrites_error.sql:126: INFO:  Query cannot be rewritten with CAggs: invalid time bucket origin value: infinity
                bucket                |         avg         | count 
 -------------------------------------+---------------------+-------
  Fri Jun 11 21:00:54.775807 2021 PDT | 26.0000000000000000 |     1
@@ -759,7 +771,7 @@ SELECT time_bucket(INTERVAL '3 days', day, "offset"=>'30m'::interval, origin=>'2
 FROM conditions
 GROUP BY bucket
 ORDER BY 1 LIMIT 1;
-psql:include/cagg_rewrites_error.sql:126: INFO:  Query cannot be rewritten with CAggs: using offset and origin in a time_bucket function at the same time is not supported
+psql:include/cagg_rewrites_error.sql:134: INFO:  Query cannot be rewritten with CAggs: using offset and origin in a time_bucket function at the same time is not supported
             bucket            |         avg         | count 
 ------------------------------+---------------------+-------
  Sat Jun 12 02:30:00 2021 PDT | 24.0000000000000000 |     2
@@ -772,7 +784,7 @@ SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
 FROM conditions_dup
 GROUP BY bucket
 ORDER BY 1 LIMIT 1;
-psql:include/cagg_rewrites_error.sql:136: INFO:  Query cannot be rewritten with CAggs: no continuous aggregates defined on "public.conditions_dup"
+psql:include/cagg_rewrites_error.sql:144: INFO:  Query cannot be rewritten with CAggs: no continuous aggregates defined on "public.conditions_dup"
             bucket            |         avg         | count 
 ------------------------------+---------------------+-------
  Sun Jun 13 17:00:00 2021 PDT | 24.0000000000000000 |     3
@@ -785,7 +797,7 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions
 GROUP BY bucket
 ORDER BY 1 LIMIT 1;
-psql:include/cagg_rewrites_error.sql:146: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:154: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Caggs are not real-time: "public.cagg_view"
 Buckets do not match: "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3"
 Joins do not match: "public.cagg_join" "public.cagg_more_conds" "public.cagg_lateral"
@@ -800,7 +812,7 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions
 GROUP BY bucket, city
 ORDER BY 1 LIMIT 1;
-psql:include/cagg_rewrites_error.sql:152: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:160: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Caggs are not real-time: "public.cagg_view"
 Buckets do not match: "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3"
 Joins do not match: "public.cagg_join" "public.cagg_more_conds" "public.cagg_lateral"
@@ -816,7 +828,7 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions
 GROUP BY device_id, bucket
 ORDER BY 1 LIMIT 1;
-psql:include/cagg_rewrites_error.sql:159: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:167: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Caggs are not real-time: "public.cagg_view"
 Buckets do not match: "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3"
 Joins do not match: "public.cagg_join" "public.cagg_more_conds" "public.cagg_lateral"
@@ -834,7 +846,7 @@ FROM conditions
 GROUP BY bucket
 HAVING count(device_id) > 0
 ORDER BY 1 LIMIT 1;
-psql:include/cagg_rewrites_error.sql:168: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:176: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Buckets do not match: "public.cagg1" "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg_join" "public.cagg_more_conds" "public.cagg_view" "public.cagg_lateral"
 HAVING quals do not match: "public.cagg3"
 
@@ -854,7 +866,7 @@ WHERE location_id > 1 AND
       conditions.temperature > 28
 GROUP BY devices.name, bucket, devices.device_id
 ORDER BY 1 LIMIT 1;
-psql:include/cagg_rewrites_error.sql:181: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:189: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Caggs are not real-time: "public.cagg_view"
 Buckets do not match: "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3"
 Joins do not match: "public.cagg1" "public.cagg_join" "public.cagg_lateral"
@@ -875,7 +887,7 @@ WHERE location_id > 1 AND
       conditions.temperature < 20
 GROUP BY devices.name, bucket, devices.device_id
 ORDER BY 1 LIMIT 1;
-psql:include/cagg_rewrites_error.sql:193: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:201: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Caggs are not real-time: "public.cagg_view"
 Buckets do not match: "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3"
 Joins do not match: "public.cagg1" "public.cagg_join" "public.cagg_lateral"
@@ -896,7 +908,7 @@ WHERE location_id > 1 AND
 GROUP BY devices.name, bucket, devices.device_id
 ORDER BY 1,2,3,4
 LIMIT 2;
-psql:include/cagg_rewrites_error.sql:206: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:214: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Caggs are not real-time: "public.cagg_view"
 Buckets do not match: "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3"
 Joins do not match: "public.cagg1" "public.cagg_join" "public.cagg_lateral"
@@ -920,7 +932,7 @@ WHERE location_id < 1 AND
 GROUP BY devices.name, bucket, devices.device_id
 ORDER BY 1,2,3,4
 LIMIT 2;
-psql:include/cagg_rewrites_error.sql:220: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:228: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Caggs are not real-time: "public.cagg_view"
 Buckets do not match: "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3"
 Joins do not match: "public.cagg1" "public.cagg_join" "public.cagg_lateral"
@@ -936,7 +948,7 @@ SELECT time_bucket(INTERVAL '1 day', day,  "offset"=>'15s'::interval, timezone=>
 FROM conditions
 GROUP BY device_id, bucket
 ORDER BY 1, 2, 3 LIMIT 3;
-psql:include/cagg_rewrites_error.sql:228: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:236: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Buckets do not match: "public.cagg1" "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3" "public.cagg_join" "public.cagg_more_conds" "public.cagg_view" "public.cagg_lateral"
 
             bucket            |         avg         | device_id 
@@ -952,7 +964,7 @@ SELECT time_bucket(INTERVAL '1 day', day, timezone=>'Australia/Sydney') AS bucke
 FROM conditions
 GROUP BY device_id, bucket
 ORDER BY 1, 2, 3 LIMIT 3;
-psql:include/cagg_rewrites_error.sql:236: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:244: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Buckets do not match: "public.cagg1" "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3" "public.cagg_join" "public.cagg_more_conds" "public.cagg_view" "public.cagg_lateral"
 
             bucket            |         avg         | device_id 
@@ -968,7 +980,7 @@ SELECT time_bucket(INTERVAL '1 day', day,  "offset"=>'30m'::interval, timezone=>
 FROM conditions
 GROUP BY device_id, bucket
 ORDER BY 1, 2, 3 LIMIT 3;
-psql:include/cagg_rewrites_error.sql:244: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:252: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Buckets do not match: "public.cagg1" "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3" "public.cagg_join" "public.cagg_more_conds" "public.cagg_view" "public.cagg_lateral"
 
             bucket            |         avg         | device_id 
@@ -984,7 +996,7 @@ SELECT time_bucket(INTERVAL '1 day', day, origin=>'2001-01-03') AS bucket,
 FROM conditions
 GROUP BY device_id, bucket
 ORDER BY 1, 2, 3 LIMIT 3;
-psql:include/cagg_rewrites_error.sql:252: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:260: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Buckets do not match: "public.cagg1" "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3" "public.cagg_join" "public.cagg_more_conds" "public.cagg_view" "public.cagg_lateral"
 
             bucket            |         avg         | device_id 
@@ -999,7 +1011,7 @@ SELECT time_bucket(INTERVAL '1 day', day, origin=>'2001-01-02 00:00:00 Europe/Be
 FROM conditions
 GROUP BY device_id, bucket
 ORDER BY 1, 2, 3 LIMIT 3;
-psql:include/cagg_rewrites_error.sql:259: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:267: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Buckets do not match: "public.cagg1" "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3" "public.cagg_join" "public.cagg_more_conds" "public.cagg_view" "public.cagg_lateral"
 
             bucket            |         avg         | device_id 
@@ -1014,7 +1026,7 @@ SELECT time_bucket(3, day, 2) AS bucket,
    count(device_id)
 FROM conditions_int
 GROUP BY bucket ORDER BY 1, 2, 3;
-psql:include/cagg_rewrites_error.sql:266: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions_int" are matching the query:
+psql:include/cagg_rewrites_error.sql:274: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions_int" are matching the query:
 Buckets do not match: "public.cagg3_int"
 
  bucket |         avg         | count 
@@ -1031,7 +1043,7 @@ SELECT time_bucket(3, day) AS bucket,
    count(device_id)
 FROM conditions_int
 GROUP BY bucket  ORDER BY 1, 2, 3;
-psql:include/cagg_rewrites_error.sql:272: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions_int" are matching the query:
+psql:include/cagg_rewrites_error.sql:280: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions_int" are matching the query:
 Buckets do not match: "public.cagg3_int"
 
  bucket |         avg         | count 
@@ -1048,7 +1060,7 @@ SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,
 FROM cagg1, devices
 WHERE devices.device_id = cagg1.device_id AND devices.device_id > 1
 GROUP BY 1 ORDER BY 1 LIMIT 1;
-psql:include/cagg_rewrites_error.sql:279: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.cagg1" are matching the query:
+psql:include/cagg_rewrites_error.sql:287: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.cagg1" are matching the query:
 WHERE/JOIN quals do not match: "public.cagg_on_cagg1"
 
             bucket            |     temperature     
@@ -1069,7 +1081,7 @@ GROUP BY devices.name, bucket, devices.device_id
 ORDER BY 1,2,3,4
 LIMIT 2;
 EXECUTE prep1(28);
-psql:include/cagg_rewrites_error.sql:295: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:303: INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Caggs are not real-time: "public.cagg_view"
 Buckets do not match: "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3"
 Joins do not match: "public.cagg1" "public.cagg_join" "public.cagg_lateral"
@@ -1094,7 +1106,7 @@ GROUP BY devices.name, bucket, devices.device_id
 ORDER BY 1,2,3,4
 LIMIT 2;
 EXECUTE prep2(INTERVAL '1 day');
-psql:include/cagg_rewrites_error.sql:311: INFO:  Query cannot be rewritten with CAggs: non-immutable expression as first argument to the time bucket function
+psql:include/cagg_rewrites_error.sql:319: INFO:  Query cannot be rewritten with CAggs: non-immutable expression as first argument to the time bucket function
             bucket            |         avg         | count |   name   
 ------------------------------+---------------------+-------+----------
  Sun Jun 20 17:00:00 2021 PDT | 31.0000000000000000 |     1 | thermo_1
@@ -1115,9 +1127,9 @@ SELECT * FROM (VALUES (1), (1)) a(v),
    GROUP BY devices.name, bucket, devices.device_id) q
 ORDER BY 1,2,3,4
 LIMIT 2;
-psql:include/cagg_rewrites_error.sql:327: INFO:  Query cannot be rewritten with CAggs: no GROUP BY clause in the query
-psql:include/cagg_rewrites_error.sql:327: INFO:  Subquery "a" cannot be rewritten with CAggs: no GROUP BY clause in the query
-psql:include/cagg_rewrites_error.sql:327: INFO:  Subquery "q" cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+psql:include/cagg_rewrites_error.sql:335: INFO:  Query cannot be rewritten with CAggs: no GROUP BY clause in the query
+psql:include/cagg_rewrites_error.sql:335: INFO:  Subquery "a" cannot be rewritten with CAggs: no GROUP BY clause in the query
+psql:include/cagg_rewrites_error.sql:335: INFO:  Subquery "q" cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
 Caggs are not real-time: "public.cagg_view"
 Buckets do not match: "public.cagg1_tz" "public.cagg1_origin" "public.cagg2" "public.cagg3"
 Joins do not match: "public.cagg1" "public.cagg_join" "public.cagg_lateral"

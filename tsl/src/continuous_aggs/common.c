@@ -403,25 +403,24 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 
 		if (width->constisnull)
 		{
-			if (process_checks && is_cagg_create)
+			if (process_checks && !for_rewrites)
 			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("invalid bucket width for time bucket function")));
 			}
+			return;
 		}
-		else
-		{
-			if (width->consttype == INTERVALOID)
-			{
-				bf->bucket_time_width = DatumGetIntervalP(width->constvalue);
-			}
 
-			if (!IS_TIME_BUCKET_INFO_TIME_BASED(bf))
-			{
-				bf->bucket_integer_width =
-					ts_interval_value_to_internal(width->constvalue, width->consttype);
-			}
+		if (width->consttype == INTERVALOID)
+		{
+			bf->bucket_time_width = DatumGetIntervalP(width->constvalue);
+		}
+
+		if (!IS_TIME_BUCKET_INFO_TIME_BASED(bf))
+		{
+			bf->bucket_integer_width =
+				ts_interval_value_to_internal(width->constvalue, width->consttype);
 		}
 	}
 	else if (process_checks)
