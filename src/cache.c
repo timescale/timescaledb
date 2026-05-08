@@ -93,10 +93,10 @@ ts_cache_invalidate(Cache **cache_ptr)
 	cache->refcount--;
 	cache_destroy(cache_ptr);
 	/*
-     * Even if the cache stays alive due to pins, clear the caller
-     * pointer so that it cannot be reused. The cache itself will be
-     * freed with the last pin release (see remove_pin).
-     */
+	 * Even if the cache stays alive due to pins, clear the caller
+	 * pointer so that it cannot be reused. The cache itself will be
+	 * freed with the last pin release (see remove_pin).
+	 */
 	*cache_ptr = NULL;
 }
 
