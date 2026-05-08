@@ -59,16 +59,16 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 	switch (stage)
 	{
 		case UPPERREL_GROUP_AGG:
-			if (input_reltype != TS_REL_HYPERTABLE_CHILD)
-			{
-				plan_add_gapfill(root, output_rel);
-			}
-
 			if (ts_guc_enable_chunkwise_aggregation && input_rel != NULL &&
 				!IS_DUMMY_REL(input_rel) && output_rel != NULL &&
 				involves_hypertable(root, input_rel))
 			{
 				tsl_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
+			}
+
+			if (input_reltype != TS_REL_HYPERTABLE_CHILD)
+			{
+				plan_add_gapfill(root, output_rel);
 			}
 
 			if (root->numOrderedAggs && !IS_DUMMY_REL(input_rel) && output_rel != NULL)
