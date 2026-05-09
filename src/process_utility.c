@@ -3715,19 +3715,48 @@ process_index_start(ProcessUtilityArgs *args)
 		if (cagg)
 		{
 			ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+
+			if (stmt->unique)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("continuous aggregates do not support UNIQUE indexes")));
+			}
+		}
+
+		if (stmt->unique || stmt->primary)
+		{
+			/*
+			 * When building a unique index on a chunk, there may be compressed data
+			 * present on the chunk that would not be considered by postgres validity
+			 * check. We need to check for constraint violations ourselves in those
+			 * cases.
+			 */
+			Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+
+			if (OidIsValid(relid))
+			{
+				Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
+				if (chunk && ts_chunk_is_compressed(chunk))
+				{
+					/*
+					 * Expression index elements are still raw parse trees at that point
+					 * and cannot be passed to deparse_expression directly, so run the
+					 * standard PostgreSQL transformation first.
+					 */
+					Relation rel = table_open(chunk->table_id, AccessShareLock);
+					IndexStmt *transformed = transformIndexStmt(chunk->table_id, stmt, NULL);
+					table_close(rel, NoLock);
+					validate_index_constraints(chunk, transformed);
+				}
+			}
 		}
 
 		if (!ht)
 		{
 			ts_cache_release(&hcache);
 			return DDL_CONTINUE;
-		}
-
-		if (stmt->unique)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("continuous aggregates do not support UNIQUE indexes")));
 		}
 
 		/* Make the RangeVar for the underlying materialization hypertable */

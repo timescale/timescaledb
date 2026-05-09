@@ -1,0 +1,1 @@
+Fixes: #9745 Check constrainsts when adding unique constraints to chunks
