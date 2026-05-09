@@ -50,6 +50,11 @@ SET timescaledb.cagg_rewrites_debug_info = 1;
 RESET timescaledb.cagg_rewrites_debug_info;
 RESET timescaledb.enable_cagg_rewrites;
 
+-- Rewrite check with only enable_cagg_rewrites set
+SET timescaledb.enable_cagg_rewrites = 1;
+SELECT max(day) FROM conditions;
+RESET timescaledb.enable_cagg_rewrites;
+
 DROP MATERIALIZED VIEW cagg_on_cagg1 CASCADE;
 DROP MATERIALIZED VIEW cagg1 CASCADE;
 DROP MATERIALIZED VIEW cagg1_tz CASCADE;
