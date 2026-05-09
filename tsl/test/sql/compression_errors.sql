@@ -546,5 +546,36 @@ UPDATE _timescaledb_catalog.chunk ch SET osm_chunk = true FROM _timescaledb_cata
 
 -- show_chunks should not show any OSM chunks
 SELECT show_chunks('osm_table');
+\set ON_ERROR_STOP 0
 SELECT compress_chunk(:'CHUNK_NAME');
+\set ON_ERROR_STOP 1
+
+-- #9720 CREATE UNIQUE INDEX directly on a compressed chunk must reject
+-- duplicates that already live on the compressed side.
+CREATE TABLE i9720(device_id int NOT NULL, ts timestamptz NOT NULL, v float8);
+SELECT create_hypertable('i9720', 'ts');
+ALTER TABLE i9720 SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id');
+INSERT INTO i9720 VALUES (1, '2026-01-01', 1.0), (1, '2026-01-01', 2.0);
+SELECT compress_chunk(show_chunks('i9720'));
+
+SELECT format('%I.%I', chunk_schema, chunk_name) AS "CHUNK"
+FROM timescaledb_information.chunks WHERE hypertable_name = 'i9720' \gset
+
+\set ON_ERROR_STOP 0
+-- duplicates on the compressed side: must be rejected
+CREATE UNIQUE INDEX dup_idx ON :CHUNK (device_id, ts);
+CREATE UNIQUE INDEX CONCURRENTLY dup_idx_c ON :CHUNK (device_id, ts);
+CREATE UNIQUE INDEX dup_idx ON :CHUNK ((device_id + 1), ts);
+CREATE UNIQUE INDEX CONCURRENTLY dup_idx_c ON :CHUNK ((device_id + 1), ts);
+\set ON_ERROR_STOP 1
+
+-- non-unique index is unaffected
+CREATE INDEX nonunique_idx ON :CHUNK (device_id);
+DROP INDEX _timescaledb_internal.nonunique_idx;
+
+-- after removing the duplicate, the unique index should succeed
+DELETE FROM i9720 WHERE v = 2.0;
+CREATE UNIQUE INDEX ok_idx ON :CHUNK (device_id, ts);
+SELECT indisunique FROM pg_index WHERE indexrelid::regclass::text LIKE '%ok_idx';
+DROP TABLE i9720;
 
