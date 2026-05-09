@@ -1275,6 +1275,14 @@ Buckets do not match: "public.cagg1" "public.cagg1_tz" "public.cagg1_origin" "pu
 TRUNCATE TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges;
 RESET timescaledb.cagg_rewrites_debug_info;
 RESET timescaledb.enable_cagg_rewrites;
+-- Rewrite check with only enable_cagg_rewrites set
+SET timescaledb.enable_cagg_rewrites = 1;
+SELECT max(day) FROM conditions;
+             max              
+------------------------------
+ Sun Jun 27 00:00:00 2021 PDT
+
+RESET timescaledb.enable_cagg_rewrites;
 DROP MATERIALIZED VIEW cagg_on_cagg1 CASCADE;
 NOTICE:  drop cascades to 2 other objects
 DROP MATERIALIZED VIEW cagg1 CASCADE;
