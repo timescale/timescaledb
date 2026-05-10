@@ -51,6 +51,8 @@ CREATE TABLE PUBLIC."Parent" (
 ALTER TABLE "Hypertable_1" INHERIT "Parent";
 ALTER TABLE _timescaledb_internal._hyper_1_1_chunk INHERIT "Parent";
 ALTER TABLE _timescaledb_internal._hyper_1_1_chunk NO INHERIT "Parent";
+CREATE TABLE PUBLIC."Hyper_Child" () INHERITS ("Hypertable_1");
+CREATE TABLE PUBLIC."Hyper_Child" (extra int) INHERITS (PUBLIC."Hypertable_1", PUBLIC."Parent");
 \set ON_ERROR_STOP 1
 
 CREATE TABLE PUBLIC."Child" () INHERITS ("Parent");
