@@ -1,0 +1,1 @@
+Implements: #4054 Support ANALYZE and VACUUM on continuous aggregates by redirecting to the underlying materialization hypertable

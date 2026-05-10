@@ -1287,6 +1287,28 @@ process_vacuum(ProcessUtilityArgs *args)
 
 			if (OidIsValid(table_relid))
 			{
+				/*
+				 * Continuous aggregates expose a view to the user, which
+				 * VACUUM/ANALYZE refuses to process. Redirect to the
+				 * underlying materialization hypertable so its chunks (and
+				 * any compressed chunks) are processed instead.
+				 */
+				ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(table_relid);
+				if (cagg)
+				{
+					Hypertable *mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+					if (mat_ht)
+					{
+						RangeVar *mat_rv = makeRangeVar(pstrdup(NameStr(mat_ht->fd.schema_name)),
+														pstrdup(NameStr(mat_ht->fd.table_name)),
+														-1);
+						vacuum_rel = makeVacuumRelation(mat_rv,
+														mat_ht->main_table_relid,
+														vacuum_rel->va_cols);
+						table_relid = mat_ht->main_table_relid;
+					}
+				}
+
 				ht = ts_hypertable_cache_get_entry(hcache, table_relid, CACHE_FLAG_MISSING_OK);
 
 				if (ht)

@@ -212,3 +212,91 @@ ORDER BY attnum;
 
 DROP TABLE vacuum_settings_test;
 RESET timescaledb.enable_direct_compress_insert;
+-- ANALYZE/VACUUM on a continuous aggregate user-view should be
+-- redirected to the underlying materialization hypertable.
+CREATE TABLE cagg_analyze_src(time timestamptz NOT NULL, device int, value float);
+SELECT create_hypertable('cagg_analyze_src', 'time', chunk_time_interval => interval '1 day');
+       create_hypertable       
+-------------------------------
+ (9,public,cagg_analyze_src,t)
+
+INSERT INTO cagg_analyze_src
+SELECT '2024-01-01'::timestamptz + (i || ' minute')::interval,
+       i % 4,
+       i::float
+FROM generate_series(0, 5000) i;
+CREATE MATERIALIZED VIEW cagg_analyze_view
+WITH (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', time) AS bucket, device, avg(value) AS avg_value
+FROM cagg_analyze_src
+GROUP BY 1, 2
+WITH NO DATA;
+CALL refresh_continuous_aggregate('cagg_analyze_view', NULL, NULL);
+-- Locate the materialization hypertable so we can check its stats.
+SELECT format('%I.%I', h.schema_name, h.table_name) AS mat_ht
+FROM _timescaledb_catalog.continuous_agg c
+JOIN _timescaledb_catalog.hypertable h ON h.id = c.mat_hypertable_id
+WHERE c.user_view_name = 'cagg_analyze_view' \gset
+-- No analyze stats yet on the materialization hypertable.
+SELECT relname, last_analyze IS NOT NULL AS has_analyze
+FROM pg_stat_all_tables
+WHERE relid = :'mat_ht'::regclass;
+           relname           | has_analyze 
+-----------------------------+-------------
+ _materialized_hypertable_10 | f
+
+CREATE FUNCTION cagg_analyze_count_analyzed(view_name name) RETURNS bigint
+LANGUAGE sql AS $$
+  SELECT count(*)
+  FROM pg_stat_all_tables s
+  JOIN _timescaledb_catalog.chunk c
+    ON c.table_name = s.relname AND c.schema_name = s.schemaname
+  WHERE c.hypertable_id = (SELECT mat_hypertable_id
+                           FROM _timescaledb_catalog.continuous_agg
+                           WHERE user_view_name = view_name)
+    AND s.last_analyze IS NOT NULL;
+$$;
+ANALYZE cagg_analyze_view;
+SELECT cagg_analyze_count_analyzed('cagg_analyze_view') > 0 AS chunk_stats_collected;
+ chunk_stats_collected 
+-----------------------
+ t
+
+-- VACUUM ANALYZE and plain VACUUM should also be accepted on the view.
+VACUUM ANALYZE cagg_analyze_view;
+VACUUM cagg_analyze_view;
+-- Mixed list with a plain table, a hypertable and the cagg view.
+CREATE TABLE cagg_analyze_plain(a int);
+INSERT INTO cagg_analyze_plain SELECT generate_series(1, 100);
+ANALYZE cagg_analyze_plain, cagg_analyze_src, cagg_analyze_view;
+DROP TABLE cagg_analyze_plain;
+-- Compressed cagg: the compression chunk should also be analyzed.
+ALTER MATERIALIZED VIEW cagg_analyze_view SET (timescaledb.compress = true);
+NOTICE:  defaulting compress_orderby to bucket,device
+SELECT compress_chunk(ch) IS NOT NULL AS compressed
+FROM show_chunks('cagg_analyze_view') ch
+ORDER BY ch
+LIMIT 1;
+ compressed 
+------------
+ t
+
+ANALYZE cagg_analyze_view;
+SELECT count(*) > 0 AS compression_chunk_analyzed
+FROM pg_stat_all_tables s
+JOIN _timescaledb_catalog.chunk c
+  ON c.table_name = s.relname AND c.schema_name = s.schemaname
+JOIN _timescaledb_catalog.chunk parent
+  ON parent.compressed_chunk_id = c.id
+WHERE parent.hypertable_id = (SELECT mat_hypertable_id
+                              FROM _timescaledb_catalog.continuous_agg
+                              WHERE user_view_name = 'cagg_analyze_view')
+  AND s.last_analyze IS NOT NULL;
+ compression_chunk_analyzed 
+----------------------------
+ t
+
+DROP FUNCTION cagg_analyze_count_analyzed(name);
+DROP MATERIALIZED VIEW cagg_analyze_view;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_10_17_chunk
+DROP TABLE cagg_analyze_src;
