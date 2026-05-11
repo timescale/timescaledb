@@ -36,7 +36,6 @@ extern void array_compressor_append_null(ArrayCompressor *compressor);
 extern void array_compressor_append(ArrayCompressor *compressor, Datum val);
 extern void *array_compressor_finish(ArrayCompressor *compressor);
 
-extern ArrayDecompressionIterator *array_decompression_iterator_alloc(void);
 extern DecompressionIterator *
 tsl_array_decompression_iterator_from_datum_forward(Datum compressed_array, Oid element_type);
 extern DecompressResult array_decompression_iterator_try_next_forward(DecompressionIterator *iter);

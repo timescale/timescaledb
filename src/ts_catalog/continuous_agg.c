@@ -1451,28 +1451,12 @@ void
 ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
 													  const ContinuousAggBucketFunction *bf)
 {
-	Datum start_old, end_old, start_aligned, end_aliged;
-
-	/*
-	 * It's OK to use TIMESTAMPOID here. Variable-sized buckets can be used
-	 * only for dates, timestamps and timestamptz's. For all these types our
-	 * internal time representation is microseconds relative the UNIX epoch.
-	 * So the results will be correct regardless of the actual type used in
-	 * the CAGG. For more details see ts_internal_to_time_value() implementation.
-	 */
-	start_old = ts_internal_to_time_value(*start, TIMESTAMPOID);
-	end_old = ts_internal_to_time_value(*end, TIMESTAMPOID);
-
-	start_aligned = generic_time_bucket(bf, start_old);
-	end_aliged = generic_time_bucket(bf, end_old);
-
-	if (DatumGetTimestamp(start_aligned) != DatumGetTimestamp(start_old))
+	int64 start_aligned = ts_cagg_variable_current_bucket_start(*start, bf);
+	if (start_aligned != *start)
 	{
-		start_aligned = generic_add_interval(bf, start_aligned);
+		*start = ts_cagg_variable_next_bucket_start(*start, bf);
 	}
-
-	*start = ts_time_value_to_internal(start_aligned, TIMESTAMPOID);
-	*end = ts_time_value_to_internal(end_aliged, TIMESTAMPOID);
+	*end = ts_cagg_variable_current_bucket_start(*end, bf);
 }
 
 /*
@@ -1489,28 +1473,20 @@ void
 ts_compute_circumscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
 														  const ContinuousAggBucketFunction *bf)
 {
-	Datum start_old, end_old, start_new, end_new;
-
-	/*
-	 * It's OK to use TIMESTAMPOID here.
-	 * See the comment in ts_compute_inscribed_bucketed_refresh_window_variable()
-	 */
-	start_old = ts_internal_to_time_value(*start, TIMESTAMPOID);
-	end_old = ts_internal_to_time_value(*end, TIMESTAMPOID);
-	start_new = generic_time_bucket(bf, start_old);
-	end_new = generic_time_bucket(bf, end_old);
+	*start = ts_cagg_variable_current_bucket_start(*start, bf);
+	int64 end_new = ts_cagg_variable_current_bucket_start(*end, bf);
 
 	/* Add interval to expand to next bucket if:
 	 * 1. end wasn't at a bucket boundary (end moved during bucketing), OR
 	 * 2. we have a single-point at a bucket boundary (start == end after bucketing) */
-	if (DatumGetTimestamp(end_new) != DatumGetTimestamp(end_old) ||
-		DatumGetTimestamp(start_new) == DatumGetTimestamp(end_new))
+	if (end_new != *end || *start == end_new)
 	{
-		end_new = generic_add_interval(bf, end_new);
+		*end = ts_cagg_variable_next_bucket_start(*end, bf);
 	}
-
-	*start = ts_time_value_to_internal(start_new, TIMESTAMPOID);
-	*end = ts_time_value_to_internal(end_new, TIMESTAMPOID);
+	else
+	{
+		*end = end_new;
+	}
 }
 
 /*
@@ -1521,15 +1497,14 @@ ts_compute_circumscribed_bucketed_refresh_window_variable(int64 *start, int64 *e
  * val = time_bucket(bucket_size, val) + interval bucket_size
  */
 int64
-ts_compute_beginning_of_the_next_bucket_variable(int64 timeval,
-												 const ContinuousAggBucketFunction *bf)
+ts_cagg_variable_next_bucket_start(int64 timeval, const ContinuousAggBucketFunction *bf)
 {
 	Datum val_new;
 	Datum val_old;
 
 	/*
 	 * It's OK to use TIMESTAMPOID here.
-	 * See the comment in ts_compute_inscribed_bucketed_refresh_window_variable()
+	 * See the comment in ts_cagg_variable_current_bucket_start()
 	 */
 	val_old = ts_internal_to_time_value(timeval, TIMESTAMPOID);
 
@@ -1547,11 +1522,14 @@ ts_compute_beginning_of_the_next_bucket_variable(int64 timeval,
  * val = time_bucket(bucket_size, val)
  */
 int64
-ts_compute_start_of_current_bucket_variable(int64 timeval, const ContinuousAggBucketFunction *bf)
+ts_cagg_variable_current_bucket_start(int64 timeval, const ContinuousAggBucketFunction *bf)
 {
 	/*
-	 * It's OK to use TIMESTAMPOID here.
-	 * See the comment in ts_compute_inscribed_bucketed_refresh_window_variable()
+	 * It's OK to use TIMESTAMPOID here. Variable-sized buckets can be used
+	 * only for dates, timestamps and timestamptz's. For all these types our
+	 * internal time representation is microseconds relative the UNIX epoch.
+	 * So the results will be correct regardless of the actual type used in
+	 * the CAGG. For more details see ts_internal_to_time_value() implementation.
 	 */
 	Datum val_beg = ts_internal_to_time_value(timeval, TIMESTAMPOID);
 	return ts_time_value_to_internal(generic_time_bucket(bf, val_beg), TIMESTAMPOID);

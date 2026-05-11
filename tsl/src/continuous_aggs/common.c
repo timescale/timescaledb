@@ -188,19 +188,25 @@ process_additional_timebucket_parameter(ContinuousAggBucketFunction *bf, Const *
 	{
 		/* Timezone as text */
 		case TEXTOID:
-			tz_name = TextDatumGetCString(arg->constvalue);
-			if (!ts_is_valid_timezone_name(tz_name))
+			if (!arg->constisnull)
 			{
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("invalid timezone name \"%s\"", tz_name)));
-			}
+				tz_name = TextDatumGetCString(arg->constvalue);
+				if (!ts_is_valid_timezone_name(tz_name))
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+							 errmsg("invalid timezone name \"%s\"", tz_name)));
+				}
 
-			bf->bucket_time_timezone = tz_name;
+				bf->bucket_time_timezone = tz_name;
+			}
 			break;
 		case INTERVALOID:
 			/* Bucket offset as interval */
-			bf->bucket_time_offset = DatumGetIntervalP(arg->constvalue);
+			if (!arg->constisnull)
+			{
+				bf->bucket_time_offset = DatumGetIntervalP(arg->constvalue);
+			}
 			break;
 		case DATEOID:
 			/* Bucket origin as Date */
@@ -258,6 +264,14 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 	TIMESTAMP_NOBEGIN(bf->bucket_time_origin);
 	int nargs;
 
+	nargs = list_length(fe->args);
+	if (nargs < 2 || nargs > 5)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("unsupported time bucket function signature")));
+	}
+
 	/* Only column allowed : time_bucket('1day', <column> ) */
 	col_arg = lsecond(fe->args);
 
@@ -285,9 +299,6 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 		}
 		return;
 	}
-
-	nargs = list_length(fe->args);
-	Assert(nargs >= 2 && nargs <= 5);
 
 	/*
 	 * Process the third argument of the time bucket function. This could be `timezone`, `offset`,
@@ -392,25 +403,24 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
 
 		if (width->constisnull)
 		{
-			if (process_checks && is_cagg_create)
+			if (process_checks && !for_rewrites)
 			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("invalid bucket width for time bucket function")));
 			}
+			return;
 		}
-		else
-		{
-			if (width->consttype == INTERVALOID)
-			{
-				bf->bucket_time_width = DatumGetIntervalP(width->constvalue);
-			}
 
-			if (!IS_TIME_BUCKET_INFO_TIME_BASED(bf))
-			{
-				bf->bucket_integer_width =
-					ts_interval_value_to_internal(width->constvalue, width->consttype);
-			}
+		if (width->consttype == INTERVALOID)
+		{
+			bf->bucket_time_width = DatumGetIntervalP(width->constvalue);
+		}
+
+		if (!IS_TIME_BUCKET_INFO_TIME_BASED(bf))
+		{
+			bf->bucket_integer_width =
+				ts_interval_value_to_internal(width->constvalue, width->consttype);
 		}
 	}
 	else if (process_checks)

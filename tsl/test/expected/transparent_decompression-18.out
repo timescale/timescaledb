@@ -8971,7 +8971,7 @@ SET min_parallel_table_scan_size TO '0';
 EXPLAIN (buffers off, costs off) SELECT * FROM metrics ORDER BY time, device_id;
 --- QUERY PLAN ---
  Gather Merge
-   Workers Planned: 3
+   Workers Planned: 4
    ->  Sort
          Sort Key: metrics."time", metrics.device_id
          ->  Parallel Append
