@@ -123,7 +123,7 @@ columnar_result_init_for_type(ColumnarResult *columnar_result,
 	{
 		Assert(columnar_result->type > 0);
 		columnar_result->allocated_body_bytes =
-			pad_to_multiple(64, 1 + columnar_result->type * nrows);
+			pad_to_multiple(64, sizeof(Datum) + columnar_result->type * nrows);
 	}
 
 	columnar_result->body_buffer = MemoryContextAllocZero(batch_state->per_batch_context,
