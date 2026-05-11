@@ -16,9 +16,9 @@ SELECT create_hypertable('t', 'a');
 ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'b', timescaledb.compress_index = 'bloom("a","b","c","d","e","f","g","h")');
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings
 where relid = 't'::regclass and index is not null order by 1,2;
- relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                    index                                                                                                    
--------+----------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- t     |                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c", "d", "e", "f", "g", "h"], "source": "config"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                       index                                                                                                       
+-------+----------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ t     |                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c", "d", "e", "f", "g", "h"], "source": "config"}, {"type": "firstlast", "column": "b", "source": "orderby"}, {"type": "firstlast", "column": "a", "source": "orderby"}]
 
 -- Should fail (9 columns)
 \set ON_ERROR_STOP 0
@@ -30,9 +30,9 @@ ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'b', tim
 NOTICE:  updated compression settings will only apply to future compressions
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings
 where relid = 't'::regclass and index is not null order by 1,2;
- relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                 index                                                                                                  
--------+----------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- t     |                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["b", "c", "d", "e", "f", "g", "h"], "source": "config"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                    index                                                                                                     
+-------+----------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ t     |                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["b", "c", "d", "e", "f", "g", "h"], "source": "config"}, {"type": "firstlast", "column": "b", "source": "orderby"}, {"type": "firstlast", "column": "a", "source": "orderby"}]
 
 -- Creating two composite bloom indexes with the same columns in different orders should fail
 \set ON_ERROR_STOP 0
@@ -56,9 +56,9 @@ SELECT create_hypertable('u', 'a');
 
 ALTER TABLE u SET (timescaledb.compress, timescaledb.compress_orderby = 'b');
 select index from settings where relid = 'u'::regclass and index is not null order by 1;
-                                                      index                                                       
-------------------------------------------------------------------------------------------------------------------
- [{"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
+                                                         index                                                          
+------------------------------------------------------------------------------------------------------------------------
+ [{"type": "firstlast", "column": "b", "source": "orderby"}, {"type": "firstlast", "column": "a", "source": "orderby"}]
 
 INSERT INTO u VALUES (1, 2, 3, 4), (5, 6, 7, 8);
 select count(compress_chunk(x)) from show_chunks('u') x;
@@ -67,10 +67,10 @@ select count(compress_chunk(x)) from show_chunks('u') x;
      1
 
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                    
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- u                                      |                                                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
- _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal.compress_hyper_4_2_chunk |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "default"}, {"type": "bloom", "column": "c", "source": "default"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                      index                                                                                                                       
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ u                                      |                                                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "firstlast", "column": "b", "source": "orderby"}, {"type": "firstlast", "column": "a", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal.compress_hyper_4_2_chunk |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "default"}, {"type": "bloom", "column": "c", "source": "default"}, {"type": "firstlast", "column": "b", "source": "orderby"}, {"type": "firstlast", "column": "a", "source": "orderby"}]
 
 -- Check the auto generated compressed columns
 select relname,attname from compressedcols order by 1,2;
@@ -83,6 +83,10 @@ select relname,attname from compressedcols order by 1,2;
  compress_hyper_4_2_chunk | _ts_meta_min_2
  compress_hyper_4_2_chunk | regress-test-bloom_c
  compress_hyper_4_2_chunk | regress-test-bloom_ed4b_a_b_c
+ compress_hyper_4_2_chunk | _ts_meta_v2_first_a
+ compress_hyper_4_2_chunk | _ts_meta_v2_first_b
+ compress_hyper_4_2_chunk | _ts_meta_v2_last_a
+ compress_hyper_4_2_chunk | _ts_meta_v2_last_b
  compress_hyper_4_2_chunk | a
  compress_hyper_4_2_chunk | b
  compress_hyper_4_2_chunk | c
@@ -97,19 +101,19 @@ select relname,attname from compressedcols order by 1,2;
 ALTER TABLE u SET (timescaledb.compress_index = 'bloom("a","b","c")');
 NOTICE:  updated compression settings will only apply to future compressions
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                    
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- u                                      |                                                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "config"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
- _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal.compress_hyper_4_2_chunk |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "default"}, {"type": "bloom", "column": "c", "source": "default"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                      index                                                                                                                       
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ u                                      |                                                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "config"}, {"type": "firstlast", "column": "b", "source": "orderby"}, {"type": "firstlast", "column": "a", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal.compress_hyper_4_2_chunk |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "default"}, {"type": "bloom", "column": "c", "source": "default"}, {"type": "firstlast", "column": "b", "source": "orderby"}, {"type": "firstlast", "column": "a", "source": "orderby"}]
 
 -- Also in a different order
 ALTER TABLE u SET (timescaledb.compress_index = 'bloom("c","b","a")');
 NOTICE:  updated compression settings will only apply to future compressions
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                   index                                                                                                                    
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- u                                      |                                                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "config"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
- _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal.compress_hyper_4_2_chunk |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "default"}, {"type": "bloom", "column": "c", "source": "default"}, {"type": "minmax", "column": "b", "source": "orderby"}, {"type": "minmax", "column": "a", "source": "orderby"}]
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                                                      index                                                                                                                       
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ u                                      |                                                |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "config"}, {"type": "firstlast", "column": "b", "source": "orderby"}, {"type": "firstlast", "column": "a", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal.compress_hyper_4_2_chunk |           | {b,a}   | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a", "b", "c"], "source": "default"}, {"type": "bloom", "column": "c", "source": "default"}, {"type": "firstlast", "column": "b", "source": "orderby"}, {"type": "firstlast", "column": "a", "source": "orderby"}]
 
 DROP TABLE u CASCADE;
 -------------------------------------------------------------------
@@ -123,9 +127,9 @@ SELECT create_hypertable('v', 'a_01234567890123456789');
 
 ALTER TABLE v SET (timescaledb.compress, timescaledb.compress_orderby = 'b_01234567890123456789');
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
- relid | compress_relid | segmentby |                     orderby                     | orderby_desc | orderby_nullsfirst |                                                                           index                                                                            
--------+----------------+-----------+-------------------------------------------------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------
- v     |                |           | {b_01234567890123456789,a_01234567890123456789} | {f,t}        | {f,t}              | [{"type": "minmax", "column": "b_01234567890123456789", "source": "orderby"}, {"type": "minmax", "column": "a_01234567890123456789", "source": "orderby"}]
+ relid | compress_relid | segmentby |                     orderby                     | orderby_desc | orderby_nullsfirst |                                                                              index                                                                               
+-------+----------------+-----------+-------------------------------------------------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ v     |                |           | {b_01234567890123456789,a_01234567890123456789} | {f,t}        | {f,t}              | [{"type": "firstlast", "column": "b_01234567890123456789", "source": "orderby"}, {"type": "firstlast", "column": "a_01234567890123456789", "source": "orderby"}]
 
 INSERT INTO v VALUES (1, 2, 3, 4, 5, 6, 7, 8, 9);
 select count(compress_chunk(x)) from show_chunks('v') x;
@@ -135,10 +139,10 @@ select count(compress_chunk(x)) from show_chunks('v') x;
 
 -- Check the auto generated composite bloom index configuration and column names
 select relid,compress_relid,segmentby,orderby,orderby_desc,orderby_nullsfirst,index from settings where index is not null order by 1,2;
-                 relid                  |                 compress_relid                 | segmentby |                     orderby                     | orderby_desc | orderby_nullsfirst |                                                                                                                                                                                                                                                                                        index                                                                                                                                                                                                                                                                                         
-----------------------------------------+------------------------------------------------+-----------+-------------------------------------------------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- v                                      |                                                |           | {b_01234567890123456789,a_01234567890123456789} | {f,t}        | {f,t}              | [{"type": "minmax", "column": "b_01234567890123456789", "source": "orderby"}, {"type": "minmax", "column": "a_01234567890123456789", "source": "orderby"}]
- _timescaledb_internal._hyper_5_3_chunk | _timescaledb_internal.compress_hyper_6_4_chunk |           | {b_01234567890123456789,a_01234567890123456789} | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a_01234567890123456789", "b_01234567890123456789", "c_01234567890123456789", "d_01234567890123456789", "e_01234567890123456789"], "source": "default"}, {"type": "bloom", "column": "c_01234567890123456789", "source": "default"}, {"type": "bloom", "column": "d_01234567890123456789", "source": "default"}, {"type": "bloom", "column": "e_01234567890123456789", "source": "default"}, {"type": "minmax", "column": "b_01234567890123456789", "source": "orderby"}, {"type": "minmax", "column": "a_01234567890123456789", "source": "orderby"}]
+                 relid                  |                 compress_relid                 | segmentby |                     orderby                     | orderby_desc | orderby_nullsfirst |                                                                                                                                                                                                                                                                                           index                                                                                                                                                                                                                                                                                            
+----------------------------------------+------------------------------------------------+-----------+-------------------------------------------------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ v                                      |                                                |           | {b_01234567890123456789,a_01234567890123456789} | {f,t}        | {f,t}              | [{"type": "firstlast", "column": "b_01234567890123456789", "source": "orderby"}, {"type": "firstlast", "column": "a_01234567890123456789", "source": "orderby"}]
+ _timescaledb_internal._hyper_5_3_chunk | _timescaledb_internal.compress_hyper_6_4_chunk |           | {b_01234567890123456789,a_01234567890123456789} | {f,t}        | {f,t}              | [{"type": "bloom", "column": ["a_01234567890123456789", "b_01234567890123456789", "c_01234567890123456789", "d_01234567890123456789", "e_01234567890123456789"], "source": "default"}, {"type": "bloom", "column": "c_01234567890123456789", "source": "default"}, {"type": "bloom", "column": "d_01234567890123456789", "source": "default"}, {"type": "bloom", "column": "e_01234567890123456789", "source": "default"}, {"type": "firstlast", "column": "b_01234567890123456789", "source": "orderby"}, {"type": "firstlast", "column": "a_01234567890123456789", "source": "orderby"}]
 
 select relname,attname from compressedcols order by 1,2;
          relname          |                             attname                             
@@ -152,6 +156,10 @@ select relname,attname from compressedcols order by 1,2;
  compress_hyper_6_4_chunk | regress-test-bloom_c_01234567890123456789
  compress_hyper_6_4_chunk | regress-test-bloom_d_01234567890123456789
  compress_hyper_6_4_chunk | regress-test-bloom_e_01234567890123456789
+ compress_hyper_6_4_chunk | _ts_meta_v2_first_a_01234567890123456789
+ compress_hyper_6_4_chunk | _ts_meta_v2_first_b_01234567890123456789
+ compress_hyper_6_4_chunk | _ts_meta_v2_last_a_01234567890123456789
+ compress_hyper_6_4_chunk | _ts_meta_v2_last_b_01234567890123456789
  compress_hyper_6_4_chunk | a_01234567890123456789
  compress_hyper_6_4_chunk | b_01234567890123456789
  compress_hyper_6_4_chunk | c_01234567890123456789

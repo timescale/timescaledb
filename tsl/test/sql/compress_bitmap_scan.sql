@@ -16,7 +16,7 @@ $$ language sql;
 set max_parallel_workers_per_gather = 0;
 set enable_memoize to off;
 
-create table bscan(ts int, s int, id int, payload int);
+create table bscan(ts int, s int, id int not null, payload int);
 
 select create_hypertable('bscan', 'ts', chunk_time_interval => 500001);
 

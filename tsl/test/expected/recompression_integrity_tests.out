@@ -105,11 +105,11 @@ SELECT
 -- Compare result using diff to validate integrity of recompressed data
 :DIFF_CMD
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
- recomp_segmentby_test                  |                                                | {device}  | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal.compress_hyper_2_5_chunk | {device}  | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal.compress_hyper_2_4_chunk | {device}  | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                             index                              
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------
+ recomp_segmentby_test                  |                                                | {device}  | {time}  | {f}          | {f}                | [{"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal.compress_hyper_2_5_chunk | {device}  | {time}  | {f}          | {f}                | [{"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal.compress_hyper_2_4_chunk | {device}  | {time}  | {f}          | {f}                | [{"type": "firstlast", "column": "time", "source": "orderby"}]
 
 DROP TABLE recomp_segmentby_test CASCADE;
 -- Test Case 2: Multiple segmentby columns configuration
@@ -210,11 +210,11 @@ SELECT
 -- Compare result using diff to validate integrity of recompressed data
 :DIFF_CMD
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
-                 relid                  |                 compress_relid                  |     segmentby     | orderby | orderby_desc | orderby_nullsfirst |                            index                            
-----------------------------------------+-------------------------------------------------+-------------------+---------+--------------+--------------------+-------------------------------------------------------------
- recomp_multi_segmentby_test            |                                                 | {device,location} | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal.compress_hyper_4_10_chunk | {device,location} | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_7_chunk | _timescaledb_internal.compress_hyper_4_9_chunk  | {device,location} | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+                 relid                  |                 compress_relid                  |     segmentby     | orderby | orderby_desc | orderby_nullsfirst |                             index                              
+----------------------------------------+-------------------------------------------------+-------------------+---------+--------------+--------------------+----------------------------------------------------------------
+ recomp_multi_segmentby_test            |                                                 | {device,location} | {time}  | {f}          | {f}                | [{"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal.compress_hyper_4_10_chunk | {device,location} | {time}  | {f}          | {f}                | [{"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_7_chunk | _timescaledb_internal.compress_hyper_4_9_chunk  | {device,location} | {time}  | {f}          | {f}                | [{"type": "firstlast", "column": "time", "source": "orderby"}]
 
 DROP TABLE recomp_multi_segmentby_test CASCADE;
 -- Test Case 3: Sparse index configuration
@@ -316,10 +316,10 @@ SELECT
 -- Compare result using diff to validate integrity of recompressed data
 :DIFF_CMD
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
-                  relid                  |                 compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                 index                                                                                  
------------------------------------------+-------------------------------------------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- recomp_index_test                       |                                                 | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
- _timescaledb_internal._hyper_5_11_chunk | _timescaledb_internal.compress_hyper_6_13_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+                  relid                  |                 compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                   index                                                                                   
+-----------------------------------------+-------------------------------------------------+-----------+---------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ recomp_index_test                       |                                                 | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_5_11_chunk | _timescaledb_internal.compress_hyper_6_13_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "firstlast", "column": "x", "source": "orderby"}]
 
 DROP TABLE recomp_index_test CASCADE;
 -- Test Case 4: Large dataset
@@ -423,11 +423,11 @@ SELECT
 -- Compare result using diff to validate integrity of recompressed data
 :DIFF_CMD
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
-                  relid                  |                 compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                      index                                      
------------------------------------------+-------------------------------------------------+-----------+---------+--------------+--------------------+---------------------------------------------------------------------------------
- recomp_large_data_test                  |                                                 | {}        | {ts}    | {f}          | {f}                | [{"source": "config"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
- _timescaledb_internal._hyper_7_14_chunk | _timescaledb_internal.compress_hyper_8_18_chunk | {}        | {ts}    | {f}          | {f}                | [{"source": "config"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
- _timescaledb_internal._hyper_7_15_chunk | _timescaledb_internal.compress_hyper_8_17_chunk | {}        | {ts}    | {f}          | {f}                | [{"source": "config"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+                  relid                  |                 compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                       index                                        
+-----------------------------------------+-------------------------------------------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------
+ recomp_large_data_test                  |                                                 | {}        | {ts}    | {f}          | {f}                | [{"source": "config"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
+ _timescaledb_internal._hyper_7_14_chunk | _timescaledb_internal.compress_hyper_8_18_chunk | {}        | {ts}    | {f}          | {f}                | [{"source": "config"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
+ _timescaledb_internal._hyper_7_15_chunk | _timescaledb_internal.compress_hyper_8_17_chunk | {}        | {ts}    | {f}          | {f}                | [{"source": "config"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 DROP TABLE recomp_large_data_test CASCADE;
 -- Setup Direct Compress
@@ -540,10 +540,10 @@ SELECT
 -- Compare result using diff to validate integrity of recompressed data
 :DIFF_CMD
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid;
-                  relid                  |                  compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
------------------------------------------+--------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
- recomp_direct_compress                  |                                                  |           | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_9_19_chunk | _timescaledb_internal.compress_hyper_10_21_chunk |           | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+                  relid                  |                  compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                             index                              
+-----------------------------------------+--------------------------------------------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------
+ recomp_direct_compress                  |                                                  |           | {time}  | {f}          | {f}                | [{"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_9_19_chunk | _timescaledb_internal.compress_hyper_10_21_chunk |           | {time}  | {f}          | {f}                | [{"type": "firstlast", "column": "time", "source": "orderby"}]
 
 DROP TABLE IF EXISTS recomp_direct_compress CASCADE;
 RESET timescaledb.enable_direct_compress_insert;

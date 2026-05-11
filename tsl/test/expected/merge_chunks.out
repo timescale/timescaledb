@@ -398,7 +398,7 @@ select * from mergeme where device = 1;
  Append
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          Filter: (device = 1)
-         ->  Index Scan using compress_hyper_2_6_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_6_chunk
+         ->  Index Scan using compress_hyper_2_6_chunk_device__ts_meta_v2_first_time__ts__idx on compress_hyper_2_6_chunk
                Index Cond: (device = 1)
    ->  Index Scan using _hyper_1_1_chunk_mergeme_device_time_idx on _hyper_1_1_chunk
          Index Cond: (device = 1)

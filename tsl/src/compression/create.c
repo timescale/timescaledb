@@ -656,7 +656,11 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 						 errdetail("Could not identify a less-than operator for the type.")));
 			}
 
-			/* segment_meta min and max columns */
+			/*
+			 * Every orderby column gets minmax metadata so range predicates
+			 * on any orderby position can be pushed down as a filter on the
+			 * compressed scan, regardless of NULL handling or direction.
+			 */
 			ColumnDef *def = makeColumnDef(column_segment_min_name(index),
 										   attr->atttypid,
 										   attr->atttypmod,
@@ -669,6 +673,29 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 								attr->attcollation);
 			def->storage = TYPSTORAGE_PLAIN;
 			compressed_column_defs = lappend(compressed_column_defs, def);
+
+			/*
+			 * When firstlast is configured for the orderby column, also add
+			 * first/last metadata. These columns lead the compressed-chunk
+			 * btree and let predicates on the leading orderby become index
+			 * conditions when the column is NOT NULL.
+			 */
+			bool add_firstlast = per_column_setting != NULL && composite_attr_lists != NULL &&
+								 per_column_setting->firstlast_obj_id != -1;
+			if (add_firstlast)
+			{
+				ColumnDef *first_def =
+					create_sparse_index_column_def(composite_attr_lists[per_column_setting
+																			->firstlast_obj_id],
+												   "first");
+				compressed_column_defs = lappend(compressed_column_defs, first_def);
+
+				ColumnDef *last_def =
+					create_sparse_index_column_def(composite_attr_lists[per_column_setting
+																			->firstlast_obj_id],
+												   "last");
+				compressed_column_defs = lappend(compressed_column_defs, last_def);
+			}
 		}
 		else if (per_column_setting != NULL && composite_attr_lists != NULL)
 		{
@@ -678,12 +705,11 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 			bool is_firstlast = per_column_setting->firstlast_obj_id != -1;
 
 			/*
-			 * We allow only one sparse index per column. Columns used in the ORDER BY
-			 * clause implicitly have a minmax index and adding a bloom filter on them is not
-			 * allowed.
+			 * We allow only one sparse index per column. Adding a bloom filter
+			 * on a column that already has a sparse index is not allowed.
 			 *
-			 * The parser is expected to enforce this constraint earlier, but we check again
-			 * here as a safeguard.
+			 * The parser is expected to enforce this constraint earlier, but we
+			 * check again here as a safeguard.
 			 */
 			Ensure((!is_bloom || !is_minmax),
 				   "Should not create bloom filter for minmax column \"%s\"",

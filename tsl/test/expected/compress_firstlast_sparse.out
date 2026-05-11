@@ -14,18 +14,18 @@ alter table test_firstlast set (timescaledb.compress,
     timescaledb.compress_orderby = 'ts',
     timescaledb.compress_index = 'firstlast("value")');
 select * from settings;
-     relid      | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                          index                                                          
-----------------+----------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
- test_firstlast |                |           | {ts}    | {f}          | {f}                | [{"type": "firstlast", "column": "value", "source": "config"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+     relid      | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                           index                                                            
+----------------+----------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------------------------------------------------------------------
+ test_firstlast |                |           | {ts}    | {f}          | {f}                | [{"type": "firstlast", "column": "value", "source": "config"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 alter table test_firstlast set (timescaledb.compress,
     timescaledb.compress_orderby = 'ts',
     timescaledb.compress_index = 'firstlast("tag")');
 NOTICE:  updated compression settings will only apply to future compressions
 select * from settings;
-     relid      | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                         index                                                         
-----------------+----------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------
- test_firstlast |                |           | {ts}    | {f}          | {f}                | [{"type": "firstlast", "column": "tag", "source": "config"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+     relid      | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                          index                                                           
+----------------+----------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------------------------------------------------
+ test_firstlast |                |           | {ts}    | {f}          | {f}                | [{"type": "firstlast", "column": "tag", "source": "config"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 -- firstlast alongside bloom
 alter table test_firstlast set (timescaledb.compress,
@@ -33,9 +33,9 @@ alter table test_firstlast set (timescaledb.compress,
     timescaledb.compress_index = 'firstlast("value"), bloom("tag")');
 NOTICE:  updated compression settings will only apply to future compressions
 select * from settings;
-     relid      | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                      index                                                                                      
-----------------+----------------+-----------+---------+--------------+--------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- test_firstlast |                |           | {ts}    | {f}          | {f}                | [{"type": "firstlast", "column": "value", "source": "config"}, {"type": "bloom", "column": "tag", "source": "config"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+     relid      | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                       index                                                                                        
+----------------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ test_firstlast |                |           | {ts}    | {f}          | {f}                | [{"type": "firstlast", "column": "value", "source": "config"}, {"type": "bloom", "column": "tag", "source": "config"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 drop table test_firstlast;
 -- metadata column values

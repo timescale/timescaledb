@@ -20,6 +20,7 @@
 #include "custom_type_cache.h"
 #include "guc.h"
 #include "ts_catalog/array_utils.h"
+#include "utils.h"
 
 #include "qual_pushdown.h"
 
@@ -177,12 +178,25 @@ make_segment_meta_opexpr(QualPushdownContext *context, Oid opno, AttrNumber meta
 									uncompressed_var->varcollid);
 }
 
+/*
+ * Locate the lower/upper boundary metadata columns for a Var on the chunk.
+ * Returns InvalidAttrNumber via the out params when the expression is not a
+ * sound pushdown target.
+ *
+ * For the leading orderby column under a firstlast-shaped chunk we prefer
+ * the first/last metadata when the column is NOT NULL: those columns lead
+ * the compressed-chunk btree, so the pushed-down predicate can become an
+ * index condition. Every other case (nullable leading orderby, secondary
+ * orderbys, non-orderby columns with an explicit minmax sparse index, and
+ * any orderby on a legacy minmax-shaped chunk) falls back to minmax, which
+ * is always available for orderby columns and direction-blind.
+ */
 static void
-expr_fetch_minmax_metadata(QualPushdownContext *context, Expr *expr, AttrNumber *min_attno,
-						   AttrNumber *max_attno)
+expr_fetch_orderby_range_metadata(QualPushdownContext *context, Expr *expr, AttrNumber *lower_attno,
+								  AttrNumber *upper_attno)
 {
-	*min_attno = InvalidAttrNumber;
-	*max_attno = InvalidAttrNumber;
+	*lower_attno = InvalidAttrNumber;
+	*upper_attno = InvalidAttrNumber;
 
 	if (!IsA(expr, Var))
 	{
@@ -206,20 +220,44 @@ expr_fetch_minmax_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 		return;
 	}
 
-	*min_attno = compressed_column_metadata_attno(context->settings,
-												  context->chunk_rte->relid,
-												  var->varattno,
-												  context->compressed_rte->relid,
-												  "min");
-	*max_attno = compressed_column_metadata_attno(context->settings,
-												  context->chunk_rte->relid,
-												  var->varattno,
-												  context->compressed_rte->relid,
-												  "max");
+	char *attname = get_attname(context->chunk_rte->relid, var->varattno, true);
+	if (attname == NULL)
+	{
+		return;
+	}
+
+	if (ts_array_is_member(context->settings->fd.orderby, attname))
+	{
+		int orderby_pos = ts_array_position(context->settings->fd.orderby, attname);
+
+		if (orderby_sparse_kind(context->settings, orderby_pos) == ORDERBY_SPARSE_FIRSTLAST &&
+			orderby_pos == 1 && ts_get_attnotnull(context->chunk_rte->relid, var->varattno))
+		{
+			orderby_sparse_metadata_attnos(context->settings,
+										   context->compressed_rte->relid,
+										   orderby_pos,
+										   lower_attno,
+										   upper_attno);
+			return;
+		}
+
+		/* Fall through to minmax (always available for orderby columns). */
+	}
+
+	*lower_attno = compressed_column_metadata_attno(context->settings,
+													context->chunk_rte->relid,
+													var->varattno,
+													context->compressed_rte->relid,
+													"min");
+	*upper_attno = compressed_column_metadata_attno(context->settings,
+													context->chunk_rte->relid,
+													var->varattno,
+													context->compressed_rte->relid,
+													"max");
 }
 
 static void *
-pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_opexpr)
+pushdown_op_to_orderby_range_metadata(QualPushdownContext *context, OpExpr *orig_opexpr)
 {
 	/*
 	 * This always requires rechecking the decompressed data.
@@ -242,10 +280,10 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 
 	/* Find the side that has var with segment meta set expr to the other side */
 	Oid op_oid = orig_opexpr->opno;
-	AttrNumber min_attno;
-	AttrNumber max_attno;
-	expr_fetch_minmax_metadata(context, orig_leftop, &min_attno, &max_attno);
-	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
+	AttrNumber lower_attno;
+	AttrNumber upper_attno;
+	expr_fetch_orderby_range_metadata(context, orig_leftop, &lower_attno, &upper_attno);
+	if (lower_attno == InvalidAttrNumber || upper_attno == InvalidAttrNumber)
 	{
 		/* No metadata for the left operand, try to commute the operator. */
 		op_oid = get_commutator(op_oid);
@@ -253,10 +291,10 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 		orig_leftop = orig_rightop;
 		orig_rightop = tmp;
 
-		expr_fetch_minmax_metadata(context, orig_leftop, &min_attno, &max_attno);
+		expr_fetch_orderby_range_metadata(context, orig_leftop, &lower_attno, &upper_attno);
 	}
 
-	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
+	if (lower_attno == InvalidAttrNumber || upper_attno == InvalidAttrNumber)
 	{
 		/* No metadata for either operand. */
 		context->can_pushdown = false;
@@ -313,7 +351,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 	{
 		case BTEqualStrategyNumber:
 		{
-			/* var = expr implies min < expr and max > expr */
+			/* var = expr implies lower <= expr and upper >= expr */
 			Oid opno_le = get_opfamily_member(tce->btree_opf,
 											  tce->type_id,
 											  expr_type_id,
@@ -326,8 +364,8 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 			if (!OidIsValid(opno_le) || !OidIsValid(opno_ge))
 			{
 				/*
-				 * Shouldn't be possible if we managed to create the min/max
-				 * sparse index, but defend against catalog corruption.
+				 * Shouldn't be possible if we managed to create the sparse
+				 * index, but defend against catalog corruption.
 				 */
 				context->can_pushdown = false;
 				return orig_opexpr;
@@ -336,20 +374,20 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 			return make_andclause(
 				list_make2(make_segment_meta_opexpr(context,
 													opno_le,
-													min_attno,
+													lower_attno,
 													var_with_segment_meta,
 													pushed_down_rightop,
 													BTLessEqualStrategyNumber),
 						   make_segment_meta_opexpr(context,
 													opno_ge,
-													max_attno,
+													upper_attno,
 													var_with_segment_meta,
 													pushed_down_rightop,
 													BTGreaterEqualStrategyNumber)));
 		}
 		case BTLessStrategyNumber:
 		case BTLessEqualStrategyNumber:
-			/* var < expr  implies min < expr */
+			/* var < expr implies lower < expr */
 			{
 				Oid opno =
 					get_opfamily_member(tce->btree_opf, tce->type_id, expr_type_id, strategy);
@@ -357,7 +395,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 				if (!OidIsValid(opno))
 				{
 					/*
-					 * Shouldn't be possible if we managed to create the min/max
+					 * Shouldn't be possible if we managed to create the
 					 * sparse index, but defend against catalog corruption.
 					 */
 					context->can_pushdown = false;
@@ -366,7 +404,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 
 				return (Expr *) make_segment_meta_opexpr(context,
 														 opno,
-														 min_attno,
+														 lower_attno,
 														 var_with_segment_meta,
 														 pushed_down_rightop,
 														 strategy);
@@ -374,7 +412,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 
 		case BTGreaterStrategyNumber:
 		case BTGreaterEqualStrategyNumber:
-			/* var > expr  implies max > expr */
+			/* var > expr implies upper > expr */
 			{
 				Oid opno =
 					get_opfamily_member(tce->btree_opf, tce->type_id, expr_type_id, strategy);
@@ -382,7 +420,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 				if (!OidIsValid(opno))
 				{
 					/*
-					 * Shouldn't be possible if we managed to create the min/max
+					 * Shouldn't be possible if we managed to create the
 					 * sparse index, but defend against catalog corruption.
 					 */
 					context->can_pushdown = false;
@@ -391,7 +429,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 
 				return (Expr *) make_segment_meta_opexpr(context,
 														 opno,
-														 max_attno,
+														 upper_attno,
 														 var_with_segment_meta,
 														 pushed_down_rightop,
 														 strategy);
@@ -1599,10 +1637,10 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 			}
 
 			/*
-			 * Try minmax sparse index.
+			 * Try the orderby range sparse index (minmax or firstlast).
 			 */
 			tmp_context = copy_context(context);
-			pushed_down = pushdown_op_to_segment_meta_min_max(&tmp_context, opexpr);
+			pushed_down = pushdown_op_to_orderby_range_metadata(&tmp_context, opexpr);
 			if (tmp_context.can_pushdown)
 			{
 				context->needs_recheck |= tmp_context.needs_recheck;

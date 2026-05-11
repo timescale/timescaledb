@@ -37,6 +37,8 @@ select * from :chunk;
 _ts_meta_count|1
 _ts_meta_min_1|1
 _ts_meta_max_1|1
+_ts_meta_v2_first_ts|1
+_ts_meta_v2_last_ts|1
 ts|BAAAAAAAAAAAAQAAAAAAAAABAAAAAQAAAAEAAAAAAAAAAgAAAAAAAAAC
 regress-test-bloom_x|\x0110010004004400
 x|AQBwZ19jYXRhbG9nAHRleHQAAAEAAAABAAAACXRlc3QgdGV4dA==
