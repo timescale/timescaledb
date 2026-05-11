@@ -5776,6 +5776,20 @@ static DDLResult
 process_create_stmt(ProcessUtilityArgs *args)
 {
 	CreateStmt *stmt = castNode(CreateStmt, args->parsetree);
+	ListCell *lc;
+
+	foreach (lc, stmt->inhRelations)
+	{
+		RangeVar *parent = lfirst_node(RangeVar, lc);
+		Oid parent_relid = RangeVarGetRelid(parent, NoLock, true);
+
+		if (OidIsValid(parent_relid) && ts_is_hypertable(parent_relid))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("hypertables do not support inheritance")));
+		}
+	}
 
 	List *pg_options = NIL, *hypertable_options = NIL;
 	ts_with_clause_filter(stmt->options, &hypertable_options, NULL, &pg_options);
