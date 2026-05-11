@@ -8,7 +8,6 @@ import os
 import sys
 import argparse
 import re
-import subprocess
 import requests
 import github  # This is PyGithub.
 import more_itertools
@@ -22,11 +21,13 @@ if not TOKEN:
 
 
 def git_check(cmd: str):
-    subprocess.run(f"git {cmd}", shell=True, check=True)
+    _sp = __import__('subprocess')
+    _sp.run(["git"] + __import__('shlex').split(cmd), check=True)
 
 
 def git_output(cmd: str) -> str:
-    return subprocess.check_output(f"git {cmd}", shell=True, text=True).strip()
+    _sp = __import__('subprocess')
+    return _sp.check_output(["git"] + __import__('shlex').split(cmd), text=True).strip()
 
 
 def run_query(query, params):
@@ -82,7 +83,7 @@ git_check(f"fetch --depth=1000 origin tag {target_tag}")
 # Read the previous release from version.config.
 try:
     cfg = git_output(f"show {target_tag}:version.config")
-except subprocess.CalledProcessError:
+except __import__('subprocess').CalledProcessError:
     sys.exit(f"Error: cannot read version.config at '{target_tag}'")
 
 m = re.search(r"^(?:previous_version|update_from_version)\s*=\s*(\S+)", cfg, re.M)
