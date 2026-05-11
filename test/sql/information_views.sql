@@ -100,3 +100,26 @@ FROM timescaledb_information.chunks WHERE hypertable_name = 'test_table_int' ORD
 \x
 SELECT * FROM timescaledb_information.dimensions ORDER BY hypertable_name, dimension_number;
 \x
+
+CREATE OR REPLACE FUNCTION info_view_time_part(unixtime float8)
+RETURNS bigint LANGUAGE SQL IMMUTABLE AS 'SELECT unixtime::bigint';
+
+CREATE OR REPLACE FUNCTION info_view_hash_part(device text)
+RETURNS integer LANGUAGE SQL IMMUTABLE AS 'SELECT _timescaledb_functions.get_partition_hash(device)';
+
+CREATE TABLE info_view_custom_part(time float8, device text);
+SELECT create_hypertable('info_view_custom_part',
+                         'time',
+                         'device',
+                         2,
+                         chunk_time_interval => 1,
+                         time_partitioning_func => 'info_view_time_part',
+                         partitioning_func => 'info_view_hash_part');
+
+\pset format unaligned
+SELECT hypertable_name,
+       primary_dimension_partitioning_func,
+       secondary_dimension_partitioning_func
+FROM timescaledb_information.hypertables
+WHERE hypertable_name = 'info_view_custom_part';
+\pset format aligned

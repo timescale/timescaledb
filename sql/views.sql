@@ -8,7 +8,8 @@ WITH
   hypertable_info AS (
     SELECT hypertable_id, schema_name, table_name,
            num_dimensions, compression_state, column_name,
-           column_type, interval_length,
+           column_type, interval_length, partitioning_func_schema,
+           partitioning_func,
            (compression_state = 1) AS compression_enabled,
            row_number() OVER (PARTITION BY hypertable_id ORDER BY di.id) AS dimension_num
       FROM _timescaledb_catalog.hypertable ht
@@ -28,10 +29,22 @@ SELECT
   ht.compression_enabled,
   srchtbs.tablespace_list AS tablespaces,
   ht.column_name AS primary_dimension,
-  ht.column_type AS primary_dimension_type
+  ht.column_type AS primary_dimension_type,
+  CASE WHEN ht.partitioning_func IS NULL THEN
+    NULL
+  ELSE
+    format('%I.%I', ht.partitioning_func_schema, ht.partitioning_func)
+  END AS primary_dimension_partitioning_func,
+  CASE WHEN secondary_ht.partitioning_func IS NULL THEN
+    NULL
+  ELSE
+    format('%I.%I', secondary_ht.partitioning_func_schema, secondary_ht.partitioning_func)
+  END AS secondary_dimension_partitioning_func
 FROM hypertable_info ht
 JOIN pg_tables t ON ht.table_name = t.tablename AND ht.schema_name = t.schemaname
 LEFT JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = ht.hypertable_id
+LEFT JOIN hypertable_info secondary_ht ON secondary_ht.hypertable_id = ht.hypertable_id
+  AND secondary_ht.dimension_num = 2
 LEFT JOIN (
     SELECT hypertable_id,
       array_agg(tablespace_name ORDER BY id) AS tablespace_list

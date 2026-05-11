@@ -1,0 +1,1 @@
+Implements: #6295 Expose partitioning functions in timescaledb_information.hypertables
