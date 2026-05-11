@@ -372,3 +372,17 @@ SELECT _timescaledb_functions.policy_retention_check(NULL);
 
 --TEST check if alias for bgw_job table works
 SELECT * from _timescaledb_config.bgw_job WHERE id = :retenion_id_missing_schedint ORDER BY id;
+
+-- test quoted mixed-case reorder index names
+CREATE TABLE "ReorderMixedCase"(time timestamptz NOT NULL, value int);
+SELECT created AS mixed_case_hypertable_created
+FROM create_hypertable('"ReorderMixedCase"', 'time', create_default_indexes => false) \gset
+CREATE INDEX "ReorderMixedCaseTimeIdx" ON "ReorderMixedCase"(time);
+SELECT add_reorder_policy('"ReorderMixedCase"', '"ReorderMixedCaseTimeIdx"') AS mixed_case_reorder_job_id \gset
+\pset format unaligned
+SELECT config->>'index_name' = 'ReorderMixedCaseTimeIdx' AS quoted_index_resolved
+FROM _timescaledb_catalog.bgw_job
+WHERE id = :mixed_case_reorder_job_id;
+\pset format aligned
+SELECT remove_reorder_policy('"ReorderMixedCase"') AS removed_mixed_case_reorder_policy \gset
+DROP TABLE "ReorderMixedCase";

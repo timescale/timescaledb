@@ -9,8 +9,10 @@
 #include <catalog/pg_collation.h>
 #include <catalog/pg_type.h>
 #include <miscadmin.h>
+#include <parser/parse_node.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
+#include <utils/regproc.h>
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
 
@@ -75,11 +77,40 @@ policy_reorder_get_index_name(const Jsonb *config)
 static void
 check_valid_index(Hypertable *ht, Name index_name)
 {
-	Oid index_oid;
+	const char *index_name_str = NameStr(*index_name);
+	Oid index_oid = ts_get_relation_relid(NameStr(ht->fd.schema_name), index_name_str, true);
 	HeapTuple idxtuple;
 	Form_pg_index indexForm;
 
-	index_oid = ts_get_relation_relid(NameStr(ht->fd.schema_name), NameStr(*index_name), true);
+	/* index_name is NAME for compatibility, but callers may pass a quoted identifier. */
+	if (!OidIsValid(index_oid) &&
+		(strchr(index_name_str, '.') != NULL || strchr(index_name_str, '"') != NULL))
+	{
+		List *index_parts;
+
+#if PG16_LT
+		index_parts = stringToQualifiedNameList(NameStr(*index_name));
+#else
+		index_parts = stringToQualifiedNameList(NameStr(*index_name), NULL);
+#endif
+		if (list_length(index_parts) == 1)
+		{
+			index_oid = ts_get_relation_relid(NameStr(ht->fd.schema_name),
+											 strVal(linitial(index_parts)),
+											 true);
+		}
+		else
+		{
+			RangeVar *index_rel = makeRangeVarFromNameList(index_parts);
+			index_oid = RangeVarGetRelid(index_rel, NoLock, true);
+		}
+
+		if (OidIsValid(index_oid))
+		{
+			namestrcpy(index_name, get_rel_name(index_oid));
+		}
+	}
+
 	idxtuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(index_oid));
 	if (!HeapTupleIsValid(idxtuple))
 	{
@@ -146,7 +177,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	const Dimension *dim;
 	Interval schedule_interval = DEFAULT_SCHEDULE_INTERVAL;
 	Oid ht_oid = PG_GETARG_OID(0);
-	Name index_name = PG_GETARG_NAME(1);
+	NameData index_name;
 	bool if_not_exists = PG_GETARG_BOOL(2);
 	Cache *hcache;
 	Hypertable *ht;
@@ -161,6 +192,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 
 	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+	namestrcpy(&index_name, NameStr(*PG_GETARG_NAME(1)));
 
 	if (timezone != NULL)
 	{
@@ -185,7 +217,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	}
 
 	/* Now verify that the index is an actual index on that hypertable */
-	check_valid_index(ht, index_name);
+	check_valid_index(ht, &index_name);
 
 	/* Verify that the hypertable owner can create a background worker */
 	ts_bgw_job_validate_job_owner(owner_id);
@@ -229,7 +261,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 												  C_COLLATION_OID,
 												  CStringGetDatum(policy_reorder_get_index_name(
 													  existing->fd.config)),
-												  NameGetDatum(index_name))))
+												  NameGetDatum(&index_name))))
 		{
 			ereport(WARNING,
 					(errmsg("reorder policy already exists for hypertable \"%s\"",
@@ -267,7 +299,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	ts_jsonb_add_int32(parse_state, POLICY_CONFIG_KEY_HYPERTABLE_ID, hypertable_id);
-	ts_jsonb_add_str(parse_state, CONFIG_KEY_INDEX_NAME, NameStr(*index_name));
+	ts_jsonb_add_str(parse_state, CONFIG_KEY_INDEX_NAME, NameStr(index_name));
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
 
