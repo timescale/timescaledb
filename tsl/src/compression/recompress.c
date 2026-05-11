@@ -1059,19 +1059,26 @@ static enum Batch_match_result
 match_tuple_batch(TupleTableSlot *compressed_slot, int num_orderby, ScanKey orderby_scankeys,
 				  bool *nulls_first)
 {
-	ScanKey key;
-	for (int i = 0; i < num_orderby; i++)
+	/*
+	 * Only the leading orderby column gives a sound before/after verdict from
+	 * batch metadata. The min/max for later orderby columns are aggregated
+	 * over all rows in the batch, not conditional on the leading column, so a
+	 * tuple whose leading column is in range but whose later column is out of
+	 * range is interleaved with the batch in multi-column sort order — not
+	 * strictly before or after it.
+	 */
+	if (num_orderby >= 1)
 	{
-		key = &orderby_scankeys[i * 2];
+		ScanKey key = &orderby_scankeys[0];
 		if (!slot_key_test(compressed_slot, key))
 		{
-			return handle_null_scan(key->sk_flags, nulls_first[i], Tuple_before);
+			return handle_null_scan(key->sk_flags, nulls_first[0], Tuple_before);
 		}
 
-		key = &orderby_scankeys[i * 2 + 1];
+		key = &orderby_scankeys[1];
 		if (!slot_key_test(compressed_slot, key))
 		{
-			return handle_null_scan(key->sk_flags, nulls_first[i], Tuple_after);
+			return handle_null_scan(key->sk_flags, nulls_first[0], Tuple_after);
 		}
 	}
 
