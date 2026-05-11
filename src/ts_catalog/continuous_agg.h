@@ -186,10 +186,10 @@ ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
 extern TSDLLEXPORT void
 ts_compute_circumscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
 														  const ContinuousAggBucketFunction *bf);
-extern TSDLLEXPORT int64 ts_compute_beginning_of_the_next_bucket_variable(
-	int64 timeval, const ContinuousAggBucketFunction *bf);
+extern TSDLLEXPORT int64 ts_cagg_variable_next_bucket_start(int64 timeval,
+															const ContinuousAggBucketFunction *bf);
 extern TSDLLEXPORT int64
-ts_compute_start_of_current_bucket_variable(int64 timeval, const ContinuousAggBucketFunction *bf);
+ts_cagg_variable_current_bucket_start(int64 timeval, const ContinuousAggBucketFunction *bf);
 
 extern TSDLLEXPORT Query *ts_continuous_agg_get_query(ContinuousAgg *cagg);
 
