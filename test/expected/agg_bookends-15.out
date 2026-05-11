@@ -501,6 +501,17 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
                ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
                ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
 
+-- parent-only scan
+:PREFIX SELECT first(temp, time) FROM ONLY btest;
+--- QUERY PLAN ---
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Seq Scan on btest (actual rows=0.00 loops=1)
+
+:PREFIX SELECT last(temp, time) FROM ONLY btest;
+--- QUERY PLAN ---
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Seq Scan on btest (actual rows=0.00 loops=1)
+
 -- test constants
 :PREFIX SELECT first(100, 100) FROM btest;
 --- QUERY PLAN ---
@@ -940,6 +951,17 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
   2 | 35.3
   2 | 35.3
 
+-- parent-only scan
+:PREFIX SELECT first(temp, time) FROM ONLY btest;
+ first 
+-------
+      
+
+:PREFIX SELECT last(temp, time) FROM ONLY btest;
+ last 
+------
+     
+
 -- test constants
 :PREFIX SELECT first(100, 100) FROM btest;
  first 
@@ -1132,6 +1154,9 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT first(temp, time) FROM btest WHERE time >= '2017-01-20 09:00:47';
 -- can't do index scan when using WINDOW function
 :PREFIX SELECT gp, last(temp, time) OVER (PARTITION BY gp) AS last FROM btest;
+-- parent-only scan
+:PREFIX SELECT first(temp, time) FROM ONLY btest;
+:PREFIX SELECT last(temp, time) FROM ONLY btest;
 -- test constants
 :PREFIX SELECT first(100, 100) FROM btest;
 -- create an index so we can test optimization
@@ -1252,6 +1277,9 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT first(temp, time) FROM btest WHERE time >= '2017-01-20 09:00:47';
 -- can't do index scan when using WINDOW function
 :PREFIX SELECT gp, last(temp, time) OVER (PARTITION BY gp) AS last FROM btest;
+-- parent-only scan
+:PREFIX SELECT first(temp, time) FROM ONLY btest;
+:PREFIX SELECT last(temp, time) FROM ONLY btest;
 -- test constants
 :PREFIX SELECT first(100, 100) FROM btest;
 -- create an index so we can test optimization

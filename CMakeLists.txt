@@ -386,6 +386,10 @@ get_pg_config(PG_CFLAGS --cflags)
 get_pg_config(PG_CFLAGS_SL --cflags_sl)
 get_pg_config(PG_CPPFLAGS --cppflags)
 get_pg_config(PG_LDFLAGS --ldflags)
+
+# Strip any -Wl,-rpath,... entries that pg_config may have emitted so the
+# resulting shared modules do not bake in a hardcoded library search path.
+string(REGEX REPLACE "-Wl,-rpath,[^ ]+" "" PG_LDFLAGS "${PG_LDFLAGS}")
 get_pg_config(PG_LIBS --libs)
 
 separate_arguments(PG_CFLAGS)

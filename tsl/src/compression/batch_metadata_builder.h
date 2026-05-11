@@ -14,6 +14,7 @@ enum BatchMetadataBuilderType
 {
 	METADATA_BUILDER_MINMAX,
 	METADATA_BUILDER_BLOOM1,
+	METADATA_BUILDER_FIRSTLAST,
 };
 
 typedef struct BatchMetadataBuilder
@@ -31,6 +32,10 @@ BatchMetadataBuilder *batch_metadata_builder_minmax_create(Oid type, Oid collati
 BatchMetadataBuilder *batch_metadata_builder_bloom1_create(int num_columns, const Oid *type_oids,
 														   const AttrNumber *attnums,
 														   int bloom_attr_offset);
+
+BatchMetadataBuilder *batch_metadata_builder_firstlast_create(Oid type_oid, AttrNumber attnum,
+															  int first_attr_offset,
+															  int last_attr_offset);
 
 /* Hasher interface common to bloom filters, used to compute the hash without updating the bloom
  * filter */
