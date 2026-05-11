@@ -50,6 +50,32 @@ extern InvalidationStore *collect_and_delete_cagg_invalidations_in_window(
 	const ContinuousAgg *cagg, const InternalTimeRange *refresh_window, bool force);
 
 extern void invalidation_store_free(InvalidationStore *store);
+
+/*
+ * Per-bucket grouping of tenant values produced by the backfill tracker
+ * collector. Step 2 (refresh wiring) iterates these and constructs an
+ * ArrayType per bucket for the materialization API.
+ */
+typedef struct BucketTenantGroup
+{
+	InternalTimeRange bucket; /* [bucket_start, bucket_start + bucket_width) */
+	Datum *tenant_values;	  /* parsed Datums of tenant_type (see TrackerStore) */
+	int tenant_count;
+} BucketTenantGroup;
+
+typedef struct TrackerStore
+{
+	List *groups; /* of BucketTenantGroup *, sorted by bucket.start ascending */
+	Oid tenant_type;
+	bool tenant_typbyval;
+	int16 tenant_typlen;
+	char tenant_typalign;
+} TrackerStore;
+
+extern TrackerStore *
+collect_and_delete_tracker_entries_in_window(const ContinuousAgg *cagg,
+											 const InternalTimeRange *refresh_window);
+extern void tracker_store_free(TrackerStore *store);
 extern void
 invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 										 const ContinuousAggBucketFunction *bucket_function);

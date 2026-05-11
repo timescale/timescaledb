@@ -19,6 +19,7 @@
 #include "continuous_aggs/common.h"
 #include "continuous_aggs/create.h"
 #include "errors.h"
+#include "hypertable.h"
 #include "hypertable_cache.h"
 #include "options.h"
 #include "scan_iterator.h"
@@ -28,6 +29,7 @@
 #include "with_clause/create_materialized_view_with_clause.h"
 
 static void cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only);
+static void cagg_add_tenant_column(ContinuousAgg *agg, const char *tenant_column);
 static List *cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht,
 										 WithClauseResult *with_clause_options);
 static void cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_defelems);
@@ -61,6 +63,136 @@ cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 		doReplace[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] = true;
 		values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 			BoolGetDatum(materialized_only);
+
+		new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, doReplace);
+
+		ts_catalog_update(ti->scanrel, new_tuple);
+		heap_freetuple(new_tuple);
+
+		if (should_free)
+		{
+			heap_freetuple(tuple);
+		}
+
+		break;
+	}
+	ts_scan_iterator_close(&iterator);
+}
+
+static void
+cagg_add_tenant_column(ContinuousAgg *agg, const char *tenant_column)
+{
+	/* Error if tenant column is already set on this cagg */
+	if (tenant_column != NULL && strlen(NameStr(agg->data.tenant_column_name)) > 0)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_DUPLICATE_OBJECT),
+				 errmsg("tenant column \"%s\" is already set on continuous aggregate \"%s\"",
+						NameStr(agg->data.tenant_column_name),
+						NameStr(agg->data.user_view_name)),
+				 errhint(
+					 "Drop and recreate the continuous aggregate to change the tenant column.")));
+	}
+
+	/* Validate: check the column exists on the raw hypertable */
+	if (tenant_column != NULL)
+	{
+		/*
+		 * Validate: tenant column must be one of the continuous aggregate's
+		 * GROUP BY columns so that it is preserved in the materialization
+		 * hypertable and backfill tracking can key off it.
+		 */
+		Cache *hcache = ts_hypertable_cache_pin();
+		Hypertable *mat_ht =
+			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
+		Assert(mat_ht != NULL);
+		List *grp_colnames = cagg_find_groupingcols(agg, mat_ht);
+		ts_cache_release(&hcache);
+
+		bool found = false;
+		ListCell *lc;
+		foreach (lc, grp_colnames)
+		{
+			if (strcmp((char *) lfirst(lc), tenant_column) == 0)
+			{
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("tenant column \"%s\" must be a GROUP BY column of "
+							"continuous aggregate \"%s\"",
+							tenant_column,
+							NameStr(agg->data.user_view_name))));
+		}
+
+		/*
+		 * Validate: all other caggs on the same raw hypertable must use the
+		 * same tenant column (or have none set).
+		 */
+		List *sibling_caggs = ts_continuous_aggs_find_by_raw_table_id(agg->data.raw_hypertable_id);
+		foreach (lc, sibling_caggs)
+		{
+			ContinuousAgg *sibling = (ContinuousAgg *) lfirst(lc);
+			if (sibling->data.mat_hypertable_id == agg->data.mat_hypertable_id)
+			{
+				continue; /* skip self */
+			}
+
+			const char *sibling_col = NameStr(sibling->data.tenant_column_name);
+			if (strlen(sibling_col) > 0 && strcmp(sibling_col, tenant_column) != 0)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("all continuous aggregates on the same hypertable must "
+								"use the same tenant column"),
+						 errdetail("Continuous aggregate \"%s\" already uses "
+								   "tenant_column \"%s\".",
+								   NameStr(sibling->data.user_view_name),
+								   sibling_col)));
+			}
+		}
+	}
+
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, RowExclusiveLock, CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CONTINUOUS_AGG, CONTINUOUS_AGG_PKEY);
+
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_agg_pkey_mat_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(agg->data.mat_hypertable_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool nulls[Natts_continuous_agg];
+		Datum values[Natts_continuous_agg];
+		bool doReplace[Natts_continuous_agg] = { false };
+		bool should_free;
+		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
+		HeapTuple new_tuple;
+		TupleDesc tupdesc = ts_scan_iterator_tupledesc(&iterator);
+
+		heap_deform_tuple(tuple, tupdesc, values, nulls);
+
+		doReplace[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)] = true;
+		if (tenant_column == NULL)
+		{
+			nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)] = true;
+		}
+		else
+		{
+			NameData col_name;
+			namestrcpy(&col_name, tenant_column);
+			nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)] = false;
+			values[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)] =
+				NameGetDatum(&col_name);
+		}
 
 		new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, doReplace);
 
@@ -229,5 +361,12 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot alter create_group_indexes option for continuous aggregates")));
+	}
+
+	if (!with_clause_options[CreateMaterializedViewFlagTenantColumn].is_default)
+	{
+		Datum val = with_clause_options[CreateMaterializedViewFlagTenantColumn].parsed;
+		const char *tenant_column = val ? TextDatumGetCString(val) : NULL;
+		cagg_add_tenant_column(agg, tenant_column);
 	}
 }

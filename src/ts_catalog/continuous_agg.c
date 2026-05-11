@@ -263,6 +263,16 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(fd->materialized_only);
 
+	if (strlen(NameStr(fd->tenant_column_name)) == 0)
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)] = true;
+	}
+	else
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)] =
+			NameGetDatum(&fd->tenant_column_name);
+	}
+
 	return heap_form_tuple(desc, values, nulls);
 }
 
@@ -315,6 +325,18 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 
 	fd->materialized_only =
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)]);
+
+	if (nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)])
+	{
+		namestrcpy(&fd->tenant_column_name, "");
+	}
+	else
+	{
+		namestrcpy(&fd->tenant_column_name,
+				   DatumGetCString(
+					   values[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)]));
+	}
+
 	if (should_free)
 	{
 		heap_freetuple(tuple);
@@ -589,6 +611,56 @@ ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id)
 	}
 
 	return continuous_aggs;
+}
+
+/*
+ * Look up the tenant column name configured on any continuous aggregate built
+ * on the given raw hypertable. Returns a palloc'd string in CurrentMemoryContext
+ * or NULL if no cagg has a tenant column set.
+ *
+ * If multiple caggs on the same raw hypertable specify tenant columns that
+ * disagree, raises an error — the backfill tracker is keyed per raw hypertable
+ * and cannot serve two distinct tenant interpretations at once.
+ */
+TSDLLEXPORT char *
+ts_continuous_agg_get_tenant_column_name(int32 raw_hypertable_id)
+{
+	char *result = NULL;
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+
+	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		FormData_continuous_agg data;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
+		continuous_agg_formdata_fill(&data, ti);
+
+		const char *tenant = NameStr(data.tenant_column_name);
+		if (tenant[0] == '\0')
+		{
+			continue;
+		}
+
+		if (result == NULL)
+		{
+			result = pstrdup(tenant);
+		}
+		else if (strcmp(result, tenant) != 0)
+		{
+			ts_scan_iterator_close(&iterator);
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("continuous aggregates on hypertable %d have conflicting "
+							"tenant columns: \"%s\" and \"%s\"",
+							raw_hypertable_id,
+							result,
+							tenant)));
+		}
+	}
+
+	return result;
 }
 
 /* Find a continuous aggregate by the materialized hypertable id */

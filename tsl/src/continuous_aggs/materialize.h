@@ -42,3 +42,16 @@ void continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousA
 										   SchemaAndName materialization_table,
 										   const NameData *time_column_name,
 										   InternalTimeRange materialization_range);
+
+/*
+ * tenant_values_array must be a constructed ArrayType* (as Datum) whose element
+ * type is tenant_type. The SQL uses `tenant_col = ANY($3)`, so a one-element
+ * array is the normal form for refreshing a single tenant.
+ */
+void continuous_agg_update_materialization_for_tenant(Hypertable *mat_ht, const ContinuousAgg *cagg,
+													  SchemaAndName partial_view,
+													  SchemaAndName materialization_table,
+													  const NameData *time_column_name,
+													  InternalTimeRange materialization_range,
+													  const NameData *tenant_column_name,
+													  Datum tenant_values_array, Oid tenant_type);

@@ -1239,6 +1239,309 @@ invalidation_store_free(InvalidationStore *store)
 	pfree(store);
 }
 
+/*
+ * Drain rows from _timescaledb_catalog.continuous_aggs_backfill_tracker that
+ * fall fully inside [refresh_window->start, refresh_window->end), group them
+ * by the cagg's time_bucket, and return per-bucket tenant sets for the
+ * refresh path to materialize. Returns NULL when tenant_column_name is unset
+ * on the cagg or no tracker rows match.
+ *
+ * Bucket expansion
+ * ----------------
+ * Each tracker row [lowest, greatest] for a given device is expanded here
+ * into every bucket the range touches under the cagg's bucket function.
+ * A row whose range spans N buckets contributes N (bucket, tenant) pairs.
+ * Step 2 then emits one DELETE+INSERT per bucket, covering that bucket's
+ * accumulated tenants via `tenant = ANY($3)`.
+ *
+ * Alternative — bucket at log time
+ * --------------------------------
+ * The row expansion here is O(N_buckets) per tracker entry. An alternative
+ * design would bucket the modified timestamps when continuous_agg_backfill_check
+ * writes tracker entries (tsl/src/continuous_aggs/insert.c): each insert
+ * produces one tracker row per (device, bucket) instead of one row spanning
+ * [lowest, greatest]. Refresh-time expansion disappears and entries become
+ * directly usable. Trade-off: more tracker rows, more in-memory state and
+ * catalog inserts on the hot DML path. Revisit if refresh-time expansion
+ * becomes a bottleneck.
+ *
+ * Concurrency
+ * -----------
+ * - Tracker rows are opened RowExclusiveLock; per-tuple deletes serialise
+ *   naturally against other DML on the same rows. VACUUM FULL / DDL are
+ *   blocked for the duration of the scan.
+ * - Two concurrent refreshes of the same cagg cannot both reach this point:
+ *   continuous_aggs_jobs_refresh_ranges_lock_and_register (T1) rejects the
+ *   second if its window overlaps. Non-overlapping windows drain disjoint
+ *   tracker slices by construction (full-containment filter on bucket-ranges).
+ * - Multi-cagg on the same raw hypertable: the tracker is keyed by
+ *   (raw_hypertable_id, device_value), but T1's refresh-range registration
+ *   is keyed by mat_hypertable_id. Two sibling caggs refreshing overlapping
+ *   windows on the same raw ht can therefore both reach T3 and race on the
+ *   same tracker rows. RowExclusiveLock + tuple deletion prevents corruption
+ *   but one refresh may see rows the other already deleted. Out of scope
+ *   for V1 — flagged as an open question on the project plan.
+ *
+ * Deferred / open
+ * ---------------
+ * - Partial-overlap tracker rows (range straddles the window boundary) are
+ *   left in place. A follow-up pass symmetrical to invalidation_process_cagg_log
+ *   should cut these so the remainder inside the window can be drained.
+ * - Wide-span entries (a single row spanning many buckets) can expand into
+ *   many per-bucket materialisations. Consider a range-refresh fallback when
+ *   the bucket count exceeds a threshold (e.g. reuse MATERIALIZATIONS_PER_
+ *   REFRESH_WINDOW from the time-only path).
+ * - Tenant text -> Datum parse failures (tenant column altered between tracker
+ *   write and refresh): policy to decide — skip+warn vs. error out.
+ * - Multi-cagg-on-raw-ht race (see Concurrency above).
+ */
+
+typedef struct TrackerRawEntry
+{
+	int64 bucket_start;
+	char *device_value_text; /* palloc'd in caller's CurrentMemoryContext */
+} TrackerRawEntry;
+
+static int
+tracker_raw_entry_cmp(const void *a, const void *b)
+{
+	const TrackerRawEntry *ea = *(const TrackerRawEntry *const *) a;
+	const TrackerRawEntry *eb = *(const TrackerRawEntry *const *) b;
+	if (ea->bucket_start < eb->bucket_start)
+	{
+		return -1;
+	}
+	if (ea->bucket_start > eb->bucket_start)
+	{
+		return 1;
+	}
+	return strcmp(ea->device_value_text, eb->device_value_text);
+}
+
+static ScanFilterResult
+tracker_window_end_filter(const TupleInfo *ti, void *data)
+{
+	int64 window_end = *(const int64 *) data;
+	bool isnull;
+	Datum greatest = slot_getattr(ti->slot,
+								  Anum_continuous_aggs_backfill_tracker_greatest_modified_value,
+								  &isnull);
+	Assert(!isnull);
+	return DatumGetInt64(greatest) < window_end ? SCAN_INCLUDE : SCAN_EXCLUDE;
+}
+
+static int64
+tracker_first_bucket(int64 timeval, const ContinuousAgg *cagg, Oid time_type)
+{
+	if (cagg->bucket_function->bucket_fixed_interval)
+	{
+		NullableDatum offset = INIT_NULL_DATUM;
+		NullableDatum origin = INIT_NULL_DATUM;
+		fill_bucket_offset_origin(cagg->bucket_function, time_type, &offset, &origin);
+		int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
+		return ts_time_bucket_by_type_extended(bucket_width, timeval, time_type, offset, origin);
+	}
+	return ts_compute_start_of_current_bucket_variable(timeval, cagg->bucket_function);
+}
+
+static int64
+tracker_next_bucket(int64 bucket_start, const ContinuousAgg *cagg, Oid time_type)
+{
+	if (cagg->bucket_function->bucket_fixed_interval)
+	{
+		int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
+		return ts_time_saturating_add(bucket_start, bucket_width, time_type);
+	}
+	return ts_compute_beginning_of_the_next_bucket_variable(bucket_start, cagg->bucket_function);
+}
+
+TrackerStore *
+collect_and_delete_tracker_entries_in_window(const ContinuousAgg *cagg,
+											 const InternalTimeRange *refresh_window)
+{
+	/* Tenant column not configured -> tracker is irrelevant for this cagg. */
+	if (NameStr(cagg->data.tenant_column_name)[0] == '\0')
+	{
+		return NULL;
+	}
+
+	int32 raw_ht_id = cagg->data.raw_hypertable_id;
+	Oid raw_ht_relid = ts_hypertable_id_to_relid(raw_ht_id, false);
+	AttrNumber tenant_attno = get_attnum(raw_ht_relid, NameStr(cagg->data.tenant_column_name));
+	if (tenant_attno == InvalidAttrNumber)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_COLUMN),
+				 errmsg("tenant column \"%s\" not found on hypertable %u",
+						NameStr(cagg->data.tenant_column_name),
+						raw_ht_relid)));
+	}
+	Oid tenant_type = get_atttype(raw_ht_relid, tenant_attno);
+
+	Oid typinput;
+	Oid typioparam;
+	getTypeInputInfo(tenant_type, &typinput, &typioparam);
+	int16 typlen;
+	bool typbyval;
+	char typalign;
+	get_typlenbyvalalign(tenant_type, &typlen, &typbyval, &typalign);
+
+	Oid time_type = refresh_window->type;
+	int64 window_end = refresh_window->end;
+
+	/* Phase 1: index scan; expand each row to per-bucket (text) pairs; delete row. */
+	List *raw_entries = NIL;
+
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_BACKFILL_TRACKER,
+													RowExclusiveLock,
+													CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(),
+										   CONTINUOUS_AGGS_BACKFILL_TRACKER,
+										   CONTINUOUS_AGGS_BACKFILL_TRACKER_IDX);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_aggs_backfill_tracker_idx_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(raw_ht_id));
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_aggs_backfill_tracker_idx_lowest_modified_value,
+								   BTGreaterEqualStrategyNumber,
+								   F_INT8GE,
+								   Int64GetDatum(refresh_window->start));
+	iterator.ctx.filter = tracker_window_end_filter;
+	iterator.ctx.data = &window_end;
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool isnull;
+
+		Datum text_d =
+			slot_getattr(ti->slot, Anum_continuous_aggs_backfill_tracker_device_value, &isnull);
+		Assert(!isnull);
+		Datum lowest_d = slot_getattr(ti->slot,
+									  Anum_continuous_aggs_backfill_tracker_lowest_modified_value,
+									  &isnull);
+		Assert(!isnull);
+		Datum greatest_d =
+			slot_getattr(ti->slot,
+						 Anum_continuous_aggs_backfill_tracker_greatest_modified_value,
+						 &isnull);
+		Assert(!isnull);
+
+		char *text_str = TextDatumGetCString(text_d);
+		int64 lowest = DatumGetInt64(lowest_d);
+		int64 greatest = DatumGetInt64(greatest_d);
+
+		int64 bucket = tracker_first_bucket(lowest, cagg, time_type);
+		while (bucket <= greatest)
+		{
+			TrackerRawEntry *e = palloc(sizeof(*e));
+			e->bucket_start = bucket;
+			e->device_value_text = pstrdup(text_str);
+			raw_entries = lappend(raw_entries, e);
+			bucket = tracker_next_bucket(bucket, cagg, time_type);
+		}
+		pfree(text_str);
+
+		ts_catalog_delete_tid_only(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+	}
+	ts_scan_iterator_close(&iterator);
+
+	if (raw_entries == NIL)
+	{
+		return NULL;
+	}
+
+	/* Phase 2: sort by (bucket_start, device_value_text). */
+	int n = list_length(raw_entries);
+	TrackerRawEntry **arr = palloc(sizeof(TrackerRawEntry *) * n);
+	int i = 0;
+	ListCell *lc;
+	foreach (lc, raw_entries)
+	{
+		arr[i++] = lfirst(lc);
+	}
+	qsort(arr, n, sizeof(TrackerRawEntry *), tracker_raw_entry_cmp);
+
+	/* Phase 3: dedup adjacent texts within a bucket; parse to Datums; group. */
+	List *groups = NIL;
+	int idx = 0;
+	while (idx < n)
+	{
+		int64 cur_bucket = arr[idx]->bucket_start;
+		int span_end = idx;
+		while (span_end < n && arr[span_end]->bucket_start == cur_bucket)
+		{
+			span_end++;
+		}
+
+		Datum *values = palloc(sizeof(Datum) * (span_end - idx));
+		int unique_count = 0;
+		const char *prev_text = NULL;
+		for (int j = idx; j < span_end; j++)
+		{
+			const char *t = arr[j]->device_value_text;
+			if (prev_text != NULL && strcmp(prev_text, t) == 0)
+			{
+				continue;
+			}
+			values[unique_count++] = OidInputFunctionCall(typinput, (char *) t, typioparam, -1);
+			prev_text = t;
+		}
+
+		BucketTenantGroup *g = palloc(sizeof(*g));
+		g->bucket.type = time_type;
+		g->bucket.start = cur_bucket;
+		g->bucket.end = tracker_next_bucket(cur_bucket, cagg, time_type);
+		g->bucket.start_isnull = false;
+		g->bucket.end_isnull = false;
+		g->tenant_values = values;
+		g->tenant_count = unique_count;
+		groups = lappend(groups, g);
+
+		idx = span_end;
+	}
+
+	/* Free the raw scratch (texts + structs). */
+	for (int j = 0; j < n; j++)
+	{
+		pfree(arr[j]->device_value_text);
+		pfree(arr[j]);
+	}
+	pfree(arr);
+	list_free(raw_entries);
+
+	TrackerStore *store = palloc(sizeof(*store));
+	store->groups = groups;
+	store->tenant_type = tenant_type;
+	store->tenant_typbyval = typbyval;
+	store->tenant_typlen = typlen;
+	store->tenant_typalign = typalign;
+	return store;
+}
+
+void
+tracker_store_free(TrackerStore *store)
+{
+	ListCell *lc;
+	foreach (lc, store->groups)
+	{
+		BucketTenantGroup *g = lfirst(lc);
+		if (!store->tenant_typbyval)
+		{
+			for (int i = 0; i < g->tenant_count; i++)
+			{
+				pfree(DatumGetPointer(g->tenant_values[i]));
+			}
+		}
+		pfree(g->tenant_values);
+		pfree(g);
+	}
+	list_free(store->groups);
+	pfree(store);
+}
+
 bool
 invalidation_hypertable_has_invalidations(int32 hyper_id)
 {

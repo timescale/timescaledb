@@ -171,6 +171,9 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(materialized_only);
 
+	/* tenant_column_name is NULL by default (backfill tracking disabled) */
+	nulls[AttrNumberGetAttrOffset(Anum_continuous_agg_tenant_column_name)] = true;
+
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
 	ts_catalog_restore_user(&sec_ctx);
