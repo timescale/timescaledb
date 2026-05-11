@@ -55,7 +55,7 @@ ORDER BY 1,2,3,4;
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
                Vectorized Filter: ((a = 1) AND (b = 2))
                ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0.00 loops=1)
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a_b, TEST-HASHES::bigint[])
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_7035_a_b, TEST-HASHES::bigint[])
                      Rows Removed by Filter: 2
    ->  Sort (actual rows=0.00 loops=1)
          Sort Key: _hyper_1_2_chunk.ts, _hyper_1_2_chunk.c
@@ -175,7 +175,7 @@ ORDER BY 1,2,3,4;
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
                Vectorized Filter: ((a = 1) AND (b = 2))
                ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0.00 loops=1)
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a_b, TEST-HASHES::bigint[])
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_7035_a_b, TEST-HASHES::bigint[])
                      Rows Removed by Filter: 2
    ->  Sort (actual rows=0.00 loops=1)
          Sort Key: _hyper_1_2_chunk.ts, _hyper_1_2_chunk.c
@@ -212,7 +212,7 @@ ORDER BY 1,2,3,4;
                Vectorized Filter: ((a = 1) AND (c = 2))
                Rows Removed by Filter: 2328
                ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3.00 loops=1)
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_a_c, TEST-HASHES::bigint[])
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_e8f0_a_c, TEST-HASHES::bigint[])
    ->  Sort (actual rows=27.00 loops=1)
          Sort Key: _hyper_1_3_chunk.ts, _hyper_1_3_chunk.b
          Sort Method: quicksort 
@@ -248,6 +248,6 @@ ORDER BY 1,2,3,4;
                Vectorized Filter: ((b = 1) AND (c = 2))
                Rows Removed by Filter: 846
                ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=1.00 loops=1)
-                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_b_c, TEST-HASHES::bigint[])
+                     Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_7ba1_b_c, TEST-HASHES::bigint[])
 
 DROP TABLE IF EXISTS mixed_avail_manual CASCADE;

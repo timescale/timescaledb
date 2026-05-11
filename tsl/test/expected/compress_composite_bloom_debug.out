@@ -199,7 +199,7 @@ WHERE attrelid = :'chunk'::regclass
   LIMIT 1
 \gset
 \echo 'Composite bloom column: ' :composite_bloom_col
-Composite bloom column:  regress-test-bloom_device_id_sensor_type
+Composite bloom column:  regress-test-bloom_d3fa_device_id_sensor_type
 -----------------------------------------------------------
 -- Filtering Effectiveness Tests
 -----------------------------------------------------------
@@ -211,7 +211,7 @@ SELECT * FROM composite_filter_test WHERE device_id = 1 AND sensor_type = 'temp'
    Vectorized Filter: ((device_id = 1) AND (sensor_type = 'temp'::text))
    Rows Removed by Filter: 600
    ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=2.00 loops=1)
-         Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_device_id_sensor_type, TEST-HASHES::bigint[])
+         Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_d3fa_device_id_sensor_type, TEST-HASHES::bigint[])
          Rows Removed by Filter: 2
 
 -- Expected behavior:
@@ -227,7 +227,7 @@ SELECT * FROM composite_filter_test WHERE device_id = 2 AND sensor_type = 'humid
    Vectorized Filter: ((device_id = 2) AND (sensor_type = 'humidity'::text))
    Rows Removed by Filter: 600
    ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=2.00 loops=1)
-         Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_device_id_sensor_type, TEST-HASHES::bigint[])
+         Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_d3fa_device_id_sensor_type, TEST-HASHES::bigint[])
          Rows Removed by Filter: 2
 
 -- Expected: Similar pruning as Test 5.1
@@ -238,7 +238,7 @@ SELECT * FROM composite_filter_test WHERE device_id = 5 AND sensor_type = 'temp'
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
    Vectorized Filter: ((device_id = 5) AND (sensor_type = 'temp'::text))
    ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
-         Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_device_id_sensor_type, TEST-HASHES::bigint[])
+         Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_d3fa_device_id_sensor_type, TEST-HASHES::bigint[])
          Rows Removed by Filter: 4
 
 -- Expected:
@@ -251,7 +251,7 @@ SELECT * FROM composite_filter_test WHERE device_id = 1 AND sensor_type = 'humid
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0.00 loops=1)
    Vectorized Filter: ((device_id = 1) AND (sensor_type = 'humidity'::text))
    ->  Seq Scan on compress_hyper_2_2_chunk (actual rows=0.00 loops=1)
-         Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_device_id_sensor_type, TEST-HASHES::bigint[])
+         Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_d3fa_device_id_sensor_type, TEST-HASHES::bigint[])
          Rows Removed by Filter: 4
 
 -- Expected:

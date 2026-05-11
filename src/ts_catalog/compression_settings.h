@@ -151,6 +151,7 @@ TSDLLEXPORT bool ts_compression_settings_equal(const CompressionSettings *left,
 											   const CompressionSettings *right);
 TSDLLEXPORT bool ts_compression_settings_equal_with_defaults(const CompressionSettings *ht,
 															 const CompressionSettings *chunk);
+TSDLLEXPORT bool ts_sparse_index_equal(const Jsonb *left, const Jsonb *right);
 
 TSDLLEXPORT int ts_compression_settings_update(CompressionSettings *settings);
 TSDLLEXPORT void ts_compression_settings_rename_column_cascade(Oid parent_relid, const char *old,
