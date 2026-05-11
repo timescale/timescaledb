@@ -19,6 +19,7 @@ As a reminder, the upcoming TimescaleDB release in June 2026 will officially be 
 
 **Backward-Incompatible Changes**
 * [#9579](https://github.com/timescale/timescaledb/pull/9579) The bloom filter sparse indexes on compressed `int2` columns could lead to `SELECT` queries not returning the rows that actually match the `WHERE` condition. The upgrade is blocked for the affected databases, and the incorrect indexes have to be dropped manually before the upgrade.
+* This release introduces a new naming convention for composite bloom filter metadata. While this change will not disrupt query processing, v2.27 cannot automatically utilize composite bloom filters generated in v2.26. To convert your existing v2.26 composite bloom filters, the legacy metadata columns must be renamed. This is a lightweight, catalog-only operation requiring zero data recompression, which can be done with [this migration script](https://github.com/timescale/timescaledb-extras/blob/main/utils/2.27.x-fix-composite-bloom-columns.sql).
 
 **Features**
 * [#8868](https://github.com/timescale/timescaledb/pull/8868) Use `PG_MODULE_MAGIC_EXT` for `PG18`
