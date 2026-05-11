@@ -231,4 +231,93 @@ alter table fl_errors set (timescaledb.compress,
 
 drop table fl_errors;
 
+-- pushdown: leading orderby NOT NULL ASC -> Index Cond on first/last
+create table fl_push_asc(ts int not null, value int);
+select create_hypertable('fl_push_asc', 'ts', chunk_time_interval => 1000);
+insert into fl_push_asc select x, x from generate_series(1, 5000) x;
+alter table fl_push_asc set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
+select count(compress_chunk(x)) from show_chunks('fl_push_asc') x;
+analyze fl_push_asc;
+
+explain (costs off, summary off, buffers off)
+select * from fl_push_asc where ts = 2500;
+
+explain (costs off, summary off, buffers off)
+select * from fl_push_asc where ts >= 2500 and ts <= 2600;
+
+drop table fl_push_asc;
+
+-- pushdown: leading orderby NOT NULL DESC -> Index Cond on first/last
+-- (direction-aware: under DESC, lower=last, upper=first)
+create table fl_push_desc(ts int not null, value int);
+select create_hypertable('fl_push_desc', 'ts', chunk_time_interval => 1000);
+insert into fl_push_desc select x, x from generate_series(1, 5000) x;
+alter table fl_push_desc set (timescaledb.compress, timescaledb.compress_orderby = 'ts desc');
+select count(compress_chunk(x)) from show_chunks('fl_push_desc') x;
+analyze fl_push_desc;
+
+explain (costs off, summary off, buffers off)
+select * from fl_push_desc where ts = 2500;
+
+drop table fl_push_desc;
+
+-- pushdown: leading orderby NULLABLE -> falls back to min/max as Filter.
+-- The partition column gets an implicit NOT NULL, so put it in segmentby
+-- and use a nullable non-partition column as the leading orderby.
+create table fl_push_null(part int not null, val int);
+select create_hypertable('fl_push_null', 'part', chunk_time_interval => 100000);
+insert into fl_push_null select x % 5, x from generate_series(1, 5000) x;
+alter table fl_push_null set (timescaledb.compress, timescaledb.compress_segmentby = 'part', timescaledb.compress_orderby = 'val');
+select count(compress_chunk(x)) from show_chunks('fl_push_null') x;
+analyze fl_push_null;
+
+explain (costs off, summary off, buffers off)
+select * from fl_push_null where val = 2500;
+
+drop table fl_push_null;
+
+-- pushdown: compound orderby. Leading NOT NULL goes to first/last,
+-- secondary falls back to min/max as Filter.
+create table fl_push_compound(a int not null, b int not null, value int);
+select create_hypertable('fl_push_compound', 'a', chunk_time_interval => 1000);
+insert into fl_push_compound select x, x % 100, x from generate_series(1, 5000) x;
+alter table fl_push_compound set (timescaledb.compress, timescaledb.compress_orderby = 'a, b');
+select count(compress_chunk(x)) from show_chunks('fl_push_compound') x;
+analyze fl_push_compound;
+
+-- predicate on leading orderby -> first/last Index Cond
+explain (costs off, summary off, buffers off)
+select * from fl_push_compound where a = 2500;
+
+-- predicate on secondary orderby -> min/max Filter (not Index Cond)
+explain (costs off, summary off, buffers off)
+select * from fl_push_compound where b = 50;
+
+drop table fl_push_compound;
+
+-- recompression preserves both firstlast and minmax metadata
+create table fl_push_recompress(ts int not null, value int);
+select create_hypertable('fl_push_recompress', 'ts', chunk_time_interval => 1000);
+insert into fl_push_recompress select x, x from generate_series(1, 1500) x;
+alter table fl_push_recompress set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
+select count(compress_chunk(x)) from show_chunks('fl_push_recompress') x;
+
+insert into fl_push_recompress values (1600, 16000);
+select count(compress_chunk(x, recompress:=true)) from show_chunks('fl_push_recompress') x;
+
+select ch.schema_name || '.' || ch.table_name as compressed_chunk
+from _timescaledb_catalog.chunk ch
+inner join _timescaledb_catalog.chunk uc on ch.id = uc.compressed_chunk_id
+where uc.hypertable_id = (select id from _timescaledb_catalog.hypertable where table_name = 'fl_push_recompress')
+order by ch.id
+limit 1
+\gset
+
+-- both metadata kinds populated per batch
+select _ts_meta_v2_first_ts, _ts_meta_v2_last_ts, _ts_meta_min_1, _ts_meta_max_1
+from :compressed_chunk
+order by _ts_meta_min_1;
+
+drop table fl_push_recompress;
+
 drop view settings;
