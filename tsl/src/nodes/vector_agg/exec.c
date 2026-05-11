@@ -194,6 +194,8 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 			memcpy(&columnar_result->body_buffer[columnar_result->current_offset],
 				   VARDATA_ANY(datum),
 				   result_bytes);
+			/* offset_buffer should be allocated for ArrowText type */
+			Assert(columnar_result->offset_buffer != NULL);
 			columnar_result->offset_buffer[row] = columnar_result->current_offset;
 			columnar_result->current_offset += result_bytes;
 			break;
