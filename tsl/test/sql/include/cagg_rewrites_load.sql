@@ -46,6 +46,9 @@ CREATE TABLE conditions_int(
 INSERT INTO conditions_int SELECT (day::date - '2021-06-19'::date), city, temperature, device_id FROM conditions;
 SELECT table_name FROM create_hypertable('conditions_int', 'day', chunk_time_interval =>1, migrate_data => true);
 
+CREATE TABLE conditions_addcol AS SELECT * FROM conditions;
+SELECT table_name FROM create_hypertable('conditions_addcol', 'day', chunk_time_interval => INTERVAL '1 day', migrate_data => true);
+
 CREATE TABLE devices ( device_id int not null, name text, location text);
 INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
 
@@ -166,6 +169,15 @@ AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket, q.name, avg(temperature)  from conditions,
 LATERAL (SELECT * FROM devices WHERE devices.device_id = conditions.device_id) q
 GROUP BY bucket, q.name;
+
+-- Real-time cagg used to test that a later ALTER ... ADD COLUMN makes a cagg
+-- ineligible for rewrite.
+CREATE MATERIALIZED VIEW cagg_added_col
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature) AS avg
+FROM conditions_addcol
+GROUP BY bucket;
 
 SELECT h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME"

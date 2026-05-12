@@ -93,6 +93,7 @@ set(TEST_FILES
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES
+    cagg_add_column.sql.in
     cagg_query.sql.in
     cagg_query_using_merge.sql.in
     cagg_union_view.sql.in
