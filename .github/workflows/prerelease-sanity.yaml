@@ -56,3 +56,25 @@ jobs:
         git log --oneline -1 @^0
         git log --oneline -1 @^0~
         ! git diff --exit-code @^0~ @^0 -- version.config
+
+    - name: The tagged release commit must belong to the corresponding release branch
+      if: github.event.name == 'push'
+      run: |
+        version=$(sed -n "s/^version = //p" version.config)
+        echo $version
+
+        branch=$(echo ${version} | sed 's/\([0-9]\+\.[0-9]\+\.\).*/\1x/')
+        echo $branch
+
+        echo ${{ github.event.pull_request.base.ref }} | grep $branch
+
+    - name: The release PR must target the corresponding release branch
+      if: github.event.name == 'pull_request'
+      run: |
+        version=$(sed -n "s/^version = //p" version.config)
+        echo Version '$version'
+
+        branch=$(echo ${version} | sed 's/\([0-9]\+\.[0-9]\+\.\).*/\1x/')
+        echo Expected branch '$branch'
+
+        git branch --contains @ | grep $branch
