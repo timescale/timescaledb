@@ -8,6 +8,16 @@ INSERT INTO _timescaledb_catalog.compression_algorithm( id, version, name, descr
 ( 6, 1, 'COMPRESSION_ALGORITHM_NULL', 'null')
 ;
 
+-- clean up orphaned compression settings
+DELETE FROM _timescaledb_catalog.compression_settings cs
+WHERE
+  NOT EXISTS (SELECT FROM _timescaledb_catalog.hypertable h WHERE format('%I.%I', h.schema_name, h.table_name)::regclass = cs.relid)
+  AND NOT EXISTS (
+    SELECT FROM _timescaledb_catalog.chunk cch
+    JOIN _timescaledb_catalog.chunk ch ON ch.compressed_chunk_id = cch.id
+    WHERE NOT ch.dropped AND NOT cch.dropped AND format('%I.%I', cch.schema_name, cch.table_name)::regclass = cs.relid
+);
+
 -------------------------------
 -- Update compression settings
 -------------------------------
