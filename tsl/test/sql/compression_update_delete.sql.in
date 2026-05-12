@@ -1377,15 +1377,11 @@ SELECT format('%I.%I', schema_name, table_name) AS "CHUNK2" FROM _timescaledb_ca
 
 SELECT format('%I.%I', i.schemaname, i.indexname) AS "CHUNK1_INDEX"
 FROM pg_indexes i
-JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name AND i.tablename = cc.table_name
-JOIN _timescaledb_catalog.chunk uc ON uc.compressed_chunk_id = cc.id
-WHERE format('%I.%I', uc.schema_name, uc.table_name) = :'CHUNK1'
+WHERE format('%I.%I', i.schemaname, i.tablename) = :'CHUNK1'
 LIMIT 1 \gset
 SELECT format('%I.%I', i.schemaname, i.indexname) AS "CHUNK2_INDEX"
 FROM pg_indexes i
-JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name AND i.tablename = cc.table_name
-JOIN _timescaledb_catalog.chunk uc ON uc.compressed_chunk_id = cc.id
-WHERE format('%I.%I', uc.schema_name, uc.table_name) = :'CHUNK2'
+WHERE format('%I.%I', i.schemaname, i.tablename) = :'CHUNK2'
 LIMIT 1 \gset
 
 DROP INDEX :CHUNK1_INDEX;

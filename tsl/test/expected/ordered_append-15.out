@@ -1939,13 +1939,13 @@ LIMIT 1;
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
          Order: metrics_compressed."time" DESC
          ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_4_18_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_4_18_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
-               ->  Index Scan using compress_hyper_4_17_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_17_chunk (never executed)
+               ->  Index Scan using compress_hyper_4_17_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_17_chunk (never executed)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
-               ->  Index Scan using compress_hyper_4_16_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_16_chunk (never executed)
+               ->  Index Scan using compress_hyper_4_16_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_16_chunk (never executed)
                      Index Cond: (device_id = 1)
 
 -- test RECORD in targetlist
@@ -1964,13 +1964,13 @@ LIMIT 1;
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1.00 loops=1)
                Order: metrics_compressed."time" DESC
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
-                     ->  Index Scan using compress_hyper_4_18_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
-                     ->  Index Scan using compress_hyper_4_17_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_17_chunk (never executed)
+                     ->  Index Scan using compress_hyper_4_17_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_17_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
-                     ->  Index Scan using compress_hyper_4_16_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_16_chunk (never executed)
+                     ->  Index Scan using compress_hyper_4_16_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_16_chunk (never executed)
                            Index Cond: (device_id = 1)
 
 -- test sort column not in targetlist
@@ -2009,11 +2009,11 @@ LIMIT 1;
    ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: metrics_compressed.device_id
          ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_4_16_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_16_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_4_16_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_16_chunk (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_4_17_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_17_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_4_17_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_17_chunk (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_4_18_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_4_18_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
 
 -- time column must be primary sort order
 SET enable_seqscan TO false;
@@ -2031,21 +2031,21 @@ LIMIT 1;
          Sort Key: metrics_compressed.device_id, metrics_compressed."time"
          ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=1.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_4_16_chunk.device_id, compress_hyper_4_16_chunk._ts_meta_min_1, compress_hyper_4_16_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_4_16_chunk.device_id, compress_hyper_4_16_chunk._ts_meta_v2_last_time, compress_hyper_4_16_chunk._ts_meta_v2_first_time
                      Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_4_16_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_16_chunk (actual rows=8.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_16_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_16_chunk (actual rows=8.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=1.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_4_17_chunk.device_id, compress_hyper_4_17_chunk._ts_meta_min_1, compress_hyper_4_17_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_4_17_chunk.device_id, compress_hyper_4_17_chunk._ts_meta_v2_last_time, compress_hyper_4_17_chunk._ts_meta_v2_first_time
                      Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_4_17_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_17_chunk (actual rows=12.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_17_chunk (actual rows=12.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_4_18_chunk.device_id, compress_hyper_4_18_chunk._ts_meta_min_1, compress_hyper_4_18_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_4_18_chunk.device_id, compress_hyper_4_18_chunk._ts_meta_v2_last_time, compress_hyper_4_18_chunk._ts_meta_v2_first_time
                      Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_4_18_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_18_chunk (actual rows=12.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_18_chunk (actual rows=12.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
 
 RESET enable_seqscan;
@@ -2066,13 +2066,13 @@ LIMIT 10;
    ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: metrics_compressed."time"
          ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=10.00 loops=1)
-               ->  Index Scan Backward using compress_hyper_4_16_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_16_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan Backward using compress_hyper_4_16_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_16_chunk (actual rows=1.00 loops=1)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan Backward using compress_hyper_4_17_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_17_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan Backward using compress_hyper_4_17_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_17_chunk (actual rows=1.00 loops=1)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan Backward using compress_hyper_4_18_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan Backward using compress_hyper_4_18_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
                      Index Cond: (device_id = 1)
 
 RESET enable_seqscan;
@@ -2092,7 +2092,7 @@ ORDER BY time ASC;
          ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=7196.00 loops=1)
                Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=8.00 loops=1)
-                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_v2_first_time > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                      Rows Removed by Filter: 12
    ->  Sort (actual rows=24467.00 loops=1)
          Sort Key: _hyper_3_14_chunk."time"
@@ -2101,7 +2101,7 @@ ORDER BY time ASC;
                Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                Rows Removed by Filter: 609
                ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=27.00 loops=1)
-                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_v2_first_time > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                      Rows Removed by Filter: 3
    ->  Sort (actual rows=25190.00 loops=1)
          Sort Key: _hyper_3_15_chunk."time"
@@ -2109,7 +2109,7 @@ ORDER BY time ASC;
          ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=25190.00 loops=1)
                Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=30.00 loops=1)
-                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_v2_first_time > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
 
 -- queries without ORDER BY shouldnt use ordered append
 SET enable_seqscan TO false;
@@ -2147,7 +2147,7 @@ LIMIT 1;
                      Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      Rows Removed by Filter: 4615
                      ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=25.00 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            Rows Removed by Filter: 5
          ->  Sort (never executed)
                Sort Key: _hyper_3_15_chunk."time"
@@ -2174,7 +2174,7 @@ LIMIT 1;
                ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
                      Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_4_17_chunk (never executed)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
 
 -- test interaction with runtime exclusion
 :PREFIX
@@ -2195,14 +2195,14 @@ LIMIT 1;
                      Vectorized Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                      Rows Removed by Filter: 3215
                      ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=20.00 loops=1)
-                           Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                           Filter: (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 10
          ->  Sort (never executed)
                Sort Key: _hyper_3_15_chunk."time"
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (never executed)
                      Vectorized Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_4_18_chunk (never executed)
-                           Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                           Filter: (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone)
 
 :PREFIX
 SELECT time
@@ -2221,13 +2221,13 @@ LIMIT 1;
                ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=17990.00 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=20.00 loops=1)
-                           Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                           Filter: (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone)
          ->  Sort (never executed)
                Sort Key: _hyper_3_14_chunk."time"
                ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
                      Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_4_17_chunk (never executed)
-                           Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                           Filter: (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone)
 
 -- test constraint exclusion
 :PREFIX
@@ -2249,7 +2249,7 @@ LIMIT 1;
                      Vectorized Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
                      Rows Removed by Filter: 7805
                      ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=15.00 loops=1)
-                           Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                           Filter: ((_ts_meta_v2_last_time < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone))
                            Rows Removed by Filter: 15
 
 :PREFIX
@@ -2271,7 +2271,7 @@ LIMIT 1;
                      Vectorized Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
                      Rows Removed by Filter: 6405
                      ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=10.00 loops=1)
-                           Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                           Filter: ((_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone))
                            Rows Removed by Filter: 20
 
 -- Disable hash aggregation to get a deterministic test output
@@ -2575,19 +2575,19 @@ LIMIT 1;
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=25190.00 loops=1)
                      Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                      ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=30.00 loops=1)
-                           Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+                           Filter: (_ts_meta_v2_last_time < (now() + '@ 1 mon'::interval))
          ->  Sort (never executed)
                Sort Key: _hyper_3_14_chunk."time" DESC
                ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
                      Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                      ->  Seq Scan on compress_hyper_4_17_chunk (never executed)
-                           Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+                           Filter: (_ts_meta_v2_last_time < (now() + '@ 1 mon'::interval))
          ->  Sort (never executed)
                Sort Key: _hyper_3_13_chunk."time" DESC
                ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
                      Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                      ->  Seq Scan on compress_hyper_4_16_chunk (never executed)
-                           Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+                           Filter: (_ts_meta_v2_last_time < (now() + '@ 1 mon'::interval))
 
 -- test CTE
 :PREFIX WITH i AS (
@@ -2610,19 +2610,19 @@ FROM i;
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=25190.00 loops=1)
                      Vectorized Filter: ("time" < now())
                      ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=30.00 loops=1)
-                           Filter: (_ts_meta_min_1 < now())
+                           Filter: (_ts_meta_v2_last_time < now())
          ->  Sort (never executed)
                Sort Key: _hyper_3_14_chunk."time" DESC
                ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
                      Vectorized Filter: ("time" < now())
                      ->  Seq Scan on compress_hyper_4_17_chunk (never executed)
-                           Filter: (_ts_meta_min_1 < now())
+                           Filter: (_ts_meta_v2_last_time < now())
          ->  Sort (never executed)
                Sort Key: _hyper_3_13_chunk."time" DESC
                ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
                      Vectorized Filter: ("time" < now())
                      ->  Seq Scan on compress_hyper_4_16_chunk (never executed)
-                           Filter: (_ts_meta_min_1 < now())
+                           Filter: (_ts_meta_v2_last_time < now())
 
 -- test CTE
 -- no chunk exclusion for CTE because cte query is not pulled up
@@ -2640,13 +2640,13 @@ WHERE time < '2000-02-01'::timestamptz;
  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=13674.00 loops=1)
    Order: metrics_compressed."time"
    ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=3598.00 loops=1)
-         ->  Index Scan Backward using compress_hyper_4_16_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_16_chunk (actual rows=4.00 loops=1)
+         ->  Index Scan Backward using compress_hyper_4_16_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_16_chunk (actual rows=4.00 loops=1)
                Index Cond: (device_id = 1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=5038.00 loops=1)
-         ->  Index Scan Backward using compress_hyper_4_17_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_17_chunk (actual rows=6.00 loops=1)
+         ->  Index Scan Backward using compress_hyper_4_17_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_17_chunk (actual rows=6.00 loops=1)
                Index Cond: (device_id = 1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=5038.00 loops=1)
-         ->  Index Scan Backward using compress_hyper_4_18_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_4_18_chunk (actual rows=6.00 loops=1)
+         ->  Index Scan Backward using compress_hyper_4_18_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_4_18_chunk (actual rows=6.00 loops=1)
                Index Cond: (device_id = 1)
 
 RESET enable_seqscan;
@@ -2687,16 +2687,16 @@ ORDER BY time;
    ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (never executed)
          Filter: ("time" = $1)
          ->  Seq Scan on compress_hyper_4_16_chunk (never executed)
-               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+               Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
    ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
          Filter: ("time" = $1)
          ->  Seq Scan on compress_hyper_4_17_chunk (never executed)
-               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+               Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
    ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=5.00 loops=1)
          Filter: ("time" = $1)
          Rows Removed by Filter: 4995
          ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=5.00 loops=1)
-               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+               Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
                Rows Removed by Filter: 25
 
 -- test ordered append with limit expression
@@ -3026,13 +3026,13 @@ LIMIT 1;
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
          Order: metrics_space_compressed."time" DESC
          ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_6_34_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_34_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_6_34_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_34_chunk (actual rows=1.00 loops=1)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (never executed)
-               ->  Index Scan using compress_hyper_6_31_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_31_chunk (never executed)
+               ->  Index Scan using compress_hyper_6_31_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_31_chunk (never executed)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (never executed)
-               ->  Index Scan using compress_hyper_6_28_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_28_chunk (never executed)
+               ->  Index Scan using compress_hyper_6_28_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_28_chunk (never executed)
                      Index Cond: (device_id = 1)
 
 -- test RECORD in targetlist
@@ -3051,13 +3051,13 @@ LIMIT 1;
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1.00 loops=1)
                Order: metrics_space_compressed."time" DESC
                ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=1.00 loops=1)
-                     ->  Index Scan using compress_hyper_6_34_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_34_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_6_34_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_34_chunk (actual rows=1.00 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (never executed)
-                     ->  Index Scan using compress_hyper_6_31_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_31_chunk (never executed)
+                     ->  Index Scan using compress_hyper_6_31_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_31_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (never executed)
-                     ->  Index Scan using compress_hyper_6_28_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_28_chunk (never executed)
+                     ->  Index Scan using compress_hyper_6_28_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_28_chunk (never executed)
                            Index Cond: (device_id = 1)
 
 -- test sort column not in targetlist
@@ -3128,23 +3128,23 @@ LIMIT 1;
    ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: metrics_space_compressed.device_id
          ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_6_28_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_28_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_6_28_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_28_chunk (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_6_29_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_29_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_6_29_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_29_chunk (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_6_30_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_30_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_6_30_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_30_chunk (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_6_31_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_31_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_6_31_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_31_chunk (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_6_32_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_32_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_6_32_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_32_chunk (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_6_33_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_33_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_6_33_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_33_chunk (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_6_34_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_34_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_6_34_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_34_chunk (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_6_35_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_35_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_6_35_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_35_chunk (actual rows=1.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan using compress_hyper_6_36_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_36_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan using compress_hyper_6_36_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_36_chunk (actual rows=1.00 loops=1)
 
 -- time column must be primary sort order
 SET enable_seqscan TO false;
@@ -3162,39 +3162,39 @@ LIMIT 1;
          Sort Key: metrics_space_compressed.device_id, metrics_space_compressed."time"
          ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=1.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_6_28_chunk.device_id, compress_hyper_6_28_chunk._ts_meta_min_1, compress_hyper_6_28_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_6_28_chunk.device_id, compress_hyper_6_28_chunk._ts_meta_v2_last_time, compress_hyper_6_28_chunk._ts_meta_v2_first_time
                      Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_6_28_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_28_chunk (actual rows=4.00 loops=1)
+                     ->  Index Scan using compress_hyper_6_28_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_28_chunk (actual rows=4.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (actual rows=1.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_6_29_chunk.device_id, compress_hyper_6_29_chunk._ts_meta_min_1, compress_hyper_6_29_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_6_29_chunk.device_id, compress_hyper_6_29_chunk._ts_meta_v2_last_time, compress_hyper_6_29_chunk._ts_meta_v2_first_time
                      Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_6_29_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_29_chunk (actual rows=4.00 loops=1)
+                     ->  Index Scan using compress_hyper_6_29_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_29_chunk (actual rows=4.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (actual rows=1.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_6_31_chunk.device_id, compress_hyper_6_31_chunk._ts_meta_min_1, compress_hyper_6_31_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_6_31_chunk.device_id, compress_hyper_6_31_chunk._ts_meta_v2_last_time, compress_hyper_6_31_chunk._ts_meta_v2_first_time
                      Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_6_31_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_31_chunk (actual rows=6.00 loops=1)
+                     ->  Index Scan using compress_hyper_6_31_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_31_chunk (actual rows=6.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk (actual rows=1.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_6_32_chunk.device_id, compress_hyper_6_32_chunk._ts_meta_min_1, compress_hyper_6_32_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_6_32_chunk.device_id, compress_hyper_6_32_chunk._ts_meta_v2_last_time, compress_hyper_6_32_chunk._ts_meta_v2_first_time
                      Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_6_32_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_32_chunk (actual rows=6.00 loops=1)
+                     ->  Index Scan using compress_hyper_6_32_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_32_chunk (actual rows=6.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=1.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_6_34_chunk.device_id, compress_hyper_6_34_chunk._ts_meta_min_1, compress_hyper_6_34_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_6_34_chunk.device_id, compress_hyper_6_34_chunk._ts_meta_v2_last_time, compress_hyper_6_34_chunk._ts_meta_v2_first_time
                      Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_6_34_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_34_chunk (actual rows=6.00 loops=1)
+                     ->  Index Scan using compress_hyper_6_34_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_34_chunk (actual rows=6.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (actual rows=1.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_6_35_chunk.device_id, compress_hyper_6_35_chunk._ts_meta_min_1, compress_hyper_6_35_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_6_35_chunk.device_id, compress_hyper_6_35_chunk._ts_meta_v2_last_time, compress_hyper_6_35_chunk._ts_meta_v2_first_time
                      Sort Method: quicksort 
-                     ->  Index Scan using compress_hyper_6_35_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_35_chunk (actual rows=6.00 loops=1)
+                     ->  Index Scan using compress_hyper_6_35_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_35_chunk (actual rows=6.00 loops=1)
                            Index Cond: (device_id = ANY ('{1,2}'::integer[]))
 
 RESET enable_seqscan;
@@ -3215,13 +3215,13 @@ LIMIT 10;
    ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: metrics_space_compressed."time"
          ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=10.00 loops=1)
-               ->  Index Scan Backward using compress_hyper_6_28_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_28_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan Backward using compress_hyper_6_28_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_28_chunk (actual rows=1.00 loops=1)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan Backward using compress_hyper_6_31_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_31_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan Backward using compress_hyper_6_31_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_31_chunk (actual rows=1.00 loops=1)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=1.00 loops=1)
-               ->  Index Scan Backward using compress_hyper_6_34_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_34_chunk (actual rows=1.00 loops=1)
+               ->  Index Scan Backward using compress_hyper_6_34_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_34_chunk (actual rows=1.00 loops=1)
                      Index Cond: (device_id = 1)
 
 RESET enable_seqscan;
@@ -3243,7 +3243,7 @@ ORDER BY time ASC;
                ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=3598.00 loops=1)
                      Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                      ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=4.00 loops=1)
-                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_v2_first_time > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                            Rows Removed by Filter: 20
          ->  Sort (actual rows=3598.00 loops=1)
                Sort Key: _hyper_5_20_chunk."time"
@@ -3251,7 +3251,7 @@ ORDER BY time ASC;
                ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (actual rows=3598.00 loops=1)
                      Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                      ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=4.00 loops=1)
-                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_v2_first_time > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                            Rows Removed by Filter: 28
          ->  Sort (actual rows=0.00 loops=1)
                Sort Key: _hyper_5_21_chunk."time"
@@ -3259,7 +3259,7 @@ ORDER BY time ASC;
                ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (actual rows=0.00 loops=1)
                      Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                      ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=0.00 loops=1)
-                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_v2_first_time > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                            Rows Removed by Filter: 24
    ->  Merge Append (actual rows=96422.00 loops=1)
          Sort Key: metrics_space_compressed."time"
@@ -3270,7 +3270,7 @@ ORDER BY time ASC;
                      Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                      Rows Removed by Filter: 1015
                      ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=31.00 loops=1)
-                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_v2_first_time > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                            Rows Removed by Filter: 5
          ->  Sort (actual rows=38617.00 loops=1)
                Sort Key: _hyper_5_23_chunk."time"
@@ -3279,7 +3279,7 @@ ORDER BY time ASC;
                      Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                      Rows Removed by Filter: 1421
                      ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=41.00 loops=1)
-                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_v2_first_time > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                            Rows Removed by Filter: 7
          ->  Sort (actual rows=28782.00 loops=1)
                Sort Key: _hyper_5_24_chunk."time"
@@ -3288,7 +3288,7 @@ ORDER BY time ASC;
                      Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                      Rows Removed by Filter: 1218
                      ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=30.00 loops=1)
-                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_v2_first_time > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                            Rows Removed by Filter: 6
    ->  Merge Append (actual rows=100760.00 loops=1)
          Sort Key: metrics_space_compressed."time"
@@ -3298,21 +3298,21 @@ ORDER BY time ASC;
                ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=30228.00 loops=1)
                      Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                      ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=36.00 loops=1)
-                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_v2_first_time > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
          ->  Sort (actual rows=40304.00 loops=1)
                Sort Key: _hyper_5_26_chunk."time"
                Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (actual rows=40304.00 loops=1)
                      Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                      ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=48.00 loops=1)
-                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_v2_first_time > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
          ->  Sort (actual rows=30228.00 loops=1)
                Sort Key: _hyper_5_27_chunk."time"
                Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=30228.00 loops=1)
                      Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
                      ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=36.00 loops=1)
-                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_v2_first_time > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
 
 -- queries without ORDER BY shouldnt use ordered append
 SET enable_seqscan TO false;
@@ -3364,7 +3364,7 @@ LIMIT 1;
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            Rows Removed by Filter: 5538
                            ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=30.00 loops=1)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                                  Rows Removed by Filter: 6
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_23_chunk."time"
@@ -3373,7 +3373,7 @@ LIMIT 1;
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            Rows Removed by Filter: 7384
                            ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=40.00 loops=1)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                                  Rows Removed by Filter: 8
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_24_chunk."time"
@@ -3382,7 +3382,7 @@ LIMIT 1;
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            Rows Removed by Filter: 5538
                            ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=30.00 loops=1)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                                  Rows Removed by Filter: 6
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time"
@@ -3391,19 +3391,19 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (never executed)
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_34_chunk (never executed)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_5_26_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (never executed)
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_35_chunk (never executed)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_5_27_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
 
 :PREFIX
 SELECT time
@@ -3423,21 +3423,21 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=30228.00 loops=1)
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=36.00 loops=1)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_26_chunk."time" DESC
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (actual rows=40304.00 loops=1)
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=48.00 loops=1)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_25_chunk."time" DESC
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=30228.00 loops=1)
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=36.00 loops=1)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time" DESC
                ->  Sort (never executed)
@@ -3445,19 +3445,19 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk (never executed)
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_5_23_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk (never executed)
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_5_22_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (never executed)
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_31_chunk (never executed)
-                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
 
 -- test interaction with runtime exclusion
 :PREFIX
@@ -3478,7 +3478,7 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=0.00 loops=1)
                            Vectorized Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=0.00 loops=1)
-                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 24
                ->  Sort (actual rows=0.00 loops=1)
                      Sort Key: _hyper_5_20_chunk."time"
@@ -3486,7 +3486,7 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (actual rows=0.00 loops=1)
                            Vectorized Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=0.00 loops=1)
-                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 32
                ->  Sort (actual rows=0.00 loops=1)
                      Sort Key: _hyper_5_21_chunk."time"
@@ -3494,7 +3494,7 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (actual rows=0.00 loops=1)
                            Vectorized Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=0.00 loops=1)
-                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 24
          ->  Merge Append (actual rows=1.00 loops=1)
                Sort Key: metrics_space_compressed."time"
@@ -3505,7 +3505,7 @@ LIMIT 1;
                            Vectorized Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 3858
                            ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=24.00 loops=1)
-                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 12
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_23_chunk."time"
@@ -3514,7 +3514,7 @@ LIMIT 1;
                            Vectorized Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 5144
                            ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=32.00 loops=1)
-                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 16
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_24_chunk."time"
@@ -3523,7 +3523,7 @@ LIMIT 1;
                            Vectorized Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 3858
                            ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=24.00 loops=1)
-                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 12
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time"
@@ -3532,19 +3532,19 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (never executed)
                            Vectorized Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_34_chunk (never executed)
-                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_5_26_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (never executed)
                            Vectorized Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_35_chunk (never executed)
-                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_5_27_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                            Vectorized Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-                                 Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone)
 
 :PREFIX
 SELECT time
@@ -3564,21 +3564,21 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=21588.00 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=24.00 loops=1)
-                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone)
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_20_chunk."time"
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (actual rows=28784.00 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=32.00 loops=1)
-                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone)
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_21_chunk."time"
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (actual rows=21588.00 loops=1)
                            Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=24.00 loops=1)
-                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time"
                ->  Sort (never executed)
@@ -3586,19 +3586,19 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (never executed)
                            Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_31_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_5_23_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk (never executed)
                            Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_5_24_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk (never executed)
                            Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time"
                ->  Sort (never executed)
@@ -3606,19 +3606,19 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (never executed)
                            Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_34_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_5_26_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (never executed)
                            Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_6_35_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                           ->  Index Scan using compress_hyper_6_35_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_35_chunk (never executed)
+                                 Index Cond: (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_5_27_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                            Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+                                 Filter: (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone)
 
 -- test constraint exclusion
 :PREFIX
@@ -3640,7 +3640,7 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=0.00 loops=1)
                            Vectorized Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
                            ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=0.00 loops=1)
-                                 Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Filter: ((_ts_meta_v2_last_time < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 24
                ->  Sort (actual rows=0.00 loops=1)
                      Sort Key: _hyper_5_20_chunk."time"
@@ -3648,7 +3648,7 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (actual rows=0.00 loops=1)
                            Vectorized Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
                            ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=0.00 loops=1)
-                                 Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Filter: ((_ts_meta_v2_last_time < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 32
                ->  Sort (actual rows=0.00 loops=1)
                      Sort Key: _hyper_5_21_chunk."time"
@@ -3656,7 +3656,7 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (actual rows=0.00 loops=1)
                            Vectorized Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
                            ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=0.00 loops=1)
-                                 Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Filter: ((_ts_meta_v2_last_time < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 24
          ->  Merge Append (actual rows=1.00 loops=1)
                Sort Key: metrics_space_compressed."time"
@@ -3667,7 +3667,7 @@ LIMIT 1;
                            Vectorized Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
                            Rows Removed by Filter: 9366
                            ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=18.00 loops=1)
-                                 Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Filter: ((_ts_meta_v2_last_time < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 18
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_23_chunk."time"
@@ -3676,7 +3676,7 @@ LIMIT 1;
                            Vectorized Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
                            Rows Removed by Filter: 12488
                            ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=24.00 loops=1)
-                                 Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Filter: ((_ts_meta_v2_last_time < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 24
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_24_chunk."time"
@@ -3685,7 +3685,7 @@ LIMIT 1;
                            Vectorized Filter: (("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" > ('2000-01-08'::cstring)::timestamp with time zone))
                            Rows Removed by Filter: 9366
                            ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=18.00 loops=1)
-                                 Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Filter: ((_ts_meta_v2_last_time < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_first_time > ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 18
 
 :PREFIX
@@ -3708,7 +3708,7 @@ LIMIT 1;
                            Vectorized Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
                            Rows Removed by Filter: 7686
                            ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=12.00 loops=1)
-                                 Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Filter: ((_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 24
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_23_chunk."time"
@@ -3717,7 +3717,7 @@ LIMIT 1;
                            Vectorized Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
                            Rows Removed by Filter: 10248
                            ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=16.00 loops=1)
-                                 Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Filter: ((_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 32
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_24_chunk."time"
@@ -3726,7 +3726,7 @@ LIMIT 1;
                            Vectorized Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
                            Rows Removed by Filter: 7686
                            ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=12.00 loops=1)
-                                 Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Filter: ((_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 24
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time"
@@ -3735,19 +3735,19 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (never executed)
                            Vectorized Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
                            ->  Seq Scan on compress_hyper_6_34_chunk (never executed)
-                                 Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Filter: ((_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone))
                ->  Sort (never executed)
                      Sort Key: _hyper_5_26_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (never executed)
                            Vectorized Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
-                           ->  Seq Scan on compress_hyper_6_35_chunk (never executed)
-                                 Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                           ->  Index Scan using compress_hyper_6_35_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_35_chunk (never executed)
+                                 Index Cond: ((_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone) AND (_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone))
                ->  Sort (never executed)
                      Sort Key: _hyper_5_27_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (never executed)
                            Vectorized Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
                            ->  Seq Scan on compress_hyper_6_36_chunk (never executed)
-                                 Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
+                                 Filter: ((_ts_meta_v2_first_time > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_v2_last_time < ('2000-01-08'::cstring)::timestamp with time zone))
 
 -- Disable hash aggregation to get a deterministic test output
 SET enable_hashagg = OFF;
@@ -4367,21 +4367,21 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=30228.00 loops=1)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=36.00 loops=1)
-                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+                                 Filter: (_ts_meta_v2_last_time < (now() + '@ 1 mon'::interval))
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_26_chunk."time" DESC
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (actual rows=40304.00 loops=1)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=48.00 loops=1)
-                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+                                 Filter: (_ts_meta_v2_last_time < (now() + '@ 1 mon'::interval))
                ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_5_25_chunk."time" DESC
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=30228.00 loops=1)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=36.00 loops=1)
-                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+                                 Filter: (_ts_meta_v2_last_time < (now() + '@ 1 mon'::interval))
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time" DESC
                ->  Sort (never executed)
@@ -4389,19 +4389,19 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk (never executed)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+                                 Filter: (_ts_meta_v2_last_time < (now() + '@ 1 mon'::interval))
                ->  Sort (never executed)
                      Sort Key: _hyper_5_23_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk (never executed)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+                                 Filter: (_ts_meta_v2_last_time < (now() + '@ 1 mon'::interval))
                ->  Sort (never executed)
                      Sort Key: _hyper_5_22_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (never executed)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_6_31_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+                                 Filter: (_ts_meta_v2_last_time < (now() + '@ 1 mon'::interval))
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time" DESC
                ->  Sort (never executed)
@@ -4409,19 +4409,19 @@ LIMIT 1;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (never executed)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+                                 Filter: (_ts_meta_v2_last_time < (now() + '@ 1 mon'::interval))
                ->  Sort (never executed)
                      Sort Key: _hyper_5_20_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (never executed)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_6_29_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+                                 Filter: (_ts_meta_v2_last_time < (now() + '@ 1 mon'::interval))
                ->  Sort (never executed)
                      Sort Key: _hyper_5_19_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (never executed)
                            Vectorized Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_6_28_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < (now() + '@ 1 mon'::interval))
+                                 Filter: (_ts_meta_v2_last_time < (now() + '@ 1 mon'::interval))
 
 -- test CTE
 :PREFIX WITH i AS (
@@ -4445,21 +4445,21 @@ FROM i;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=30228.00 loops=1)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=36.00 loops=1)
-                                 Filter: (_ts_meta_min_1 < now())
+                                 Filter: (_ts_meta_v2_last_time < now())
                ->  Sort (actual rows=40.00 loops=1)
                      Sort Key: _hyper_5_26_chunk."time" DESC
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (actual rows=40304.00 loops=1)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=48.00 loops=1)
-                                 Filter: (_ts_meta_min_1 < now())
+                                 Filter: (_ts_meta_v2_last_time < now())
                ->  Sort (actual rows=31.00 loops=1)
                      Sort Key: _hyper_5_25_chunk."time" DESC
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=30228.00 loops=1)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=36.00 loops=1)
-                                 Filter: (_ts_meta_min_1 < now())
+                                 Filter: (_ts_meta_v2_last_time < now())
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time" DESC
                ->  Sort (never executed)
@@ -4467,19 +4467,19 @@ FROM i;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk (never executed)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_6_33_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < now())
+                                 Filter: (_ts_meta_v2_last_time < now())
                ->  Sort (never executed)
                      Sort Key: _hyper_5_23_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk (never executed)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_6_32_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < now())
+                                 Filter: (_ts_meta_v2_last_time < now())
                ->  Sort (never executed)
                      Sort Key: _hyper_5_22_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (never executed)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_6_31_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < now())
+                                 Filter: (_ts_meta_v2_last_time < now())
          ->  Merge Append (never executed)
                Sort Key: metrics_space_compressed."time" DESC
                ->  Sort (never executed)
@@ -4487,19 +4487,19 @@ FROM i;
                      ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (never executed)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_6_30_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < now())
+                                 Filter: (_ts_meta_v2_last_time < now())
                ->  Sort (never executed)
                      Sort Key: _hyper_5_20_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (never executed)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_6_29_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < now())
+                                 Filter: (_ts_meta_v2_last_time < now())
                ->  Sort (never executed)
                      Sort Key: _hyper_5_19_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (never executed)
                            Vectorized Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_6_28_chunk (never executed)
-                                 Filter: (_ts_meta_min_1 < now())
+                                 Filter: (_ts_meta_v2_last_time < now())
 
 -- test CTE
 -- no chunk exclusion for CTE because cte query is not pulled up
@@ -4518,16 +4518,16 @@ WHERE time < '2000-02-01'::timestamptz;
    Order: metrics_space_compressed."time"
    ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=3598.00 loops=1)
          Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Index Scan Backward using compress_hyper_6_28_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_28_chunk (actual rows=4.00 loops=1)
-               Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Scan Backward using compress_hyper_6_28_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_28_chunk (actual rows=4.00 loops=1)
+               Index Cond: ((device_id = 1) AND (_ts_meta_v2_last_time < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
    ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (actual rows=5038.00 loops=1)
          Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Index Scan Backward using compress_hyper_6_31_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_31_chunk (actual rows=6.00 loops=1)
-               Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Scan Backward using compress_hyper_6_31_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_31_chunk (actual rows=6.00 loops=1)
+               Index Cond: ((device_id = 1) AND (_ts_meta_v2_last_time < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
    ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=5038.00 loops=1)
          Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Index Scan Backward using compress_hyper_6_34_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_6_34_chunk (actual rows=6.00 loops=1)
-               Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Scan Backward using compress_hyper_6_34_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_6_34_chunk (actual rows=6.00 loops=1)
+               Index Cond: ((device_id = 1) AND (_ts_meta_v2_last_time < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
 
 RESET enable_seqscan;
 -- test subquery
@@ -4605,52 +4605,52 @@ ORDER BY time;
          ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=0.00 loops=1)
                Filter: ("time" = $1)
                ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=0.00 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
                      Rows Removed by Filter: 24
          ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (actual rows=0.00 loops=1)
                Filter: ("time" = $1)
                ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=0.00 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
                      Rows Removed by Filter: 32
          ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (actual rows=0.00 loops=1)
                Filter: ("time" = $1)
                ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=0.00 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
                      Rows Removed by Filter: 24
    ->  Merge Append (actual rows=0.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (actual rows=0.00 loops=1)
                Filter: ("time" = $1)
                ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=0.00 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
                      Rows Removed by Filter: 36
          ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk (actual rows=0.00 loops=1)
                Filter: ("time" = $1)
                ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=0.00 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
                      Rows Removed by Filter: 48
          ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk (actual rows=0.00 loops=1)
                Filter: ("time" = $1)
                ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=0.00 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
                      Rows Removed by Filter: 36
    ->  Merge Append (actual rows=20.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=6.00 loops=1)
                Filter: ("time" = $1)
                Rows Removed by Filter: 5994
                ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=6.00 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
                      Rows Removed by Filter: 30
          ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (actual rows=8.00 loops=1)
                Filter: ("time" = $1)
                Rows Removed by Filter: 7992
                ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=8.00 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
                      Rows Removed by Filter: 40
          ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=6.00 loops=1)
                Filter: ("time" = $1)
                Rows Removed by Filter: 5994
                ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=6.00 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
+                     Filter: ((_ts_meta_v2_last_time <= $1) AND (_ts_meta_v2_first_time >= $1))
                      Rows Removed by Filter: 30
 
 -- test ordered append with limit expression

@@ -183,13 +183,14 @@ make_segment_meta_opexpr(QualPushdownContext *context, Oid opno, AttrNumber meta
  * Returns InvalidAttrNumber via the out params when the expression is not a
  * sound pushdown target.
  *
- * For the leading orderby column under a firstlast-shaped chunk we prefer
- * the first/last metadata when the column is NOT NULL: those columns lead
- * the compressed-chunk btree, so the pushed-down predicate can become an
- * index condition. Every other case (nullable leading orderby, secondary
- * orderbys, non-orderby columns with an explicit minmax sparse index, and
- * any orderby on a legacy minmax-shaped chunk) falls back to minmax, which
- * is always available for orderby columns and direction-blind.
+ * For the leading orderby column under a firstlast-shaped compressed chunk
+ * index, we prefer the first/last metadata when the column is NOT NULL:
+ * those columns are part of the compressed chunk btree index, so the
+ * pushed-down predicate can become an index condition. Every other case
+ * (nullable leading orderby, secondary orderbys, non-orderby columns
+ * with an explicit minmax sparse index, and any orderby on a legacy
+ * minmax-shaped compressed chunk indexl) falls back to minmax, which
+ * is always available for orderby columns.
  */
 static void
 expr_fetch_orderby_range_metadata(QualPushdownContext *context, Expr *expr, AttrNumber *lower_attno,

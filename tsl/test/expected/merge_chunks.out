@@ -1110,13 +1110,13 @@ SELECT compress_chunk(:'mso_c2');
 
 -- have different sparse indexes
 SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
-                  relid                   |                                                                                                                        index                                                                                                                         
-------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_11_33_chunk | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}]
- merge_sparse_order                       | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}]
+                  relid                   |                                                                                                                          index                                                                                                                          
+------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_11_33_chunk | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_1_1_chunk   | [{"type": "firstlast", "column": "time", "source": "orderby"}]
+ merge_sparse_order                       | [{"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ mergeme                                  | [{"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- Merge should not succeed
 \set ON_ERROR_STOP 0
@@ -1136,22 +1136,22 @@ SELECT compress_chunk(decompress_chunk(:'mso_c2'));
 
 -- have different JSONB but same logical sparse indexes
 SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
-                  relid                   |                                                                                                                        index                                                                                                                         
-------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_11_33_chunk | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}]
- merge_sparse_order                       | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}]
+                  relid                   |                                                                                                                          index                                                                                                                          
+------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_11_33_chunk | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_1_1_chunk   | [{"type": "firstlast", "column": "time", "source": "orderby"}]
+ merge_sparse_order                       | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ mergeme                                  | [{"type": "firstlast", "column": "time", "source": "orderby"}]
 
 -- Merge should succeed
 CALL merge_chunks(:'mso_c1'::regclass, :'mso_c2'::regclass);
 SELECT relid, index FROM _timescaledb_catalog.compression_settings ORDER BY relid::text COLLATE "C";
-                  relid                   |                                                                                                                        index                                                                                                                         
-------------------------------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_1_1_chunk   | [{"type": "minmax", "column": "time", "source": "orderby"}]
- merge_sparse_order                       | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- mergeme                                  | [{"type": "minmax", "column": "time", "source": "orderby"}]
+                  relid                   |                                                                                                                          index                                                                                                                          
+------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ _timescaledb_internal._hyper_11_32_chunk | [{"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_1_1_chunk   | [{"type": "firstlast", "column": "time", "source": "orderby"}]
+ merge_sparse_order                       | [{"type": "bloom", "column": ["device", "val"], "source": "config"}, {"type": "minmax", "column": "temp", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "firstlast", "column": "time", "source": "orderby"}]
+ mergeme                                  | [{"type": "firstlast", "column": "time", "source": "orderby"}]
 
 DROP TABLE merge_sparse_order;

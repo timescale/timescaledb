@@ -659,7 +659,7 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 			/*
 			 * Every orderby column gets minmax metadata so range predicates
 			 * on any orderby position can be pushed down as a filter on the
-			 * compressed scan, regardless of NULL handling or direction.
+			 * compressed scan.
 			 */
 			ColumnDef *def = makeColumnDef(column_segment_min_name(index),
 										   attr->atttypid,
@@ -676,7 +676,7 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 
 			/*
 			 * When firstlast is configured for the orderby column, also add
-			 * first/last metadata. These columns lead the compressed-chunk
+			 * first/last metadata. These columns are a part of the compressed chunk
 			 * btree and let predicates on the leading orderby become index
 			 * conditions when the column is NOT NULL.
 			 */

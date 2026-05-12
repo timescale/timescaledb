@@ -28,18 +28,18 @@ ORDER BY m.time;
                ->  Append
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_1
                            Vectorized Filter: ("time" < now())
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
-                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_min_1 < now()))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk
+                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_v2_last_time < now()))
                      ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m_1
                            Index Cond: ((device_id = d.device_id) AND ("time" < now()))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_2
                            Vectorized Filter: ("time" < now())
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
-                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_min_1 < now()))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk
+                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_v2_last_time < now()))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_3
                            Vectorized Filter: ("time" < now())
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
-                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_min_1 < now()))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk
+                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_v2_last_time < now()))
 
 :PREFIX
 SELECT m.time, m.device_id, m.v0
@@ -58,40 +58,40 @@ ORDER BY m.time;
                ->  Append
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_1
                            Vectorized Filter: ("time" < now())
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
-                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_min_1 < now()))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk
+                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_v2_last_time < now()))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_2
                            Vectorized Filter: ("time" < now())
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
-                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_min_1 < now()))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk
+                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_v2_last_time < now()))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_3
                            Vectorized Filter: ("time" < now())
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
-                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_min_1 < now()))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk
+                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_v2_last_time < now()))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_4
                            Vectorized Filter: ("time" < now())
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
-                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_min_1 < now()))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk
+                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_v2_last_time < now()))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_5
                            Vectorized Filter: ("time" < now())
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
-                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_min_1 < now()))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk
+                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_v2_last_time < now()))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_6
                            Vectorized Filter: ("time" < now())
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
-                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_min_1 < now()))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk
+                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_v2_last_time < now()))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_7
                            Vectorized Filter: ("time" < now())
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
-                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_min_1 < now()))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk
+                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_v2_last_time < now()))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_8
                            Vectorized Filter: ("time" < now())
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
-                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_min_1 < now()))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk
+                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_v2_last_time < now()))
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_9
                            Vectorized Filter: ("time" < now())
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
-                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_min_1 < now()))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_v2_last_time___idx on compress_hyper_X_X_chunk
+                                 Index Cond: ((device_id = d.device_id) AND (_ts_meta_v2_last_time < now()))
 
 RESET enable_material;
 RESET enable_seqscan;
