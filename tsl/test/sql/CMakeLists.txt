@@ -69,7 +69,6 @@ set(TEST_FILES
     decompress_index.sql
     direct_compress_analyze_segmentby.sql
     direct_compress_insert.sql
-    direct_compress_memory.sql
     move.sql
     plan_skip_scan_notnull.sql
     plan_skip_scan_pg_partition.sql
@@ -207,6 +206,10 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_update_delete.sql.in
     compression_delete_bitmapscan.sql.in
     transparent_decompression_queries.sql.in)
+
+  if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
+    list(APPEND TEST_FILES direct_compress_memory.sql)
+  endif()
 
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry_stats.sql)
