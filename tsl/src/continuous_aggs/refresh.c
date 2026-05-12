@@ -998,6 +998,35 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 			refresh_window.end = computed_invalidation_threshold_for_cagg;
 		}
 
+		/*
+		 * Cap the refresh window start at the earliest chunk of the raw
+		 * hypertable when start is NULL
+		 *
+		 * Without this cap the refresh window would begin at -infinity
+		 * causing invalidations before the earliest chunk to be processed
+		 * and removed. By raising the start to the earliest chunk boundary
+		 * we preserve those earlier invalidations so they
+		 * can be processed later if data is inserted before the current
+		 * earliest chunk.
+		 * This is relevant mainly in the case of tiered data, where tiered
+		 * chunks can exist before the earliest hypertable chunk.
+		 *
+		 * TODO: If `enable_tiered_reads` is ON, then we should query earliest slice from the OSM
+		 */
+		if (start_isnull)
+		{
+			const Hypertable *raw_ht =
+				cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
+			const Dimension *time_dim =
+				hyperspace_get_open_dimension(raw_ht->space, 0);
+			DimensionSlice *earliest_slice =
+				ts_dimension_slice_nth_earliest_slice(time_dim->fd.id, 1);
+
+			if (earliest_slice != NULL &&
+				earliest_slice->fd.range_start > refresh_window.start)
+				refresh_window.start = earliest_slice->fd.range_start;
+		}
+
 		/* Capping the end might have made the window 0, or negative, so nothing to refresh in that
 		 * case.
 		 *

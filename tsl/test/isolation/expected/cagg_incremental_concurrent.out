@@ -72,7 +72,7 @@ debug_waitpoint_release
 R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 50, 60 ] (batch 2 of 7)
 R1: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
 R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
-R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ -2147483648, 10 ] (batch 7 of 7)
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 0, 10 ] (batch 7 of 7)
 R1: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
 R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
 step r1_run: <... completed>
@@ -200,7 +200,7 @@ debug_waitpoint_release
 R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 50, 60 ] (batch 2 of 7)
 R1: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
 R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
-R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ -2147483648, 10 ] (batch 7 of 7)
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 0, 10 ] (batch 7 of 7)
 R1: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
 R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
 step r1_run: <... completed>
@@ -316,7 +316,7 @@ R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._m
 R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 10, 20 ] (batch 6 of 7)
 R1: LOG:  deleted 3 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
 R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
-R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ -2147483648, 10 ] (batch 7 of 7)
+R1: LOG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 0, 10 ] (batch 7 of 7)
 R1: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
 R1: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
 step r1_run: <... completed>
