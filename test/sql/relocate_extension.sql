@@ -47,7 +47,6 @@ SELECT * FROM test_dt ORDER BY time;
 -- testing time_bucket START
 SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, INTERVAL '1 minutes') AS ten_min FROM test_ts GROUP BY ten_min ORDER BY avg_tmp;
 SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, INTERVAL '1 minutes') AS ten_min FROM test_tz GROUP BY ten_min ORDER BY avg_tmp;
-SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('1 day', time, INTERVAL '-0.5 day') AS ten_min FROM test_dt GROUP BY ten_min ORDER BY avg_tmp;
 -- testing time_bucket END
 
 -- testing drop_chunks START

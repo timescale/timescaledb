@@ -1,0 +1,1 @@
+Fixes: #9709 Reject mismatched element type in bool/uuid decompression

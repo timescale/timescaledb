@@ -76,7 +76,7 @@ DROP TABLE IF EXISTS recomp_unordered_segmentby CASCADE;
 
 -- Test Case 3: Unordered chunk with segmentby and multiple orderbys
 DROP TABLE IF EXISTS recomp_unordered_multi_orderby CASCADE;
-CREATE TABLE recomp_unordered_multi_orderby (time TIMESTAMPTZ NOT NULL, device TEXT, sensor_id INT, value float) WITH (tsdb.hypertable, tsdb.orderby='time,sensor_id', tsdb.segmentby='device');
+CREATE TABLE recomp_unordered_multi_orderby (time TIMESTAMPTZ NOT NULL, device TEXT, sensor_id INT NOT NULL, value float) WITH (tsdb.hypertable, tsdb.orderby='time,sensor_id', tsdb.segmentby='device');
 -- Insert uneven batches with multiple devices and sensor_ids
 SELECT setseed(0.5);
 DO $$

@@ -60,7 +60,7 @@ jobs:
     steps:
 
     - name: Install Linux Dependencies
-      timeout-minutes: 3
+      timeout-minutes: 15
       run: |
         # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
         # If needed, install them before opening the core dump.
@@ -141,8 +141,8 @@ jobs:
     - name: make regresscheck
       id: regresscheck
       run: |
-          set -o pipefail
-          make -k -C build_snapshot installcheck IGNORES="${{ matrix.ignores }}" | tee installcheck.log
+        set -o pipefail
+        make -k -C build_snapshot installcheck IGNORES="${{ matrix.ignores }}" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()
@@ -165,14 +165,14 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: Regression diff Snapshot ABI Breakage PG${{ matrix.pg }}
         path: regression.log
 
     - name: Save postmaster.log
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: PostgreSQL log Snapshot ABI Breakage PG${{ matrix.pg }}
         path: postmaster.log

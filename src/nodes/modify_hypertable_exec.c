@@ -619,8 +619,19 @@ ExecPrepareTupleRouting(ModifyTableState *mtstate,
 						ResultRelInfo **partRelInfo)
 {
 	ChunkInsertState *cis = ctr->cis;
+
+	/*
+	 * If we're capturing transition tuples, save the original tuple in
+	 * hypertable format before converting to chunk format. This is needed
+	 * because chunks created after a column drop have a different TupleDesc,
+	 * and the transition table must store tuples in the hypertable's format.
+	 * See PostgreSQL's ExecPrepareTupleRouting in nodeModifyTable.c.
+	 */
+	if (mtstate->mt_transition_capture != NULL)
+		mtstate->mt_transition_capture->tcs_original_insert_tuple = slot;
+
 	/* Convert the tuple to the chunk's rowtype, if necessary */
-	if (cis->hyper_to_chunk_map != NULL && ctr->has_dropped_attrs == false)
+	if (cis->hyper_to_chunk_map != NULL)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
 
 	*partRelInfo = cis->result_relation_info;
@@ -2422,7 +2433,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 		if (operation == CMD_INSERT || (operation == CMD_MERGE && (node->mt_merge_subcommands & MERGE_INSERT)))
 		{
-			TupleTableSlot *slot = context.planSlot;
+			TupleTableSlot *hypertable_slot = context.planSlot;
 			if (operation == CMD_MERGE)
 			{
 				/*
@@ -2441,8 +2452,8 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					CmdType commandType = action->mas_action->commandType;
 					if (commandType == CMD_INSERT)
 					{
-						action->mas_proj->pi_exprContext->ecxt_innertuple = slot;
-						slot = ExecProject(action->mas_proj);
+						action->mas_proj->pi_exprContext->ecxt_innertuple = hypertable_slot;
+						hypertable_slot = ExecProject(action->mas_proj);
 						break;
 					}
 				}
@@ -2450,12 +2461,12 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 			/* do tuple routing in short lived memory context */
 			MemoryContext oldctx = MemoryContextSwitchTo(estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
-			Point *point = ts_hyperspace_calculate_point(ctr->hypertable->space, slot);
+			Point *point = ts_hyperspace_calculate_point(ctr->hypertable->space, hypertable_slot);
 
 			/* Find or create the insert state matching the point */
 			ctr->cis = ts_chunk_tuple_routing_find_chunk(ctr, point);
 			bool update_counter = ctr->cis->onConflictAction == ONCONFLICT_UPDATE;
-			ts_chunk_tuple_routing_decompress_for_insert(ctr->cis, ctr->root_rri, slot, ctr->estate, update_counter);
+			ts_chunk_tuple_routing_decompress_for_insert(ctr->cis, ctr->root_rri, hypertable_slot, ctr->estate, update_counter);
 			MemoryContextSwitchTo(oldctx);
 
 			/* ON CONFLICT DO NOTHING optimization for columnstore */
@@ -2518,11 +2529,25 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				Relation rel = ctr->cis->rel;
 				if (rel->rd_att->constr && rel->rd_att->constr->has_generated_stored)
 				{
-					slot->tts_tableOid = RelationGetRelid(rel);
-					ExecComputeStoredGenerated(ctr->root_rri, estate, slot, CMD_INSERT);
+					hypertable_slot->tts_tableOid = RelationGetRelid(rel);
+					ExecComputeStoredGenerated(ctr->root_rri, estate, hypertable_slot, CMD_INSERT);
 				}
 
-				ts_cm_functions->compressor_add_slot(ht_state->compressor, ht_state->bulk_writer, slot);
+				/*
+				 * Convert the slot to the chunk's rowtype if the chunk's
+				 * TupleDesc differs from the hypertable (e.g. due to dropped
+				 * columns). The compressor was initialized with the chunk's
+				 * descriptor and indexes per-column state by chunk attribute
+				 * offsets, so passing a parent-format slot reads the wrong
+				 * columns.
+				 */
+				TupleTableSlot *chunk_slot = hypertable_slot;
+				if (ctr->cis->hyper_to_chunk_map != NULL)
+					chunk_slot = execute_attr_map_slot(ctr->cis->hyper_to_chunk_map->attrMap,
+													   hypertable_slot,
+													   ctr->cis->slot);
+
+				ts_cm_functions->compressor_add_slot(ht_state->compressor, ht_state->bulk_writer, chunk_slot);
 				estate->es_processed++;
 				continue;
 			}
@@ -3467,36 +3492,7 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 #else
 				context->relaction = action;
 #endif
-				if (ctr->has_dropped_attrs)
-				{
-					AttrMap *map;
-					TupleDesc parenttupdesc, chunktupdesc;
-					TupleTableSlot *chunk_slot = NULL;
-
-					parenttupdesc = RelationGetDescr(resultRelInfo->ri_RelationDesc);
-					chunktupdesc = RelationGetDescr(ctr->cis->result_relation_info->ri_RelationDesc);
-					/* map from parent to chunk */
-#if PG16_LT
-					map = build_attrmap_by_name_if_req(parenttupdesc, chunktupdesc);
-#else
-					map = build_attrmap_by_name_if_req(parenttupdesc, chunktupdesc, false);
-#endif
-					if (map != NULL)
-						chunk_slot =
-							execute_attr_map_slot(map,
-												  newslot,
-												  MakeSingleTupleTableSlot(chunktupdesc,
-																		   &TTSOpsVirtual));
-					rslot = ExecInsert(context,
-									   resultRelInfo,
-									   ctr,
-									   (chunk_slot ? chunk_slot : newslot),
-									   canSetTag);
-					if (chunk_slot)
-						ExecDropSingleTupleTableSlot(chunk_slot);
-				}
-				else
-					rslot = ExecInsert(context, resultRelInfo, ctr, newslot, canSetTag);
+				rslot = ExecInsert(context, resultRelInfo, ctr, newslot, canSetTag);
 				mtstate->mt_merge_inserted = 1;
 				break;
 			case CMD_NOTHING:

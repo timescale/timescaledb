@@ -31,7 +31,7 @@ jobs:
 
     steps:
     - name: Install Linux Dependencies
-      timeout-minutes: 3
+      timeout-minutes: 15
       run: |
         sudo apt-get update
         sudo apt-get install gnupg systemd-coredump gdb postgresql-common \
@@ -139,14 +139,14 @@ jobs:
 
     - name: Upload Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: Coredumps sqlsmith ${{ matrix.os }} PG${{ matrix.pg }}
         path: coredumps
 
     - name: Save PostgreSQL log
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: PostgreSQL log for PG${{ matrix.pg }}
         path: postgres.*

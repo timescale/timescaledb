@@ -20,6 +20,7 @@ typedef enum SparseIndexTypeEnum
 {
 	_SparseIndexTypeEnumBloom = 0,
 	_SparseIndexTypeEnumMinmax,
+	_SparseIndexTypeEnumFirstLast,
 	_SparseIndexTypeEnumMax
 } SparseIndexTypeEnum;
 
@@ -54,6 +55,12 @@ typedef struct MinmaxIndexColumnConfig
 	SparseIndexConfigBase base;
 	const char *col;
 } MinmaxIndexColumnConfig;
+
+typedef struct FirstLastIndexColumnConfig
+{
+	SparseIndexConfigBase base;
+	const char *col;
+} FirstLastIndexColumnConfig;
 
 typedef struct SparseIndexColumn
 {
@@ -116,6 +123,9 @@ typedef struct PerColumnCompressionSettings
 	/* the index of the minmax index object that the column participates in, -1 if not present */
 	int minmax_obj_id;
 
+	/* the index of the firstlast index object that the column participates in, -1 if not present */
+	int firstlast_obj_id;
+
 	/* the index of the single bloom index object that the column participates in, -1 if not present
 	 */
 	int single_bloom_obj_id;
@@ -141,6 +151,7 @@ TSDLLEXPORT bool ts_compression_settings_equal(const CompressionSettings *left,
 											   const CompressionSettings *right);
 TSDLLEXPORT bool ts_compression_settings_equal_with_defaults(const CompressionSettings *ht,
 															 const CompressionSettings *chunk);
+TSDLLEXPORT bool ts_sparse_index_equal(const Jsonb *left, const Jsonb *right);
 
 TSDLLEXPORT int ts_compression_settings_update(CompressionSettings *settings);
 TSDLLEXPORT void ts_compression_settings_rename_column_cascade(Oid parent_relid, const char *old,
@@ -153,6 +164,7 @@ bool ts_contains_sparse_index_config(CompressionSettings *settings, const char *
 									 const char *sparse_index_type, bool skip_column_arrays);
 TSDLLEXPORT bool ts_column_has_sparse_index(CompressionSettings *settings, const char *attname);
 TSDLLEXPORT bool ts_accept_for_segmentby(CompressionSettings *settings, Form_pg_attribute attr);
+TSDLLEXPORT bool ts_can_set_default_sparse_index(CompressionSettings *settings);
 TSDLLEXPORT Jsonb *ts_add_orderby_sparse_index(CompressionSettings *settings);
 
 TSDLLEXPORT Jsonb *ts_remove_orderby_sparse_index(CompressionSettings *settings);

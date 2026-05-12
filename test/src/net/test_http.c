@@ -108,7 +108,9 @@ ts_test_http_parsing(PG_FUNCTION_ARGS)
 
 			TestAssertTrue(success);
 			if (!success)
+			{
 				elog(ERROR, "could not parse http state");
+			}
 
 			success = ts_http_response_state_is_done(state);
 
@@ -158,7 +160,9 @@ ts_test_http_parsing_full(PG_FUNCTION_ARGS)
 					   ts_http_response_state_content_length(state));
 		TestAssertTrue(cmp);
 		if (!cmp)
+		{
 			elog(ERROR, "bad message");
+		}
 
 		ts_http_response_state_destroy(state);
 	}
@@ -207,7 +211,9 @@ ts_test_http_request_build(PG_FUNCTION_ARGS)
 	cmp_res = !strncmp(expected_response, serialized, request_len);
 	TestAssertTrue(cmp_res);
 	if (!cmp_res)
+	{
 		elog(ERROR, "bad response");
+	}
 	ts_http_request_destroy(req);
 
 	expected_response =

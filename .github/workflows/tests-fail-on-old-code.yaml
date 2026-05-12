@@ -80,7 +80,7 @@ jobs:
 
     - name: Install Linux Dependencies
       if: steps.check.outputs.should_run == 'true'
-      timeout-minutes: 3
+      timeout-minutes: 15
       run: |
         sudo apt-get update
         sudo apt-get install flex bison cmake
@@ -99,7 +99,7 @@ jobs:
     - name: Cache PostgreSQL ${{ steps.pg.outputs.version }}
       if: steps.check.outputs.should_run == 'true'
       id: cache-postgresql
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "pg-${{ steps.pg.outputs.version }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
@@ -113,7 +113,8 @@ jobs:
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
-          --without-readline --without-zlib --without-libxml
+          --without-readline --without-zlib --without-libxml --enable-debug \
+          --enable-cassert
         make -j $(getconf _NPROCESSORS_ONLN)
 
     - name: Install PostgreSQL ${{ steps.pg.outputs.version }}
@@ -159,7 +160,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: Regression diff PG${{ steps.pg.outputs.version }}
         path: |
@@ -168,7 +169,7 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always() && steps.check.outputs.should_run == 'true'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: PostgreSQL log ${{ steps.pg.outputs.version }}
         path: postmaster.*

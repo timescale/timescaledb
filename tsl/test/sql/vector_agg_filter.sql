@@ -19,7 +19,7 @@ create function stable_abs(x int4) returns int4 as 'int4abs' language internal s
 \set CHUNK_ROWS 100000::int
 \set GROUPING_CARDINALITY 10::int
 
-create table aggfilter(t int, s int,
+create table aggfilter(t int NOT NULL, s int,
     cint2 int2, dropped int4, cint4 int4);
 select create_hypertable('aggfilter', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
 
@@ -147,7 +147,7 @@ reset timescaledb.debug_require_vector_agg;
 
 
 -- Grouping with a scalar UUID column (segmentby or default).
-create table uuid_default(ts int, value int4)
+create table uuid_default(ts int NOT NULL, value int4)
     with (tsdb.hypertable, tsdb.partition_column = 'ts', tsdb.compress,
         tsdb.chunk_interval = 1000);
 

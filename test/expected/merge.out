@@ -924,3 +924,23 @@ DROP TABLE target;
 DROP TABLE source;
 DROP USER priv_user;
 DROP USER non_priv_user;
+-- Regression test for "invalid perminfoindex 0 in RTE" on MERGE NOT MATCHED
+-- INSERT into a hypertable when a CHECK constraint is violated. The chunk
+-- ResultRelInfo used to inherit a NULL ri_RootResultRelInfo from the
+-- hypertable, which made GetResultRTEPermissionInfo() look up an RTE with
+-- perminfoindex = 0 instead of falling back to the rootResultRelInfo.
+CREATE TABLE merge_check_target(time timestamptz NOT NULL, a int CHECK (a > 0));
+SELECT FROM create_hypertable('merge_check_target', 'time');
+--
+
+INSERT INTO merge_check_target VALUES ('2024-01-01', 1);
+CREATE TABLE merge_check_source(time timestamptz, a int);
+INSERT INTO merge_check_source VALUES ('2025-01-01', -1);
+\set ON_ERROR_STOP 0
+-- Expect a CHECK constraint violation, not an internal "perminfoindex" error.
+MERGE INTO merge_check_target t USING merge_check_source s ON t.time = s.time
+WHEN NOT MATCHED THEN INSERT VALUES (s.time, s.a);
+ERROR:  new row for relation "_hyper_11_30_chunk" violates check constraint "merge_check_target_a_check"
+\set ON_ERROR_STOP 1
+DROP TABLE merge_check_target;
+DROP TABLE merge_check_source;

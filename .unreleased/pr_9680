@@ -1,0 +1,1 @@
+Fixes: #9680 Fix segfault in direct compress insert on hypertable with dropped column

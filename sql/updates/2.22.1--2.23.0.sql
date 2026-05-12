@@ -13,6 +13,14 @@ $$;
 DROP VIEW IF EXISTS timescaledb_information.job_stats;
 DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
 
+-- remove stale hypertable entries
+DELETE FROM _timescaledb_catalog.hypertable ht
+WHERE NOT EXISTS(
+  SELECT FROM pg_class c
+    JOIN pg_namespace ns ON ns.oid=c.relnamespace AND ns.nspname=ht.schema_name
+    WHERE c.relname=ht.table_name
+);
+
 -- remove cagg trigger from all hypertables and chunks
 DO $$
 DECLARE
@@ -24,15 +32,15 @@ BEGIN
     EXECUTE format('DROP TRIGGER IF EXISTS ts_cagg_invalidation_trigger ON %s;', rel);
   END LOOP;
   FOR rel IN SELECT format('%I.%I', schema_name, table_name)::regclass
-    FROM _timescaledb_catalog.chunk ch
+    FROM _timescaledb_catalog.chunk ch WHERE NOT dropped
   LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS ts_cagg_invalidation_trigger ON %s;', rel);
   END LOOP;
 END
 $$;
 
-DROP FUNCTION IF EXISTS _timescaledb_internal.continuous_agg_invalidation_trigger();
-DROP FUNCTION IF EXISTS _timescaledb_functions.continuous_agg_invalidation_trigger();
+DROP FUNCTION IF EXISTS _timescaledb_internal.continuous_agg_invalidation_trigger() CASCADE;
+DROP FUNCTION IF EXISTS _timescaledb_functions.continuous_agg_invalidation_trigger() CASCADE;
 DROP FUNCTION IF EXISTS _timescaledb_functions.has_invalidation_trigger(regclass);
 
 -- remove ts_insert_blocker trigger from all hypertables
@@ -48,5 +56,5 @@ BEGIN
 END
 $$;
 
-DROP FUNCTION IF EXISTS _timescaledb_internal.insert_blocker();
-DROP FUNCTION IF EXISTS _timescaledb_functions.insert_blocker();
+DROP FUNCTION IF EXISTS _timescaledb_internal.insert_blocker() CASCADE;
+DROP FUNCTION IF EXISTS _timescaledb_functions.insert_blocker() CASCADE;

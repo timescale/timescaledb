@@ -5,3 +5,7 @@ ALTER TABLE _timescaledb_catalog.chunk ADD CONSTRAINT chunk_compressed_chunk_id_
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.bloom1_contains_any_hashes(_timescaledb_internal.bloom1, bigint[]);
 DROP FUNCTION IF EXISTS _timescaledb_functions.bloom1_hash(anyelement);
+
+-- Drop BIGINT-returning version so the downgrade script can recreate the
+-- INTEGER-returning version of compressed_data_column_size.
+DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_column_size(_timescaledb_internal.compressed_data, ANYELEMENT);

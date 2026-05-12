@@ -42,7 +42,9 @@ slot_key_test(TupleTableSlot *compressed_slot, ScanKey key)
 	val = slot_getattr(compressed_slot, key->sk_attno, &is_null);
 
 	if (is_null)
+	{
 		return false;
+	}
 
 	return DatumGetBool(FunctionCall2Coll(&key->sk_func, key->sk_collation, val, key->sk_argument));
 }
@@ -103,7 +105,9 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 		 * and should therefore have the required opfamily
 		 */
 		if (!OidIsValid(tce->btree_opf))
+		{
 			elog(ERROR, "no btree opfamily for type \"%s\"", format_type_be(atttypid));
+		}
 
 		Oid opr = get_opfamily_member(tce->btree_opf, atttypid, atttypid, BTEqualStrategyNumber);
 
@@ -120,7 +124,9 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 		}
 
 		if (!OidIsValid(opr))
+		{
 			elog(ERROR, "no operator found for type \"%s\"", format_type_be(atttypid));
+		}
 
 		ScanKeyEntryInitialize(&scankeys[key_index++],
 							   isnull ? SK_ISNULL : 0,
@@ -214,7 +220,9 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 				 * are not visible in metadata
 				 */
 				if (isnull)
+				{
 					continue;
+				}
 
 				int16 index = ts_array_position(settings->fd.orderby, attname);
 
@@ -383,7 +391,9 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 
 			TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_BTREE_OPFAMILY);
 			if (!OidIsValid(tce->btree_opf))
+			{
 				elog(ERROR, "no btree opfamily for type \"%s\"", format_type_be(atttypid));
+			}
 
 			Oid opr =
 				get_opfamily_member(tce->btree_opf, atttypid, atttypid, BTEqualStrategyNumber);
@@ -402,7 +412,9 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 
 			/* No operator could be found so we can't create the scankey. */
 			if (!OidIsValid(opr))
+			{
 				continue;
+			}
 
 			Oid opcode = get_opcode(opr);
 			Ensure(OidIsValid(opcode),
@@ -457,11 +469,13 @@ build_update_delete_scankeys(Relation in_rel, List *heap_filters, int *num_scank
 		AttrNumber attno = get_attnum(in_rel->rd_id, NameStr(filter->column_name));
 		Oid typoid = get_atttype(in_rel->rd_id, attno);
 		if (attno == InvalidAttrNumber)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
 					 errmsg("column \"%s\" of relation \"%s\" does not exist",
 							NameStr(filter->column_name),
 							RelationGetRelationName(in_rel))));
+		}
 
 		bool added = create_segment_filter_scankey(in_rel,
 												   NameStr(filter->column_name),
@@ -481,7 +495,9 @@ build_update_delete_scankeys(Relation in_rel, List *heap_filters, int *num_scank
 		 * we are skipping filters.
 		 */
 		if (*delete_only && !added)
+		{
 			*delete_only = false;
+		}
 	}
 	*num_scankeys = key_index;
 	return scankeys;
@@ -498,7 +514,9 @@ create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 	/* This should never happen but if it does happen, we can't generate a scan key for
 	 * the filter column so just skip it */
 	if (cmp_attno == InvalidAttrNumber)
+	{
 		return false;
+	}
 
 	int flags = is_array_op ? SK_SEARCHARRAY : 0;
 
@@ -536,7 +554,9 @@ create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 
 		TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_BTREE_OPFAMILY);
 		if (!OidIsValid(tce->btree_opf))
+		{
 			elog(ERROR, "no btree opfamily for type \"%s\"", format_type_be(atttypid));
+		}
 
 		opr = get_opfamily_member(tce->btree_opf, atttypid, atttypid, strategy);
 
@@ -554,14 +574,18 @@ create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 
 		/* No operator could be found so we can't create the scankey. */
 		if (!OidIsValid(opr))
+		{
 			return false;
+		}
 
 		opr = get_opcode(opr);
 	}
 
 	/* We should never end up here but: no opcode, no optimization */
 	if (!OidIsValid(opr))
+	{
 		return false;
+	}
 
 	ScanKeyEntryInitialize(&scankeys[(*num_scankeys)++],
 						   flags,
@@ -586,7 +610,9 @@ deduce_filter_subtype(BatchFilter *filter, Oid att_typoid)
 	Oid subtype = InvalidOid;
 
 	if (!filter->value)
+	{
 		return InvalidOid;
+	}
 
 	/*
 	 * Check if the filter type is different from the att type. If yes, the
@@ -596,9 +622,13 @@ deduce_filter_subtype(BatchFilter *filter, Oid att_typoid)
 	{
 		/* For an array type get its element type */
 		if (filter->is_array_op)
+		{
 			subtype = get_element_type(filter->value->consttype);
+		}
 		else
+		{
 			subtype = filter->value->consttype;
+		}
 	}
 
 	return subtype;

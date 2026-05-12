@@ -55,7 +55,9 @@ ts_transform_cross_datatype_comparison(Expr *clause)
 	Assert(op->opresulttype == BOOLOID && !op->opretset);
 
 	if (!IsA(linitial(op->args), Var) && !IsA(lsecond(op->args), Var))
+	{
 		return clause;
+	}
 
 	if (DATATYPE_PAIR(left_type, right_type, TIMESTAMPOID, TIMESTAMPTZOID) ||
 		DATATYPE_PAIR(left_type, right_type, TIMESTAMPTZOID, DATEOID))
@@ -87,19 +89,23 @@ ts_transform_cross_datatype_comparison(Expr *clause)
 			Expr *right = copyObject(lsecond(op->args));
 
 			if (source_type == left_type)
+			{
 				left = (Expr *) makeFuncExpr(cast_oid,
 											 target_type,
 											 list_make1(left),
 											 InvalidOid,
 											 InvalidOid,
 											 0);
+			}
 			else
+			{
 				right = (Expr *) makeFuncExpr(cast_oid,
 											  target_type,
 											  list_make1(right),
 											  InvalidOid,
 											  InvalidOid,
 											  0);
+			}
 
 			return make_opclause(opno, BOOLOID, false, left, right, InvalidOid, InvalidOid);
 		}

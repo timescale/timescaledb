@@ -1,0 +1,1 @@
+Implements: #9569 For nullable orderby columns do segmentwise decompress-compress instead of segmentwise recompress.

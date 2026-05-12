@@ -416,8 +416,8 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
 ROLLBACK;
 
 -- Test with segmentby
--- Should show that BSM works even with segmentby
--- Using segmentby column for ordering should not use BSM or compressed index ordering
+-- Should show that BatchSortedMerge works even with segmentby
+-- Using segmentby column for ordering should not use BatchSortedMerge or compressed index ordering
 
 CREATE TABLE test_segby (
 	segby int,
@@ -441,6 +441,7 @@ INSERT INTO test_segby (time, segby, val) values
 ('2000-01-01 01:00:00-00', 1, 3),
 ('2000-01-01 02:00:00-00', 2, 1),
 ('2000-01-01 03:00:00-00', 1, 2);
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('test_segby') chunk;
 
 set timescaledb.debug_require_batch_sorted_merge to 'force';
 
@@ -464,14 +465,6 @@ SELECT * FROM test_segby ORDER BY time ASC NULLS LAST;
 :PREFIX
 SELECT * FROM test_segby ORDER BY time ASC NULLS LAST;
 
--- Should be optimized
-:PREFIX
-SELECT * FROM test2 ORDER BY time ASC;
-
--- Should be optimized (backward scan)
-:PREFIX
-SELECT * FROM test2 ORDER BY time DESC NULLS FIRST;
-
 set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 
 -- Should not be optimized (NULL order wrong)
@@ -486,7 +479,7 @@ SELECT * FROM test_segby ORDER BY time ASC NULLS FIRST;
 :PREFIX
 SELECT * FROM test_segby ORDER BY segby, time;
 
--- Tests for #9445: forbid BSM on nullable orderby columns
+-- Tests for #9445: forbid BatchSortedMerge on nullable orderby columns
 CREATE TABLE t(time int NOT NULL, device int, val int);
 SELECT create_hypertable('t', 'time', chunk_time_interval => 10000);
 ALTER TABLE t SET (timescaledb.compress,
@@ -508,15 +501,89 @@ INSERT INTO t SELECT 1, 1, g FROM generate_series(900, 1000) g;
 SET timescaledb.debug_require_batch_sorted_merge = 'forbid';
 
 -- In DESC order NULLs come first; a NULL after a non-NULL is wrong.
--- Should not use BSM here, should return 0
+-- Should not use BatchSortedMerge here, should return 0
 SELECT count(*) AS wrong_rows FROM (
     SELECT val, lag(val) OVER (ORDER BY val DESC) AS prev FROM t
 ) t WHERE val IS NULL AND prev IS NOT NULL;
 
--- Can use BSM if we can exclude NULLs from val
+-- Can use BatchSortedMerge if we can exclude NULLs from val
 SET timescaledb.debug_require_batch_sorted_merge = 'force';
 SELECT val, lag(val) OVER (ORDER BY val DESC NULLS FIRST) AS prev FROM t where val > 995;
 
+-- Tests for BatchSortedMerge over one-segment data
+--------------------------------------
+
+-- Should be optimized (all segmentby columns are pinned to a Const, orderby columns match)
+SET timescaledb.debug_require_batch_sorted_merge = 'force';
+:PREFIX
+SELECT * FROM test_segby WHERE segby = 1 ORDER BY time DESC;
+
+:PREFIX
+SELECT * FROM test1 WHERE x1 = 1 AND x2 = 2 AND x5 = 0 ORDER BY x1, x2, x5, time DESC;
+
+:PREFIX
+SELECT * FROM test2 WHERE x1 = 1 AND x2 = 2 AND x5 = 0 ORDER BY time ASC, x3 DESC;
+
+:PREFIX
+SELECT * FROM test2 WHERE x1 = 1 AND x2 = 2 AND x5 = 0 ORDER BY x1 DESC, x2 DESC, x5 DESC, time DESC, x3 ASC;
+
+-- No segmentby
+CREATE TABLE test_nosegby (
+	segby int NOT NULL,
+	time timestamptz NOT NULL,
+	val int);
+
+SELECT FROM create_hypertable('test_nosegby', 'time');
+
+ALTER TABLE test_nosegby SET (timescaledb.compress, timescaledb.compress_orderby = 'segby,time DESC');
+
+INSERT INTO test_nosegby (time, segby, val) values
+('2000-01-01 00:00:00-00', 1, 2),
+('2000-01-01 01:00:00-00', 1, 3),
+('2000-01-01 02:00:00-00', 2, 1),
+('2000-01-01 03:00:00-00', 1, 2),
+('2000-01-01 00:00:00-00', 1, 2),
+('2000-01-01 01:00:00-00', 1, 3),
+('2000-01-01 02:00:00-00', 2, 1),
+('2000-01-01 03:00:00-00', 1, 2),
+('2000-01-01 00:00:00-00', 1, 2),
+('2000-01-01 01:00:00-00', 1, 3),
+('2000-01-01 02:00:00-00', 2, 1),
+('2000-01-01 03:00:00-00', 1, 2);
+
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('test_nosegby') chunk;
+
+-- Should be optimized (implicit NULLS first)
+:PREFIX
+SELECT * FROM test_nosegby ORDER BY segby, time DESC;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test_nosegby ORDER BY segby, time DESC NULLS FIRST;
+
+-- Should be optimized (backward scan, NULLS last)
+:PREFIX
+SELECT * FROM test_nosegby ORDER BY segby DESC, time ASC NULLS LAST;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test_nosegby ORDER BY segby DESC;
+
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
+
+-- Should not be optimized (NULL order wrong)
+:PREFIX
+SELECT * FROM test_nosegby ORDER BY segby, time DESC NULLS LAST;
+
+-- Should not be optimized (NULL order wrong)
+:PREFIX
+SELECT * FROM test_nosegby ORDER BY segby DESC NULLS LAST;
+
+drop table test1 cascade;
+drop table test2 cascade;
+drop table test_segby cascade;
+drop table test_nosegby cascade;
 drop table t cascade;
+
 RESET timescaledb.enable_direct_compress_insert;
 RESET timescaledb.debug_require_batch_sorted_merge;

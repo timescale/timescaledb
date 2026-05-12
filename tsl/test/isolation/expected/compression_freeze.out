@@ -298,3 +298,37 @@ compression_status|count
 ------------------+-----
 Compressed        |    2
 
+
+starting permutation: s2_begin_rr s1_compress_delete_then_insert s2_count_in_tx s2_commit
+step s2_begin_rr: 
+    BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+    SELECT count(*) FROM sensor_data;
+
+count
+-----
+16850
+
+step s1_compress_delete_then_insert: 
+   BEGIN;
+   SET LOCAL timescaledb.compress_truncate_behaviour TO truncate_disabled;
+   SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
+   -- Insert new rows so the chunks become partially compressed; this forces
+   -- the scan to read from BOTH the compressed and uncompressed sides.
+   INSERT INTO sensor_data VALUES ('2022-01-05 00:00', 999, 0, 0);
+   INSERT INTO sensor_data VALUES ('2022-01-12 00:00', 999, 0, 0);
+   COMMIT;
+
+count
+-----
+    2
+
+step s2_count_in_tx: 
+    SELECT count(*) FROM sensor_data;
+
+count
+-----
+16850
+
+step s2_commit: 
+    COMMIT;
+

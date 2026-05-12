@@ -61,10 +61,12 @@ policy_recompression_get_recompress_after_int(const Jsonb *config)
 		ts_jsonb_get_int64_field(config, POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER, &found);
 
 	if (!found)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not find %s in config for job",
 						POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER)));
+	}
 
 	return compress_after;
 }
@@ -76,10 +78,12 @@ policy_recompression_get_recompress_after_interval(const Jsonb *config)
 		ts_jsonb_get_interval_field(config, POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER);
 
 	if (interval == NULL)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not find %s in config for job",
 						POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER)));
+	}
 
 	return interval;
 }
@@ -88,7 +92,9 @@ Datum
 policy_recompression_proc(PG_FUNCTION_ARGS)
 {
 	if (PG_NARGS() != 2 || PG_ARGISNULL(0) || PG_ARGISNULL(1))
+	{
 		PG_RETURN_VOID();
+	}
 
 	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
@@ -107,7 +113,9 @@ validate_compress_after_type(const Dimension *dim, Oid partitioning_type, Oid co
 		Oid now_func = ts_get_integer_now_func(dim, false);
 
 		if (!IS_INTEGER_TYPE(compress_after_type) && OidIsValid(now_func))
+		{
 			expected_type = partitioning_type;
+		}
 	}
 	else if (compress_after_type != INTERVALOID)
 	{
@@ -162,10 +170,12 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 
 	/* creation time usage not supported with caggs yet */
 	if (is_cagg && created_before != NULL)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot use \"compress_created_before\" with continuous aggregate \"%s\" ",
 						get_rel_name(user_rel_oid))));
+	}
 
 	owner_id = ts_hypertable_permissions_check(user_rel_oid, GetUserId());
 	ts_bgw_job_validate_job_owner(owner_id);
@@ -196,6 +206,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 		BgwJob *existing = linitial(jobs);
 
 		if (OidIsValid(compress_after_type))
+		{
 			is_equal =
 				policy_config_check_hypertable_lag_equality(existing->fd.config,
 															POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
@@ -203,6 +214,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 															compress_after_type,
 															compress_after_datum,
 															false /* isnull */);
+		}
 		else
 		{
 			Assert(created_before != NULL);
@@ -244,12 +256,14 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 
 	if (!is_cagg && IS_INTEGER_TYPE(partitioning_type) && !IS_INTEGER_TYPE(compress_after_type) &&
 		created_before == NULL)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid value for parameter %s", POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER),
 				 errhint("Integer duration in \"compress_after\" or interval time duration"
 						 " in \"compress_created_before\" is required for hypertables with integer "
 						 "time dimension.")));
+	}
 
 	if (dim && IS_TIMESTAMP_TYPE(ts_dimension_get_partition_type(dim)) &&
 		!user_defined_schedule_interval)
@@ -288,13 +302,17 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	{
 		case INTERVALOID:
 			if (created_before)
+			{
 				ts_jsonb_add_interval(parse_state,
 									  POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE,
 									  created_before);
+			}
 			else
+			{
 				ts_jsonb_add_interval(parse_state,
 									  POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 									  DatumGetIntervalP(compress_after_datum));
+			}
 			break;
 		case INT2OID:
 			ts_jsonb_add_int64(parse_state,
@@ -381,21 +399,27 @@ policy_compression_add(PG_FUNCTION_ARGS)
 
 	/* compress_after and created_before cannot be specified [or omitted] together */
 	if ((PG_ARGISNULL(1) && PG_ARGISNULL(6)) || (!PG_ARGISNULL(1) && !PG_ARGISNULL(6)))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg(
 					 "need to specify one of \"compress_after\" or \"compress_created_before\"")));
+	}
 
 	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
 	if (fixed_schedule)
 	{
 		ts_bgw_job_validate_schedule_interval(default_schedule_interval);
 		if (TIMESTAMP_NOT_FINITE(initial_start))
+		{
 			initial_start = ts_timer_get_current_timestamp();
+		}
 	}
 
 	if (timezone != NULL)
+	{
 		valid_timezone = ts_bgw_job_validate_timezone(PG_GETARG_DATUM(5));
+	}
 
 	Datum retval;
 	retval = policy_compression_add_internal(user_rel_oid,
@@ -424,18 +448,22 @@ policy_compression_remove_internal(Oid user_rel_oid, bool if_exists)
 		const char *view_name = get_rel_name(user_rel_oid);
 
 		if (!view_name)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("relation is not a hypertable or continuous aggregate")));
+		}
 		else
 		{
 			ContinuousAgg *ca = ts_continuous_agg_find_by_relid(user_rel_oid);
 
 			if (!ca)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
 						 errmsg("relation \"%s\" is not a hypertable or continuous aggregate",
 								view_name)));
+			}
 			ht = ts_hypertable_get_by_id(ca->data.mat_hypertable_id);
 		}
 	}
@@ -449,10 +477,12 @@ policy_compression_remove_internal(Oid user_rel_oid, bool if_exists)
 	if (jobs == NIL)
 	{
 		if (!if_exists)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("columnstore policy not found for hypertable \"%s\"",
 							get_rel_name(user_rel_oid))));
+		}
 		else
 		{
 			ereport(NOTICE,
@@ -532,13 +562,17 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 			ts_cache_release(&hcache);
 			const char *relname = get_rel_name(user_htoid);
 			if (relname)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 						 errmsg("\"%s\" is not a hypertable or a continuous aggregate", relname)));
+			}
 			else
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
 						 errmsg("object with id \"%u\" not found", user_htoid)));
+			}
 		}
 		*is_cagg = true;
 		mat_id = cagg->data.mat_hypertable_id;

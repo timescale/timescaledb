@@ -8,7 +8,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_data_to_array(_time
    LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_data_column_size(_timescaledb_internal.compressed_data, ANYELEMENT)
-   RETURNS INTEGER
+   RETURNS BIGINT
    AS '@MODULE_PATHNAME@', 'ts_compressed_data_column_size'
    LANGUAGE C IMMUTABLE PARALLEL SAFE;
 

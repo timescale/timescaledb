@@ -73,13 +73,17 @@ ts_partitioning_func_is_valid(regproc funcoid, DimensionType dimtype, Oid argtyp
 	tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcoid));
 
 	if (!HeapTupleIsValid(tuple))
+	{
 		elog(ERROR, "cache lookup failed for function %u", funcoid);
+	}
 
 	aclresult = object_aclcheck(ProcedureRelationId, funcoid, GetUserId(), ACL_EXECUTE);
 	if (aclresult != ACLCHECK_OK)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("permission denied for function %s", get_func_name(funcoid))));
+	}
 
 	isvalid = IS_VALID_PARTITIONING_FUNC((Form_pg_proc) GETSTRUCT(tuple), dimtype, argtype);
 
@@ -120,7 +124,9 @@ partitioning_func_set_func_fmgr(PartitioningFunc *pf, Oid argtype, DimensionType
 															open_dim_partitioning_func_filter;
 
 	if (dimtype != DIMENSION_TYPE_CLOSED && dimtype != DIMENSION_TYPE_OPEN)
+	{
 		elog(ERROR, "invalid dimension type %u", dimtype);
+	}
 
 	funcoid = ts_lookup_proc_filtered(NameStr(pf->schema),
 									  NameStr(pf->name),
@@ -131,16 +137,20 @@ partitioning_func_set_func_fmgr(PartitioningFunc *pf, Oid argtype, DimensionType
 	if (!OidIsValid(funcoid))
 	{
 		if (dimtype == DIMENSION_TYPE_CLOSED)
+		{
 			ereport(ERROR,
 					(errmsg("invalid partitioning function"),
 					 errhint("A partitioning function for a closed (space) dimension "
 							 "must be IMMUTABLE and have the signature (anyelement) -> integer")));
+		}
 		else
+		{
 			ereport(ERROR,
 					(errmsg("invalid partitioning function"),
 					 errhint("A partitioning function for a open (time) dimension "
 							 "must be IMMUTABLE, take one argument, and return a supported time "
 							 "type")));
+		}
 	}
 
 	fmgr_info_cxt(funcoid, &pf->func_fmgr, CurrentMemoryContext);
@@ -160,7 +170,9 @@ find_text_coercion_func(Oid type)
 	cpt = find_coercion_pathway(TEXTOID, type, COERCION_EXPLICIT, &funcid);
 
 	if (cpt != COERCION_PATH_FUNC)
+	{
 		getTypeOutputInfo(type, &funcid, &is_varlena);
+	}
 
 	return funcid;
 }
@@ -177,9 +189,11 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 	FuncExpr *expr;
 
 	if (schema == NULL || partfunc == NULL || partcol == NULL)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
 				 errmsg("partitioning function information cannot be null")));
+	}
 
 	pinfo = palloc0(sizeof(PartitioningInfo));
 	namestrcpy(&pinfo->partfunc.name, partfunc);
@@ -189,7 +203,9 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 
 	/* handle the case that the attribute has been dropped */
 	if (pinfo->column_attnum == InvalidAttrNumber)
+	{
 		return NULL;
+	}
 
 	namestrcpy(&pinfo->partfunc.schema, schema);
 
@@ -201,7 +217,9 @@ ts_partitioning_info_create(const char *schema, const char *partfunc, const char
 		TypeCacheEntry *tce = lookup_type_cache(columntype, TYPECACHE_HASH_FLAGS);
 
 		if (!OidIsValid(tce->hash_proc) && ts_partitioning_func_is_closed_default(schema, partfunc))
+		{
 			elog(ERROR, "could not find hash function for type %s", format_type_be(columntype));
+		}
 	}
 
 	partitioning_func_set_func_fmgr(&pinfo->partfunc, columntype, dimtype);
@@ -274,10 +292,14 @@ ts_partitioning_func_apply_slot(PartitioningInfo *pinfo, TupleTableSlot *slot, b
 	value = slot_getattr(slot, pinfo->column_attnum, &null);
 
 	if (NULL != isnull)
+	{
 		*isnull = null;
+	}
 
 	if (null)
+	{
 		return 0;
+	}
 
 	collation =
 		TupleDescAttr(slot->tts_tupleDescriptor, AttrNumberGetAttrOffset(pinfo->column_attnum))
@@ -302,10 +324,14 @@ resolve_function_argtype(FunctionCallInfo fcinfo)
 	fe = (FuncExpr *) fcinfo->flinfo->fn_expr;
 
 	if (NULL == fe || !IsA(fe, FuncExpr))
+	{
 		elog(ERROR, "no function expression set when invoking partitioning function");
+	}
 
 	if (list_length(fe->args) != 1)
+	{
 		elog(ERROR, "unexpected number of arguments in function expression");
+	}
 
 	node = linitial(fe->args);
 
@@ -386,7 +412,9 @@ ts_get_partition_for_key(PG_FUNCTION_ARGS)
 	int32 res;
 
 	if (PG_NARGS() != 1)
+	{
 		elog(ERROR, "unexpected number of arguments to partitioning function");
+	}
 
 	if (NULL == pfc)
 	{
@@ -399,7 +427,9 @@ ts_get_partition_for_key(PG_FUNCTION_ARGS)
 			funcid = find_text_coercion_func(argtype);
 
 			if (!OidIsValid(funcid))
+			{
 				elog(ERROR, "could not coerce type %u to text", argtype);
+			}
 		}
 
 		pfc = part_func_cache_create(argtype, NULL, funcid, fcinfo->flinfo->fn_mcxt);
@@ -444,7 +474,9 @@ ts_get_partition_hash(PG_FUNCTION_ARGS)
 	Oid collation;
 
 	if (PG_NARGS() != 1)
+	{
 		elog(ERROR, "unexpected number of arguments to partitioning function");
+	}
 
 	if (NULL == pfc)
 	{
@@ -456,14 +488,18 @@ ts_get_partition_hash(PG_FUNCTION_ARGS)
 	}
 
 	if (!OidIsValid(pfc->tce->hash_proc))
+	{
 		elog(ERROR, "could not find hash function for type %u", pfc->argtype);
+	}
 
 	/* use the supplied collation, if it exists, otherwise use the default for
 	 * the type
 	 */
 	collation = PG_GET_COLLATION();
 	if (!OidIsValid(collation))
+	{
 		collation = pfc->tce->typcollation;
+	}
 
 	hash = FunctionCall1Coll(&pfc->tce->hash_proc_finfo, collation, arg);
 

@@ -37,7 +37,9 @@ ts_scan_iterator_scan_key_init(ScanIterator *iterator, AttrNumber attributeNumbe
 	iterator->ctx.scankey = iterator->scankey;
 
 	if (iterator->ctx.nkeys >= EMBEDDED_SCAN_KEY_SIZE)
+	{
 		elog(ERROR, "cannot scan more than %d keys", EMBEDDED_SCAN_KEY_SIZE);
+	}
 
 	/*
 	 * For rescans, when the scan key is reinitialized during the scan, make

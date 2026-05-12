@@ -78,7 +78,9 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 			break;
 		case UPPERREL_WINDOW:
 			if (IsA(linitial(input_rel->pathlist), CustomPath))
+			{
 				gapfill_adjust_window_targetlist(root, input_rel, output_rel);
+			}
 			break;
 		case UPPERREL_DISTINCT:
 			tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
@@ -100,7 +102,9 @@ static inline bool
 use_columnar_scan(const RelOptInfo *rel, const RangeTblEntry *rte, const Chunk *chunk)
 {
 	if (!ts_guc_enable_columnarscan)
+	{
 		return false;
+	}
 
 	/* Check that the chunk is actually compressed */
 	return ts_chunk_is_compressed(chunk) &&
@@ -115,7 +119,9 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	/* Only interested in queries on relations that are part of hypertables
 	 * with compression enabled, so quick exit if not this case. */
 	if (ht == NULL || !TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	{
 		return;
+	}
 
 	/*
 	 * For a chunk, we can get here via a query on the hypertable that expands
@@ -128,7 +134,9 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	const Chunk *chunk = ts_planner_chunk_fetch(root, rel);
 
 	if (chunk == NULL)
+	{
 		return;
+	}
 
 	if (use_columnar_scan(rel, rte, chunk))
 	{
@@ -143,10 +151,12 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 	if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		if (!ts_guc_enable_compressed_merge && root->parse->commandType == CMD_MERGE)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("The MERGE command with UPDATE/DELETE merge actions is not support on "
 							"compressed hypertables")));
+		}
 
 #if !PG17_GE
 		/*
@@ -184,7 +194,9 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 			{
 				Path *path = lfirst(lc);
 				if (!IsA(path, BitmapHeapPath))
+				{
 					filtered_paths = lappend(filtered_paths, path);
+				}
 			}
 
 			/*
@@ -209,7 +221,9 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 				{
 					Path *path = lfirst(lc);
 					if (!IsA(path, BitmapHeapPath))
+					{
 						filtered_paths = lappend(filtered_paths, path);
+					}
 				}
 
 				/*
@@ -232,7 +246,9 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 			{
 				Path *path = lfirst(lc);
 				if (!IsA(path, BitmapHeapPath))
+				{
 					filtered_paths = lappend(filtered_paths, path);
+				}
 			}
 			rel->partial_pathlist = filtered_paths;
 		}
@@ -262,30 +278,6 @@ tsl_preprocess_query(Query *parse, int *cursor_opts)
 		cagg_sort_pushdown(parse, cursor_opts);
 	}
 #endif
-}
-
-/*
- * Replaces pathkeys in tsl-specific custom path types during sort transformation.
- *
- * This hook is called from ts_sort_transform_replace_pathkeys() in sort_transform.c
- * after the basic pathkey replacement has been performed. It handles tsl-specific
- * path types (such as ColumnarScan) that contain additional pathkey fields beyond
- * the standard path.pathkeys field.
- */
-void
-tsl_sort_transform_replace_pathkeys(void *path, List *transformed_pathkeys, List *original_pathkeys)
-{
-	if (!path)
-		return;
-	if (ts_is_columnar_scan_path(path))
-	{
-		ColumnarScanPath *dcpath = (ColumnarScanPath *) path;
-		if (compare_pathkeys(dcpath->required_compressed_pathkeys, transformed_pathkeys) ==
-			PATHKEYS_EQUAL)
-		{
-			dcpath->required_compressed_pathkeys = original_pathkeys;
-		}
-	}
 }
 
 /*

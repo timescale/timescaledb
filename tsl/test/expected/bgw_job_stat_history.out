@@ -90,9 +90,12 @@ SELECT scheduled FROM alter_job(:job_id_2, next_start => now());
 -----------
  t
 
-SELECT _timescaledb_functions.restart_background_workers();
- restart_background_workers 
-----------------------------
+-- Wake the scheduler so it picks up the new next_start without killing
+-- any in-flight worker (a hard restart races with running jobs and can
+-- leave an unclosed history row that surfaces as "crash detected").
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
  t
 
 SELECT test.wait_for_job_to_run(:job_id_1, 2);
@@ -144,9 +147,9 @@ SELECT scheduled FROM alter_job(:job_id_2, next_start => now());
 -----------
  t
 
-SELECT _timescaledb_functions.restart_background_workers();
- restart_background_workers 
-----------------------------
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
  t
 
 SELECT test.wait_for_job_to_run(:job_id_1, 3);
@@ -184,9 +187,9 @@ SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
 -----------
  t
 
-SELECT _timescaledb_functions.restart_background_workers();
- restart_background_workers 
-----------------------------
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
  t
 
 SELECT test.wait_for_job_to_run(:job_id_1, 4);
@@ -219,9 +222,9 @@ SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
 -----------
  t
 
-SELECT _timescaledb_functions.restart_background_workers();
- restart_background_workers 
-----------------------------
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
  t
 
 SELECT test.wait_for_job_to_run(:job_id_1, 5);
@@ -258,9 +261,9 @@ SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
 -----------
  t
 
-SELECT _timescaledb_functions.restart_background_workers();
- restart_background_workers 
-----------------------------
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
  t
 
 SELECT test.wait_for_job_to_run(:job_id_1, 6);
@@ -289,9 +292,9 @@ BEGIN
 END
 $$;
 SELECT add_job('custom_job_alter', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_3 \gset
-SELECT _timescaledb_functions.restart_background_workers();
- restart_background_workers 
-----------------------------
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
  t
 
 SELECT test.wait_for_job_to_run(:job_id_3, 1);
@@ -305,9 +308,9 @@ FROM alter_job(:job_id_3, timezone => 'America/Sao_Paulo', fixed_schedule => fal
 -------------------+----------------+------------------+-------------------
  America/Sao_Paulo | f              | {"key": "value"} | @ 10 mins
 
-SELECT _timescaledb_functions.restart_background_workers();
- restart_background_workers 
-----------------------------
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
  t
 
 SELECT test.wait_for_job_to_run(:job_id_3, 2);

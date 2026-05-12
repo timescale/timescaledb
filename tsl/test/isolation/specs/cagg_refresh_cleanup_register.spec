@@ -241,4 +241,4 @@ permutation "P1_add_policy" "WP_after_register_enable" "P1_run_policy" "check_jo
 # Stale registration cleanup by concurrent refreshes.
 # Kill a backend during refresh to end up with a pid left behind. Later two concurrent refreshes run, only one removes the stale pid.
 # backend R1 is killed, we can no longer use this for later permutations
-permutation "WP_before_txn2_commit_enable" "R1_refresh" "check_jobs" "K1_terminate"("check_jobs") "WP_before_txn2_commit_disable" "L1_lock" "R2_refresh"("L1_lock") "R3_refresh"("R2_refresh") "L1_unlock" "check_jobs"
+permutation "WP_before_txn2_commit_enable" "R1_refresh" "check_jobs" "K1_terminate"("check_jobs") "WP_before_txn2_commit_disable" "L1_lock" "R2_refresh"("L1_lock") "R3_refresh"("R2_refresh") "L1_unlock"(R2_refresh, R3_refresh) "check_jobs"

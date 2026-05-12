@@ -91,19 +91,25 @@ classify_table(const Form_pg_class class, Cache *htcache, const Hypertable **ht,
 	Assert(class->relkind == RELKIND_RELATION);
 
 	if (class->relispartition)
+	{
 		return RELTYPE_PARTITION;
+	}
 
 	/* Check if it is a hypertable */
 	*ht = ts_hypertable_cache_get_entry(htcache, class->oid, CACHE_FLAG_MISSING_OK);
 
 	if (*ht)
+	{
 		return classify_hypertable(*ht);
+	}
 
 	/* Check if it is a chunk */
 	*chunk = ts_chunk_get_by_relid(class->oid, false);
 
 	if (NULL != *chunk)
+	{
 		return classify_chunk(htcache, ht, *chunk);
+	}
 
 	return RELTYPE_TABLE;
 }
@@ -119,7 +125,9 @@ classify_partitioned_table(const Form_pg_class class)
 	 * that only "root" tables are counted as partitioned tables.
 	 */
 	if (class->relispartition)
+	{
 		return RELTYPE_PARTITION;
+	}
 
 	return RELTYPE_PARTITIONED_TABLE;
 }
@@ -130,7 +138,9 @@ classify_foreign_table(Cache *htcache, Oid relid, const Hypertable **ht, const C
 	*chunk = ts_chunk_get_by_relid(relid, false);
 
 	if (*chunk)
+	{
 		return classify_chunk(htcache, ht, *chunk);
+	}
 
 	/*
 	 * Currently don't care about non-chunk foreign tables, so classify as
@@ -145,12 +155,16 @@ classify_view(const Form_pg_class class, Cache *htcache, const ContinuousAgg **c
 	const Catalog *catalog = ts_catalog_get();
 
 	if (class->relnamespace == catalog->extension_schema_id[TS_INTERNAL_SCHEMA])
+	{
 		return RELTYPE_OTHER;
+	}
 
 	*cagg = ts_continuous_agg_find_by_relid(class->oid);
 
 	if (*cagg)
+	{
 		return RELTYPE_CONTINUOUS_AGG;
+	}
 
 	return RELTYPE_VIEW;
 }
@@ -203,10 +217,14 @@ process_relation(BaseStats *stats, Form_pg_class class)
 	 * available.
 	 */
 	if (class->reltuples > 0)
+	{
 		stats->reltuples += class->reltuples;
+	}
 
 	if (RELKIND_HAS_STORAGE(class->relkind))
+	{
 		add_storage((StorageStats *) stats, class);
+	}
 }
 
 static void
@@ -215,7 +233,9 @@ process_hypertable(HyperStats *hyp, Form_pg_class class, const Hypertable *ht)
 	process_relation(&hyp->storage.base, class);
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+	{
 		hyp->compressed_hypertable_count++;
+	}
 }
 
 static void
@@ -228,15 +248,21 @@ process_continuous_agg(CaggStats *cs, Form_pg_class class, const ContinuousAgg *
 	process_relation(&cs->hyp.storage.base, class);
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
+	{
 		cs->hyp.compressed_hypertable_count++;
+	}
 
 	if (!cagg->data.materialized_only)
+	{
 		cs->uses_real_time_aggregation_count++;
+	}
 
 	cs->finalized++;
 
 	if (cagg->data.parent_mat_hypertable_id != INVALID_HYPERTABLE_ID)
+	{
 		cs->nested++;
+	}
 }
 
 static void
@@ -270,7 +296,9 @@ add_chunk_stats(HyperStats *stats, Form_pg_class class, const Chunk *chunk,
 	process_partition(stats, class, true);
 
 	if (ts_chunk_is_compressed(chunk))
+	{
 		stats->compressed_chunk_count++;
+	}
 
 	if (fd_compr)
 	{
@@ -300,7 +328,9 @@ get_chunk_compression_stats(StatsContext *statsctx, const Chunk *chunk,
 	bool found = false;
 
 	if (!ts_chunk_is_compressed(chunk))
+	{
 		return false;
+	}
 
 	it = ts_scan_iterator_create(COMPRESSION_CHUNK_SIZE, AccessShareLock, CurrentMemoryContext);
 	ts_scan_iterator_set_index(&it, COMPRESSION_CHUNK_SIZE, COMPRESSION_CHUNK_SIZE_PKEY);
@@ -325,7 +355,9 @@ get_chunk_compression_stats(StatsContext *statsctx, const Chunk *chunk,
 		memcpy(compr_stats, fd, sizeof(*fd));
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 
 		found = true;
 	}
@@ -370,10 +402,14 @@ process_chunk(StatsContext *statsctx, StatsRelType chunk_reltype, Form_pg_class 
 	 * stats for them
 	 */
 	if (chunk_reltype == RELTYPE_COMPRESSION_CHUNK)
+	{
 		return;
+	}
 
 	if (get_chunk_compression_stats(statsctx, chunk, &comp_stats_data))
+	{
 		compr_stats = &comp_stats_data;
+	}
 
 	switch (chunk_reltype)
 	{
@@ -395,10 +431,14 @@ is_pg_schema(Oid namespaceid)
 	static Oid information_schema_oid = InvalidOid;
 
 	if (namespaceid == PG_CATALOG_NAMESPACE || namespaceid == PG_TOAST_NAMESPACE)
+	{
 		return true;
+	}
 
 	if (!OidIsValid(information_schema_oid))
+	{
 		information_schema_oid = get_namespace_oid("information_schema", false);
+	}
 
 	return namespaceid == information_schema_oid;
 }
@@ -412,7 +452,9 @@ is_ts_schema(const Catalog *catalog, Oid namespaceid)
 	{
 		if (namespaceid != catalog->extension_schema_id[TS_INTERNAL_SCHEMA] &&
 			namespaceid == catalog->extension_schema_id[i])
+		{
 			return true;
+		}
 	}
 
 	return false;
@@ -459,12 +501,16 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 		tup = systable_getnext(scan);
 
 		if (!HeapTupleIsValid(tup))
+		{
 			break;
+		}
 
 		class = (Form_pg_class) GETSTRUCT(tup);
 
 		if (should_ignore_relation(catalog, class))
+		{
 			continue;
+		}
 
 		/* Lock the relation to ensure it does not disappear while we process
 		 * it */
@@ -514,7 +560,9 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 			case RELTYPE_VIEW:
 				/* Filter internal cagg views */
 				if (class->relnamespace != catalog->extension_schema_id[TS_INTERNAL_SCHEMA])
+				{
 					process_relation(&stats->views, class);
+				}
 				break;
 			case RELTYPE_MATVIEW:
 				process_relation(&stats->materialized_views.base, class);

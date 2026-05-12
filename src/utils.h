@@ -176,7 +176,9 @@ static inline int64
 int64_min(int64 a, int64 b)
 {
 	if (a <= b)
+	{
 		return a;
+	}
 	return b;
 }
 
@@ -186,7 +188,9 @@ int64_saturating_add(int64 a, int64 b)
 	int64 result;
 	bool overflowed = pg_add_s64_overflow(a, b, &result);
 	if (overflowed)
+	{
 		result = a < 0 ? PG_INT64_MIN : PG_INT64_MAX;
+	}
 	return result;
 }
 
@@ -196,7 +200,9 @@ int64_saturating_sub(int64 a, int64 b)
 	int64 result;
 	bool overflowed = pg_sub_s64_overflow(a, b, &result);
 	if (overflowed)
+	{
 		result = b < 0 ? PG_INT64_MAX : PG_INT64_MIN;
+	}
 	return result;
 }
 
@@ -230,7 +236,9 @@ static inline void
 TryRegisterCustomScanMethods(const CustomScanMethods *methods)
 {
 	if (!GetCustomScanMethods(methods->CustomName, true))
+	{
 		RegisterCustomScanMethods(methods);
+	}
 }
 
 typedef struct RelationSize
@@ -268,18 +276,22 @@ ts_get_relation_relid(char const *schema_name, char const *relation_name, bool r
 		Oid rel_oid = get_relname_relid(relation_name, schema_oid);
 
 		if (!return_invalid)
+		{
 			Ensure(OidIsValid(rel_oid), "relation \"%s.%s\" not found", schema_name, relation_name);
+		}
 
 		return rel_oid;
 	}
 	else
 	{
 		if (!return_invalid)
+		{
 			Ensure(OidIsValid(schema_oid),
 				   "schema \"%s\" not found (during lookup of relation \"%s.%s\")",
 				   schema_name,
 				   schema_name,
 				   relation_name);
+		}
 
 		return InvalidOid;
 	}
@@ -300,7 +312,9 @@ ts_datum_set_text_from_cstring(const AttrNumber attno, NullableDatum *datums, co
 		datums[AttrNumberGetAttrOffset(attno)].isnull = false;
 	}
 	else
+	{
 		datums[AttrNumberGetAttrOffset(attno)].isnull = true;
+	}
 }
 
 static inline void
@@ -308,7 +322,9 @@ ts_datum_set_bool(const AttrNumber attno, NullableDatum *datums, const bool valu
 				  const bool isnull)
 {
 	if (!isnull)
+	{
 		datums[AttrNumberGetAttrOffset(attno)].value = BoolGetDatum(value);
+	}
 	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
 }
 
@@ -317,7 +333,9 @@ ts_datum_set_int32(const AttrNumber attno, NullableDatum *datums, const int32 va
 				   const bool isnull)
 {
 	if (!isnull)
+	{
 		datums[AttrNumberGetAttrOffset(attno)].value = Int32GetDatum(value);
+	}
 	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
 }
 
@@ -326,7 +344,9 @@ ts_datum_set_int64(const AttrNumber attno, NullableDatum *datums, const int64 va
 				   const bool isnull)
 {
 	if (!isnull)
+	{
 		datums[AttrNumberGetAttrOffset(attno)].value = Int64GetDatum(value);
+	}
 	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
 }
 
@@ -335,7 +355,9 @@ ts_datum_set_timestamptz(const AttrNumber attno, NullableDatum *datums, const Ti
 						 const bool isnull)
 {
 	if (!isnull)
+	{
 		datums[AttrNumberGetAttrOffset(attno)].value = TimestampTzGetDatum(value);
+	}
 	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
 }
 
@@ -348,7 +370,9 @@ ts_datum_set_jsonb(const AttrNumber attno, NullableDatum *datums, const Jsonb *v
 		datums[AttrNumberGetAttrOffset(attno)].isnull = false;
 	}
 	else
+	{
 		datums[AttrNumberGetAttrOffset(attno)].isnull = true;
+	}
 }
 
 static inline void
@@ -360,7 +384,9 @@ ts_datum_set_objectid(const AttrNumber attno, NullableDatum *datums, const Oid v
 		datums[AttrNumberGetAttrOffset(attno)].isnull = false;
 	}
 	else
+	{
 		datums[AttrNumberGetAttrOffset(attno)].isnull = true;
+	}
 }
 
 typedef void (*append_cell_func)(StringInfo, ListCell *);
@@ -374,6 +400,4 @@ extern TSDLLEXPORT char *ts_get_attr_expr(Relation rel, AttrNumber attno);
 extern TSDLLEXPORT char *ts_list_to_string(List *list, append_cell_func append);
 extern TSDLLEXPORT List *ts_find_aggrefs(Node *node);
 extern TSDLLEXPORT bool ts_is_time_bucket_function(Expr *node);
-#if PG17_LT
 extern TSDLLEXPORT bool ts_get_attnotnull(Oid relid, AttrNumber attno);
-#endif

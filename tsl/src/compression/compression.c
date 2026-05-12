@@ -95,7 +95,9 @@ compressor_for_type(Oid type)
 {
 	CompressionAlgorithm algorithm = compression_get_default_algorithm(type);
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
+	{
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
+	}
 
 	return definitions[algorithm].compressor_for_type(type);
 }
@@ -104,19 +106,27 @@ DecompressionInitializer
 tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm, bool reverse)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
+	{
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
+	}
 
 	if (reverse)
+	{
 		return definitions[algorithm].iterator_init_reverse;
+	}
 	else
+	{
 		return definitions[algorithm].iterator_init_forward;
+	}
 }
 
 DecompressAllFunction
 tsl_get_decompress_all_function(CompressionAlgorithm algorithm, Oid type)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
+	{
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
+	}
 
 	if (type != TEXTOID && type != BOOLOID && type != UUIDOID &&
 		(algorithm == COMPRESSION_ALGORITHM_DICTIONARY || algorithm == COMPRESSION_ALGORITHM_ARRAY))
@@ -157,7 +167,9 @@ get_compressed_data_header(Datum data)
 	CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(data);
 
 	if (header->compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
+	{
 		elog(ERROR, "invalid compression algorithm %d", header->compression_algorithm);
+	}
 
 	return header;
 }
@@ -178,7 +190,9 @@ truncate_relation(Oid table_oid)
 
 	/* Chunks should never have fks into them, but double check */
 	if (fks != NIL)
+	{
 		elog(ERROR, "found a FK into a chunk while truncating");
+	}
 
 	CheckTableForSerializableConflictIn(rel);
 
@@ -237,16 +251,13 @@ delete_relation_rows(Oid table_oid)
 	Relation rel = table_open(table_oid, RowExclusiveLock);
 	Snapshot snap = RegisterSnapshot(GetLatestSnapshot());
 
-	/* Delete the rows in the table */
+	/*
+	 * Delete the rows in the table. heap_delete also deletes any out-of-line
+	 * TOAST values via heap_toast_delete, so the TOAST relation does not need
+	 * a separate pass; doing one would re-visit those TOAST tuples in the
+	 * same command and fail with "tuple already updated by self".
+	 */
 	RelationDeleteAllRows(rel, snap);
-
-	/* Delete the rows in the toast table */
-	if (OidIsValid(rel->rd_rel->reltoastrelid))
-	{
-		Relation toast_rel = table_open(rel->rd_rel->reltoastrelid, RowExclusiveLock);
-		RelationDeleteAllRows(toast_rel, snap);
-		table_close(toast_rel, NoLock);
-	}
 
 	table_close(rel, NoLock);
 	UnregisterSnapshot(snap);
@@ -271,7 +282,9 @@ calculate_reltuples_to_report(float4 reltuples)
 		report_reltuples = (int64) (0.1 * reltuples);
 		/* either analyze has not been done or table doesn't have a lot of rows */
 		if (report_reltuples < RELTUPLES_REPORT_DEFAULT)
+		{
 			report_reltuples = RELTUPLES_REPORT_DEFAULT;
+		}
 	}
 
 	return report_reltuples;
@@ -393,17 +406,21 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 
 					in_table_tp = SearchSysCacheAttNum(in_table, att_num);
 					if (!HeapTupleIsValid(in_table_tp))
+					{
 						elog(ERROR,
 							 "table \"%s\" does not have column \"%s\"",
 							 get_rel_name(in_table),
 							 attname);
+					}
 
 					index_tp = SearchSysCacheAttNum(index_oid, i + 1);
 					if (!HeapTupleIsValid(index_tp))
+					{
 						elog(ERROR,
 							 "index \"%s\" does not have column \"%s\"",
 							 get_rel_name(index_oid),
 							 attname);
+					}
 
 					in_table_attr_tp = (Form_pg_attribute) GETSTRUCT(in_table_tp);
 					index_attr_tp = (Form_pg_attribute) GETSTRUCT(index_tp);
@@ -493,14 +510,18 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 		{
 			row_compressor_process_ordered_slot(&row_compressor, slot, &writer);
 			if ((++nrows_processed % report_reltuples) == 0)
+			{
 				elog(DEBUG2,
 					 "converted " INT64_FORMAT " rows to columnstore from \"%s\"",
 					 nrows_processed,
 					 RelationGetRelationName(in_rel));
+			}
 		}
 
 		if (row_compressor.rows_compressed_into_current_value > 0)
+		{
 			row_compressor_flush(&row_compressor, &writer, true);
+		}
 
 		elog(DEBUG1,
 			 "finished converting " INT64_FORMAT " rows to columnstore from \"%s\"",
@@ -596,9 +617,13 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	cstat.rowcnt_post_compression = row_compressor.num_compressed_rows;
 
 	if ((insert_options & HEAP_INSERT_FROZEN) == HEAP_INSERT_FROZEN)
+	{
 		cstat.rowcnt_frozen = row_compressor.num_compressed_rows;
+	}
 	else
+	{
 		cstat.rowcnt_frozen = 0;
+	}
 
 	return cstat;
 }
@@ -696,7 +721,9 @@ compress_chunk_populate_sort_info_for_column(const CompressionSettings *settings
 
 	tp = SearchSysCacheAttName(table, attname);
 	if (!HeapTupleIsValid(tp))
+	{
 		elog(ERROR, "table \"%s\" does not have column \"%s\"", get_rel_name(table), attname);
+	}
 
 	att_tup = (Form_pg_attribute) GETSTRUCT(tp);
 	/* Other validation checks beyond just existence of a valid comparison operator could be useful
@@ -719,16 +746,22 @@ compress_chunk_populate_sort_info_for_column(const CompressionSettings *settings
 		*nulls_first = ts_array_get_element_bool(settings->fd.orderby_nullsfirst, position);
 
 		if (ts_array_get_element_bool(settings->fd.orderby_desc, position))
+		{
 			*sort_operator = tentry->gt_opr;
+		}
 		else
+		{
 			*sort_operator = tentry->lt_opr;
+		}
 	}
 
 	if (!OidIsValid(*sort_operator))
+	{
 		elog(ERROR,
 			 "no valid sort operator for column \"%s\" of type \"%s\"",
 			 attname,
 			 format_type_be(att_tup->atttypid));
+	}
 
 	ReleaseSysCache(tp);
 }
@@ -753,7 +786,9 @@ get_compressed_chunk_index(ResultRelInfo *resultRelInfo, const CompressionSettin
 		 * Default index we build includes all segmentby columns and metadata columns (min and max,
 		 * in that order) for all orderby columns.*/
 		if (index_info->ii_NumIndexKeyAttrs != num_segmentby_columns + (num_orderby_columns * 2))
+		{
 			continue;
+		}
 
 		for (int j = 0; j < num_segmentby_columns - 1; j++)
 		{
@@ -768,7 +803,9 @@ get_compressed_chunk_index(ResultRelInfo *resultRelInfo, const CompressionSettin
 		}
 
 		if (!matches)
+		{
 			continue;
+		}
 
 		return RelationGetRelid(index_relation);
 	}
@@ -789,7 +826,9 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 
 	SparseIndexSettings *parsed_settings = NULL;
 	if (settings && settings->fd.index)
+	{
 		parsed_settings = ts_convert_to_sparse_index_settings(settings->fd.index);
+	}
 
 	if (parsed_settings != NULL && ts_guc_enable_composite_bloom_indexes)
 	{
@@ -800,7 +839,9 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 			List *column_names = ts_get_column_names_from_parsed_object(obj);
 			int num_columns = list_length(column_names);
 			if (num_columns < 2)
+			{
 				continue;
+			}
 
 			Oid type_oids[MAX_BLOOM_FILTER_COLUMNS];
 			AttrNumber attnums[MAX_BLOOM_FILTER_COLUMNS];
@@ -820,7 +861,9 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 				compressed_column_metadata_name_list_v2(bloom1_column_prefix, column_names);
 			AttrNumber bloom_attr_number = get_attnum(settings->fd.compress_relid, bloom_col_name);
 			if (!AttributeNumberIsValid(bloom_attr_number))
+			{
 				continue;
+			}
 
 			int bloom_attr_offset = AttrNumberGetAttrOffset(bloom_attr_number);
 			metadata_builders = lappend(metadata_builders,
@@ -839,7 +882,9 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 			Form_pg_attribute attr = TupleDescAttr(in_desc, i);
 
 			if (attr->attisdropped)
+			{
 				continue;
+			}
 
 			PerColumn *column = &columns[AttrNumberGetAttrOffset(attr->attnum)];
 			AttrNumber compressed_colnum =
@@ -854,9 +899,11 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 			if (!is_segmentby)
 			{
 				if (compressed_column_attr->atttypid != compressed_data_type_oid)
+				{
 					elog(ERROR,
 						 "expected column '%s' to be a compressed data type",
 						 NameStr(attr->attname));
+				}
 
 				AttrNumber segment_min_attr_number =
 					compressed_column_metadata_attno(settings,
@@ -913,6 +960,31 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 																	 bloom_attr_offset));
 				}
 
+				const AttrNumber first_attr_number =
+					compressed_column_metadata_attno(settings,
+													 settings->fd.relid,
+													 attr->attnum,
+													 settings->fd.compress_relid,
+													 "first");
+				const AttrNumber last_attr_number =
+					compressed_column_metadata_attno(settings,
+													 settings->fd.relid,
+													 attr->attnum,
+													 settings->fd.compress_relid,
+													 "last");
+				if (AttributeNumberIsValid(first_attr_number) &&
+					AttributeNumberIsValid(last_attr_number))
+				{
+					const int16 first_attr_offset = AttrNumberGetAttrOffset(first_attr_number);
+					const int16 last_attr_offset = AttrNumberGetAttrOffset(last_attr_number);
+					metadata_builders =
+						lappend(metadata_builders,
+								batch_metadata_builder_firstlast_create(attr->atttypid,
+																		attr->attnum,
+																		first_attr_offset,
+																		last_attr_offset));
+				}
+
 				*column = (PerColumn){
 					.compressor = compressor_for_type(attr->atttypid),
 					.segmentby_column_index = -1,
@@ -921,9 +993,11 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 			else
 			{
 				if (attr->atttypid != compressed_column_attr->atttypid)
+				{
 					elog(ERROR,
 						 "expected segment by column \"%s\" to be same type as uncompressed column",
 						 NameStr(attr->attname));
+				}
 				int16 index = ts_array_position(settings->fd.segmentby, NameStr(attr->attname));
 				*column = (PerColumn){
 					.segment_info = segment_info_new(attr),
@@ -945,7 +1019,9 @@ check_for_limited_size_compressors(PerColumn *pcolumns, int16 natts)
 	for (int i = 0; i < natts; i++)
 	{
 		if (pcolumns[i].compressor && pcolumns[i].compressor->is_full)
+		{
 			return true;
+		}
 	}
 
 	return false;
@@ -1043,10 +1119,14 @@ void
 tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
 {
 	if (compressor->sort_state)
+	{
 		tuplesort_end(compressor->sort_state);
+	}
 
 	if (compressor->invalidation)
+	{
 		pfree(compressor->invalidation);
+	}
 
 	bulk_writer_close(bulk_writer);
 
@@ -1239,9 +1319,11 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 		get_attnum(settings->fd.compress_relid, NameStr(*count_metadata_name));
 
 	if (count_metadata_column_num == InvalidAttrNumber)
+	{
 		elog(ERROR,
 			 "missing metadata column '%s' in columnstore table",
 			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+	}
 
 	MemoryContext row_compressor_context = AllocSetContextCreate(CurrentMemoryContext,
 																 "row compressor context",
@@ -1304,14 +1386,18 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 	{
 		row_compressor_process_ordered_slot(row_compressor, slot, writer);
 		if ((++nrows_processed % report_reltuples) == 0)
+		{
 			elog(DEBUG2,
 				 "compressed " INT64_FORMAT " rows from \"%s\"",
 				 nrows_processed,
 				 RelationGetRelationName(in_rel));
+		}
 	}
 
 	if (row_compressor->rows_compressed_into_current_value > 0)
+	{
 		row_compressor_flush(row_compressor, writer, true);
+	}
 	elog(DEBUG1,
 		 "finished compressing " INT64_FORMAT " rows from \"%s\"",
 		 nrows_processed,
@@ -1325,13 +1411,19 @@ row_compressor_is_full(RowCompressor *row_compressor, TupleTableSlot *row)
 {
 	if (row_compressor->rows_compressed_into_current_value >=
 		(uint32) ts_guc_compression_batch_size_limit)
+	{
 		return true;
+	}
 
 	if (!ts_guc_compression_enable_compressor_batch_limit)
+	{
 		return false;
+	}
 
 	if (!row_compressor->needs_fullness_check)
+	{
 		return false;
+	}
 
 	/* Check with every column compressor if they can add the next value to current batch */
 	int col;
@@ -1343,13 +1435,17 @@ row_compressor_is_full(RowCompressor *row_compressor, TupleTableSlot *row)
 
 		/* No compressor or the compressor has no check, just skip */
 		if (compressor == NULL || compressor->is_full == NULL)
+		{
 			continue;
+		}
 
 		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
 		if (!is_null)
 		{
 			if (compressor->is_full(compressor, val))
+			{
 				return true;
+			}
 		}
 	}
 
@@ -1393,9 +1489,13 @@ row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlo
 	if (compressed_row_is_full || changed_groups)
 	{
 		if (row_compressor->rows_compressed_into_current_value > 0)
+		{
 			row_compressor_flush(row_compressor, writer, changed_groups);
+		}
 		if (changed_groups)
+		{
 			row_compressor_update_group(row_compressor, slot);
+		}
 	}
 
 	row_compressor_append_row(row_compressor, slot);
@@ -1420,7 +1520,9 @@ row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 		bool is_null;
 
 		if (column->segment_info == NULL)
+		{
 			continue;
+		}
 
 		Assert(column->compressor == NULL);
 
@@ -1444,14 +1546,18 @@ row_compressor_new_row_is_in_new_group(RowCompressor *row_compressor, TupleTable
 		bool is_null;
 
 		if (column->segment_info == NULL)
+		{
 			continue;
+		}
 
 		Assert(column->compressor == NULL);
 
 		datum = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
 
 		if (!segment_info_datum_is_in_group(column->segment_info, datum, is_null))
+		{
 			return true;
+		}
 	}
 
 	return false;
@@ -1469,16 +1575,22 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 
 		/* if there is no compressor, this must be a segmenter, so just skip */
 		if (compressor == NULL)
+		{
 			continue;
+		}
 
 		/* Performance Improvement: Since we call getallatts at the beginning, slot_getattr is
 		 * useless overhead here, and we should just access the array directly.
 		 */
 		val = slot_getattr(row, AttrOffsetGetAttrNumber(col), &is_null);
 		if (is_null)
+		{
 			compressor->append_null(compressor);
+		}
 		else
+		{
 			compressor->append_val(compressor, val);
+		}
 	}
 
 	ListCell *lc;
@@ -1502,7 +1614,9 @@ row_compressor_build_tuple(RowCompressor *row_compressor)
 		Compressor *compressor;
 		int16 compressed_col;
 		if (column->compressor == NULL && column->segment_info == NULL)
+		{
 			continue;
+		}
 
 		compressor = column->compressor;
 		compressed_col = row_compressor->uncompressed_col_to_compressed_col[col];
@@ -1519,13 +1633,17 @@ row_compressor_build_tuple(RowCompressor *row_compressor)
 			{
 				if (ts_guc_enable_null_compression &&
 					row_compressor->rows_compressed_into_current_value > 0)
+				{
 					compressed_data = null_compressor_get_dummy_block();
+				}
 			}
 			row_compressor->compressed_is_null[compressed_col] = compressed_data == NULL;
 
 			if (compressed_data != NULL)
+			{
 				row_compressor->compressed_values[compressed_col] =
 					PointerGetDatum(compressed_data);
+			}
 		}
 		else if (column->segment_info != NULL)
 		{
@@ -1565,19 +1683,27 @@ row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups)
 		PerColumn *column = &row_compressor->per_column[col];
 		int16 compressed_col;
 		if (column->compressor == NULL && column->segment_info == NULL)
+		{
 			continue;
+		}
 
 		compressed_col = row_compressor->uncompressed_col_to_compressed_col[col];
 		Assert(compressed_col >= 0);
 		if (row_compressor->compressed_is_null[compressed_col])
+		{
 			continue;
+		}
 
 		/* don't free the segment-bys if we've overflowed the row, we still need them */
 		if (column->segment_info != NULL && !changed_groups)
+		{
 			continue;
+		}
 
 		if (column->compressor != NULL || !column->segment_info->typ_by_val)
+		{
 			pfree(DatumGetPointer(row_compressor->compressed_values[compressed_col]));
+		}
 
 		row_compressor->compressed_values[compressed_col] = 0;
 		row_compressor->compressed_is_null[compressed_col] = true;
@@ -1608,7 +1734,8 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 	if (row_compressor->invalidation)
 	{
 		InvalidationSettings *settings = row_compressor->invalidation;
-		AttrNumber dim_attnum = AttrOffsetGetAttrNumber(settings->invalidation_column_offset);
+		int16 dim_offset = settings->invalidation_column_offset;
+		AttrNumber dim_attnum = AttrOffsetGetAttrNumber(dim_offset);
 
 		BatchMetadataBuilderMinMax *minmax_builder = NULL;
 		ListCell *lc;
@@ -1626,11 +1753,32 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 			}
 		}
 
-		Assert(minmax_builder != NULL);
-		Datum min = row_compressor->compressed_values[minmax_builder->min_metadata_attr_offset];
-		Datum max = row_compressor->compressed_values[minmax_builder->max_metadata_attr_offset];
-		int64 start = ts_time_value_to_internal(min, minmax_builder->type_oid);
-		int64 end = ts_time_value_to_internal(max, minmax_builder->type_oid);
+		Datum min;
+		Datum max;
+		Oid type_oid;
+		if (minmax_builder != NULL)
+		{
+			min = row_compressor->compressed_values[minmax_builder->min_metadata_attr_offset];
+			max = row_compressor->compressed_values[minmax_builder->max_metadata_attr_offset];
+			type_oid = minmax_builder->type_oid;
+		}
+		else
+		{
+			/*
+			 * No minmax sparse index for the cagg invalidation column means it
+			 * is configured as segmentby. Every row in the batch shares the
+			 * same segmentby value, so use it as both bounds.
+			 */
+			PerColumn *dim_column = &row_compressor->per_column[dim_offset];
+			Ensure(dim_column->compressor == NULL && dim_column->segment_info != NULL,
+				   "cagg invalidation column has no minmax builder and is not segmentby");
+			Ensure(!dim_column->segment_info->is_null, "cagg invalidation column is NULL");
+			int16 compressed_col = row_compressor->uncompressed_col_to_compressed_col[dim_offset];
+			min = max = row_compressor->compressed_values[compressed_col];
+			type_oid = TupleDescAttr(row_compressor->in_desc, dim_offset)->atttypid;
+		}
+		int64 start = ts_time_value_to_internal(min, type_oid);
+		int64 end = ts_time_value_to_internal(max, type_oid);
 		continuous_agg_invalidate_range(settings->hypertable_id, settings->chunk_relid, start, end);
 	}
 
@@ -1648,8 +1796,10 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 	heap_freetuple(compressed_tuple);
 
 	if (row_compressor->on_flush)
+	{
 		row_compressor->on_flush(row_compressor,
 								 row_compressor->rows_compressed_into_current_value);
+	}
 
 	MemoryContextSwitchTo(old_cxt);
 	row_compressor_clear_batch(row_compressor, changed_groups);
@@ -1683,7 +1833,9 @@ segment_info_new(Form_pg_attribute column_attr)
 	TypeCacheEntry *tce = lookup_type_cache(column_attr->atttypid, TYPECACHE_EQ_OPR_FINFO);
 
 	if (!OidIsValid(tce->eq_opr_finfo.fn_oid))
+	{
 		elog(ERROR, "no equality function for column \"%s\"", NameStr(column_attr->attname));
+	}
 
 	SegmentInfo *segment_info = palloc(sizeof(*segment_info));
 
@@ -1714,9 +1866,13 @@ segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null)
 {
 	segment_info->is_null = is_null;
 	if (is_null)
+	{
 		segment_info->val = 0;
+	}
 	else
+	{
 		segment_info->val = datumCopy(val, segment_info->typ_by_val, segment_info->typlen);
+	}
 }
 
 bool
@@ -1726,11 +1882,15 @@ segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_n
 	FunctionCallInfo eq_fcinfo;
 	/* if one of the datums is null and the other isn't, we must be in a new group */
 	if (segment_info->is_null != is_null)
+	{
 		return false;
+	}
 
 	/* they're both null */
 	if (segment_info->is_null)
+	{
 		return true;
+	}
 
 	/* neither is null, call the eq function */
 	eq_fcinfo = segment_info->eq_fcinfo;
@@ -1741,7 +1901,9 @@ segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_n
 	data_is_eq = FunctionCallInvoke(eq_fcinfo);
 
 	if (eq_fcinfo->isnull)
+	{
 		return false;
+	}
 
 	return DatumGetBool(data_is_eq);
 }
@@ -1771,7 +1933,9 @@ build_decompress_attrmap(const TupleDesc noncompressed_desc, const TupleDesc com
 		int j;
 
 		if (outatt->attisdropped)
+		{
 			continue;
+		}
 
 		attname = NameStr(outatt->attname);
 
@@ -1797,11 +1961,15 @@ build_decompress_attrmap(const TupleDesc noncompressed_desc, const TupleDesc com
 
 			nextindesc++;
 			if (nextindesc >= innatts)
+			{
 				nextindesc = 0;
+			}
 
 			inatt = TupleDescAttr(noncompressed_desc, nextindesc);
 			if (inatt->attisdropped)
+			{
 				continue;
+			}
 			if (strcmp(attname, NameStr(inatt->attname)) == 0)
 			{
 				attrMap->attnums[i] = inatt->attnum;
@@ -1846,7 +2014,9 @@ bulk_writer_close(BulkWriter *writer)
 {
 	FreeBulkInsertState(writer->bistate);
 	if (writer->indexstate)
+	{
 		CatalogCloseIndexes(writer->indexstate);
+	}
 	FreeExecutorState(writer->estate);
 }
 
@@ -1964,15 +2134,19 @@ decompress_chunk(Oid in_table, Oid out_table)
 						  decompressor.compressed_is_nulls);
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 
 		row_decompressor_decompress_row_to_table(&decompressor, &writer);
 
 		if ((++nrows_processed % report_reltuples) == 0)
+		{
 			elog(DEBUG2,
 				 "decompressed " INT64_FORMAT " rows from \"%s\"",
 				 nrows_processed,
 				 RelationGetRelationName(in_rel));
+		}
 	}
 
 	elog(DEBUG1,
@@ -2034,12 +2208,14 @@ create_per_compressed_column(RowDecompressor *decompressor)
 		/* determine if the data is compressed or not */
 		is_compressed = compressed_attr->atttypid == compressed_data_type_oid;
 		if (!is_compressed && compressed_attr->atttypid != decompressed_type)
+		{
 			elog(ERROR,
 				 "compressed table type '%s' does not match decompressed table type '%s' for "
 				 "segment-by column \"%s\"",
 				 format_type_be(compressed_attr->atttypid),
 				 format_type_be(decompressed_type),
 				 col_name);
+		}
 
 		*per_compressed_col = (PerCompressedColumn){
 			.decompressed_column_offset = decompressed_column_offset,
@@ -2147,7 +2323,9 @@ int
 decompress_batch(RowDecompressor *decompressor)
 {
 	if (decompressor->unprocessed_tuples)
+	{
 		return decompressor->unprocessed_tuples;
+	}
 
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 
@@ -2331,7 +2509,9 @@ decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *
 	{
 		column_info = &decompressor->per_compressed_cols[col];
 		if (!column_info->is_compressed)
+		{
 			continue;
+		}
 
 		if (column_info->decompressed_column_offset == AttrNumberGetAttrOffset(attno))
 		{
@@ -2477,7 +2657,9 @@ tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS)
 	DecompressResult res;
 
 	if (PG_ARGISNULL(0))
+	{
 		PG_RETURN_NULL();
+	}
 
 	if (SRF_IS_FIRSTCALL())
 	{
@@ -2500,10 +2682,14 @@ tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS)
 	res = iter->try_next(iter);
 
 	if (res.is_done)
+	{
 		SRF_RETURN_DONE(funcctx);
+	}
 
 	if (res.is_null)
+	{
 		SRF_RETURN_NEXT_NULL(funcctx);
+	}
 
 	SRF_RETURN_NEXT(funcctx, res.val);
 }
@@ -2518,7 +2704,9 @@ tsl_compressed_data_decompress_reverse(PG_FUNCTION_ARGS)
 	DecompressResult res;
 
 	if (PG_ARGISNULL(0))
+	{
 		PG_RETURN_NULL();
+	}
 
 	if (SRF_IS_FIRSTCALL())
 	{
@@ -2541,10 +2729,14 @@ tsl_compressed_data_decompress_reverse(PG_FUNCTION_ARGS)
 	res = iter->try_next(iter);
 
 	if (res.is_done)
+	{
 		SRF_RETURN_DONE(funcctx);
+	}
 
 	if (res.is_null)
+	{
 		SRF_RETURN_NEXT_NULL(funcctx);
+	}
 
 	SRF_RETURN_NEXT(funcctx, res.val);
 	;
@@ -2561,7 +2753,9 @@ tsl_compressed_data_to_array(PG_FUNCTION_ARGS)
 	ArrayType *result;
 
 	if (PG_ARGISNULL(0))
+	{
 		PG_RETURN_NULL();
+	}
 
 	compressed_data = PG_GETARG_DATUM(0);
 
@@ -2569,9 +2763,11 @@ tsl_compressed_data_to_array(PG_FUNCTION_ARGS)
 	element_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 
 	if (!OidIsValid(element_type))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("could not determine element type")));
+	}
 
 	/* Initial allocation - will grow as needed */
 	int capacity = TARGET_COMPRESSED_BATCH_SIZE;
@@ -2601,7 +2797,9 @@ tsl_compressed_data_to_array(PG_FUNCTION_ARGS)
 		res = iter->try_next(iter);
 
 		if (res.is_done)
+		{
 			break;
+		}
 
 		/* Grow arrays if needed */
 		if (count >= capacity)
@@ -2642,7 +2840,9 @@ Datum
 tsl_compressed_data_column_size(PG_FUNCTION_ARGS)
 {
 	if (PG_ARGISNULL(0))
+	{
 		PG_RETURN_NULL();
+	}
 
 	Datum compressed_data = PG_GETARG_DATUM(0);
 
@@ -2650,9 +2850,11 @@ tsl_compressed_data_column_size(PG_FUNCTION_ARGS)
 	Oid element_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 
 	if (!OidIsValid(element_type))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("could not determine element type")));
+	}
 
 	int16 typlen;
 	bool typbyval pg_attribute_unused();
@@ -2668,37 +2870,45 @@ tsl_compressed_data_column_size(PG_FUNCTION_ARGS)
 	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
 	{
 		/* All values are NULL, so size is 0 */
-		PG_RETURN_INT32(0);
+		PG_RETURN_INT64(0);
 	}
 
 	/* Initialize the decompression iterator */
 	iter = definitions[header->compression_algorithm].iterator_init_forward(PointerGetDatum(header),
 																			element_type);
 
-	int32 column_size = 0;
+	int64 column_size = 0;
 	/* Iterate through all compressed values */
 	for (;;)
 	{
 		res = iter->try_next(iter);
 
 		if (res.is_done)
+		{
 			break;
+		}
 
 		/* similar to pg_column_size implementation */
 		if (!res.is_null)
 		{
 			if (typlen == -1)
+			{
 				column_size += toast_datum_size(res.val);
+			}
 			else if (typlen == -2)
+			{
 				column_size += strlen(DatumGetCString(res.val)) + 1;
+			}
 			else
+			{
 				column_size += typlen;
+			}
 
 			column_size = att_align_nominal(column_size, typalign);
 		}
 	}
 
-	PG_RETURN_INT32(column_size);
+	PG_RETURN_INT64(column_size);
 }
 
 Datum
@@ -2727,7 +2937,9 @@ tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 	header.compression_algorithm = pq_getmsgbyte(buf);
 
 	if (header.compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
+	{
 		elog(ERROR, "invalid compression algorithm %d", header.compression_algorithm);
+	}
 
 	return definitions[header.compression_algorithm].compressed_data_recv(buf);
 }
@@ -2752,14 +2964,18 @@ tsl_compressed_data_in(PG_FUNCTION_ARGS)
 	Datum result;
 
 	if (input_len > PG_INT32_MAX)
+	{
 		elog(ERROR, "input too long");
+	}
 
 	decoded_len = pg_b64_dec_len(input_len);
 	decoded = palloc(decoded_len + 1);
 	decoded_len = pg_b64_decode(input, input_len, decoded, decoded_len);
 
 	if (decoded_len < 0)
+	{
 		elog(ERROR, "could not decode base64-encoded compressed data");
+	}
 
 	decoded[decoded_len] = '\0';
 	data = (StringInfoData){
@@ -2794,7 +3010,9 @@ tsl_compressed_data_out(PG_FUNCTION_ARGS)
 	encoded_len = pg_b64_encode(raw_data, raw_len, encoded, encoded_len);
 
 	if (encoded_len < 0)
+	{
 		elog(ERROR, "could not base64-encode compressed data");
+	}
 
 	encoded[encoded_len] = '\0';
 
@@ -2820,10 +3038,12 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 	bool has_nulls = false;
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("function returning record called in "
 						"context that cannot accept type record")));
+	}
 
 	switch (header->compression_algorithm)
 	{
@@ -2907,7 +3127,9 @@ extern CompressionStorage
 compression_get_toast_storage(CompressionAlgorithm algorithm)
 {
 	if (algorithm == _INVALID_COMPRESSION_ALGORITHM || algorithm >= _END_COMPRESSION_ALGORITHMS)
+	{
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
+	}
 	return definitions[algorithm].compressed_data_storage;
 }
 
@@ -2941,15 +3163,23 @@ compression_get_default_algorithm(Oid typeoid)
 
 		case BOOLOID:
 			if (ts_guc_enable_bool_compression)
+			{
 				return COMPRESSION_ALGORITHM_BOOL;
+			}
 			else
+			{
 				return COMPRESSION_ALGORITHM_ARRAY;
+			}
 
 		case UUIDOID:
 			if (ts_guc_enable_uuid_compression)
+			{
 				return COMPRESSION_ALGORITHM_UUID;
+			}
 			else
+			{
 				return COMPRESSION_ALGORITHM_DICTIONARY;
+			}
 
 		default:
 		{
@@ -2957,7 +3187,9 @@ compression_get_default_algorithm(Oid typeoid)
 			TypeCacheEntry *tentry =
 				lookup_type_cache(typeoid, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
 			if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
+			{
 				return COMPRESSION_ALGORITHM_ARRAY;
+			}
 			return COMPRESSION_ALGORITHM_DICTIONARY;
 		}
 	}
@@ -3032,7 +3264,8 @@ process_segmentby_candidate_value(ColumnAnalysis *ca, Datum val, bool is_null)
 	if (ca->n_distinct < MAX_SEGMENTBY_DISTINCT)
 	{
 		DistinctEntry *entry = &ca->entries[ca->n_distinct];
-		entry->value = datumCopy(val, ca->seg_info->typ_by_val, ca->seg_info->typlen);
+		entry->value =
+			is_null ? (Datum) 0 : datumCopy(val, ca->seg_info->typ_by_val, ca->seg_info->typlen);
 		entry->is_null = is_null;
 		entry->count = 1;
 		ca->n_distinct++;

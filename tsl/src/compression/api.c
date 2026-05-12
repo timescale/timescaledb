@@ -17,7 +17,6 @@
 #include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
-#include <libpq-fe.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/parsenodes.h>
@@ -44,6 +43,7 @@
 #include "debug_point.h"
 #include "error_utils.h"
 #include "errors.h"
+#include "guc.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
@@ -55,7 +55,6 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_chunk_size.h"
-#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "utils.h"
 #include "wal_utils.h"
@@ -196,7 +195,9 @@ compression_chunk_size_catalog_update_merged(int32 chunk_id, const RelationSize 
 		heap_freetuple(new_tuple);
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 
 		updated = true;
 		break;
@@ -212,7 +213,9 @@ get_hypertable_or_cagg_name(Hypertable *ht, Name objname)
 {
 	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
 	if (status == HypertableIsNotContinuousAgg || status == HypertableIsRawTable)
+	{
 		namestrcpy(objname, NameStr(ht->fd.table_name));
+	}
 	else if (status == HypertableIsMaterialization)
 	{
 		ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id, false);
@@ -251,15 +254,19 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 	}
 	compress_ht = ts_hypertable_get_by_id(srcht->fd.compressed_hypertable_id);
 	if (compress_ht == NULL)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("missing columnstore-enabled hypertable")));
+	}
 	/* user has to be the owner of the compression table too */
 	ts_hypertable_permissions_check(compress_ht->main_table_relid, GetUserId());
 
 	if (!srcht->space) /* something is wrong */
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing hyperspace for hypertable")));
+	}
 	/* refetch the srcchunk with all attributes filled in */
 	srcchunk = ts_chunk_get_by_relid(chunk_relid, true);
 	ts_chunk_validate_chunk_status_for_operation(srcchunk, CHUNK_COMPRESS, true);
@@ -278,7 +285,9 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	if (!time_dim || time_dim->fd.compress_interval_length == 0)
+	{
 		return NULL;
+	}
 
 	Assert(current_chunk->cube->num_slices > 0);
 	Assert(current_chunk->cube->slices[0]->fd.dimension_id == time_dim->fd.id);
@@ -305,7 +314,9 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 	 * if it hasn't been compressed yet, we can't merge.
 	 */
 	if (!previous_chunk || !OidIsValid(previous_chunk->fd.compressed_chunk_id))
+	{
 		return NULL;
+	}
 
 	Assert(previous_chunk->cube->num_slices > 0);
 	Assert(previous_chunk->cube->slices[0]->fd.dimension_id == time_dim->fd.id);
@@ -315,7 +326,9 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 
 	/* If the slices do not match (except on time dimension), we cannot merge the chunks. */
 	if (previous_chunk->cube->num_slices != current_chunk->cube->num_slices)
+	{
 		return NULL;
+	}
 
 	for (int i = 1; i < previous_chunk->cube->num_slices; i++)
 	{
@@ -328,18 +341,24 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 	/* If the compressed chunk is full, we can't merge any more. */
 	if (compressed_chunk_interval == 0 ||
 		compressed_chunk_interval + current_chunk_interval > max_chunk_interval)
+	{
 		return NULL;
+	}
 
 	/* Get reloid of the previous compressed chunk via settings */
 	CompressionSettings *prev_comp_settings = ts_compression_settings_get(previous_chunk->table_id);
 	CompressionSettings *ht_comp_settings = ts_compression_settings_get(ht->main_table_relid);
 	if (!ts_compression_settings_equal_with_defaults(ht_comp_settings, prev_comp_settings))
+	{
 		return NULL;
+	}
 
 	/* We don't support merging chunks with sequence numbers */
 	if (get_attnum(prev_comp_settings->fd.compress_relid,
 				   COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) != InvalidAttrNumber)
+	{
 		return NULL;
+	}
 
 	return previous_chunk;
 }
@@ -361,11 +380,15 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 	const DimensionSlice *mergable_slice =
 		ts_hypercube_get_slice_by_dimension_id(mergable_chunk->cube, time_dim->fd.id);
 	if (!mergable_slice)
+	{
 		elog(ERROR, "mergeable chunk has no time dimension slice");
+	}
 	const DimensionSlice *compressed_slice =
 		ts_hypercube_get_slice_by_dimension_id(cxt->srcht_chunk->cube, time_dim->fd.id);
 	if (!compressed_slice)
+	{
 		elog(ERROR, "columnstore chunk has no time dimension slice");
+	}
 	/*
 	 * Ensure the compressed chunk is AFTER the chunk that
 	 * it is being merged into. This is already guaranteed by previous checks.
@@ -380,7 +403,9 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 
 	/* Primary dimension column should be first compress_orderby column. */
 	if (index != 1)
+	{
 		return true;
+	}
 
 	return false;
 }
@@ -480,9 +505,14 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	 * In contrast, when the compressed chunk part is created in the same transaction as the tuples
 	 * are written, the compressed chunk (i.e., the catalog entry) becomes visible to other
 	 * transactions only after the transaction that performs the compression is committed and
-	 * the uncompressed chunk is truncated.
+	 * the uncompressed chunk is truncated. This only holds for truncate_only behaviour; the
+	 * other behaviours may DELETE instead, which leaves the uncompressed rows visible to
+	 * concurrent readers and would expose duplicates when combined with HEAP_INSERT_FROZEN.
 	 */
-	int insert_options = new_compressed_chunk ? HEAP_INSERT_FROZEN : 0;
+	int insert_options =
+		(new_compressed_chunk && ts_guc_compress_truncate_behaviour == COMPRESS_TRUNCATE_ONLY) ?
+			HEAP_INSERT_FROZEN :
+			0;
 
 	before_size = ts_relation_size_impl(cxt.srcht_chunk->table_id);
 
@@ -490,7 +520,9 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	after_size = ts_relation_size_impl(compress_ht_chunk->table_id);
 
 	if (cxt.srcht->range_space)
+	{
 		ts_chunk_column_stats_calculate(cxt.srcht, cxt.srcht_chunk);
+	}
 
 	if (new_compressed_chunk)
 	{
@@ -507,6 +539,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		float POOR_COMPRESSION_THRESHOLD = 1.0;
 		if (ts_guc_enable_compression_ratio_warnings &&
 			compression_ratio < POOR_COMPRESSION_THRESHOLD)
+		{
 			ereport(WARNING,
 					errcode(ERRCODE_WARNING),
 					errmsg("poor compression ratio detected for chunk \"%s\"'",
@@ -520,6 +553,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 							  after_size.total_size),
 					errhint("Changing compression settings for \"%s\" can improve compression rate",
 							get_rel_name(hypertable_relid)));
+		}
 	}
 	else
 	{
@@ -563,20 +597,26 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	ts_hypertable_permissions_check(uncompressed_hypertable->main_table_relid, GetUserId());
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(uncompressed_hypertable))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg(
 					 "convert_to_rowstore must not be called on the internal columnstore chunk")));
+	}
 
 	compressed_hypertable =
 		ts_hypertable_get_by_id(uncompressed_hypertable->fd.compressed_hypertable_id);
 	if (compressed_hypertable == NULL)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("missing columnstore-enabled hypertable")));
+	}
 
 	if (uncompressed_chunk->fd.hypertable_id != uncompressed_hypertable->fd.id)
+	{
 		elog(ERROR, "hypertable and chunk do not match");
+	}
 
 	if (uncompressed_chunk->fd.compressed_chunk_id == INVALID_CHUNK_ID)
 	{
@@ -662,6 +702,24 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	write_logical_replication_msg_decompression_end();
 }
 
+bool
+is_chunk_orderby_nonnullable(CompressionSettings *settings)
+{
+	int num_orderby = ts_array_length(settings->fd.orderby);
+	const char *attname;
+	int attnum;
+	for (int i = 1; i <= num_orderby; i++)
+	{
+		attname = ts_array_get_element_text(settings->fd.orderby, i);
+		attnum = get_attnum(settings->fd.relid, attname);
+		if (!AttributeNumberIsValid(attnum) || !ts_get_attnotnull(settings->fd.relid, attnum))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
 static bool
 recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
 {
@@ -705,7 +763,21 @@ recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
 			return false;
 		}
 
-		*uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
+		/* #9444: do not recompress when order by columns are nullable, do segmentwise
+		 * decompress/compress instead. It is due to compression min/max metadata not handling
+		 * NULLs. When we implement chunks with min/max NULL-handling metadata, this restriction can
+		 * be lifted.
+		 */
+		bool nullable_orderby = !is_chunk_orderby_nonnullable(chunk_settings);
+		if (nullable_orderby)
+		{
+			elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
+				 "in-memory recompression is disabled due to nullable order by, "
+				 "performing segmentwise decompress/compress on chunk \"%s.%s\"",
+				 NameStr(chunk->fd.schema_name),
+				 NameStr(chunk->fd.table_name));
+		}
+		*uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk, nullable_orderby);
 		recompressed = true;
 	}
 	else
@@ -824,6 +896,17 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 {
 	Oid uncompressed_chunk_id = chunk->table_id;
 
+	if (ts_chunk_is_frozen(chunk))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("chunk \"%s.%s\" is frozen, skipping compression",
+						NameStr(chunk->fd.schema_name),
+						NameStr(chunk->fd.table_name)),
+				 errhint("Use _timescaledb_functions.unfreeze_chunk to unfreeze.")));
+		return uncompressed_chunk_id;
+	}
+
 	write_logical_replication_msg_compression_start();
 
 	if (ts_chunk_needs_compression(chunk))
@@ -876,9 +959,11 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 
 	if (!ht->fd.compressed_hypertable_id)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("missing columnstore-enabled hypertable")));
+	}
 
 	if (!ts_chunk_is_compressed(uncompressed_chunk))
 	{
@@ -890,7 +975,9 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 	}
 	else
+	{
 		decompress_chunk_impl(uncompressed_chunk, if_compressed);
+	}
 
 	/*
 	 * Post decompression regular DML can happen into this chunk. So, we update
@@ -936,7 +1023,9 @@ tsl_rebuild_columnstore(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (!OidIsValid(chunk_relid))
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk OID")));
+	}
 
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
@@ -984,7 +1073,9 @@ tsl_get_compressed_chunk_index_for_recompression(PG_FUNCTION_ARGS)
 		PG_RETURN_OID(index_oid);
 	}
 	else
+	{
 		PG_RETURN_NULL();
+	}
 }
 
 static Oid

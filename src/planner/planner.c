@@ -168,7 +168,9 @@ rte_mark_for_expansion(RangeTblEntry *rte)
 	 * is supposed to expand them.
 	 */
 	if (rte->relkind != RELKIND_PARTITIONED_TABLE)
+	{
 		rte->inh = false;
+	}
 }
 
 static void
@@ -188,10 +190,14 @@ bool
 ts_rte_is_marked_for_expansion(const RangeTblEntry *rte)
 {
 	if (NULL == rte->ctename)
+	{
 		return false;
+	}
 
 	if (rte->ctename == TS_CTE_EXPAND || rte->ctename == TS_FK_EXPAND)
+	{
 		return true;
+	}
 
 	return strcmp(rte->ctename, TS_CTE_EXPAND) == 0;
 }
@@ -235,7 +241,9 @@ planner_hcache_pop(bool release)
 		/* If we pop a stack and discover a new hypertable cache, the basrel
 		 * cache can contain invalid entries, so we reset it. */
 		if (planner_hcaches != NIL && hcache != linitial(planner_hcaches))
+		{
 			BaserelInfo_reset(ts_baserel_info);
+		}
 	}
 }
 
@@ -249,7 +257,9 @@ static Cache *
 planner_hcache_get(void)
 {
 	if (planner_hcaches == NIL)
+	{
 		return NULL;
+	}
 
 	return (Cache *) linitial(planner_hcaches);
 }
@@ -269,7 +279,9 @@ ts_planner_get_hypertable(const Oid relid, const unsigned int flags)
 	Cache *cache = planner_hcache_get();
 
 	if (NULL == cache)
+	{
 		return NULL;
+	}
 
 	return ts_hypertable_cache_get_entry(cache, relid, flags);
 }
@@ -355,7 +367,9 @@ static bool
 preprocess_query(Node *node, PreprocessQueryContext *context)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
 	if (IsA(node, FromExpr) && ts_guc_enable_optimizations)
 	{
@@ -432,12 +446,18 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 
 					if (ht)
 					{
-						/* Mark hypertable RTEs we'd like to expand ourselves.
-						 * We skip the DML target relation (resultRelation != 0
-						 * in the current query) but allow non-target hypertables
-						 * in subqueries of UPDATE/DELETE to use TSDB expansion. */
+						/*
+						 * Mark hypertable RTEs we'd like to expand ourselves.
+						 * We always do this for SELECTs from hypertables.
+						 *
+						 * For DML, we also always expand the non-target relations.
+						 *
+						 * The hypertables that are not expanded by our custom code
+						 * here fall back to the standard Postgres inheritance
+						 * hierarchy expansion.
+						 */
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-							query->resultRelation == 0 && rte->inh)
+							rte->inh && (Index) query->resultRelation != rti)
 						{
 							rte_mark_for_expansion(rte);
 						}
@@ -466,7 +486,9 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 						Chunk *chunk =
 							ts_chunk_get_by_relid_locked(rte->relid, NoLock, NULL, false);
 						if (chunk && rte->inh)
+						{
 							rte_mark_for_expansion(rte);
+						}
 					}
 					break;
 				default:
@@ -563,7 +585,9 @@ preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *contex
 			{
 				rte_mark_for_fk_expansion(rte);
 				if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+				{
 					query->rowMarks = NIL;
+				}
 			}
 		}
 	}
@@ -618,10 +642,12 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 	 * can happen when executing plpgsql procedures.
 	 */
 	if (IsAbortedTransactionBlockState())
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_IN_FAILED_SQL_TRANSACTION),
 				 errmsg("current transaction is aborted, "
 						"commands ignored until end of transaction block")));
+	}
 
 	planner_hcache_push();
 	if (ts_baserel_info == NULL)
@@ -668,7 +694,9 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 #if PG16_GE
 			if (ts_guc_enable_optimizations &&
 				ts_cm_functions->continuous_agg_apply_rewrites_tsl != NULL)
+			{
 				context.rootquery = ts_cm_functions->continuous_agg_apply_rewrites_tsl(parse);
+			}
 #endif
 			/*
 			 * Preprocess the hypertables in the query and warm up the caches.
@@ -676,15 +704,21 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 			preprocess_query((Node *) context.rootquery, &context);
 
 			if (ts_guc_enable_optimizations)
+			{
 				ts_cm_functions->preprocess_query_tsl(context.rootquery, &cursor_opts);
+			}
 		}
 
 		if (prev_planner_hook != NULL)
+		{
 			/* Call any earlier hooks */
 			stmt = (prev_planner_hook) (context.rootquery, query_string, cursor_opts, bound_params);
+		}
 		else
+		{
 			/* Call the standard planner */
 			stmt = standard_planner(context.rootquery, query_string, cursor_opts, bound_params);
+		}
 
 		if (ts_extension_is_loaded_and_not_upgrading())
 		{
@@ -703,7 +737,9 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 				Plan *subplan = (Plan *) lfirst(lc);
 
 				if (subplan)
+				{
 					ts_modify_hypertable_fixup_tlist(subplan);
+				}
 			}
 
 			ts_cm_functions->tsl_postprocess_plan(stmt);
@@ -754,7 +790,9 @@ get_parent_rte(const PlannerInfo *root, Index rti)
 		AppendRelInfo *appinfo = lfirst_node(AppendRelInfo, lc);
 
 		if (appinfo->child_relid == rti)
+		{
 			return planner_rt_fetch(appinfo->parent_relid, root);
+		}
 	}
 
 	return NULL;
@@ -911,7 +949,9 @@ ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable 
 										rte->inh ? CACHE_FLAG_MISSING_OK : CACHE_FLAG_CHECK);
 
 		if (*ht)
+		{
 			return TS_REL_HYPERTABLE;
+		}
 
 		/*
 		 * This is either a chunk seen as a standalone table or a non-chunk baserel.
@@ -922,7 +962,9 @@ ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable 
 		*ht = entry->ht;
 
 		if (*ht)
+		{
 			return TS_REL_CHUNK_STANDALONE;
+		}
 
 		return TS_REL_OTHER;
 	}
@@ -975,7 +1017,9 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 		((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
 		 bms_num_members(root->all_baserels) > 1) ||
 		!ts_guc_enable_chunk_append)
+	{
 		return false;
+	}
 
 	switch (nodeTag(path))
 	{
@@ -990,7 +1034,9 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 
 				/* Don't create ChunkAppend with no children */
 				if (list_length(append->subpaths) == 0)
+				{
 					return false;
+				}
 
 				foreach (lc, rel->baserestrictinfo)
 				{
@@ -999,7 +1045,9 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					if (contain_mutable_functions((Node *) rinfo->clause) ||
 						ts_contains_external_param((Node *) rinfo->clause) ||
 						ts_contains_join_param((Node *) rinfo->clause))
+					{
 						return true;
+					}
 				}
 				return false;
 				break;
@@ -1014,7 +1062,9 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				ListCell *lc;
 
 				if (!ordered || path->pathkeys == NIL || list_length(merge->subpaths) == 0)
+				{
 					return false;
+				}
 
 				/*
 				 * Do not try to do ordered append if the OSM chunk range is noncontiguous
@@ -1023,7 +1073,9 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				{
 					if (ts_flags_are_set_32(ht->fd.status,
 											HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS))
+					{
 						return false;
+					}
 				}
 
 				/*
@@ -1041,7 +1093,9 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 						if (contain_mutable_functions((Node *) rinfo->clause) ||
 							ts_contains_external_param((Node *) rinfo->clause) ||
 							ts_contains_join_param((Node *) rinfo->clause))
+						{
 							return true;
+						}
 					}
 					return false;
 				}
@@ -1064,10 +1118,14 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				 */
 
 				if (!em_expr)
+				{
 					return false;
+				}
 
 				if (IsA(em_expr, Var) && castNode(Var, em_expr)->varattno == order_attno)
+				{
 					return true;
+				}
 
 				if (IsA(em_expr, FuncExpr) && list_length(path->pathkeys) == 1)
 				{
@@ -1080,7 +1138,9 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 						transformed = info->sort_transform(func);
 						if (IsA(transformed, Var) &&
 							castNode(Var, transformed)->varattno == order_attno)
+						{
 							return true;
+						}
 					}
 				}
 
@@ -1099,7 +1159,9 @@ should_constraint_aware_append(PlannerInfo *root, Hypertable *ht, Path *path)
 	 * "relation" (e.g., not an "upper" relation).
 	 */
 	if (root->parse->commandType != CMD_SELECT)
+	{
 		return false;
+	}
 
 	return ts_constraint_aware_append_possible(path);
 }
@@ -1131,7 +1193,9 @@ expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry 
 		 * https://github.com/postgres/postgres/commit/5f6f95
 		 */
 		if (!in_rte)
+		{
 			continue;
+		}
 #endif
 
 		if (rte_should_expand(in_rte) && root->simple_rel_array[i])
@@ -1175,7 +1239,9 @@ expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry 
 	}
 
 	if (!reenabled_inheritance)
+	{
 		return;
+	}
 
 	total_pages = 0;
 	for (int i = 1; i < root->simple_rel_array_size; i++)
@@ -1183,15 +1249,21 @@ expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry 
 		RelOptInfo *brel = root->simple_rel_array[i];
 
 		if (brel == NULL)
+		{
 			continue;
+		}
 
 		Assert(brel->relid == (Index) i); /* sanity check on array */
 
 		if (IS_DUMMY_REL(brel))
+		{
 			continue;
+		}
 
 		if (IS_SIMPLE_REL(brel))
+		{
 			total_pages += (double) brel->pages;
+		}
 	}
 	root->total_table_pages = total_pages;
 
@@ -1209,7 +1281,9 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 					Hypertable *ht)
 {
 	if (!ts_guc_enable_optimizations)
+	{
 		return;
+	}
 
 	switch (reltype)
 	{
@@ -1237,7 +1311,9 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 				 * that the decompression paths also use this optimization.
 				 */
 				if (ts_cm_functions->set_rel_pathlist_query != NULL)
+				{
 					ts_cm_functions->set_rel_pathlist_query(root, rel, rel->relid, rte, ht);
+				}
 
 				root->query_pathkeys = orig_query_pathkeys;
 
@@ -1255,7 +1331,9 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 			else
 			{
 				if (ts_cm_functions->set_rel_pathlist_query != NULL)
+				{
 					ts_cm_functions->set_rel_pathlist_query(root, rel, rel->relid, rte, ht);
+				}
 			}
 			break;
 		}
@@ -1284,6 +1362,7 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 				case T_AppendPath:
 				case T_MergeAppendPath:
 					if (should_chunk_append(ht, root, rel, *pathptr, ordered, order_attno))
+					{
 						*pathptr = ts_chunk_append_path_create(root,
 															   rel,
 															   ht,
@@ -1291,8 +1370,11 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 															   false,
 															   ordered,
 															   nested_oids);
+					}
 					else if (should_constraint_aware_append(root, ht, *pathptr))
+					{
 						*pathptr = ts_constraint_aware_append_path_create(root, *pathptr);
+					}
 					break;
 				default:
 					break;
@@ -1308,10 +1390,14 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 				case T_AppendPath:
 				case T_MergeAppendPath:
 					if (should_chunk_append(ht, root, rel, *pathptr, false, 0))
+					{
 						*pathptr =
 							ts_chunk_append_path_create(root, rel, ht, *pathptr, true, false, NIL);
+					}
 					else if (should_constraint_aware_append(root, ht, *pathptr))
+					{
 						*pathptr = ts_constraint_aware_append_path_create(root, *pathptr);
+					}
 					break;
 				default:
 					break;
@@ -1352,7 +1438,9 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 		IS_DUMMY_REL(rel))
 	{
 		if (prev_set_rel_pathlist_hook != NULL)
+		{
 			(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
+		}
 		return;
 	}
 
@@ -1360,22 +1448,30 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 
 	/* Check for unexpanded hypertable */
 	if (!rte->inh && ts_rte_is_marked_for_expansion(rte))
+	{
 		expand_hypertables(root, rel, rti, rte);
+	}
 
 	if (ts_guc_enable_optimizations)
+	{
 		ts_planner_constraint_cleanup(root, rel);
+	}
 
 	/* Call other extensions. Do it after table expansion. */
 	if (prev_set_rel_pathlist_hook != NULL)
+	{
 		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
+	}
 
 	switch (reltype)
 	{
 		case TS_REL_HYPERTABLE_CHILD:
 			if (ts_guc_enable_optimizations && IS_UPDL_CMD(root->parse))
+			{
 				ts_planner_constraint_cleanup(root, rel);
-
+			}
 			break;
+
 		case TS_REL_CHUNK_STANDALONE:
 		case TS_REL_CHUNK_CHILD:
 			/* Check for UPDATE/DELETE/MERGE (DML) on compressed chunks */
@@ -1383,11 +1479,17 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 				dml_involves_hypertable(root, ht, rti))
 			{
 				if (ts_cm_functions->set_rel_pathlist_dml != NULL)
+				{
 					ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
-				break;
+				}
 			}
-			TS_FALLTHROUGH;
-		default:
+			else
+			{
+				apply_optimizations(root, reltype, rel, rte, ht);
+			}
+			break;
+
+		case TS_REL_HYPERTABLE:
 			/*
 			 * Set the indexlist for a hypertable parent to NIL since we
 			 * should not try to do any index scans on hypertable parents,
@@ -1399,8 +1501,26 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			 * This has to be after the hypertable is expanded, since the
 			 * indexlist is used during hypertable expansion.
 			 */
-			if (reltype == TS_REL_HYPERTABLE)
-				rel->indexlist = NIL;
+
+			rel->indexlist = NIL;
+
+			if (!rte->inh)
+			{
+				/*
+				 * This happens with SELECT FROM ONLY hypertable or with an
+				 * empty hypertable. Mark it as dummy, otherwise we'll get a
+				 * scan on hypertable relation itself. It's always empty, so
+				 * this scan is useless and looks misleading.
+				 */
+				mark_dummy_rel(rel);
+			}
+			else
+			{
+				apply_optimizations(root, reltype, rel, rte, ht);
+			}
+			break;
+
+		default:
 			apply_optimizations(root, reltype, rel, rte, ht);
 			break;
 	}
@@ -1415,10 +1535,14 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 								   RelOptInfo *rel)
 {
 	if (prev_get_relation_info_hook != NULL)
+	{
 		prev_get_relation_info_hook(root, relation_objectid, inhparent, rel);
+	}
 
 	if (!valid_hook_call())
+	{
 		return;
+	}
 
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 	Query *query = root->parse;
@@ -1429,10 +1553,14 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	{
 		case TS_REL_HYPERTABLE:
 		{
-			/* Mark hypertable RTEs we'd like to expand ourselves.
+			/*
+			 * Mark hypertable RTEs we'd like to expand ourselves.
 			 * Hypertables inside inlineable functions don't get marked during
-			 * the query preprocessing step. Therefore we do an extra try here.
-			 * We skip the DML target relation identified by resultRelation.
+			 * the query preprocessing step handled in preprocess_query().
+			 * Therefore we do an extra try here.
+			 *
+			 * For the explanation of the logic, see the comments in
+			 * preprocess_query().
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
 				rte->ctename == NULL && rel->relid != (Index) query->resultRelation)
@@ -1446,6 +1574,36 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 		case TS_REL_CHUNK_STANDALONE:
 		case TS_REL_CHUNK_CHILD:
 			ts_create_private_reloptinfo(rel);
+
+			/*
+			 * Querying a compressed chunk requires Community Edition that
+			 * lives in the TSL module. Under the Apache license the TSL
+			 * module is not available, so without this check the planner
+			 * would only return the contents of the uncompressed chunk
+			 * relation. Raise an error instead.
+			 *
+			 * Skip the chunk fetch when the hypertable has no compression at
+			 * all: no chunk under it can be compressed, and opening the chunk
+			 * relation here has observable side effects (schema USAGE checks
+			 * fire before the parent's table-level ACL check).
+			 */
+			if (ts_license_is_apache() && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+			{
+				const Chunk *chunk = ts_planner_chunk_fetch(root, rel);
+
+				if (chunk != NULL && ts_chunk_is_compressed(chunk))
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("querying compressed data is not supported under the "
+									"current \"timescaledb.license\""),
+							 errdetail("Chunk \"%s\" is compressed and requires "
+									   "the TimescaleDB Community Edition to query.",
+									   get_rel_name(chunk->table_id)),
+							 errhint("Set timescaledb.license to 'timescale' and install the "
+									 "TimescaleDB Community Edition to query compressed data.")));
+				}
+			}
 
 			/*
 			 * We don't want to plan index scans on empty uncompressed tables of
@@ -1485,7 +1643,9 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * hypertable ourself.
 			 */
 			if (IS_UPDL_CMD(root->parse))
+			{
 				mark_dummy_rel(rel);
+			}
 			break;
 		case TS_REL_OTHER:
 			break;
@@ -1502,10 +1662,12 @@ join_involves_hypertable(const PlannerInfo *root, const RelOptInfo *rel)
 		const RangeTblEntry *rte = planner_rt_fetch(relid, root);
 
 		if (rte != NULL)
+		{
 			/* This might give a false positive for chunks in case of PostgreSQL
 			 * expansion since the ctename is copied from the parent hypertable
 			 * to the chunk */
 			return ts_rte_is_marked_for_expansion(rte);
+		}
 	}
 	return false;
 }
@@ -1514,7 +1676,9 @@ static bool
 involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
 {
 	if (rel->reloptkind == RELOPT_JOINREL)
+	{
 		return join_involves_hypertable(root, rel);
+	}
 
 	Hypertable *ht;
 	return ts_classify_relation(root, rel, &ht) == TS_REL_HYPERTABLE;
@@ -1577,10 +1741,12 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			 * couldn't even insert any actual data.
 			 */
 			if (ht && ht->fd.compression_state == HypertableInternalCompressionTable)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("direct insert into internal compressed hypertable is not "
 								"supported")));
+			}
 
 			/* Check for DML on chunk directly */
 			if (!ht)
@@ -1606,10 +1772,12 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					 */
 					Chunk *uncompressed = ts_chunk_get_compressed_chunk_parent(chunk);
 					if (ts_chunk_is_frozen(uncompressed))
+					{
 						ereport(ERROR,
 								(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 								 errmsg("cannot modify compressed chunk belonging to a frozen "
 										"chunk")));
+					}
 
 					new_pathlist = lappend(new_pathlist, path);
 					continue;
@@ -1649,7 +1817,9 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 						}
 					}
 					if (need_modify)
+					{
 						path = ts_modify_hypertable_path_create(root, mt, input_rel);
+					}
 					break;
 				}
 				default:
@@ -1672,32 +1842,44 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 	Hypertable *ht = NULL;
 
 	if (prev_create_upper_paths_hook != NULL)
+	{
 		prev_create_upper_paths_hook(root, stage, input_rel, output_rel, extra);
+	}
 
 	if (!ts_extension_is_loaded_and_not_upgrading())
+	{
 		return;
+	}
 
 	if (input_rel != NULL)
+	{
 		reltype = ts_classify_relation(root, input_rel, &ht);
+	}
 
 	if (output_rel != NULL)
 	{
 		/* Modify for INSERTs on a hypertable */
 		if (output_rel->pathlist != NIL)
+		{
 			output_rel->pathlist =
 				replace_modify_hypertable_paths(root, output_rel->pathlist, input_rel);
+		}
 	}
 
 	if (stage == UPPERREL_GROUP_AGG && output_rel != NULL && ts_guc_enable_optimizations &&
 		input_rel != NULL && !IS_DUMMY_REL(input_rel) && involves_hypertable(root, input_rel))
 	{
 		if (parse->hasAggs)
+		{
 			ts_preprocess_first_last_aggregates(root, root->processed_tlist);
+		}
 	}
 
 	if (ts_cm_functions->create_upper_paths_hook != NULL)
+	{
 		ts_cm_functions
 			->create_upper_paths_hook(root, stage, input_rel, output_rel, reltype, ht, extra);
+	}
 }
 
 static bool
@@ -1709,7 +1891,9 @@ contains_join_param_walker(Node *node, void *context)
 	}
 
 	if (IsA(node, Param) && castNode(Param, node)->paramkind == PARAM_EXEC)
+	{
 		return true;
+	}
 
 	return expression_tree_walker(node, contains_join_param_walker, context);
 }
@@ -1729,7 +1913,9 @@ contains_external_param_walker(Node *node, void *context)
 	}
 
 	if (IsA(node, Param) && castNode(Param, node)->paramkind == PARAM_EXTERN)
+	{
 		return true;
+	}
 
 	return expression_tree_walker(node, contains_external_param_walker, context);
 }
@@ -1751,7 +1937,9 @@ fill_missing_groupclause(List *new_groupclause, List *orig_groupclause)
 			SortGroupClause *gc = lfirst_node(SortGroupClause, gl);
 
 			if (list_member_ptr(new_groupclause, gc))
+			{
 				continue; /* already in list */
+			}
 			new_groupclause = lappend(new_groupclause, gc);
 		}
 	}
@@ -1778,11 +1966,15 @@ check_cagg_view_rte(RangeTblEntry *rte)
 		RangeTblEntry *rte = lfirst_node(RangeTblEntry, rtlc);
 
 		if (!OidIsValid(rte->relid))
+		{
 			break;
+		}
 
 		cagg = ts_continuous_agg_find_by_relid(rte->relid);
 		if (cagg != NULL)
+		{
 			found = true;
+		}
 	}
 	return found;
 }
@@ -1847,7 +2039,9 @@ cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sor
 				}
 			}
 			if (not_found)
+			{
 				break;
+			}
 		}
 		/* all order by found in group by clause */
 		if (new_groupclause != NIL && not_found == false)

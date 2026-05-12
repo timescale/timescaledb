@@ -32,6 +32,7 @@ bool policy_refresh_cagg_get_include_tiered_data(const Jsonb *config, bool *isnu
 int32 policy_refresh_cagg_get_buckets_per_batch(const Jsonb *config);
 int32 policy_refresh_cagg_get_max_batches_per_execution(const Jsonb *config);
 bool policy_refresh_cagg_get_refresh_newest_first(const Jsonb *config);
+bool policy_refresh_cagg_get_compress_after_refresh(const Jsonb *config);
 bool policy_refresh_cagg_exists(int32 materialization_id);
 
 Datum policy_refresh_cagg_add_internal(

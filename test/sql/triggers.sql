@@ -289,10 +289,41 @@ SELECT * FROM color;
 -- switch back to default user to run some dropping tests
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER;
 
-\set ON_ERROR_STOP 0
--- test that disable trigger is disallowed
+-- test that ENABLE/DISABLE TRIGGER is propagated to chunks
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'create_vehicle_trigger'
+  AND tgrelid = 'location'::regclass;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+
 ALTER TABLE location DISABLE TRIGGER create_vehicle_trigger;
-\set ON_ERROR_STOP 1
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'create_vehicle_trigger'
+  AND tgrelid = 'location'::regclass;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+
+ALTER TABLE location ENABLE TRIGGER create_vehicle_trigger;
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'create_vehicle_trigger'
+  AND tgrelid = 'location'::regclass;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+
+ALTER TABLE location ENABLE ALWAYS TRIGGER create_vehicle_trigger;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+
+ALTER TABLE location DISABLE TRIGGER USER;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
+
+ALTER TABLE location ENABLE TRIGGER USER;
+SELECT DISTINCT tgenabled FROM pg_trigger t
+  JOIN show_chunks('location') c(oid) ON t.tgrelid = c.oid
+  WHERE tgname = 'create_vehicle_trigger';
 
 -- test that drop trigger works
 DROP TRIGGER create_color_trigger ON location;
@@ -338,4 +369,35 @@ CREATE TRIGGER t5 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_t
 CREATE TRIGGER t6 AFTER UPDATE ON transition_test REFERENCING NEW TABLE AS new_trans OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
 CREATE TRIGGER t7 AFTER DELETE ON transition_test REFERENCING OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
 \set ON_ERROR_STOP 1
+
+-- #9613: segfault when referencing transition table after column drop
+CREATE TABLE transition_drop(time timestamptz NOT NULL, to_drop int NOT NULL, name text NOT NULL, c1 bigint NOT NULL);
+SELECT create_hypertable('transition_drop', 'time');
+ALTER TABLE transition_drop DROP COLUMN to_drop;
+
+CREATE OR REPLACE FUNCTION transition_drop_fn()
+    RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
+DECLARE
+    r record;
+BEGIN
+    FOR r IN SELECT name, c1 FROM to_insert ORDER BY name LOOP
+        RAISE NOTICE 'transition: name=% c1=%', r.name, r.c1;
+    END LOOP;
+    RETURN NULL;
+END $$;
+
+CREATE TRIGGER transition_drop_tg
+    AFTER INSERT ON transition_drop
+    REFERENCING NEW TABLE AS to_insert
+    FOR EACH STATEMENT EXECUTE FUNCTION transition_drop_fn();
+
+INSERT INTO transition_drop (time, name, c1) VALUES ('2026-04-16 08:00:00+00', 'xxxxx', 1);
+INSERT INTO transition_drop (time, name, c1) VALUES ('2026-04-16 08:00:00+00', 'xxxxxx', 1);
+
+-- Same issue also affects the COPY path.
+COPY transition_drop (time, name, c1) FROM STDIN;
+2026-04-16 08:00:00+00	yyyyy	2
+2026-04-16 08:00:00+00	yyyyyy	2
+\.
+DROP TABLE transition_drop;
 

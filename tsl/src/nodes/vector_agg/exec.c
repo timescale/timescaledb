@@ -51,7 +51,9 @@ get_input_offset(const DecompressContext *dcontext, const Var *var)
 			break;
 		}
 	}
-	Ensure(value_column_description != NULL, "aggregated compressed column not found");
+	Ensure(value_column_description != NULL,
+		   "compressed column %d not found in columnar aggregation",
+		   var->varattno);
 
 	Assert(value_column_description->type == COMPRESSED_COLUMN ||
 		   value_column_description->type == SEGMENTBY_COLUMN);
@@ -192,6 +194,8 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 			memcpy(&columnar_result->body_buffer[columnar_result->current_offset],
 				   VARDATA_ANY(datum),
 				   result_bytes);
+			/* offset_buffer should be allocated for ArrowText type */
+			Assert(columnar_result->offset_buffer != NULL);
 			columnar_result->offset_buffer[row] = columnar_result->current_offset;
 			columnar_result->current_offset += result_bytes;
 			break;
@@ -439,6 +443,159 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	return columnar_result_finalize(&columnar_result, batch_state);
 }
 
+static pg_noinline CompressedColumnValues
+vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
+						  uint64 const *top_filter, CaseExpr const *case_expr)
+{
+	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
+	const int nrows = batch_state->total_batch_rows;
+	const int num_validity_words = (nrows + 63) / 64;
+	Ensure(case_expr->arg == NULL,
+		   "The CASE with explicit argument is not supported by vectorized aggregation");
+
+	/*
+	 * The CASE expression can have several WHEN branches, and the last branch
+	 * is the default expression (explicit ELSE or the default null).
+	 */
+	const int num_when_branches = list_length(case_expr->args);
+	const int num_total_branches = num_when_branches + 1;
+
+	uint64 const **branch_filters = palloc0(sizeof(*branch_filters) * num_total_branches);
+	CompressedColumnValues *branch_values = palloc0(sizeof(*branch_values) * num_total_branches);
+
+	/*
+	 * This is the intermediate space for materializing the individual branch
+	 * values in Postgres Datum format.
+	 */
+	Datum *branch_data = palloc0(sizeof(*branch_data) * num_total_branches);
+	bool *branch_isnull = palloc0(sizeof(*branch_isnull) * num_total_branches);
+
+	/*
+	 * Compute the filters and values for every branch.
+	 */
+	for (int i = 0; i < num_total_branches; i++)
+	{
+		Expr *filter_expression;
+		Expr *value_expression;
+		if (i < num_when_branches)
+		{
+			CaseWhen const *when = castNode(CaseWhen, list_nth(case_expr->args, i));
+			filter_expression = when->expr;
+			value_expression = when->result;
+		}
+		else
+		{
+			filter_expression = NULL;
+			value_expression = case_expr->defresult;
+		}
+
+		uint64 const *branch_filter = top_filter;
+		if (filter_expression != NULL)
+		{
+			CompressedBatchVectorQualState vqstate =
+				compressed_batch_init_vector_quals(dcontext, list_make1(filter_expression), slot);
+			vector_qual_compute(&vqstate.vqstate);
+			uint64 const *qual_result = vqstate.vqstate.vector_qual_result;
+			if (qual_result != NULL)
+			{
+				arrow_validity_and(num_validity_words, (uint64 *) qual_result, top_filter);
+				branch_filter = qual_result;
+			}
+		}
+
+		branch_filters[i] = branch_filter;
+
+		Ensure(value_expression != NULL, "CASE branch %d has NULL value expression", i);
+		branch_values[i] =
+			vector_slot_evaluate_expression(dcontext, slot, branch_filter, value_expression);
+
+		branch_values[i].output_value = &branch_data[i];
+		branch_values[i].output_isnull = &branch_isnull[i];
+
+		Ensure(branch_values[i].decompression_type != DT_Invalid,
+			   "got DT_Invalid for argument %d",
+			   i);
+
+		if (branch_values[i].decompression_type == DT_ArrowText ||
+			branch_values[i].decompression_type == DT_ArrowTextDict)
+		{
+			/*
+			 * For text values, we need to preallocate the varlena storage for
+			 * converting the individual values into the Postgres Datum format.
+			 */
+			Ensure(branch_values[i].arrow != NULL, "no arrow for arg %d", i);
+			const int maxbytes = get_max_varlena_bytes(branch_values[i].arrow);
+			*branch_values[i].output_value =
+				PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+		}
+		else if (branch_values[i].decompression_type == DT_Scalar)
+		{
+			/*
+			 * For the scalar values, the value in Postgres Datum format must be
+			 * set once at initialization.
+			 */
+			*branch_values[i].output_value = PointerGetDatum(branch_values[i].buffers[1]);
+			*branch_values[i].output_isnull =
+				DatumGetBool(PointerGetDatum(branch_values[i].buffers[0]));
+		}
+	}
+
+	ColumnarResult columnar_result = { 0 };
+	columnar_result_init_for_type(&columnar_result, batch_state, case_expr->casetype);
+	for (int row = 0; row < nrows; row++)
+	{
+		/*
+		 * The Arrow format requires the offsets to monotonically increase even
+		 * for the invalid rows, so we have to fill the offsets always.
+		 */
+		if (columnar_result.offset_buffer != NULL)
+		{
+			columnar_result.offset_buffer[row] = columnar_result.current_offset;
+		}
+
+		if (!arrow_row_is_valid(top_filter, row))
+		{
+			continue;
+		}
+
+		/*
+		 * Check if any of the branch conditions matched. If not, we'll end up
+		 * with the last branch that is the default.
+		 */
+		int branch_index;
+		for (branch_index = 0; branch_index < num_when_branches; branch_index++)
+		{
+			if (arrow_row_is_valid(branch_filters[branch_index], row))
+			{
+				break;
+			}
+		}
+
+		compressed_columns_to_postgres_data(&branch_values[branch_index], 1, row);
+
+		const bool isnull = *branch_values[branch_index].output_isnull;
+		const Datum result = isnull ? 0 : *branch_values[branch_index].output_value;
+
+		columnar_result_set_row(&columnar_result, batch_state, row, result, isnull);
+	}
+
+	if (columnar_result.validity != NULL)
+	{
+		arrow_validity_and(num_validity_words, columnar_result.validity, top_filter);
+	}
+	else
+	{
+		columnar_result.validity = (uint64 *) top_filter;
+	}
+
+	pfree(branch_filters);
+	pfree(branch_values);
+	pfree(branch_data);
+	pfree(branch_isnull);
+
+	return columnar_result_finalize(&columnar_result, batch_state);
+}
+
 /*
  * Return the arrow array or the datum (in case of single scalar value) for a
  * given expression as a CompressedColumnValues struct.
@@ -488,6 +645,11 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 												 f->args,
 												 f->funcid,
 												 f->inputcollid);
+		}
+		case T_CaseExpr:
+		{
+			CaseExpr const *c = (CaseExpr const *) argument;
+			return vector_slot_evaluate_case(dcontext, slot, filter, c);
 		}
 		default:
 			Ensure(false,
@@ -663,7 +825,9 @@ static void
 vector_agg_rescan(CustomScanState *node)
 {
 	if (node->ss.ps.chgParam != NULL)
+	{
 		UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
+	}
 
 	ExecReScan(linitial(node->custom_ps));
 
@@ -671,6 +835,122 @@ vector_agg_rescan(CustomScanState *node)
 	state->input_ended = false;
 
 	state->grouping->gp_reset(state->grouping);
+}
+
+static void
+vector_agg_evaluate_postgres_quals(DecompressContext *dcontext, DecompressBatchState *batch_state,
+								   List *quals)
+{
+	Assert(batch_state->next_batch_row == 0);
+
+	const int num_words = (batch_state->total_batch_rows + 63) / 64;
+
+	uint64 *restrict combined_qual_result = NULL;
+
+	ListCell *lc;
+	foreach (lc, quals)
+	{
+		const CompressedColumnValues single_qual_result =
+			vector_slot_evaluate_expression(dcontext,
+											&batch_state->decompressed_scan_slot_data.base,
+											combined_qual_result != NULL ?
+												combined_qual_result :
+												batch_state->vector_qual_result,
+											lfirst(lc));
+
+		/*
+		 * The result is a nullable bool. We are checking a qualifier, so both
+		 * false and null mean "doesn't pass".
+		 *
+		 * Typically we expect to get the standard DT_ArrowBits representation
+		 * of bools there, but we can also get a DT_Scalar. In this case, the
+		 * entire batch either passes or is filtered out.
+		 *
+		 * First, determine if the qual filtered something out.
+		 */
+		bool some_rows_are_filtered_out_by_this_qual = false;
+		if (single_qual_result.decompression_type == DT_ArrowBits)
+		{
+			some_rows_are_filtered_out_by_this_qual |=
+				(get_vector_qual_summary(single_qual_result.buffers[0],
+										 batch_state->total_batch_rows) != AllRowsPass);
+			some_rows_are_filtered_out_by_this_qual |=
+				(get_vector_qual_summary(single_qual_result.buffers[1],
+										 batch_state->total_batch_rows) != AllRowsPass);
+		}
+		else if (single_qual_result.decompression_type == DT_Scalar)
+		{
+			const bool isnull = DatumGetBool(PointerGetDatum(single_qual_result.buffers[0]));
+			const bool value = DatumGetBool(PointerGetDatum(single_qual_result.buffers[1]));
+			some_rows_are_filtered_out_by_this_qual |= isnull;
+			some_rows_are_filtered_out_by_this_qual |= !value;
+		}
+		else
+		{
+			Ensure(false,
+				   "unexpected decompression type %d for postgres qual result",
+				   single_qual_result.decompression_type);
+		}
+
+		if (!some_rows_are_filtered_out_by_this_qual)
+		{
+			continue;
+		}
+
+		/*
+		 * Some rows were filtered out by this qual, we might need to allocate
+		 * the qual result storage.
+		 */
+		const int bitmap_bytes = num_words * sizeof(*combined_qual_result);
+		if (combined_qual_result == NULL)
+		{
+			combined_qual_result = MemoryContextAlloc(batch_state->per_batch_context, bitmap_bytes);
+			memset(combined_qual_result, 0xFF, bitmap_bytes);
+		}
+
+		/*
+		 * Integrate the results of this qual into the current results for the
+		 * batch using bool AND.
+		 */
+		if (single_qual_result.decompression_type == DT_ArrowBits)
+		{
+			arrow_validity_and(num_words, combined_qual_result, single_qual_result.buffers[0]);
+			arrow_validity_and(num_words, combined_qual_result, single_qual_result.buffers[1]);
+		}
+		else
+		{
+			/* The other option is scalar bool as we have checked above. */
+			Assert(single_qual_result.decompression_type == DT_Scalar);
+			const bool isnull = DatumGetBool(PointerGetDatum(single_qual_result.buffers[0]));
+			const bool value = DatumGetBool(PointerGetDatum(single_qual_result.buffers[1]));
+			if (isnull || !value)
+			{
+				memset(combined_qual_result, 0x0, bitmap_bytes);
+			}
+		}
+
+		/* Early exit when all rows are already filtered out. */
+		if (get_vector_qual_summary(combined_qual_result, batch_state->total_batch_rows) ==
+			NoRowsPass)
+		{
+			break;
+		}
+	}
+
+	if (combined_qual_result != NULL)
+	{
+		batch_state->vector_qual_result = combined_qual_result;
+
+		/* If no rows pass, mark the batch as fully consumed. */
+		if (get_vector_qual_summary(batch_state->vector_qual_result,
+									batch_state->total_batch_rows) == NoRowsPass)
+		{
+			compressed_batch_discard_tuples(batch_state);
+
+			InstrCountTuples2(dcontext->ps, 1);
+			InstrCountFiltered1(dcontext->ps, batch_state->total_batch_rows);
+		}
+	}
 }
 
 /*
@@ -691,6 +971,9 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 	DecompressContext *dcontext = &decompress_state->decompress_context;
 	BatchQueue *batch_queue = decompress_state->batch_queue;
 	DecompressBatchState *batch_state = batch_array_get_at(&batch_queue->batch_array, 0);
+	List *pg_quals =
+		list_nth(castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_private,
+				 VASI_PostgresQuals);
 
 	do
 	{
@@ -727,6 +1010,15 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 		}
 
 		compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
+
+		/*
+		 * If we have PG quals and there are some rows that passed the vectorized
+		 * quals, run the PG quals next.
+		 */
+		if (pg_quals && batch_state->next_batch_row < batch_state->total_batch_rows)
+		{
+			vector_agg_evaluate_postgres_quals(dcontext, batch_state, pg_quals);
+		}
 
 		/* If the entire batch is filtered out, then immediately read the next
 		 * one */
@@ -847,7 +1139,9 @@ vector_agg_exec(CustomScanState *node)
 		 * "input_ended" flag instead.
 		 */
 		if (vector_agg_state->input_ended)
+		{
 			break;
+		}
 
 		/*
 		 * Compute the vectorized filters for the aggregate function FILTER

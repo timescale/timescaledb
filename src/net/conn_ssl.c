@@ -121,7 +121,9 @@ ssl_connect(Connection *conn, const char *host, const char *servname, int port)
 	ret = ts_plain_connect(conn, host, servname, port);
 
 	if (ret < 0)
+	{
 		return -1;
+	}
 
 	return ssl_setup((SSLConnection *) conn, host);
 }
@@ -134,7 +136,9 @@ ssl_write(Connection *conn, const char *buf, size_t writelen)
 	int ret = SSL_write(sslconn->ssl, buf, writelen);
 
 	if (ret < 0)
+	{
 		ssl_set_error(sslconn, ret);
+	}
 
 	return ret;
 }
@@ -147,7 +151,9 @@ ssl_read(Connection *conn, char *buf, size_t buflen)
 	int ret = SSL_read(sslconn->ssl, buf, buflen);
 
 	if (ret < 0)
+	{
 		ssl_set_error(sslconn, ret);
+	}
 
 	return ret;
 }
@@ -211,7 +217,9 @@ ssl_errmsg(Connection *conn)
 				if (ecode == 0)
 				{
 					if (err == 0)
+					{
 						return "EOF in SSL operation";
+					}
 					else if (IS_SOCKET_ERROR(err))
 					{
 						/* reset error for plan_errmsg() */
@@ -219,7 +227,9 @@ ssl_errmsg(Connection *conn)
 						return ts_plain_errmsg(conn);
 					}
 					else
+					{
 						return "unknown SSL syscall error";
+					}
 				}
 				return "SSL error syscall";
 			default:
@@ -243,7 +253,9 @@ ssl_errmsg(Connection *conn)
 	reason = ERR_reason_error_string(ecode);
 
 	if (NULL != reason)
+	{
 		return reason;
+	}
 
 	snprintf(errbuf, sizeof(errbuf), "SSL error code %lu", ecode);
 

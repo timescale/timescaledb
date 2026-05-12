@@ -47,15 +47,21 @@ get_timeout_millisec(TimestampTz by_time)
 	int timeout_usec = 0;
 
 	if (TIMESTAMP_IS_NOBEGIN(by_time))
+	{
 		return 0;
+	}
 
 	if (TIMESTAMP_IS_NOEND(by_time))
+	{
 		return PG_INT64_MAX;
+	}
 
 	TimestampDifference(GetCurrentTimestamp(), by_time, &timeout_sec, &timeout_usec);
 
 	if (timeout_sec < 0 || timeout_usec < 0)
+	{
 		return 0;
+	}
 
 	return (int64) ((timeout_sec * MILLISECS_PER_SEC) +
 					(((int64) timeout_usec) / USECS_PER_MILLISEC));
@@ -71,11 +77,15 @@ wait_using_wait_latch(TimestampTz until)
 	Assert(timeout >= 0 && "get_timeout_millisec underflow");
 
 	if (timeout > MAX_TIMEOUT)
+	{
 		timeout = MAX_TIMEOUT;
+	}
 
 	/* Wait latch requires timeout to be <= INT_MAX */
 	if (timeout > (int64) INT_MAX)
+	{
 		timeout = INT_MAX;
+	}
 
 	wl_rc = WaitLatch(MyLatch,
 					  WL_LATCH_SET | WL_TIMEOUT | WL_POSTMASTER_DEATH,
@@ -83,7 +93,9 @@ wait_using_wait_latch(TimestampTz until)
 					  PG_WAIT_EXTENSION);
 	ResetLatch(MyLatch);
 	if (wl_rc & WL_POSTMASTER_DEATH)
+	{
 		on_postmaster_death();
+	}
 
 	return true;
 }

@@ -26,10 +26,12 @@ batch_metadata_builder_minmax_create(Oid type_oid, Oid collation, AttrNumber att
 	TypeCacheEntry *type = lookup_type_cache(type_oid, TYPECACHE_LT_OPR);
 
 	if (!OidIsValid(type->lt_opr))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_FUNCTION),
 				 errmsg("could not identify an less-than operator for type %s",
 						format_type_be(type_oid))));
+	}
 
 	*builder = (BatchMetadataBuilderMinMax){
 		.functions =
@@ -84,7 +86,9 @@ minmax_update_row(void *builder_, TupleTableSlot *slot)
 	if (cmp > 0)
 	{
 		if (!builder->type_by_val)
+		{
 			pfree(DatumGetPointer(builder->min));
+		}
 		builder->min = datumCopy(val, builder->type_by_val, builder->type_len);
 	}
 
@@ -92,7 +96,9 @@ minmax_update_row(void *builder_, TupleTableSlot *slot)
 	if (cmp < 0)
 	{
 		if (!builder->type_by_val)
+		{
 			pfree(DatumGetPointer(builder->max));
+		}
 		builder->max = datumCopy(val, builder->type_by_val, builder->type_len);
 	}
 }
@@ -125,12 +131,16 @@ batch_metadata_builder_minmax_min(void *builder_)
 {
 	BatchMetadataBuilderMinMax *builder = (BatchMetadataBuilderMinMax *) builder_;
 	if (builder->empty)
+	{
 		elog(ERROR, "trying to get min from an empty builder");
+	}
 	if (builder->type_len == -1)
 	{
 		Datum unpacked = PointerGetDatum(PG_DETOAST_DATUM_PACKED(builder->min));
 		if (builder->min != unpacked)
+		{
 			pfree(DatumGetPointer(builder->min));
+		}
 		builder->min = unpacked;
 	}
 	return builder->min;
@@ -141,12 +151,16 @@ batch_metadata_builder_minmax_max(void *builder_)
 {
 	BatchMetadataBuilderMinMax *builder = (BatchMetadataBuilderMinMax *) builder_;
 	if (builder->empty)
+	{
 		elog(ERROR, "trying to get max from an empty builder");
+	}
 	if (builder->type_len == -1)
 	{
 		Datum unpacked = PointerGetDatum(PG_DETOAST_DATUM_PACKED(builder->max));
 		if (builder->max != unpacked)
+		{
 			pfree(DatumGetPointer(builder->max));
+		}
 		builder->max = unpacked;
 	}
 	return builder->max;

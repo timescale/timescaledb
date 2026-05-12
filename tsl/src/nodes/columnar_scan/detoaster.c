@@ -153,6 +153,7 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 		 * Some checks on the data we've found
 		 */
 		if (curchunk != expectedchunk)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_DATA_CORRUPTED),
 					 errmsg_internal("unexpected chunk number %d (expected %d) for toast value %u "
@@ -161,7 +162,9 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 									 expectedchunk,
 									 valueid,
 									 RelationGetRelationName(detoaster->toastrel))));
+		}
 		if (curchunk > endchunk)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_DATA_CORRUPTED),
 					 errmsg_internal("unexpected chunk number %d (out of range %d..%d) for toast "
@@ -171,10 +174,12 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 									 endchunk,
 									 valueid,
 									 RelationGetRelationName(detoaster->toastrel))));
+		}
 		expected_size = curchunk < totalchunks - 1 ?
 							TOAST_MAX_CHUNK_SIZE :
 							attrsize - ((totalchunks - 1) * TOAST_MAX_CHUNK_SIZE);
 		if (chunksize != expected_size)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_DATA_CORRUPTED),
 					 errmsg_internal("unexpected chunk size %d (expected %d) in chunk %d of %d for "
@@ -185,6 +190,7 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 									 totalchunks,
 									 valueid,
 									 RelationGetRelationName(detoaster->toastrel))));
+		}
 
 		/*
 		 * Copy the data into proper place in our result
@@ -192,9 +198,13 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 		chcpystrt = 0;
 		chcpyend = chunksize - 1;
 		if (curchunk == startchunk)
+		{
 			chcpystrt = 0;
+		}
 		if (curchunk == endchunk)
+		{
 			chcpyend = (attrsize - 1) % TOAST_MAX_CHUNK_SIZE;
+		}
 
 		memcpy(VARDATA(result) + (curchunk * TOAST_MAX_CHUNK_SIZE) + chcpystrt,
 			   chunkdata + chcpystrt,
@@ -207,12 +217,14 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 	 * Final checks that we successfully fetched the datum
 	 */
 	if (expectedchunk != (endchunk + 1))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_DATA_CORRUPTED),
 				 errmsg_internal("missing chunk number %d for toast value %u in %s",
 								 expectedchunk,
 								 valueid,
 								 RelationGetRelationName(detoaster->toastrel))));
+	}
 }
 
 /*
@@ -253,7 +265,9 @@ ts_toast_fetch_datum(struct varlena *attr, Detoaster *detoaster, MemoryContext d
 	int32 attrsize;
 
 	if (!VARATT_IS_EXTERNAL_ONDISK(attr))
+	{
 		elog(ERROR, "toast_fetch_datum shouldn't be called for non-ondisk datums");
+	}
 
 	/* Must copy to access aligned fields */
 	VARATT_EXTERNAL_GET_POINTER(toast_pointer, attr);
@@ -263,13 +277,19 @@ ts_toast_fetch_datum(struct varlena *attr, Detoaster *detoaster, MemoryContext d
 	result = (struct varlena *) MemoryContextAlloc(dest_mctx, attrsize + VARHDRSZ);
 
 	if (TS_VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer))
+	{
 		SET_VARSIZE_COMPRESSED(result, attrsize + VARHDRSZ);
+	}
 	else
+	{
 		SET_VARSIZE(result, attrsize + VARHDRSZ);
+	}
 
 	if (attrsize == 0)
+	{
 		return result; /* Probably shouldn't happen, but just in
 						* case. */
+	}
 
 	/* Fetch all chunks */
 	ts_fetch_toast(detoaster, &toast_pointer, result);

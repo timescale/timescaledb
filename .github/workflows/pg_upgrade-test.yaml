@@ -48,7 +48,7 @@ jobs:
 
     steps:
       - name: Install Linux Dependencies
-        timeout-minutes: 3
+        timeout-minutes: 15
         run: |
           sudo apt-get update
           sudo apt-get install pip postgresql-common
@@ -58,7 +58,7 @@ jobs:
           pip install testgres
 
       - name: Install PostgreSQL ${{ matrix.pg_version_old}} and ${{ matrix.pg_version_new }}
-        timeout-minutes: 3
+        timeout-minutes: 15
         run: |
           yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
           echo "deb https://packagecloud.io/timescale/timescaledb/ubuntu/ $(lsb_release -c -s) main" | sudo tee /etc/apt/sources.list.d/timescaledb.list
@@ -126,7 +126,7 @@ jobs:
 
       - name: Upload pg_upgrade logs
         if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pg_upgrade logs from ${{ matrix.pg_version_old }} to ${{ matrix.pg_version_new }}
           path: /tmp/pg_upgrade_artifacts.tgz
