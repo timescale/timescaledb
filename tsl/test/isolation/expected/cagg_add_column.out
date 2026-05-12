@@ -1,0 +1,175 @@
+Parsed test spec with 7 sessions
+
+starting permutation: wp_before_ht_enable s1_add_a wp_before_uv_enable s2_add_a wp_before_ht_release wp_before_uv_release v_cols_a
+step wp_before_ht_enable: SELECT debug_waitpoint_enable('cagg_add_column_before_ht_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_add_a: ALTER MATERIALIZED VIEW cagg_a      ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp))      STORED; <waiting ...>
+step wp_before_uv_enable: SELECT debug_waitpoint_enable('cagg_add_column_before_uv_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s2_add_a: ALTER MATERIALIZED VIEW cagg_a     ADD COLUMN max_temp  double precision GENERATED ALWAYS AS (max(temp))      STORED; <waiting ...>
+step wp_before_ht_release: SELECT debug_waitpoint_release('cagg_add_column_before_ht_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_add_a: <... completed>
+step wp_before_uv_release: SELECT debug_waitpoint_release('cagg_add_column_before_uv_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s2_add_a: <... completed>
+step v_cols_a: SELECT column_name FROM information_schema.columns WHERE table_name='cagg_a'      ORDER BY ordinal_position;
+column_name
+-----------
+bucket     
+avg_val    
+min_temp   
+max_temp   
+
+
+starting permutation: wp_refresh_enable r_refresh_a s1_add_a wp_refresh_release v_cols_a
+step wp_refresh_enable: SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step r_refresh_a: CALL refresh_continuous_aggregate('cagg_a', '2026-01-01', '2026-01-02'); <waiting ...>
+step s1_add_a: ALTER MATERIALIZED VIEW cagg_a      ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp))      STORED; <waiting ...>
+step wp_refresh_release: SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step r_refresh_a: <... completed>
+step s1_add_a: <... completed>
+step v_cols_a: SELECT column_name FROM information_schema.columns WHERE table_name='cagg_a'      ORDER BY ordinal_position;
+column_name
+-----------
+bucket     
+avg_val    
+min_temp   
+
+
+starting permutation: wp_after_enable s1_add_a r_refresh_a wp_after_release v_cols_a
+step wp_after_enable: SELECT debug_waitpoint_enable('cagg_add_column_after_locks');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_add_a: ALTER MATERIALIZED VIEW cagg_a      ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp))      STORED; <waiting ...>
+step r_refresh_a: CALL refresh_continuous_aggregate('cagg_a', '2026-01-01', '2026-01-02'); <waiting ...>
+step wp_after_release: SELECT debug_waitpoint_release('cagg_add_column_after_locks');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_add_a: <... completed>
+step r_refresh_a: <... completed>
+step v_cols_a: SELECT column_name FROM information_schema.columns WHERE table_name='cagg_a'      ORDER BY ordinal_position;
+column_name
+-----------
+bucket     
+avg_val    
+min_temp   
+
+
+starting permutation: wp_after_enable s1_add_parent s2_add_child wp_after_release v_cols_parent v_cols_child
+step wp_after_enable: SELECT debug_waitpoint_enable('cagg_add_column_after_locks');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_add_parent: ALTER MATERIALIZED VIEW cagg_parent ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp))      STORED; <waiting ...>
+step s2_add_child: ALTER MATERIALIZED VIEW cagg_child ADD COLUMN max_daily double precision GENERATED ALWAYS AS (max(avg_val))   STORED; <waiting ...>
+step wp_after_release: SELECT debug_waitpoint_release('cagg_add_column_after_locks');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_add_parent: <... completed>
+step s2_add_child: <... completed>
+step v_cols_parent: SELECT column_name FROM information_schema.columns WHERE table_name='cagg_parent' ORDER BY ordinal_position;
+column_name
+-----------
+bucket     
+avg_val    
+min_temp   
+
+step v_cols_child: SELECT column_name FROM information_schema.columns WHERE table_name='cagg_child'  ORDER BY ordinal_position;
+column_name
+-----------
+day        
+daily      
+max_daily  
+
+
+starting permutation: wp_before_uv_enable s1_add_a reader_begin wp_before_uv_release reader_commit v_cols_a
+step wp_before_uv_enable: SELECT debug_waitpoint_enable('cagg_add_column_before_uv_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_add_a: ALTER MATERIALIZED VIEW cagg_a      ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp))      STORED; <waiting ...>
+step reader_begin: BEGIN; SELECT count(*) FROM cagg_a;
+count
+-----
+    0
+
+step wp_before_uv_release: SELECT debug_waitpoint_release('cagg_add_column_before_uv_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step reader_commit: COMMIT;
+step s1_add_a: <... completed>
+step v_cols_a: SELECT column_name FROM information_schema.columns WHERE table_name='cagg_a'      ORDER BY ordinal_position;
+column_name
+-----------
+bucket     
+avg_val    
+min_temp   
+
+
+starting permutation: wp_after_enable s1_add_a drop_a wp_after_release v_exists_a
+step wp_after_enable: SELECT debug_waitpoint_enable('cagg_add_column_after_locks');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_add_a: ALTER MATERIALIZED VIEW cagg_a      ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp))      STORED; <waiting ...>
+step drop_a: DROP MATERIALIZED VIEW cagg_a; <waiting ...>
+step wp_after_release: SELECT debug_waitpoint_release('cagg_add_column_after_locks');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_add_a: <... completed>
+step drop_a: <... completed>
+step v_exists_a: SELECT count(*) AS cagg_a_exists FROM pg_class WHERE relname='cagg_a' AND relkind='v';
+cagg_a_exists
+-------------
+            0
+
+
+starting permutation: wp_before_uv_enable s1_add_a drop_a wp_before_uv_release
+step wp_before_uv_enable: SELECT debug_waitpoint_enable('cagg_add_column_before_uv_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_add_a: ALTER MATERIALIZED VIEW cagg_a      ADD COLUMN min_temp double precision GENERATED ALWAYS AS (min(temp))      STORED; <waiting ...>
+step drop_a: DROP MATERIALIZED VIEW cagg_a;
+step wp_before_uv_release: SELECT debug_waitpoint_release('cagg_add_column_before_uv_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_add_a: <... completed>
+ERROR:  continuous aggregate cagg_a does not exist
