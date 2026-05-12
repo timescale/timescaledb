@@ -1,1 +1,0 @@
-Fixes: #9490 Disallow negative interval as chunk_interval
