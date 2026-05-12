@@ -70,7 +70,13 @@ As a reminder, the upcoming TimescaleDB release in June 2026 will officially be 
 * [#9711](https://github.com/timescale/timescaledb/pull/9711) Fix registration row leak when continuous aggregate refresh fails
 * [#9697](https://github.com/timescale/timescaledb/pull/9697) Improve `pathkey` handling for compressed sub-paths during sort transformation
 * [#9743](https://github.com/timescale/timescaledb/pull/9743) Fix the composite bloom metadata column naming scheme
-
+* [#9767](https://github.com/timescale/timescaledb/pull/9767) Skip dropped chunks when trying to remove `ts_cagg_invalidation_trigger`
+* [#9747](https://github.com/timescale/timescaledb/pull/9747) Reject inheriting from a hypertable
+* [#9744](https://github.com/timescale/timescaledb/pull/9744) Use a fixed call string for the telemetry job in `ts_stat_statements` recording
+* [#9736](https://github.com/timescale/timescaledb/pull/9736) Do logical sparse index comparison
+* [#9731](https://github.com/timescale/timescaledb/pull/9731) Avoid creating overlapping batches during recompression for multi orderby configurations
+* [#9717](https://github.com/timescale/timescaledb/pull/9717) Reject non-positive time bucket width on cagg creation
+* [#9707](https://github.com/timescale/timescaledb/pull/9707) Fix policy name comparison in remove_policies
 
 **New Settings**
 * `enable_cagg_rewrites`: enables rewriting queries with CAggs. Off by default. `cagg_rewrites_debug_info`: prints CAgg rewrites diagnostics. Off by default.
@@ -80,6 +86,7 @@ As a reminder, the upcoming TimescaleDB release in June 2026 will officially be 
 * @fabriziomello for adding support for `PG_MODULE_MAGIC_EXT`
 * @maltalex for reporting an issue with index creation progress reporting
 * @pavanmanishd for the first version of the fix for #9743
+* @h0rn3t for reporting issue with recompression creating overlapping batches
 
 ## 2.26.4 (2026-04-28)
 
