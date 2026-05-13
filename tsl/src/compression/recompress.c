@@ -6,6 +6,7 @@
 
 #include <postgres.h>
 #include "debug_point.h"
+#include <miscadmin.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
 #include <utils/inval.h>
@@ -22,6 +23,7 @@
 #include "create.h"
 #include "debug_assert.h"
 #include "guc.h"
+#include "hypertable.h"
 #include "indexing.h"
 #include "recompress.h"
 #include "ts_catalog/array_utils.h"
@@ -82,6 +84,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
+	ts_hypertable_permissions_check(chunk->hypertable_relid, GetUserId());
 
 	if (!ts_chunk_is_partial(chunk))
 	{
