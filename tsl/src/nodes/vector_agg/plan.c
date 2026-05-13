@@ -227,6 +227,55 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 			return is_vector && is_vector_type(var->vartype);
 		}
 
+		case T_CaseExpr:
+		{
+			CaseExpr *c = castNode(CaseExpr, expr);
+			if (c->arg != NULL)
+			{
+				/*
+				 * We don't handle the "CASE testexpr WHEN comexpr ..." form at
+				 * the moment.
+				 */
+				return false;
+			}
+
+			ListCell *lc;
+			foreach (lc, c->args)
+			{
+				Node *when = lfirst(lc);
+				if (!is_vector_expr(vqinfo, (Expr *) when))
+				{
+					return false;
+				}
+			}
+
+			if (!is_vector_expr(vqinfo, c->defresult))
+			{
+				return false;
+			}
+
+			return true;
+		}
+
+		case T_CaseWhen:
+		{
+			CaseWhen *when = castNode(CaseWhen, expr);
+
+			if (!is_vector_expr(vqinfo, when->result))
+			{
+				return false;
+			}
+
+			Node *condition_vectorized = vector_qual_make((Node *) when->expr, vqinfo);
+			if (condition_vectorized == NULL)
+			{
+				return false;
+			}
+
+			when->expr = (Expr *) condition_vectorized;
+			return true;
+		}
+
 		default:
 			return false;
 	}
@@ -492,7 +541,9 @@ static Node *
 mark_partial_aggref_mutator(Node *node, void *context)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 
 	if (IsA(node, Aggref))
 	{
@@ -513,7 +564,9 @@ static Node *
 make_finalize_agg_mutator(Node *node, void *context)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 
 	if (IsA(node, TargetEntry))
 	{
@@ -529,7 +582,9 @@ make_finalize_agg_mutator(Node *node, void *context)
 			for (int k = 0; k < ctx->agg->numCols; k++)
 			{
 				if (ctx->agg->grpColIdx[k] == old_attno)
+				{
 					ctx->agg->grpColIdx[k] = tle->resno;
+				}
 			}
 			return node;
 		}
@@ -651,7 +706,9 @@ insert_vector_agg(Plan *plan, void *context)
 		{
 			AttrNumber grp_attno = agg->grpColIdx[k];
 			if (bms_is_member(grp_attno - FirstLowInvalidHeapAttributeNumber, tlist_attnos))
+			{
 				continue;
+			}
 
 			TargetEntry *child_tle =
 				list_nth(childplan->targetlist, AttrNumberGetAttrOffset(grp_attno));

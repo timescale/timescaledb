@@ -123,16 +123,22 @@ update_cache_from_tuple(ContinuousAggsCacheInvalEntry *cache_entry, HeapTuple tu
 	 * error handling for these NULL values.
 	 */
 	if (isnull)
+	{
 		return;
+	}
 
 	dimtype = ts_dimension_get_partition_type(d);
 	int64 timeval = ts_time_value_to_internal(datum, dimtype);
 
 	cache_entry->value_is_set = true;
 	if (timeval < cache_entry->lowest_modified_value)
+	{
 		cache_entry->lowest_modified_value = timeval;
+	}
 	if (timeval > cache_entry->greatest_modified_value)
+	{
 		cache_entry->greatest_modified_value = timeval;
+	}
 }
 
 static inline void
@@ -163,13 +169,17 @@ get_cache_inval_entry(int32 hypertable_id, Oid chunk_relid)
 	bool found;
 
 	if (!continuous_aggs_cache_inval_htab)
+	{
 		cache_inval_init();
+	}
 
 	cache_entry = (ContinuousAggsCacheInvalEntry *)
 		hash_search(continuous_aggs_cache_inval_htab, &chunk_relid, HASH_ENTER, &found);
 
 	if (!found)
+	{
 		cache_inval_entry_init(cache_entry, hypertable_id, chunk_relid);
+	}
 
 	return cache_entry;
 }
@@ -185,9 +195,13 @@ continuous_agg_invalidate_range(int32 hypertable_id, Oid chunk_relid, int64 star
 	cache_entry->value_is_set = true;
 	Assert(start <= end);
 	if (start < cache_entry->lowest_modified_value)
+	{
 		cache_entry->lowest_modified_value = start;
+	}
 	if (end > cache_entry->greatest_modified_value)
+	{
 		cache_entry->greatest_modified_value = end;
+	}
 }
 
 void
@@ -200,7 +214,9 @@ continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple
 	update_cache_from_tuple(cache_entry, chunk_tuple, RelationGetDescr(chunk_rel));
 
 	if (!update)
+	{
 		return;
+	}
 
 	/* on update we need to invalidate the new time value as well as the old one */
 	update_cache_from_tuple(cache_entry, chunk_newtuple, RelationGetDescr(chunk_rel));
@@ -212,7 +228,9 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	int64 liv;
 
 	if (!entry->value_is_set)
+	{
 		return;
+	}
 
 	/* The materialization worker uses a READ COMMITTED isolation level by default. Therefore, if we
 	 * use a stronger isolation level, the isolation threshold could update without us seeing the
@@ -232,9 +250,11 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	liv = cache_get_lowest_invalidated_time_for_hypertable(entry->hypertable_id);
 
 	if (entry->lowest_modified_value < liv)
+	{
 		invalidation_hyper_log_add_entry(entry->hypertable_id,
 										 entry->lowest_modified_value,
 										 entry->greatest_modified_value);
+	}
 };
 
 static void
@@ -259,7 +279,9 @@ cache_inval_htab_write(void)
 	Catalog *catalog;
 
 	if (hash_get_num_entries(continuous_aggs_cache_inval_htab) == 0)
+	{
 		return;
+	}
 
 	catalog = ts_catalog_get();
 
@@ -272,7 +294,9 @@ cache_inval_htab_write(void)
 
 	hash_seq_init(&hash_seq, continuous_aggs_cache_inval_htab);
 	while ((current_entry = hash_seq_search(&hash_seq)) != NULL)
+	{
 		cache_inval_entry_write(current_entry);
+	}
 };
 
 /*
@@ -308,7 +332,9 @@ continuous_agg_xact_invalidation_callback(XactEvent event, void *arg)
 {
 	/* Return quickly if we never initialize the hashtable */
 	if (!continuous_aggs_cache_inval_htab)
+	{
 		return;
+	}
 
 	switch (event)
 	{
@@ -351,7 +377,9 @@ invalidation_tuple_found(TupleInfo *ti, void *min)
 	Assert(!isnull);
 
 	if (DatumGetInt64(watermark) < *((int64 *) min))
+	{
 		*((int64 *) min) = DatumGetInt64(watermark);
+	}
 
 	DEBUG_WAITPOINT("invalidation_tuple_found_done");
 
@@ -403,7 +431,9 @@ get_lowest_invalidated_time_for_hypertable(int32 hypertable_id)
 	 * first materialization needs to scan the entire table anyway; the invalidations are redundant.
 	 */
 	if (!ts_scanner_scan_one(&scanctx, false, CAGG_INVALIDATION_THRESHOLD_NAME))
+	{
 		min_val = INVAL_NEG_INFINITY;
+	}
 	PopActiveSnapshot();
 
 	return min_val;

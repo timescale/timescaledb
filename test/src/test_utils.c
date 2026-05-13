@@ -278,7 +278,9 @@ ts_bgw_wait(PG_FUNCTION_ARGS)
 	while (iterations-- > 0)
 	{
 		if (!CountOtherDBBackends(dboid, &notherbackends, &npreparedxacts))
+		{
 			PG_RETURN_NULL();
+		}
 		ereport(NOTICE,
 				(errmsg("source database \"%s\" is being accessed by other users",
 						text_to_cstring(datname)),

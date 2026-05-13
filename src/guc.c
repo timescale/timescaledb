@@ -267,7 +267,9 @@ ts_feature_flag_check(FeatureFlagType type)
 {
 	FeatureFlag *flag = &ts_feature_flags[type];
 	if (likely(*flag->enable))
+	{
 		return;
+	}
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("You are using a PostgreSQL service. This feature is only available on "
@@ -416,7 +418,9 @@ static void
 chunk_skipping_assign_hook(bool newval, void *extra)
 {
 	if (newval)
+	{
 		ts_hypertable_cache_invalidate_callback();
+	}
 }
 
 #if PG16_LT
@@ -430,10 +434,14 @@ guc_malloc(int elevel, size_t size)
 
 	/* Avoid unportable behavior of malloc(0) */
 	if (size == 0)
+	{
 		size = 1;
+	}
 	data = malloc(size);
 	if (data == NULL)
+	{
 		ereport(elevel, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("out of memory")));
+	}
 	return data;
 }
 #endif

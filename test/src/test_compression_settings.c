@@ -337,10 +337,143 @@ test_convert_to_sparse_index_settings()
 	}
 }
 
+static void
+test_sparse_index_equal()
+{
+	/* Both NULL — equal */
+	TestAssertBoolEq(ts_sparse_index_equal(NULL, NULL), true);
+
+	/* One NULL, one non-NULL — not equal */
+	{
+		Jsonb *jb =
+			cstring_to_jsonb("[{\"type\": \"bloom\", \"column\": \"x\", \"source\": \"config\"}]");
+		TestAssertBoolEq(ts_sparse_index_equal(NULL, jb), false);
+		TestAssertBoolEq(ts_sparse_index_equal(jb, NULL), false);
+		pfree(jb);
+	}
+
+	/* Identical JSONB — equal */
+	{
+		Jsonb *jb = cstring_to_jsonb(
+			"[{\"type\": \"bloom\", \"column\": \"x\", \"source\": \"config\"}, "
+			"{\"type\": \"minmax\", \"column\": \"ts\", \"source\": \"orderby\"}]");
+		TestAssertBoolEq(ts_sparse_index_equal(jb, jb), true);
+		pfree(jb);
+	}
+
+	/* Same objects, different array order — equal */
+	{
+		Jsonb *a = cstring_to_jsonb(
+			"[{\"type\": \"bloom\", \"column\": \"x\", \"source\": \"config\"}, "
+			"{\"type\": \"minmax\", \"column\": \"ts\", \"source\": \"orderby\"}]");
+		Jsonb *b = cstring_to_jsonb(
+			"[{\"type\": \"minmax\", \"column\": \"ts\", \"source\": \"orderby\"}, "
+			"{\"type\": \"bloom\", \"column\": \"x\", \"source\": \"config\"}]");
+		TestAssertBoolEq(ts_sparse_index_equal(a, b), true);
+		pfree(a);
+		pfree(b);
+	}
+
+	/* Different column value — not equal */
+	{
+		Jsonb *a =
+			cstring_to_jsonb("[{\"type\": \"bloom\", \"column\": \"x\", \"source\": \"config\"}]");
+		Jsonb *b =
+			cstring_to_jsonb("[{\"type\": \"bloom\", \"column\": \"y\", \"source\": \"config\"}]");
+		TestAssertBoolEq(ts_sparse_index_equal(a, b), false);
+		pfree(a);
+		pfree(b);
+	}
+
+	/* Different number of objects — not equal */
+	{
+		Jsonb *a =
+			cstring_to_jsonb("[{\"type\": \"bloom\", \"column\": \"x\", \"source\": \"config\"}]");
+		Jsonb *b = cstring_to_jsonb(
+			"[{\"type\": \"bloom\", \"column\": \"x\", \"source\": \"config\"}, "
+			"{\"type\": \"minmax\", \"column\": \"ts\", \"source\": \"orderby\"}]");
+		TestAssertBoolEq(ts_sparse_index_equal(a, b), false);
+		pfree(a);
+		pfree(b);
+	}
+
+	/* Composite bloom columns, same order — equal */
+	{
+		Jsonb *a = cstring_to_jsonb(
+			"[{\"type\": \"bloom\", \"column\": [\"a\", \"b\"], \"source\": \"config\"}]");
+		Jsonb *b = cstring_to_jsonb(
+			"[{\"type\": \"bloom\", \"column\": [\"a\", \"b\"], \"source\": \"config\"}]");
+		TestAssertBoolEq(ts_sparse_index_equal(a, b), true);
+		pfree(a);
+		pfree(b);
+	}
+
+	/* Composite bloom columns, different column order — not equal. */
+	/* Should not be possible but keep this test to flag if something breaks this logic */
+	{
+		Jsonb *a = cstring_to_jsonb(
+			"[{\"type\": \"bloom\", \"column\": [\"a\", \"b\"], \"source\": \"config\"}]");
+		Jsonb *b = cstring_to_jsonb(
+			"[{\"type\": \"bloom\", \"column\": [\"b\", \"a\"], \"source\": \"config\"}]");
+		TestAssertBoolEq(ts_sparse_index_equal(a, b), false);
+		pfree(a);
+		pfree(b);
+	}
+
+	/* Different type — not equal */
+	{
+		Jsonb *a =
+			cstring_to_jsonb("[{\"type\": \"bloom\", \"column\": \"x\", \"source\": \"config\"}]");
+		Jsonb *b =
+			cstring_to_jsonb("[{\"type\": \"minmax\", \"column\": \"x\", \"source\": \"config\"}]");
+		TestAssertBoolEq(ts_sparse_index_equal(a, b), false);
+		pfree(a);
+		pfree(b);
+	}
+
+	/* Extra keys — not equal */
+	{
+		Jsonb *a =
+			cstring_to_jsonb("[{\"type\": \"bloom\", \"column\": \"x\", \"source\": \"config\"}]");
+		Jsonb *b = cstring_to_jsonb(
+			"[{\"type\": \"bloom\", \"column\": \"x\", \"source\": \"config\",\"foo\":\"bar\"}]");
+		TestAssertBoolEq(ts_sparse_index_equal(a, b), false);
+		pfree(a);
+		pfree(b);
+	}
+
+	/* Different source — not equal */
+	{
+		Jsonb *a = cstring_to_jsonb(
+			"[{\"type\": \"minmax\", \"column\": \"ts\", \"source\": \"config\"}]");
+		Jsonb *b = cstring_to_jsonb(
+			"[{\"type\": \"minmax\", \"column\": \"ts\", \"source\": \"orderby\"}]");
+		TestAssertBoolEq(ts_sparse_index_equal(a, b), false);
+		pfree(a);
+		pfree(b);
+	}
+
+	/* Three objects shuffled — equal */
+	{
+		Jsonb *a = cstring_to_jsonb(
+			"[{\"type\": \"bloom\", \"column\": \"a\", \"source\": \"config\"}, "
+			"{\"type\": \"bloom\", \"column\": \"b\", \"source\": \"config\"}, "
+			"{\"type\": \"minmax\", \"column\": \"ts\", \"source\": \"orderby\"}]");
+		Jsonb *b = cstring_to_jsonb(
+			"[{\"type\": \"minmax\", \"column\": \"ts\", \"source\": \"orderby\"}, "
+			"{\"type\": \"bloom\", \"column\": \"b\", \"source\": \"config\"}, "
+			"{\"type\": \"bloom\", \"column\": \"a\", \"source\": \"config\"}]");
+		TestAssertBoolEq(ts_sparse_index_equal(a, b), true);
+		pfree(a);
+		pfree(b);
+	}
+}
+
 TS_TEST_FN(ts_test_compression_settings)
 {
 	test_alter_table_rename_column_effect_jsonb();
 	test_alter_table_drop_column_effect_jsonb();
 	test_convert_to_sparse_index_settings();
+	test_sparse_index_equal();
 	PG_RETURN_VOID();
 }

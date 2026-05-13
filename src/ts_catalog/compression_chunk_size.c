@@ -42,7 +42,9 @@ ts_compression_chunk_size_delete(int32 uncompressed_chunk_id)
 
 	/* Make catalog changes visible */
 	if (count > 0)
+	{
 		CommandCounterIncrement();
+	}
 
 	return count;
 }
@@ -67,7 +69,9 @@ ts_compression_chunk_size_get(int32 chunk_id, Form_compression_chunk_size form)
 		Assert(form->chunk_id == chunk_id);
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 
 		break;
 	}
@@ -109,7 +113,9 @@ ts_compression_chunk_size_update(int32 chunk_id, Form_compression_chunk_size for
 		heap_freetuple(copy);
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 
 		break;
 	}

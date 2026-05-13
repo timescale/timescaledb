@@ -86,9 +86,11 @@ ts_hist_sfunc(PG_FUNCTION_ARGS)
 	 */
 	nbuckets = state->nbuckets - 2;
 	if (nbuckets != PG_GETARG_INT32(4))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("number of buckets must not change between calls")));
+	}
 
 	int32 bucket = DatumGetInt32(DirectFunctionCall4(width_bucket_float8,
 													 val_datum,
@@ -162,7 +164,9 @@ ts_hist_combinefunc(PG_FUNCTION_ARGS)
 		/* Since number of buckets is part of the aggregation call the initialization
 		 * might be different in the partials so we error out if they are not identical. */
 		if (state1->nbuckets != state2->nbuckets)
+		{
 			elog(ERROR, "number of buckets must not change between calls");
+		}
 
 		result = copy_state(aggcontext, state1);
 
@@ -173,7 +177,9 @@ ts_hist_combinefunc(PG_FUNCTION_ARGS)
 			int64 val = (int64) DatumGetInt32(result->buckets[i]);
 			int64 other = (int64) DatumGetInt32(state2->buckets[i]);
 			if (val + other >= PG_INT32_MAX)
+			{
 				elog(ERROR, "overflow in histogram combine");
+			}
 
 			result->buckets[i] = Int32GetDatum((int32) (val + other));
 		}
@@ -196,7 +202,9 @@ ts_hist_serializefunc(PG_FUNCTION_ARGS)
 	pq_sendint32(&buf, state->nbuckets);
 
 	for (int32 i = 0; i < state->nbuckets; i++)
+	{
 		pq_sendint32(&buf, DatumGetInt32(state->buckets[i]));
+	}
 
 	PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
 }
@@ -213,7 +221,9 @@ ts_hist_deserializefunc(PG_FUNCTION_ARGS)
 	Histogram *state;
 
 	if (!AggCheckCallContext(fcinfo, &aggcontext))
+	{
 		elog(ERROR, "ts_hist_deserializefunc called in non-aggregate context");
+	}
 
 	Assert(!PG_ARGISNULL(0));
 	serialized = PG_GETARG_BYTEA_P(0);
@@ -229,7 +239,9 @@ ts_hist_deserializefunc(PG_FUNCTION_ARGS)
 	state->nbuckets = nbuckets;
 
 	for (i = 0; i < state->nbuckets; i++)
+	{
 		state->buckets[i] = Int32GetDatum(pq_getmsgint(&buf, 4));
+	}
 
 	PG_RETURN_POINTER(state);
 }
@@ -251,7 +263,9 @@ ts_hist_finalfunc(PG_FUNCTION_ARGS)
 	state = (Histogram *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 
 	if (state == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 
 	dims[0] = state->nbuckets;
 	lbs[0] = 1;

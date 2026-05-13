@@ -41,6 +41,7 @@ typedef struct PolicyContinuousAggData
 	int32 buckets_per_batch;
 	int32 max_batches_per_execution;
 	bool refresh_newest_first;
+	bool compress_after_refresh;
 } PolicyContinuousAggData;
 
 typedef struct PolicyCompressionData

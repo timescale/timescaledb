@@ -42,7 +42,9 @@ ts_extract_expr_args(Expr *expr, Var **var, Expr **arg_value, Oid *opno, Oid *op
 			expr_opcode = opexpr->opfuncid;
 
 			if (opexpr->opresulttype != BOOLOID)
+			{
 				return false;
+			}
 
 			break;
 		}
@@ -59,47 +61,63 @@ ts_extract_expr_args(Expr *expr, Var **var, Expr **arg_value, Oid *opno, Oid *op
 	}
 
 	if (list_length(args) != 2)
+	{
 		return false;
+	}
 
 	Expr *leftop = linitial(args);
 	Expr *rightop = lsecond(args);
 
 	if (IsA(leftop, RelabelType))
+	{
 		leftop = castNode(RelabelType, leftop)->arg;
+	}
 	if (IsA(rightop, RelabelType))
+	{
 		rightop = castNode(RelabelType, rightop)->arg;
+	}
 
 	if (IsA(leftop, Var) && !IsA(rightop, Var))
 	{
 		/* ignore system columns */
 		if (castNode(Var, leftop)->varattno <= 0)
+		{
 			return false;
+		}
 
 		*var = castNode(Var, leftop);
 
 		*arg_value = rightop;
 		*opno = expr_opno;
 		if (opcode)
+		{
 			*opcode = expr_opcode;
+		}
 		return true;
 	}
 	else if (IsA(rightop, Var) && !IsA(leftop, Var))
 	{
 		/* ignore system columns */
 		if (castNode(Var, rightop)->varattno <= 0)
+		{
 			return false;
+		}
 
 		*var = castNode(Var, rightop);
 		*arg_value = leftop;
 		expr_opno = get_commutator(expr_opno);
 		if (!OidIsValid(expr_opno))
+		{
 			return false;
+		}
 
 		if (opcode)
 		{
 			expr_opcode = get_opcode(expr_opno);
 			if (!OidIsValid(expr_opcode))
+			{
 				return false;
+			}
 			*opcode = expr_opcode;
 		}
 
@@ -204,7 +222,9 @@ Plan *
 ts_plan_tree_walker(Plan *plan, ts_plan_tree_walkerfunc func, void *context)
 {
 	if (!plan)
+	{
 		return NULL;
+	}
 
 	if (IsA(plan, List))
 	{
@@ -217,9 +237,13 @@ ts_plan_tree_walker(Plan *plan, ts_plan_tree_walkerfunc func, void *context)
 	}
 
 	if (plan->lefttree)
+	{
 		plan->lefttree = ts_plan_tree_walker(plan->lefttree, func, context);
+	}
 	if (plan->righttree)
+	{
 		plan->righttree = ts_plan_tree_walker(plan->righttree, func, context);
+	}
 
 	if (IsA(plan, Append))
 	{

@@ -59,7 +59,9 @@ ts_test_job_refresh(PG_FUNCTION_ARGS)
 	lc = (ListCell *) funcctx->user_fctx;
 
 	if (lc == NULL)
+	{
 		SRF_RETURN_DONE(funcctx);
+	}
 	else
 	{
 		/* Return the current list_cell and advance ptr */

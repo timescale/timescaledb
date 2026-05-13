@@ -39,7 +39,9 @@ ts_hypercube_free(Hypercube *hc)
 	int i;
 
 	for (i = 0; i < hc->num_slices; i++)
+	{
 		ts_dimension_slice_free(hc->slices[i]);
+	}
 
 	pfree(hc);
 }
@@ -51,11 +53,17 @@ hypercube_is_sorted(const Hypercube *hc)
 	int i;
 
 	if (hc->num_slices < 2)
+	{
 		return true;
+	}
 
 	for (i = 1; i < hc->num_slices; i++)
+	{
 		if (hc->slices[i]->fd.dimension_id < hc->slices[i - 1]->fd.dimension_id)
+		{
 			return false;
+		}
+	}
 
 	return true;
 }
@@ -72,7 +80,9 @@ ts_hypercube_copy(const Hypercube *hc)
 	memcpy(copy, hc, nbytes);
 
 	for (i = 0; i < hc->num_slices; i++)
+	{
 		copy->slices[i] = ts_dimension_slice_copy(hc->slices[i]);
+	}
 
 	return copy;
 }
@@ -83,11 +93,17 @@ ts_hypercube_equal(const Hypercube *hc1, const Hypercube *hc2)
 	int i;
 
 	if (hc1->num_slices != hc2->num_slices)
+	{
 		return false;
+	}
 
 	for (i = 0; i < hc1->num_slices; i++)
+	{
 		if (ts_dimension_slice_cmp(hc1->slices[i], hc2->slices[i]) != 0)
+		{
 			return false;
+		}
+	}
 
 	return true;
 }
@@ -99,9 +115,13 @@ cmp_slices_by_dimension_id(const void *left, const void *right)
 	const DimensionSlice *right_slice = *((DimensionSlice **) right);
 
 	if (left_slice->fd.dimension_id == right_slice->fd.dimension_id)
+	{
 		return 0;
+	}
 	if (left_slice->fd.dimension_id < right_slice->fd.dimension_id)
+	{
 		return -1;
+	}
 	return 1;
 }
 
@@ -118,7 +138,9 @@ ts_hypercube_add_slice_from_range(Hypercube *hc, int32 dimension_id, int64 start
 	/* Check if we require a sort to maintain dimension order */
 	if (hc->num_slices > 1 &&
 		slice->fd.dimension_id < hc->slices[hc->num_slices - 2]->fd.dimension_id)
+	{
 		ts_hypercube_slice_sort(hc);
+	}
 
 	Assert(hypercube_is_sorted(hc));
 
@@ -161,7 +183,9 @@ ts_hypercube_get_slice_by_dimension_id(const Hypercube *hc, int32 dimension_id)
 	void *ptr = &slice;
 
 	if (hc->num_slices == 0)
+	{
 		return NULL;
+	}
 
 	Assert(hypercube_is_sorted(hc));
 
@@ -172,7 +196,9 @@ ts_hypercube_get_slice_by_dimension_id(const Hypercube *hc, int32 dimension_id)
 				  cmp_slices_by_dimension_id);
 
 	if (NULL == ptr)
+	{
 		return NULL;
+	}
 
 	return *((DimensionSlice **) ptr);
 }
@@ -249,7 +275,9 @@ ts_hypercube_find_existing_slices(const Hypercube *cube, const ScanTupLock *tupl
 		bool found = ts_dimension_slice_scan_for_existing(cube->slices[i], tuplock);
 
 		if (found)
+		{
 			num_found++;
+		}
 	}
 
 	return num_found;
@@ -350,8 +378,12 @@ ts_hypercubes_collide(const Hypercube *cube1, const Hypercube *cube2)
 	Assert(cube1->num_slices == cube2->num_slices);
 
 	for (i = 0; i < cube1->num_slices; i++)
+	{
 		if (!ts_dimension_slices_collide(cube1->slices[i], cube2->slices[i]))
+		{
 			return false;
+		}
+	}
 
 	return true;
 }

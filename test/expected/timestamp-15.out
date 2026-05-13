@@ -234,6 +234,11 @@ SELECT time_bucket('1 hour', DATE '2012-01-01');
 ERROR:  interval must not have sub-day precision
 SELECT time_bucket('25 hour', DATE '2012-01-01');
 ERROR:  interval must be a multiple of a day
+-- sub-day offset not supported for time_bucket of type Date
+SELECT time_bucket('1 day', DATE '2012-01-01', '1 hour'::interval);
+ERROR:  interval must not have sub-day precision
+SELECT time_bucket('1 week', DATE '2012-01-01', '30 minutes'::interval);
+ERROR:  interval must not have sub-day precision
 \set ON_ERROR_STOP 1
 SELECT time_bucket(INTERVAL '1 day', TIMESTAMP '2011-01-02 01:01:01');
        time_bucket        

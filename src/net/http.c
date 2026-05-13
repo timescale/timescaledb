@@ -38,8 +38,12 @@ ts_http_version_from_string(const char *version)
 	int i;
 
 	for (i = 0; i < HTTP_VERSION_INVALID; i++)
+	{
 		if (pg_strcasecmp(http_version_strings[i], version) == 0)
+		{
 			return i;
+		}
+	}
 
 	return HTTP_VERSION_INVALID;
 }
@@ -67,17 +71,23 @@ ts_http_send_and_recv(Connection *conn, HttpRequest *req, HttpResponseState *sta
 	built_request = ts_http_request_build(req, &request_len);
 
 	if (NULL == built_request)
+	{
 		return HTTP_ERROR_REQUEST_BUILD;
+	}
 
 	while (request_len > 0)
 	{
 		ret = ts_connection_write(conn, built_request + write_off, request_len);
 
 		if (ret < 0 || (size_t) ret > request_len)
+		{
 			return HTTP_ERROR_WRITE;
+		}
 
 		if (ret == 0)
+		{
 			return HTTP_ERROR_CONN_CLOSED;
+		}
 
 		write_off += ret;
 		request_len -= ret;
@@ -89,20 +99,30 @@ ts_http_send_and_recv(Connection *conn, HttpRequest *req, HttpResponseState *sta
 		char *buf = ts_http_response_state_next_buffer(state, &remaining);
 
 		if (remaining < 0)
+		{
 			err = HTTP_ERROR_INVALID_BUFFER_STATE;
+		}
 		else if (remaining == 0)
+		{
 			err = HTTP_ERROR_RESPONSE_INCOMPLETE;
+		}
 		else
 		{
 			ssize_t bytes_read = ts_connection_read(conn, buf, remaining);
 
 			if (bytes_read < 0)
+			{
 				err = HTTP_ERROR_READ;
+			}
 			/* Check for error or closed socket/EOF (ret == 0) */
 			else if (bytes_read == 0)
+			{
 				err = HTTP_ERROR_CONN_CLOSED;
+			}
 			else if (!ts_http_response_state_parse(state, bytes_read))
+			{
 				err = HTTP_ERROR_RESPONSE_PARSE;
+			}
 		}
 	}
 

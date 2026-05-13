@@ -228,19 +228,25 @@ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 	 * NULL. Since messages have already been printed in, just exit.
 	 */
 	if (!worker_handle)
+	{
 		PG_RETURN_VOID();
+	}
 
 	BgwHandleStatus status = WaitForBackgroundWorkerStartup(worker_handle, &pid);
 	TestAssertTrue(BGWH_STARTED == status);
 	if (status != BGWH_STARTED)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not started")));
+	}
 
 	status = WaitForBackgroundWorkerShutdown(worker_handle);
 	TestAssertTrue(BGWH_STOPPED == status);
 	if (status != BGWH_STOPPED)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not stopped")));
+	}
 
 	PG_RETURN_VOID();
 }
@@ -263,13 +269,17 @@ ts_bgw_db_scheduler_test_run(PG_FUNCTION_ARGS)
 	 * NULL. Since messages have already been printed in, just exit.
 	 */
 	if (!current_handle)
+	{
 		PG_RETURN_VOID();
+	}
 
 	status = WaitForBackgroundWorkerStartup(current_handle, &pid);
 	TestAssertTrue(BGWH_STARTED == status);
 	if (status != BGWH_STARTED)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not started")));
+	}
 
 	PG_RETURN_VOID();
 }
@@ -282,8 +292,10 @@ ts_bgw_db_scheduler_test_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 		BgwHandleStatus status = WaitForBackgroundWorkerShutdown(current_handle);
 		TestAssertTrue(BGWH_STOPPED == status);
 		if (status != BGWH_STOPPED)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not stopped")));
+		}
 	}
 	PG_RETURN_VOID();
 }
@@ -386,7 +398,9 @@ get_test_job_type_from_name(Name job_type_name)
 	for (i = 0; i < _MAX_TEST_JOB_TYPE; i++)
 	{
 		if (namestrcmp(job_type_name, test_job_type_names[i]) == 0)
+		{
 			return i;
+		}
 	}
 	return _MAX_TEST_JOB_TYPE;
 }

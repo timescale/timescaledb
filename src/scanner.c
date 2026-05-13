@@ -167,9 +167,13 @@ static inline Scanner *
 scanner_ctx_get_scanner(ScannerCtx *ctx)
 {
 	if (OidIsValid(ctx->index))
+	{
 		return &scanners[ScannerTypeIndex];
+	}
 	else
+	{
 		return &scanners[ScannerTypeTable];
+	}
 }
 
 TSDLLEXPORT void
@@ -181,7 +185,9 @@ ts_scanner_rescan(ScannerCtx *ctx, const ScanKey scankey)
 	/* If scankey is NULL, the existing scan key was already updated or the
 	 * old should be reused */
 	if (NULL != scankey)
+	{
 		memcpy(ctx->scankey, scankey, sizeof(*ctx->scankey));
+	}
 
 	oldmcxt = MemoryContextSwitchTo(ctx->internal.scan_mcxt);
 	scanner->rescan(ctx);
@@ -195,7 +201,9 @@ prepare_scan(ScannerCtx *ctx)
 	ctx->internal.registered_snapshot = false;
 
 	if (ctx->internal.scan_mcxt == NULL)
+	{
 		ctx->internal.scan_mcxt = CurrentMemoryContext;
+	}
 
 	if (ctx->snapshot == NULL)
 	{
@@ -308,7 +316,9 @@ ts_scanner_start_scan(ScannerCtx *ctx)
 		ctx->table = RelationGetRelid(ctx->tablerel);
 
 		if (NULL != ctx->indexrel)
+		{
 			ctx->index = RelationGetRelid(ctx->indexrel);
+		}
 	}
 
 	Assert(ctx->internal.scan_mcxt != NULL);
@@ -326,7 +336,9 @@ ts_scanner_start_scan(ScannerCtx *ctx)
 
 	/* Call pre-scan handler, if any. */
 	if (ctx->prescan != NULL)
+	{
 		ctx->prescan(ctx->data);
+	}
 
 	ictx->started = true;
 }
@@ -368,11 +380,15 @@ ts_scanner_end_scan(ScannerCtx *ctx)
 	MemoryContext oldmcxt;
 
 	if (ictx->ended)
+	{
 		return;
+	}
 
 	/* Call post-scan handler, if any. */
 	if (ctx->postscan != NULL)
+	{
 		ctx->postscan(ictx->tinfo.count, ctx->data);
+	}
 
 	oldmcxt = MemoryContextSwitchTo(ctx->internal.scan_mcxt);
 	scanner->endscan(ctx);
@@ -439,7 +455,9 @@ ts_scanner_next(ScannerCtx *ctx)
 		}
 
 		if (ts_scanner_limit_reached(ctx))
+		{
 			is_valid = false;
+		}
 		else
 		{
 			MemoryContext oldmcxt = MemoryContextSwitchTo(ctx->internal.scan_mcxt);
@@ -449,10 +467,14 @@ ts_scanner_next(ScannerCtx *ctx)
 	}
 
 	if (!(ctx->flags & SCANNER_F_NOEND))
+	{
 		ts_scanner_end_scan(ctx);
+	}
 
 	if (!(ctx->flags & SCANNER_F_NOEND_AND_NOCLOSE))
+	{
 		ts_scanner_close(ctx);
+	}
 
 	return NULL;
 }
@@ -481,10 +503,14 @@ ts_scanner_scan(ScannerCtx *ctx)
 			if (scan_result == SCAN_DONE)
 			{
 				if (!(ctx->flags & SCANNER_F_NOEND))
+				{
 					ts_scanner_end_scan(ctx);
+				}
 
 				if (!(ctx->flags & SCANNER_F_NOEND_AND_NOCLOSE))
+				{
 					ts_scanner_close(ctx);
+				}
 				break;
 			}
 			else if (scan_result == SCAN_RESTART_WITH_NEW_SNAPSHOT)

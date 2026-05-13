@@ -78,7 +78,9 @@ emit_log_hook_callback(ErrorData *edata)
 	 * once proc_exit has started we may no longer be able to start transactions
 	 */
 	if (MyProc == NULL)
+	{
 		return;
+	}
 
 	/*
 	 * Block signals so we don't lose messages generated during signal
@@ -107,10 +109,14 @@ emit_log_hook_callback(ErrorData *edata)
 		bgw_log_insert(edata->message);
 
 		if (started_txn)
+		{
 			CommitTransactionCommand();
+		}
 
 		if (prev_emit_log_hook != NULL)
+		{
 			prev_emit_log_hook(edata);
+		}
 
 		/* Reinstall the hook if log was successful. */
 		emit_log_hook = emit_log_hook_callback;
@@ -119,7 +125,9 @@ emit_log_hook_callback(ErrorData *edata)
 	{
 		/* If there was an error, rollback what was done before the error */
 		if (IsTransactionState())
+		{
 			AbortCurrentTransaction();
+		}
 
 		/*
 		 * Reinstall the hook because we are out of the main body of the

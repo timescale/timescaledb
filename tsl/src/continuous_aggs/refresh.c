@@ -58,9 +58,8 @@ typedef struct CaggRefreshSpiContext
 static Hypertable *cagg_get_hypertable_or_fail(int32 hypertable_id);
 static InternalTimeRange get_largest_bucketed_window(Oid timetype, int64 bucket_width);
 static InternalTimeRange
-compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
-										  const InternalTimeRange *const refresh_window,
-										  const int64 bucket_width);
+compute_inscribed_bucketed_refresh_window(const InternalTimeRange *const refresh_window,
+										  const ContinuousAggBucketFunction *bucket_function);
 static void continuous_agg_refresh_init(ContinuousAggRefreshState *refresh,
 										const ContinuousAgg *cagg,
 										const InternalTimeRange *refresh_window,
@@ -90,10 +89,12 @@ cagg_get_hypertable_or_fail(int32 hypertable_id)
 	Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
 
 	if (NULL == ht)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("invalid continuous aggregate state"),
 				 errdetail("A continuous aggregate references a hypertable that does not exist.")));
+	}
 
 	return ht;
 }
@@ -152,24 +153,26 @@ get_largest_bucketed_window(Oid timetype, int64 bucket_width)
  * where part of its data were dropped by a retention policy. See #2198 for details.
  */
 static InternalTimeRange
-compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
-										  const InternalTimeRange *const refresh_window,
-										  const int64 bucket_width)
+compute_inscribed_bucketed_refresh_window(const InternalTimeRange *const refresh_window,
+										  const ContinuousAggBucketFunction *bucket_function)
 {
-	Assert(cagg != NULL);
-	Assert(cagg->bucket_function != NULL);
+	Assert(bucket_function != NULL);
+
+	if (bucket_function->bucket_fixed_interval == false)
+	{
+		InternalTimeRange result = *refresh_window;
+		ts_compute_inscribed_bucketed_refresh_window_variable(&result.start,
+															  &result.end,
+															  bucket_function);
+		return result;
+	}
+
+	int64 bucket_width = ts_continuous_agg_fixed_bucket_width(bucket_function);
+	Assert(bucket_width > 0);
 
 	InternalTimeRange result = *refresh_window;
 	InternalTimeRange largest_bucketed_window =
 		get_largest_bucketed_window(refresh_window->type, bucket_width);
-
-	/* Get offset and origin for bucket function */
-	NullableDatum offset = INIT_NULL_DATUM;
-	NullableDatum origin = INIT_NULL_DATUM;
-	fill_bucket_offset_origin(cagg->bucket_function, refresh_window->type, &offset, &origin);
-
-	/* Defined offset and origin in one function is not supported */
-	Assert(offset.isnull == true || origin.isnull == true);
 
 	if (refresh_window->start <= largest_bucketed_window.start)
 	{
@@ -184,11 +187,8 @@ compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 		int64 included_bucket =
 			ts_time_saturating_add(refresh_window->start, bucket_width - 1, refresh_window->type);
 		/* Get the start of the included bucket. */
-		result.start = ts_time_bucket_by_type_extended(bucket_width,
-													   included_bucket,
-													   refresh_window->type,
-													   offset,
-													   origin);
+		result.start =
+			cagg_fixed_current_bucket_start(included_bucket, refresh_window->type, bucket_function);
 	}
 
 	if (refresh_window->end >= largest_bucketed_window.end)
@@ -199,11 +199,9 @@ compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 	{
 		/* The window is reduced to the beginning of the bucket, which contains the exclusive
 		 * end of the refresh window. */
-		result.end = ts_time_bucket_by_type_extended(bucket_width,
-													 refresh_window->end,
+		result.end = cagg_fixed_current_bucket_start(refresh_window->end,
 													 refresh_window->type,
-													 offset,
-													 origin);
+													 bucket_function);
 	}
 	return result;
 }
@@ -233,7 +231,7 @@ int_bucket_offset_to_datum(Oid type, const ContinuousAggBucketFunction *bucket_f
 /*
  * Get a NullableDatum for offset and origin based on the CAgg information
  */
-void
+static void
 fill_bucket_offset_origin(const ContinuousAggBucketFunction *bucket_function, Oid type,
 						  NullableDatum *offset, NullableDatum *origin)
 {
@@ -279,6 +277,76 @@ fill_bucket_offset_origin(const ContinuousAggBucketFunction *bucket_function, Oi
 }
 
 /*
+ * Compute the start of the bucket containing the given timestamp, accounting
+ * for the CAgg's offset and origin.
+ *
+ * This is a convenience wrapper that combines fill_bucket_offset_origin and
+ * ts_time_bucket_by_type_extended for fixed-interval buckets.
+ */
+int64
+cagg_fixed_current_bucket_start(int64 timestamp, Oid type,
+								const ContinuousAggBucketFunction *bucket_function)
+{
+	int64 bucket_width = ts_continuous_agg_fixed_bucket_width(bucket_function);
+	Assert(bucket_width > 0);
+	NullableDatum offset = INIT_NULL_DATUM;
+	NullableDatum origin = INIT_NULL_DATUM;
+	fill_bucket_offset_origin(bucket_function, type, &offset, &origin);
+	Assert(offset.isnull == true || origin.isnull == true);
+	return ts_time_bucket_by_type_extended(bucket_width, timestamp, type, offset, origin);
+}
+
+/*
+ * Compute the start of the bucket immediately following the bucket that
+ * contains the given timestamp.  Equivalently, this is the exclusive end of
+ * the bucket containing timestamp.
+ *
+ * This is a convenience wrapper used when the caller needs to advance past the
+ * current bucket (e.g. computing an invalidation threshold or the exclusive
+ * upper bound of a circumscribed refresh window).
+ */
+int64
+cagg_fixed_next_bucket_start(int64 timestamp, Oid type,
+							 const ContinuousAggBucketFunction *bucket_function)
+{
+	int64 bucket_width = ts_continuous_agg_fixed_bucket_width(bucket_function);
+	Assert(bucket_width > 0);
+	int64 bucket_start = cagg_fixed_current_bucket_start(timestamp, type, bucket_function);
+	return ts_time_saturating_add(bucket_start, bucket_width, type);
+}
+
+/*
+ * Compute the start of the bucket containing the given timestamp, dispatching
+ * to the fixed-interval or variable-interval implementation as appropriate.
+ */
+int64
+cagg_current_bucket_start(int64 timestamp, Oid type,
+						  const ContinuousAggBucketFunction *bucket_function)
+{
+	if (bucket_function->bucket_fixed_interval)
+	{
+		return cagg_fixed_current_bucket_start(timestamp, type, bucket_function);
+	}
+	return ts_cagg_variable_current_bucket_start(timestamp, bucket_function);
+}
+
+/*
+ * Compute the start of the bucket immediately following the bucket containing
+ * the given timestamp, dispatching to the fixed-interval or variable-interval
+ * implementation as appropriate.
+ */
+int64
+cagg_next_bucket_start(int64 timestamp, Oid type,
+					   const ContinuousAggBucketFunction *bucket_function)
+{
+	if (bucket_function->bucket_fixed_interval)
+	{
+		return cagg_fixed_next_bucket_start(timestamp, type, bucket_function);
+	}
+	return ts_cagg_variable_next_bucket_start(timestamp, bucket_function);
+}
+
+/*
  * Adjust the refresh window to align with circumscribed buckets, so it includes buckets, which
  * fully cover the refresh window.
  *
@@ -306,12 +374,10 @@ fill_bucket_offset_origin(const ContinuousAggBucketFunction *bucket_function, Oi
  * dropping chunks manually or as part of retention policy.
  */
 InternalTimeRange
-compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
-											  const InternalTimeRange *const refresh_window,
+compute_circumscribed_bucketed_refresh_window(const InternalTimeRange *const refresh_window,
 											  const ContinuousAggBucketFunction *bucket_function)
 {
-	Assert(cagg != NULL);
-	Assert(cagg->bucket_function != NULL);
+	Assert(bucket_function != NULL);
 
 	if (bucket_function->bucket_fixed_interval == false)
 	{
@@ -330,14 +396,6 @@ compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 	InternalTimeRange largest_bucketed_window =
 		get_largest_bucketed_window(refresh_window->type, bucket_width);
 
-	/* Get offset and origin for bucket function */
-	NullableDatum offset = INIT_NULL_DATUM;
-	NullableDatum origin = INIT_NULL_DATUM;
-	fill_bucket_offset_origin(cagg->bucket_function, refresh_window->type, &offset, &origin);
-
-	/* Defined offset and origin in one function is not supported */
-	Assert(offset.isnull == true || origin.isnull == true);
-
 	if (refresh_window->start <= largest_bucketed_window.start)
 	{
 		result.start = largest_bucketed_window.start;
@@ -346,11 +404,9 @@ compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 	{
 		/* For alignment with a bucket, which includes the start of the refresh window, we just
 		 * need to get start of the bucket. */
-		result.start = ts_time_bucket_by_type_extended(bucket_width,
-													   refresh_window->start,
+		result.start = cagg_fixed_current_bucket_start(refresh_window->start,
 													   refresh_window->type,
-													   offset,
-													   origin);
+													   bucket_function);
 	}
 
 	if (refresh_window->end >= largest_bucketed_window.end)
@@ -359,24 +415,16 @@ compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 	}
 	else
 	{
-		int64 exclusive_end;
-		int64 bucketed_end;
-
 		Assert(refresh_window->end > result.start);
+
+		int64 exclusive_end;
 
 		/* The end of the window is non-inclusive so subtract one before
 		 * bucketing in case we're already at the end of the bucket (we don't
 		 * want to add an extra bucket).  */
 		exclusive_end = ts_time_saturating_sub(refresh_window->end, 1, refresh_window->type);
-		bucketed_end = ts_time_bucket_by_type_extended(bucket_width,
-													   exclusive_end,
-													   refresh_window->type,
-													   offset,
-													   origin);
-
-		/* We get the time value for the start of the bucket, so need to add
-		 * bucket_width to get the end of it. */
-		result.end = ts_time_saturating_add(bucketed_end, bucket_width, refresh_window->type);
+		result.end =
+			cagg_fixed_next_bucket_start(exclusive_end, refresh_window->type, bucket_function);
 	}
 	return result;
 }
@@ -431,6 +479,7 @@ log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRang
 {
 	const char *msg = "continuous aggregate refresh (individual invalidation) on";
 	if (context.callctx == CAGG_REFRESH_POLICY_BATCHED)
+	{
 		elog(elevel,
 			 "%s \"%s\" in window [ %s, %s ] (batch %d of %d)",
 			 msg,
@@ -439,13 +488,16 @@ log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRang
 			 ts_internal_to_time_string(refresh_window->end, refresh_window->type),
 			 context.processing_batch,
 			 context.number_of_batches);
+	}
 	else
+	{
 		elog(elevel,
 			 "%s \"%s\" in window [ %s, %s ]",
 			 msg,
 			 NameStr(cagg->data.user_view_name),
 			 ts_internal_to_time_string(refresh_window->start, refresh_window->type),
 			 ts_internal_to_time_string(refresh_window->end, refresh_window->type));
+	}
 }
 
 typedef void (*scan_refresh_ranges_funct_t)(const InternalTimeRange *bucketed_refresh_window,
@@ -510,9 +562,7 @@ continuous_agg_scan_refresh_window_ranges(const ContinuousAgg *cagg,
 		if (refresh->bucketing_refresh_window)
 		{
 			bucketed_refresh_window =
-				compute_circumscribed_bucketed_refresh_window(cagg,
-															  &invalidation,
-															  cagg->bucket_function);
+				compute_circumscribed_bucketed_refresh_window(&invalidation, cagg->bucket_function);
 		}
 		(*exec_func)(&bucketed_refresh_window, context, count, func_arg1);
 
@@ -591,21 +641,29 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	refresh_window.type = cagg->partition_type;
 
 	if (!PG_ARGISNULL(1))
+	{
 		refresh_window.start = ts_time_value_from_arg(PG_GETARG_DATUM(1),
 													  get_fn_expr_argtype(fcinfo->flinfo, 1),
 													  refresh_window.type,
 													  true);
+	}
 	else
+	{
 		/* get min time for a cagg depending of the primary partition type */
 		refresh_window.start = cagg_get_time_min(cagg);
+	}
 
 	if (!PG_ARGISNULL(2))
+	{
 		refresh_window.end = ts_time_value_from_arg(PG_GETARG_DATUM(2),
 													get_fn_expr_argtype(fcinfo->flinfo, 2),
 													refresh_window.type,
 													true);
+	}
 	else
+	{
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
+	}
 
 	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_WINDOW };
 	continuous_agg_refresh_internal(cagg,
@@ -741,7 +799,9 @@ continuous_agg_refresh_spi_setup_and_connect(CaggRefreshSpiContext *cagg_spi_ctx
 	/* Connect to SPI manager due to the underlying SPI calls */
 	int rc = SPI_connect_ext(SPI_OPT_NONATOMIC);
 	if (rc != SPI_OK_CONNECT)
+	{
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
+	}
 
 	/* Lock down search_path */
 	cagg_spi_ctx->save_nestlevel = NewGUCNestLevel();
@@ -794,28 +854,18 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 	CaggRefreshSpiContext cagg_spi_ctx = {};
 	/* Like regular materialized views, require owner to refresh. */
 	if (!object_ownercheck(RelationRelationId, cagg->relid, GetUserId()))
+	{
 		aclcheck_error(ACLCHECK_NOT_OWNER,
 					   get_relkind_objtype(get_rel_relkind(cagg->relid)),
 					   get_rel_name(cagg->relid));
+	}
 
 	continuous_agg_refresh_spi_setup_and_connect(&cagg_spi_ctx);
 	/* No bucketing when open ended */
 	if (bucketing_refresh_window && !(start_isnull && end_isnull))
 	{
-		if (cagg->bucket_function->bucket_fixed_interval == false)
-		{
-			refresh_window = *refresh_window_arg;
-			ts_compute_inscribed_bucketed_refresh_window_variable(&refresh_window.start,
-																  &refresh_window.end,
-																  cagg->bucket_function);
-		}
-		else
-		{
-			int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
-			Assert(bucket_width > 0);
-			refresh_window =
-				compute_inscribed_bucketed_refresh_window(cagg, refresh_window_arg, bucket_width);
-		}
+		refresh_window =
+			compute_inscribed_bucketed_refresh_window(refresh_window_arg, cagg->bucket_function);
 	}
 
 	/* If there is no other policy defined after this, the inscribed bucket calculated above
@@ -827,27 +877,19 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 	 */
 	if (extend_last_bucket && !(start_isnull && end_isnull))
 	{
-		if (cagg->bucket_function->bucket_fixed_interval == false)
-		{
-			refresh_window.end =
-				ts_compute_beginning_of_the_next_bucket_variable(refresh_window.end,
-																 cagg->bucket_function);
-		}
-		else
-		{
-			int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
-			refresh_window.end =
-				ts_time_saturating_add(refresh_window.end, bucket_width, refresh_window.type);
-		}
+		refresh_window.end =
+			cagg_next_bucket_start(refresh_window.end, refresh_window.type, cagg->bucket_function);
 	}
 
 	if (refresh_window.start >= refresh_window.end)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("refresh window too small"),
 				 errdetail("The refresh window must cover at least one bucket of data."),
 				 errhint("Align the refresh window with the bucket"
 						 " time zone or use at least two buckets.")));
+	}
 
 	/*
 	 * Perform the refresh across three transactions.
@@ -884,6 +926,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 													   refresh_window.end,
 													   MyProcPid,
 													   context.job_id))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 				 errmsg("could not refresh continuous aggregate \"%s\" due to a concurrent refresh",
@@ -891,15 +934,23 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 				 errdetail("A concurrent refresh on window [%s, %s) is already in progress.",
 						   ts_internal_to_time_string(refresh_window.start, refresh_window.type),
 						   ts_internal_to_time_string(refresh_window.end, refresh_window.type))));
+	}
 
 	DEBUG_WAITPOINT("cagg_refresh_before_first_txn_commit");
-	SPI_commit_and_chain();
 
 	volatile bool refreshed = false;
 	volatile ErrorData *edata = NULL;
 	PG_TRY();
 	{
-		/* Commit and Start a new transaction */
+		/*
+		 * Commit the registration row and start a new transaction. Kept inside
+		 * PG_TRY so that an error here (e.g. cancel arriving after the commit
+		 * is durable but before the chained transaction has started) is routed
+		 * through rollback_and_error, which deletes the just-committed
+		 * registration row in a fresh transaction.
+		 */
+		SPI_commit_and_chain();
+		DEBUG_ERROR_INJECTION("cagg_refresh_fail_at_txn1_start");
 
 		DEBUG_WAITPOINT("cagg_refresh_after_register");
 
@@ -936,32 +987,16 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 		if (invalidation_threshold > ts_time_get_min(refresh_window.type) &&
 			invalidation_threshold < ts_time_get_max(refresh_window.type))
 		{
-			if (cagg->bucket_function->bucket_fixed_interval)
-			{
-				NullableDatum offset = INIT_NULL_DATUM;
-				NullableDatum origin = INIT_NULL_DATUM;
-				fill_bucket_offset_origin(cagg->bucket_function,
+			computed_invalidation_threshold_for_cagg =
+				cagg_current_bucket_start(invalidation_threshold,
 										  refresh_window.type,
-										  &offset,
-										  &origin);
-				int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
-				computed_invalidation_threshold_for_cagg =
-					ts_time_bucket_by_type_extended(bucket_width,
-													invalidation_threshold,
-													refresh_window.type,
-													offset,
-													origin);
-			}
-			else
-			{
-				computed_invalidation_threshold_for_cagg =
-					ts_compute_start_of_current_bucket_variable(invalidation_threshold,
-																cagg->bucket_function);
-			}
+										  cagg->bucket_function);
 		}
 
 		if (refresh_window.end > computed_invalidation_threshold_for_cagg)
+		{
 			refresh_window.end = computed_invalidation_threshold_for_cagg;
+		}
 
 		/* Capping the end might have made the window 0, or negative, so nothing to refresh in that
 		 * case.
@@ -1018,14 +1053,18 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg_arg,
 		return;
 	}
 	if (!refreshed)
+	{
 		emit_up_to_date_notice(cagg, context);
+	}
 
 	cleanup_before_cagg_refresh_exit(cagg, &cagg_spi_ctx);
 
 	SPI_commit();
 	int rc = SPI_finish();
 	if (rc != SPI_OK_FINISH)
+	{
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
+	}
 }
 
 static void
@@ -1117,17 +1156,8 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	/* Compute the inscribed bucket for the capped refresh window range */
 	const int64 bucket_width = ts_continuous_agg_bucket_width(cagg->bucket_function);
-	if (cagg->bucket_function->bucket_fixed_interval == false)
-	{
-		ts_compute_inscribed_bucketed_refresh_window_variable(&refresh_window.start,
-															  &refresh_window.end,
-															  cagg->bucket_function);
-	}
-	else
-	{
-		refresh_window =
-			compute_inscribed_bucketed_refresh_window(cagg, &refresh_window, bucket_width);
-	}
+	refresh_window =
+		compute_inscribed_bucketed_refresh_window(&refresh_window, cagg->bucket_function);
 
 	/* Check if the refresh size is large enough to produce bathes, if not then return no batches */
 	const int64 refresh_window_size = i64abs(refresh_window.end - refresh_window.start);
@@ -1252,7 +1282,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	MemoryContext oldcontext = CurrentMemoryContext;
 
 	if (SPI_connect() != SPI_OK_CONNECT)
+	{
 		elog(ERROR, "could not connect to SPI");
+	}
 
 	/* Lock down search_path */
 	int save_nestlevel = NewGUCNestLevel();
@@ -1267,7 +1299,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 								0 /* count */);
 
 	if (res < 0)
+	{
 		elog(ERROR, "%s: could not produce batches for the policy cagg refresh", __func__);
+	}
 
 	if (SPI_processed == 1)
 	{
@@ -1282,7 +1316,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
+		{
 			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+		}
 
 		return NIL;
 	}
@@ -1352,7 +1388,9 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
+	{
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+	}
 
 	if (refresh_window_list == NIL)
 	{

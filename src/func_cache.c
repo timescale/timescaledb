@@ -47,12 +47,16 @@ date_trunc_sort_transform(FuncExpr *func)
 	Expr *second;
 
 	if (list_length(func->args) != 2 || !IsA(linitial(func->args), Const))
+	{
 		return (Expr *) func;
+	}
 
 	second = ts_sort_transform_expr(lsecond(func->args));
 
 	if (!IsA(second, Var))
+	{
 		return (Expr *) func;
+	}
 
 	return (Expr *) copyObject(second);
 }
@@ -72,7 +76,9 @@ do_sort_transform(FuncExpr *func)
 	Expr *second = ts_sort_transform_expr(lsecond(func->args));
 
 	if (!IsA(second, Var))
+	{
 		return (Expr *) func;
+	}
 
 	return (Expr *) copyObject(second);
 }
@@ -90,7 +96,9 @@ time_bucket_gapfill_sort_transform(FuncExpr *func)
 
 	if (!time_bucket_has_const_period(func) ||
 		(list_length(func->args) == 5 && !time_bucket_has_const_timezone(func)))
+	{
 		return (Expr *) func;
+	}
 
 	return do_sort_transform(func);
 }
@@ -103,10 +111,14 @@ time_bucket_sort_transform(FuncExpr *func)
 	 * If period and offset are not constants we must not do the optimization
 	 */
 	if (!time_bucket_has_const_offset(func))
+	{
 		return (Expr *) func;
+	}
 
 	if (!time_bucket_has_const_period(func))
+	{
 		return (Expr *) func;
+	}
 
 	return do_sort_transform(func);
 }
@@ -122,7 +134,9 @@ time_bucket_tz_sort_transform(FuncExpr *func)
 
 	if (!IsA(linitial((func)->args), Const) || !IsA(lthird(func->args), Const) ||
 		!IsA(lfourth(func->args), Const) || !IsA(lfifth(func->args), Const))
+	{
 		return (Expr *) func;
+	}
 
 	return do_sort_transform(func);
 }
@@ -140,7 +154,9 @@ time_bucket_group_estimate(PlannerInfo *root, FuncExpr *expr, double path_rows)
 	double period;
 
 	if (!IsA(first_arg, Const))
+	{
 		return INVALID_ESTIMATE;
+	}
 
 	c = (Const *) first_arg;
 	switch (c->consttype)
@@ -176,7 +192,9 @@ date_trunc_group_estimate(PlannerInfo *root, FuncExpr *expr, double path_rows)
 	text *interval;
 
 	if (!IsA(first_arg, Const))
+	{
 		return INVALID_ESTIMATE;
+	}
 
 	c = (Const *) first_arg;
 	interval = DatumGetTextPP(c->constvalue);
@@ -582,9 +600,13 @@ ts_func_cache_init()
 
 		/* Special handling for first/last to set up named variables for their oids */
 		if (strcmp(finfo->funcname, "first") == 0)
+		{
 			ts_first_func_oid = funcid;
+		}
 		else if (strcmp(finfo->funcname, "last") == 0)
+		{
 			ts_last_func_oid = funcid;
+		}
 
 		fentry = hash_search(func_hash, &funcid, HASH_ENTER, &hash_found);
 		Assert(!hash_found);
@@ -602,7 +624,9 @@ ts_func_cache_get(Oid funcid)
 	FuncEntry *entry;
 
 	if (!func_hash)
+	{
 		ts_func_cache_init();
+	}
 
 	entry = hash_search(func_hash, &funcid, HASH_FIND, NULL);
 
@@ -615,7 +639,9 @@ ts_func_cache_get_bucketing_func(Oid funcid)
 	FuncInfo *finfo = ts_func_cache_get(funcid);
 
 	if (NULL == finfo)
+	{
 		return NULL;
+	}
 
 	return finfo->is_bucketing_func ? finfo : NULL;
 }

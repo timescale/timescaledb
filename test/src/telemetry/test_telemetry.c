@@ -67,7 +67,9 @@ test_factory(ConnectionType type, int status, char *host, int port)
 	conn = ts_connection_create(type);
 
 	if (conn == NULL)
+	{
 		return CStringGetTextDatum("could not initialize a connection");
+	}
 
 	if (ts_connection_connect(conn, host, NULL, port) < 0)
 	{
@@ -79,7 +81,9 @@ test_factory(ConnectionType type, int status, char *host, int port)
 
 #ifdef TS_DEBUG
 	if (type == CONNECTION_MOCK)
+	{
 		ts_connection_mock_set_recv_buf(conn, test_string, strlen(test_string));
+	}
 #endif
 
 	for (int retries = 0; retries < INVALID_RESPONSE_RETRIES; retries++)
@@ -94,16 +98,22 @@ test_factory(ConnectionType type, int status, char *host, int port)
 
 		/* We are mocking the connection, no need to retry */
 		if (type == CONNECTION_MOCK)
+		{
 			break;
+		}
 
 		/* Could be a transient HTTP error, lets try again */
 		if (err != HTTP_ERROR_NONE)
+		{
 			continue;
+		}
 
 		/* Got what we want, no need to retry */
 		if (ts_http_response_state_valid_status(rsp) ||
 			ts_http_response_state_status_code(rsp) == status)
+		{
 			break;
+		}
 	}
 
 	if (err != HTTP_ERROR_NONE)
@@ -114,10 +124,12 @@ test_factory(ConnectionType type, int status, char *host, int port)
 	ts_connection_destroy(conn);
 
 	if (!ts_http_response_state_valid_status(rsp))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_IO_ERROR),
 				 errmsg("endpoint sent back unexpected HTTP status: %d",
 						ts_http_response_state_status_code(rsp))));
+	}
 
 	json = DirectFunctionCall1(jsonb_in, CStringGetDatum(ts_http_response_state_body_start(rsp)));
 
@@ -138,9 +150,11 @@ ts_test_status_ssl(PG_FUNCTION_ARGS)
 	char buf[128] = { '\0' };
 
 	if (status / 100 != 2)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_IO_ERROR),
 				 errmsg("endpoint sent back unexpected HTTP status: %d", status)));
+	}
 
 	snprintf(buf, sizeof(buf) - 1, "{\"status\":%d}", status);
 
@@ -181,7 +195,9 @@ ts_test_validate_server_version(PG_FUNCTION_ARGS)
 	VersionResult result;
 
 	if (ts_validate_server_version(text_to_cstring(response), &result))
+	{
 		PG_RETURN_TEXT_P(cstring_to_text(result.versionstr));
+	}
 
 	PG_RETURN_NULL();
 }
@@ -241,19 +257,29 @@ ts_test_telemetry(PG_FUNCTION_ARGS)
 	int ret;
 
 	if (PG_NARGS() > 3)
+	{
 		elog(ERROR, "invalid number of arguments");
+	}
 
 	if (strcmp("http", servname) == 0)
+	{
 		conntype = CONNECTION_PLAIN;
+	}
 	else if (strcmp("https", servname) == 0)
+	{
 		conntype = CONNECTION_SSL;
+	}
 	else
+	{
 		elog(ERROR, "invalid service type '%s'", servname);
+	}
 
 	conn = ts_connection_create(conntype);
 
 	if (conn == NULL)
+	{
 		elog(ERROR, "could not create telemetry connection");
+	}
 
 	ret = ts_connection_connect(conn, host, servname, port);
 

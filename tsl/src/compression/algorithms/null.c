@@ -37,12 +37,16 @@ null_compressed_recv(StringInfo buffer)
 {
 	/* Sanity checks for invalid buffer */
 	if (buffer->len == 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("compressed data is invalid to be a null compressed block")));
+	}
 	if (buffer->data == NULL)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("compressed data is NULL")));
+	}
 	PG_RETURN_POINTER(null_compressor_get_dummy_block());
 }
 

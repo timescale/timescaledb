@@ -123,7 +123,7 @@ columnar_result_init_for_type(ColumnarResult *columnar_result,
 	{
 		Assert(columnar_result->type > 0);
 		columnar_result->allocated_body_bytes =
-			pad_to_multiple(64, 1 + columnar_result->type * nrows);
+			pad_to_multiple(64, sizeof(Datum) + columnar_result->type * nrows);
 	}
 
 	columnar_result->body_buffer = MemoryContextAllocZero(batch_state->per_batch_context,
@@ -194,6 +194,8 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 			memcpy(&columnar_result->body_buffer[columnar_result->current_offset],
 				   VARDATA_ANY(datum),
 				   result_bytes);
+			/* offset_buffer should be allocated for ArrowText type */
+			Assert(columnar_result->offset_buffer != NULL);
 			columnar_result->offset_buffer[row] = columnar_result->current_offset;
 			columnar_result->current_offset += result_bytes;
 			break;
@@ -441,6 +443,159 @@ vector_slot_evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot,
 	return columnar_result_finalize(&columnar_result, batch_state);
 }
 
+static pg_noinline CompressedColumnValues
+vector_slot_evaluate_case(DecompressContext *dcontext, TupleTableSlot *slot,
+						  uint64 const *top_filter, CaseExpr const *case_expr)
+{
+	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
+	const int nrows = batch_state->total_batch_rows;
+	const int num_validity_words = (nrows + 63) / 64;
+	Ensure(case_expr->arg == NULL,
+		   "The CASE with explicit argument is not supported by vectorized aggregation");
+
+	/*
+	 * The CASE expression can have several WHEN branches, and the last branch
+	 * is the default expression (explicit ELSE or the default null).
+	 */
+	const int num_when_branches = list_length(case_expr->args);
+	const int num_total_branches = num_when_branches + 1;
+
+	uint64 const **branch_filters = palloc0(sizeof(*branch_filters) * num_total_branches);
+	CompressedColumnValues *branch_values = palloc0(sizeof(*branch_values) * num_total_branches);
+
+	/*
+	 * This is the intermediate space for materializing the individual branch
+	 * values in Postgres Datum format.
+	 */
+	Datum *branch_data = palloc0(sizeof(*branch_data) * num_total_branches);
+	bool *branch_isnull = palloc0(sizeof(*branch_isnull) * num_total_branches);
+
+	/*
+	 * Compute the filters and values for every branch.
+	 */
+	for (int i = 0; i < num_total_branches; i++)
+	{
+		Expr *filter_expression;
+		Expr *value_expression;
+		if (i < num_when_branches)
+		{
+			CaseWhen const *when = castNode(CaseWhen, list_nth(case_expr->args, i));
+			filter_expression = when->expr;
+			value_expression = when->result;
+		}
+		else
+		{
+			filter_expression = NULL;
+			value_expression = case_expr->defresult;
+		}
+
+		uint64 const *branch_filter = top_filter;
+		if (filter_expression != NULL)
+		{
+			CompressedBatchVectorQualState vqstate =
+				compressed_batch_init_vector_quals(dcontext, list_make1(filter_expression), slot);
+			vector_qual_compute(&vqstate.vqstate);
+			uint64 const *qual_result = vqstate.vqstate.vector_qual_result;
+			if (qual_result != NULL)
+			{
+				arrow_validity_and(num_validity_words, (uint64 *) qual_result, top_filter);
+				branch_filter = qual_result;
+			}
+		}
+
+		branch_filters[i] = branch_filter;
+
+		Ensure(value_expression != NULL, "CASE branch %d has NULL value expression", i);
+		branch_values[i] =
+			vector_slot_evaluate_expression(dcontext, slot, branch_filter, value_expression);
+
+		branch_values[i].output_value = &branch_data[i];
+		branch_values[i].output_isnull = &branch_isnull[i];
+
+		Ensure(branch_values[i].decompression_type != DT_Invalid,
+			   "got DT_Invalid for argument %d",
+			   i);
+
+		if (branch_values[i].decompression_type == DT_ArrowText ||
+			branch_values[i].decompression_type == DT_ArrowTextDict)
+		{
+			/*
+			 * For text values, we need to preallocate the varlena storage for
+			 * converting the individual values into the Postgres Datum format.
+			 */
+			Ensure(branch_values[i].arrow != NULL, "no arrow for arg %d", i);
+			const int maxbytes = get_max_varlena_bytes(branch_values[i].arrow);
+			*branch_values[i].output_value =
+				PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+		}
+		else if (branch_values[i].decompression_type == DT_Scalar)
+		{
+			/*
+			 * For the scalar values, the value in Postgres Datum format must be
+			 * set once at initialization.
+			 */
+			*branch_values[i].output_value = PointerGetDatum(branch_values[i].buffers[1]);
+			*branch_values[i].output_isnull =
+				DatumGetBool(PointerGetDatum(branch_values[i].buffers[0]));
+		}
+	}
+
+	ColumnarResult columnar_result = { 0 };
+	columnar_result_init_for_type(&columnar_result, batch_state, case_expr->casetype);
+	for (int row = 0; row < nrows; row++)
+	{
+		/*
+		 * The Arrow format requires the offsets to monotonically increase even
+		 * for the invalid rows, so we have to fill the offsets always.
+		 */
+		if (columnar_result.offset_buffer != NULL)
+		{
+			columnar_result.offset_buffer[row] = columnar_result.current_offset;
+		}
+
+		if (!arrow_row_is_valid(top_filter, row))
+		{
+			continue;
+		}
+
+		/*
+		 * Check if any of the branch conditions matched. If not, we'll end up
+		 * with the last branch that is the default.
+		 */
+		int branch_index;
+		for (branch_index = 0; branch_index < num_when_branches; branch_index++)
+		{
+			if (arrow_row_is_valid(branch_filters[branch_index], row))
+			{
+				break;
+			}
+		}
+
+		compressed_columns_to_postgres_data(&branch_values[branch_index], 1, row);
+
+		const bool isnull = *branch_values[branch_index].output_isnull;
+		const Datum result = isnull ? 0 : *branch_values[branch_index].output_value;
+
+		columnar_result_set_row(&columnar_result, batch_state, row, result, isnull);
+	}
+
+	if (columnar_result.validity != NULL)
+	{
+		arrow_validity_and(num_validity_words, columnar_result.validity, top_filter);
+	}
+	else
+	{
+		columnar_result.validity = (uint64 *) top_filter;
+	}
+
+	pfree(branch_filters);
+	pfree(branch_values);
+	pfree(branch_data);
+	pfree(branch_isnull);
+
+	return columnar_result_finalize(&columnar_result, batch_state);
+}
+
 /*
  * Return the arrow array or the datum (in case of single scalar value) for a
  * given expression as a CompressedColumnValues struct.
@@ -490,6 +645,11 @@ vector_slot_evaluate_expression(DecompressContext *dcontext, TupleTableSlot *slo
 												 f->args,
 												 f->funcid,
 												 f->inputcollid);
+		}
+		case T_CaseExpr:
+		{
+			CaseExpr const *c = (CaseExpr const *) argument;
+			return vector_slot_evaluate_case(dcontext, slot, filter, c);
 		}
 		default:
 			Ensure(false,
@@ -665,7 +825,9 @@ static void
 vector_agg_rescan(CustomScanState *node)
 {
 	if (node->ss.ps.chgParam != NULL)
+	{
 		UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
+	}
 
 	ExecReScan(linitial(node->custom_ps));
 
@@ -977,7 +1139,9 @@ vector_agg_exec(CustomScanState *node)
 		 * "input_ended" flag instead.
 		 */
 		if (vector_agg_state->input_ended)
+		{
 			break;
+		}
 
 		/*
 		 * Compute the vectorized filters for the aggregate function FILTER

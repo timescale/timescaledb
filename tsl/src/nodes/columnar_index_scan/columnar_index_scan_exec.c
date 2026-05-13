@@ -56,7 +56,9 @@ columnar_index_scan_exec(CustomScanState *node)
 
 	TupleTableSlot *child_slot = ExecProcNode(child_ps);
 	if (TupIsNull(child_slot))
+	{
 		return NULL;
+	}
 
 	/*
 	 * Copy values from the child slot to the output slot using the output_map.

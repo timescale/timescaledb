@@ -66,12 +66,14 @@ static void
 log_retention_boundary(int elevel, PolicyRetentionData *policy_data, const char *message)
 {
 	if (OidIsValid(policy_data->boundary_type))
+	{
 		elog(elevel,
 			 "%s \"%s\": dropping data %s %s",
 			 message,
 			 get_rel_name(policy_data->object_relid),
 			 policy_data->use_creation_time ? "created before" : "older than",
 			 ts_datum_to_string(policy_data->boundary, policy_data->boundary_type));
+	}
 }
 
 static void
@@ -89,7 +91,9 @@ enable_fast_restart(int32 job_id, const char *job_name)
 										   GetCurrentTransactionStartTimestamp());
 	}
 	else
+	{
 		ts_bgw_job_stat_upsert_next_start(job_id, GetCurrentTransactionStartTimestamp());
+	}
 
 	elog(DEBUG1, "the %s job is scheduled to run again immediately", job_name);
 }
@@ -112,7 +116,9 @@ get_chunk_id_to_reorder(int32 job_id, Hypertable *ht)
 											REORDER_SKIP_RECENT_DIM_SLICES_N);
 
 	if (!nth_dimension)
+	{
 		return -1;
+	}
 
 	Assert(time_dimension != NULL);
 
@@ -162,7 +168,9 @@ get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_gette
 		 * input, so we compute the boundary as TIMESTAMPTZ instead of UUID.
 		 */
 		if (IS_UUID_TYPE(partitioning_type))
+		{
 			partitioning_type = TIMESTAMPTZOID;
+		}
 		return ts_subtract_interval_from_now(lag, partitioning_type);
 	}
 }
@@ -180,7 +188,9 @@ get_chunk_to_recompress(const Dimension *dim, const Jsonb *config)
 	 * by get_window_boundary, so we need to use TIMESTAMPTZOID for conversion.
 	 */
 	if (IS_UUID_TYPE(partitioning_type))
+	{
 		boundary_type = TIMESTAMPTZOID;
+	}
 
 	Datum boundary = get_window_boundary(dim,
 										 config,
@@ -208,18 +218,22 @@ check_valid_index(Hypertable *ht, const char *index_name)
 	index_oid = ts_get_relation_relid(NameStr(ht->fd.schema_name), (char *) index_name, true);
 	idxtuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(index_oid));
 	if (!HeapTupleIsValid(idxtuple))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("reorder index not found"),
 				 errdetail("The index \"%s\" could not be found", index_name)));
+	}
 
 	index_form = (Form_pg_index) GETSTRUCT(idxtuple);
 	if (index_form->indrelid != ht->main_table_relid)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid reorder index"),
 				 errhint("The reorder index must by an index on hypertable \"%s\".",
 						 NameStr(ht->fd.table_name))));
+	}
 
 	ReleaseSysCache(idxtuple);
 }
@@ -265,7 +279,9 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	ts_bgw_policy_chunk_stats_record_job_run(job_id, chunk_id, ts_timer_get_current_timestamp());
 
 	if (get_chunk_id_to_reorder(job_id, policy.hypertable) != -1)
+	{
 		enable_fast_restart(job_id, "reorder");
+	}
 
 	return true;
 }
@@ -277,9 +293,11 @@ policy_reorder_read_and_validate_config(Jsonb *config, PolicyReorderData *policy
 	Hypertable *ht = ts_hypertable_get_by_id(htid);
 
 	if (!ht)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("configuration hypertable id %d not found", htid)));
+	}
 
 	const char *index_name = policy_reorder_get_index_name(config);
 	check_valid_index(ht, index_name);
@@ -302,7 +320,9 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 
 	verbose_log = policy_get_verbose_log(config);
 	if (verbose_log)
+	{
 		log_retention_boundary(LOG, &policy_data, "applying retention policy to hypertable");
+	}
 
 	chunk_invoke_drop_chunks(policy_data.object_relid,
 							 policy_data.boundary,
@@ -339,9 +359,11 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 		open_dim = hyperspace_get_open_dimension(hypertable->space, 0);
 		partition_type = ts_dimension_get_partition_type(open_dim);
 		if (!IS_INTEGER_TYPE(partition_type))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("incorrect partition type %d.  Expected integer", partition_type)));
+		}
 
 		/* if there's no int_now function the boundary is considered as an INTERVAL */
 		boundary_type = INTERVALOID;
@@ -357,7 +379,9 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 		 * pass the boundary as TIMESTAMPTZ, not as UUID.
 		 */
 		if (IS_UUID_TYPE(boundary_type))
+		{
 			boundary_type = TIMESTAMPTZOID;
+		}
 
 		/*
 		 * Check if the policy was created with drop_created_before instead of
@@ -427,9 +451,13 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 											policy_data.buckets_per_batch,
 											policy_data.refresh_newest_first);
 	if (refresh_window_list == NIL)
+	{
 		refresh_window_list = lappend(refresh_window_list, &policy_data.refresh_window);
+	}
 	else
+	{
 		context.callctx = CAGG_REFRESH_POLICY_BATCHED;
+	}
 
 	context.number_of_batches = list_length(refresh_window_list);
 
@@ -484,6 +512,69 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 						PGC_S_SESSION);
 	}
 
+	/* Compress chunks that need it after the refresh if the cagg has compression enabled */
+	Hypertable *mat_ht = ts_hypertable_get_by_id(policy_data.cagg->data.mat_hypertable_id);
+
+	if (policy_data.compress_after_refresh && mat_ht &&
+		TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
+	{
+		const Dimension *dim = hyperspace_get_open_dimension(mat_ht->space, 0);
+
+		StrategyNumber start_strategy = InvalidStrategy;
+		int64 start_value = -1;
+		StrategyNumber end_strategy = InvalidStrategy;
+		int64 end_value = -1;
+
+		if (!policy_data.refresh_window.start_isnull)
+		{
+			start_strategy = BTGreaterEqualStrategyNumber;
+			start_value = policy_data.refresh_window.start;
+		}
+		if (!policy_data.refresh_window.end_isnull)
+		{
+			end_strategy = BTLessStrategyNumber;
+			end_value = policy_data.refresh_window.end;
+		}
+
+		List *chunkid_lst = ts_dimension_slice_get_chunkids_to_compress(dim->fd.id,
+																		start_strategy,
+																		start_value,
+																		end_strategy,
+																		end_value,
+																		true, /* compress */
+																		true, /* recompress */
+																		0);	  /* all chunks */
+
+		if (chunkid_lst)
+		{
+			if (ActiveSnapshotSet())
+			{
+				PopActiveSnapshot();
+			}
+
+			/* Process each chunk in its own transaction */
+			foreach (lc, chunkid_lst)
+			{
+				PushActiveSnapshot(GetTransactionSnapshot());
+
+				int32 chunkid = lfirst_int(lc);
+				Chunk *chunk = ts_chunk_get_by_id(chunkid, true /* fail_if_not_found */);
+				tsl_compress_chunk_wrapper(chunk,
+										   true /* if_not_compressed */,
+										   false /* recompress */);
+
+				elog(DEBUG1,
+					 "compressed chunk \"%s.%s\" after continuous aggregate refresh",
+					 NameStr(chunk->fd.schema_name),
+					 NameStr(chunk->fd.table_name));
+
+				PopActiveSnapshot();
+				CommitTransactionCommand();
+				StartTransactionCommand();
+			}
+		}
+	}
+
 	return true;
 }
 
@@ -504,10 +595,12 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	mat_ht = ts_hypertable_get_by_id(materialization_id);
 
 	if (!mat_ht)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("configuration materialization hypertable id %d not found",
 						materialization_id)));
+	}
 
 	ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id, false);
 
@@ -517,6 +610,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	refresh_end = policy_refresh_cagg_get_refresh_end(open_dim, config, &end_isnull);
 
 	if (refresh_start >= refresh_end)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid refresh window"),
@@ -524,6 +618,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 						   ts_internal_to_time_string(refresh_start, dim_type),
 						   ts_internal_to_time_string(refresh_end, dim_type)),
 				 errhint("The start of the window must be before the end.")));
+	}
 
 	include_tiered_data =
 		policy_refresh_cagg_get_include_tiered_data(config, &include_tiered_data_isnull);
@@ -531,23 +626,29 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	buckets_per_batch = policy_refresh_cagg_get_buckets_per_batch(config);
 
 	if (buckets_per_batch < 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid buckets per batch"),
 				 errdetail("buckets_per_batch: %d", buckets_per_batch),
 				 errhint("The buckets per batch should be greater than or equal to zero.")));
+	}
 
 	max_batches_per_execution = policy_refresh_cagg_get_max_batches_per_execution(config);
 
 	if (max_batches_per_execution < 0)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid max batches per execution"),
 				 errdetail("max_batches_per_execution: %d", max_batches_per_execution),
 				 errhint(
 					 "The max batches per execution should be greater than or equal to zero.")));
+	}
 
 	refresh_newest_first = policy_refresh_cagg_get_refresh_newest_first(config);
+
+	bool compress_after_refresh = policy_refresh_cagg_get_compress_after_refresh(config);
 
 	if (policy_data)
 	{
@@ -562,6 +663,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 		policy_data->buckets_per_batch = buckets_per_batch;
 		policy_data->max_batches_per_execution = max_batches_per_execution;
 		policy_data->refresh_newest_first = refresh_newest_first;
+		policy_data->compress_after_refresh = compress_after_refresh;
 	}
 }
 
@@ -634,12 +736,16 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 			 NameStr(policy_data.hypertable->fd.table_name));
 		ts_cache_release(&policy_data.hcache);
 		if (!used_portalcxt)
+		{
 			MemoryContextDelete(multitxn_cxt);
+		}
 		return true;
 	}
 	ts_cache_release(&policy_data.hcache);
 	if (ActiveSnapshotSet())
+	{
 		PopActiveSnapshot();
+	}
 	/* process each chunk in a new transaction */
 	foreach (lc, chunkid_lst)
 	{
@@ -649,7 +755,9 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
 		Assert(chunk);
 		if (!ts_chunk_needs_recompression(chunk))
+		{
 			continue;
+		}
 
 		tsl_compress_chunk_wrapper(chunk, true, false);
 
@@ -718,12 +826,16 @@ job_execute(BgwJob *job)
 	}
 
 	if (job->fd.config)
+	{
 		elog(DEBUG1,
 			 "Executing %s with parameters %s",
 			 NameStr(job->fd.proc_name),
 			 DatumGetCString(DirectFunctionCall1(jsonb_out, JsonbPGetDatum(job->fd.config))));
+	}
 	else
+	{
 		elog(DEBUG1, "Executing %s with no parameters", NameStr(job->fd.proc_name));
+	}
 	/* Create a portal if there's no active */
 	if (!PortalIsValid(portal))
 	{
@@ -771,10 +883,14 @@ job_execute(BgwJob *job)
 	MemoryContextSwitchTo(parent_ctx);
 	arg1 = makeConst(INT4OID, -1, InvalidOid, 4, Int32GetDatum(job->fd.id), false, true);
 	if (job->fd.config == NULL)
+	{
 		arg2 = makeNullConst(JSONBOID, -1, InvalidOid);
+	}
 	else
+	{
 		arg2 =
 			makeConst(JSONBOID, -1, InvalidOid, -1, JsonbPGetDatum(job->fd.config), false, false);
+	}
 
 	funcexpr = makeFuncExpr(proc,
 							VOIDOID,
@@ -814,7 +930,9 @@ job_execute(BgwJob *job)
 	if (portal_created)
 	{
 		if (ActiveSnapshotSet())
+		{
 			PopActiveSnapshot();
+		}
 		CommitTransactionCommand();
 		PortalDrop(portal, false);
 		ActivePortal = NULL;

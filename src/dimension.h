@@ -43,13 +43,21 @@ chunk_interval_set(ChunkInterval *chunk_interval, Datum interval, Oid type)
 
 	/* Store interval value in appropriate union field */
 	if (type == INT8OID)
+	{
 		chunk_interval->integer_interval = DatumGetInt64(interval);
+	}
 	else if (type == INTERVALOID)
+	{
 		chunk_interval->interval = *DatumGetIntervalP(interval);
+	}
 	else if (type == INT4OID)
+	{
 		chunk_interval->integer_interval = DatumGetInt32(interval);
+	}
 	else if (type == INT2OID)
+	{
 		chunk_interval->integer_interval = DatumGetInt16(interval);
+	}
 }
 
 typedef enum DimensionType
