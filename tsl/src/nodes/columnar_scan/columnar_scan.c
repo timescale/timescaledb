@@ -1692,10 +1692,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			/*
 			 * We have to remove the explicit Sort, otherwise it will lead to
 			 * planning time regression because of double call of
-			 * prepare_sort_from_pathkeys() in MergeAppend plan creation. Still,
-			 * we have to use the copy of ColumnarScan path that we created
-			 * for explicit sorting, because it has the sort projection cost
-			 * workaround.
+			 * prepare_sort_from_pathkeys() in MergeAppend plan creation.
 			 */
 			decompression_path = castNode(SortPath, decompression_path)->subpath;
 		}
