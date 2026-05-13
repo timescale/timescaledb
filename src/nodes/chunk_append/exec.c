@@ -212,7 +212,6 @@ do_startup_exclusion(ChunkAppendState *state)
 
 	if (!state->startup_exclusion)
 	{
-		/* No exclusion -- include every subplan. */
 		state->subplans_after_startup =
 			bms_add_range(NULL, 0, list_length(state->initial_subplans) - 1);
 		return;
