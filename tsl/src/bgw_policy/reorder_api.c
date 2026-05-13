@@ -310,11 +310,14 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
+	int32 ht_id = ht->fd.id;
+	ts_cache_release(&hcache);
+
+	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REORDER_PROC_NAME,
 														   FUNCTIONS_SCHEMA_NAME,
-														   ht->fd.id);
-	ts_cache_release(&hcache);
+														   ht_id);
 
 	if (jobs == NIL)
 	{
@@ -335,8 +338,6 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 	}
 	Assert(list_length(jobs) == 1);
 	BgwJob *job = linitial(jobs);
-
-	ts_hypertable_permissions_check(hypertable_oid, GetUserId());
 
 	ts_bgw_job_delete_by_id(job->fd.id);
 
