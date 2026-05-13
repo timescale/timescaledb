@@ -3,6 +3,7 @@ name: Prerelease Sanity
   push:
     branches:
       - prerelease_test
+      - trigger/prerelease-sanity
 
   pull_request:
     branches: "?.*.x"
