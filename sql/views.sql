@@ -323,8 +323,7 @@ FROM
 LEFT JOIN
     _timescaledb_catalog.bgw_job j ON (j.id = h.job_id)
 WHERE
-    h.succeeded IS FALSE
-    OR h.succeeded IS NULL
+    (h.succeeded IS FALSE OR h.succeeded IS NULL)
     AND (pg_catalog.pg_has_role(current_user,
 			   (SELECT pg_catalog.pg_get_userbyid(datdba)
 			      FROM pg_catalog.pg_database
