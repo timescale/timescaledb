@@ -188,3 +188,8 @@ SET index = COALESCE(index, '[]'::jsonb) ||
             )
 WHERE cs.orderby IS NOT NULL;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.decompress_batch(record)
+   RETURNS SETOF record
+   AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
+   LANGUAGE C STRICT;
+

@@ -9,3 +9,5 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.bloom1_hash(anyelement);
 -- Drop BIGINT-returning version so the downgrade script can recreate the
 -- INTEGER-returning version of compressed_data_column_size.
 DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_data_column_size(_timescaledb_internal.compressed_data, ANYELEMENT);
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.decompress_batch(record);

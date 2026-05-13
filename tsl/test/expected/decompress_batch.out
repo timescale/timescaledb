@@ -1,0 +1,99 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- _timescaledb_functions.decompress_batch(record) RETURNS SETOF record
+-- expands a single row of a compressed chunk into the user-visible rows it
+-- was compressed from.
+SET datestyle TO ISO;
+CREATE TABLE metrics(time timestamptz NOT NULL, device_id int, value float)
+    WITH (tsdb.hypertable, tsdb.orderby = 'time', tsdb.segmentby = 'device_id');
+NOTICE:  using column "time" as partitioning column
+INSERT INTO metrics
+SELECT '2025-01-01'::timestamptz + (g || ' minute')::interval, g % 3, g::float
+FROM generate_series(1, 30) g;
+-- A row with NULLs in user columns to verify round-trip of NULLs.
+INSERT INTO metrics VALUES ('2025-01-01 02:00', NULL, NULL);
+SELECT count(*) AS source_rows FROM metrics;
+ source_rows 
+-------------
+          31
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
+ count 
+-------
+     1
+
+-- Capture the compressed chunk relation name.
+SELECT format('%I.%I', cc.schema_name, cc.table_name) AS compressed_chunk
+FROM _timescaledb_catalog.chunk c
+JOIN _timescaledb_catalog.chunk cc ON c.compressed_chunk_id = cc.id
+JOIN _timescaledb_catalog.hypertable h ON c.hypertable_id = h.id
+WHERE h.table_name = 'metrics' \gset
+-- Expanding every compressed row reproduces the source rowcount.
+SELECT count(*) AS round_trip_count
+FROM :compressed_chunk t,
+     LATERAL _timescaledb_functions.decompress_batch(t)
+         AS r(time timestamptz, device_id int, value float);
+ round_trip_count 
+------------------
+               31
+
+-- Set equality: no source row missing, no extra row introduced.
+SELECT count(*) AS missing FROM (
+    TABLE metrics
+    EXCEPT ALL
+    SELECT r.time, r.device_id, r.value
+    FROM :compressed_chunk t,
+         LATERAL _timescaledb_functions.decompress_batch(t)
+             AS r(time timestamptz, device_id int, value float)
+) m;
+ missing 
+---------
+       0
+
+SELECT count(*) AS extras FROM (
+    SELECT r.time, r.device_id, r.value
+    FROM :compressed_chunk t,
+         LATERAL _timescaledb_functions.decompress_batch(t)
+             AS r(time timestamptz, device_id int, value float)
+    EXCEPT ALL
+    TABLE metrics
+) e;
+ extras 
+--------
+      0
+
+-- Per-batch counts: each compressed row is one segmentby batch.
+SELECT t.device_id AS segment, count(*) AS batch_rows
+FROM :compressed_chunk t,
+     LATERAL _timescaledb_functions.decompress_batch(t)
+         AS r(time timestamptz, device_id int, value float)
+GROUP BY t.device_id
+ORDER BY t.device_id NULLS LAST;
+ segment | batch_rows 
+---------+------------
+       0 |         10
+       1 |         10
+       2 |         10
+         |          1
+
+-- Decompressing a single batch yields exactly that batch.
+SELECT r.time, r.device_id, r.value
+FROM (SELECT t FROM :compressed_chunk t WHERE t.device_id = 1) one,
+     LATERAL _timescaledb_functions.decompress_batch(one.t)
+         AS r(time timestamptz, device_id int, value float)
+ORDER BY r.time;
+          time          | device_id | value 
+------------------------+-----------+-------
+ 2025-01-01 00:01:00-08 |         1 |     1
+ 2025-01-01 00:04:00-08 |         1 |     4
+ 2025-01-01 00:07:00-08 |         1 |     7
+ 2025-01-01 00:10:00-08 |         1 |    10
+ 2025-01-01 00:13:00-08 |         1 |    13
+ 2025-01-01 00:16:00-08 |         1 |    16
+ 2025-01-01 00:19:00-08 |         1 |    19
+ 2025-01-01 00:22:00-08 |         1 |    22
+ 2025-01-01 00:25:00-08 |         1 |    25
+ 2025-01-01 00:28:00-08 |         1 |    28
+
+DROP TABLE metrics CASCADE;
