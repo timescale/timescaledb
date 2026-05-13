@@ -57,6 +57,20 @@ jobs:
         git log --oneline -1 @^0~
         ! git diff --exit-code @^0~ @^0 -- version.config
 
+    # The SQL upgrade scripts must be moved from the development files to
+    # the respective versioned files.
+    - name: The latest-dev.sql and the reverse-dev.sql must be empty
+      run: |
+        if [ -s sql/updates/latest-dev.sql ]
+            echo "latest-dev.sql is not empty"
+            exit 1
+        fi
+
+        if [ -s sql/updates/reverse-dev.sql ]
+            echo "reverse-dev.sql is not empty"
+            exit 1
+        fi
+
     - name: The tagged release commit must belong to the corresponding release branch
       if: github.event.name == 'push'
       run: |
