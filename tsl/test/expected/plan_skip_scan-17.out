@@ -4434,22 +4434,22 @@ stable expression in targetlist on skip_scan_htc
          Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
-                     Vectorized Filter: (dev_name IS NOT NULL)
+                     Filter: (dev_name IS NOT NULL)
                      Rows Removed by Filter: 5
                      ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11.00 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
-                     Vectorized Filter: (dev_name IS NOT NULL)
+                     Filter: (dev_name IS NOT NULL)
                      Rows Removed by Filter: 5
                      ->  Index Scan using compress_hyper_4_27_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_27_chunk (actual rows=11.00 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=10.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=10.00 loops=1)
-                     Vectorized Filter: (dev_name IS NOT NULL)
+                     Filter: (dev_name IS NOT NULL)
                      Rows Removed by Filter: 5
                      ->  Index Scan using compress_hyper_4_28_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_28_chunk (actual rows=11.00 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=10.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=10.00 loops=1)
-                     Vectorized Filter: (dev_name IS NOT NULL)
+                     Filter: (dev_name IS NOT NULL)
                      Rows Removed by Filter: 5
                      ->  Index Scan using compress_hyper_4_29_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_29_chunk (actual rows=11.00 loops=1)
 
@@ -4802,12 +4802,12 @@ range queries on skip_scan_htc
          Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=11.00 loops=1)
-                     Vectorized Filter: (("time" >= 100) AND ("time" <= 300))
+                     Filter: (("time" >= 100) AND ("time" <= 300))
                      ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11.00 loops=1)
                            Index Cond: ((_ts_meta_min_1 <= 300) AND (_ts_meta_max_1 >= 100))
          ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=11.00 loops=1)
-                     Vectorized Filter: (("time" >= 100) AND ("time" <= 300))
+                     Filter: (("time" >= 100) AND ("time" <= 300))
                      Rows Removed by Filter: 1993
                      ->  Index Scan using compress_hyper_4_27_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_27_chunk (actual rows=11.00 loops=1)
                            Index Cond: ((_ts_meta_min_1 <= 300) AND (_ts_meta_max_1 >= 100))
@@ -4817,7 +4817,7 @@ range queries on skip_scan_htc
  Unique (actual rows=11.00 loops=1)
    ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=11.00 loops=1)
-               Vectorized Filter: ("time" < 200)
+               Filter: ("time" < 200)
                Rows Removed by Filter: 501
                ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11.00 loops=1)
                      Index Cond: (_ts_meta_min_1 < 200)
@@ -4827,7 +4827,7 @@ range queries on skip_scan_htc
  Unique (actual rows=11.00 loops=1)
    ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=11.00 loops=1)
-               Vectorized Filter: ("time" > 800)
+               Filter: ("time" > 800)
                ->  Index Scan using compress_hyper_4_29_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_29_chunk (actual rows=11.00 loops=1)
                      Index Cond: (_ts_meta_max_1 > 800)
 
@@ -5411,7 +5411,7 @@ WHERE CLAUSES
                      Sort Key: skip_scan_htc.dev
                      ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11.00 loops=1)
                            ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=11.00 loops=1)
-                                 Vectorized Filter: ("time" > 5)
+                                 Filter: ("time" > 5)
                                  Rows Removed by Filter: 61
                                  ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11.00 loops=1)
                                        Index Cond: (_ts_meta_max_1 > 5)
@@ -5706,7 +5706,7 @@ WHERE CLAUSES
          Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=5.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=5.00 loops=1)
-                     Vectorized Filter: ("time" > 200)
+                     Filter: ("time" > 200)
                      Rows Removed by Filter: 1005
                      ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=5.00 loops=1)
                            Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
@@ -5750,7 +5750,7 @@ WHERE CLAUSES
  Unique (actual rows=0.00 loops=1)
    ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=0.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=0.00 loops=1)
-               Vectorized Filter: (("time" > 100) AND ("time" < 200) AND (val > 10) AND (val < 10000))
+               Filter: (("time" > 100) AND ("time" < 200) AND (val > 10) AND (val < 10000))
                Rows Removed by Filter: 1000
                ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=4.00 loops=1)
                      Index Cond: ((dev > 2) AND (dev < 7) AND (_ts_meta_min_1 < 200) AND (_ts_meta_max_1 > 100))
@@ -6827,7 +6827,7 @@ set enable_seqscan to off;
  Unique (actual rows=11.00 loops=1)
    ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=11.00 loops=1)
-               Vectorized Filter: ("time" < 200)
+               Filter: ("time" < 200)
                Rows Removed by Filter: 501
                ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11.00 loops=1)
                      Index Cond: (_ts_meta_min_1 < 200)
@@ -6837,7 +6837,7 @@ set enable_seqscan to off;
  Unique (actual rows=11.00 loops=1)
    ->  Custom Scan (SkipScan) on _hyper_5_13_chunk (actual rows=11.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_5_13_chunk (actual rows=11.00 loops=1)
-               Vectorized Filter: ("time" > 800)
+               Filter: ("time" > 800)
                ->  Index Scan using compress_hyper_6_16_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_16_chunk (actual rows=11.00 loops=1)
                      Index Cond: (_ts_meta_max_1 > 800)
 
@@ -6957,7 +6957,7 @@ WHERE CLAUSES
                      Sort Key: skip_scan_htcl.dev
                      ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11.00 loops=1)
                            ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=11.00 loops=1)
-                                 Vectorized Filter: ("time" > 5)
+                                 Filter: ("time" > 5)
                                  ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11.00 loops=1)
                                        Index Cond: (_ts_meta_max_1 > 5)
                      ->  Custom Scan (SkipScan) on _hyper_5_11_chunk (actual rows=11.00 loops=1)
@@ -7279,7 +7279,7 @@ SET enable_seqscan = false;
          Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=5.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=5.00 loops=1)
-                     Vectorized Filter: ("time" > 200)
+                     Filter: ("time" > 200)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=5.00 loops=1)
                            Index Cond: ((dev > 5) AND (_ts_meta_max_1 > 200))
          ->  Custom Scan (SkipScan) on _hyper_5_11_chunk (actual rows=5.00 loops=1)
