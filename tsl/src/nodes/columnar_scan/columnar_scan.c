@@ -1185,7 +1185,7 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	 *
 	 * First, check if this query is candidate for SELECT DISTINCT SkipScan.
 	 */
-	const bool potential_select_distinct = list_length(root->distinct_pathkeys) == 1;
+	const bool potential_select_distinct = list_length(root->distinct_pathkeys) >= 1;
 
 	/* Next, candidate for DISTINCT aggregate SkipScan */
 	const bool potential_distinct_aggregate =
