@@ -1066,9 +1066,6 @@ tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer, Tupl
 void
 tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 {
-	fprintf(stderr, "flush compressor at %p\n", compressor);
-	mybt();
-
 	if (compressor->sort_state)
 	{
 		if (compressor->tuples_to_sort)
@@ -1116,9 +1113,6 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 void
 tsl_compressor_close(RowCompressor *compressor, BulkWriter *bulk_writer)
 {
-	fprintf(stderr, "free compressor at %p\n", compressor);
-	mybt();
-
 	if (compressor->sort_state)
 	{
 		tuplesort_end(compressor->sort_state);
@@ -1276,8 +1270,6 @@ tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int so
 	CompressionSettings *settings = ts_compression_settings_get(in_rel->rd_id);
 	Relation out_rel = table_open(settings->fd.compress_relid, RowExclusiveLock);
 	RowCompressor *compressor = palloc0(sizeof(RowCompressor));
-	fprintf(stderr, "alloc compressor at %p\n", compressor);
-	mybt();
 	row_compressor_init(compressor, settings, RelationGetDescr(in_rel), RelationGetDescr(out_rel));
 
 	*bulk_writer = bulk_writer_alloc(out_rel, 0);
