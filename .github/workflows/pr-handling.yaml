@@ -20,7 +20,7 @@ jobs:
     name: Assign PR to author
     runs-on: ubuntu-latest
     steps:
-      - uses: toshimaru/auto-author-assign@4d585cc37690897bd9015942ed6e766aa7cdb97f # v3.0.1
+      - uses: toshimaru/auto-author-assign@bdd7688cbf9e6d5683f02f8c7d8ae4062a254b6d # v3.0.2
 
   ask-review:
     name: Run pull-review
@@ -37,4 +37,4 @@ jobs:
         shell: bash
         run: |
           PR_URL="https://github.com/${OWNER}/${REPO}/pull/${PULL_REQUEST_NUMBER}"
-          docker run ghcr.io/imsky/pull-review "$PR_URL" --github-token "${GITHUB_TOKEN}"
+          docker run ghcr.io/imsky/pull-review@sha256:80d099c92a3259322900b2d2d75ced5d628d1a182f917682c8fc411a750d650a "$PR_URL" --github-token "${GITHUB_TOKEN}"

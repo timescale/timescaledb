@@ -110,7 +110,9 @@ ts_chunk_rewrite_get_with_lock(Oid chunk_relid, Form_chunk_rewrite form, ItemPoi
 				found = true;
 
 				if (tid)
+				{
 					ItemPointerCopy(&ti->slot->tts_tid, tid);
+				}
 
 				if (form)
 				{
@@ -119,7 +121,9 @@ ts_chunk_rewrite_get_with_lock(Oid chunk_relid, Form_chunk_rewrite form, ItemPoi
 					memcpy(form, GETSTRUCT(tuple), sizeof(FormData_chunk_rewrite));
 
 					if (should_free)
+					{
 						heap_freetuple(tuple);
+					}
 				}
 				break;
 			case TM_Deleted:
@@ -179,12 +183,16 @@ ts_chunk_rewrite_delete(Oid chunk_relid, bool conditional)
 	ChunkRewriteDeleteResult result;
 
 	if (!ts_chunk_rewrite_get_with_lock(chunk_relid, &form, &tid))
+	{
 		return ChunkRewriteEntryDoesNotExist;
+	}
 
 	if (conditional)
 	{
 		if (!ConditionalLockRelationOid(form.new_relid, AccessExclusiveLock))
+		{
 			return ChunkRewriteOngoing;
+		}
 	}
 
 	/*
@@ -275,7 +283,9 @@ ts_chunk_rewrite_cleanup(PG_FUNCTION_ARGS)
 				tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(chunk_relid));
 
 				if (HeapTupleIsValid(tuple))
+				{
 					ownerid = ((Form_pg_class) GETSTRUCT(tuple))->relowner;
+				}
 
 				ReleaseSysCache(tuple);
 
@@ -290,9 +300,13 @@ ts_chunk_rewrite_cleanup(PG_FUNCTION_ARGS)
 					 * Otherwise release lock.
 					 */
 					if (SearchSysCacheExists1(RELOID, ObjectIdGetDatum(new_relid)))
+					{
 						add_exact_object_address(&new_objaddr, objaddrs);
+					}
 					else
+					{
 						UnlockRelationOid(new_relid, AccessExclusiveLock);
+					}
 
 					ItemPointer tid = ts_scanner_get_tuple_tid(ti);
 

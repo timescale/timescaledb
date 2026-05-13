@@ -69,7 +69,9 @@ index_has_attribute(const List *indexelems, const char *attrname)
 		}
 
 		if (colname != NULL && strncmp(colname, attrname, NAMEDATALEN) == 0)
+		{
 			return true;
+		}
 	}
 
 	return false;
@@ -93,6 +95,7 @@ ts_indexing_verify_columns(const Hyperspace *hs, const List *indexelems)
 		const Dimension *dim = &hs->dimensions[i];
 
 		if (!index_has_attribute(indexelems, NameStr(dim->fd.column_name)))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_BAD_HYPERTABLE_INDEX_DEFINITION),
 					 errmsg("cannot create a unique index without the column \"%s\" (used in "
@@ -101,6 +104,7 @@ ts_indexing_verify_columns(const Hyperspace *hs, const List *indexelems)
 					 errhint(
 						 "If you're creating a hypertable on a table with a primary key, ensure "
 						 "the partitioning column is part of the primary or composite key.")));
+		}
 	}
 }
 
@@ -113,7 +117,9 @@ void
 ts_indexing_verify_index(const Hyperspace *hs, const IndexStmt *stmt)
 {
 	if (stmt->unique || stmt->excludeOpNames != NULL)
+	{
 		ts_indexing_verify_columns(hs, stmt->indexParams);
+	}
 }
 
 /*
@@ -166,7 +172,9 @@ static const Node *
 get_open_dim_expr(const Dimension *dim)
 {
 	if (dim == NULL || dim->partitioning == NULL)
+	{
 		return NULL;
+	}
 
 	return dim->partitioning->partfunc.func_fmgr.fn_expr;
 }
@@ -175,7 +183,9 @@ static const char *
 get_open_dim_name(const Dimension *dim)
 {
 	if (dim == NULL || dim->partitioning != NULL)
+	{
 		return NULL;
+	}
 
 	return NameStr(dim->fd.column_name);
 }
@@ -194,11 +204,15 @@ create_default_indexes(const Hypertable *ht, const Dimension *time_dim, const Di
 
 	/* In case we'd allow tables that are only space partitioned */
 	if (NULL == time_dim)
+	{
 		return;
+	}
 
 	/* Create ("time") index */
 	if (!has_time_idx)
+	{
 		create_default_index(ht, list_make1(&telem));
+	}
 
 	/* Create ("space", "time") index */
 	if (space_dim != NULL && !has_time_space_idx)
@@ -237,7 +251,9 @@ indexing_create_and_verify_hypertable_indexes(const Hypertable *ht, bool create_
 		Relation idxrel = index_open(lfirst_oid(lc), AccessShareLock);
 
 		if (verify && (idxrel->rd_index->indisunique || idxrel->rd_index->indisexclusion))
+		{
 			ts_indexing_verify_columns(ht->space, build_indexcolumn_list(idxrel));
+		}
 
 		/* Check for existence of "default" indexes */
 		if (create_default && NULL != time_dim)
@@ -250,7 +266,9 @@ indexing_create_and_verify_hypertable_indexes(const Hypertable *ht, bool create_
 					/* ("time") index */
 					idxattr_time = TupleDescAttr(idxrel->rd_att, 0);
 					if (namestrcmp(&idxattr_time->attname, NameStr(time_dim->fd.column_name)) == 0)
+					{
 						has_time_idx = true;
+					}
 					break;
 				case 2:
 					/* ("space", "time") index */
@@ -260,7 +278,9 @@ indexing_create_and_verify_hypertable_indexes(const Hypertable *ht, bool create_
 						namestrcmp(&idxattr_space->attname, NameStr(space_dim->fd.column_name)) ==
 							0 &&
 						namestrcmp(&idxattr_time->attname, NameStr(time_dim->fd.column_name)) == 0)
+					{
 						has_time_space_idx = true;
+					}
 					break;
 				default:
 					break;
@@ -270,7 +290,9 @@ indexing_create_and_verify_hypertable_indexes(const Hypertable *ht, bool create_
 	}
 
 	if (create_default)
+	{
 		create_default_indexes(ht, time_dim, space_dim, has_time_idx, has_time_space_idx);
+	}
 
 	table_close(tblrel, AccessShareLock);
 }
@@ -283,7 +305,9 @@ ts_indexing_relation_has_primary_or_unique_index(Relation htrel)
 	bool result = false;
 
 	if (OidIsValid(htrel->rd_pkindex))
+	{
 		return true;
+	}
 
 	foreach (lc, indexoidlist)
 	{
@@ -293,15 +317,19 @@ ts_indexing_relation_has_primary_or_unique_index(Relation htrel)
 
 		index_tuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexoid));
 		if (!HeapTupleIsValid(index_tuple)) /* should not happen */
+		{
 			elog(ERROR,
 				 "cache lookup failed for index %u in \"%s\" ",
 				 indexoid,
 				 RelationGetRelationName(htrel));
+		}
 		index = (Form_pg_index) GETSTRUCT(index_tuple);
 		result = index->indisunique;
 		ReleaseSysCache(index_tuple);
 		if (result)
+		{
 			break;
+		}
 	}
 
 	list_free(indexoidlist);
@@ -324,7 +352,9 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 	int total_parts = -1;
 
 	if (stmt->concurrent)
+	{
 		PreventInTransactionBlock(true, "CREATE INDEX CONCURRENTLY");
+	}
 
 	/*
 	 * Look up the relation OID just once, right here at the
@@ -360,12 +390,14 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 			if (relkind != RELKIND_RELATION && relkind != RELKIND_MATVIEW &&
 				relkind != RELKIND_FOREIGN_TABLE &&
 				!(relkind == RELKIND_PARTITIONED_TABLE && ts_guc_enable_partitioned_hypertables))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_OBJECT_DEFINITION),
 						 errmsg("cannot create index on hypertable \"%s\"",
 								stmt->relation->relname),
 						 errdetail("Table \"%s\" contains chunks of the wrong type.",
 								   stmt->relation->relname)));
+			}
 		}
 		total_parts = list_length(inheritors) - 1;
 		list_free(inheritors);
@@ -423,9 +455,11 @@ ts_indexing_find_clustered_index(Oid table_relid)
 		index_relid = lfirst_oid(index);
 		idxtuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(index_relid));
 		if (!HeapTupleIsValid(idxtuple))
+		{
 			elog(ERROR,
 				 "cache lookup failed for index %u when looking for a clustered index",
 				 index_relid);
+		}
 		indexForm = (Form_pg_index) GETSTRUCT(idxtuple);
 
 		if (indexForm->indisclustered)
@@ -463,7 +497,9 @@ ts_indexing_mark_as(Oid index_id, IndexValidity validity)
 	indexTuple = SearchSysCacheCopy1(INDEXRELID, ObjectIdGetDatum(index_id));
 
 	if (!HeapTupleIsValid(indexTuple))
+	{
 		elog(ERROR, "cache lookup failed when marking index %u", index_id);
+	}
 
 	new_tuple = heap_copytuple(indexTuple);
 	indexForm = (Form_pg_index) GETSTRUCT(new_tuple);
@@ -513,7 +549,9 @@ ts_index_matches(PG_FUNCTION_ARGS)
 	bool result;
 
 	if (!OidIsValid(index1) || !OidIsValid(index2))
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid index")));
+	}
 
 	result = ts_indexing_compare(index1, index2);
 

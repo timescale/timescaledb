@@ -30,7 +30,9 @@ get_space_dimension(Oid relid, AttrNumber varattno)
 {
 	Hypertable *ht = ts_planner_get_hypertable(relid, CACHE_FLAG_CHECK);
 	if (!ht)
+	{
 		return NULL;
+	}
 
 	for (uint16 i = 0; i < ht->space->num_dimensions; i++)
 	{
@@ -73,7 +75,9 @@ ts_is_equality_operator(Oid opno, Oid left, Oid right)
 		 */
 		tce = lookup_type_cache(left, TYPECACHE_BTREE_OPFAMILY);
 		if (!tce)
+		{
 			return false;
+		}
 
 		Oid eqop = get_opfamily_member(tce->btree_opf, left, right, BTEqualStrategyNumber);
 		return opno == eqop;
@@ -89,15 +93,21 @@ is_valid_space_constraint(OpExpr *op, List *rtable)
 {
 	Assert(IsA(op, OpExpr));
 	if (!IsA(linitial(op->args), Var) || !IsA(lsecond(op->args), Const))
+	{
 		return false;
+	}
 
 	Var *var = linitial_node(Var, op->args);
 	if (var->varlevelsup != 0)
+	{
 		return false;
+	}
 
 	Const *value = lsecond_node(Const, op->args);
 	if (!ts_is_equality_operator(op->opno, var->vartype, value->consttype))
+	{
 		return false;
+	}
 
 	/*
 	 * Check that the constraint is actually on a partitioning column.
@@ -107,7 +117,9 @@ is_valid_space_constraint(OpExpr *op, List *rtable)
 	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
 
 	if (!dim)
+	{
 		return false;
+	}
 
 	return true;
 }
@@ -123,15 +135,21 @@ is_valid_scalar_space_constraint(ScalarArrayOpExpr *op, List *rtable)
 {
 	Assert(IsA(op, ScalarArrayOpExpr));
 	if (!IsA(linitial(op->args), Var) || !IsA(lsecond(op->args), ArrayExpr))
+	{
 		return false;
+	}
 
 	Var *var = linitial_node(Var, op->args);
 	ArrayExpr *arr = castNode(ArrayExpr, lsecond(op->args));
 	if (arr->multidims || !op->useOr || var->varlevelsup != 0)
+	{
 		return false;
+	}
 
 	if (!ts_is_equality_operator(op->opno, var->vartype, arr->element_typeid))
+	{
 		return false;
+	}
 
 	/*
 	 * Check that the constraint is actually on a partitioning column.
@@ -141,7 +159,9 @@ is_valid_scalar_space_constraint(ScalarArrayOpExpr *op, List *rtable)
 	Dimension *dim = get_space_dimension(rte->relid, var->varattno);
 
 	if (!dim)
+	{
 		return false;
+	}
 
 	ListCell *lc;
 	foreach (lc, arr->elements)
@@ -155,7 +175,9 @@ is_valid_scalar_space_constraint(ScalarArrayOpExpr *op, List *rtable)
 				FuncExpr *element = lfirst_node(FuncExpr, lc);
 				if (element->funcformat != COERCE_IMPLICIT_CAST ||
 					!IsA(linitial(element->args), Const))
+				{
 					return false;
+				}
 
 				break;
 			}
@@ -254,7 +276,9 @@ transform_scalar_space_constraint(PlannerInfo *root, List *rtable, ScalarArrayOp
 		 * have NOT NULL constraint.
 		 */
 		if (IsA(lfirst(lc), Const) && lfirst_node(Const, lc)->constisnull)
+		{
 			continue;
+		}
 
 		List *args = list_make1(lfirst(lc));
 		partcall->args = args;
@@ -343,17 +367,21 @@ ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node)
 						{
 							OpExpr *op = lfirst_node(OpExpr, lc);
 							if (is_valid_space_constraint(op, rtable))
+							{
 								additions = lappend(additions,
 													transform_space_constraint(root, rtable, op));
+							}
 							break;
 						}
 						case T_ScalarArrayOpExpr:
 						{
 							ScalarArrayOpExpr *op = lfirst_node(ScalarArrayOpExpr, lc);
 							if (is_valid_scalar_space_constraint(op, rtable))
+							{
 								additions =
 									lappend(additions,
 											transform_scalar_space_constraint(root, rtable, op));
+							}
 							break;
 						}
 						default:
@@ -362,7 +390,9 @@ ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node)
 				}
 
 				if (additions)
+				{
 					be->args = list_concat(be->args, additions);
+				}
 			}
 			break;
 		}

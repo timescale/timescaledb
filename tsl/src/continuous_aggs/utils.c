@@ -88,7 +88,9 @@ continuous_agg_validate_query(PG_FUNCTION_ARGS)
 	elog(DEBUG1, "sql: %s", sql);
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		elog(ERROR, "function returning record called in context that cannot accept type record");
+	}
 
 	PG_TRY();
 	{
@@ -191,9 +193,11 @@ get_direct_view_oid(int32 mat_hypertable_id)
 	/* Read tuple from relation */
 	bool got_next_slot = index_getnext_slot(indexscan, ForwardScanDirection, slot);
 	if (!got_next_slot)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid materialized hypertable ID: %d", mat_hypertable_id)));
+	}
 	bool is_null = false;
 
 	/* We use the view_schema and view_name to get data from the system catalog. Even char pointers
@@ -339,7 +343,9 @@ cagg_get_bucket_function_datum(int32 mat_hypertable_id, FunctionCallInfo fcinfo)
 	TupleDesc tupdesc;
 
 	if (fcinfo != NULL && get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		elog(ERROR, "function returning record called in context that cannot accept type record");
+	}
 
 	ContinuousAggBucketFunction *bf = ts_cagg_get_bucket_function_info(direct_view_oid);
 
@@ -354,7 +360,9 @@ cagg_get_bucket_function_datum(int32 mat_hypertable_id, FunctionCallInfo fcinfo)
 	}
 
 	if (fcinfo != NULL)
+	{
 		return create_cagg_get_bucket_function_datum(tupdesc, bf);
+	}
 
 	return ObjectIdGetDatum(bf->bucket_function);
 }

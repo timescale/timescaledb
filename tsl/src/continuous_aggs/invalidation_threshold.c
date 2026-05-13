@@ -85,7 +85,9 @@ invalidation_threshold_scan_update(TupleInfo *ti, void *const data)
 	/* If the tuple was modified concurrently, retry the operation and use a new snapshot
 	 * to see the updated tuple. */
 	if (ti->lockresult == TM_Updated)
+	{
 		return SCAN_RESTART_WITH_NEW_SNAPSHOT;
+	}
 
 	if (ti->lockresult != TM_Ok)
 	{
@@ -138,7 +140,9 @@ invalidation_threshold_scan_update(TupleInfo *ti, void *const data)
 		heap_freetuple(new_tuple);
 
 		if (should_free)
+		{
 			heap_freetuple(tuple);
+		}
 	}
 	else
 	{
@@ -239,10 +243,14 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 	Hypertable *ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
 
 	if (IS_TIMESTAMP_TYPE(refresh_window->type))
+	{
 		max_refresh = TS_TIME_IS_END(refresh_window->end, refresh_window->type) ||
 					  TS_TIME_IS_NOEND(refresh_window->end, refresh_window->type);
+	}
 	else
+	{
 		max_refresh = TS_TIME_IS_MAX(refresh_window->end, refresh_window->type);
+	}
 
 	if (max_refresh)
 	{
@@ -256,27 +264,7 @@ invalidation_threshold_compute(const ContinuousAgg *cagg, const InternalTimeRang
 		}
 		else
 		{
-			if (cagg->bucket_function->bucket_fixed_interval == false)
-			{
-				return ts_compute_beginning_of_the_next_bucket_variable(maxval,
-																		cagg->bucket_function);
-			}
-
-			int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
-			Assert(bucket_width > 0);
-			NullableDatum offset = INIT_NULL_DATUM;
-			NullableDatum origin = INIT_NULL_DATUM;
-			fill_bucket_offset_origin(cagg->bucket_function,
-									  refresh_window->type,
-									  &offset,
-									  &origin);
-			int64 bucket_start = ts_time_bucket_by_type_extended(bucket_width,
-																 maxval,
-																 refresh_window->type,
-																 offset,
-																 origin);
-			/* Add one bucket to get to the end of the last bucket */
-			return ts_time_saturating_add(bucket_start, bucket_width, refresh_window->type);
+			return cagg_next_bucket_start(maxval, refresh_window->type, cagg->bucket_function);
 		}
 	}
 

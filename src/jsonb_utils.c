@@ -47,7 +47,9 @@ ts_jsonb_add_str(JsonbParseState *state, const char *key, const char *value)
 	Assert(value != NULL);
 	/* If there is a null entry, don't add it to the JSON */
 	if (value == NULL)
+	{
 		return;
+	}
 
 	json_value.type = jbvString;
 	json_value.val.string.val = (char *) value;
@@ -64,7 +66,9 @@ ts_jsonb_add_str_element(JsonbParseState *state, const char *elem)
 	Assert(elem != NULL);
 	/* If there is a null entry, don't add it to the JSON */
 	if (elem == NULL)
+	{
 		return;
+	}
 
 	json_value.type = jbvString;
 	json_value.val.string.val = (char *) elem;
@@ -82,7 +86,9 @@ ts_jsonb_add_str_array(JsonbParseState *state, const char *key, const char **val
 	Assert(num_values > 0);
 	Assert(key[0] != '\0');
 	if (key == NULL || values == NULL || num_values <= 0 || key[0] == '\0')
+	{
 		return;
+	}
 
 	json_key.type = jbvString;
 	json_key.val.string.val = (char *) key;
@@ -93,7 +99,9 @@ ts_jsonb_add_str_array(JsonbParseState *state, const char *key, const char **val
 	for (int i = 0; i < num_values; i++)
 	{
 		if (values[i] == NULL || values[i][0] == '\0')
+		{
 			continue;
+		}
 		ts_jsonb_add_str_element(state, values[i]);
 	}
 	pushJsonbValue(&state, WJB_END_ARRAY, NULL);
@@ -175,7 +183,9 @@ ts_jsonb_add_value(JsonbParseState *state, const char *key, JsonbValue *value)
 
 	Assert(key != NULL);
 	if (value == NULL)
+	{
 		return;
+	}
 
 	json_key.type = jbvString;
 	json_key.val.string.val = (char *) key;
@@ -190,7 +200,9 @@ ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValue *value)
 	Assert(state != NULL);
 	Assert(key != NULL);
 	if (value == NULL)
+	{
 		return;
+	}
 
 	pushJsonbValue(&state, WJB_KEY, key);
 	pushJsonbValue(&state, WJB_VALUE, value);
@@ -214,7 +226,9 @@ ts_jsonb_get_str_field(const Jsonb *jsonb, const char *key)
 	result = jsonb_object_field_text(fcinfo);
 
 	if (fcinfo->isnull)
+	{
 		return NULL;
+	}
 
 	return text_to_cstring(DatumGetTextP(result));
 }
@@ -280,7 +294,9 @@ ts_jsonb_get_interval_field(const Jsonb *json, const char *key)
 	char *interval_str = ts_jsonb_get_str_field(json, key);
 
 	if (interval_str == NULL)
+	{
 		return NULL;
+	}
 
 	interval_datum =
 		DirectFunctionCall3(interval_in, CStringGetDatum(interval_str), InvalidOid, -1);
@@ -293,10 +309,14 @@ ts_jsonb_equal(const Jsonb *left, const Jsonb *right)
 {
 	/* Quick exit if both are NULL or point to same thing. */
 	if (left == right)
+	{
 		return true;
+	}
 
 	if (left == NULL || right == NULL)
+	{
 		return false;
+	}
 
 	Assert(left != NULL && right != NULL);
 
@@ -317,11 +337,15 @@ ts_jsonb_has_key_value_str_field(Jsonb *jb, const char *key, const char *value)
 	JsonbIteratorToken r;
 
 	if (jb == NULL || JB_ROOT_COUNT(jb) == 0)
+	{
 		return false;
+	}
 
 	if (JB_ROOT_IS_SCALAR(jb))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("cannot find from scalar")));
+	}
 
 	it = JsonbIteratorInit(&jb->root);
 

@@ -200,10 +200,11 @@ SHOW timescaledb.enable_vectorized_aggregation;
 --- QUERY PLAN ---
  Hash Join
    Hash Cond: (CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END = (12))
-   ->  HashAggregate
-         Group Key: CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               ->  Seq Scan on compress_hyper_2_2_chunk
+   ->  Finalize HashAggregate
+         Group Key: (CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END)
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on compress_hyper_2_2_chunk
    ->  Hash
          ->  Limit
                ->  Seq Scan on pg_class
@@ -488,10 +489,11 @@ SHOW timescaledb.enable_vectorized_aggregation;
 --- QUERY PLAN ---
  Hash Join
    Hash Cond: (CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END = (12))
-   ->  HashAggregate
-         Group Key: CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               ->  Seq Scan on compress_hyper_2_2_chunk
+   ->  Finalize HashAggregate
+         Group Key: (CASE WHEN (_hyper_1_1_chunk.value = '1'::double precision) THEN NULL::smallint ELSE NULL::smallint END)
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on compress_hyper_2_2_chunk
    ->  Hash
          ->  Limit
                ->  Seq Scan on pg_class

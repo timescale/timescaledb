@@ -89,14 +89,6 @@ SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('5 minutes', time, INTERV
     23.4 | Mon Mar 20 09:16:00 2017 PDT
       30 | Mon Mar 20 09:36:00 2017 PDT
 
-SELECT AVG(temp) AS avg_tmp, "testSchema0".time_bucket('1 day', time, INTERVAL '-0.5 day') AS ten_min FROM test_dt GROUP BY ten_min ORDER BY avg_tmp;
- avg_tmp |  ten_min   
----------+------------
-    21.2 | 03-21-2017
-      22 | 03-20-2017
-    23.4 | 03-19-2017
-      30 | 03-22-2017
-
 -- testing time_bucket END
 -- testing drop_chunks START
 -- show_chunks and drop_chunks output should be the same

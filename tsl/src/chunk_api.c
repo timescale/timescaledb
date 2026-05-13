@@ -135,7 +135,9 @@ hypercube_from_jsonb(Jsonb *json, const Hyperspace *hs, const char **parse_error
 		const char *name;
 
 		if (type == WJB_END_OBJECT)
+		{
 			break;
+		}
 
 		if (type != WJB_KEY)
 		{
@@ -220,10 +222,14 @@ hypercube_from_jsonb(Jsonb *json, const Hyperspace *hs, const char **parse_error
 
 out_err:
 	if (NULL != parse_error)
+	{
 		*parse_error = err;
+	}
 
 	if (NULL != err)
+	{
 		return NULL;
+	}
 
 	return hc;
 }
@@ -251,7 +257,9 @@ chunk_form_tuple(Chunk *chunk, Hypertable *ht, TupleDesc tupdesc, bool created)
 	JsonbValue *jv = hypercube_to_jsonb_value(chunk->cube, ht->space, &ps);
 
 	if (NULL == jv)
+	{
 		return NULL;
+	}
 
 	values[AttrNumberGetAttrOffset(Anum_create_chunk_id)] = Int32GetDatum(chunk->fd.id);
 	values[AttrNumberGetAttrOffset(Anum_create_chunk_hypertable_id)] =
@@ -283,10 +291,12 @@ chunk_show(PG_FUNCTION_ARGS)
 	Assert(NULL != ht);
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
+	}
 
 	/*
 	 * We use the create_chunk tuple for show_chunk, because they only differ
@@ -298,8 +308,10 @@ chunk_show(PG_FUNCTION_ARGS)
 	ts_cache_release(&hcache);
 
 	if (NULL == tuple)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not create tuple from chunk")));
+	}
 
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }
@@ -311,11 +323,13 @@ check_privileges_for_creating_chunk(Oid hyper_relid)
 
 	acl_result = pg_class_aclcheck(hyper_relid, GetUserId(), ACL_INSERT);
 	if (acl_result != ACLCHECK_OK)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("permission denied for table \"%s\"", get_rel_name(hyper_relid)),
 				 errdetail("Insert privileges required on \"%s\" to create chunks.",
 						   get_rel_name(hyper_relid))));
+	}
 }
 
 static Hypercube *
@@ -327,11 +341,13 @@ get_hypercube_from_slices(Jsonb *slices, const Hypertable *ht)
 	hc = hypercube_from_jsonb(slices, ht->space, &parse_err);
 
 	if (hc == NULL)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid hypercube for hypertable \"%s\"",
 						get_rel_name(ht->main_table_relid)),
 				 errdetail("%s", parse_err)));
+	}
 
 	return hc;
 }
@@ -366,13 +382,17 @@ chunk_create(PG_FUNCTION_ARGS)
 	check_privileges_for_creating_chunk(hypertable_relid);
 
 	if (NULL == slices)
+	{
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid slices")));
+	}
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("function returning record called in context "
 						"that cannot accept type record")));
+	}
 
 	hc = get_hypercube_from_slices(slices, ht);
 	Assert(NULL != hc);
@@ -389,8 +409,10 @@ chunk_create(PG_FUNCTION_ARGS)
 	ts_cache_release(&hcache);
 
 	if (NULL == tuple)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not create tuple from chunk")));
+	}
 
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }
@@ -410,16 +432,20 @@ chunk_detach(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (!OidIsValid(chunk_relid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk relation OID")));
+	}
 
 	DEBUG_WAITPOINT("chunk_detach_before_lock");
 
 	ht_rel = ts_hypertable_id_to_relid(ts_chunk_get_hypertable_id_by_reloid(chunk_relid), true);
 	if (!OidIsValid(ht_rel))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("hypertable not found for the chunk")));
+	}
 
 	/* Take the same locks taken by PostgreSQL partitioning to be consistent */
 	LockRelationOid(ht_rel, ShareUpdateExclusiveLock);
@@ -432,20 +458,26 @@ chunk_detach(PG_FUNCTION_ARGS)
 	Assert(ht != NULL);
 
 	if (!object_ownercheck(RelationRelationId, ht->main_table_relid, GetUserId()))
+	{
 		aclcheck_error(ACLCHECK_NOT_OWNER,
 					   get_relkind_objtype(get_rel_relkind(ht->main_table_relid)),
 					   get_rel_name(ht->main_table_relid));
+	}
 
 	if (ts_chunk_is_compressed(chunk))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot detach compressed chunk \"%s\"", get_rel_name(chunk_relid)),
 				 errhint("Decompress the chunk first.")));
+	}
 
 	if (chunk->fd.osm_chunk)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot detach OSM chunk \"%s\"", get_rel_name(chunk_relid))));
+	}
 
 	AlterTableCmd cmd = {
 		.type = T_AlterTableCmd,
@@ -485,25 +517,33 @@ chunk_attach(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (!OidIsValid(chunk_relid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk relation OID")));
+	}
 
 	if (!OidIsValid(ht_relid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid hypertable relation OID")));
+	}
 
 	if (chunk_relid == ht_relid)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("chunk relation cannot be the same as hypertable relation")));
+	}
 
 	if (NULL == slices)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid dimension slices argument"),
 				 errhint("Provide a json-formatted definition of dimensional constraints for the "
 						 "chunk partition.")));
+	}
 
 	DEBUG_WAITPOINT("chunk_attach_before_lock");
 
@@ -513,25 +553,33 @@ chunk_attach(PG_FUNCTION_ARGS)
 
 	/* Only owner is allowed */
 	if (!object_ownercheck(RelationRelationId, chunk_relid, GetUserId()))
+	{
 		aclcheck_error(ACLCHECK_NOT_OWNER,
 					   get_relkind_objtype(get_rel_relkind(chunk_relid)),
 					   get_rel_name(chunk_relid));
+	}
 
 	if (is_inheritance_child(chunk_relid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot attach chunk that is already a child of another table")));
+	}
 
 	if (ts_is_hypertable(chunk_relid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot attach hypertable as a chunk")));
+	}
 
 	/* Check if the table still exists after taking the lock */
 	if (!SearchSysCacheExists1(RELOID, ObjectIdGetDatum(chunk_relid)))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_TABLE),
 				 errmsg("relation with OID %u does not exist", chunk_relid)));
+	}
 
 	check_privileges_for_creating_chunk(ht_relid);
 	ht = ts_hypertable_cache_get_cache_and_entry(ht_relid, CACHE_FLAG_NONE, &hcache);

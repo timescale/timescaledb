@@ -40,11 +40,11 @@
 #define INVALID_SUBPLAN_INDEX (-1)
 #define NO_MATCHING_SUBPLANS (-2)
 
-typedef enum SubplanState
+typedef enum ChunkAppendSubplanState
 {
-	SUBPLAN_STATE_INCLUDED = 1 << 0, /* Used and not removed by startup exclusion */
-	SUBPLAN_STATE_FINISHED = 1 << 1, /* The subplan is finished */
-} SubplanState;
+	CASS_Included = 1 << 0, /* Used and not removed by startup exclusion */
+	CASS_Finished = 1 << 1, /* The subplan is finished */
+} ChunkAppendSubplanState;
 
 /* ParallelChunkAppendState is stored in shared memory to coordinate the parallel workers.
  *
@@ -120,7 +120,7 @@ typedef struct ChunkAppendState
 
 	LWLock *lock;
 	ParallelContext *pcxt;
-	ParallelChunkAppendState *pstate;
+	ParallelChunkAppendState *parallel_state;
 	EState *estate;
 	int eflags;
 	void (*choose_next_subplan)(struct ChunkAppendState *);
@@ -151,7 +151,7 @@ static CustomExecMethods chunk_append_state_methods = {
 };
 
 static void choose_next_subplan_non_parallel(ChunkAppendState *state);
-static void choose_next_subplan_for_worker(ChunkAppendState *state);
+static void choose_next_subplan_in_worker(ChunkAppendState *state);
 
 static bool can_exclude_chunk(List *constraints, List *baserestrictinfo);
 static void do_startup_exclusion(ChunkAppendState *state);
@@ -164,7 +164,7 @@ static void show_sort_group_keys(ChunkAppendState *planstate, List *ancestors, E
 static void show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid collation,
 								   bool nullsFirst);
 
-static void perform_plan_init(ChunkAppendState *state, EState *estate, int eflags);
+static void init_subplanstates(ChunkAppendState *state, EState *estate, int eflags);
 
 Node *
 ts_chunk_append_state_create(CustomScan *cscan)
@@ -273,7 +273,9 @@ do_startup_exclusion(ChunkAppendState *state)
 			if (can_exclude_chunk(lfirst(lc_constraints), restrictinfos))
 			{
 				if (i < state->first_partial_plan)
+				{
 					filtered_first_partial_plan--;
+				}
 
 				continue;
 			}
@@ -377,16 +379,18 @@ chunk_append_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	if (state->startup_exclusion)
+	{
 		do_startup_exclusion(state);
+	}
 
-	perform_plan_init(state, estate, eflags);
+	init_subplanstates(state, estate, eflags);
 }
 
 /*
  * Perform an initialization of the filtered_subplans.
  */
 static void
-perform_plan_init(ChunkAppendState *state, EState *estate, int eflags)
+init_subplanstates(ChunkAppendState *state, EState *estate, int eflags)
 {
 	ListCell *lc;
 	int i;
@@ -420,7 +424,9 @@ perform_plan_init(ChunkAppendState *state, EState *estate, int eflags)
 		 * pass down limit to child nodes
 		 */
 		if (state->limit)
+		{
 			ExecSetTupleBound(state->limit, state->subplanstates[i]);
+		}
 
 		i++;
 	}
@@ -463,7 +469,7 @@ can_exclude_constraints_using_clauses(ChunkAppendState *state, List *constraints
  * build bitmap of valid subplans for runtime exclusion
  */
 static void
-initialize_runtime_exclusion(ChunkAppendState *state)
+do_runtime_exclusion(ChunkAppendState *state)
 {
 	ListCell *lc_clauses, *lc_constraints;
 	int i = 0;
@@ -537,9 +543,13 @@ initialize_runtime_exclusion(ChunkAppendState *state)
 																	 ps);
 
 			if (!can_exclude)
+			{
 				state->valid_subplans = bms_add_member(state->valid_subplans, i);
+			}
 			else
+			{
 				state->runtime_number_exclusions_children++;
+			}
 		}
 
 		lc_clauses = lnext(state->filtered_ri_clauses, lc_clauses);
@@ -565,7 +575,9 @@ chunk_append_exec(CustomScanState *node)
 	Assert(state->init_done == true);
 
 	if (state->current == INVALID_SUBPLAN_INDEX)
+	{
 		state->choose_next_subplan(state);
+	}
 
 	while (true)
 	{
@@ -574,7 +586,9 @@ chunk_append_exec(CustomScanState *node)
 		CHECK_FOR_INTERRUPTS();
 
 		if (state->current == NO_MATCHING_SUBPLANS)
+		{
 			return ExecClearTuple(node->ss.ps.ps_ResultTupleSlot);
+		}
 
 		Assert(state->current >= 0 && state->current < state->num_subplans);
 		subnode = state->subplanstates[state->current];
@@ -591,7 +605,9 @@ chunk_append_exec(CustomScanState *node)
 			 * to do projection otherwise return as is.
 			 */
 			if (projinfo == NULL)
+			{
 				return subslot;
+			}
 
 			ResetExprContext(econtext);
 			econtext->ecxt_scantuple = subslot;
@@ -609,12 +625,16 @@ static int
 get_next_subplan(ChunkAppendState *state, int last_plan)
 {
 	if (last_plan == NO_MATCHING_SUBPLANS)
+	{
 		return NO_MATCHING_SUBPLANS;
+	}
 
 	if (state->runtime_exclusion_parent || state->runtime_exclusion_children)
 	{
 		if (!state->runtime_initialized)
-			initialize_runtime_exclusion(state);
+		{
+			do_runtime_exclusion(state);
+		}
 
 		/*
 		 * bms_next_member will return -2 (NO_MATCHING_SUBPLANS) if there are
@@ -627,7 +647,9 @@ get_next_subplan(ChunkAppendState *state, int last_plan)
 		int next_plan = last_plan + 1;
 
 		if (next_plan >= state->num_subplans)
+		{
 			return NO_MATCHING_SUBPLANS;
+		}
 
 		return next_plan;
 	}
@@ -640,43 +662,51 @@ choose_next_subplan_non_parallel(ChunkAppendState *state)
 }
 
 static void
-choose_next_subplan_for_worker(ChunkAppendState *state)
+choose_next_subplan_in_worker(ChunkAppendState *worker_state)
 {
-	ParallelChunkAppendState *pstate = state->pstate;
+	ParallelChunkAppendState *parallel_state = worker_state->parallel_state;
 	int next_plan;
 	int start;
 
-	LWLockAcquire(state->lock, LW_EXCLUSIVE);
+	LWLockAcquire(worker_state->lock, LW_EXCLUSIVE);
 
 	/* mark just completed subplan as finished */
-	if (state->current >= 0)
-		pstate->subplan_state[state->current] =
-			ts_set_flags_32(pstate->subplan_state[state->current], SUBPLAN_STATE_FINISHED);
+	if (worker_state->current >= 0)
+	{
+		parallel_state->subplan_state[worker_state->current] =
+			ts_set_flags_32(parallel_state->subplan_state[worker_state->current], CASS_Finished);
+	}
 
-	if (pstate->next_plan == INVALID_SUBPLAN_INDEX)
-		next_plan = get_next_subplan(state, INVALID_SUBPLAN_INDEX);
+	if (parallel_state->next_plan == INVALID_SUBPLAN_INDEX)
+	{
+		next_plan = get_next_subplan(worker_state, INVALID_SUBPLAN_INDEX);
+	}
 	else
-		next_plan = pstate->next_plan;
+	{
+		next_plan = parallel_state->next_plan;
+	}
 
 	if (next_plan == NO_MATCHING_SUBPLANS)
 	{
 		/* all subplans are finished */
-		pstate->next_plan = NO_MATCHING_SUBPLANS;
-		state->current = NO_MATCHING_SUBPLANS;
-		LWLockRelease(state->lock);
+		parallel_state->next_plan = NO_MATCHING_SUBPLANS;
+		worker_state->current = NO_MATCHING_SUBPLANS;
+		LWLockRelease(worker_state->lock);
 		return;
 	}
 
 	start = next_plan;
 
 	/* skip finished subplans */
-	while (ts_flags_are_set_32(pstate->subplan_state[next_plan], SUBPLAN_STATE_FINISHED))
+	while (ts_flags_are_set_32(parallel_state->subplan_state[next_plan], CASS_Finished))
 	{
-		next_plan = get_next_subplan(state, next_plan);
+		next_plan = get_next_subplan(worker_state, next_plan);
 
 		/* wrap around if we reach end of subplan list */
 		if (next_plan < 0)
-			next_plan = get_next_subplan(state, INVALID_SUBPLAN_INDEX);
+		{
+			next_plan = get_next_subplan(worker_state, INVALID_SUBPLAN_INDEX);
+		}
 
 		if (next_plan == start || next_plan < 0)
 		{
@@ -690,35 +720,39 @@ choose_next_subplan_for_worker(ChunkAppendState *state)
 			 * that in the check
 			 */
 			Assert(next_plan >= 0);
-			pstate->next_plan = NO_MATCHING_SUBPLANS;
-			state->current = NO_MATCHING_SUBPLANS;
-			LWLockRelease(state->lock);
+			parallel_state->next_plan = NO_MATCHING_SUBPLANS;
+			worker_state->current = NO_MATCHING_SUBPLANS;
+			LWLockRelease(worker_state->lock);
 			return;
 		}
 	}
 
-	Assert(next_plan >= 0 && next_plan < state->num_subplans);
-	state->current = next_plan;
+	Assert(next_plan >= 0 && next_plan < worker_state->num_subplans);
+	worker_state->current = next_plan;
 
 	/*
 	 * if this is not a partial plan we mark it as finished
 	 * immediately so it does not get assigned another worker
 	 */
-	if (next_plan < state->filtered_first_partial_plan)
-		pstate->subplan_state[next_plan] =
-			ts_set_flags_32(pstate->subplan_state[next_plan], SUBPLAN_STATE_FINISHED);
+	if (next_plan < worker_state->filtered_first_partial_plan)
+	{
+		parallel_state->subplan_state[next_plan] =
+			ts_set_flags_32(parallel_state->subplan_state[next_plan], CASS_Finished);
+	}
 
 	/* advance next_plan for next worker */
-	pstate->next_plan = get_next_subplan(state, state->current);
+	parallel_state->next_plan = get_next_subplan(worker_state, worker_state->current);
 	/*
 	 * if we reach the end of the list of subplans we set next_plan
 	 * to INVALID_SUBPLAN_INDEX to allow rechecking unfinished subplans
 	 * on next call
 	 */
-	if (pstate->next_plan < 0)
-		pstate->next_plan = INVALID_SUBPLAN_INDEX;
+	if (parallel_state->next_plan < 0)
+	{
+		parallel_state->next_plan = INVALID_SUBPLAN_INDEX;
+	}
 
-	LWLockRelease(state->lock);
+	LWLockRelease(worker_state->lock);
 }
 
 /*
@@ -751,7 +785,9 @@ chunk_append_rescan(CustomScanState *node)
 	for (i = 0; i < state->num_subplans; i++)
 	{
 		if (node->ss.ps.chgParam != NULL)
+		{
 			UpdateChangedParamSet(state->subplanstates[i], node->ss.ps.chgParam);
+		}
 
 		ExecReScan(state->subplanstates[i]);
 	}
@@ -789,26 +825,26 @@ chunk_append_estimate_dsm(CustomScanState *node, ParallelContext *pcxt)
  * Initialize the parallel state.
  */
 static void
-init_pstate(ChunkAppendState *state, ParallelChunkAppendState *pstate)
+init_parallel_state(ChunkAppendState *state, ParallelChunkAppendState *parallel_state)
 {
 	Assert(state != NULL);
-	Assert(pstate != NULL);
+	Assert(parallel_state != NULL);
 	Assert(state->csstate.pscan_len > 0);
 
 	/* The parallel worker state has to be (re-)initialized by the parallel leader */
 	Assert(!IsParallelWorker());
 
-	memset(pstate, 0, state->csstate.pscan_len);
+	memset(parallel_state, 0, state->csstate.pscan_len);
 
-	pstate->next_plan = INVALID_SUBPLAN_INDEX;
-	pstate->filtered_first_partial_plan = state->filtered_first_partial_plan;
+	parallel_state->next_plan = INVALID_SUBPLAN_INDEX;
+	parallel_state->filtered_first_partial_plan = state->filtered_first_partial_plan;
 
 	/* Mark active subplans in parallel state */
 	int plan = -1;
 	while ((plan = bms_next_member(state->included_subplans_by_se, plan)) >= 0)
 	{
-		pstate->subplan_state[plan] =
-			ts_set_flags_32(pstate->subplan_state[plan], SUBPLAN_STATE_INCLUDED);
+		parallel_state->subplan_state[plan] =
+			ts_set_flags_32(parallel_state->subplan_state[plan], CASS_Included);
 	}
 }
 
@@ -825,7 +861,7 @@ chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *
 {
 	ChunkAppendState *state = (ChunkAppendState *) node;
 	ParallelChunkAppendState *pstate = (ParallelChunkAppendState *) coordinate;
-	init_pstate(state, pstate);
+	init_parallel_state(state, pstate);
 
 	state->lock = chunk_append_get_lock_pointer();
 
@@ -834,10 +870,10 @@ chunk_append_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *
 	 * disallow running plans on the leader they should do so via the parallel_leader_participation
 	 * GUC.
 	 */
-	state->choose_next_subplan = choose_next_subplan_for_worker;
+	state->choose_next_subplan = choose_next_subplan_in_worker;
 	state->current = INVALID_SUBPLAN_INDEX;
 	state->pcxt = pcxt;
-	state->pstate = pstate;
+	state->parallel_state = pstate;
 }
 
 /*
@@ -855,7 +891,7 @@ chunk_append_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt, void
 {
 	ChunkAppendState *state = (ChunkAppendState *) node;
 	ParallelChunkAppendState *pstate = (ParallelChunkAppendState *) coordinate;
-	init_pstate(state, pstate);
+	init_parallel_state(state, pstate);
 }
 
 /*
@@ -885,7 +921,7 @@ chunk_append_initialize_worker(CustomScanState *node, shm_toc *toc, void *coordi
 
 	for (int plan = 0; plan < list_length(state->initial_subplans); plan++)
 	{
-		if (ts_flags_are_set_32(pstate->subplan_state[plan], SUBPLAN_STATE_INCLUDED))
+		if (ts_flags_are_set_32(pstate->subplan_state[plan], CASS_Included))
 		{
 			filtered_subplans =
 				lappend(filtered_subplans, list_nth(state->filtered_subplans, plan));
@@ -904,11 +940,11 @@ chunk_append_initialize_worker(CustomScanState *node, shm_toc *toc, void *coordi
 	Assert(list_length(state->filtered_ri_clauses) == list_length(state->filtered_constraints));
 
 	state->lock = chunk_append_get_lock_pointer();
-	state->choose_next_subplan = choose_next_subplan_for_worker;
+	state->choose_next_subplan = choose_next_subplan_in_worker;
 	state->current = INVALID_SUBPLAN_INDEX;
-	state->pstate = pstate;
+	state->parallel_state = pstate;
 
-	perform_plan_init(state, state->estate, state->eflags);
+	init_subplanstates(state, state->estate, state->eflags);
 	Assert(state->num_subplans == list_length(state->filtered_subplans));
 }
 
@@ -922,7 +958,9 @@ chunk_append_get_lock_pointer()
 	LWLock **lock = (LWLock **) find_rendezvous_variable(RENDEZVOUS_CHUNK_APPEND_LWLOCK);
 
 	if (*lock == NULL)
+	{
 		elog(ERROR, "LWLock for coordinating parallel workers not initialized");
+	}
 
 	return *lock;
 }
@@ -1004,12 +1042,16 @@ static Node *
 constify_param_mutator(Node *node, void *context)
 {
 	if (node == NULL)
+	{
 		return NULL;
+	}
 
 	/* Don't descend into subplans to constify their parameters, because they may not be valid yet
 	 */
 	if (IsA(node, SubPlan))
+	{
 		return node;
+	}
 
 	if (IsA(node, Param))
 	{
@@ -1030,6 +1072,7 @@ constify_param_mutator(Node *node, void *context)
 			}
 
 			if (prm.execPlan == NULL)
+			{
 				return (Node *) makeConst(param->paramtype,
 										  param->paramtypmod,
 										  param->paramcollid,
@@ -1037,6 +1080,7 @@ constify_param_mutator(Node *node, void *context)
 										  prm.value,
 										  prm.isnull,
 										  tce->typbyval);
+			}
 		}
 		return node;
 	}
@@ -1074,7 +1118,9 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 			 * ignore it here.
 			 */
 			if (!constr->check[i].ccvalid)
+			{
 				continue;
+			}
 
 			cexpr = stringToNode(constr->check[i].ccbin);
 
@@ -1093,7 +1139,9 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 
 			/* Fix Vars to have the desired varno */
 			if (varno != 1)
+			{
 				ChangeVarNodes(cexpr, 1, varno, 0);
+			}
 
 			/*
 			 * Finally, convert to implicit-AND format (that is, a List) and
@@ -1175,7 +1223,9 @@ can_exclude_chunk(List *constraints, List *baserestrictinfo)
 
 		if (clause && IsA(clause, Const) &&
 			(((Const *) clause)->constisnull || !DatumGetBool(((Const *) clause)->constvalue)))
+		{
 			return true;
+		}
 	}
 
 	/*
@@ -1192,7 +1242,9 @@ can_exclude_chunk(List *constraints, List *baserestrictinfo)
 	 * would yield false, not just NULL.
 	 */
 	if (predicate_refuted_by(constraints, baserestrictinfo, false))
+	{
 		return true;
+	}
 
 	return false;
 }
@@ -1209,7 +1261,9 @@ initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes)
 	EState *estate = state->csstate.ss.ps.state;
 
 	if (initial_rt_indexes == NIL)
+	{
 		return;
+	}
 
 	Assert(list_length(state->initial_subplans) == list_length(state->initial_ri_clauses));
 	Assert(list_length(state->initial_subplans) == list_length(initial_rt_indexes));
@@ -1237,7 +1291,9 @@ initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes)
 			 * different from the final index after flattening.
 			 */
 			if (rt_index != initial_index)
+			{
 				ChangeVarNodes(lfirst(lc_clauses), initial_index, scan->scanrelid, 0);
+			}
 		}
 		constraints = lappend(constraints, relation_constraints);
 	}
@@ -1258,21 +1314,29 @@ chunk_append_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 	ChunkAppendState *state = (ChunkAppendState *) node;
 
 	if (state->sort_options != NIL)
+	{
 		show_sort_group_keys(state, ancestors, es);
+	}
 
 	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
+	{
 		ExplainPropertyBool("Startup Exclusion", state->startup_exclusion, es);
+	}
 
 	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
+	{
 		ExplainPropertyBool("Runtime Exclusion",
 							(state->runtime_exclusion_parent || state->runtime_exclusion_children),
 							es);
+	}
 
 	if (state->startup_exclusion)
+	{
 		ExplainPropertyInteger("Chunks excluded during startup",
 							   NULL,
 							   list_length(state->initial_subplans) - list_length(node->custom_ps),
 							   es);
+	}
 
 	if (state->runtime_exclusion_parent && state->runtime_number_loops > 0)
 	{
@@ -1308,7 +1372,9 @@ show_sort_group_keys(ChunkAppendState *state, List *ancestors, ExplainState *es)
 	List *sort_nulls = lfourth(state->sort_options);
 
 	if (nkeys <= 0)
+	{
 		return;
+	}
 
 	initStringInfo(&sortkeybuf);
 
@@ -1325,18 +1391,22 @@ show_sort_group_keys(ChunkAppendState *state, List *ancestors, ExplainState *es)
 		char *exprstr;
 
 		if (!target)
+		{
 			elog(ERROR, "no tlist entry for key %d", keyresno);
+		}
 		/* Deparse the expression, showing any top-level cast */
 		exprstr = deparse_expression((Node *) target->expr, context, useprefix, true);
 		resetStringInfo(&sortkeybuf);
 		appendStringInfoString(&sortkeybuf, exprstr);
 		/* Append sort order information, if relevant */
 		if (sort_ops != NIL)
+		{
 			show_sortorder_options(&sortkeybuf,
 								   (Node *) target->expr,
 								   list_nth_oid(sort_ops, keyno),
 								   list_nth_oid(sort_collations, keyno),
 								   list_nth_oid(sort_nulls, keyno));
+		}
 		/* Emit one property-list item per sort key */
 		result = lappend(result, pstrdup(sortkeybuf.data));
 	}
@@ -1365,7 +1435,9 @@ show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid col
 		char *collname = get_collation_name(collation);
 
 		if (collname == NULL)
+		{
 			elog(ERROR, "cache lookup failed for collation %u", collation);
+		}
 		appendStringInfo(buf, " COLLATE %s", quote_identifier(collname));
 	}
 
@@ -1380,7 +1452,9 @@ show_sortorder_options(StringInfo buf, Node *sortexpr, Oid sortOperator, Oid col
 		char *opname = get_opname(sortOperator);
 
 		if (opname == NULL)
+		{
 			elog(ERROR, "cache lookup failed for operator %u", sortOperator);
+		}
 		appendStringInfo(buf, " USING %s", opname);
 		/* Determine whether operator would be considered ASC or DESC */
 		(void) get_equality_op_for_ordering_op(sortOperator, &reverse);

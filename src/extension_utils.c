@@ -148,14 +148,18 @@ extension_current_state(char const *const extension_name, char const *const sche
 	 * RelationCacheInitializePhase3 to have been already called.
 	 */
 	if (!IsNormalProcessingMode() || !IsTransactionState() || !OidIsValid(MyDatabaseId))
+	{
 		return EXTENSION_STATE_UNKNOWN;
+	}
 
 	/*
 	 * NOTE: do not check for (schema_name, table_name) existing here. Want to be in
 	 * TRANSITIONING state even before that table is created
 	 */
 	if (extension_is_transitioning(extension_name))
+	{
 		return EXTENSION_STATE_TRANSITIONING;
+	}
 
 	/*
 	 * We use syscache to check (schema_name, table_name) exists. Must come first.

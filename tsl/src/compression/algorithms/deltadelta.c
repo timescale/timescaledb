@@ -90,7 +90,9 @@ deltadelta_compressor_append_bool(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = delta_delta_compressor_alloc();
+	}
 
 	delta_delta_compressor_append_value(extended->internal, DatumGetBool(val) ? 1 : 0);
 }
@@ -100,7 +102,9 @@ deltadelta_compressor_append_int16(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = delta_delta_compressor_alloc();
+	}
 
 	delta_delta_compressor_append_value(extended->internal, DatumGetInt16(val));
 }
@@ -110,7 +114,9 @@ deltadelta_compressor_append_int32(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = delta_delta_compressor_alloc();
+	}
 
 	delta_delta_compressor_append_value(extended->internal, DatumGetInt32(val));
 }
@@ -120,7 +126,9 @@ deltadelta_compressor_append_int64(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = delta_delta_compressor_alloc();
+	}
 
 	delta_delta_compressor_append_value(extended->internal, DatumGetInt64(val));
 }
@@ -130,7 +138,9 @@ deltadelta_compressor_append_date(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = delta_delta_compressor_alloc();
+	}
 
 	delta_delta_compressor_append_value(extended->internal, DatumGetDateADT(val));
 }
@@ -140,7 +150,9 @@ deltadelta_compressor_append_timestamp(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = delta_delta_compressor_alloc();
+	}
 
 	delta_delta_compressor_append_value(extended->internal, DatumGetTimestamp(val));
 }
@@ -150,7 +162,9 @@ deltadelta_compressor_append_timestamptz(Compressor *compressor, Datum val)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = delta_delta_compressor_alloc();
+	}
 
 	delta_delta_compressor_append_value(extended->internal, DatumGetTimestampTz(val));
 }
@@ -160,7 +174,9 @@ deltadelta_compressor_append_null_value(Compressor *compressor)
 {
 	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
 	if (extended->internal == NULL)
+	{
 		extended->internal = delta_delta_compressor_alloc();
+	}
 
 	delta_delta_compressor_append_null(extended->internal);
 }
@@ -278,11 +294,15 @@ tsl_deltadelta_compressor_append(PG_FUNCTION_ARGS)
 	{
 		compressor = delta_delta_compressor_alloc();
 		if (PG_NARGS() > 2)
+		{
 			elog(ERROR, "append expects two arguments");
+		}
 	}
 
 	if (PG_ARGISNULL(1))
+	{
 		delta_delta_compressor_append_null(compressor);
+	}
 	else
 	{
 		int64 next_val = PG_GETARG_INT64(1);
@@ -327,7 +347,9 @@ delta_delta_compressor_compressed_size(DeltaDeltaCompressor *compressor, size_t 
 	if (compressor->delta_delta.num_elements == 0)
 	{
 		if (nulls_size_out != NULL)
+		{
 			*nulls_size_out = 0;
+		}
 		return 0;
 	}
 
@@ -338,10 +360,14 @@ delta_delta_compressor_compressed_size(DeltaDeltaCompressor *compressor, size_t 
 		nulls_size_actual = simple8brle_compressor_compressed_const_size(&compressor->nulls);
 		compressed_size += nulls_size_actual;
 		if (nulls_size_out != NULL)
+		{
 			*nulls_size_out = nulls_size_actual;
+		}
 	}
 	else if (nulls_size_out != NULL)
+	{
 		*nulls_size_out = 0;
+	}
 
 	return compressed_size;
 }
@@ -353,7 +379,9 @@ delta_delta_compressor_finish(DeltaDeltaCompressor *compressor)
 	char *compressed = NULL;
 
 	if (total_size == 0)
+	{
 		return NULL;
+	}
 
 	compressed = palloc(total_size);
 	delta_delta_compressor_finish_into(compressor, compressed);
@@ -371,7 +399,9 @@ delta_delta_compressor_finish_into(DeltaDeltaCompressor *compressor, void *dest)
 	/* The compressed size includes the header and the nulls */
 	compressed_size = delta_delta_compressor_compressed_size(compressor, &nulls_size);
 	if (compressed_size == 0)
+	{
 		return dest;
+	}
 
 	/* Check if the data size is valid */
 	data_size = compressed_size - sizeof(DeltaDeltaCompressed) - nulls_size;
@@ -401,11 +431,15 @@ tsl_deltadelta_compressor_finish(PG_FUNCTION_ARGS)
 		PG_ARGISNULL(0) ? NULL : (DeltaDeltaCompressor *) PG_GETARG_POINTER(0);
 	void *compressed;
 	if (compressor == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 
 	compressed = delta_delta_compressor_finish(compressor);
 	if (compressed == NULL)
+	{
 		PG_RETURN_NULL();
+	}
 	PG_RETURN_POINTER(compressed);
 }
 
@@ -581,9 +615,11 @@ delta_delta_decompression_iterator_try_next_forward_internal(DeltaDeltaDecompres
 		Simple8bRleDecompressResult result =
 			simple8brle_decompression_iterator_try_next_forward(&iter->nulls);
 		if (result.is_done)
+		{
 			return (DecompressResultInternal){
 				.is_done = true,
 			};
+		}
 
 		if (result.val != 0)
 		{
@@ -597,9 +633,11 @@ delta_delta_decompression_iterator_try_next_forward_internal(DeltaDeltaDecompres
 	result = simple8brle_decompression_iterator_try_next_forward(&iter->delta_deltas);
 
 	if (result.is_done)
+	{
 		return (DecompressResultInternal){
 			.is_done = true,
 		};
+	}
 
 	delta_delta = zig_zag_decode(result.val);
 
@@ -674,9 +712,11 @@ delta_delta_decompression_iterator_try_next_reverse_internal(DeltaDeltaDecompres
 		Simple8bRleDecompressResult result =
 			simple8brle_decompression_iterator_try_next_reverse(&iter->nulls);
 		if (result.is_done)
+		{
 			return (DecompressResultInternal){
 				.is_done = true,
 			};
+		}
 
 		if (result.val != 0)
 		{
@@ -690,9 +730,11 @@ delta_delta_decompression_iterator_try_next_reverse_internal(DeltaDeltaDecompres
 	result = simple8brle_decompression_iterator_try_next_reverse(&iter->delta_deltas);
 
 	if (result.is_done)
+	{
 		return (DecompressResultInternal){
 			.is_done = true,
 		};
+	}
 
 	val = iter->prev_val;
 
@@ -798,9 +840,11 @@ deltadelta_compressed_recv(StringInfo buffer)
 	compressed_size = sizeof(DeltaDeltaCompressed) + delta_size + nulls_size;
 
 	if (!AllocSizeIsValid(compressed_size))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
+	}
 
 	/* Set header but don't change the buffer pointer */
 	delta_delta_set_header_and_advance(last_value,

@@ -35,9 +35,11 @@ ts_sqlstate_raise_in(PG_FUNCTION_ARGS)
 {
 	char *code = PG_GETARG_CSTRING(0);
 	if (strlen(code) != 5)
+	{
 		ereport(ERROR,
 				errcode(ERRCODE_SYNTAX_ERROR),
 				errmsg("error code \"%s\" was not of length 5", code));
+	}
 	int sqlstate = MAKE_SQLSTATE(code[0], code[1], code[2], code[3], code[4]);
 	ereport(ERROR, errcode(sqlstate), errmsg("raised requested error code \"%s\"", code));
 	return 0;
@@ -124,19 +126,31 @@ create_filter_tuple(TupleDesc tuple_desc, DefElem *d, bool within)
 	TestAssertTrue(tuple_desc->natts >= 4);
 
 	if (d->defnamespace != NULL)
+	{
 		values[0] = CStringGetTextDatum(d->defnamespace);
+	}
 	else
+	{
 		nulls[0] = true;
+	}
 
 	if (d->defname != NULL)
+	{
 		values[1] = CStringGetTextDatum(d->defname);
+	}
 	else
+	{
 		nulls[1] = true;
+	}
 
 	if (d->arg != NULL)
+	{
 		values[2] = CStringGetTextDatum(defGetString(d));
+	}
 	else
+	{
 		nulls[2] = true;
+	}
 
 	values[3] = BoolGetDatum(within);
 	return heap_form_tuple(tuple_desc, values, nulls);
@@ -159,10 +173,12 @@ TS_TEST_FN(ts_test_with_clause_filter)
 		with_clause_array = DatumGetArrayTypeP(PG_GETARG_DATUM(0));
 
 		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("function returning record called in context "
 							"that cannot accept type record")));
+		}
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
@@ -211,7 +227,9 @@ TS_TEST_FN(ts_test_with_clause_filter)
 		SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
 	}
 	else
+	{
 		SRF_RETURN_DONE(funcctx);
+	}
 }
 
 typedef enum TestArgs
@@ -281,7 +299,9 @@ TS_TEST_FN(ts_test_with_clause_parse)
 			fcinfo_in->args[0].isnull = false;
 			result = to_regtype(fcinfo_in);
 			if (!fcinfo_in->isnull)
+			{
 				test_args[i].type_id = DatumGetObjectId(result);
+			}
 		}
 	}
 
@@ -296,10 +316,12 @@ TS_TEST_FN(ts_test_with_clause_parse)
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
 
 		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("function returning record called in context "
 							"that cannot accept type record")));
+		}
 
 		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
 
@@ -319,7 +341,9 @@ TS_TEST_FN(ts_test_with_clause_parse)
 
 	result = funcctx->user_fctx;
 	if (result == NULL || (size_t) result->i >= TS_ARRAY_LEN(test_args))
+	{
 		SRF_RETURN_DONE(funcctx);
+	}
 
 	values = palloc0(sizeof(*values) * funcctx->tuple_desc->natts);
 	nulls = palloc(sizeof(*nulls) * funcctx->tuple_desc->natts);

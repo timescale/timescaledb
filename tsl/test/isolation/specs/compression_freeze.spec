@@ -49,6 +49,17 @@ step "s1_compress_delete" {
    SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
 }
 
+step "s1_compress_delete_then_insert" {
+   BEGIN;
+   SET LOCAL timescaledb.compress_truncate_behaviour TO truncate_disabled;
+   SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
+   -- Insert new rows so the chunks become partially compressed; this forces
+   -- the scan to read from BOTH the compressed and uncompressed sides.
+   INSERT INTO sensor_data VALUES ('2022-01-05 00:00', 999, 0, 0);
+   INSERT INTO sensor_data VALUES ('2022-01-12 00:00', 999, 0, 0);
+   COMMIT;
+}
+
 step "s1_compress_truncate_or_delete" {
    SET timescaledb.compress_truncate_behaviour TO truncate_or_delete;
    SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
@@ -100,6 +111,19 @@ step "s2_unlock_compression_after_truncate_or_delete" {
     SELECT debug_waitpoint_release('compression_done_after_truncate_or_delete_uncompressed');
 }
 
+step "s2_begin_rr" {
+    BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+    SELECT count(*) FROM sensor_data;
+}
+
+step "s2_count_in_tx" {
+    SELECT count(*) FROM sensor_data;
+}
+
+step "s2_commit" {
+    COMMIT;
+}
+
 permutation "s1_select_count" "s2_select_count_and_stats"
 permutation "s1_select_count" "s1_compress" "s1_select_count" "s2_select_count_and_stats"
 permutation "s2_lock_compression" "s2_select_count_and_stats" "s1_compress" "s2_select_count_and_stats" "s2_unlock_compression" "s2_select_count_and_stats"
@@ -115,3 +139,21 @@ permutation "s2_lock_compression_after_delete" "s2_select_count_and_stats" "s1_c
 # However, spin locks don't play well with isolation tests, so that is tesed in a TAP test instead `tsl/test/t/004_truncate_or_delete_spin_lock_test.pl`
 
 permutation "s2_lock_compression_after_truncate_or_delete" "s2_select_count_and_stats" "s1_compress_truncate_or_delete" "s2_unlock_compression_after_truncate_or_delete" "s2_select_count_and_stats"
+
+# Test that a concurrent reader does not observe duplicate rows when a
+# compression commits with truncate_disabled and the chunks are left
+# partially compressed.
+#
+# Scenario:
+#   s2 starts a REPEATABLE READ transaction and takes a count snapshot.
+#   s1 compresses every chunk with truncate_disabled (DELETE on the
+#   uncompressed side) and then INSERTs new rows into the same chunks in
+#   the same transaction. The chunks end up partially compressed, so the
+#   planner scans both the compressed companion and the uncompressed
+#   chunk relation.
+#
+# Expected: s2's count stays the same across s1's commit. The DELETE is
+# invisible to s2's older snapshot, so the uncompressed rows are still
+# visible; if the compressed rows were inserted with HEAP_INSERT_FROZEN
+# they would also be visible to that snapshot and the count would double.
+permutation "s2_begin_rr" "s1_compress_delete_then_insert" "s2_count_in_tx" "s2_commit"

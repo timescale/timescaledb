@@ -65,7 +65,10 @@ SELECT pg_reload_conf();
 SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
 SELECT scheduled FROM alter_job(:job_id_2, next_start => now());
 
-SELECT _timescaledb_functions.restart_background_workers();
+-- Wake the scheduler so it picks up the new next_start without killing
+-- any in-flight worker (a hard restart races with running jobs and can
+-- leave an unclosed history row that surfaces as "crash detected").
+SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:job_id_1, 2);
 SELECT test.wait_for_job_to_run(:job_id_2, 2);
 
@@ -85,7 +88,7 @@ SELECT scheduled FROM alter_job(:job_id_2, config => '{"bar": 1}'::jsonb);
 SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
 SELECT scheduled FROM alter_job(:job_id_2, next_start => now());
 
-SELECT _timescaledb_functions.restart_background_workers();
+SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:job_id_1, 3);
 SELECT test.wait_for_job_to_run(:job_id_2, 3);
 
@@ -98,7 +101,7 @@ ORDER BY id, job_id;
 -- Changing the config of one job
 SELECT scheduled FROM alter_job(:job_id_1, config => '{"foo": 2, "bar": 1}'::jsonb);
 SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
-SELECT _timescaledb_functions.restart_background_workers();
+SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:job_id_1, 4);
 
 -- Check job execution history
@@ -118,7 +121,7 @@ $$;
 
 -- Run the job
 SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
-SELECT _timescaledb_functions.restart_background_workers();
+SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:job_id_1, 5);
 
 -- Check job execution history
@@ -141,7 +144,7 @@ $$;
 
 -- Run the job
 SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
-SELECT _timescaledb_functions.restart_background_workers();
+SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:job_id_1, 6);
 
 -- Check job execution history
@@ -159,12 +162,12 @@ END
 $$;
 
 SELECT add_job('custom_job_alter', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_3 \gset
-SELECT _timescaledb_functions.restart_background_workers();
+SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:job_id_3, 1);
 
 SELECT timezone, fixed_schedule, config, schedule_interval
 FROM alter_job(:job_id_3, timezone => 'America/Sao_Paulo', fixed_schedule => false, config => '{"key": "value"}'::jsonb, schedule_interval => interval '10 min', next_start => now());
-SELECT _timescaledb_functions.restart_background_workers();
+SELECT pg_reload_conf();
 SELECT test.wait_for_job_to_run(:job_id_3, 2);
 
 -- Should return two executions, the second will show the changed values

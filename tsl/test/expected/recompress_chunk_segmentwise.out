@@ -751,13 +751,95 @@ SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks
  {COMPRESSED,UNORDERED}
 
 -- Output would be incorrectly ordered if the flag was cleared
--- We have to see a sort on top of the ColumnarScan node due to UNORDERED flag
+-- We can use BatchSortedMerge for UNORDERED chunk because segmentby is pinned to a Const i.e. we are dealing with 1 segment only
+SET timescaledb.debug_require_batch_sorted_merge = 'force';
 EXPLAIN (COSTS OFF) SELECT a, time FROM segwise_unordered WHERE a = 2 ORDER BY a, time;
 --- QUERY PLAN ---
- Sort
-   Sort Key: _hyper_25_27_chunk."time"
-   ->  Custom Scan (ColumnarScan) on _hyper_25_27_chunk
+ Custom Scan (ColumnarScan) on _hyper_25_27_chunk
+   ->  Sort
+         Sort Key: compress_hyper_26_28_chunk._ts_meta_min_1
          ->  Index Scan using compress_hyper_26_28_chunk_a__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_26_28_chunk
                Index Cond: (a = 2)
 
+RESET timescaledb.debug_require_batch_sorted_merge;
 DROP TABLE segwise_unordered;
+----------------------------------------------------------------------------
+-- Issue #9731: segmentwise recompression must not write a new batch whose
+-- leading-orderby range is contained inside an existing batch's range.
+-- The matcher previously evaluated each orderby column independently and
+-- could return Tuple_after based on a non-leading column even when the
+-- leading column sat inside the existing batch's range. The result was a
+-- new batch shifted up inside the original, which the planner's
+-- use_compressed_sort path then concatenated out of order.
+----------------------------------------------------------------------------
+CREATE TABLE segwise_no_overlap (
+    ts        timestamptz NOT NULL,
+    series_id bigint      NOT NULL,
+    value     int
+);
+SELECT create_hypertable('segwise_no_overlap', 'ts', chunk_time_interval => interval '30 day');
+        create_hypertable         
+----------------------------------
+ (27,public,segwise_no_overlap,t)
+
+ALTER TABLE segwise_no_overlap SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby   = 'series_id DESC, ts ASC'
+);
+-- Initial compression: 1000 rows for series_id 1..100, ts 00:01..00:10.
+-- Produces a single batch with series_id range [1,100].
+INSERT INTO segwise_no_overlap
+SELECT '2026-05-01 00:00:00+00'::timestamptz + (t * interval '1 second'), s, s * 100 + t
+FROM generate_series(1, 100) s
+CROSS JOIN generate_series(1, 10) t;
+SELECT compress_chunk(c) FROM show_chunks('segwise_no_overlap') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_27_29_chunk
+
+-- Add rows for series_id = 50 (inside the existing batch's series_id range)
+-- with ts outside the existing batch's ts range. Pre-fix, the matcher would
+-- decide Tuple_after on ts and write a new batch [50,50] inside [1,100].
+INSERT INTO segwise_no_overlap
+SELECT '2026-05-01 06:00:00+00'::timestamptz + (t * interval '1 second'), 50, 99000 + t
+FROM generate_series(1, 500) t;
+-- Triggers segmentwise recompression (chunk is partial).
+SELECT compress_chunk(c) FROM show_chunks('segwise_no_overlap') c;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_27_29_chunk
+
+-- Locate the compressed chunk for the metadata check.
+SELECT cc.schema_name || '.' || cc.table_name AS comp_table_segwise
+FROM _timescaledb_catalog.chunk uc
+JOIN _timescaledb_catalog.chunk cc      ON cc.id = uc.compressed_chunk_id
+JOIN _timescaledb_catalog.hypertable h  ON h.id  = uc.hypertable_id
+WHERE h.table_name = 'segwise_no_overlap' \gset
+-- Resulting batches: must be at most adjacent on series_id, never
+-- shifted-up contained. Consecutive pairs in (min DESC, max DESC) order
+-- must satisfy prev_min >= curr_max.
+SELECT count(*) AS overlap_violations FROM (
+    SELECT _ts_meta_max_1 AS curr_hi,
+           lag(_ts_meta_min_1) OVER (
+               ORDER BY _ts_meta_min_1 DESC, _ts_meta_max_1 DESC
+           ) AS prev_lo
+    FROM :comp_table_segwise
+) t WHERE prev_lo IS NOT NULL AND prev_lo < curr_hi;
+ overlap_violations 
+--------------------
+                  0
+
+-- Row-level stream must be monotone DESC on series_id.
+SELECT count(*) AS desc_violations FROM (
+    SELECT series_id, lag(series_id) OVER () AS prev
+    FROM (
+        SELECT series_id FROM segwise_no_overlap
+        ORDER BY series_id DESC, ts ASC
+    ) ordered
+) lagged WHERE prev IS NOT NULL AND prev < series_id;
+ desc_violations 
+-----------------
+               0
+
+DROP TABLE segwise_no_overlap CASCADE;

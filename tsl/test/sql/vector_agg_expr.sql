@@ -13,6 +13,16 @@ set timescaledb.enable_columnarindexscan = off;
 create function always_null(x int4) returns int4 as $$ select null::int4 $$
 language sql strict immutable parallel safe;
 
+create or replace function throw_on_twelve(n integer)
+returns integer language plpgsql strict immutable parallel safe as $$
+begin
+  if n = 12 then
+    raise exception 'n = 12';
+  end if;
+  return n;
+end;
+$$;
+
 create table aggexpr(ts int, i int, x text, b bool, v float4) with (tsdb.hypertable,
     tsdb.compress, tsdb.compress_orderby = 'ts', tsdb.compress_segmentby = 'i, x, b',
     tsdb.partition_column = 'ts', tsdb.chunk_interval = 10);
@@ -214,4 +224,41 @@ select sum((b = (i > 0))::int), count(b = (i > 0)) from aggexpr;
 
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
+
+-- Some CASE statements are vectorized.
+set timescaledb.debug_require_vector_agg = 'require';
+-- /* Uncomment to generate reference. */ set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
+
+select sum(case when i > 10 then i else -i end) from aggexpr group by b order by 1;
+
+select count(case when i > 10 then i end) from aggexpr group by v - 501 > 0 order by 1;
+
+select sum(case when i > 10 then (case when i > 12 then length(x) else -length(x) end) end) from aggexpr group by v - 502 > 0;
+
+select avg(case when v > 500 then v - 500 else 500 - v end) from aggexpr group by x order by 1 limit 10;
+
+select count(*), case when v > 503 then x else 'something-else' end from aggexpr group by 2 order by 1, 2 limit 10;
+
+-- The short circuit semantics for CASE is not implemented at the moment.
+\set ON_ERROR_STOP 0
+select count(*), case when i = 12 then 12 else throw_on_twelve(i) end from aggexpr group by 2 order by 1, 2 limit 10;
+\set ON_ERROR_STOP 1
+
+reset timescaledb.debug_require_vector_agg;
+
+-- This form is not vectorized at the moment.
+select count(*), case i when 12 then 1212 else i end from aggexpr group by 2 order by 1, 2 limit 10;
+
+select sum(case i when ts then 1 else 0 end) from aggexpr group by b order by 1;
+
+-- Non-vectorizable branches.
+select count(*), case when i = 12 then 1212 else i::numeric end from aggexpr group by 2 order by 1, 2 limit 10;
+
+select count(*), case when i::numeric = 12::numeric then 1212 else i end from aggexpr group by 2 order by 1, 2 limit 10;
+
+-- Vectorizable WHEN branches but non-vectorizable ELSE (volatile function).
+select sum(case when i > 10 then i else (random() * 0)::int end) from aggexpr group by b order by 1;
+
+
+reset timescaledb.enable_columnarindexscan;
 reset timescaledb.enable_decompression_sorted_merge;

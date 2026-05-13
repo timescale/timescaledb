@@ -261,12 +261,16 @@ get_cluster_options(const ClusterStmt *stmt)
 	{
 		DefElem *opt = (DefElem *) lfirst(lc);
 		if (strcmp(opt->defname, "verbose") == 0)
+		{
 			verbose = defGetBoolean(opt);
+		}
 		else
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
 					 errmsg("unrecognized CLUSTER option \"%s\"", opt->defname),
 					 parser_errposition(NULL, opt->location)));
+		}
 	}
 
 	params->options = (verbose ? CLUOPT_VERBOSE : 0);
@@ -288,14 +292,20 @@ get_reindex_options(ReindexStmt *stmt)
 	{
 		DefElem *opt = (DefElem *) lfirst(lc);
 		if (strcmp(opt->defname, "verbose") == 0)
+		{
 			verbose = defGetBoolean(opt);
+		}
 		else if (strcmp(opt->defname, "concurrently") == 0)
+		{
 			concurrently = defGetBoolean(opt);
+		}
 		else
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
 					 errmsg("unrecognized REINDEX option \"%s\"", opt->defname),
 					 parser_errposition(NULL, opt->location)));
+		}
 	}
 	return (verbose ? REINDEXOPT_VERBOSE : 0) | (concurrently ? REINDEXOPT_CONCURRENTLY : 0);
 }
@@ -906,7 +916,9 @@ static inline bool
 LockHeldByMeCompat(const LOCKTAG *locktag, LOCKMODE lockmode, bool orstronger)
 {
 	if (orstronger)
+	{
 		return LockOrStrongerHeldByMe(locktag, lockmode);
+	}
 	return LockHeldByMe(locktag, lockmode);
 }
 #else

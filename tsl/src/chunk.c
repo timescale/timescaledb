@@ -57,7 +57,9 @@ chunk_freeze_chunk(PG_FUNCTION_ARGS)
 						get_rel_name(chunk_relid))));
 	}
 	if (ts_chunk_is_frozen(chunk))
+	{
 		PG_RETURN_BOOL(true);
+	}
 	/* get Share lock. will wait for other concurrent transactions that are
 	 * modifying the chunk. Does not block SELECTs on the chunk.
 	 * Does not block other DDL on the chunk table.
@@ -83,7 +85,9 @@ chunk_unfreeze_chunk(PG_FUNCTION_ARGS)
 						get_rel_name(chunk_relid))));
 	}
 	if (!ts_chunk_is_frozen(chunk))
+	{
 		PG_RETURN_BOOL(true);
+	}
 	/* This is a previously frozen chunk. Only selects are permitted on this chunk.
 	 * This changes the status in the catalog to allow previously blocked operations.
 	 */
@@ -143,15 +147,21 @@ chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type, boo
 
 	/* decide whether to use "older_than" or "drop_created_before" */
 	if (use_creation_time)
+	{
 		argarr[4] = IntervalVal;
+	}
 	else
+	{
 		argarr[1] = IntervalVal;
+	}
 
 	/* Prepare the function expr with argument list */
 	get_func_result_type(func_oid, &restype, NULL);
 
 	for (size_t i = 0; i < lengthof(argarr); i++)
+	{
 		args = lappend(args, argarr[i]);
+	}
 
 	fexpr = makeFuncExpr(func_oid, restype, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
 	fexpr->funcretset = true;
@@ -169,10 +179,14 @@ chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type, boo
 		ExecMakeFunctionResultSet(state, econtext, estate->es_query_cxt, &isnull, &isdone);
 
 		if (isdone == ExprEndResult)
+		{
 			break;
+		}
 
 		if (!isnull)
+		{
 			num_results++;
+		}
 	}
 
 	/* Cleanup */

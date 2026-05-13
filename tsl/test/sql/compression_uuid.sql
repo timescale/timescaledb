@@ -308,6 +308,34 @@ SELECT count(*) FROM uuid_part
 WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
       id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
 
+-- Calling compressed_data_to_array / compressed_data_column_size on a
+-- uuid-compressed value with a non-uuid element type must raise a clean
+-- error rather than aborting on an assert (or silently producing garbage
+-- in release builds).
+\set ON_ERROR_STOP 0
+DO $$
+DECLARE
+    uuid_chunk regclass;
+BEGIN
+    SELECT compressed_chunk INTO uuid_chunk
+    FROM compression_info WHERE result LIKE '(UUID,%' LIMIT 1;
+    EXECUTE format(
+        'SELECT _timescaledb_functions.compressed_data_to_array(u, NULL::int4) FROM %s WHERE u IS NOT NULL LIMIT 1',
+        uuid_chunk);
+END $$;
+
+DO $$
+DECLARE
+    uuid_chunk regclass;
+BEGIN
+    SELECT compressed_chunk INTO uuid_chunk
+    FROM compression_info WHERE result LIKE '(UUID,%' LIMIT 1;
+    EXECUTE format(
+        'SELECT _timescaledb_functions.compressed_data_column_size(u, NULL::int4) FROM %s WHERE u IS NOT NULL LIMIT 1',
+        uuid_chunk);
+END $$;
+\set ON_ERROR_STOP 1
+
 -- Cleanup
 DROP TABLE t;
 DROP TABLE subms;

@@ -106,7 +106,7 @@ jobs:
     # leading to a tainted cache
     - name: Restore PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
       id: cache-postgresql
-      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "$llm-fuzzer-postgresql-${{ needs.config.outputs.pg_latest }}-${{ env.CC }}\
@@ -137,14 +137,14 @@ jobs:
 
     - name: Save PostgreSQL ${{ needs.config.outputs.pg_latest }} cache
       if: steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: config.log for PostgreSQL
         path: ~/${{ env.PG_SRC_DIR }}/config.log
@@ -173,6 +173,9 @@ jobs:
       env:
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       run: |
+        export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
+        export PGDATABASE=postgres
+
         rc=0
         claude -p --output-format stream-json --verbose \
           --max-budget-usd 5.00 --dangerously-skip-permissions \
@@ -229,7 +232,6 @@ jobs:
         exit $rc
 
     - name: Write job summary
-      if: always()
       run: |
         jq -r 'select(.type == "result") | "## LLM Fuzzer Result\n\n"
           + (.result // "No result produced.")
@@ -245,33 +247,32 @@ jobs:
 
     - name: Upload Claude log
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: Claude execution log
         path: ${{ runner.temp }}/claude-execution-output.json
         if-no-files-found: ignore
 
     - name: Check for reproducer
-      if: always()
       id: repro
       run: test -f ~/llm-fuzzer-repro.sql && echo "found=true" >> $GITHUB_OUTPUT || true
 
     - name: Rebuild after fuzzing
-      if: always() && steps.repro.outputs.found == 'true'
+      if: steps.repro.outputs.found == 'true'
       run: |
         set -xeu
         pkill -U "$(id -u)" postgres || true
         sleep 2
 
     - name: Restore clean PostgreSQL build
-      if: always() && steps.repro.outputs.found == 'true'
-      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      if: steps.repro.outputs.found == 'true'
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
 
     - name: Reinstall PostgreSQL and TimescaleDB
-      if: always() && steps.repro.outputs.found == 'true'
+      if: steps.repro.outputs.found == 'true'
       run: |
         set -xeu
         cd ~/$PG_SRC_DIR && make install
@@ -281,9 +282,11 @@ jobs:
         make -j$(getconf _NPROCESSORS_ONLN) -C build install
 
     - name: Run the reproducer
-      if: always() && steps.repro.outputs.found == 'true'
+      if: steps.repro.outputs.found == 'true'
       run: |
         set -xeu
+
+        sudo coredumpctl rm
 
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
 
@@ -361,7 +364,7 @@ jobs:
 
     - name: Upload sanitizer logs
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: sanitizer logs
         # The log_path sanitizer option means "Write logs to 'log_path.pid'".
@@ -370,21 +373,21 @@ jobs:
 
     - name: Upload core dumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: Coredumps
         path: coredumps
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: PostgreSQL log
         path: postmaster.*
 
     - name: Upload llm-fuzzer-repro.sql
       if: always()
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: llm-fuzzer-repro.sql
         path: ~/llm-fuzzer-repro.sql

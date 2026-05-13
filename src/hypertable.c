@@ -80,14 +80,18 @@ ts_rel_get_owner(Oid relid)
 	Oid ownerid;
 
 	if (!OidIsValid(relid))
+	{
 		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_TABLE), errmsg("invalid relation OID")));
+	}
 
 	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
 
 	if (!HeapTupleIsValid(tuple))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_TABLE),
 				 errmsg("relation with OID %u does not exist", relid)));
+	}
 
 	ownerid = ((Form_pg_class) GETSTRUCT(tuple))->relowner;
 
@@ -115,9 +119,11 @@ ts_hypertable_permissions_check(Oid hypertable_oid, Oid userid)
 	Oid ownerid = ts_rel_get_owner(hypertable_oid);
 
 	if (!has_privs_of_role(userid, ownerid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("must be owner of hypertable \"%s\"", get_rel_name(hypertable_oid))));
+	}
 
 	return ownerid;
 }
@@ -169,10 +175,14 @@ hypertable_formdata_make_tuple(const FormData_hypertable *fd, TupleDesc desc)
 	values[AttrNumberGetAttrOffset(Anum_hypertable_compression_state)] =
 		Int16GetDatum(fd->compression_state);
 	if (fd->compressed_hypertable_id == INVALID_HYPERTABLE_ID)
+	{
 		nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] = true;
+	}
 	else
+	{
 		values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] =
 			Int32GetDatum(fd->compressed_hypertable_id);
+	}
 	values[AttrNumberGetAttrOffset(Anum_hypertable_status)] = Int32GetDatum(fd->status);
 
 	return heap_form_tuple(desc, values, nulls);
@@ -229,14 +239,20 @@ ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti)
 		DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_hypertable_compression_state)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)])
+	{
 		fd->compressed_hypertable_id = INVALID_HYPERTABLE_ID;
+	}
 	else
+	{
 		fd->compressed_hypertable_id = DatumGetInt32(
 			values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)]);
+	}
 	fd->status = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_hypertable_status)]);
 
 	if (should_free)
+	{
 		heap_freetuple(tuple);
+	}
 }
 
 Hypertable *
@@ -277,9 +293,11 @@ ts_resolve_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_ma
 	rel_name = get_rel_name(relid);
 
 	if (!rel_name)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_TABLE),
 				 errmsg("invalid hypertable or continuous aggregate")));
+	}
 
 	ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 
@@ -310,15 +328,18 @@ ts_resolve_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_ma
 		ContinuousAgg *const cagg = ts_continuous_agg_find_by_relid(relid);
 
 		if (!cagg)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 					 errmsg("\"%s\" is not a hypertable or a continuous aggregate", rel_name),
 					 errhint("The operation is only possible on a hypertable or continuous"
 							 " aggregate.")));
+		}
 
 		ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 
 		if (!ht)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("no materialized table for continuous aggregate"),
@@ -327,6 +348,7 @@ ts_resolve_hypertable_from_table_or_cagg(Cache *hcache, Oid relid, bool allow_ma
 							   "catalog.",
 							   rel_name,
 							   cagg->data.mat_hypertable_id)));
+		}
 	}
 
 	return ht;
@@ -343,7 +365,9 @@ hypertable_tuple_get_relid(TupleInfo *ti, void *data)
 	schema_oid = get_namespace_oid(NameStr(fd.schema_name), true);
 
 	if (OidIsValid(schema_oid))
+	{
 		*relid = get_relname_relid(NameStr(fd.table_name), schema_oid);
+	}
 
 	return SCAN_DONE;
 }
@@ -375,9 +399,11 @@ ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid)
 	ts_scanner_scan(&scanctx);
 
 	if (!OidIsValid(relid) && !return_invalid)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("hypertable with id %d does not exist", hypertable_id)));
+	}
 
 	return relid;
 }
@@ -517,10 +543,14 @@ ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
 	NameData table_name = { .data = { 0 } };
 
 	if (schema)
+	{
 		namestrcpy(&schema_name, schema);
+	}
 
 	if (table)
+	{
 		namestrcpy(&table_name, table);
+	}
 
 	/* Perform an index scan on schema and table. */
 	ScanKeyInit(&scankey[0],
@@ -575,14 +605,18 @@ ts_hypertable_create_trigger(const Hypertable *ht, CreateTrigStmt *stmt, const c
 	CommandCounterIncrement();
 
 	if (!stmt->row)
+	{
 		return root_trigger_addr;
+	}
 
 	/* switch to the hypertable owner's role -- note that this logic must be the same as
 	 * `ts_trigger_create_all_on_chunk` */
 	owner = ts_rel_get_owner(ht->main_table_relid);
 	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
 	if (saved_uid != owner)
+	{
 		SetUserIdAndSecContext(owner, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
+	}
 
 	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 
@@ -598,11 +632,15 @@ ts_hypertable_create_trigger(const Hypertable *ht, CreateTrigStmt *stmt, const c
 		/* Only create triggers on standard relations and not on, e.g., foreign
 		 * table chunks */
 		if (relkind == RELKIND_RELATION)
+		{
 			ts_trigger_create_on_chunk(root_trigger_addr.objectId, relschema, relname);
+		}
 	}
 
 	if (saved_uid != owner)
+	{
 		SetUserIdAndSecContext(saved_uid, sec_ctx);
+	}
 
 	return root_trigger_addr;
 }
@@ -621,7 +659,9 @@ ts_hypertable_drop_trigger(Oid relid, const char *trigger_name)
 			.objectId = get_trigger_oid(relid, trigger_name, true),
 		};
 		if (OidIsValid(objaddr.objectId))
+		{
 			performDeletion(&objaddr, DROP_RESTRICT, 0);
+		}
 	}
 
 	foreach (lc, chunks)
@@ -633,7 +673,9 @@ ts_hypertable_drop_trigger(Oid relid, const char *trigger_name)
 		};
 
 		if (OidIsValid(objaddr.objectId))
+		{
 			performDeletion(&objaddr, DROP_RESTRICT, 0);
+		}
 	}
 }
 
@@ -669,7 +711,9 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 		Hypertable *compressed_hypertable = ts_hypertable_get_by_id(compressed_hypertable_id);
 		/* The hypertable may have already been deleted by a cascade */
 		if (compressed_hypertable != NULL)
+		{
 			ts_hypertable_drop(compressed_hypertable, DROP_RESTRICT);
+		}
 	}
 
 	hypertable_drop_hook_type osm_htdrop_hook = ts_get_osm_hypertable_drop_hook();
@@ -902,7 +946,9 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 		namestrcpy(&fd.associated_table_prefix, NameStr(*associated_table_prefix));
 	}
 	if (strnlen(NameStr(fd.associated_table_prefix), NAMEDATALEN) > MAXIMUM_PREFIX_LENGTH)
+	{
 		elog(ERROR, "associated_table_prefix too long");
+	}
 
 	fd.num_dimensions = num_dimensions;
 
@@ -911,12 +957,18 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 
 	fd.chunk_target_size = chunk_target_size;
 	if (fd.chunk_target_size < 0)
+	{
 		fd.chunk_target_size = 0;
+	}
 
 	if (compressed)
+	{
 		fd.compression_state = HypertableInternalCompressionTable;
+	}
 	else
+	{
 		fd.compression_state = HypertableCompressionOff;
+	}
 
 	/* when creating a hypertable, there is never an associated compressed dual */
 	fd.compressed_hypertable_id = INVALID_HYPERTABLE_ID;
@@ -1047,7 +1099,9 @@ ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point, LOCK
 		chunk = ts_chunk_find_for_point(h, point, lockmode);
 
 		if (chunk)
+		{
 			chunk = ts_hypertable_chunk_store_add(h, chunk);
+		}
 	}
 	else if (!ts_chunk_lock_if_exists(chunk->table_id, lockmode))
 	{
@@ -1125,7 +1179,9 @@ ts_hypertable_select_tablespace(const Hypertable *ht, const Chunk *chunk)
 	int i;
 
 	if (NULL == tspcs || tspcs->num_tablespaces == 0)
+	{
 		return NULL;
+	}
 
 	i = hypertable_get_chunk_round_robin_index(ht, chunk->cube);
 
@@ -1140,12 +1196,16 @@ ts_hypertable_select_tablespace_name(const Hypertable *ht, const Chunk *chunk)
 	Oid main_tspc_oid;
 
 	if (tspc != NULL)
+	{
 		return NameStr(tspc->fd.tablespace_name);
+	}
 
 	/* Use main table tablespace, if any */
 	main_tspc_oid = get_rel_tablespace(ht->main_table_relid);
 	if (OidIsValid(main_tspc_oid))
+	{
 		return get_tablespace_name(main_tspc_oid);
+	}
 
 	return NULL;
 }
@@ -1160,12 +1220,16 @@ ts_hypertable_get_tablespace_at_offset_from(int32 hypertable_id, Oid tablespace_
 	int i = 0;
 
 	if (NULL == tspcs || tspcs->num_tablespaces == 0)
+	{
 		return NULL;
+	}
 
 	for (i = 0; i < tspcs->num_tablespaces; i++)
 	{
 		if (tablespace_oid == tspcs->tablespaces[i].tablespace_oid)
+		{
 			return &tspcs->tablespaces[(i + offset) % tspcs->num_tablespaces];
+		}
 	}
 
 	return NULL;
@@ -1197,7 +1261,9 @@ bool
 ts_is_hypertable(Oid relid)
 {
 	if (!OidIsValid(relid))
+	{
 		return false;
+	}
 
 	return OidIsValid(hypertable_relid_lookup(relid));
 }
@@ -1220,7 +1286,9 @@ hypertable_check_associated_schema_permissions(const char *schema_name, Oid user
 	 * anyone should be able to create chunks there.
 	 */
 	if (NULL == schema_name)
+	{
 		return InvalidOid;
+	}
 
 	schema_oid = get_namespace_oid(schema_name, true);
 
@@ -1238,16 +1306,20 @@ hypertable_check_associated_schema_permissions(const char *schema_name, Oid user
 		 * privileges to create the schema in the current database
 		 */
 		if (object_aclcheck(DatabaseRelationId, MyDatabaseId, user_oid, ACL_CREATE) != ACLCHECK_OK)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 					 errmsg("permissions denied: cannot create schema \"%s\" in database \"%s\"",
 							schema_name,
 							get_database_name(MyDatabaseId))));
+		}
 	}
 	else if (object_aclcheck(NamespaceRelationId, schema_oid, user_oid, ACL_CREATE) != ACLCHECK_OK)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("permissions denied: cannot create chunks in schema \"%s\"", schema_name)));
+	}
 
 	return schema_oid;
 }
@@ -1312,13 +1384,16 @@ hypertable_validate_constraints(Oid relid)
 		{
 			if (ts_hypertable_relid_to_id(form->confrelid) != INVALID_HYPERTABLE_ID &&
 				!is_partitioning_allowed(form->confrelid))
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("hypertables cannot be used as foreign key references of "
 								"hypertables")));
+			}
 		}
 
 		if (form->contype == CONSTRAINT_CHECK && form->connoinherit)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 					 errmsg("cannot have NO INHERIT constraints on hypertable \"%s\"",
@@ -1326,6 +1401,7 @@ hypertable_validate_constraints(Oid relid)
 					 errhint("Remove all NO INHERIT constraints from table \"%s\" before "
 							 "making it a hypertable.",
 							 get_rel_name(relid))));
+		}
 	}
 
 	systable_endscan(scan);
@@ -1348,6 +1424,7 @@ hypertable_validate_constraints(Oid relid)
 		 */
 		if (form->contype == CONSTRAINT_FOREIGN &&
 			ts_hypertable_relid_to_id(form->conrelid) != INVALID_HYPERTABLE_ID)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
 					 errmsg("cannot have FOREIGN KEY constraints to hypertable \"%s\"",
@@ -1355,6 +1432,7 @@ hypertable_validate_constraints(Oid relid)
 					 errhint("Remove all FOREIGN KEY constraints to table \"%s\" before "
 							 "making it a hypertable.",
 							 get_rel_name(relid))));
+		}
 	}
 
 	systable_endscan(scan);
@@ -1369,10 +1447,12 @@ create_hypertable_datum(FunctionCallInfo fcinfo, const Hypertable *ht, bool crea
 	HeapTuple tuple;
 
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("function returning record called in "
 						"context that cannot accept type record")));
+	}
 
 	tupdesc = BlessTupleDesc(tupdesc);
 
@@ -1440,14 +1520,18 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 	if (ht)
 	{
 		if (if_not_exists)
+		{
 			ereport(NOTICE,
 					(errcode(ERRCODE_TS_HYPERTABLE_EXISTS),
 					 errmsg("table \"%s\" is already a hypertable, skipping",
 							get_rel_name(table_relid))));
+		}
 		else
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_HYPERTABLE_EXISTS),
 					 errmsg("table \"%s\" is already a hypertable", get_rel_name(table_relid))));
+		}
 		created = false;
 	}
 	else
@@ -1465,11 +1549,17 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 		}
 
 		if (if_not_exists)
+		{
 			flags |= HYPERTABLE_CREATE_IF_NOT_EXISTS;
+		}
 		if (!create_default_indexes)
+		{
 			flags |= HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES;
+		}
 		if (migrate_data)
+		{
 			flags |= HYPERTABLE_CREATE_MIGRATE_DATA;
+		}
 
 		created = ts_hypertable_create_from_info(table_relid,
 												 INVALID_HYPERTABLE_ID,
@@ -1530,8 +1620,10 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	regproc open_partitioning_func = PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13);
 
 	if (!OidIsValid(table_relid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("relation cannot be NULL")));
+	}
 
 	if (get_rel_name(table_relid) == NULL)
 	{
@@ -1541,9 +1633,11 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 	}
 
 	if (!open_dim_name)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("partition column cannot be NULL")));
+	}
 
 	DimensionInfo *open_dim_info =
 		ts_dimension_info_create_open(table_relid,
@@ -1555,12 +1649,14 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 
 	DimensionInfo *closed_dim_info = NULL;
 	if (closed_dim_name)
+	{
 		closed_dim_info =
 			ts_dimension_info_create_closed(table_relid,
 											closed_dim_name,		 /* column name */
 											num_partitions,			 /* number partitions */
 											closed_partitioning_func /* partitioning func */
 			);
+	}
 
 	return ts_hypertable_create_internal(fcinfo,
 										 table_relid,
@@ -1660,7 +1756,9 @@ ts_validate_basetable_columns(Relation *rel)
 		Form_pg_attribute attr = TupleDescAttr(tupdesc, attno - 1);
 		/* skip dropped columns */
 		if (attr->attisdropped)
+		{
 			continue;
+		}
 		Oid typid = attr->atttypid;
 		switch (typid)
 		{
@@ -1759,7 +1857,9 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	 * only for hypertables created via call to create_hypertable().
 	 */
 	if (hypertable_id == INVALID_HYPERTABLE_ID)
+	{
 		ts_validate_basetable_columns(&rel);
+	}
 
 	/*
 	 * Check that the user has permissions to make this table into a
@@ -1772,11 +1872,13 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	{
 		case RELKIND_PARTITIONED_TABLE:
 			if (!ts_guc_enable_partitioned_hypertables)
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_WRONG_OBJECT_TYPE),
 						 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
 						 errdetail(
 							 "It is not possible to turn partitioned tables into hypertables.")));
+			}
 			break;
 		case RELKIND_MATVIEW:
 		case RELKIND_RELATION:
@@ -1807,32 +1909,40 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 						 ts_relation_has_tuples(rel);
 
 	if ((flags & HYPERTABLE_CREATE_MIGRATE_DATA) == 0 && table_has_data)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("table \"%s\" is not empty", get_rel_name(table_relid)),
 				 errhint("You can migrate data by specifying 'migrate_data => true' when calling "
 						 "this function.")));
+	}
 
 	if (is_inheritance_table(table_relid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("table \"%s\" is already partitioned", get_rel_name(table_relid)),
 				 errdetail(
 					 "It is not possible to turn tables that use inheritance into hypertables.")));
+	}
 
 	if (rel->rd_rel->relpersistence == RELPERSISTENCE_TEMP)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("table \"%s\" cannot be temporary", get_rel_name(table_relid)),
 				 errdetail("It is not supported to turn temporary tables into hypertables.")));
+	}
 
 	if (table_has_rules(rel))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertables do not support rules"),
 				 errdetail("Table \"%s\" has attached rules, which do not work on hypertables.",
 						   get_rel_name(table_relid)),
 				 errhint("Remove the rules before creating a hypertable.")));
+	}
 
 	/*
 	 * Must close the relation to decrease the reference count for the relation
@@ -1854,7 +1964,9 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 
 	/* Create the associated schema if it doesn't already exist */
 	if (!OidIsValid(associated_schema_oid))
+	{
 		hypertable_create_schema(NameStr(*associated_schema_name));
+	}
 
 	/*
 	 * Hypertables do not support arbitrary triggers, so if the table already
@@ -1863,7 +1975,9 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	ts_check_unsupported_triggers(table_relid);
 
 	if (NULL == chunk_sizing_info)
+	{
 		chunk_sizing_info = ts_chunk_sizing_info_get_default_disabled(table_relid);
+	}
 
 	/* Validate and set chunk sizing information */
 	if (OidIsValid(chunk_sizing_info->func))
@@ -1890,7 +2004,9 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	ts_dimension_info_validate(time_dim_info);
 
 	if (DIMENSION_INFO_IS_SET(closed_dim_info))
+	{
 		ts_dimension_info_validate(closed_dim_info);
+	}
 
 	/* Checks pass, now we can create the catalog information */
 	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
@@ -1937,7 +2053,9 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	}
 
 	if ((flags & HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES) == 0)
+	{
 		ts_indexing_create_default_indexes(ht);
+	}
 
 	/*
 	 * Migrate data from the main table to chunks
@@ -2027,7 +2145,9 @@ ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno)
 	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
 		if (column_attno == ht->space->dimensions[i].column_attno)
+		{
 			return true;
+		}
 	}
 	return false;
 }
@@ -2040,7 +2160,9 @@ ts_is_partitioning_column_name(const Hypertable *ht, NameData column_name)
 	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
 		if (namestrcmp(&ht->space->dimensions[i].fd.column_name, NameStr(column_name)) == 0)
+		{
 			return true;
+		}
 	}
 	return false;
 }
@@ -2055,8 +2177,10 @@ integer_now_func_validate(Oid now_func_oid, Oid open_dim_type)
 	Assert(IS_INTEGER_TYPE(open_dim_type));
 
 	if (!OidIsValid(now_func_oid))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_FUNCTION), (errmsg("invalid custom time function"))));
+	}
 
 	tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(now_func_oid));
 	if (!HeapTupleIsValid(tuple))
@@ -2109,36 +2233,46 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 	hypertable = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(hypertable))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("custom time function not supported on internal columnstore table")));
+	}
 
 	/* validate that the open dimension uses numeric type */
 	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);
 
 	if (!replace_if_exists)
+	{
 		if (*NameStr(open_dim->fd.integer_now_func_schema) != '\0' ||
 			*NameStr(open_dim->fd.integer_now_func) != '\0')
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("custom time function already set for hypertable \"%s\"",
 							get_rel_name(table_relid))));
+		}
+	}
 
 	open_dim_type = ts_dimension_get_partition_type(open_dim);
 	if (!IS_INTEGER_TYPE(open_dim_type))
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("custom time function not supported"),
 				 errhint("A custom time function can only be set for hypertables"
 						 " that have integer time dimensions.")));
+	}
 
 	integer_now_func_validate(now_func_oid, open_dim_type);
 
 	aclresult = object_aclcheck(ProcedureRelationId, now_func_oid, GetUserId(), ACL_EXECUTE);
 	if (aclresult != ACLCHECK_OK)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("permission denied for function %s", get_func_name(now_func_oid))));
+	}
 
 	ts_dimension_update(hypertable,
 						&open_dim->fd.column_name,
@@ -2307,7 +2441,9 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	dim = hyperspace_get_open_dimension(ht->space, dimension_index);
 
 	if (NULL == dim)
+	{
 		elog(ERROR, "invalid open dimension index %d", dimension_index);
+	}
 
 	timetype = ts_dimension_get_partition_type(dim);
 
@@ -2326,7 +2462,9 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 					 quote_identifier(NameStr(ht->fd.table_name)));
 
 	if (SPI_connect() != SPI_OK_CONNECT)
+	{
 		elog(ERROR, "could not connect to SPI");
+	}
 
 	int64 max_value;
 
@@ -2335,10 +2473,12 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 		res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
 		if (res < 0)
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 (errmsg("could not find the maximum time value for hypertable \"%s\"",
 							 get_rel_name(ht->main_table_relid)))));
+		}
 
 		/* In most cases the result type is the same as the time type. However, with UUIDs we
 		 * first extract the timestamptz so the result type is timestamptz instead. */
@@ -2351,7 +2491,9 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 		maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &max_isnull);
 
 		if (isnull)
+		{
 			*isnull = max_isnull;
+		}
 
 		max_value = max_isnull ? ts_time_get_min(result_type) :
 								 ts_time_value_to_internal(maxdat, result_type);
@@ -2365,7 +2507,9 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
+	{
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+	}
 
 	return max_value;
 }
@@ -2429,7 +2573,9 @@ ts_hypertable_update_chunk_sizing(Hypertable *ht)
 		namestrcpy(&form.chunk_sizing_func_name, NameStr(info.func_name));
 	}
 	else
+	{
 		elog(ERROR, "chunk sizing function cannot be NULL");
+	}
 	form.chunk_target_size = ht->fd.chunk_target_size;
 	hypertable_update_catalog_tuple(&tid, &form);
 	return true;
@@ -2473,7 +2619,9 @@ ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id, LockTuple
 													   CurrentMemoryContext,
 													   tablelockmode);
 			if (dimslice->fd.dimension_id == time_dim_id)
+			{
 				return dimslice;
+			}
 		}
 	}
 	return NULL;
@@ -2518,21 +2666,25 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	if (time_dim == NULL)
+	{
 		ereport(ERROR,
 				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				errmsg("could not find time dimension for hypertable %s.%s",
 					   quote_identifier(NameStr(ht->fd.schema_name)),
 					   quote_identifier(NameStr(ht->fd.table_name))));
+	}
 
 	time_type = ts_dimension_get_partition_type(time_dim);
 
 	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 	if (osm_chunk_id == INVALID_CHUNK_ID)
+	{
 		ereport(ERROR,
 				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				errmsg("no OSM chunk found for hypertable %s.%s",
 					   quote_identifier(NameStr(ht->fd.schema_name)),
 					   quote_identifier(NameStr(ht->fd.table_name))));
+	}
 	/*
 	 * range_start, range_end arguments must be converted to internal representation
 	 * a NULL start value is interpreted as INT64_MAX - 1 and a NULL end value is
@@ -2541,9 +2693,11 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	 * OSM chunk is given upon creation, which is [INT64_MAX - 1, INT64_MAX]
 	 */
 	if ((PG_ARGISNULL(1) && !PG_ARGISNULL(2)) || (!PG_ARGISNULL(1) && PG_ARGISNULL(2)))
+	{
 		ereport(ERROR,
 				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				errmsg("range_start and range_end parameters must be both NULL or both non-NULL"));
+	}
 
 	Oid argtypes[2];
 	for (int i = 0; i < 2; i++)
@@ -2551,28 +2705,40 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 		argtypes[i] = get_fn_expr_argtype(fcinfo->flinfo, i + 1);
 		if (!can_coerce_type(1, &argtypes[i], &time_type, COERCION_IMPLICIT) &&
 			!PG_ARGISNULL(i + 1))
+		{
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("invalid time argument type \"%s\"", format_type_be(argtypes[i])),
 					 errhint("Try casting the argument to \"%s\".", format_type_be(time_type))));
+		}
 	}
 
 	int64 range_start_internal, range_end_internal;
 	if (PG_ARGISNULL(1))
+	{
 		range_start_internal = PG_INT64_MAX - 1;
+	}
 	else
+	{
 		range_start_internal =
 			ts_time_value_to_internal(PG_GETARG_DATUM(1), get_fn_expr_argtype(fcinfo->flinfo, 1));
+	}
 	if (PG_ARGISNULL(2))
+	{
 		range_end_internal = PG_INT64_MAX;
+	}
 	else
+	{
 		range_end_internal =
 			ts_time_value_to_internal(PG_GETARG_DATUM(2), get_fn_expr_argtype(fcinfo->flinfo, 2));
+	}
 
 	if (range_start_internal > range_end_internal)
+	{
 		ereport(ERROR,
 				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				errmsg("dimension slice range_end cannot be less than range_start"));
+	}
 
 	bool osm_chunk_empty = PG_GETARG_BOOL(3);
 
@@ -2585,7 +2751,9 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 															RowShareLock);
 
 	if (!slice)
+	{
 		ereport(ERROR, errmsg("could not find time dimension slice for chunk %d", osm_chunk_id));
+	}
 
 	int32 dimension_slice_id = slice->fd.id;
 	overlap = ts_osm_chunk_range_overlaps(dimension_slice_id,
@@ -2600,12 +2768,14 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	 * But throw an error in case we encounter this situation.
 	 */
 	if (overlap)
+	{
 		ereport(ERROR,
 				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				errmsg("attempting to set overlapping range for tiered chunk of %s.%s",
 					   NameStr(ht->fd.schema_name),
 					   NameStr(ht->fd.table_name)),
 				errhint("Range should be set to invalid for tiered chunk"));
+	}
 	range_invalid = ts_osm_chunk_range_is_invalid(range_start_internal, range_end_internal);
 	/* Update the hypertable flags regarding the validity of the OSM range */
 	if (range_invalid)
@@ -2614,14 +2784,20 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 		range_start_internal = PG_INT64_MAX - 1;
 		range_end_internal = PG_INT64_MAX;
 		if (!osm_chunk_empty)
+		{
 			ht->fd.status =
 				ts_set_flags_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
+		}
 		else
+		{
 			ht->fd.status =
 				ts_clear_flags_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
+		}
 	}
 	else
+	{
 		ht->fd.status = ts_clear_flags_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
+	}
 
 	ts_hypertable_update_status_osm(ht);
 	ts_cache_release(&hcache);
@@ -2651,7 +2827,9 @@ ts_hypertable_has_continuous_aggregates(int32 hypertable_id)
 
 	ts_scan_iterator_start_scan(&iterator);
 	if (ts_scan_iterator_next(&iterator))
+	{
 		found = true;
+	}
 	ts_scan_iterator_close(&iterator);
 
 	return found;
