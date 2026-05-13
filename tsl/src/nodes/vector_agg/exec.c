@@ -72,7 +72,7 @@ typedef struct
 
 	uint64 *restrict validity;
 
-	int allocated_body_bytes;
+	Size allocated_body_bytes;
 	uint8 *restrict body_buffer;
 
 	uint32 *restrict offset_buffer;
@@ -171,8 +171,8 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 		}
 		case DT_ArrowText:
 		{
-			const int result_bytes = VARSIZE_ANY_EXHDR(datum);
-			const int required_body_bytes =
+			const Size result_bytes = VARSIZE_ANY_EXHDR(datum);
+			const Size required_body_bytes =
 				pad_to_multiple(64, columnar_result->current_offset + result_bytes);
 			if (required_body_bytes > columnar_result->allocated_body_bytes)
 			{
@@ -183,8 +183,10 @@ columnar_result_set_row(ColumnarResult *columnar_result, DecompressBatchState co
 				 * tuned manually on a few real data sets until this balance
 				 * looked somewhat acceptable.
 				 */
-				const int new_body_bytes =
-					required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) row + 1))) + 1;
+				const Size new_body_bytes =
+					(Size) (required_body_bytes *
+							Min(10, Max(1.2, 1.2 * nrows / ((double) row + 1)))) +
+					1;
 				Assert(new_body_bytes >= required_body_bytes);
 				columnar_result->body_buffer =
 					repalloc(columnar_result->body_buffer, new_body_bytes);
