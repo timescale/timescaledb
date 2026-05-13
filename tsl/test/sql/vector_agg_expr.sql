@@ -121,6 +121,110 @@ order by grouping.n, condition.n, function.n
 reset timescaledb.debug_require_vector_agg;
 reset timescaledb.enable_vectorized_aggregation;
 
+
+-- Common subexpression elimination: same expression in multiple aggregates.
+set timescaledb.debug_require_vector_agg = 'require';
+-- /* Uncomment to generate reference. */ set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
+
+-- Same expression abs(v - 500) used in two different aggregates.
+select sum(abs(v - 500)), count(abs(v - 500)) from aggexpr;
+
+-- Same expression in aggregates with grouping.
+select i % 2, sum(abs(v - 500)), count(abs(v - 500))
+    from aggexpr group by i % 2 order by 1;
+
+-- Grouping column expression also appears as aggregate argument.
+select length(x), count(length(x)), sum(length(x))
+    from aggexpr group by length(x) order by 1;
+
+-- Nested common subexpressions: i % 2 appears in both grouping and aggregate.
+select i % 2, sum((i % 2)::float4) from aggexpr group by i % 2 order by 1;
+
+-- Multiple aggregates with the same complex expression on different functions.
+select sum((i = 12)::int), count((i = 12)::int) from aggexpr;
+
+-- Same expression with WHERE clause.
+select sum(abs(v - 500)), count(abs(v - 500))
+    from aggexpr where b order by 1;
+
+-- Aggregate FILTER clause with shared expression: CSE is skipped for
+-- FILTER aggregates, but other aggregates still share.
+select sum(abs(v - 500)) filter (where b),
+       count(abs(v - 500)),
+       sum(abs(v - 500))
+    from aggexpr;
+
+-- Shared text-returning subexpression: lower(x) cached as DT_ArrowText,
+-- reused by length() in the second aggregate.
+select count(lower(x)), sum(length(lower(x))) from aggexpr;
+
+-- Text shared expression with hash grouping: lower(x) shared between
+-- grouping column and aggregate arguments.
+select lower(x), count(lower(x)), sum(length(lower(x)))
+    from aggexpr group by lower(x) order by 1 limit 10;
+
+-- Hash grouping with WHERE clause and CSE.
+select i % 2, sum(abs(v - 500)), count(abs(v - 500))
+    from aggexpr where b group by i % 2 order by 1;
+
+-- Selective WHERE: only partial rows pass, cached result has many invalid rows.
+select sum(abs(v - 500)), count(abs(v - 500))
+    from aggexpr where i > 13;
+
+-- WHERE filtering rows that would cause division by zero. The cached
+-- expression must be evaluated under the batch filter, not a wider one,
+-- to avoid calling the strict integer division on filtered-out rows.
+select sum(1 / i), count(1 / i) from aggexpr where i > 0;
+
+-- Strict function always returning NULL: tests caching of a null result.
+select sum(always_null(i)), count(always_null(i)) from aggexpr;
+
+-- Multiple distinct shared expressions cached simultaneously.
+select sum(abs(v - 500)), count(abs(v - 500)),
+       sum(length(x)), count(length(x)) from aggexpr;
+
+-- Shared subtree at depth 2: v - 500 is shared between abs(v - 500) (in sum
+-- and count) and (v - 500 > 0)::int (in sum), exercising a cache hit inside
+-- a non-cached outer expression.
+select sum(abs(v - 500)), count(abs(v - 500)),
+       sum((v - 500 > 0)::int) from aggexpr;
+
+-- Nullable column across batches: some segmentby batches have i as all-null
+-- scalar, non-segmentby batches have mixed null/non-null arrow.
+select sum(i % 2 + 1), count(i % 2 + 1) from aggexpr;
+
+-- Multiple shared expressions with hash grouping.
+select i % 2, sum(abs(v - 500)), count(abs(v - 500)),
+       sum(length(x)), count(length(x))
+    from aggexpr group by i % 2 order by 1;
+
+-- FILTER clause with hash grouping: FILTER aggregate excluded from CSE,
+-- other aggregates still share.
+select i % 2,
+       sum(abs(v - 500)) filter (where b),
+       count(abs(v - 500)),
+       sum(abs(v - 500))
+    from aggexpr group by i % 2 order by 1;
+
+-- Two shared sibling subexpressions: abs(v - 500) and length(x) both appear
+-- in both aggregates. Tests that the refcount walker continues to sibling
+-- nodes after finding a shared subtree.
+select sum(abs(v - 500) + length(x)), sum(abs(v - 500) - length(x)) from aggexpr;
+
+-- Three aggregates sharing the same expression (refcount = 3). The refcount
+-- walker must not over-count children: it visits abs(v - 500) three times,
+-- recurses into v - 500 only on the first visit, and skips children on
+-- subsequent visits. Children (v - 500) stay at refcount 1 and are not cached.
+select sum(abs(v - 500)), count(abs(v - 500)), min(abs(v - 500)) from aggexpr;
+
+-- Cached boolean subexpression consumed as function argument. The comparison
+-- b = (i > 0) produces a boolean arrow (DT_ArrowBits) that is cached, then
+-- the int4 cast consumes it via compressed_columns_to_postgres_data.
+select sum((b = (i > 0))::int), count(b = (i > 0)) from aggexpr;
+
+reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
+
 -- Some CASE statements are vectorized.
 set timescaledb.debug_require_vector_agg = 'require';
 -- /* Uncomment to generate reference. */ set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
