@@ -106,7 +106,7 @@ jobs:
         ./scripts/clang_format_all.sh
         git diff --exit-code
 
-    - name: [F]IXME annotations left in code (use TODO for long-term notes)
+    - name: "[F]IXME annotations left in code (use TODO for long-term notes)"
       if: always()
       run: |
         ! grep [f]ixme -niR ./* .github/workflows/*
