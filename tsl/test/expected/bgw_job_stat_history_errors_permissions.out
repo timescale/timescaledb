@@ -82,12 +82,9 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT job_id, proc_schema, proc_name, sqlerrcode, err_message
 FROM timescaledb_information.job_errors WHERE job_id >= 1000
 ORDER BY job_id;
- job_id | proc_schema |  proc_name   | sqlerrcode |                     err_message                     
---------+-------------+--------------+------------+-----------------------------------------------------
-   1000 | public      | job_fail     | P0001      | raising an exception
-   1002 | public      | custom_proc2 | 40001      | could not serialize access due to concurrent update
-  11111 |             |              |            | not an error
-  22222 |             |              |            | 
+ job_id | proc_schema | proc_name | sqlerrcode |     err_message      
+--------+-------------+-----------+------------+----------------------
+   1000 | public      | job_fail  | P0001      | raising an exception
 
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 SELECT job_id, proc_schema, proc_name, sqlerrcode, err_message
@@ -95,10 +92,7 @@ FROM timescaledb_information.job_errors WHERE job_id >= 1000
 ORDER BY job_id;
  job_id | proc_schema |  proc_name   | sqlerrcode |                     err_message                     
 --------+-------------+--------------+------------+-----------------------------------------------------
-   1000 | public      | job_fail     | P0001      | raising an exception
    1002 | public      | custom_proc2 | 40001      | could not serialize access due to concurrent update
-  11111 |             |              |            | not an error
-  22222 |             |              |            | 
 
 SET ROLE :ROLE_SUPERUSER;
 SELECT job_id, proc_schema, proc_name, sqlerrcode, err_message
