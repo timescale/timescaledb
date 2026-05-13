@@ -17,7 +17,6 @@
 #include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
-#include <libpq-fe.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/parsenodes.h>

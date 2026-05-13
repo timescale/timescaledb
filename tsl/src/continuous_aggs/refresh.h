@@ -24,9 +24,14 @@ extern List *continuous_agg_split_refresh_window(ContinuousAgg *cagg,
 												 int32 buckets_per_batch,
 												 bool refresh_newest_first);
 InternalTimeRange
-compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
-											  const InternalTimeRange *const refresh_window,
+compute_circumscribed_bucketed_refresh_window(const InternalTimeRange *const refresh_window,
 											  const ContinuousAggBucketFunction *bucket_function);
 
-extern void fill_bucket_offset_origin(const ContinuousAggBucketFunction *bucket_function, Oid type,
-									  NullableDatum *offset, NullableDatum *origin);
+extern int64 cagg_fixed_current_bucket_start(int64 timestamp, Oid type,
+											 const ContinuousAggBucketFunction *bucket_function);
+extern int64 cagg_fixed_next_bucket_start(int64 timestamp, Oid type,
+										  const ContinuousAggBucketFunction *bucket_function);
+extern int64 cagg_current_bucket_start(int64 timestamp, Oid type,
+									   const ContinuousAggBucketFunction *bucket_function);
+extern int64 cagg_next_bucket_start(int64 timestamp, Oid type,
+									const ContinuousAggBucketFunction *bucket_function);

@@ -232,7 +232,6 @@ jobs:
         exit $rc
 
     - name: Write job summary
-      if: always()
       run: |
         jq -r 'select(.type == "result") | "## LLM Fuzzer Result\n\n"
           + (.result // "No result produced.")
@@ -255,26 +254,25 @@ jobs:
         if-no-files-found: ignore
 
     - name: Check for reproducer
-      if: always()
       id: repro
       run: test -f ~/llm-fuzzer-repro.sql && echo "found=true" >> $GITHUB_OUTPUT || true
 
     - name: Rebuild after fuzzing
-      if: always() && steps.repro.outputs.found == 'true'
+      if: steps.repro.outputs.found == 'true'
       run: |
         set -xeu
         pkill -U "$(id -u)" postgres || true
         sleep 2
 
     - name: Restore clean PostgreSQL build
-      if: always() && steps.repro.outputs.found == 'true'
+      if: steps.repro.outputs.found == 'true'
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: ${{ steps.cache-postgresql.outputs.cache-primary-key }}
 
     - name: Reinstall PostgreSQL and TimescaleDB
-      if: always() && steps.repro.outputs.found == 'true'
+      if: steps.repro.outputs.found == 'true'
       run: |
         set -xeu
         cd ~/$PG_SRC_DIR && make install
@@ -284,9 +282,11 @@ jobs:
         make -j$(getconf _NPROCESSORS_ONLN) -C build install
 
     - name: Run the reproducer
-      if: always() && steps.repro.outputs.found == 'true'
+      if: steps.repro.outputs.found == 'true'
       run: |
         set -xeu
+
+        sudo coredumpctl rm
 
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
 

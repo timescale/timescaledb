@@ -1,0 +1,1 @@
+Fixes: #9767 Skip dropped chunks when trying to remove ts_cagg_invalidation_trigger

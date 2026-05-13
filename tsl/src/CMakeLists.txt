@@ -35,12 +35,6 @@ target_include_directories(${TSL_LIBRARY_NAME} PRIVATE ${PG_INCLUDEDIR})
 target_compile_definitions(${TSL_LIBRARY_NAME} PUBLIC TS_TSL)
 target_compile_definitions(${TSL_LIBRARY_NAME} PUBLIC TS_SUBMODULE)
 
-if(WIN32)
-  target_link_libraries(${TSL_LIBRARY_NAME} ${PG_LIBDIR}/libpq.lib)
-else()
-  target_link_libraries(${TSL_LIBRARY_NAME} pq)
-endif()
-
 install(TARGETS ${TSL_LIBRARY_NAME} DESTINATION ${PG_PKGLIBDIR})
 
 # if (WIN32) target_link_libraries(${PROJECT_NAME}
