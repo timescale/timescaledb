@@ -1679,15 +1679,6 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			continue;
 		}
 
-		if (decompression_path == chunk_path_no_sort)
-		{
-			/*
-			 * We can't use the unsorted decompression path directly because it
-			 * doesn't have the sort projection cost workaround.
-			 */
-			continue;
-		}
-
 		if (!bms_is_empty(chunk_rel->lateral_relids) || !bms_is_empty(req_outer))
 		{
 			/*
