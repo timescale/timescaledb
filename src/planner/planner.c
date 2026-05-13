@@ -1484,10 +1484,10 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			if (!rte->inh)
 			{
 				/*
-				 * We get here with SELECT FROM ONLY hypertable. Mark it as
-				 * dummy, otherwise we'll get a scan on hypertable relation
-				 * itself. It's always empty, so a scan would be harmless but
-				 * still misleading.
+				 * This happens with SELECT FROM ONLY hypertable or with an
+				 * empty hypertable. Mark it as dummy, otherwise we'll get a
+				 * scan on hypertable relation itself. It's always empty, so
+				 * this scan is useless and looks misleading.
 				 */
 				mark_dummy_rel(rel);
 			}

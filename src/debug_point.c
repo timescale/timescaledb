@@ -301,6 +301,56 @@ ts_debug_point_raise_error_if_enabled(const char *name)
 			break;
 	}
 
+	/*
+	 * Drop error context, so that the error description doesn't inherit details
+	 * from the surrounding context (i.e. parse location).
+	 */
+	error_context_stack = NULL;
+
+	ereport(ERROR,
+			(errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION),
+			 errmsg("error injected at debug point '%s'", point.name)));
+}
+
+/*
+ * One-shot variant: release the debug point before raising the error.
+ * This allows error recovery code paths to call the same function
+ * without hitting the injection again.
+ */
+void
+ts_debug_point_raise_error_oneshot(const char *name)
+{
+	DebugPoint point;
+	LockAcquireResult lock_acquire_result;
+
+	debug_point_init(&point, name);
+
+	lock_acquire_result = LockAcquire(&point.tag, ShareLock, true, true);
+	switch (lock_acquire_result)
+	{
+		case LOCKACQUIRE_OK:
+			LockRelease(&point.tag, ShareLock, true);
+			if (LockHeldByMeCompat(&point.tag, ExclusiveLock, false))
+			{
+				break;
+			}
+			return;
+		case LOCKACQUIRE_ALREADY_HELD:
+		case LOCKACQUIRE_ALREADY_CLEAR:
+			LockRelease(&point.tag, ShareLock, true);
+			return;
+		case LOCKACQUIRE_NOT_AVAIL:
+			break;
+	}
+
+	debug_point_release(&point);
+
+	/*
+	 * Drop error context, so that the error description doesn't inherit details
+	 * from the surrounding context (i.e. parse location).
+	 */
+	error_context_stack = NULL;
+
 	ereport(ERROR,
 			(errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION),
 			 errmsg("error injected at debug point '%s'", point.name)));

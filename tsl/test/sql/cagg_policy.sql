@@ -254,6 +254,11 @@ SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false);
 -- Code coverage: incorrect name of policy
 SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'refresh_policy');
 
+-- Short and prefix-matching policy names must not match a real policy
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'a');
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'policy_retention_extra');
+SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'p');
+
 SELECT timescaledb_experimental.remove_policies('max_mat_view_date', false, 'policy_refresh_continuous_aggregate', 'policy_compression');
 SELECT timescaledb_experimental.show_policies('max_mat_view_date');
 

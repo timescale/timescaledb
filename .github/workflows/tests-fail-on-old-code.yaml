@@ -113,7 +113,8 @@ jobs:
         tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
         cd ~/$PG_SRC_DIR
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
-          --without-readline --without-zlib --without-libxml
+          --without-readline --without-zlib --without-libxml --enable-debug \
+          --enable-cassert
         make -j $(getconf _NPROCESSORS_ONLN)
 
     - name: Install PostgreSQL ${{ steps.pg.outputs.version }}

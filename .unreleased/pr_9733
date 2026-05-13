@@ -1,0 +1,2 @@
+Fixes: #9731 Avoid creating overlapping batches during recompression for multi orderby configurations
+Thanks: @h0rn3t for reporting issue with recompression creating overlapping batches

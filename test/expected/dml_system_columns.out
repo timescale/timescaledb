@@ -434,17 +434,17 @@ VACUUM FREEZE ANALYZE ht_zero_chunks;
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.ht_zero_chunks (actual rows=0.00 loops=1)
-         ->  Seq Scan on public.ht_zero_chunks (actual rows=0.00 loops=1)
+         ->  Result (actual rows=0.00 loops=1)
                Output: 1, ctid
-               Filter: (ht_zero_chunks."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
+               One-Time Filter: false
 
 :PREFIX DELETE FROM ht_zero_chunks WHERE time = '2020-01-15';
 --- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.ht_zero_chunks (actual rows=0.00 loops=1)
-         ->  Seq Scan on public.ht_zero_chunks (actual rows=0.00 loops=1)
+         ->  Result (actual rows=0.00 loops=1)
                Output: ctid
-               Filter: (ht_zero_chunks."time" = 'Wed Jan 15 00:00:00 2020 PST'::timestamp with time zone)
+               One-Time Filter: false
 
 :PREFIX UPDATE ht_zero_chunks SET v = 1 RETURNING ctid, xmin, tableoid::regclass, *;
 --- QUERY PLAN ---
@@ -452,8 +452,9 @@ VACUUM FREEZE ANALYZE ht_zero_chunks;
    Output: ctid, xmin, ((tableoid)::regclass), "time", v
    ->  Update on public.ht_zero_chunks (actual rows=0.00 loops=1)
          Output: ctid, xmin, (tableoid)::regclass, "time", v
-         ->  Seq Scan on public.ht_zero_chunks (actual rows=0.00 loops=1)
+         ->  Result (actual rows=0.00 loops=1)
                Output: 1, ctid
+               One-Time Filter: false
 
 :PREFIX DELETE FROM ht_zero_chunks RETURNING ctid, xmin, tableoid::regclass, *;
 --- QUERY PLAN ---
@@ -461,8 +462,9 @@ VACUUM FREEZE ANALYZE ht_zero_chunks;
    Output: ctid, xmin, ((tableoid)::regclass), "time", v
    ->  Delete on public.ht_zero_chunks (actual rows=0.00 loops=1)
          Output: ctid, xmin, (tableoid)::regclass, "time", v
-         ->  Seq Scan on public.ht_zero_chunks (actual rows=0.00 loops=1)
+         ->  Result (actual rows=0.00 loops=1)
                Output: ctid
+               One-Time Filter: false
 
 DROP TABLE ht_zero_chunks;
 -- UPDATE/DELETE on a hypertable that becomes a dummy rel due to

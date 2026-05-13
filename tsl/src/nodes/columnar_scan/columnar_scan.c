@@ -1175,6 +1175,27 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	chunk_rel->pathlist = NIL;
 	chunk_rel->partial_pathlist = NIL;
 
+	/*
+	 * We want to consider startup costs so that IndexScan is preferred to
+	 * sorted SeqScan when we may have a chance to use SkipScan. We consider
+	 * startup costs for LIMIT queries, and SkipScan is basically a
+	 * "LIMIT 1" query run "ndistinct" times. At this point we don't have
+	 * all information to check if SkipScan can be used, but we can narrow
+	 * it down.
+	 *
+	 * First, check if this query is candidate for SELECT DISTINCT SkipScan.
+	 */
+	const bool potential_select_distinct = list_length(root->distinct_pathkeys) >= 1;
+
+	/* Next, candidate for DISTINCT aggregate SkipScan */
+	const bool potential_distinct_aggregate =
+		root->numOrderedAggs >= 1 && list_length(root->group_pathkeys) == 1;
+
+	if (potential_select_distinct || potential_distinct_aggregate)
+	{
+		chunk_rel->consider_startup = true;
+	}
+
 	/* add RangeTblEntry and RelOptInfo for compressed chunk */
 	columnar_scan_add_plannerinfo(root,
 								  compression_info,
@@ -1192,8 +1213,6 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	}
 
 	RelOptInfo *compressed_rel = compression_info->compressed_rel;
-
-	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 
 	/* translate chunk_rel->baserestrictinfo */
 	if (ts_guc_enable_columnar_scan_filter_pushdown)
@@ -1266,25 +1285,6 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 																   uncompressed_table_pathlist,
 																   &sort_info,
 																   compression_info);
-
-		/*
-		 * We want to consider startup costs so that IndexScan is preferred to
-		 * sorted SeqScan when we may have a chance to use SkipScan. We consider
-		 * startup costs for LIMIT queries, and SkipScan is basically a
-		 * "LIMIT 1" query run "ndistinct" times. At this point we don't have
-		 * all information to check if SkipScan can be used, but we can narrow
-		 * it down.
-		 */
-		if (!chunk_rel->consider_startup && IsA(compressed_path, IndexPath))
-		{
-			/* Candidate for SELECT DISTINCT SkipScan */
-			if (list_length(root->distinct_pathkeys) == 1
-				/* Candidate for DISTINCT aggregate SkipScan */
-				|| (root->numOrderedAggs >= 1 && list_length(root->group_pathkeys) == 1))
-			{
-				chunk_rel->consider_startup = true;
-			}
-		}
 
 		/*
 		 * Add the paths to the chunk relation.
@@ -2404,6 +2404,9 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	/* translate chunk_rel->joininfo for compressed_rel */
 	compressed_rel_setup_joininfo(compressed_rel, info);
 
+	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
+	compressed_rel->consider_startup = chunk_rel->consider_startup;
+
 	/*
 	 * Force parallel plan creation, see compute_parallel_worker().
 	 * This is not compatible with ts_classify_relation(), but on the other hand
@@ -2497,6 +2500,28 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_
 	return path;
 }
 
+/*
+ * relation_byte_size, copied from costsize.c, PG 17.
+ *	  Estimate the storage space in bytes for a given number of tuples
+ *	  of a given width (size in bytes).
+ */
+static double
+ts_relation_byte_size(double tuples, int width)
+{
+	return tuples * (MAXALIGN(width) + MAXALIGN(SizeofHeapTupleHeader));
+}
+
+/*
+ * page_size, copied from costsize.c, PG 17.
+ *	  Returns an estimate of the number of pages covered by a given
+ *	  number of tuples of a given width (size in bytes).
+ */
+static double
+ts_page_size(double tuples, int width)
+{
+	return ceil(ts_relation_byte_size(tuples, width) / BLCKSZ);
+}
+
 /* NOTE: this needs to be called strictly after all restrictinfos have been added
  *       to the compressed rel
  */
@@ -2534,8 +2559,10 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	 */
 	if (compressed_rel->consider_parallel && required_outer == NULL)
 	{
+		const double effective_pages = ts_page_size(compression_info->chunk_rel->tuples,
+													compression_info->chunk_rel->reltarget->width);
 		int parallel_workers = compute_parallel_worker(compressed_rel,
-													   compressed_rel->pages,
+													   effective_pages,
 													   -1,
 													   max_parallel_workers_per_gather);
 

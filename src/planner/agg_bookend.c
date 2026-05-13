@@ -756,17 +756,6 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 
 	final_rel = query_planner(subroot, first_last_qp_callback, NULL);
 
-	/* we need to disable inheritance so the chunks are re-expanded correctly in the subroot */
-	foreach (lc, root->parse->rtable)
-	{
-		RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
-
-		if (ts_rte_is_hypertable(rte))
-		{
-			rte->inh = true;
-		}
-	}
-
 	/*
 	 * Since we didn't go through subquery_planner() to handle the subquery,
 	 * we have to do some of the same cleanup it would do, in particular cope

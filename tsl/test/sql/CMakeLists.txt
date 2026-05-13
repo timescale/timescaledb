@@ -31,7 +31,9 @@ set(TEST_FILES
     compress_compbloom_index_add.sql
     compress_compbloom_index_drop.sql
     compress_compbloom_manual_config.sql
+    compress_compbloom_naming.sql
     compress_compbloom_upsert.sql
+    compress_firstlast_sparse.sql
     compress_default.sql
     compress_dml_copy.sql
     compress_explain.sql
@@ -69,6 +71,7 @@ set(TEST_FILES
     direct_compress_insert.sql
     move.sql
     plan_skip_scan_notnull.sql
+    plan_skip_scan_pg_partition.sql
     policy_generalization.sql
     rebuild_columnstore_tests.sql
     recompression_integrity_tests.sql

@@ -32,7 +32,7 @@ BEGIN
     EXECUTE format('DROP TRIGGER IF EXISTS ts_cagg_invalidation_trigger ON %s;', rel);
   END LOOP;
   FOR rel IN SELECT format('%I.%I', schema_name, table_name)::regclass
-    FROM _timescaledb_catalog.chunk ch
+    FROM _timescaledb_catalog.chunk ch WHERE NOT dropped
   LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS ts_cagg_invalidation_trigger ON %s;', rel);
   END LOOP;
