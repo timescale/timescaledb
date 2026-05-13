@@ -2485,10 +2485,13 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				/* Flush on chunk change */
 				if (ht_state->compressor && ht_state->compressor_relid != RelationGetRelid(ctr->cis->rel))
 				{
-				  ts_cm_functions->compressor_flush(ht_state->compressor, ht_state->bulk_writer);
-				  ts_cm_functions->compressor_free(ht_state->compressor, ht_state->bulk_writer);
-				  ht_state->compressor = NULL;
-				  ht_state->compressor_relid = InvalidOid;
+					ts_cm_functions->compressor_flush(ht_state->compressor, ht_state->bulk_writer);
+					ts_cm_functions->compressor_close(ht_state->compressor, ht_state->bulk_writer);
+					pfree(ht_state->compressor);
+					pfree(ht_state->bulk_writer);
+					ht_state->compressor = NULL;
+					ht_state->compressor_relid = InvalidOid;
+					ht_state->bulk_writer = NULL;
 				}
 
 				if (!ht_state->compressor)
@@ -2814,8 +2817,11 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	if (ht_state->compressor)
 	{
 		ts_cm_functions->compressor_flush(ht_state->compressor, ht_state->bulk_writer);
-		ts_cm_functions->compressor_free(ht_state->compressor, ht_state->bulk_writer);
+		ts_cm_functions->compressor_close(ht_state->compressor, ht_state->bulk_writer);
+		pfree(ht_state->compressor);
+		pfree(ht_state->bulk_writer);
 		ht_state->compressor = NULL;
+		ht_state->compressor_relid = InvalidOid;
 		ht_state->bulk_writer = NULL;
 	}
 
