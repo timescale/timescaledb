@@ -3,11 +3,16 @@ name: Prerelease Sanity
   push:
     branches:
       - prerelease_test
+
   pull_request:
     branches: "?.*.x"
     paths:
       - version.config
+
+  pull_request:
+    paths:
       - .github/workflows/prerelease-sanity.yaml
+
   workflow_dispatch:
 
 jobs:
