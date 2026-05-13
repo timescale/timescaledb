@@ -445,11 +445,9 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY, .job_id = job_id };
 
 	/* Try to split window range into a list of ranges */
-	List *refresh_window_list =
-		continuous_agg_split_refresh_window(policy_data.cagg,
-											&policy_data.refresh_window,
-											policy_data.buckets_per_batch,
-											policy_data.refresh_newest_first);
+	List *refresh_window_list = continuous_agg_split_refresh_window(policy_data.cagg,
+																	&policy_data.refresh_window,
+																	policy_data.buckets_per_batch);
 	if (refresh_window_list == NIL)
 	{
 		refresh_window_list = lappend(refresh_window_list, &policy_data.refresh_window);
@@ -461,11 +459,20 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 
 	context.number_of_batches = list_length(refresh_window_list);
 
-	ListCell *lc;
+	/*
+	 * The list is always built oldest-first. When refresh_newest_first is true we
+	 * iterate from the last element down to the first using index-based access so
+	 * that no reversal copy of the list is needed.
+	 */
 	int32 processing_batch = 0;
-	foreach (lc, refresh_window_list)
+	int32 nbatches = list_length(refresh_window_list);
+	int32 batch_start = policy_data.refresh_newest_first ? nbatches - 1 : 0;
+	int32 batch_end = policy_data.refresh_newest_first ? -1 : nbatches;
+	int32 batch_step = policy_data.refresh_newest_first ? -1 : 1;
+	for (int32 batch_idx = batch_start; batch_idx != batch_end; batch_idx += batch_step)
 	{
-		InternalTimeRange *refresh_window = (InternalTimeRange *) lfirst(lc);
+		InternalTimeRange *refresh_window =
+			(InternalTimeRange *) list_nth(refresh_window_list, batch_idx);
 		elog(DEBUG1,
 			 "refreshing continuous aggregate \"%s\" from %s to %s",
 			 NameStr(policy_data.cagg->data.user_view_name),
@@ -553,6 +560,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 			}
 
 			/* Process each chunk in its own transaction */
+			ListCell *lc;
 			foreach (lc, chunkid_lst)
 			{
 				PushActiveSnapshot(GetTransactionSnapshot());
