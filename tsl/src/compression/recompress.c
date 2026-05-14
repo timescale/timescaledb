@@ -617,7 +617,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 			break;
 		}
 
-		/* Reset index scan if we are done with with this segment */
+		/* Reset index scan if we are done with this segment */
 		if (done_with_segment)
 		{
 			continue;
