@@ -256,10 +256,12 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	cscan->custom_plans = custom_plans;
 
 	/*
-	 * If we do either startup or runtime exclusion, we need to pass restrictinfo
-	 * clauses into executor.
+	 * Always pass per-chunk restrictinfo clauses and RT indexes into the
+	 * executor so that the three per-chunk lists (subplans, ri_clauses,
+	 * constraints) are uniformly populated.  This is required for parallel
+	 * workers that index into these lists, and keeps startup/runtime
+	 * exclusion from having to cope with missing data.
 	 */
-	if (capath->startup_exclusion || capath->runtime_exclusion_children)
 	{
 		foreach (lc_child, cscan->custom_plans)
 		{
