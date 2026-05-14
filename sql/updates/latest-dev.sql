@@ -188,3 +188,18 @@ SET index = COALESCE(index, '[]'::jsonb) ||
             )
 WHERE cs.orderby IS NOT NULL;
 
+-- Snapshot-aware catalog lookup functions. Read GetActiveSnapshot() so callers
+-- (e.g. logical decoding plugins) that install a non-default snapshot via
+-- PushActiveSnapshot() can use them.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_id_by_name(schema_name NAME, table_name NAME) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C STABLE STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_chunk_parent_id(compressed_chunk_id INTEGER) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C STABLE STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_hypertable_id(chunk_id INTEGER) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C STABLE STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.hypertable_relid_by_id(hypertable_id INTEGER) RETURNS REGCLASS
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C STABLE STRICT PARALLEL SAFE;
+

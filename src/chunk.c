@@ -49,6 +49,7 @@
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
 #include <utils/palloc.h>
+#include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
 #include <utils/typcache.h>
@@ -94,6 +95,9 @@ TS_FUNCTION_INFO_V1(ts_chunk_drop_single_chunk);
 TS_FUNCTION_INFO_V1(ts_chunk_attach_osm_table_chunk);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_osm_chunk);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
+TS_FUNCTION_INFO_V1(ts_chunk_id_by_name);
+TS_FUNCTION_INFO_V1(ts_compressed_chunk_parent_id);
+TS_FUNCTION_INFO_V1(ts_chunk_hypertable_id);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
 TS_FUNCTION_INFO_V1(ts_chunk_status);
@@ -3038,6 +3042,145 @@ ts_chunk_id_from_relid(PG_FUNCTION_ARGS)
 	last_id = form.id;
 
 	PG_RETURN_INT32(last_id);
+}
+
+/*
+ * Look up a chunk id by (schema, table) using the active snapshot.
+ *
+ * Reads the snapshot via GetActiveSnapshot() so a logical decoding plugin can
+ * install a HistoricSnapshot via PushActiveSnapshot() before invoking. Returns
+ * NULL when no matching chunk exists.
+ */
+Datum
+ts_chunk_id_by_name(PG_FUNCTION_ARGS)
+{
+	Name schema = PG_GETARG_NAME(0);
+	Name table = PG_GETARG_NAME(1);
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
+	int32 chunk_id = INVALID_CHUNK_ID;
+	bool found = false;
+
+	iterator.ctx.snapshot = GetActiveSnapshot();
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_SCHEMA_NAME_INDEX);
+
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_chunk_schema_name_idx_schema_name,
+								   BTEqualStrategyNumber,
+								   F_NAMEEQ,
+								   NameGetDatum(schema));
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_chunk_schema_name_idx_table_name,
+								   BTEqualStrategyNumber,
+								   F_NAMEEQ,
+								   NameGetDatum(table));
+
+	ts_scanner_foreach(&iterator)
+	{
+		bool isnull;
+		Datum value = slot_getattr(iterator.tinfo->slot, Anum_chunk_id, &isnull);
+
+		if (!isnull)
+		{
+			chunk_id = DatumGetInt32(value);
+			found = true;
+		}
+		break;
+	}
+	ts_scan_iterator_close(&iterator);
+
+	if (!found)
+	{
+		PG_RETURN_NULL();
+	}
+
+	PG_RETURN_INT32(chunk_id);
+}
+
+/*
+ * Look up the parent (uncompressed) chunk id from a compressed chunk id, using
+ * the active snapshot. See ts_chunk_id_by_name for snapshot semantics.
+ */
+Datum
+ts_compressed_chunk_parent_id(PG_FUNCTION_ARGS)
+{
+	int32 compressed_chunk_id = PG_GETARG_INT32(0);
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
+	int32 chunk_id = INVALID_CHUNK_ID;
+	bool found = false;
+
+	iterator.ctx.snapshot = GetActiveSnapshot();
+	iterator.ctx.index =
+		catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_COMPRESSED_CHUNK_ID_INDEX);
+
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_chunk_compressed_chunk_id_idx_compressed_chunk_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(compressed_chunk_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		bool isnull;
+		Datum value = slot_getattr(iterator.tinfo->slot, Anum_chunk_id, &isnull);
+
+		if (!isnull)
+		{
+			chunk_id = DatumGetInt32(value);
+			found = true;
+		}
+		break;
+	}
+	ts_scan_iterator_close(&iterator);
+
+	if (!found)
+	{
+		PG_RETURN_NULL();
+	}
+
+	PG_RETURN_INT32(chunk_id);
+}
+
+/*
+ * Look up the owning hypertable id of a chunk by chunk id, using the active
+ * snapshot. See ts_chunk_id_by_name for snapshot semantics.
+ */
+Datum
+ts_chunk_hypertable_id(PG_FUNCTION_ARGS)
+{
+	int32 chunk_id = PG_GETARG_INT32(0);
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
+	int32 hypertable_id = 0;
+	bool found = false;
+
+	iterator.ctx.snapshot = GetActiveSnapshot();
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
+
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_chunk_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(chunk_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		bool isnull;
+		Datum value = slot_getattr(iterator.tinfo->slot, Anum_chunk_hypertable_id, &isnull);
+
+		if (!isnull)
+		{
+			hypertable_id = DatumGetInt32(value);
+			found = true;
+		}
+		break;
+	}
+	ts_scan_iterator_close(&iterator);
+
+	if (!found)
+	{
+		PG_RETURN_NULL();
+	}
+
+	PG_RETURN_INT32(hypertable_id);
 }
 
 bool
