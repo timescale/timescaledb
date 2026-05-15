@@ -29,3 +29,41 @@ explain (analyze, buffers off, costs off, summary off, timing off)
 select * from metrics
 where ts >= (select max(ts) from metrics where id = -1)
     and id = 1;
+
+-- Issue #9645: an unnamed prepared statement with a stable
+-- timestamptz->timestamp cast on a parameter cannot be folded at plan time, so
+-- chunk exclusion is deferred to executor startup. The plan-time row estimate
+-- should reflect the chunks expected to survive that deferred exclusion
+-- rather than the full hypertable, otherwise the inflated row count cascades
+-- into bad HashAgg/join sizing.
+create table ts9645(metadata_id int not null, ts timestamp without time zone not null,
+    primary key (metadata_id, ts));
+select create_hypertable('ts9645', by_range('ts', interval '1 hour'));
+insert into ts9645
+select 1, '2026-04-01 12:00:00'::timestamp - (i || ' hours')::interval
+from generate_series(0, 99) i;
+analyze ts9645;
+
+prepare q9645(timestamptz) as
+select count(*) from ts9645 where ts > $1::timestamp without time zone group by metadata_id;
+
+-- Filter excludes all 100 chunks at startup; ChunkAppend's Plan Rows should
+-- reflect that (~1 chunk's worth), not all 100 chunks. Extract just the
+-- ChunkAppend row estimate from the JSON plan to keep the assertion stable
+-- across cost-model tweaks.
+do $$
+declare
+    plan jsonb;
+    chunkappend_rows int;
+begin
+    execute 'explain (format json) execute q9645(''3000-01-01 00:00:00+00''::timestamptz)' into plan;
+    chunkappend_rows := (jsonb_path_query_first(plan,
+        '$.** ? (@."Custom Plan Provider" == "ChunkAppend")."Plan Rows"'))::int;
+    if chunkappend_rows > 5 then
+        raise exception '#9645: ChunkAppend Plan Rows = %, expected <= 5 once startup-exclusion-aware costing kicks in',
+            chunkappend_rows;
+    end if;
+end$$;
+
+deallocate q9645;
+drop table ts9645;

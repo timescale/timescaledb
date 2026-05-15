@@ -45,6 +45,14 @@ typedef struct ChunkAppendPath
 	bool pushdown_limit;
 	int limit_tuples;
 	int first_partial_path;
+	/*
+	 * Estimated fraction of children that survive startup exclusion. Used to
+	 * scale the row/cost estimates we hand to upstream planning. 1.0 means
+	 * no discount (no exclusion expected, or estimation declined to discount).
+	 * The estimate is purely advisory; the actual exclusion happens at
+	 * executor startup regardless.
+	 */
+	double startup_exclusion_ratio;
 } ChunkAppendPath;
 
 extern TSDLLEXPORT ChunkAppendPath *ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths,
