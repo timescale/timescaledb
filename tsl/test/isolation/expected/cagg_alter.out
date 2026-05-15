@@ -1,0 +1,59 @@
+Parsed test spec with 4 sessions
+
+starting permutation: l1_lock s1_add_column l1_unlock s1_add_column_commit s3_select
+step l1_lock: 
+    BEGIN;
+    LOCK TABLE cagg_test IN ACCESS SHARE MODE;
+
+step s1_add_column: 
+    BEGIN;
+    SELECT add_continuous_aggregate_column('cagg_test', 'sum(humidity) AS sum_humidity');
+ <waiting ...>
+step l1_unlock: 
+    ROLLBACK;
+
+step s1_add_column: <... completed>
+add_continuous_aggregate_column
+-------------------------------
+                               
+
+step s1_add_column_commit: 
+    COMMIT;
+
+step s3_select: 
+    SELECT * FROM cagg_test ORDER BY bucket, device;
+
+bucket|device|avg_temp|sum_humidity
+------+------+--------+------------
+
+
+starting permutation: s1_add_column s2_add_column s1_add_column_commit s2_add_column_commit s3_select
+step s1_add_column: 
+    BEGIN;
+    SELECT add_continuous_aggregate_column('cagg_test', 'sum(humidity) AS sum_humidity');
+
+add_continuous_aggregate_column
+-------------------------------
+                               
+
+step s2_add_column: 
+    BEGIN;
+    SELECT add_continuous_aggregate_column('cagg_test', 'max(pressure) AS max_pressure');
+ <waiting ...>
+step s1_add_column_commit: 
+    COMMIT;
+
+step s2_add_column: <... completed>
+add_continuous_aggregate_column
+-------------------------------
+                               
+
+step s2_add_column_commit: 
+    COMMIT;
+
+step s3_select: 
+    SELECT * FROM cagg_test ORDER BY bucket, device;
+
+bucket|device|avg_temp|sum_humidity|max_pressure
+------+------+--------+------------+------------
+
