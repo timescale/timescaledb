@@ -1126,21 +1126,26 @@ SELECT
 FROM (VALUES ('2000-01-01'::timestamptz),('2000-02-01'::timestamptz)) v(time)
 GROUP BY 1;
 ERROR:  invalid time_bucket_gapfill argument: bucket_width must be greater than 0
--- test subqueries as interval, start and stop (not supported atm)
+-- nonsimple expression (var) as gapfill bucket width, start and finish
 SELECT
-  time_bucket_gapfill((SELECT 1),time,1,11)
-FROM (VALUES (1),(2)) v(time)
-GROUP BY 1;
+  time_bucket_gapfill(polling_interval,time),
+  m1.device_id,
+  locf(avg(v1))
+FROM metrics_tstz m1, (VALUES(1, '10m'::interval),(2, '20m'::interval), (3, '30m'::interval)) dev(device_id, polling_interval)
+WHERE m1.device_id = dev.device_id AND time >= (select min(time) from  metrics_tstz m2) AND time < (select max(time) from  metrics_tstz m2)
+GROUP BY 1,2 ORDER BY 2,1;
 ERROR:  invalid time_bucket_gapfill argument: bucket_width must be a simple expression
 SELECT
-  time_bucket_gapfill(1,time,(SELECT 1),11)
-FROM (VALUES (1),(2)) v(time)
-GROUP BY 1;
+  time_bucket_gapfill(1, time, time - 10, 100),
+  locf(avg(value))
+FROM metrics_int m1
+GROUP BY 1 ORDER BY 1;
 ERROR:  invalid time_bucket_gapfill argument: start must be a simple expression
 SELECT
-  time_bucket_gapfill(1,time,1,(SELECT 11))
-FROM (VALUES (1),(2)) v(time)
-GROUP BY 1;
+  time_bucket_gapfill(1, time, -100, time + 10),
+  locf(avg(value))
+FROM metrics_int m1
+GROUP BY 1 ORDER BY 1;
 ERROR:  invalid time_bucket_gapfill argument: finish must be a simple expression
 \set ON_ERROR_STOP 1
 -- test time_bucket_gapfill without aggregation
@@ -3448,3 +3453,304 @@ EXECUTE coalesce_tz_test(NULL);
 DEALLOCATE coalesce_tz_test;
 RESET plan_cache_mode;
 DROP TABLE gf_tz_test;
+-- test subqueries as bucket width, start and stop
+SELECT
+  time_bucket_gapfill((SELECT 1),time,1,11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill 
+---------------------
+                   1
+                   2
+                   3
+                   4
+                   5
+                   6
+                   7
+                   8
+                   9
+                  10
+
+SELECT
+  time_bucket_gapfill(1,time,(SELECT 1),11)
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill 
+---------------------
+                   1
+                   2
+                   3
+                   4
+                   5
+                   6
+                   7
+                   8
+                   9
+                  10
+
+SELECT
+  time_bucket_gapfill(1,time,1,(SELECT 11))
+FROM (VALUES (1),(2)) v(time)
+GROUP BY 1;
+ time_bucket_gapfill 
+---------------------
+                   1
+                   2
+                   3
+                   4
+                   5
+                   6
+                   7
+                   8
+                   9
+                  10
+
+-- Fill gaps between min and max time in the table
+SELECT
+  time_bucket_gapfill('10m'::interval,time),
+  locf(avg(v1))
+FROM metrics_tstz m1
+WHERE time >= (select min(time) from  metrics_tstz m2) AND time < (select max(time) from  metrics_tstz m2)
+GROUP BY 1 ORDER BY 1;
+     time_bucket_gapfill      | locf 
+------------------------------+------
+ Mon Jan 01 05:00:00 2018 PST |  0.7
+ Mon Jan 01 05:10:00 2018 PST |  0.7
+ Mon Jan 01 05:20:00 2018 PST |  0.7
+ Mon Jan 01 05:30:00 2018 PST |  0.7
+ Mon Jan 01 05:40:00 2018 PST |  0.7
+ Mon Jan 01 05:50:00 2018 PST |  0.7
+ Mon Jan 01 06:00:00 2018 PST |  0.7
+ Mon Jan 01 06:10:00 2018 PST |  0.7
+ Mon Jan 01 06:20:00 2018 PST |  0.7
+ Mon Jan 01 06:30:00 2018 PST |  0.7
+ Mon Jan 01 06:40:00 2018 PST |  0.7
+ Mon Jan 01 06:50:00 2018 PST |  0.7
+
+-- Fill gaps between min and max time in the table for each device
+SELECT
+  time_bucket_gapfill('20m'::interval,time),
+  device_id,
+  locf(avg(v1))
+FROM metrics_tstz m1
+WHERE time >= (select min(time) from  metrics_tstz m2) AND time < (select max(time) from  metrics_tstz m2)
+GROUP BY 1,2 ORDER BY 2,1;
+     time_bucket_gapfill      | device_id | locf 
+------------------------------+-----------+------
+ Mon Jan 01 05:00:00 2018 PST |         1 |  0.5
+ Mon Jan 01 05:20:00 2018 PST |         1 |  0.5
+ Mon Jan 01 05:40:00 2018 PST |         1 |  0.5
+ Mon Jan 01 06:00:00 2018 PST |         1 |  0.5
+ Mon Jan 01 06:20:00 2018 PST |         1 |  0.5
+ Mon Jan 01 06:40:00 2018 PST |         1 |  0.5
+ Mon Jan 01 05:00:00 2018 PST |         2 |  0.7
+ Mon Jan 01 05:20:00 2018 PST |         2 |  0.7
+ Mon Jan 01 05:40:00 2018 PST |         2 |  0.7
+ Mon Jan 01 06:00:00 2018 PST |         2 |  0.7
+ Mon Jan 01 06:20:00 2018 PST |         2 |  0.7
+ Mon Jan 01 06:40:00 2018 PST |         2 |  0.7
+ Mon Jan 01 05:00:00 2018 PST |         3 |  0.9
+ Mon Jan 01 05:20:00 2018 PST |         3 |  0.9
+ Mon Jan 01 05:40:00 2018 PST |         3 |  0.9
+ Mon Jan 01 06:00:00 2018 PST |         3 |  0.9
+ Mon Jan 01 06:20:00 2018 PST |         3 |  0.9
+ Mon Jan 01 06:40:00 2018 PST |         3 |  0.9
+
+-- Fill gaps with individual bucket width for each device
+SELECT sq.device_id, bucket, value
+FROM (VALUES(1, '10m'::interval),(2, '20m'::interval), (3, '30m'::interval)) dev(device_id, polling_interval)
+INNER JOIN LATERAL (
+  SELECT
+  time_bucket_gapfill(dev.polling_interval,time) bucket,
+  m1.device_id,
+  locf(avg(v1)) value
+  FROM metrics_tstz m1
+  WHERE m1.device_id = dev.device_id AND time >= (select min(time) from  metrics_tstz m2) AND time < (select max(time) from  metrics_tstz m2)
+  GROUP BY 1,2) sq ON (true)
+ORDER BY 1,2;
+ device_id |            bucket            | value 
+-----------+------------------------------+-------
+         1 | Mon Jan 01 05:00:00 2018 PST |   0.5
+         1 | Mon Jan 01 05:10:00 2018 PST |   0.5
+         1 | Mon Jan 01 05:20:00 2018 PST |   0.5
+         1 | Mon Jan 01 05:30:00 2018 PST |   0.5
+         1 | Mon Jan 01 05:40:00 2018 PST |   0.5
+         1 | Mon Jan 01 05:50:00 2018 PST |   0.5
+         1 | Mon Jan 01 06:00:00 2018 PST |   0.5
+         1 | Mon Jan 01 06:10:00 2018 PST |   0.5
+         1 | Mon Jan 01 06:20:00 2018 PST |   0.5
+         1 | Mon Jan 01 06:30:00 2018 PST |   0.5
+         1 | Mon Jan 01 06:40:00 2018 PST |   0.5
+         1 | Mon Jan 01 06:50:00 2018 PST |   0.5
+         2 | Mon Jan 01 05:00:00 2018 PST |   0.7
+         2 | Mon Jan 01 05:20:00 2018 PST |   0.7
+         2 | Mon Jan 01 05:40:00 2018 PST |   0.7
+         2 | Mon Jan 01 06:00:00 2018 PST |   0.7
+         2 | Mon Jan 01 06:20:00 2018 PST |   0.7
+         2 | Mon Jan 01 06:40:00 2018 PST |   0.7
+         3 | Mon Jan 01 05:00:00 2018 PST |   0.9
+         3 | Mon Jan 01 05:30:00 2018 PST |   0.9
+         3 | Mon Jan 01 06:00:00 2018 PST |   0.9
+         3 | Mon Jan 01 06:30:00 2018 PST |   0.9
+
+-- See that EXPLAIN shows nested loop.
+set enable_indexscan = 0;
+set enable_bitmapscan = 0;
+\set PREFIX 'EXPLAIN (buffers off, costs off, timing off, summary off)'
+:PREFIX
+SELECT sq.device_id, bucket, value
+FROM (VALUES(1, '10m'::interval),(2, '20m'::interval), (3, '30m'::interval)) dev(device_id, polling_interval)
+INNER JOIN LATERAL (
+  SELECT
+  time_bucket_gapfill(dev.polling_interval,time) bucket,
+  m1.device_id,
+  locf(avg(v1)) value
+  FROM metrics_tstz m1
+  WHERE m1.device_id = dev.device_id AND time >= (select min(time) from  metrics_tstz m2) AND time < (select max(time) from  metrics_tstz m2)
+  GROUP BY 1,2) sq ON (true)
+ORDER BY 1,2;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: m1.device_id, (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+   ->  Nested Loop
+         ->  Values Scan on "*VALUES*"
+         ->  Custom Scan (GapFill)
+               InitPlan 1
+                 ->  Aggregate
+                       ->  Seq Scan on _hyper_X_X_chunk m2
+               InitPlan 2
+                 ->  Aggregate
+                       ->  Seq Scan on _hyper_X_X_chunk m2_1
+               ->  GroupAggregate
+                     Group Key: (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+                     ->  Sort
+                           Sort Key: (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+                           ->  Result
+                                 ->  Custom Scan (ChunkAppend) on metrics_tstz m1
+                                       ->  Seq Scan on _hyper_X_X_chunk m1_1
+                                             Filter: (("time" >= (InitPlan 1).col1) AND ("time" < (InitPlan 2).col1) AND (device_id = "*VALUES*".column1))
+
+-- Same as above with correlated subquery in locf
+SELECT sq.device_id, bucket, value
+FROM (VALUES(1, '10m'::interval),(2, '20m'::interval), (3, '30m'::interval)) dev(device_id, polling_interval)
+INNER JOIN LATERAL (
+  SELECT
+  time_bucket_gapfill(dev.polling_interval,time) bucket,
+  m1.device_id,
+  locf(
+    (SELECT avg(v1 + v2/100.0) FROM metrics_tstz m2 WHERE m1.device_id=m2.device_id)
+  ) value
+  FROM metrics_tstz m1
+  WHERE m1.device_id = dev.device_id AND time >= (select min(time) from  metrics_tstz m2) AND time < (select max(time) from  metrics_tstz m2)
+  GROUP BY 1,2) sq ON (true)
+ORDER BY 1,2;
+ device_id |            bucket            | value 
+-----------+------------------------------+-------
+         1 | Mon Jan 01 05:00:00 2018 PST |   0.3
+         1 | Mon Jan 01 05:10:00 2018 PST |   0.3
+         1 | Mon Jan 01 05:20:00 2018 PST |   0.3
+         1 | Mon Jan 01 05:30:00 2018 PST |   0.3
+         1 | Mon Jan 01 05:40:00 2018 PST |   0.3
+         1 | Mon Jan 01 05:50:00 2018 PST |   0.3
+         1 | Mon Jan 01 06:00:00 2018 PST |   0.3
+         1 | Mon Jan 01 06:10:00 2018 PST |   0.3
+         1 | Mon Jan 01 06:20:00 2018 PST |   0.3
+         1 | Mon Jan 01 06:30:00 2018 PST |   0.3
+         1 | Mon Jan 01 06:40:00 2018 PST |   0.3
+         1 | Mon Jan 01 06:50:00 2018 PST |   0.3
+         2 | Mon Jan 01 05:00:00 2018 PST |  1.35
+         2 | Mon Jan 01 05:20:00 2018 PST |  1.35
+         2 | Mon Jan 01 05:40:00 2018 PST |  1.35
+         2 | Mon Jan 01 06:00:00 2018 PST |  1.35
+         2 | Mon Jan 01 06:20:00 2018 PST |  1.35
+         2 | Mon Jan 01 06:40:00 2018 PST |  1.35
+         3 | Mon Jan 01 05:00:00 2018 PST |   1.2
+         3 | Mon Jan 01 05:30:00 2018 PST |   1.2
+         3 | Mon Jan 01 06:00:00 2018 PST |   1.2
+         3 | Mon Jan 01 06:30:00 2018 PST |   1.2
+
+:PREFIX
+SELECT sq.device_id, bucket, value
+FROM (VALUES(1, '10m'::interval),(2, '20m'::interval), (3, '30m'::interval)) dev(device_id, polling_interval)
+INNER JOIN LATERAL (
+  SELECT
+  time_bucket_gapfill(dev.polling_interval,time) bucket,
+  m1.device_id,
+  locf(
+    (SELECT avg(v1 + v2/100.0) FROM metrics_tstz m2 WHERE m1.device_id=m2.device_id)
+  ) value
+  FROM metrics_tstz m1
+  WHERE m1.device_id = dev.device_id AND time >= (select min(time) from  metrics_tstz m2) AND time < (select max(time) from  metrics_tstz m2)
+  GROUP BY 1,2) sq ON (true)
+ORDER BY 1,2;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: m1.device_id, (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+   ->  Nested Loop
+         ->  Values Scan on "*VALUES*"
+         ->  Custom Scan (GapFill)
+               InitPlan 2
+                 ->  Aggregate
+                       ->  Seq Scan on _hyper_X_X_chunk m2_2
+               InitPlan 3
+                 ->  Aggregate
+                       ->  Seq Scan on _hyper_X_X_chunk m2_3
+               ->  Group
+                     Group Key: (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+                     ->  Sort
+                           Sort Key: (time_bucket_gapfill("*VALUES*".column2, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+                           ->  Result
+                                 ->  Custom Scan (ChunkAppend) on metrics_tstz m1
+                                       ->  Seq Scan on _hyper_X_X_chunk m1_1
+                                             Filter: (("time" >= (InitPlan 2).col1) AND ("time" < (InitPlan 3).col1) AND (device_id = "*VALUES*".column1))
+                     SubPlan 1
+                       ->  Aggregate
+                             ->  Custom Scan (ChunkAppend) on metrics_tstz m2
+                                   ->  Seq Scan on _hyper_X_X_chunk m2_1
+                                         Filter: (m1.device_id = device_id)
+
+-- Cannot infer start boundary as it's a SubPlan for correlated subquery
+:PREFIX SELECT
+  time_bucket_gapfill('20m'::interval,time),
+  device_id,
+  locf(avg(v1))
+FROM metrics_tstz m1
+WHERE time >= (select min(time) from  metrics_tstz m2 where m2.device_id = m1.device_id)
+AND time < (select max(time) from  metrics_tstz m2)
+GROUP BY 1,2 ORDER BY 2,1;
+--- QUERY PLAN ---
+ Custom Scan (GapFill)
+   InitPlan 3
+     ->  Aggregate
+           ->  Seq Scan on _hyper_X_X_chunk m2_2
+   ->  GroupAggregate
+         Group Key: m1.device_id, (time_bucket_gapfill('@ 20 mins'::interval, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+         ->  Sort
+               Sort Key: m1.device_id, (time_bucket_gapfill('@ 20 mins'::interval, m1."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+               ->  Result
+                     ->  Custom Scan (ChunkAppend) on metrics_tstz m1
+                           ->  Seq Scan on _hyper_X_X_chunk m1_1
+                                 Filter: (("time" < (InitPlan 3).col1) AND ("time" >= (SubPlan 2)))
+                                 SubPlan 2
+                                   ->  Result
+                                         InitPlan 1
+                                           ->  Limit
+                                                 ->  Custom Scan (ChunkAppend) on metrics_tstz m2
+                                                       Order: m2."time"
+                                                       ->  Index Scan Backward using _hyper_X_X_chunk_metrics_tstz_time_idx on _hyper_X_X_chunk m2_1
+                                                             Filter: (device_id = m1_1.device_id)
+
+\set ON_ERROR_STOP 0
+SELECT
+  time_bucket_gapfill('20m'::interval,time),
+  device_id,
+  locf(avg(v1))
+FROM metrics_tstz m1
+WHERE time >= (select min(time) from  metrics_tstz m2 where m2.device_id = m1.device_id)
+AND time < (select max(time) from  metrics_tstz m2)
+GROUP BY 1,2 ORDER BY 2,1;
+ERROR:  missing time_bucket_gapfill argument: could not infer start from WHERE clause
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+\set ON_ERROR_STOP 1
+reset enable_indexscan;
+reset enable_bitmapscan;

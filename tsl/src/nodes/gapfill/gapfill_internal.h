@@ -46,6 +46,7 @@
  */
 typedef enum GapFillFetchState
 {
+	PREFETCH,
 	FETCHED_NONE,
 	FETCHED_ONE,
 	FETCHED_NEXT_GROUP,

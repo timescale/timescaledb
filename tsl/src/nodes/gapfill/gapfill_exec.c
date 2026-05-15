@@ -319,7 +319,8 @@ is_simple_expr_walker(Node *node, void *context)
 		case T_CaseWhen:
 			break;
 		case T_Param:
-			if (castNode(Param, node)->paramkind != PARAM_EXTERN)
+			if (castNode(Param, node)->paramkind != PARAM_EXTERN &&
+				castNode(Param, node)->paramkind != PARAM_EXEC)
 			{
 				return true;
 			}
@@ -799,29 +800,11 @@ gapfill_advance_timestamp(GapFillState *state)
 	}
 }
 
-/*
- * Initialize the scan state
- */
 static void
-gapfill_begin(CustomScanState *node, EState *estate, int eflags)
+gapfill_initialize_arguments(GapFillState *state)
 {
-	GapFillState *state = (GapFillState *) node;
-	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
-
-	/*
-	 * this is the time_bucket_gapfill call from the plan which is used to
-	 * extract arguments and to align gapfill_start
-	 */
-	FuncExpr *func = list_nth(cscan->custom_private, GFP_GapfillFunc);
-	TupleDesc tupledesc = state->csstate.ss.ps.ps_ResultTupleSlot->tts_tupleDescriptor;
-	List *targetlist = copyObject(state->csstate.ss.ps.plan->targetlist);
 	bool isnull;
 	Datum arg_value;
-
-	state->gapfill_typid = func->funcresulttype;
-	state->state = FETCHED_NONE;
-	state->subslot = MakeSingleTupleTableSlot(tupledesc, &TTSOpsVirtual);
-	state->scanslot = MakeSingleTupleTableSlot(tupledesc, &TTSOpsVirtual);
 
 	/* bucket_width */
 	if (!is_simple_expr(linitial(state->args)))
@@ -840,7 +823,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 				 errmsg("invalid time_bucket_gapfill argument: bucket_width cannot be NULL")));
 	}
 
-	state->gapfill_period = gapfill_period_get_internal(func->funcresulttype,
+	state->gapfill_period = gapfill_period_get_internal(state->gapfill_typid,
 														exprType(linitial(state->args)),
 														arg_value,
 														&state->gapfill_interval);
@@ -907,8 +890,31 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 					 errhint("Specify start and finish as arguments or in the WHERE clause.")));
 		}
 
-		state->gapfill_end = gapfill_datum_get_internal(arg_value, func->funcresulttype);
+		state->gapfill_end = gapfill_datum_get_internal(arg_value, state->gapfill_typid);
 	}
+}
+
+/*
+ * Initialize the scan state
+ */
+static void
+gapfill_begin(CustomScanState *node, EState *estate, int eflags)
+{
+	GapFillState *state = (GapFillState *) node;
+	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
+
+	/*
+	 * this is the time_bucket_gapfill call from the plan which is used to
+	 * extract arguments and to align gapfill_start
+	 */
+	FuncExpr *func = list_nth(cscan->custom_private, GFP_GapfillFunc);
+	TupleDesc tupledesc = state->csstate.ss.ps.ps_ResultTupleSlot->tts_tupleDescriptor;
+	List *targetlist = copyObject(state->csstate.ss.ps.plan->targetlist);
+
+	state->gapfill_typid = func->funcresulttype;
+	state->state = PREFETCH;
+	state->subslot = MakeSingleTupleTableSlot(tupledesc, &TTSOpsVirtual);
+	state->scanslot = MakeSingleTupleTableSlot(tupledesc, &TTSOpsVirtual);
 
 	gapfill_state_initialize_columns(state, targetlist);
 
@@ -938,6 +944,12 @@ gapfill_exec(CustomScanState *node)
 	while (true)
 	{
 		CHECK_FOR_INTERRUPTS();
+
+		if (PREFETCH == state->state)
+		{
+			gapfill_initialize_arguments(state);
+			state->state = FETCHED_NONE;
+		}
 
 		/* fetch next tuple from subplan */
 		if (FETCHED_NONE == state->state)
@@ -1043,6 +1055,7 @@ gapfill_rescan(CustomScanState *node)
 		ExecReScan(linitial(node->custom_ps));
 	}
 
+	gapfill_initialize_arguments(state);
 	state->state = FETCHED_NONE;
 	state->next_timestamp = state->gapfill_start;
 	state->next_offset = state->gapfill_interval;
