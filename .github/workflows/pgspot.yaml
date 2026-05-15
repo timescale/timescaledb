@@ -53,7 +53,12 @@ jobs:
         previous_version=$(grep '^previous_version = ' version.config | sed -e 's!^[^=]\+ = !!')
         git fetch --tags
         ./bootstrap -DGENERATE_DOWNGRADE_SCRIPT=ON
-        git checkout ${previous_version}
+        # version.config in 2.27.0 tag is incorrect and will produce wrong sql files
+        if [ "${previous_version}" == "2.27.0" ]; then
+          git checkout 2.27.0-p0
+        else
+          git checkout ${previous_version}
+        fi
         make -C build sqlfile sqlupdatescripts
         git checkout ${GITHUB_SHA}
         make -C build sqlfile sqlupdatescripts
