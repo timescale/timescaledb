@@ -768,6 +768,20 @@ insert_columnar_index_scan(Plan *plan, void *context)
 		return plan;
 	}
 
+	/*
+	 * Every group-by column must reach the Agg as a bare Var. A wrapper such
+	 * as GROUP BY (col)::text would leave the Agg's grpOperators bound to the
+	 * wrapper's type after the rewrite drops the wrapper.
+	 */
+	for (int k = 0; k < agg->numCols; k++)
+	{
+		TargetEntry *tle = list_nth_node(TargetEntry, childplan->targetlist, agg->grpColIdx[k] - 1);
+		if (!IsA(tle->expr, Var))
+		{
+			return plan;
+		}
+	}
+
 	Plan *result = columnar_index_scan_plan_create(agg, cscan, rtable);
 	if (result == NULL)
 	{

@@ -132,3 +132,17 @@ SET timescaledb.enable_columnarindexscan = on;
 -- compare optimized vs non-optimized results
 :DIFF_CMD
 
+
+-- GROUP BY a cast of a segmentby column whose underlying type differs from the cast's output type
+CREATE TABLE cast_grp(ts timestamptz NOT NULL, device_id int) WITH (
+    tsdb.hypertable, tsdb.orderby='ts', tsdb.segmentby='device_id');
+INSERT INTO cast_grp VALUES ('2025-01-01', 1), ('2025-01-01', 2);
+SELECT compress_chunk(c) FROM show_chunks('cast_grp') c;
+
+SELECT format('%I.%I', chunk_schema, chunk_name) AS "CAST_CHUNK"
+FROM timescaledb_information.chunks WHERE hypertable_name = 'cast_grp' \gset
+
+SET timescaledb.enable_columnarindexscan = on;
+EXPLAIN (costs off) SELECT count(*) FROM :CAST_CHUNK GROUP BY (device_id)::text;
+SELECT count(*) FROM :CAST_CHUNK GROUP BY (device_id)::text ORDER BY 1;
+
