@@ -768,6 +768,19 @@ insert_columnar_index_scan(Plan *plan, void *context)
 		return plan;
 	}
 
+	/*
+	 * Every group-by column must reach the Agg as a bare Var.
+	 * Grouping by expression is currently not supported.
+	 */
+	for (int k = 0; k < agg->numCols; k++)
+	{
+		TargetEntry *tle = list_nth_node(TargetEntry, childplan->targetlist, agg->grpColIdx[k] - 1);
+		if (!IsA(tle->expr, Var))
+		{
+			return plan;
+		}
+	}
+
 	Plan *result = columnar_index_scan_plan_create(agg, cscan, rtable);
 	if (result == NULL)
 	{
