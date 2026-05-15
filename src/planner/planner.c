@@ -7,6 +7,7 @@
 #include <access/tsmapi.h>
 #include <access/xact.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_inherits.h>
 #include <commands/extension.h>
 #include <executor/nodeAgg.h>
 #include <miscadmin.h>
@@ -447,20 +448,10 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 					if (ht)
 					{
 						/*
-						 * Mark hypertable RTEs we'd like to expand ourselves.
-						 * We always do this for SELECTs from hypertables.
-						 *
-						 * For DML, we also always expand the non-target relations.
-						 *
-						 * The hypertables that are not expanded by our custom code
-						 * here fall back to the standard Postgres inheritance
-						 * hierarchy expansion.
+						 * Hypertable expansion marking is done in the
+						 * get_relation_info_hook, which also handles
+						 * hypertables appearing after function	or view inlining.
 						 */
-						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-							rte->inh && (Index) query->resultRelation != rti)
-						{
-							rte_mark_for_expansion(rte);
-						}
 
 						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 						{
@@ -1490,20 +1481,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 			break;
 
 		case TS_REL_HYPERTABLE:
-			/*
-			 * Set the indexlist for a hypertable parent to NIL since we
-			 * should not try to do any index scans on hypertable parents,
-			 * similar to how it works for partitioned tables.
-			 *
-			 * This can happen when building a merge join path and computing
-			 * cost for it. See get_actual_variable_range().
-			 *
-			 * This has to be after the hypertable is expanded, since the
-			 * indexlist is used during hypertable expansion.
-			 */
-
-			rel->indexlist = NIL;
-
 			if (!rte->inh)
 			{
 				/*
@@ -1555,15 +1532,21 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 		{
 			/*
 			 * Mark hypertable RTEs we'd like to expand ourselves.
-			 * Hypertables inside inlineable functions don't get marked during
-			 * the query preprocessing step handled in preprocess_query().
-			 * Therefore we do an extra try here.
+			 * We always do this for SELECTs from hypertables.
 			 *
-			 * For the explanation of the logic, see the comments in
-			 * preprocess_query().
+			 * For DML, we also always expand the non-target relations.
+			 *
+			 * The hypertables that are not expanded by our custom code
+			 * here fall back to the standard Postgres inheritance
+			 * hierarchy expansion.
+			 *
+			 * `inhparent` goes to false in two cases: a hypertable without
+			 * chunks or a SELECT FROM ONLY hypertable. We still want to run our
+			 * hypertable expansion code for hypertables w/o chunks.
 			 */
-			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
-				rte->ctename == NULL && rel->relid != (Index) query->resultRelation)
+			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
+				(inhparent || !has_subclass(rte->relid)) && rte->ctename == NULL &&
+				rel->relid != (Index) query->resultRelation)
 			{
 				rte_mark_for_expansion(rte);
 			}
