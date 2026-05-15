@@ -416,8 +416,10 @@ route_next_compressed_tuple(TupleTableSlot *slot, SplitContext *scontext, int *r
 
 		tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
 
-		RowDecompressor decompressor =
-			build_decompressor(slot->tts_tupleDescriptor, csp->noncompressed_tupdesc);
+		RowDecompressor decompressor = build_decompressor(slot->tts_tupleDescriptor,
+														  csp->noncompressed_tupdesc,
+														  csettings->fd.compress_relid,
+														  csettings->fd.relid);
 
 		heap_deform_tuple(tuple,
 						  decompressor.in_desc,

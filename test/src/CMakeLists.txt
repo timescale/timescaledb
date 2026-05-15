@@ -5,6 +5,7 @@ set(SOURCES
     test_compression_settings.c
     test_bmslist_utils.c
     test_jsonb_utils.c
+    test_observ_lru.c
     test_scanner.c
     test_time_to_internal.c
     test_time_utils.c

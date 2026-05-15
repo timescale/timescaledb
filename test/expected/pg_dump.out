@@ -462,6 +462,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
  timescaledb_information.job_history
  timescaledb_information.job_stats
  timescaledb_information.jobs
+ timescaledb_information.stat_chunk_activity
 
 -- Make sure we can't run our restoring functions as a normal perm user as that would disable functionality for the whole db
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

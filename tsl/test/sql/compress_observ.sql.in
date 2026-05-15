@@ -1,0 +1,154 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+-- Test the integration of the compression and observability features
+
+CREATE TABLE t(ts timestamptz, a int, b int, c int, seg int);
+SELECT create_hypertable('t', by_range('ts', interval '1 day'));
+
+CREATE VIEW observ AS
+SELECT
+      -- skip the OIDs for test stability:
+      -- compressed_relid,
+      -- uncompressed_relid,
+      compressed_batch_count,                compressed_block_count,
+      compressed_batch_rows_min,             compressed_batch_rows_max,
+      compressed_batch_rows_sum,             compressed_batch_rows_sqsum,
+      compressed_batch_bytes_min,            compressed_batch_bytes_max,
+      compressed_batch_bytes_sum,            compressed_batch_bytes_sqsum,
+      compressed_block_bytes_min,            compressed_block_bytes_max,
+      compressed_block_bytes_sum,            compressed_block_bytes_sqsum,
+      -- op totals
+      total_batches_deleted,                 total_batches_decompressed,
+      total_tuples_decompressed,             total_batches_scanned,
+      total_batches_checked_by_bloom,        total_batches_pruned_by_bloom,
+      total_batches_without_bloom,           total_batches_bloom_false_positives,
+      total_batches_filtered_compressed,     total_batches_filtered_decompressed,
+      -- last op
+      last_op_batches_deleted,               last_op_batches_decompressed,
+      last_op_tuples_decompressed,           last_op_batches_scanned,
+      last_op_batches_checked_by_bloom,      last_op_batches_pruned_by_bloom,
+      last_op_batches_without_bloom,         last_op_batches_bloom_false_positives,
+      last_op_batches_filtered_compressed,   last_op_batches_filtered_decompressed,
+      -- op counters
+      n_selects, n_inserts, n_updates, n_deletes
+      -- skip the below two for test stability:
+      -- first_update,
+      -- last_update
+FROM
+(
+      SELECT * FROM _timescaledb_functions.chunk_statistics()
+      ORDER BY last_update ASC, compressed_relid ASC, uncompressed_relid ASC
+) sub;
+
+CREATE VIEW observ_main_view AS
+SELECT
+      chunk,  compressed_chunk,
+      chunk_id,  hypertable_id, hypertable,
+      -- compression stats
+      compressed_batch_count,                compressed_block_count,
+      compressed_batch_rows_min,             compressed_batch_rows_max,
+      compressed_batch_rows_avg,             compressed_batch_rows_stddev,
+      compressed_batch_bytes_min,            compressed_batch_bytes_max,
+      compressed_batch_bytes_avg,            compressed_batch_bytes_stddev,
+      compressed_block_bytes_min,            compressed_block_bytes_max,
+      compressed_block_bytes_avg,            compressed_block_bytes_stddev,
+      -- op totals
+      total_batches_deleted,                 total_batches_decompressed,
+      total_tuples_decompressed,             total_batches_scanned,
+      total_batches_checked_by_bloom,        total_batches_pruned_by_bloom,
+      total_batches_without_bloom,           total_batches_bloom_false_positives,
+      total_batches_filtered_compressed,     total_batches_filtered_decompressed,
+      -- last op stats
+      last_op_batches_deleted,               last_op_batches_decompressed,
+      last_op_tuples_decompressed,           last_op_batches_scanned,
+      last_op_batches_checked_by_bloom,      last_op_batches_pruned_by_bloom,
+      last_op_batches_without_bloom,         last_op_batches_bloom_false_positives,
+      last_op_batches_filtered_compressed,   last_op_batches_filtered_decompressed,
+      -- op counters
+      n_selects, n_inserts, n_updates, n_deletes
+      -- these will make the test flaky, so skip them:
+      -- first_update,
+      -- last_update
+FROM
+(
+      SELECT *
+      FROM timescaledb_information.stat_chunk_activity
+      ORDER BY last_update ASC, hypertable_id ASC, chunk_id ASC
+) sub;
+
+-- Initial config: bloom(a,b)
+ALTER TABLE t SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'seg',
+    timescaledb.compress_orderby = 'ts',
+    timescaledb.compress_index = 'bloom(a,b)'
+);
+
+INSERT INTO t
+SELECT ts, (i % 10), (i % 5), (i % 3), 1
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-03', interval '1 hour') ts,
+     generate_series(1, 100) i;
+
+\pset expanded on
+
+SELECT compress_chunk(c) FROM show_chunks('t') c;
+
+SELECT * FROM observ; -- see view definition above
+
+SELECT COUNT(*) FROM t;
+SELECT count(*),min(ts),max(ts) from t where a % 19 = 9 or b % 19 = 9 or c % 19 = 2 or seg % 19 = 2;
+
+SELECT * FROM observ; -- see view definition above
+
+-- Test DELETE stats
+BEGIN;
+DELETE FROM t WHERE a % 19 = 2;
+ROLLBACK;
+
+SELECT * FROM observ; -- see view definition above
+
+-- Test UPDATE stats
+BEGIN;
+UPDATE t SET a = 42 WHERE a % 19 = 2;
+ROLLBACK;
+
+SELECT * FROM observ; -- see view definition above
+
+-- Show the information schema view as well:
+SELECT * FROM observ_main_view;
+
+-- Reset the stats and check how we re-populate them as we select from the chunk again:
+SELECT _timescaledb_functions.chunk_statistics_reset();
+SELECT count(*) FROM t where a % 19 = 9;
+
+-- Only care about compression stats here:
+SELECT
+      chunk,                                 compressed_chunk,
+      compressed_batch_count,                compressed_block_count,
+      compressed_batch_rows_min,             compressed_batch_rows_max,
+      compressed_batch_rows_avg,             compressed_batch_rows_stddev,
+      compressed_batch_bytes_min,            compressed_batch_bytes_max,
+      compressed_batch_bytes_avg,            compressed_batch_bytes_stddev,
+      compressed_block_bytes_min,            compressed_block_bytes_max,
+      compressed_block_bytes_avg,            compressed_block_bytes_stddev
+FROM observ_main_view;
+
+-- Select more and check how things change:
+SELECT count(*),min(ts),max(ts) from t where a % 19 = 9 or b % 19 = 9 or c % 19 = 2 or seg % 19 = 2;
+
+SELECT
+      chunk,                                 compressed_chunk,
+      compressed_batch_count,                compressed_block_count,
+      compressed_batch_rows_min,             compressed_batch_rows_max,
+      compressed_batch_rows_avg,             compressed_batch_rows_stddev,
+      compressed_batch_bytes_min,            compressed_batch_bytes_max,
+      compressed_batch_bytes_avg,            compressed_batch_bytes_stddev,
+      compressed_block_bytes_min,            compressed_block_bytes_max,
+      compressed_block_bytes_avg,            compressed_block_bytes_stddev
+FROM observ_main_view;
+
+DROP VIEW observ;
+DROP VIEW observ_main_view;
+DROP TABLE t;

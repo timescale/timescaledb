@@ -1,0 +1,872 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Test the integration of the compression and observability features
+CREATE TABLE t(ts timestamptz, a int, b int, c int, seg int);
+SELECT create_hypertable('t', by_range('ts', interval '1 day'));
+ create_hypertable 
+-------------------
+ (1,t)
+
+CREATE VIEW observ AS
+SELECT
+      -- skip the OIDs for test stability:
+      -- compressed_relid,
+      -- uncompressed_relid,
+      compressed_batch_count,                compressed_block_count,
+      compressed_batch_rows_min,             compressed_batch_rows_max,
+      compressed_batch_rows_sum,             compressed_batch_rows_sqsum,
+      compressed_batch_bytes_min,            compressed_batch_bytes_max,
+      compressed_batch_bytes_sum,            compressed_batch_bytes_sqsum,
+      compressed_block_bytes_min,            compressed_block_bytes_max,
+      compressed_block_bytes_sum,            compressed_block_bytes_sqsum,
+      -- op totals
+      total_batches_deleted,                 total_batches_decompressed,
+      total_tuples_decompressed,             total_batches_scanned,
+      total_batches_checked_by_bloom,        total_batches_pruned_by_bloom,
+      total_batches_without_bloom,           total_batches_bloom_false_positives,
+      total_batches_filtered_compressed,     total_batches_filtered_decompressed,
+      -- last op
+      last_op_batches_deleted,               last_op_batches_decompressed,
+      last_op_tuples_decompressed,           last_op_batches_scanned,
+      last_op_batches_checked_by_bloom,      last_op_batches_pruned_by_bloom,
+      last_op_batches_without_bloom,         last_op_batches_bloom_false_positives,
+      last_op_batches_filtered_compressed,   last_op_batches_filtered_decompressed,
+      -- op counters
+      n_selects, n_inserts, n_updates, n_deletes
+      -- skip the below two for test stability:
+      -- first_update,
+      -- last_update
+FROM
+(
+      SELECT * FROM _timescaledb_functions.chunk_statistics()
+      ORDER BY last_update ASC, compressed_relid ASC, uncompressed_relid ASC
+) sub;
+CREATE VIEW observ_main_view AS
+SELECT
+      chunk,  compressed_chunk,
+      chunk_id,  hypertable_id, hypertable,
+      -- compression stats
+      compressed_batch_count,                compressed_block_count,
+      compressed_batch_rows_min,             compressed_batch_rows_max,
+      compressed_batch_rows_avg,             compressed_batch_rows_stddev,
+      compressed_batch_bytes_min,            compressed_batch_bytes_max,
+      compressed_batch_bytes_avg,            compressed_batch_bytes_stddev,
+      compressed_block_bytes_min,            compressed_block_bytes_max,
+      compressed_block_bytes_avg,            compressed_block_bytes_stddev,
+      -- op totals
+      total_batches_deleted,                 total_batches_decompressed,
+      total_tuples_decompressed,             total_batches_scanned,
+      total_batches_checked_by_bloom,        total_batches_pruned_by_bloom,
+      total_batches_without_bloom,           total_batches_bloom_false_positives,
+      total_batches_filtered_compressed,     total_batches_filtered_decompressed,
+      -- last op stats
+      last_op_batches_deleted,               last_op_batches_decompressed,
+      last_op_tuples_decompressed,           last_op_batches_scanned,
+      last_op_batches_checked_by_bloom,      last_op_batches_pruned_by_bloom,
+      last_op_batches_without_bloom,         last_op_batches_bloom_false_positives,
+      last_op_batches_filtered_compressed,   last_op_batches_filtered_decompressed,
+      -- op counters
+      n_selects, n_inserts, n_updates, n_deletes
+      -- these will make the test flaky, so skip them:
+      -- first_update,
+      -- last_update
+FROM
+(
+      SELECT *
+      FROM timescaledb_information.stat_chunk_activity
+      ORDER BY last_update ASC, hypertable_id ASC, chunk_id ASC
+) sub;
+-- Initial config: bloom(a,b)
+ALTER TABLE t SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'seg',
+    timescaledb.compress_orderby = 'ts',
+    timescaledb.compress_index = 'bloom(a,b)'
+);
+INSERT INTO t
+SELECT ts, (i % 10), (i % 5), (i % 3), 1
+FROM generate_series('2024-01-01'::timestamptz, '2024-01-03', interval '1 hour') ts,
+     generate_series(1, 100) i;
+\pset expanded on
+SELECT compress_chunk(c) FROM show_chunks('t') c;
+-[ RECORD 1 ]--+---------------------------------------
+compress_chunk | _timescaledb_internal._hyper_1_1_chunk
+-[ RECORD 2 ]--+---------------------------------------
+compress_chunk | _timescaledb_internal._hyper_1_2_chunk
+-[ RECORD 3 ]--+---------------------------------------
+compress_chunk | _timescaledb_internal._hyper_1_3_chunk
+
+SELECT * FROM observ; -- see view definition above
+-[ RECORD 1 ]-------------------------+--------
+compressed_batch_count                | 2
+compressed_block_count                | 8
+compressed_batch_rows_min             | 600
+compressed_batch_rows_max             | 1000
+compressed_batch_rows_sum             | 1600
+compressed_batch_rows_sqsum           | 1360000
+compressed_batch_bytes_min            | 1280
+compressed_batch_bytes_max            | 2032
+compressed_batch_bytes_sum            | 3312
+compressed_batch_bytes_sqsum          | 5767424
+compressed_block_bytes_min            | 188
+compressed_block_bytes_max            | 748
+compressed_block_bytes_sum            | 3312
+compressed_block_bytes_sqsum          | 1598208
+total_batches_deleted                 | 0
+total_batches_decompressed            | 0
+total_tuples_decompressed             | 0
+total_batches_scanned                 | 0
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 0
+last_op_tuples_decompressed           | 0
+last_op_batches_scanned               | 0
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 0
+n_inserts                             | 0
+n_updates                             | 0
+n_deletes                             | 0
+-[ RECORD 2 ]-------------------------+--------
+compressed_batch_count                | 3
+compressed_block_count                | 12
+compressed_batch_rows_min             | 400
+compressed_batch_rows_max             | 1000
+compressed_batch_rows_sum             | 2400
+compressed_batch_rows_sqsum           | 2160000
+compressed_batch_bytes_min            | 904
+compressed_batch_bytes_max            | 2032
+compressed_batch_bytes_sum            | 4968
+compressed_batch_bytes_sqsum          | 9075264
+compressed_block_bytes_min            | 132
+compressed_block_bytes_max            | 748
+compressed_block_bytes_sum            | 4968
+compressed_block_bytes_sqsum          | 2520256
+total_batches_deleted                 | 0
+total_batches_decompressed            | 0
+total_tuples_decompressed             | 0
+total_batches_scanned                 | 0
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 0
+last_op_tuples_decompressed           | 0
+last_op_batches_scanned               | 0
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 0
+n_inserts                             | 0
+n_updates                             | 0
+n_deletes                             | 0
+-[ RECORD 3 ]-------------------------+--------
+compressed_batch_count                | 1
+compressed_block_count                | 4
+compressed_batch_rows_min             | 900
+compressed_batch_rows_max             | 900
+compressed_batch_rows_sum             | 900
+compressed_batch_rows_sqsum           | 810000
+compressed_batch_bytes_min            | 1840
+compressed_batch_bytes_max            | 1840
+compressed_batch_bytes_sum            | 1840
+compressed_batch_bytes_sqsum          | 3385600
+compressed_block_bytes_min            | 260
+compressed_block_bytes_max            | 668
+compressed_block_bytes_sum            | 1840
+compressed_block_bytes_sqsum          | 936896
+total_batches_deleted                 | 0
+total_batches_decompressed            | 0
+total_tuples_decompressed             | 0
+total_batches_scanned                 | 0
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 0
+last_op_tuples_decompressed           | 0
+last_op_batches_scanned               | 0
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 0
+n_inserts                             | 0
+n_updates                             | 0
+n_deletes                             | 0
+
+SELECT COUNT(*) FROM t;
+-[ RECORD 1 ]
+count | 4900
+
+SELECT count(*),min(ts),max(ts) from t where a % 19 = 9 or b % 19 = 9 or c % 19 = 2 or seg % 19 = 2;
+-[ RECORD 1 ]-----------------------
+count | 1960
+min   | Mon Jan 01 00:00:00 2024 PST
+max   | Wed Jan 03 00:00:00 2024 PST
+
+SELECT * FROM observ; -- see view definition above
+-[ RECORD 1 ]-------------------------+--------
+compressed_batch_count                | 2
+compressed_block_count                | 8
+compressed_batch_rows_min             | 600
+compressed_batch_rows_max             | 1000
+compressed_batch_rows_sum             | 1600
+compressed_batch_rows_sqsum           | 1360000
+compressed_batch_bytes_min            | 1280
+compressed_batch_bytes_max            | 2032
+compressed_batch_bytes_sum            | 3312
+compressed_batch_bytes_sqsum          | 5767424
+compressed_block_bytes_min            | 188
+compressed_block_bytes_max            | 748
+compressed_block_bytes_sum            | 3312
+compressed_block_bytes_sqsum          | 1598208
+total_batches_deleted                 | 0
+total_batches_decompressed            | 8
+total_tuples_decompressed             | 1600
+total_batches_scanned                 | 0
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 8
+last_op_tuples_decompressed           | 1600
+last_op_batches_scanned               | 0
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 1
+n_inserts                             | 0
+n_updates                             | 0
+n_deletes                             | 0
+-[ RECORD 2 ]-------------------------+--------
+compressed_batch_count                | 3
+compressed_block_count                | 12
+compressed_batch_rows_min             | 400
+compressed_batch_rows_max             | 1000
+compressed_batch_rows_sum             | 2400
+compressed_batch_rows_sqsum           | 2160000
+compressed_batch_bytes_min            | 904
+compressed_batch_bytes_max            | 2032
+compressed_batch_bytes_sum            | 4968
+compressed_batch_bytes_sqsum          | 9075264
+compressed_block_bytes_min            | 132
+compressed_block_bytes_max            | 748
+compressed_block_bytes_sum            | 4968
+compressed_block_bytes_sqsum          | 2520256
+total_batches_deleted                 | 0
+total_batches_decompressed            | 12
+total_tuples_decompressed             | 2400
+total_batches_scanned                 | 0
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 12
+last_op_tuples_decompressed           | 2400
+last_op_batches_scanned               | 0
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 1
+n_inserts                             | 0
+n_updates                             | 0
+n_deletes                             | 0
+-[ RECORD 3 ]-------------------------+--------
+compressed_batch_count                | 1
+compressed_block_count                | 4
+compressed_batch_rows_min             | 900
+compressed_batch_rows_max             | 900
+compressed_batch_rows_sum             | 900
+compressed_batch_rows_sqsum           | 810000
+compressed_batch_bytes_min            | 1840
+compressed_batch_bytes_max            | 1840
+compressed_batch_bytes_sum            | 1840
+compressed_batch_bytes_sqsum          | 3385600
+compressed_block_bytes_min            | 260
+compressed_block_bytes_max            | 668
+compressed_block_bytes_sum            | 1840
+compressed_block_bytes_sqsum          | 936896
+total_batches_deleted                 | 0
+total_batches_decompressed            | 4
+total_tuples_decompressed             | 900
+total_batches_scanned                 | 0
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 4
+last_op_tuples_decompressed           | 900
+last_op_batches_scanned               | 0
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 1
+n_inserts                             | 0
+n_updates                             | 0
+n_deletes                             | 0
+
+-- Test DELETE stats
+BEGIN;
+DELETE FROM t WHERE a % 19 = 2;
+ROLLBACK;
+SELECT * FROM observ; -- see view definition above
+-[ RECORD 1 ]-------------------------+--------
+compressed_batch_count                | 2
+compressed_block_count                | 8
+compressed_batch_rows_min             | 600
+compressed_batch_rows_max             | 1000
+compressed_batch_rows_sum             | 1600
+compressed_batch_rows_sqsum           | 1360000
+compressed_batch_bytes_min            | 1280
+compressed_batch_bytes_max            | 2032
+compressed_batch_bytes_sum            | 3312
+compressed_batch_bytes_sqsum          | 5767424
+compressed_block_bytes_min            | 188
+compressed_block_bytes_max            | 748
+compressed_block_bytes_sum            | 3312
+compressed_block_bytes_sqsum          | 1598208
+total_batches_deleted                 | 0
+total_batches_decompressed            | 10
+total_tuples_decompressed             | 3200
+total_batches_scanned                 | 2
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 2
+last_op_tuples_decompressed           | 1600
+last_op_batches_scanned               | 2
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 1
+n_inserts                             | 0
+n_updates                             | 0
+n_deletes                             | 1
+-[ RECORD 2 ]-------------------------+--------
+compressed_batch_count                | 3
+compressed_block_count                | 12
+compressed_batch_rows_min             | 400
+compressed_batch_rows_max             | 1000
+compressed_batch_rows_sum             | 2400
+compressed_batch_rows_sqsum           | 2160000
+compressed_batch_bytes_min            | 904
+compressed_batch_bytes_max            | 2032
+compressed_batch_bytes_sum            | 4968
+compressed_batch_bytes_sqsum          | 9075264
+compressed_block_bytes_min            | 132
+compressed_block_bytes_max            | 748
+compressed_block_bytes_sum            | 4968
+compressed_block_bytes_sqsum          | 2520256
+total_batches_deleted                 | 0
+total_batches_decompressed            | 15
+total_tuples_decompressed             | 4800
+total_batches_scanned                 | 3
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 3
+last_op_tuples_decompressed           | 2400
+last_op_batches_scanned               | 3
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 1
+n_inserts                             | 0
+n_updates                             | 0
+n_deletes                             | 1
+-[ RECORD 3 ]-------------------------+--------
+compressed_batch_count                | 1
+compressed_block_count                | 4
+compressed_batch_rows_min             | 900
+compressed_batch_rows_max             | 900
+compressed_batch_rows_sum             | 900
+compressed_batch_rows_sqsum           | 810000
+compressed_batch_bytes_min            | 1840
+compressed_batch_bytes_max            | 1840
+compressed_batch_bytes_sum            | 1840
+compressed_batch_bytes_sqsum          | 3385600
+compressed_block_bytes_min            | 260
+compressed_block_bytes_max            | 668
+compressed_block_bytes_sum            | 1840
+compressed_block_bytes_sqsum          | 936896
+total_batches_deleted                 | 0
+total_batches_decompressed            | 5
+total_tuples_decompressed             | 1800
+total_batches_scanned                 | 1
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 1
+last_op_tuples_decompressed           | 900
+last_op_batches_scanned               | 1
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 1
+n_inserts                             | 0
+n_updates                             | 0
+n_deletes                             | 1
+
+-- Test UPDATE stats
+BEGIN;
+UPDATE t SET a = 42 WHERE a % 19 = 2;
+ROLLBACK;
+SELECT * FROM observ; -- see view definition above
+-[ RECORD 1 ]-------------------------+--------
+compressed_batch_count                | 2
+compressed_block_count                | 8
+compressed_batch_rows_min             | 600
+compressed_batch_rows_max             | 1000
+compressed_batch_rows_sum             | 1600
+compressed_batch_rows_sqsum           | 1360000
+compressed_batch_bytes_min            | 1280
+compressed_batch_bytes_max            | 2032
+compressed_batch_bytes_sum            | 3312
+compressed_batch_bytes_sqsum          | 5767424
+compressed_block_bytes_min            | 188
+compressed_block_bytes_max            | 748
+compressed_block_bytes_sum            | 3312
+compressed_block_bytes_sqsum          | 1598208
+total_batches_deleted                 | 0
+total_batches_decompressed            | 12
+total_tuples_decompressed             | 4800
+total_batches_scanned                 | 4
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 2
+last_op_tuples_decompressed           | 1600
+last_op_batches_scanned               | 2
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 1
+n_inserts                             | 0
+n_updates                             | 1
+n_deletes                             | 1
+-[ RECORD 2 ]-------------------------+--------
+compressed_batch_count                | 3
+compressed_block_count                | 12
+compressed_batch_rows_min             | 400
+compressed_batch_rows_max             | 1000
+compressed_batch_rows_sum             | 2400
+compressed_batch_rows_sqsum           | 2160000
+compressed_batch_bytes_min            | 904
+compressed_batch_bytes_max            | 2032
+compressed_batch_bytes_sum            | 4968
+compressed_batch_bytes_sqsum          | 9075264
+compressed_block_bytes_min            | 132
+compressed_block_bytes_max            | 748
+compressed_block_bytes_sum            | 4968
+compressed_block_bytes_sqsum          | 2520256
+total_batches_deleted                 | 0
+total_batches_decompressed            | 18
+total_tuples_decompressed             | 7200
+total_batches_scanned                 | 6
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 3
+last_op_tuples_decompressed           | 2400
+last_op_batches_scanned               | 3
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 1
+n_inserts                             | 0
+n_updates                             | 1
+n_deletes                             | 1
+-[ RECORD 3 ]-------------------------+--------
+compressed_batch_count                | 1
+compressed_block_count                | 4
+compressed_batch_rows_min             | 900
+compressed_batch_rows_max             | 900
+compressed_batch_rows_sum             | 900
+compressed_batch_rows_sqsum           | 810000
+compressed_batch_bytes_min            | 1840
+compressed_batch_bytes_max            | 1840
+compressed_batch_bytes_sum            | 1840
+compressed_batch_bytes_sqsum          | 3385600
+compressed_block_bytes_min            | 260
+compressed_block_bytes_max            | 668
+compressed_block_bytes_sum            | 1840
+compressed_block_bytes_sqsum          | 936896
+total_batches_deleted                 | 0
+total_batches_decompressed            | 6
+total_tuples_decompressed             | 2700
+total_batches_scanned                 | 2
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 1
+last_op_tuples_decompressed           | 900
+last_op_batches_scanned               | 1
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 1
+n_inserts                             | 0
+n_updates                             | 1
+n_deletes                             | 1
+
+-- Show the information schema view as well:
+SELECT * FROM observ_main_view;
+-[ RECORD 1 ]-------------------------+-----------------------------------------------
+chunk                                 | _timescaledb_internal._hyper_1_1_chunk
+compressed_chunk                      | _timescaledb_internal.compress_hyper_2_4_chunk
+chunk_id                              | 1
+hypertable_id                         | 1
+hypertable                            | t
+compressed_batch_count                | 2
+compressed_block_count                | 8
+compressed_batch_rows_min             | 600
+compressed_batch_rows_max             | 1000
+compressed_batch_rows_avg             | 800
+compressed_batch_rows_stddev          | 200
+compressed_batch_bytes_min            | 1280
+compressed_batch_bytes_max            | 2032
+compressed_batch_bytes_avg            | 1656
+compressed_batch_bytes_stddev         | 376
+compressed_block_bytes_min            | 188
+compressed_block_bytes_max            | 748
+compressed_block_bytes_avg            | 414
+compressed_block_bytes_stddev         | 168.463645929916
+total_batches_deleted                 | 0
+total_batches_decompressed            | 12
+total_tuples_decompressed             | 4800
+total_batches_scanned                 | 4
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 2
+last_op_tuples_decompressed           | 1600
+last_op_batches_scanned               | 2
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 1
+n_inserts                             | 0
+n_updates                             | 1
+n_deletes                             | 1
+-[ RECORD 2 ]-------------------------+-----------------------------------------------
+chunk                                 | _timescaledb_internal._hyper_1_2_chunk
+compressed_chunk                      | _timescaledb_internal.compress_hyper_2_5_chunk
+chunk_id                              | 2
+hypertable_id                         | 1
+hypertable                            | t
+compressed_batch_count                | 3
+compressed_block_count                | 12
+compressed_batch_rows_min             | 400
+compressed_batch_rows_max             | 1000
+compressed_batch_rows_avg             | 800
+compressed_batch_rows_stddev          | 282.842712474619
+compressed_batch_bytes_min            | 904
+compressed_batch_bytes_max            | 2032
+compressed_batch_bytes_avg            | 1656
+compressed_batch_bytes_stddev         | 531.744299452284
+compressed_block_bytes_min            | 132
+compressed_block_bytes_max            | 748
+compressed_block_bytes_avg            | 414
+compressed_block_bytes_stddev         | 196.533288104925
+total_batches_deleted                 | 0
+total_batches_decompressed            | 18
+total_tuples_decompressed             | 7200
+total_batches_scanned                 | 6
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 3
+last_op_tuples_decompressed           | 2400
+last_op_batches_scanned               | 3
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 1
+n_inserts                             | 0
+n_updates                             | 1
+n_deletes                             | 1
+-[ RECORD 3 ]-------------------------+-----------------------------------------------
+chunk                                 | _timescaledb_internal._hyper_1_3_chunk
+compressed_chunk                      | _timescaledb_internal.compress_hyper_2_6_chunk
+chunk_id                              | 3
+hypertable_id                         | 1
+hypertable                            | t
+compressed_batch_count                | 1
+compressed_block_count                | 4
+compressed_batch_rows_min             | 900
+compressed_batch_rows_max             | 900
+compressed_batch_rows_avg             | 900
+compressed_batch_rows_stddev          | 0
+compressed_batch_bytes_min            | 1840
+compressed_batch_bytes_max            | 1840
+compressed_batch_bytes_avg            | 1840
+compressed_batch_bytes_stddev         | 0
+compressed_block_bytes_min            | 260
+compressed_block_bytes_max            | 668
+compressed_block_bytes_avg            | 460
+compressed_block_bytes_stddev         | 150.412765415705
+total_batches_deleted                 | 0
+total_batches_decompressed            | 6
+total_tuples_decompressed             | 2700
+total_batches_scanned                 | 2
+total_batches_checked_by_bloom        | 0
+total_batches_pruned_by_bloom         | 0
+total_batches_without_bloom           | 0
+total_batches_bloom_false_positives   | 0
+total_batches_filtered_compressed     | 0
+total_batches_filtered_decompressed   | 0
+last_op_batches_deleted               | 0
+last_op_batches_decompressed          | 1
+last_op_tuples_decompressed           | 900
+last_op_batches_scanned               | 1
+last_op_batches_checked_by_bloom      | 0
+last_op_batches_pruned_by_bloom       | 0
+last_op_batches_without_bloom         | 0
+last_op_batches_bloom_false_positives | 0
+last_op_batches_filtered_compressed   | 0
+last_op_batches_filtered_decompressed | 0
+n_selects                             | 1
+n_inserts                             | 0
+n_updates                             | 1
+n_deletes                             | 1
+
+-- Reset the stats and check how we re-populate them as we select from the chunk again:
+SELECT _timescaledb_functions.chunk_statistics_reset();
+-[ RECORD 1 ]----------+-
+chunk_statistics_reset | 
+
+SELECT count(*) FROM t where a % 19 = 9;
+-[ RECORD 1 ]
+count | 490
+
+-- Only care about compression stats here:
+SELECT
+      chunk,                                 compressed_chunk,
+      compressed_batch_count,                compressed_block_count,
+      compressed_batch_rows_min,             compressed_batch_rows_max,
+      compressed_batch_rows_avg,             compressed_batch_rows_stddev,
+      compressed_batch_bytes_min,            compressed_batch_bytes_max,
+      compressed_batch_bytes_avg,            compressed_batch_bytes_stddev,
+      compressed_block_bytes_min,            compressed_block_bytes_max,
+      compressed_block_bytes_avg,            compressed_block_bytes_stddev
+FROM observ_main_view;
+-[ RECORD 1 ]-----------------+-----------------------------------------------
+chunk                         | _timescaledb_internal._hyper_1_1_chunk
+compressed_chunk              | _timescaledb_internal.compress_hyper_2_4_chunk
+compressed_batch_count        | 2
+compressed_block_count        | 2
+compressed_batch_rows_min     | 600
+compressed_batch_rows_max     | 1000
+compressed_batch_rows_avg     | 800
+compressed_batch_rows_stddev  | 200
+compressed_batch_bytes_min    | 0
+compressed_batch_bytes_max    | 748
+compressed_batch_bytes_avg    | 374
+compressed_batch_bytes_stddev | 374
+compressed_block_bytes_min    | 460
+compressed_block_bytes_max    | 748
+compressed_block_bytes_avg    | 604
+compressed_block_bytes_stddev | 144
+-[ RECORD 2 ]-----------------+-----------------------------------------------
+chunk                         | _timescaledb_internal._hyper_1_2_chunk
+compressed_chunk              | _timescaledb_internal.compress_hyper_2_5_chunk
+compressed_batch_count        | 3
+compressed_block_count        | 3
+compressed_batch_rows_min     | 400
+compressed_batch_rows_max     | 1000
+compressed_batch_rows_avg     | 800
+compressed_batch_rows_stddev  | 282.842712474619
+compressed_batch_bytes_min    | 0
+compressed_batch_bytes_max    | 748
+compressed_batch_bytes_avg    | 498
+compressed_batch_bytes_stddev | 352.610581551692
+compressed_block_bytes_min    | 324
+compressed_block_bytes_max    | 748
+compressed_block_bytes_avg    | 606
+compressed_block_bytes_stddev | 199.875516815398
+-[ RECORD 3 ]-----------------+-----------------------------------------------
+chunk                         | _timescaledb_internal._hyper_1_3_chunk
+compressed_chunk              | _timescaledb_internal.compress_hyper_2_6_chunk
+compressed_batch_count        | 0
+compressed_block_count        | 1
+compressed_batch_rows_min     | 
+compressed_batch_rows_max     | 
+compressed_batch_rows_avg     | 
+compressed_batch_rows_stddev  | 
+compressed_batch_bytes_min    | 
+compressed_batch_bytes_max    | 
+compressed_batch_bytes_avg    | 
+compressed_batch_bytes_stddev | 
+compressed_block_bytes_min    | 668
+compressed_block_bytes_max    | 668
+compressed_block_bytes_avg    | 668
+compressed_block_bytes_stddev | 0
+
+-- Select more and check how things change:
+SELECT count(*),min(ts),max(ts) from t where a % 19 = 9 or b % 19 = 9 or c % 19 = 2 or seg % 19 = 2;
+-[ RECORD 1 ]-----------------------
+count | 1960
+min   | Mon Jan 01 00:00:00 2024 PST
+max   | Wed Jan 03 00:00:00 2024 PST
+
+SELECT
+      chunk,                                 compressed_chunk,
+      compressed_batch_count,                compressed_block_count,
+      compressed_batch_rows_min,             compressed_batch_rows_max,
+      compressed_batch_rows_avg,             compressed_batch_rows_stddev,
+      compressed_batch_bytes_min,            compressed_batch_bytes_max,
+      compressed_batch_bytes_avg,            compressed_batch_bytes_stddev,
+      compressed_block_bytes_min,            compressed_block_bytes_max,
+      compressed_block_bytes_avg,            compressed_block_bytes_stddev
+FROM observ_main_view;
+-[ RECORD 1 ]-----------------+-----------------------------------------------
+chunk                         | _timescaledb_internal._hyper_1_1_chunk
+compressed_chunk              | _timescaledb_internal.compress_hyper_2_4_chunk
+compressed_batch_count        | 2
+compressed_block_count        | 8
+compressed_batch_rows_min     | 600
+compressed_batch_rows_max     | 1000
+compressed_batch_rows_avg     | 800
+compressed_batch_rows_stddev  | 200
+compressed_batch_bytes_min    | 0
+compressed_batch_bytes_max    | 748
+compressed_batch_bytes_avg    | 374
+compressed_batch_bytes_stddev | 374
+compressed_block_bytes_min    | 188
+compressed_block_bytes_max    | 748
+compressed_block_bytes_avg    | 414
+compressed_block_bytes_stddev | 168.463645929916
+-[ RECORD 2 ]-----------------+-----------------------------------------------
+chunk                         | _timescaledb_internal._hyper_1_2_chunk
+compressed_chunk              | _timescaledb_internal.compress_hyper_2_5_chunk
+compressed_batch_count        | 3
+compressed_block_count        | 12
+compressed_batch_rows_min     | 400
+compressed_batch_rows_max     | 1000
+compressed_batch_rows_avg     | 800
+compressed_batch_rows_stddev  | 282.842712474619
+compressed_batch_bytes_min    | 0
+compressed_batch_bytes_max    | 748
+compressed_batch_bytes_avg    | 498
+compressed_batch_bytes_stddev | 352.610581551692
+compressed_block_bytes_min    | 132
+compressed_block_bytes_max    | 748
+compressed_block_bytes_avg    | 414
+compressed_block_bytes_stddev | 196.533288104925
+-[ RECORD 3 ]-----------------+-----------------------------------------------
+chunk                         | _timescaledb_internal._hyper_1_3_chunk
+compressed_chunk              | _timescaledb_internal.compress_hyper_2_6_chunk
+compressed_batch_count        | 0
+compressed_block_count        | 4
+compressed_batch_rows_min     | 
+compressed_batch_rows_max     | 
+compressed_batch_rows_avg     | 
+compressed_batch_rows_stddev  | 
+compressed_batch_bytes_min    | 
+compressed_batch_bytes_max    | 
+compressed_batch_bytes_avg    | 
+compressed_batch_bytes_stddev | 
+compressed_block_bytes_min    | 260
+compressed_block_bytes_max    | 668
+compressed_block_bytes_avg    | 460
+compressed_block_bytes_stddev | 150.412765415705
+
+DROP VIEW observ;
+DROP VIEW observ_main_view;
+DROP TABLE t;

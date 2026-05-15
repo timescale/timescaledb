@@ -334,7 +334,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk,
 	/******************** row decompressor **************/
 
 	RowDecompressor decompressor = build_decompressor(RelationGetDescr(compressed_chunk_rel),
-													  RelationGetDescr(uncompressed_chunk_rel));
+													  RelationGetDescr(uncompressed_chunk_rel),
+													  RelationGetRelid(compressed_chunk_rel),
+													  RelationGetRelid(uncompressed_chunk_rel));
 
 	/********** row compressor *******************/
 	RowCompressor row_compressor;
@@ -769,7 +771,9 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 	PushActiveSnapshot(GetTransactionSnapshot());
 
 	decompressor = build_decompressor(RelationGetDescr(compressed_chunk_rel),
-									  RelationGetDescr(uncompressed_chunk_rel));
+									  RelationGetDescr(uncompressed_chunk_rel),
+									  RelationGetRelid(compressed_chunk_rel),
+									  RelationGetRelid(uncompressed_chunk_rel));
 
 	tuplesortstate = tuplesort_begin_heap(RelationGetDescr(uncompressed_chunk_rel),
 										  recompress_ctx->n_keys,
