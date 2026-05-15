@@ -452,14 +452,25 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 						 *
 						 * For DML, we also always expand the non-target relations.
 						 *
+						 * And finally, we also expand the target relation for
+						 * UPDATE/DELETE. The MERGE support is not fully implemented.
+						 *
 						 * The hypertables that are not expanded by our custom code
 						 * here fall back to the standard Postgres inheritance
 						 * hierarchy expansion.
 						 */
 						if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion &&
-							rte->inh && (Index) query->resultRelation != rti)
+							rte->inh)
 						{
-							rte_mark_for_expansion(rte);
+							if (rti == (Index) query->resultRelation && IS_UPDL_CMD(query) &&
+								ts_guc_enable_hypertable_expansion_for_dml)
+							{
+								rte_mark_for_expansion(rte);
+							}
+							else if ((Index) query->resultRelation != rti)
+							{
+								rte_mark_for_expansion(rte);
+							}
 						}
 
 						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
@@ -1563,9 +1574,17 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * preprocess_query().
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
-				rte->ctename == NULL && rel->relid != (Index) query->resultRelation)
+				rte->ctename == NULL)
 			{
-				rte_mark_for_expansion(rte);
+				if (rel->relid == (Index) query->resultRelation && IS_UPDL_CMD(query) &&
+					ts_guc_enable_hypertable_expansion_for_dml)
+				{
+					rte_mark_for_expansion(rte);
+				}
+				else if (rel->relid != (Index) query->resultRelation)
+				{
+					rte_mark_for_expansion(rte);
+				}
 			}
 			ts_create_private_reloptinfo(rel);
 			ts_plan_expand_timebucket_annotate(root, rel);
