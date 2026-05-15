@@ -237,6 +237,8 @@ columnar_result_finalize(ColumnarResult *columnar_result, DecompressBatchState c
 	}
 	else if (columnar_result->type == DT_ArrowText)
 	{
+		/* offset_buffer should be allocated for ArrowText type */
+		Assert(columnar_result->offset_buffer != NULL);
 		columnar_result->offset_buffer[nrows] = columnar_result->current_offset;
 
 		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
