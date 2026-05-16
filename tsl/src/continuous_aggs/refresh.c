@@ -701,15 +701,13 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 									   const ContinuousAggRefreshContext context,
 									   bool bucketing_refresh_window, bool force)
 {
-	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id, false);
-
-	/* Lock the continuous aggregate's materialized hypertable to protect against
-	 * concurrent invalidation log processing.
-	 *
-	 * This is supposed to be a short transaction and in the future we can consider
-	 * relaxing this lock.
+	/* Lock the continuous aggregate's catalog table entry to protect against concurrent refreshes
+	 * on the same cagg processing the cagg invalidation logs for that CAgg.
 	 */
-	LockRelationOid(hyper_relid, ShareUpdateExclusiveLock);
+	bool found = ts_lock_continuous_agg_tuple(cagg->data.mat_hypertable_id);
+	Ensure(found,
+		   "continuous aggregate with mat_hypertable_id %d not found",
+		   cagg->data.mat_hypertable_id);
 	invalidation_process_cagg_log(cagg, refresh_window);
 
 	DEBUG_ERROR_INJECTION("cagg_refresh_fail_in_txn2");

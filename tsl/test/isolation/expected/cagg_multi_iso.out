@@ -12,15 +12,15 @@ step Setup2:
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
+    CREATE FUNCTION lock_cagg(mat_hypertable_id integer) RETURNS void AS $$
+    BEGIN PERFORM 1 FROM _timescaledb_catalog.continuous_agg ca WHERE ca.mat_hypertable_id = lock_cagg.mat_hypertable_id FOR UPDATE;
     END; $$ LANGUAGE plpgsql;
 
-step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
+step LockMat1: BEGIN; select lock_cagg(mat_hypertable_id) FROM (SELECT mat_hypertable_id from _timescaledb_catalog.continuous_agg where user_view_name like 'continuous_view_1');
 
-lock_mattable
--------------
-             
+lock_cagg
+---------
+         
 
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); <waiting ...>
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
@@ -39,17 +39,17 @@ step Setup2:
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
+    CREATE FUNCTION lock_cagg(mat_hypertable_id integer) RETURNS void AS $$
+    BEGIN PERFORM 1 FROM _timescaledb_catalog.continuous_agg ca WHERE ca.mat_hypertable_id = lock_cagg.mat_hypertable_id FOR UPDATE;
     END; $$ LANGUAGE plpgsql;
 
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
-step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
+step LockMat1: BEGIN; select lock_cagg(mat_hypertable_id) FROM (SELECT mat_hypertable_id from _timescaledb_catalog.continuous_agg where user_view_name like 'continuous_view_1');
 
-lock_mattable
--------------
-             
+lock_cagg
+---------
+         
 
 step I1: INSERT INTO ts_continuous_test SELECT 0, i*10 FROM (SELECT generate_series(0, 10) AS i) AS i;
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); <waiting ...>
@@ -79,8 +79,8 @@ step Setup2:
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
+    CREATE FUNCTION lock_cagg(mat_hypertable_id integer) RETURNS void AS $$
+    BEGIN PERFORM 1 FROM _timescaledb_catalog.continuous_agg ca WHERE ca.mat_hypertable_id = lock_cagg.mat_hypertable_id FOR UPDATE;
     END; $$ LANGUAGE plpgsql;
 
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
@@ -95,11 +95,11 @@ bkt|maxl
 ---+----
   0|   4
 
-step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
+step LockMat1: BEGIN; select lock_cagg(mat_hypertable_id) FROM (SELECT mat_hypertable_id from _timescaledb_catalog.continuous_agg where user_view_name like 'continuous_view_1');
 
-lock_mattable
--------------
-             
+lock_cagg
+---------
+         
 
 step I2: INSERT INTO ts_continuous_test SELECT 40, 1000 ;
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); <waiting ...>
@@ -131,8 +131,8 @@ step Setup2:
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
+    CREATE FUNCTION lock_cagg(mat_hypertable_id integer) RETURNS void AS $$
+    BEGIN PERFORM 1 FROM _timescaledb_catalog.continuous_agg ca WHERE ca.mat_hypertable_id = lock_cagg.mat_hypertable_id FOR UPDATE;
     END; $$ LANGUAGE plpgsql;
 
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
