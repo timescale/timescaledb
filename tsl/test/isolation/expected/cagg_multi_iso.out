@@ -1,6 +1,7 @@
+unused step name: I2
 Parsed test spec with 9 sessions
 
-starting permutation: Setup2 LockMat1 Refresh1 Refresh2 UnlockMat1
+starting permutation: Setup2 LockCAggCatalogRow_1 Refresh1 Refresh2 UnlockCAggCatalogRow_1
 step Setup2: 
     CREATE MATERIALIZED VIEW continuous_view_1( bkt, cnt)
         WITH ( timescaledb.continuous, timescaledb.materialized_only = true)
@@ -12,22 +13,22 @@ step Setup2:
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
+
+    CREATE FUNCTION lock_cagg(mat_hypertable_id integer) RETURNS void AS $$
+    BEGIN PERFORM 1 FROM _timescaledb_catalog.continuous_agg ca WHERE ca.mat_hypertable_id = lock_cagg.mat_hypertable_id FOR UPDATE;
     END; $$ LANGUAGE plpgsql;
 
-step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
-
-lock_mattable
--------------
-             
+step LockCAggCatalogRow_1: BEGIN; select lock_cagg(mat_hypertable_id) FROM (SELECT mat_hypertable_id from _timescaledb_catalog.continuous_agg where user_view_name like 'continuous_view_1') q;
+lock_cagg
+---------
+         
 
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); <waiting ...>
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
-step UnlockMat1: ROLLBACK;
+step UnlockCAggCatalogRow_1: ROLLBACK;
 step Refresh1: <... completed>
 
-starting permutation: Setup2 Refresh1 Refresh2 LockMat1 I1 Refresh1 Refresh2 UnlockMat1 Refresh1_sel Refresh2_sel
+starting permutation: Setup2 Refresh1 Refresh2 Refresh1_sel Refresh2_sel LockCAggCatalogRow_1 I1 Refresh1 Refresh2 Refresh2_sel UnlockCAggCatalogRow_1 Refresh1_sel
 step Setup2: 
     CREATE MATERIALIZED VIEW continuous_view_1( bkt, cnt)
         WITH ( timescaledb.continuous, timescaledb.materialized_only = true)
@@ -39,84 +40,42 @@ step Setup2:
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
+
+    CREATE FUNCTION lock_cagg(mat_hypertable_id integer) RETURNS void AS $$
+    BEGIN PERFORM 1 FROM _timescaledb_catalog.continuous_agg ca WHERE ca.mat_hypertable_id = lock_cagg.mat_hypertable_id FOR UPDATE;
     END; $$ LANGUAGE plpgsql;
 
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
-step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
+step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
+bkt|cnt
+---+---
+  0|  5
 
-lock_mattable
--------------
-             
+step Refresh2_sel: select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt;
+bkt|maxl
+---+----
+  0|   4
+
+step LockCAggCatalogRow_1: BEGIN; select lock_cagg(mat_hypertable_id) FROM (SELECT mat_hypertable_id from _timescaledb_catalog.continuous_agg where user_view_name like 'continuous_view_1') q;
+lock_cagg
+---------
+         
 
 step I1: INSERT INTO ts_continuous_test SELECT 0, i*10 FROM (SELECT generate_series(0, 10) AS i) AS i;
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); <waiting ...>
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
-step UnlockMat1: ROLLBACK;
-step Refresh1: <... completed>
-step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
-bkt|cnt
----+---
-  0| 16
-
 step Refresh2_sel: select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt;
 bkt|maxl
 ---+----
   0| 100
 
-
-starting permutation: Setup2 Refresh1 Refresh2 Refresh1_sel Refresh2_sel LockMat1 I2 Refresh1 Refresh2 UnlockMat1 Refresh1_sel Refresh2_sel
-step Setup2: 
-    CREATE MATERIALIZED VIEW continuous_view_1( bkt, cnt)
-        WITH ( timescaledb.continuous, timescaledb.materialized_only = true)
-        AS SELECT time_bucket('5', time), COUNT(val)
-            FROM ts_continuous_test
-            GROUP BY 1 WITH NO DATA;
-    CREATE MATERIALIZED VIEW continuous_view_2(bkt, maxl)
-        WITH ( timescaledb.continuous, timescaledb.materialized_only = true)
-        AS SELECT time_bucket('5', time), max(val)
-            FROM ts_continuous_test
-            GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
-    END; $$ LANGUAGE plpgsql;
-
-step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
-step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
-step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
-bkt|cnt
----+---
-  0|  5
-
-step Refresh2_sel: select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt;
-bkt|maxl
----+----
-  0|   4
-
-step LockMat1: BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
-
-lock_mattable
--------------
-             
-
-step I2: INSERT INTO ts_continuous_test SELECT 40, 1000 ;
-step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); <waiting ...>
-step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
-step UnlockMat1: ROLLBACK;
-R1: NOTICE:  continuous aggregate "continuous_view_1" is already up-to-date
+step UnlockCAggCatalogRow_1: ROLLBACK;
 step Refresh1: <... completed>
 step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
 bkt|cnt
 ---+---
-  0|  5
-
-step Refresh2_sel: select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt;
-bkt|maxl
----+----
-  0|   4
- 40|1000
+  0| 16
 
 
 starting permutation: Setup2 Refresh1 Refresh2 Refresh1_sel Refresh2_sel U1 U2 LInvRow Refresh1 Refresh2 UnlockInvRow Refresh1_sel Refresh2_sel
@@ -131,8 +90,9 @@ step Setup2:
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
+
+    CREATE FUNCTION lock_cagg(mat_hypertable_id integer) RETURNS void AS $$
+    BEGIN PERFORM 1 FROM _timescaledb_catalog.continuous_agg ca WHERE ca.mat_hypertable_id = lock_cagg.mat_hypertable_id FOR UPDATE;
     END; $$ LANGUAGE plpgsql;
 
 step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);

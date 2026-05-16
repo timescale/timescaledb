@@ -14,7 +14,7 @@ setup
 }
 
 teardown {
-    DROP FUNCTION lock_mattable( text );
+    DROP FUNCTION lock_cagg(integer);
     DROP TABLE ts_continuous_test CASCADE;
 }
 
@@ -32,8 +32,9 @@ step "Setup2"
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
-    BEGIN EXECUTE format( 'lock table %s', name);
+
+    CREATE FUNCTION lock_cagg(mat_hypertable_id integer) RETURNS void AS $$
+    BEGIN PERFORM 1 FROM _timescaledb_catalog.continuous_agg ca WHERE ca.mat_hypertable_id = lock_cagg.mat_hypertable_id FOR UPDATE;
     END; $$ LANGUAGE plpgsql;
 }
 
@@ -55,11 +56,10 @@ step "Refresh2"	{ CALL refresh_continuous_aggregate('continuous_view_2', NULL, N
 session "R2_sel"
 step "Refresh2_sel"	{ select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt; }
 
-#locking the materialized table will block refresh1
-session "LM1"
-step "LockMat1" { BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
-}
-step "UnlockMat1" { ROLLBACK; }
+#locking the catalog row will block refresh1
+session "LC1"
+step "LockCAggCatalogRow_1" { BEGIN; select lock_cagg(mat_hypertable_id) FROM (SELECT mat_hypertable_id from _timescaledb_catalog.continuous_agg where user_view_name like 'continuous_view_1') q; }
+step "UnlockCAggCatalogRow_1" { ROLLBACK; }
 
 #update the hypertable
 session "Upd"
@@ -74,17 +74,15 @@ step "LInvRow" { BEGIN; update _timescaledb_catalog.continuous_aggs_invalidation
 step "UnlockInvRow" { ROLLBACK; }
 
 
-#refresh1, refresh2 can run concurrently
-permutation "Setup2" "LockMat1" "Refresh1" "Refresh2" "UnlockMat1"
+# Test 1: Refreshes on different CAggs can run concurrently.
+# Refresh1 is initially blocked by the catalog row lock on continuous_view_1. Refresh2 on continuous_view_2 is not blocked and runs concurrently.
+permutation "Setup2" "LockCAggCatalogRow_1" "Refresh1" "Refresh2" "UnlockCAggCatalogRow_1"
 
-#refresh1 and refresh2 run concurrently and see the correct invalidation
-#test1 - both see the same invalidation
-permutation "Setup2" "Refresh1" "Refresh2" "LockMat1" "I1" "Refresh1" "Refresh2" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
+# Test 2: continuous_view_2 should see results from the insert but not the other one.
+# Refresh2 will complete first due to LockCAggCatalogRow_1 and write the invalidation logs out.
+# Refresh1 will see these invalidation logs as well
+permutation "Setup2" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "LockCAggCatalogRow_1" "I1" "Refresh1" "Refresh2" "Refresh2_sel" "UnlockCAggCatalogRow_1" "Refresh1_sel"
 
-##test2 - continuous_view_2 should see results from insert but not the other one.
-## Refresh2 will complete first due to LockMat1 and write the invalidation logs out.
-permutation "Setup2" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "LockMat1" "I2" "Refresh1" "Refresh2" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
-
-#test3 - both see the updates i.e. the invalidations
+# Test 3: Both see the updates i.e. the invalidations
 ##Refresh1 and Refresh2 are blocked by LockInvRow, when that is unlocked, they should complete serially
 permutation "Setup2" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "U1" "U2" "LInvRow" "Refresh1" "Refresh2" "UnlockInvRow" "Refresh1_sel" "Refresh2_sel"
