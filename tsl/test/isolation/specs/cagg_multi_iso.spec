@@ -14,7 +14,8 @@ setup
 }
 
 teardown {
-    DROP FUNCTION lock_mattable( text );
+    DROP FUNCTION lock_mattable(text);
+    DROP FUNCTION lock_cagg(integer);
     DROP TABLE ts_continuous_test CASCADE;
 }
 
@@ -32,8 +33,13 @@ step "Setup2"
         AS SELECT time_bucket('5', time), max(val)
             FROM ts_continuous_test
             GROUP BY 1 WITH NO DATA;
-    CREATE FUNCTION lock_mattable( name text) RETURNS void AS $$
+
+    CREATE FUNCTION lock_mattable(name text) RETURNS void AS $$
     BEGIN EXECUTE format( 'lock table %s', name);
+    END; $$ LANGUAGE plpgsql;
+
+    CREATE FUNCTION lock_cagg(mat_hypertable_id integer) RETURNS void AS $$
+    BEGIN PERFORM 1 FROM _timescaledb_catalog.continuous_agg ca WHERE ca.mat_hypertable_id = lock_cagg.mat_hypertable_id FOR UPDATE;
     END; $$ LANGUAGE plpgsql;
 }
 
@@ -55,11 +61,16 @@ step "Refresh2"	{ CALL refresh_continuous_aggregate('continuous_view_2', NULL, N
 session "R2_sel"
 step "Refresh2_sel"	{ select * from continuous_view_2 where bkt = 0 or bkt > 30 order by bkt; }
 
-#locking the materialized table will block refresh1
+#locking the materialized table will not block refresh1
 session "LM1"
 step "LockMat1" { BEGIN; select lock_mattable(tab) FROM ( SELECT format('%I.%I',materialization_hypertable_schema, materialization_hypertable_name) as tab from timescaledb_information.continuous_aggregates where view_name::text like 'continuous_view_1') q ;
 }
 step "UnlockMat1" { ROLLBACK; }
+
+#locking the catalog row will block refresh1
+session "LC1"
+step "LockCatalogRow1" { BEGIN; select lock_cagg(mat_hypertable_id) FROM (SELECT mat_hypertable_id from _timescaledb_catalog.continuous_agg where user_view_name like 'continuous_view_1'); }
+step "UnlockCatalogRow1" { ROLLBACK; }
 
 #update the hypertable
 session "Upd"
@@ -82,9 +93,13 @@ permutation "Setup2" "LockMat1" "Refresh1" "Refresh2" "UnlockMat1"
 permutation "Setup2" "Refresh1" "Refresh2" "LockMat1" "I1" "Refresh1" "Refresh2" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
 
 ##test2 - continuous_view_2 should see results from insert but not the other one.
-## Refresh2 will complete first due to LockMat1 and write the invalidation logs out.
-permutation "Setup2" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "LockMat1" "I2" "Refresh1" "Refresh2" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"
+## Refresh2 will complete first due to LockCatalogRow1 and write the invalidation logs out.
+permutation "Setup2" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "LockCatalogRow1" "I2" "Refresh1" "Refresh2" "UnlockCatalogRow1" "Refresh1_sel" "Refresh2_sel"
 
 #test3 - both see the updates i.e. the invalidations
 ##Refresh1 and Refresh2 are blocked by LockInvRow, when that is unlocked, they should complete serially
 permutation "Setup2" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "U1" "U2" "LInvRow" "Refresh1" "Refresh2" "UnlockInvRow" "Refresh1_sel" "Refresh2_sel"
+
+#test4 - locking the materialization hypertable does not block refreshes
+## Refresh2 is not blocked by LockMat1
+permutation "Setup2" "Refresh1" "Refresh2" "Refresh1_sel" "Refresh2_sel" "LockMat1" "I2" "Refresh1" "Refresh2" "UnlockMat1" "Refresh1_sel" "Refresh2_sel"

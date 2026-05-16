@@ -445,7 +445,7 @@ hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int index
 /* update the tuple at this tid. The assumption is that we already hold a
  * tuple exclusive lock and no other transaction can modify this tuple
  * The sequence of operations for any update is:
- * lock the tuple using lock_hypertable_tuple.
+ * lock the tuple using ts_lock_hypertable_tuple.
  * then update the required fields
  * call hypertable_update_catalog_tuple to complete the update.
  * This ensures correct tuple locking and tuple updates in the presence of
@@ -469,8 +469,8 @@ hypertable_update_catalog_tuple(ItemPointer tid, FormData_hypertable *update)
 	relation_close(hypertable_rel, NoLock);
 }
 
-static bool
-lock_hypertable_tuple(int32 htid, ItemPointer tid, FormData_hypertable *form)
+TSDLLEXPORT bool
+ts_lock_hypertable_tuple(int32 htid, ItemPointer tid, FormData_hypertable *form)
 {
 	bool success = false;
 	ScanTupLock scantuplock = {
@@ -854,7 +854,7 @@ ts_hypertable_set_name(Hypertable *ht, const char *newname)
 	FormData_hypertable form;
 	ItemPointerData tid;
 	/* lock the tuple entry in the catalog table */
-	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	bool found = ts_lock_hypertable_tuple(ht->fd.id, &tid, &form);
 	Ensure(found, "hypertable id %d not found", ht->fd.id);
 
 	namestrcpy(&form.table_name, newname);
@@ -868,7 +868,7 @@ ts_hypertable_set_schema(Hypertable *ht, const char *newname)
 	FormData_hypertable form;
 	ItemPointerData tid;
 	/* lock the tuple entry in the catalog table */
-	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	bool found = ts_lock_hypertable_tuple(ht->fd.id, &tid, &form);
 	Ensure(found, "hypertable id %d not found", ht->fd.id);
 
 	namestrcpy(&form.schema_name, newname);
@@ -882,7 +882,7 @@ ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions)
 	FormData_hypertable form;
 	ItemPointerData tid;
 	/* lock the tuple entry in the catalog table */
-	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	bool found = ts_lock_hypertable_tuple(ht->fd.id, &tid, &form);
 	Ensure(found, "hypertable id %d not found", ht->fd.id);
 
 	Assert(num_dimensions > 0);
@@ -2294,7 +2294,7 @@ ts_hypertable_set_compressed(Hypertable *ht, int32 compressed_hypertable_id)
 	FormData_hypertable form;
 	ItemPointerData tid;
 	/* lock the tuple entry in the catalog table */
-	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	bool found = ts_lock_hypertable_tuple(ht->fd.id, &tid, &form);
 	Ensure(found, "hypertable id %d not found", ht->fd.id);
 
 	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
@@ -2313,7 +2313,7 @@ ts_hypertable_unset_compressed(Hypertable *ht)
 	FormData_hypertable form;
 	ItemPointerData tid;
 	/* lock the tuple entry in the catalog table */
-	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	bool found = ts_lock_hypertable_tuple(ht->fd.id, &tid, &form);
 	Ensure(found, "hypertable id %d not found", ht->fd.id);
 
 	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
@@ -2538,7 +2538,7 @@ ts_hypertable_update_status_osm(Hypertable *ht)
 	FormData_hypertable form;
 	ItemPointerData tid;
 	/* lock the tuple entry in the catalog table */
-	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	bool found = ts_lock_hypertable_tuple(ht->fd.id, &tid, &form);
 	Ensure(found, "hypertable id %d not found", ht->fd.id);
 
 	if (form.status != ht->fd.status)
@@ -2555,7 +2555,7 @@ ts_hypertable_update_chunk_sizing(Hypertable *ht)
 	FormData_hypertable form;
 	ItemPointerData tid;
 	/* lock the tuple entry in the catalog table */
-	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	bool found = ts_lock_hypertable_tuple(ht->fd.id, &tid, &form);
 	Ensure(found, "hypertable id %d not found", ht->fd.id);
 
 	if (OidIsValid(ht->chunk_sizing_func))

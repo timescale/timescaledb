@@ -138,6 +138,56 @@ init_materialization_invalidation_log_scan_by_materialization_id(ScanIterator *i
 		Int32GetDatum(materialization_id));
 }
 
+TSDLLEXPORT bool
+ts_lock_continuous_agg_tuple(int32 mat_hypertable_id)
+{
+	bool success = false;
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+	};
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, RowShareLock, CurrentMemoryContext);
+	init_scan_by_mat_hypertable_id(&iterator, mat_hypertable_id);
+	iterator.ctx.tuplock = &scantuplock;
+	iterator.ctx.flags = SCANNER_F_KEEPLOCK;
+
+	/* see table_tuple_lock for details about flags that are set in TupleExclusive mode */
+	scantuplock.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS;
+	if (!IsolationUsesXactSnapshot())
+	{
+		/* in read committed mode, we follow all updates to this tuple */
+		scantuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+	}
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		if (ti->lockresult != TM_Ok)
+		{
+			if (IsolationUsesXactSnapshot())
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+						 errmsg("could not serialize access due to concurrent update")));
+			}
+			else
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("unable to lock continuous aggregate catalog tuple, lock result "
+								"is %d for mat_hypertable_id (%d)",
+								ti->lockresult,
+								mat_hypertable_id)));
+			}
+		}
+		success = true;
+		break;
+	}
+	ts_scan_iterator_close(&iterator);
+	return success;
+}
+
 static int32
 number_of_continuous_aggs_attached(int32 raw_hypertable_id)
 {

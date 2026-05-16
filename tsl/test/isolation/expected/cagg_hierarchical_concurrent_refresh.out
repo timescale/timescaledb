@@ -463,7 +463,7 @@ Fri Jan 02 00:00:00 2026 UTC|32.1666666666667|32.1666666666667|        288|     
 Sat Jan 03 00:00:00 2026 UTC|            31.5|            31.5|         96|           96|t        |t          
 
 
-starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals L2_refresh_jan1 insert_ht L1_refresh_full lock_L2_source L2b_refresh_jan1_2 WP_before_release unlock chk_cagg_1d chk_1d_consistency
+starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals lock_L2_source L2_refresh_jan1 insert_ht L1_refresh_full L2b_refresh_jan1_2 WP_before_release unlock chk_cagg_1d chk_1d_consistency
 step L1_refresh_full: 
     CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01', '2026-01-04');
 
@@ -511,6 +511,16 @@ source |lowest                      |greatest
 -------+----------------------------+----------------------------
 cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 18:00:00 2026 UTC
 
+step lock_L2_source: 
+    BEGIN;
+    DO $$
+    BEGIN
+        PERFORM 1 FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cagg_1d'
+        FOR UPDATE;
+    END;
+    $$;
+
 step L2_refresh_jan1: 
     CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-02');
  <waiting ...>
@@ -522,20 +532,6 @@ step insert_ht:
 
 step L1_refresh_full: 
     CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01', '2026-01-04');
- <waiting ...>
-step lock_L2_source: 
-    BEGIN;
-    DO $$
-    DECLARE
-        mat_ht text;
-    BEGIN
-        SELECT format('%I.%I', h.schema_name, h.table_name) INTO mat_ht
-        FROM _timescaledb_catalog.continuous_agg ca
-        JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
-        WHERE ca.user_view_name = 'cagg_1d';
-        EXECUTE format('LOCK TABLE %s IN ACCESS EXCLUSIVE MODE', mat_ht);
-    END;
-    $$;
  <waiting ...>
 step L2b_refresh_jan1_2: 
     CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-03');
@@ -549,7 +545,6 @@ debug_waitpoint_release
                        
 
 step L1_refresh_full: <... completed>
-step lock_L2_source: <... completed>
 step unlock: 
     ROLLBACK;
 
@@ -590,7 +585,7 @@ Fri Jan 02 00:00:00 2026 UTC|            31.5|32.1666666666667|         96|     
 Sat Jan 03 00:00:00 2026 UTC|            31.5|            40.5|         96|          288|f        |f          
 
 
-starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals L2b_refresh_jan1_2 insert_ht L1_refresh_full lock_L2_source L2_refresh_jan1 WP_before_release unlock chk_cagg_1d chk_1d_consistency
+starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals lock_L2_source L2b_refresh_jan1_2 insert_ht L1_refresh_full L2_refresh_jan1 WP_before_release unlock chk_cagg_1d chk_1d_consistency
 step L1_refresh_full: 
     CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01', '2026-01-04');
 
@@ -638,6 +633,16 @@ source |lowest                      |greatest
 -------+----------------------------+----------------------------
 cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 18:00:00 2026 UTC
 
+step lock_L2_source: 
+    BEGIN;
+    DO $$
+    BEGIN
+        PERFORM 1 FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cagg_1d'
+        FOR UPDATE;
+    END;
+    $$;
+
 step L2b_refresh_jan1_2: 
     CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-03');
  <waiting ...>
@@ -649,20 +654,6 @@ step insert_ht:
 
 step L1_refresh_full: 
     CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01', '2026-01-04');
- <waiting ...>
-step lock_L2_source: 
-    BEGIN;
-    DO $$
-    DECLARE
-        mat_ht text;
-    BEGIN
-        SELECT format('%I.%I', h.schema_name, h.table_name) INTO mat_ht
-        FROM _timescaledb_catalog.continuous_agg ca
-        JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
-        WHERE ca.user_view_name = 'cagg_1d';
-        EXECUTE format('LOCK TABLE %s IN ACCESS EXCLUSIVE MODE', mat_ht);
-    END;
-    $$;
  <waiting ...>
 step L2_refresh_jan1: 
     CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-02');
@@ -676,7 +667,6 @@ debug_waitpoint_release
                        
 
 step L1_refresh_full: <... completed>
-step lock_L2_source: <... completed>
 step unlock: 
     ROLLBACK;
 
@@ -872,7 +862,7 @@ Fri Jan 02 00:00:00 2026 UTC|            31.5|            31.5|         96|     
 Sat Jan 03 00:00:00 2026 UTC|            40.5|            40.5|        288|          288|t        |t          
 
 
-starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals L2_refresh_jan1 insert_ht L1_refresh_full lock_L2_source L2b_refresh_jan3 WP_before_release unlock chk_cagg_1d chk_1d_consistency
+starting permutation: L1_refresh_full chk_1d_consistency WP_before_enable chk_hyper_invals lock_L2_source L2_refresh_jan1 insert_ht L1_refresh_full L2b_refresh_jan3 WP_before_release unlock chk_cagg_1d chk_1d_consistency
 step L1_refresh_full: 
     CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01', '2026-01-04');
 
@@ -920,6 +910,16 @@ source |lowest                      |greatest
 -------+----------------------------+----------------------------
 cagg_6h|Thu Jan 01 00:00:00 2026 UTC|Sat Jan 03 18:00:00 2026 UTC
 
+step lock_L2_source: 
+    BEGIN;
+    DO $$
+    BEGIN
+        PERFORM 1 FROM _timescaledb_catalog.continuous_agg
+        WHERE user_view_name = 'cagg_1d'
+        FOR UPDATE;
+    END;
+    $$;
+
 step L2_refresh_jan1: 
     CALL refresh_continuous_aggregate('cagg_1d', '2026-01-01', '2026-01-02');
  <waiting ...>
@@ -932,20 +932,6 @@ step insert_ht:
 step L1_refresh_full: 
     CALL refresh_continuous_aggregate('cagg_6h', '2026-01-01', '2026-01-04');
  <waiting ...>
-step lock_L2_source: 
-    BEGIN;
-    DO $$
-    DECLARE
-        mat_ht text;
-    BEGIN
-        SELECT format('%I.%I', h.schema_name, h.table_name) INTO mat_ht
-        FROM _timescaledb_catalog.continuous_agg ca
-        JOIN _timescaledb_catalog.hypertable h ON h.id = ca.mat_hypertable_id
-        WHERE ca.user_view_name = 'cagg_1d';
-        EXECUTE format('LOCK TABLE %s IN ACCESS EXCLUSIVE MODE', mat_ht);
-    END;
-    $$;
- <waiting ...>
 step L2b_refresh_jan3: 
     CALL refresh_continuous_aggregate('cagg_1d', '2026-01-03', '2026-01-04');
  <waiting ...>
@@ -957,7 +943,6 @@ debug_waitpoint_release
                        
 
 step L1_refresh_full: <... completed>
-step lock_L2_source: <... completed>
 step unlock: 
     ROLLBACK;
 
