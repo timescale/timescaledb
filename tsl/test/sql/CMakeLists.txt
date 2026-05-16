@@ -207,6 +207,10 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_delete_bitmapscan.sql.in
     transparent_decompression_queries.sql.in)
 
+  if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
+    list(APPEND TEST_FILES direct_compress_memory.sql)
+  endif()
+
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry_stats.sql)
   endif()

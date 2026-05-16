@@ -574,7 +574,11 @@ TSCopyMultiInsertBufferCleanup(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertB
 			FreeTupleDesc(buffer->tupdesc);
 			break;
 		case TS_CIM_COMPRESSION:
-			ts_cm_functions->compressor_free(buffer->compressor, buffer->bulk_writer);
+			ts_cm_functions->compressor_close(buffer->compressor, buffer->bulk_writer);
+			pfree(buffer->compressor);
+			pfree(buffer->bulk_writer);
+			buffer->compressor = NULL;
+			buffer->bulk_writer = NULL;
 			break;
 	}
 

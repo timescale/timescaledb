@@ -157,6 +157,9 @@ static ArrayType *analyze_segmentby_candidates(ColumnAnalysis *candidates, int n
 static ArrayType *analyze_and_get_segmentby(CompressionSettings *settings,
 											RowCompressor *compressor);
 
+static void compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor,
+												   BulkWriter *old_bulk_writer);
+
 /********************
  ** compress_chunk **
  ********************/
@@ -1071,11 +1074,10 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 
 			if (compressor->needs_analyze_segmentby)
 			{
-				tsl_compressor_apply_segmentby_and_rebuild(compressor, bulk_writer);
-				compressor->needs_analyze_segmentby = false;
+				compressor_apply_segmentby_and_rebuild(compressor, bulk_writer);
 			}
-			TupleTableSlot *slot = MakeTupleTableSlot(compressor->in_desc, &TTSOpsMinimalTuple);
 
+			TupleTableSlot *slot = MakeTupleTableSlot(compressor->in_desc, &TTSOpsMinimalTuple);
 			while (tuplesort_gettupleslot(compressor->sort_state,
 										  true /*=forward*/,
 										  false /*=copy*/,
@@ -1087,7 +1089,7 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 
 			if (compressor->rows_compressed_into_current_value > 0)
 			{
-				row_compressor_flush(compressor, bulk_writer, true);
+				row_compressor_flush(compressor, bulk_writer, /* changed_groups = */ false);
 			}
 
 			ExecDropSingleTupleTableSlot(slot);
@@ -1109,35 +1111,39 @@ tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
 }
 
 void
-tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
+tsl_compressor_close(RowCompressor *compressor, BulkWriter *bulk_writer)
 {
 	if (compressor->sort_state)
 	{
 		tuplesort_end(compressor->sort_state);
 	}
-	tsl_compressor_flush(compressor, bulk_writer);
+
 	if (compressor->invalidation)
 	{
 		pfree(compressor->invalidation);
 	}
-	row_compressor_close(compressor);
+
 	bulk_writer_close(bulk_writer);
+
 	table_close(bulk_writer->out_rel, NoLock);
+
+	row_compressor_close(compressor);
 }
 
 /*
  * Determine the segmentby column from tuples in Tuplesortstate in the RowCompressor,
  * then rebuild the compressed chunk and compressor to use it.
  */
-void
-tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *compressor, BulkWriter *bulk_writer)
+static void
+compressor_apply_segmentby_and_rebuild(RowCompressor *old_compressor, BulkWriter *old_bulk_writer)
 {
-	if (compressor->sort_state == NULL || compressor->tuples_to_sort == 0)
+	old_compressor->needs_analyze_segmentby = false;
+	if (old_compressor->sort_state == NULL || old_compressor->tuples_to_sort == 0)
 	{
 		return;
 	}
 
-	Oid old_compressed_relid = RelationGetRelid(bulk_writer->out_rel);
+	Oid old_compressed_relid = RelationGetRelid(old_bulk_writer->out_rel);
 	CompressionSettings *settings =
 		ts_compression_settings_get_by_compress_relid(old_compressed_relid);
 	Chunk *src_chunk = ts_chunk_get_by_relid(settings->fd.relid, true);
@@ -1175,7 +1181,7 @@ tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *compressor, BulkWriter
 		   NameStr(old_compressed_chunk->fd.schema_name),
 		   NameStr(old_compressed_chunk->fd.table_name));
 
-	settings->fd.segmentby = analyze_and_get_segmentby(settings, compressor);
+	settings->fd.segmentby = analyze_and_get_segmentby(settings, old_compressor);
 
 	/* nothing qualified as segmentby */
 	if (!settings->fd.segmentby)
@@ -1202,47 +1208,53 @@ tsl_compressor_apply_segmentby_and_rebuild(RowCompressor *compressor, BulkWriter
 
 	Relation in_rel = table_open(src_chunk->table_id, NoLock);
 
-	/* Tear down old internals */
-	Tuplesortstate *old_sort_state = compressor->sort_state;
-	int saved_tuple_sort_limit = compressor->tuple_sort_limit;
-	TupleDesc old_in_desc = compressor->in_desc;
-	compressor->sort_state = NULL;
-	row_compressor_close(compressor);
-	bulk_writer_close(bulk_writer);
-	table_close(bulk_writer->out_rel, NoLock);
-
 	/* Create before drop. We must update settings first to point to the new chunk. */
 	Chunk *new_compressed_chunk =
 		create_compress_chunk(compress_ht, src_chunk, InvalidOid, false, settings);
 	ts_chunk_set_compressed_chunk(src_chunk, new_compressed_chunk->fd.id);
-	ts_chunk_drop(old_compressed_chunk, DROP_RESTRICT, -1);
 
-	/* Re-init bulk writer in place and compressor against the new compressed relation */
+	/* Initialize the new bulk writer and compressor against the new compressed relation */
 	Relation out_rel = table_open(new_compressed_chunk->table_id, RowExclusiveLock);
-	*bulk_writer = bulk_writer_build(out_rel, 0);
-	row_compressor_init(compressor, settings, RelationGetDescr(in_rel), RelationGetDescr(out_rel));
-	compressor->sort_state = compression_create_tuplesort_state(settings, in_rel, false);
-	compressor->tuple_sort_limit = saved_tuple_sort_limit;
+
+	BulkWriter new_bulk_writer = bulk_writer_build(out_rel, /* insert_options = */ 0);
+
+	RowCompressor new_compressor;
+	row_compressor_init(&new_compressor,
+						settings,
+						RelationGetDescr(in_rel),
+						RelationGetDescr(out_rel));
+
+	MemoryContext old_context = MemoryContextSwitchTo(new_compressor.row_compressor_context);
+	new_compressor.sort_state = compression_create_tuplesort_state(settings, in_rel, false);
+	MemoryContextSwitchTo(old_context);
+
+	new_compressor.tuple_sort_limit = old_compressor->tuple_sort_limit;
+	new_compressor.needs_analyze_segmentby = false;
 
 	/* Transfer from old sort state into the new one with segmentby settings */
-	TupleTableSlot *slot = MakeTupleTableSlot(old_in_desc, &TTSOpsMinimalTuple);
-
-	while (tuplesort_gettupleslot(old_sort_state,
+	TupleTableSlot *slot = MakeTupleTableSlot(old_compressor->in_desc, &TTSOpsMinimalTuple);
+	while (tuplesort_gettupleslot(old_compressor->sort_state,
 								  true /*=forward*/,
 								  false /*=copy*/,
 								  slot,
 								  NULL /*=abbrev*/))
 	{
-		tuplesort_puttupleslot(compressor->sort_state, slot);
-		compressor->tuples_to_sort++;
+		tuplesort_puttupleslot(new_compressor.sort_state, slot);
+		new_compressor.tuples_to_sort++;
 	}
 
 	ExecDropSingleTupleTableSlot(slot);
-	tuplesort_performsort(compressor->sort_state);
-	tuplesort_end(old_sort_state);
 
-	FreeTupleDesc(old_in_desc);
+	tsl_compressor_close(old_compressor, old_bulk_writer);
+
+	ts_chunk_drop(old_compressed_chunk, DROP_RESTRICT, -1);
+
+	tuplesort_performsort(new_compressor.sort_state);
+
 	table_close(in_rel, NoLock);
+
+	*old_bulk_writer = new_bulk_writer;
+	*old_compressor = new_compressor;
 }
 
 /*
@@ -1255,11 +1267,14 @@ RowCompressor *
 tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int sort_limit,
 					bool created_compressed_chunk)
 {
-	RowCompressor *compressor = palloc0(sizeof(RowCompressor));
 	CompressionSettings *settings = ts_compression_settings_get(in_rel->rd_id);
 	Relation out_rel = table_open(settings->fd.compress_relid, RowExclusiveLock);
-	*bulk_writer = bulk_writer_alloc(out_rel, 0);
+	RowCompressor *compressor = palloc0(sizeof(RowCompressor));
 	row_compressor_init(compressor, settings, RelationGetDescr(in_rel), RelationGetDescr(out_rel));
+
+	*bulk_writer = bulk_writer_alloc(out_rel, 0);
+
+	MemoryContext old_context = MemoryContextSwitchTo(compressor->row_compressor_context);
 
 	if (sort)
 	{
@@ -1273,10 +1288,12 @@ tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort, int so
 		compressor->sort_state =
 			compression_create_tuplesort_state(settings,
 											   in_rel,
-											   compressor
-												   ->needs_analyze_segmentby); /* random_access */
+											   /* random_access = */
+											   compressor->needs_analyze_segmentby);
 		compressor->tuple_sort_limit = sort_limit;
 	}
+
+	MemoryContextSwitchTo(old_context);
 
 	return compressor;
 }
@@ -1300,16 +1317,24 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 	}
 
+	MemoryContext row_compressor_context = AllocSetContextCreate(CurrentMemoryContext,
+																 "row compressor context",
+																 ALLOCSET_DEFAULT_SIZES);
+	MemoryContext old_context = MemoryContextSwitchTo(row_compressor_context);
+
 	*row_compressor = (RowCompressor){
-		.per_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
+		.row_compressor_context = row_compressor_context,
+		.per_row_ctx = AllocSetContextCreate(row_compressor_context,
 											 "compress chunk per-row",
 											 ALLOCSET_DEFAULT_SIZES),
 		.in_desc = CreateTupleDescCopyConstr(noncompressed_tupdesc),
 		.out_desc = CreateTupleDescCopyConstr(compressed_tupdesc),
 		.n_input_columns = noncompressed_tupdesc->natts,
 		.count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num),
-		.compressed_values = palloc(sizeof(Datum) * compressed_tupdesc->natts),
-		.compressed_is_null = palloc(sizeof(bool) * compressed_tupdesc->natts),
+		.compressed_values =
+			MemoryContextAlloc(row_compressor_context, sizeof(Datum) * compressed_tupdesc->natts),
+		.compressed_is_null =
+			MemoryContextAlloc(row_compressor_context, sizeof(bool) * compressed_tupdesc->natts),
 		.rows_compressed_into_current_value = 0,
 		.rowcnt_pre_compression = 0,
 		.num_compressed_rows = 0,
@@ -1331,6 +1356,8 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 	row_compressor->needs_fullness_check =
 		check_for_limited_size_compressors(row_compressor->per_column,
 										   row_compressor->n_input_columns);
+
+	MemoryContextSwitchTo(old_context);
 }
 
 void
@@ -1784,6 +1811,8 @@ row_compressor_close(RowCompressor *row_compressor)
 	pfree(row_compressor->per_column);
 	pfree(row_compressor->uncompressed_col_to_compressed_col);
 	FreeTupleDesc(row_compressor->out_desc);
+
+	MemoryContextDelete(row_compressor->row_compressor_context);
 }
 
 /******************
@@ -1962,13 +1991,7 @@ BulkWriter *
 bulk_writer_alloc(Relation out_rel, int insert_options)
 {
 	BulkWriter *writer = palloc(sizeof(BulkWriter));
-	writer->out_rel = out_rel;
-	writer->indexstate = CatalogOpenIndexes(out_rel);
-	writer->mycid = GetCurrentCommandId(true);
-	writer->bistate = GetBulkInsertState();
-	writer->estate = CreateExecutorState();
-	writer->insert_options = insert_options;
-
+	*writer = bulk_writer_build(out_rel, insert_options);
 	return writer;
 }
 
