@@ -739,11 +739,7 @@ insert_columnar_index_scan(Plan *plan, void *context)
 	}
 
 	/*
-	 * GROUPING SETS / ROLLUP / CUBE produce an Agg with a non-empty chain of
-	 * additional Aggs (and Sorts) that share the same input. The rewrite below
-	 * remaps only this Agg's targetlist and grpColIdx, so chained Aggs would
-	 * end up referencing the pre-rewrite column layout. Refuse the rewrite in
-	 * that case.
+	 * GROUPING SETS / ROLLUP / CUBE currently not supported.
 	 */
 	if (agg->groupingSets != NIL || agg->chain != NIL)
 	{
