@@ -161,3 +161,8 @@ SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
 :PREFIX SELECT first(value, time) FROM metrics GROUP BY device ORDER BY device;
 :PREFIX SELECT last(value, time) FROM metrics GROUP BY device ORDER BY device;
 
+-- GROUPING SETS / ROLLUP / CUBE are not supported by ColumnarIndexScan
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY ROLLUP(device, sensor) ORDER BY device, sensor;
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY CUBE(device, sensor) ORDER BY device, sensor;
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY GROUPING SETS ((device), (sensor), ()) ORDER BY device, sensor;
+

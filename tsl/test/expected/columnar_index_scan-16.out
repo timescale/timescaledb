@@ -539,6 +539,39 @@ SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
 
+-- GROUPING SETS / ROLLUP / CUBE are not supported by ColumnarIndexScan
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY ROLLUP(device, sensor) ORDER BY device, sensor;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   Group Key: _hyper_1_1_chunk.device
+   Group Key: ()
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY CUBE(device, sensor) ORDER BY device, sensor;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  MixedAggregate
+         Hash Key: _hyper_1_1_chunk.sensor
+         Group Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+         Group Key: _hyper_1_1_chunk.device
+         Group Key: ()
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY GROUPING SETS ((device), (sensor), ()) ORDER BY device, sensor;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk.sensor
+   ->  MixedAggregate
+         Hash Key: _hyper_1_1_chunk.sensor
+         Group Key: _hyper_1_1_chunk.device
+         Group Key: ()
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+
 \set PREFIX ''
 \set ECHO errors
 --- Unoptimized results
@@ -1412,6 +1445,47 @@ SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
                ->  Partial HashAggregate
                      Group Key: _hyper_1_1_chunk.device
                      ->  Seq Scan on _hyper_1_1_chunk
+
+-- GROUPING SETS / ROLLUP / CUBE are not supported by ColumnarIndexScan
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY ROLLUP(device, sensor) ORDER BY device, sensor;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device, metrics.sensor
+   ->  MixedAggregate
+         Hash Key: metrics.device, metrics.sensor
+         Hash Key: metrics.device
+         Group Key: ()
+         ->  Append
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Seq Scan on _hyper_1_1_chunk
+
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY CUBE(device, sensor) ORDER BY device, sensor;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device, metrics.sensor
+   ->  MixedAggregate
+         Hash Key: metrics.device, metrics.sensor
+         Hash Key: metrics.device
+         Hash Key: metrics.sensor
+         Group Key: ()
+         ->  Append
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Seq Scan on _hyper_1_1_chunk
+
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY GROUPING SETS ((device), (sensor), ()) ORDER BY device, sensor;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device, metrics.sensor
+   ->  MixedAggregate
+         Hash Key: metrics.device
+         Hash Key: metrics.sensor
+         Group Key: ()
+         ->  Append
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Seq Scan on _hyper_1_1_chunk
 
 \set PREFIX ''
 \set ECHO errors
@@ -2361,6 +2435,50 @@ SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
                Group Key: _hyper_1_3_chunk.device
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
                      ->  Index Scan using compress_hyper_2_4_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_4_chunk
+
+-- GROUPING SETS / ROLLUP / CUBE are not supported by ColumnarIndexScan
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY ROLLUP(device, sensor) ORDER BY device, sensor;
+--- QUERY PLAN ---
+ GroupAggregate
+   Group Key: metrics.device, metrics.sensor
+   Group Key: metrics.device
+   Group Key: ()
+   ->  Merge Append
+         Sort Key: metrics.device, metrics.sensor
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+               ->  Index Scan using compress_hyper_2_4_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_4_chunk
+
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY CUBE(device, sensor) ORDER BY device, sensor;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device, metrics.sensor
+   ->  MixedAggregate
+         Hash Key: metrics.sensor
+         Group Key: metrics.device, metrics.sensor
+         Group Key: metrics.device
+         Group Key: ()
+         ->  Merge Append
+               Sort Key: metrics.device, metrics.sensor
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_2_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_2_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                     ->  Index Scan using compress_hyper_2_4_chunk_device_sensor__ts_meta_min_1__ts_m_idx on compress_hyper_2_4_chunk
+
+:PREFIX SELECT device, sensor, count(*) FROM metrics GROUP BY GROUPING SETS ((device), (sensor), ()) ORDER BY device, sensor;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: metrics.device, metrics.sensor
+   ->  MixedAggregate
+         Hash Key: metrics.device
+         Hash Key: metrics.sensor
+         Group Key: ()
+         ->  Append
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+                     ->  Seq Scan on compress_hyper_2_4_chunk
 
 \set PREFIX ''
 \set ECHO errors
