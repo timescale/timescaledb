@@ -1,1 +1,0 @@
-Implements: #9475 Calculate hashes for bloom filter predicates at planning time.
