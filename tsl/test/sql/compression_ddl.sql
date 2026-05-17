@@ -123,8 +123,14 @@ ALTER TABLE test1 SET TABLESPACE tablespace2;
 SELECT tablename
 FROM pg_tables WHERE tablespace = 'tablespace1';
 
+SELECT format('%I.%I', schemaname, indexname) AS "COMPRESSED_CHUNK_INDEX"
+FROM pg_indexes
+WHERE schemaname = '_timescaledb_internal'
+  AND tablename = split_part(:'COMPRESSED_CHUNK_NAME', '.', 2)
+LIMIT 1 \gset
+
 \set ON_ERROR_STOP 0
-SELECT move_chunk(chunk=>:'COMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."compress_hyper_2_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx"');
+SELECT move_chunk(chunk=>:'COMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>:'COMPRESSED_CHUNK_INDEX');
 \set ON_ERROR_STOP 1
 
 -- ensure that both compressed and uncompressed chunks moved

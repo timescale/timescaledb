@@ -58,11 +58,15 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_2_2_chunk | regress-test-bloom_c250_num_hello
  compress_hyper_2_2_chunk | regress-test-bloom_cab4_small1_small2
  compress_hyper_2_2_chunk | regress-test-bloom_value
+ compress_hyper_2_2_chunk | _ts_meta_v2_first_o
+ compress_hyper_2_2_chunk | _ts_meta_v2_first_ts
+ compress_hyper_2_2_chunk | _ts_meta_v2_last_o
+ compress_hyper_2_2_chunk | _ts_meta_v2_last_ts
 
 select index from settings where relid = (select oid from pg_class where relname = 'sparse') and index is not null group by 1 order by 1;
-                                                                                                                                                                                                                                                                                                                                                                                            index                                                                                                                                                                                                                                                                                                                                                                                            
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"type": "bloom", "column": "big1", "source": "config"}, {"type": "bloom", "column": "big2", "source": "config"}, {"type": "bloom", "column": "value", "source": "config"}, {"type": "bloom", "column": ["value", "big1", "big2"], "source": "config"}, {"type": "bloom", "column": ["o", "big2"], "source": "config"}, {"type": "bloom", "column": ["big1", "big2"], "source": "config"}, {"type": "bloom", "column": ["boo", "big1"], "source": "config"}, {"type": "bloom", "column": ["small1", "small2"], "source": "config"}, {"type": "bloom", "column": ["num", "nowts"], "source": "config"}, {"type": "bloom", "column": ["num", "hello"], "source": "config"}, {"type": "minmax", "column": "o", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+                                                                                                                                                                                                                                                                                                                                                                                               index                                                                                                                                                                                                                                                                                                                                                                                               
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"type": "bloom", "column": "big1", "source": "config"}, {"type": "bloom", "column": "big2", "source": "config"}, {"type": "bloom", "column": "value", "source": "config"}, {"type": "bloom", "column": ["value", "big1", "big2"], "source": "config"}, {"type": "bloom", "column": ["o", "big2"], "source": "config"}, {"type": "bloom", "column": ["big1", "big2"], "source": "config"}, {"type": "bloom", "column": ["boo", "big1"], "source": "config"}, {"type": "bloom", "column": ["small1", "small2"], "source": "config"}, {"type": "bloom", "column": ["num", "nowts"], "source": "config"}, {"type": "bloom", "column": ["num", "hello"], "source": "config"}, {"type": "firstlast", "column": "o", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 select distinct(attname) from compressedcols where relname = 'sparse' order by 1 asc;
  attname 
@@ -80,9 +84,8 @@ explain (buffers off, costs off) select * from sparse where o = 1 and big2 = 1;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((o = 1) AND (big2 = 1))
-   ->  Index Scan using compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx on compress_hyper_2_2_chunk
-         Index Cond: ((_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1))
-         Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_9774_o_big2, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, TEST-HASHES::bigint[]))
+   ->  Seq Scan on compress_hyper_2_2_chunk
+         Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_9774_o_big2, TEST-HASHES::bigint[]) AND (_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, TEST-HASHES::bigint[]))
 
 explain (buffers off, costs off) select * from sparse where num = 1 and hello = md5('1')::bytea;
 --- QUERY PLAN ---
@@ -112,35 +115,22 @@ explain (buffers off, costs off) select * from sparse where o in (1,2) and big2 
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((o = ANY ('{1,2}'::bigint[])) AND (big2 = 1))
-   ->  Bitmap Heap Scan on compress_hyper_2_2_chunk
-         Recheck Cond: (((_ts_meta_min_1 <= '1'::bigint) AND (_ts_meta_max_1 >= '1'::bigint)) OR ((_ts_meta_min_1 <= '2'::bigint) AND (_ts_meta_max_1 >= '2'::bigint)))
-         Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, TEST-HASHES::bigint[])
-         ->  BitmapOr
-               ->  Bitmap Index Scan on compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx
-                     Index Cond: ((_ts_meta_min_1 <= '1'::bigint) AND (_ts_meta_max_1 >= '1'::bigint))
-               ->  Bitmap Index Scan on compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx
-                     Index Cond: ((_ts_meta_min_1 <= '2'::bigint) AND (_ts_meta_max_1 >= '2'::bigint))
+   ->  Seq Scan on compress_hyper_2_2_chunk
+         Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, TEST-HASHES::bigint[]) AND (((_ts_meta_min_1 <= '1'::bigint) AND (_ts_meta_max_1 >= '1'::bigint)) OR ((_ts_meta_min_1 <= '2'::bigint) AND (_ts_meta_max_1 >= '2'::bigint))))
 
 explain (buffers off, costs off) select * from sparse where o = 1 and big2 in (1,2);
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((big2 = ANY ('{1,2}'::bigint[])) AND (o = 1))
-   ->  Index Scan using compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx on compress_hyper_2_2_chunk
-         Index Cond: ((_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1))
-         Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, TEST-HASHES::bigint[])
+   ->  Seq Scan on compress_hyper_2_2_chunk
+         Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, TEST-HASHES::bigint[]) AND (_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1))
 
 explain (buffers off, costs off) select * from sparse where o in (1,2) and big2 in (1,2);
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Vectorized Filter: ((o = ANY ('{1,2}'::bigint[])) AND (big2 = ANY ('{1,2}'::bigint[])))
-   ->  Bitmap Heap Scan on compress_hyper_2_2_chunk
-         Recheck Cond: (((_ts_meta_min_1 <= '1'::bigint) AND (_ts_meta_max_1 >= '1'::bigint)) OR ((_ts_meta_min_1 <= '2'::bigint) AND (_ts_meta_max_1 >= '2'::bigint)))
-         Filter: _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, TEST-HASHES::bigint[])
-         ->  BitmapOr
-               ->  Bitmap Index Scan on compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx
-                     Index Cond: ((_ts_meta_min_1 <= '1'::bigint) AND (_ts_meta_max_1 >= '1'::bigint))
-               ->  Bitmap Index Scan on compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx
-                     Index Cond: ((_ts_meta_min_1 <= '2'::bigint) AND (_ts_meta_max_1 >= '2'::bigint))
+   ->  Seq Scan on compress_hyper_2_2_chunk
+         Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, TEST-HASHES::bigint[]) AND (((_ts_meta_min_1 <= '1'::bigint) AND (_ts_meta_max_1 >= '1'::bigint)) OR ((_ts_meta_min_1 <= '2'::bigint) AND (_ts_meta_max_1 >= '2'::bigint))))
 
 -- segmentby = bloom
 explain (buffers off, costs off) select * from sparse where big1 = sby and value = 1;
@@ -163,9 +153,8 @@ explain (buffers off, costs off) select * from sparse where o = 1 and big2 = sby
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    Filter: (big2 = sby)
    Vectorized Filter: (o = 1)
-   ->  Index Scan using compress_hyper_2_2_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx on compress_hyper_2_2_chunk
-         Index Cond: ((_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1))
-         Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_9774_o_big2, ARRAY[_timescaledb_functions.bloom1_hash(ROW(1, sby))]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, ARRAY[_timescaledb_functions.bloom1_hash(sby)]))
+   ->  Seq Scan on compress_hyper_2_2_chunk
+         Filter: ((_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_9774_o_big2, ARRAY[_timescaledb_functions.bloom1_hash(ROW(1, sby))]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, ARRAY[_timescaledb_functions.bloom1_hash(sby)]))
 
 explain (buffers off, costs off) select * from sparse where o = sby and big2 = 1;
 --- QUERY PLAN ---
@@ -224,6 +213,10 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_2_2_chunk | regress-test-bloom_c250_num_hello
  compress_hyper_2_2_chunk | regress-test-bloom_cab4_small1_small2
  compress_hyper_2_2_chunk | regress-test-bloom_value
+ compress_hyper_2_2_chunk | _ts_meta_v2_first_o
+ compress_hyper_2_2_chunk | _ts_meta_v2_first_ts
+ compress_hyper_2_2_chunk | _ts_meta_v2_last_o
+ compress_hyper_2_2_chunk | _ts_meta_v2_last_ts
  compress_hyper_4_4_chunk | _ts_meta_count
  compress_hyper_4_4_chunk | _ts_meta_max_1
  compress_hyper_4_4_chunk | _ts_meta_max_2
@@ -239,6 +232,10 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_4_4_chunk | regress-test-bloom_c250_num_hello
  compress_hyper_4_4_chunk | regress-test-bloom_cab4_small1_small2
  compress_hyper_4_4_chunk | regress-test-bloom_hello
+ compress_hyper_4_4_chunk | _ts_meta_v2_first_o
+ compress_hyper_4_4_chunk | _ts_meta_v2_first_ts
+ compress_hyper_4_4_chunk | _ts_meta_v2_last_o
+ compress_hyper_4_4_chunk | _ts_meta_v2_last_ts
  compress_hyper_4_4_chunk | _ts_meta_v2_max_nowts
  compress_hyper_4_4_chunk | _ts_meta_v2_max_num
  compress_hyper_4_4_chunk | _ts_meta_v2_max_small1
@@ -251,9 +248,9 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_4_4_chunk | _ts_meta_v2_min_value
 
 select index from settings where relid = (select oid from pg_class where relname = 'sparse_sister') and index is not null group by 1 order by 1;
-                                                       index                                                       
--------------------------------------------------------------------------------------------------------------------
- [{"type": "minmax", "column": "o", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+                                                          index                                                          
+-------------------------------------------------------------------------------------------------------------------------
+ [{"type": "firstlast", "column": "o", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 select distinct(attname) from compressedcols where relname = 'sparse_sister' order by 1 asc;
  attname 
@@ -271,9 +268,8 @@ explain (buffers off, costs off) select * from sparse_sister where o = 1 and big
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_3_3_chunk
    Vectorized Filter: ((o = 1) AND (big2 = 1))
-   ->  Index Scan using compress_hyper_4_4_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx on compress_hyper_4_4_chunk
-         Index Cond: ((_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1))
-         Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_9774_o_big2, TEST-HASHES::bigint[]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, TEST-HASHES::bigint[]))
+   ->  Seq Scan on compress_hyper_4_4_chunk
+         Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_9774_o_big2, TEST-HASHES::bigint[]) AND (_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, TEST-HASHES::bigint[]))
 
 explain (buffers off, costs off) select * from sparse_sister where num = 1 and hello = md5('1')::bytea;
 --- QUERY PLAN ---
@@ -320,9 +316,8 @@ explain (buffers off, costs off) select * from sparse_sister where o = 1 and big
  Custom Scan (ColumnarScan) on _hyper_3_3_chunk
    Filter: (big2 = sby)
    Vectorized Filter: (o = 1)
-   ->  Index Scan using compress_hyper_4_4_chunk_sby__ts_meta_min_1__ts_meta_max_1__idx on compress_hyper_4_4_chunk
-         Index Cond: ((_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1))
-         Filter: (_timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_9774_o_big2, ARRAY[_timescaledb_functions.bloom1_hash(ROW(1, sby))]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, ARRAY[_timescaledb_functions.bloom1_hash(sby)]))
+   ->  Seq Scan on compress_hyper_4_4_chunk
+         Filter: ((_ts_meta_min_1 <= 1) AND (_ts_meta_max_1 >= 1) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_9774_o_big2, ARRAY[_timescaledb_functions.bloom1_hash(ROW(1, sby))]) AND _timescaledb_functions.bloom1_contains_any_hashes(regress-test-bloom_big2, ARRAY[_timescaledb_functions.bloom1_hash(sby)]))
 
 explain (buffers off, costs off) select * from sparse_sister where o = sby and big2 = 1;
 --- QUERY PLAN ---
@@ -352,6 +347,10 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_2_2_chunk | regress-test-bloom_cab4_small1_small2
  compress_hyper_2_2_chunk | regress-test-bloom_value
  compress_hyper_2_2_chunk | regress-test-bloom_xxl
+ compress_hyper_2_2_chunk | _ts_meta_v2_first_o
+ compress_hyper_2_2_chunk | _ts_meta_v2_first_ts
+ compress_hyper_2_2_chunk | _ts_meta_v2_last_o
+ compress_hyper_2_2_chunk | _ts_meta_v2_last_ts
  compress_hyper_4_4_chunk | _ts_meta_count
  compress_hyper_4_4_chunk | _ts_meta_max_1
  compress_hyper_4_4_chunk | _ts_meta_max_2
@@ -367,6 +366,10 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_4_4_chunk | regress-test-bloom_c250_num_hello
  compress_hyper_4_4_chunk | regress-test-bloom_cab4_small1_small2
  compress_hyper_4_4_chunk | regress-test-bloom_hello
+ compress_hyper_4_4_chunk | _ts_meta_v2_first_o
+ compress_hyper_4_4_chunk | _ts_meta_v2_first_ts
+ compress_hyper_4_4_chunk | _ts_meta_v2_last_o
+ compress_hyper_4_4_chunk | _ts_meta_v2_last_ts
  compress_hyper_4_4_chunk | _ts_meta_v2_max_nowts
  compress_hyper_4_4_chunk | _ts_meta_v2_max_num
  compress_hyper_4_4_chunk | _ts_meta_v2_max_small1
@@ -379,9 +382,9 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_4_4_chunk | _ts_meta_v2_min_value
 
 select index from settings where relid = (select oid from pg_class where relname = 'sparse') and index is not null group by 1 order by 1;
-                                                                                                                                                                                                                                                                                                                                                                                          index                                                                                                                                                                                                                                                                                                                                                                                          
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"type": "bloom", "column": "big1", "source": "config"}, {"type": "bloom", "column": "xxl", "source": "config"}, {"type": "bloom", "column": "value", "source": "config"}, {"type": "bloom", "column": ["value", "big1", "xxl"], "source": "config"}, {"type": "bloom", "column": ["o", "xxl"], "source": "config"}, {"type": "bloom", "column": ["big1", "xxl"], "source": "config"}, {"type": "bloom", "column": ["boo", "big1"], "source": "config"}, {"type": "bloom", "column": ["small1", "small2"], "source": "config"}, {"type": "bloom", "column": ["num", "nowts"], "source": "config"}, {"type": "bloom", "column": ["num", "hello"], "source": "config"}, {"type": "minmax", "column": "o", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+                                                                                                                                                                                                                                                                                                                                                                                             index                                                                                                                                                                                                                                                                                                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"type": "bloom", "column": "big1", "source": "config"}, {"type": "bloom", "column": "xxl", "source": "config"}, {"type": "bloom", "column": "value", "source": "config"}, {"type": "bloom", "column": ["value", "big1", "xxl"], "source": "config"}, {"type": "bloom", "column": ["o", "xxl"], "source": "config"}, {"type": "bloom", "column": ["big1", "xxl"], "source": "config"}, {"type": "bloom", "column": ["boo", "big1"], "source": "config"}, {"type": "bloom", "column": ["small1", "small2"], "source": "config"}, {"type": "bloom", "column": ["num", "nowts"], "source": "config"}, {"type": "bloom", "column": ["num", "hello"], "source": "config"}, {"type": "firstlast", "column": "o", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 select distinct(attname) from compressedcols where relname = 'sparse' order by 1 asc;
  attname 
@@ -403,6 +406,10 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_2_2_chunk | regress-test-bloom_c250_num_hello
  compress_hyper_2_2_chunk | regress-test-bloom_cab4_small1_small2
  compress_hyper_2_2_chunk | regress-test-bloom_value
+ compress_hyper_2_2_chunk | _ts_meta_v2_first_o
+ compress_hyper_2_2_chunk | _ts_meta_v2_first_ts
+ compress_hyper_2_2_chunk | _ts_meta_v2_last_o
+ compress_hyper_2_2_chunk | _ts_meta_v2_last_ts
  compress_hyper_4_4_chunk | _ts_meta_count
  compress_hyper_4_4_chunk | _ts_meta_max_1
  compress_hyper_4_4_chunk | _ts_meta_max_2
@@ -418,6 +425,10 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_4_4_chunk | regress-test-bloom_c250_num_hello
  compress_hyper_4_4_chunk | regress-test-bloom_cab4_small1_small2
  compress_hyper_4_4_chunk | regress-test-bloom_hello
+ compress_hyper_4_4_chunk | _ts_meta_v2_first_o
+ compress_hyper_4_4_chunk | _ts_meta_v2_first_ts
+ compress_hyper_4_4_chunk | _ts_meta_v2_last_o
+ compress_hyper_4_4_chunk | _ts_meta_v2_last_ts
  compress_hyper_4_4_chunk | _ts_meta_v2_max_nowts
  compress_hyper_4_4_chunk | _ts_meta_v2_max_num
  compress_hyper_4_4_chunk | _ts_meta_v2_max_small1
@@ -430,9 +441,9 @@ select relname,attname from metacols order by 1,2;
  compress_hyper_4_4_chunk | _ts_meta_v2_min_value
 
 select index from settings where relid = (select oid from pg_class where relname = 'sparse') and index is not null group by 1 order by 1;
-                                                                                                                                                                                                                                                        index                                                                                                                                                                                                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- [{"type": "bloom", "column": "big1", "source": "config"}, {"type": "bloom", "column": "value", "source": "config"}, {"type": "bloom", "column": ["boo", "big1"], "source": "config"}, {"type": "bloom", "column": ["small1", "small2"], "source": "config"}, {"type": "bloom", "column": ["num", "nowts"], "source": "config"}, {"type": "bloom", "column": ["num", "hello"], "source": "config"}, {"type": "minmax", "column": "o", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
+                                                                                                                                                                                                                                                           index                                                                                                                                                                                                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ [{"type": "bloom", "column": "big1", "source": "config"}, {"type": "bloom", "column": "value", "source": "config"}, {"type": "bloom", "column": ["boo", "big1"], "source": "config"}, {"type": "bloom", "column": ["small1", "small2"], "source": "config"}, {"type": "bloom", "column": ["num", "nowts"], "source": "config"}, {"type": "bloom", "column": ["num", "hello"], "source": "config"}, {"type": "firstlast", "column": "o", "source": "orderby"}, {"type": "firstlast", "column": "ts", "source": "orderby"}]
 
 select distinct(attname) from compressedcols where relname = 'sparse' order by 1 asc;
  attname 

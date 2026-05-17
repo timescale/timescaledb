@@ -1208,13 +1208,18 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 			   NameStr(splitdim_name));
 
 		/*
-		 * Get the attribute numbers for the primary dimension's min and max
-		 * values in the compressed relation. We'll use these to get the time
-		 * range of compressed segments in order to route segments to the
-		 * right result chunk.
+		 * Get the attribute numbers for the primary dimension's lower- and
+		 * upper-bound metadata columns in the compressed relation. We'll use
+		 * these to get the time range of compressed segments in order to
+		 * route segments to the right result chunk.
 		 */
-		const char *min_attname = column_segment_min_name(orderby_pos);
-		const char *max_attname = column_segment_max_name(orderby_pos);
+		AttrNumber lower_attno;
+		AttrNumber upper_attno;
+		orderby_sparse_metadata_attnos(compress_settings,
+									   compress_settings->fd.compress_relid,
+									   orderby_pos,
+									   &lower_attno,
+									   &upper_attno);
 
 		CompressedSplitPoint csp = {
 			.base = {
@@ -1222,8 +1227,8 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 				.dim = hyperspace_get_open_dimension(ht->space, 0),
 				.route_next_tuple = route_next_compressed_tuple,
 			},
-			.attnum_min = get_attnum(compress_settings->fd.compress_relid, min_attname),
-			.attnum_max = get_attnum(compress_settings->fd.compress_relid, max_attname),
+			.attnum_min = lower_attno,
+			.attnum_max = upper_attno,
 			.attnum_count = get_attnum(compress_settings->fd.compress_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME),
 			.noncompressed_tupdesc = CreateTupleDescCopy(RelationGetDescr(srcrel)),
 		};

@@ -326,9 +326,14 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 
 				column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
 				int16 orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
-				varattno =
-					get_attnum(info->compressed_rte->relid, column_segment_min_name(orderby_index));
 				Assert(orderby_index != 0);
+				AttrNumber lower_attno;
+				AttrNumber upper_attno;
+				orderby_sparse_metadata_attnos(info->settings,
+											   info->compressed_rte->relid,
+											   orderby_index,
+											   &lower_attno,
+											   &upper_attno);
 				bool orderby_desc =
 					ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
 				bool orderby_nullsfirst =
@@ -349,35 +354,33 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 				}
 
 				Var *metadata_var = makeVar(info->compressed_rel->relid,
-											varattno,
+											lower_attno,
 											var->vartype,
 											var->vartypmod,
 											var->varcollid,
 											var->varlevelsup);
-				Expr *min_expr =
+				Expr *lower_expr =
 					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-				EquivalenceClass *min_ec =
-					append_ec_for_metadata_col(root, info, min_expr, pk, opcintype);
-				PathKey *min =
-					make_canonical_pathkey(root, min_ec, pk->pk_opfamily, strategy, nulls_first);
-				required_compressed_pathkeys = lappend(required_compressed_pathkeys, min);
+				EquivalenceClass *lower_ec =
+					append_ec_for_metadata_col(root, info, lower_expr, pk, opcintype);
+				PathKey *lower_pk =
+					make_canonical_pathkey(root, lower_ec, pk->pk_opfamily, strategy, nulls_first);
+				required_compressed_pathkeys = lappend(required_compressed_pathkeys, lower_pk);
 
-				varattno =
-					get_attnum(info->compressed_rte->relid, column_segment_max_name(orderby_index));
 				metadata_var = makeVar(info->compressed_rel->relid,
-									   varattno,
+									   upper_attno,
 									   var->vartype,
 									   var->vartypmod,
 									   var->varcollid,
 									   var->varlevelsup);
-				Expr *max_expr =
+				Expr *upper_expr =
 					canonicalize_ec_expression((Expr *) metadata_var, opcintype, collation);
-				EquivalenceClass *max_ec =
-					append_ec_for_metadata_col(root, info, max_expr, pk, opcintype);
-				PathKey *max =
-					make_canonical_pathkey(root, max_ec, pk->pk_opfamily, strategy, nulls_first);
+				EquivalenceClass *upper_ec =
+					append_ec_for_metadata_col(root, info, upper_expr, pk, opcintype);
+				PathKey *upper_pk =
+					make_canonical_pathkey(root, upper_ec, pk->pk_opfamily, strategy, nulls_first);
 
-				required_compressed_pathkeys = lappend(required_compressed_pathkeys, max);
+				required_compressed_pathkeys = lappend(required_compressed_pathkeys, upper_pk);
 			}
 		}
 	}
@@ -396,22 +399,25 @@ copy_columnar_scan_path(ColumnarScanPath *src)
 }
 
 /*
- * Maps the attno of the min metadata column in the compressed chunk to the
- * attno of the corresponding max metadata column. Zero if none or not applicable.
+ * Maps the attno of a "lower" orderby metadata column on the compressed
+ * chunk to the attno of the corresponding "upper" column, and vice versa.
+ * Covers both minmax (lower=min, upper=max) and firstlast pairs.
+ * Zero entries mean none or not applicable.
  */
 typedef struct SelectivityEstimationContext
 {
-	AttrNumber *min_to_max;
-	AttrNumber *max_to_min;
+	AttrNumber *lower_to_upper;
+	AttrNumber *upper_to_lower;
 
 	List *vars;
 } SelectivityEstimationContext;
 
 /*
- * Collect the Vars referencing the "min" metadata columns into the context->vars.
+ * Collect the Vars referencing the orderby "lower" metadata columns
+ * (min for minmax pairs, first/last for firstlast pairs) into context->vars.
  */
 static bool
-min_metadata_vars_collector(Node *orig_node, SelectivityEstimationContext *context)
+lower_metadata_vars_collector(Node *orig_node, SelectivityEstimationContext *context)
 {
 	if (orig_node == NULL)
 	{
@@ -427,7 +433,7 @@ min_metadata_vars_collector(Node *orig_node, SelectivityEstimationContext *conte
 		/*
 		 * Recurse.
 		 */
-		return expression_tree_walker(orig_node, min_metadata_vars_collector, context);
+		return expression_tree_walker(orig_node, lower_metadata_vars_collector, context);
 	}
 
 	Var *orig_var = castNode(Var, orig_node);
@@ -439,7 +445,7 @@ min_metadata_vars_collector(Node *orig_node, SelectivityEstimationContext *conte
 		return false;
 	}
 
-	AttrNumber replaced_attno = context->min_to_max[orig_var->varattno];
+	AttrNumber replaced_attno = context->lower_to_upper[orig_var->varattno];
 	if (replaced_attno == InvalidAttrNumber)
 	{
 		/*
@@ -480,14 +486,14 @@ set_compressed_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	 * selectivity estimator must see the entire clause list to detect the range
 	 * conditions.
 	 *
-	 * First, build the correspondence of min metadata attno -> max metadata
-	 * attno for all minmax metadata.
+	 * First, build the correspondence of lower metadata attno -> upper
+	 * metadata attno for all orderby metadata pairs (minmax and firstlast).
 	 */
 	const int storage_elements = 2 * (compression_info->compressed_rel->max_attr + 1);
 	AttrNumber *storage = palloc0(storage_elements * sizeof(*storage));
 	SelectivityEstimationContext context = {
-		.min_to_max = &storage[0],
-		.max_to_min = &storage[compression_info->compressed_rel->max_attr],
+		.lower_to_upper = &storage[0],
+		.upper_to_lower = &storage[compression_info->compressed_rel->max_attr],
 	};
 
 	for (int uncompressed_attno = 1; uncompressed_attno <= compression_info->chunk_rel->max_attr;
@@ -531,42 +537,74 @@ set_compressed_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 											 compression_info->compressed_rte->relid,
 											 "max");
 
-		if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
+		if (min_attno != InvalidAttrNumber && max_attno != InvalidAttrNumber)
 		{
-			continue;
+			Assert(&context.lower_to_upper[min_attno] < &storage[storage_elements]);
+			Assert(&context.upper_to_lower[max_attno] < &storage[storage_elements]);
+
+			context.lower_to_upper[min_attno] = max_attno;
+			context.upper_to_lower[max_attno] = min_attno;
 		}
 
-		Assert(&context.min_to_max[min_attno] < &storage[storage_elements]);
-		Assert(&context.max_to_min[max_attno] < &storage[storage_elements]);
+		/*
+		 * Same correlation hint for the firstlast pair when present. Under ASC
+		 * the lower bound is first and the upper is last; under DESC, the
+		 * roles flip. Mapping is direction-aware so that the Var swap below
+		 * collapses the predicate onto a single column regardless of shape.
+		 */
+		AttrNumber first_attno =
+			compressed_column_metadata_attno(compression_info->settings,
+											 compression_info->chunk_rte->relid,
+											 uncompressed_attno,
+											 compression_info->compressed_rte->relid,
+											 "first");
+		AttrNumber last_attno =
+			compressed_column_metadata_attno(compression_info->settings,
+											 compression_info->chunk_rte->relid,
+											 uncompressed_attno,
+											 compression_info->compressed_rte->relid,
+											 "last");
 
-		context.min_to_max[min_attno] = max_attno;
-		context.max_to_min[max_attno] = min_attno;
+		if (first_attno != InvalidAttrNumber && last_attno != InvalidAttrNumber)
+		{
+			bool desc =
+				ts_array_get_element_bool(compression_info->settings->fd.orderby_desc, orderby_pos);
+			AttrNumber lower_attno = desc ? last_attno : first_attno;
+			AttrNumber upper_attno = desc ? first_attno : last_attno;
+
+			Assert(&context.lower_to_upper[lower_attno] < &storage[storage_elements]);
+			Assert(&context.upper_to_lower[upper_attno] < &storage[storage_elements]);
+
+			context.lower_to_upper[lower_attno] = upper_attno;
+			context.upper_to_lower[upper_attno] = lower_attno;
+		}
 	}
 
 	/*
-	 * Then, replace all conditions on min metadata column with conditions on
-	 * max metadata column.
+	 * Then, collect all Var references to lower-bound metadata columns in the
+	 * restrict clauses so we can rewrite them to their upper-bound counterpart.
 	 */
 	ListCell *lc;
 	foreach (lc, rel->baserestrictinfo)
 	{
 		RestrictInfo *orig_restrictinfo = castNode(RestrictInfo, lfirst(lc));
 		Node *orig_clause = (Node *) orig_restrictinfo->clause;
-		expression_tree_walker(orig_clause, min_metadata_vars_collector, &context);
+		expression_tree_walker(orig_clause, lower_metadata_vars_collector, &context);
 	}
 
 	/*
-	 * Temporarily replace "min" with "max" in-place to save on memory allocations.
+	 * Temporarily replace lower-bound Vars with their upper-bound counterpart
+	 * in-place to save on memory allocations.
 	 */
 	foreach (lc, context.vars)
 	{
 		Var *var = castNode(Var, lfirst(lc));
 
 		Assert(var->varattno != InvalidAttrNumber);
-		Assert(context.min_to_max[var->varattno] != InvalidAttrNumber);
-		Assert(context.max_to_min[context.min_to_max[var->varattno]] == var->varattno);
+		Assert(context.lower_to_upper[var->varattno] != InvalidAttrNumber);
+		Assert(context.upper_to_lower[context.lower_to_upper[var->varattno]] == var->varattno);
 
-		var->varattno = context.min_to_max[var->varattno];
+		var->varattno = context.lower_to_upper[var->varattno];
 	}
 
 	/*
@@ -580,7 +618,7 @@ set_compressed_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	foreach (lc, context.vars)
 	{
 		Var *var = castNode(Var, lfirst(lc));
-		var->varattno = context.max_to_min[var->varattno];
+		var->varattno = context.upper_to_lower[var->varattno];
 	}
 
 	pfree(storage);
@@ -1815,17 +1853,20 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 													column_name,
 													&attrs_used);
 
-			/* if the column is an orderby, add it's metadata columns too */
+			/* if the column is an orderby, add its metadata columns too */
 			int16 index = ts_array_position(info->settings->fd.orderby, column_name);
 			if (index != 0)
 			{
+				char *lower_name;
+				char *upper_name;
+				orderby_sparse_metadata_names(info->settings, index, &lower_name, &upper_name);
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														column_segment_min_name(index),
+														lower_name,
 														&attrs_used);
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														column_segment_max_name(index),
+														upper_name,
 														&attrs_used);
 			}
 		}
@@ -1851,13 +1892,16 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 		{
 			for (int i = 1; i <= ts_array_length(info->settings->fd.orderby); i++)
 			{
+				char *lower_name;
+				char *upper_name;
+				orderby_sparse_metadata_names(info->settings, i, &lower_name, &upper_name);
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														column_segment_min_name(i),
+														lower_name,
 														&attrs_used);
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														column_segment_max_name(i),
+														upper_name,
 														&attrs_used);
 			}
 		}

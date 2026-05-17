@@ -88,8 +88,8 @@ GROUP BY 2, 3;
                Sort Key: merge_sort.device_id, merge_sort.measure_id
                ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=86400.00 loops=1)
                      Vectorized Filter: ("time" < "timestamp"(now()))
-                     ->  Index Scan using compress_hyper_4_10_chunk_device_id_measure_id__ts_meta_min_idx on compress_hyper_4_10_chunk (actual rows=87.00 loops=1)
-                           Index Cond: (_ts_meta_min_1 < now())
+                     ->  Index Scan using compress_hyper_4_10_chunk_device_id_measure_id__ts_meta_v2__idx on compress_hyper_4_10_chunk (actual rows=87.00 loops=1)
+                           Index Cond: (_ts_meta_v2_first_time < now())
                ->  Sort (actual rows=120960.00 loops=1)
                      Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
                      Sort Method: quicksort 
@@ -278,5 +278,5 @@ EXPLAIN (costs off, buffers off, analyze, timing off, summary off) SELECT sensor
  GroupAggregate (actual rows=2.00 loops=1)
    Group Key: _hyper_9_22_chunk.sensor_id, _hyper_9_22_chunk.enum_type
    ->  Custom Scan (ColumnarScan) on _hyper_9_22_chunk (actual rows=2.00 loops=1)
-         ->  Index Scan using compress_hyper_10_23_chunk_sensor_id__ts_meta_min_1__ts_met_idx on compress_hyper_10_23_chunk (actual rows=1.00 loops=1)
+         ->  Index Scan using compress_hyper_10_23_chunk_sensor_id__ts_meta_v2_first_enum_idx on compress_hyper_10_23_chunk (actual rows=1.00 loops=1)
 

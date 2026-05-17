@@ -938,9 +938,6 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 																	 segment_max_attr_offset));
 				}
 
-				Ensure(!is_orderby || has_minmax_metadata,
-					   "orderby columns must have minmax metadata");
-
 				const AttrNumber bloom_attr_number =
 					compressed_column_metadata_attno(settings,
 													 settings->fd.relid,
@@ -972,9 +969,11 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 													 attr->attnum,
 													 settings->fd.compress_relid,
 													 "last");
+				bool has_firstlast_metadata = false;
 				if (AttributeNumberIsValid(first_attr_number) &&
 					AttributeNumberIsValid(last_attr_number))
 				{
+					has_firstlast_metadata = true;
 					const int16 first_attr_offset = AttrNumberGetAttrOffset(first_attr_number);
 					const int16 last_attr_offset = AttrNumberGetAttrOffset(last_attr_number);
 					metadata_builders =
@@ -984,6 +983,9 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 																		first_attr_offset,
 																		last_attr_offset));
 				}
+
+				Ensure(!is_orderby || has_minmax_metadata || has_firstlast_metadata,
+					   "orderby columns must have sparse index metadata");
 
 				*column = (PerColumn){
 					.compressor = compressor_for_type(attr->atttypid),

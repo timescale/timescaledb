@@ -121,7 +121,7 @@ SELECT compress_chunk(ch) FROM show_chunks('record') ch;
 explain (buffers off, costs off) SELECT * FROM record ORDER BY data;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_3_5_chunk
-   ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_6_chunk
+   ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_v2_last_time__ts_met_idx on compress_hyper_4_6_chunk
 
 -- SkipScan is chosen because IndexScan is chosen
 explain (buffers off, costs off) SELECT DISTINCT ON(data) * FROM record;
@@ -129,19 +129,19 @@ explain (buffers off, costs off) SELECT DISTINCT ON(data) * FROM record;
  Unique
    ->  Custom Scan (SkipScan) on _hyper_3_5_chunk
          ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk
-               ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_6_chunk
+               ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_v2_last_time__ts_met_idx on compress_hyper_4_6_chunk
 
 -- (seg_col = const) condition is checked even when seg_col is coerced
 explain (buffers off, costs off) SELECT * FROM record WHERE data='Yes' ORDER BY data;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_3_5_chunk
-   ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_6_chunk
+   ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_v2_last_time__ts_met_idx on compress_hyper_4_6_chunk
          Index Cond: ((data)::text = 'Yes'::text)
 
 explain (buffers off, costs off) SELECT * FROM record WHERE 'Yes' <= data ORDER BY data;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_3_5_chunk
-   ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_6_chunk
+   ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_v2_last_time__ts_met_idx on compress_hyper_4_6_chunk
          Index Cond: ((data)::text >= 'Yes'::text)
 
 drop table record cascade;
@@ -178,13 +178,13 @@ explain (buffers off, costs off) SELECT * FROM log_numeric WHERE parameter_id = 
  Merge Append
    Sort Key: log_numeric.device_id, log_numeric."time" DESC
    ->  Custom Scan (ColumnarScan) on _hyper_5_7_chunk
-         ->  Index Scan using compress_hyper_6_10_chunk_device_id_parameter_id__ts_meta_m_idx on compress_hyper_6_10_chunk
+         ->  Index Scan using compress_hyper_6_10_chunk_device_id_parameter_id__ts_meta_v_idx on compress_hyper_6_10_chunk
                Index Cond: (parameter_id = 1)
    ->  Custom Scan (ColumnarScan) on _hyper_5_8_chunk
-         ->  Index Scan using compress_hyper_6_11_chunk_device_id_parameter_id__ts_meta_m_idx on compress_hyper_6_11_chunk
+         ->  Index Scan using compress_hyper_6_11_chunk_device_id_parameter_id__ts_meta_v_idx on compress_hyper_6_11_chunk
                Index Cond: (parameter_id = 1)
    ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk
-         ->  Index Scan using compress_hyper_6_12_chunk_device_id_parameter_id__ts_meta_m_idx on compress_hyper_6_12_chunk
+         ->  Index Scan using compress_hyper_6_12_chunk_device_id_parameter_id__ts_meta_v_idx on compress_hyper_6_12_chunk
                Index Cond: (parameter_id = 1)
 
 -- SkipScan is chosen because IndexScan is chosen
@@ -195,15 +195,15 @@ explain (buffers off, costs off) SELECT DISTINCT ON(device_id, parameter_id) * F
          Sort Key: log_numeric.device_id, log_numeric."time" DESC
          ->  Custom Scan (SkipScan) on _hyper_5_7_chunk
                ->  Custom Scan (ColumnarScan) on _hyper_5_7_chunk
-                     ->  Index Scan using compress_hyper_6_10_chunk_device_id_parameter_id__ts_meta_m_idx on compress_hyper_6_10_chunk
+                     ->  Index Scan using compress_hyper_6_10_chunk_device_id_parameter_id__ts_meta_v_idx on compress_hyper_6_10_chunk
                            Index Cond: (parameter_id = 1)
          ->  Custom Scan (SkipScan) on _hyper_5_8_chunk
                ->  Custom Scan (ColumnarScan) on _hyper_5_8_chunk
-                     ->  Index Scan using compress_hyper_6_11_chunk_device_id_parameter_id__ts_meta_m_idx on compress_hyper_6_11_chunk
+                     ->  Index Scan using compress_hyper_6_11_chunk_device_id_parameter_id__ts_meta_v_idx on compress_hyper_6_11_chunk
                            Index Cond: (parameter_id = 1)
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk
                ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk
-                     ->  Index Scan using compress_hyper_6_12_chunk_device_id_parameter_id__ts_meta_m_idx on compress_hyper_6_12_chunk
+                     ->  Index Scan using compress_hyper_6_12_chunk_device_id_parameter_id__ts_meta_v_idx on compress_hyper_6_12_chunk
                            Index Cond: (parameter_id = 1)
 
 drop table log_numeric cascade;

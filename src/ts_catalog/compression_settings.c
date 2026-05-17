@@ -980,8 +980,8 @@ ts_add_orderby_sparse_index(CompressionSettings *settings)
 			continue;
 		}
 
-		MinmaxIndexColumnConfig config;
-		config.base.type = _SparseIndexTypeEnumMinmax;
+		FirstLastIndexColumnConfig config;
+		config.base.type = _SparseIndexTypeEnumFirstLast;
 		config.col = TextDatumGetCString(datum);
 		config.base.source = _SparseIndexSourceEnumOrderby;
 		ts_convert_sparse_index_config_to_jsonb(parse_state, (SparseIndexConfigBase *) &config);

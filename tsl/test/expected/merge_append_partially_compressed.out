@@ -328,7 +328,7 @@ SELECT show_chunks('ht_metrics_compressed') AS "CHUNK" LIMIT 1 \gset
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                      Filter: (device = 3)
                      ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: compress_hyper_2_6_chunk._ts_meta_min_1 DESC, compress_hyper_2_6_chunk._ts_meta_max_1 DESC
+                           Sort Key: compress_hyper_2_6_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_6_chunk._ts_meta_v2_last_time DESC
                            Sort Method: quicksort 
                            ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=1.00 loops=1)
                                  Filter: (device = 3)
@@ -341,7 +341,7 @@ SELECT show_chunks('ht_metrics_compressed') AS "CHUNK" LIMIT 1 \gset
                ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (never executed)
                      Filter: (device = 3)
                      ->  Sort (never executed)
-                           Sort Key: compress_hyper_2_5_chunk._ts_meta_min_1 DESC, compress_hyper_2_5_chunk._ts_meta_max_1 DESC
+                           Sort Key: compress_hyper_2_5_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_5_chunk._ts_meta_v2_last_time DESC
                            ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
                                  Filter: (device = 3)
                ->  Index Scan using _hyper_1_2_chunk_ht_metrics_compressed_time_idx on _hyper_1_2_chunk (never executed)
@@ -351,7 +351,7 @@ SELECT show_chunks('ht_metrics_compressed') AS "CHUNK" LIMIT 1 \gset
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (never executed)
                      Filter: (device = 3)
                      ->  Sort (never executed)
-                           Sort Key: compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
+                           Sort Key: compress_hyper_2_4_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_4_chunk._ts_meta_v2_last_time DESC
                            ->  Seq Scan on compress_hyper_2_4_chunk (never executed)
                                  Filter: (device = 3)
                ->  Index Scan using _hyper_1_1_chunk_ht_metrics_compressed_time_idx on _hyper_1_1_chunk (never executed)
@@ -370,7 +370,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                Filter: (device = 3)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
+                     Sort Key: compress_hyper_2_4_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_4_chunk._ts_meta_v2_last_time DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=1.00 loops=1)
                            Filter: (device = 3)
@@ -381,7 +381,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
          ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1.00 loops=1)
                Filter: (device = 3)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_2_5_chunk._ts_meta_min_1 DESC, compress_hyper_2_5_chunk._ts_meta_max_1 DESC
+                     Sort Key: compress_hyper_2_5_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_5_chunk._ts_meta_v2_last_time DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=1.00 loops=1)
                            Filter: (device = 3)
@@ -392,7 +392,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
          ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                Filter: (device = 3)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_2_6_chunk._ts_meta_min_1 DESC, compress_hyper_2_6_chunk._ts_meta_max_1 DESC
+                     Sort Key: compress_hyper_2_6_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_6_chunk._ts_meta_v2_last_time DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=1.00 loops=1)
                            Filter: (device = 3)
@@ -416,7 +416,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                      Filter: (device = 3)
                      ->  Sort (actual rows=1.00 loops=1)
-                           Sort Key: compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1
+                           Sort Key: compress_hyper_2_4_chunk._ts_meta_v2_first_time, compress_hyper_2_4_chunk._ts_meta_v2_last_time
                            Sort Method: quicksort 
                            ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=1.00 loops=1)
                                  Filter: (device = 3)
@@ -428,7 +428,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
                ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (never executed)
                      Filter: (device = 3)
                      ->  Sort (never executed)
-                           Sort Key: compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1
+                           Sort Key: compress_hyper_2_5_chunk._ts_meta_v2_first_time, compress_hyper_2_5_chunk._ts_meta_v2_last_time
                            ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
                                  Filter: (device = 3)
                ->  Index Scan Backward using _hyper_1_2_chunk_ht_metrics_compressed_time_idx on _hyper_1_2_chunk (never executed)
@@ -438,7 +438,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (never executed)
                      Filter: (device = 3)
                      ->  Sort (never executed)
-                           Sort Key: compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1
+                           Sort Key: compress_hyper_2_6_chunk._ts_meta_v2_first_time, compress_hyper_2_6_chunk._ts_meta_v2_last_time
                            ->  Seq Scan on compress_hyper_2_6_chunk (never executed)
                                  Filter: (device = 3)
                ->  Index Scan Backward using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (never executed)
@@ -457,7 +457,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
          Sort Key: ht_metrics_compressed.device, ht_metrics_compressed."time" DESC
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
+                     Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_4_chunk._ts_meta_v2_last_time DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -466,7 +466,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_2_5_chunk.device, compress_hyper_2_5_chunk._ts_meta_min_1 DESC, compress_hyper_2_5_chunk._ts_meta_max_1 DESC
+                     Sort Key: compress_hyper_2_5_chunk.device, compress_hyper_2_5_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_5_chunk._ts_meta_v2_last_time DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -475,7 +475,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=57.00 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_2_6_chunk.device, compress_hyper_2_6_chunk._ts_meta_min_1 DESC, compress_hyper_2_6_chunk._ts_meta_max_1 DESC
+                     Sort Key: compress_hyper_2_6_chunk.device, compress_hyper_2_6_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_6_chunk._ts_meta_v2_last_time DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -491,7 +491,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                Filter: (device = ANY ('{1,2,3}'::integer[]))
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
+                     Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_4_chunk._ts_meta_v2_last_time DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
@@ -503,7 +503,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
          ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1.00 loops=1)
                Filter: (device = ANY ('{1,2,3}'::integer[]))
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_2_5_chunk.device, compress_hyper_2_5_chunk._ts_meta_min_1 DESC, compress_hyper_2_5_chunk._ts_meta_max_1 DESC
+                     Sort Key: compress_hyper_2_5_chunk.device, compress_hyper_2_5_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_5_chunk._ts_meta_v2_last_time DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3.00 loops=1)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
@@ -515,7 +515,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
          ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                Filter: (device = ANY ('{1,2,3}'::integer[]))
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_2_6_chunk.device, compress_hyper_2_6_chunk._ts_meta_min_1 DESC, compress_hyper_2_6_chunk._ts_meta_max_1 DESC
+                     Sort Key: compress_hyper_2_6_chunk.device, compress_hyper_2_6_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_6_chunk._ts_meta_v2_last_time DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
@@ -535,7 +535,7 @@ SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
          Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk."time"
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_v2_first_time, compress_hyper_2_4_chunk._ts_meta_v2_last_time
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
          ->  Sort (actual rows=3.00 loops=1)
@@ -560,7 +560,7 @@ SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
          Sort Key: _hyper_1_1_chunk.device DESC, _hyper_1_1_chunk."time" DESC
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3.00 loops=1)
                ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_2_4_chunk.device DESC, compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
+                     Sort Key: compress_hyper_2_4_chunk.device DESC, compress_hyper_2_4_chunk._ts_meta_v2_first_time DESC, compress_hyper_2_4_chunk._ts_meta_v2_last_time DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
          ->  Sort (actual rows=3.00 loops=1)
@@ -905,7 +905,7 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time LIMIT 10;
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=13.00 loops=1)
-                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1, compress_hyper_4_8_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_v2_last_time, compress_hyper_4_8_chunk._ts_meta_v2_first_time
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -924,7 +924,7 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time DESC, x3 ASC, x
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=13.00 loops=1)
-                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1 DESC, compress_hyper_4_8_chunk._ts_meta_max_1 DESC, compress_hyper_4_8_chunk._ts_meta_min_2, compress_hyper_4_8_chunk._ts_meta_max_2, compress_hyper_4_8_chunk._ts_meta_min_3, compress_hyper_4_8_chunk._ts_meta_max_3
+                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_v2_last_time DESC, compress_hyper_4_8_chunk._ts_meta_v2_first_time DESC, compress_hyper_4_8_chunk._ts_meta_v2_first_x3, compress_hyper_4_8_chunk._ts_meta_v2_last_x3, compress_hyper_4_8_chunk._ts_meta_v2_first_x4, compress_hyper_4_8_chunk._ts_meta_v2_last_x4
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -943,7 +943,7 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time ASC, x3 DESC, x
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=13.00 loops=1)
-                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1, compress_hyper_4_8_chunk._ts_meta_max_1, compress_hyper_4_8_chunk._ts_meta_min_2 DESC, compress_hyper_4_8_chunk._ts_meta_max_2 DESC, compress_hyper_4_8_chunk._ts_meta_min_3 DESC, compress_hyper_4_8_chunk._ts_meta_max_3 DESC
+                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_v2_last_time, compress_hyper_4_8_chunk._ts_meta_v2_first_time, compress_hyper_4_8_chunk._ts_meta_v2_first_x3 DESC, compress_hyper_4_8_chunk._ts_meta_v2_last_x3 DESC, compress_hyper_4_8_chunk._ts_meta_v2_first_x4 DESC, compress_hyper_4_8_chunk._ts_meta_v2_last_x4 DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -962,7 +962,7 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x3 DESC LIMIT 
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=13.00 loops=1)
-                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1, compress_hyper_4_8_chunk._ts_meta_max_1, compress_hyper_4_8_chunk._ts_meta_min_2 DESC, compress_hyper_4_8_chunk._ts_meta_max_2 DESC
+                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_v2_last_time, compress_hyper_4_8_chunk._ts_meta_v2_first_time, compress_hyper_4_8_chunk._ts_meta_v2_first_x3 DESC, compress_hyper_4_8_chunk._ts_meta_v2_last_x3 DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -1043,7 +1043,7 @@ set enable_indexscan = off;
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=13.00 loops=1)
-                     Sort Key: compress_hyper_6_11_chunk.x1, compress_hyper_6_11_chunk.x2, compress_hyper_6_11_chunk.x5, compress_hyper_6_11_chunk._ts_meta_min_1, compress_hyper_6_11_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_6_11_chunk.x1, compress_hyper_6_11_chunk.x2, compress_hyper_6_11_chunk.x5, compress_hyper_6_11_chunk._ts_meta_v2_first_x3, compress_hyper_6_11_chunk._ts_meta_v2_last_x3
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=13.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -1055,7 +1055,7 @@ set enable_indexscan = off;
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=13.00 loops=1)
-                     Sort Key: compress_hyper_6_12_chunk.x1, compress_hyper_6_12_chunk.x2, compress_hyper_6_12_chunk.x5, compress_hyper_6_12_chunk._ts_meta_min_1, compress_hyper_6_12_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_6_12_chunk.x1, compress_hyper_6_12_chunk.x2, compress_hyper_6_12_chunk.x5, compress_hyper_6_12_chunk._ts_meta_v2_first_x3, compress_hyper_6_12_chunk._ts_meta_v2_last_x3
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=13.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -1087,7 +1087,7 @@ SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=13.00 loops=1)
-                     Sort Key: compress_hyper_6_11_chunk.x1, compress_hyper_6_11_chunk.x2, compress_hyper_6_11_chunk.x5, compress_hyper_6_11_chunk._ts_meta_min_1, compress_hyper_6_11_chunk._ts_meta_max_1, compress_hyper_6_11_chunk._ts_meta_min_2, compress_hyper_6_11_chunk._ts_meta_max_2
+                     Sort Key: compress_hyper_6_11_chunk.x1, compress_hyper_6_11_chunk.x2, compress_hyper_6_11_chunk.x5, compress_hyper_6_11_chunk._ts_meta_v2_first_x3, compress_hyper_6_11_chunk._ts_meta_v2_last_x3, compress_hyper_6_11_chunk._ts_meta_v2_first_x4, compress_hyper_6_11_chunk._ts_meta_v2_last_x4
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=13.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -1099,7 +1099,7 @@ SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=13.00 loops=1)
-                     Sort Key: compress_hyper_6_12_chunk.x1, compress_hyper_6_12_chunk.x2, compress_hyper_6_12_chunk.x5, compress_hyper_6_12_chunk._ts_meta_min_1, compress_hyper_6_12_chunk._ts_meta_max_1, compress_hyper_6_12_chunk._ts_meta_min_2, compress_hyper_6_12_chunk._ts_meta_max_2
+                     Sort Key: compress_hyper_6_12_chunk.x1, compress_hyper_6_12_chunk.x2, compress_hyper_6_12_chunk.x5, compress_hyper_6_12_chunk._ts_meta_v2_first_x3, compress_hyper_6_12_chunk._ts_meta_v2_last_x3, compress_hyper_6_12_chunk._ts_meta_v2_first_x4, compress_hyper_6_12_chunk._ts_meta_v2_last_x4
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=13.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -1317,7 +1317,7 @@ set enable_indexscan = off;
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=12.00 loops=1)
-                     Sort Key: compress_hyper_8_17_chunk.x1, compress_hyper_8_17_chunk.x2, compress_hyper_8_17_chunk.x5, compress_hyper_8_17_chunk._ts_meta_min_1, compress_hyper_8_17_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_8_17_chunk.x1, compress_hyper_8_17_chunk.x2, compress_hyper_8_17_chunk.x5, compress_hyper_8_17_chunk._ts_meta_v2_first_x3, compress_hyper_8_17_chunk._ts_meta_v2_last_x3
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=12.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -1329,7 +1329,7 @@ set enable_indexscan = off;
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=11.00 loops=1)
-                     Sort Key: compress_hyper_8_18_chunk.x1, compress_hyper_8_18_chunk.x2, compress_hyper_8_18_chunk.x5, compress_hyper_8_18_chunk._ts_meta_min_1, compress_hyper_8_18_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_8_18_chunk.x1, compress_hyper_8_18_chunk.x2, compress_hyper_8_18_chunk.x5, compress_hyper_8_18_chunk._ts_meta_v2_first_x3, compress_hyper_8_18_chunk._ts_meta_v2_last_x3
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=11.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -1341,7 +1341,7 @@ set enable_indexscan = off;
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=12.00 loops=1)
-                     Sort Key: compress_hyper_8_19_chunk.x1, compress_hyper_8_19_chunk.x2, compress_hyper_8_19_chunk.x5, compress_hyper_8_19_chunk._ts_meta_min_1, compress_hyper_8_19_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_8_19_chunk.x1, compress_hyper_8_19_chunk.x2, compress_hyper_8_19_chunk.x5, compress_hyper_8_19_chunk._ts_meta_v2_first_x3, compress_hyper_8_19_chunk._ts_meta_v2_last_x3
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=12.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -1353,7 +1353,7 @@ set enable_indexscan = off;
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=11.00 loops=1)
-                     Sort Key: compress_hyper_8_20_chunk.x1, compress_hyper_8_20_chunk.x2, compress_hyper_8_20_chunk.x5, compress_hyper_8_20_chunk._ts_meta_min_1, compress_hyper_8_20_chunk._ts_meta_max_1
+                     Sort Key: compress_hyper_8_20_chunk.x1, compress_hyper_8_20_chunk.x2, compress_hyper_8_20_chunk.x5, compress_hyper_8_20_chunk._ts_meta_v2_first_x3, compress_hyper_8_20_chunk._ts_meta_v2_last_x3
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=11.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -1385,7 +1385,7 @@ SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=12.00 loops=1)
-                     Sort Key: compress_hyper_8_17_chunk.x1, compress_hyper_8_17_chunk.x2, compress_hyper_8_17_chunk.x5, compress_hyper_8_17_chunk._ts_meta_min_1, compress_hyper_8_17_chunk._ts_meta_max_1, compress_hyper_8_17_chunk._ts_meta_min_2, compress_hyper_8_17_chunk._ts_meta_max_2
+                     Sort Key: compress_hyper_8_17_chunk.x1, compress_hyper_8_17_chunk.x2, compress_hyper_8_17_chunk.x5, compress_hyper_8_17_chunk._ts_meta_v2_first_x3, compress_hyper_8_17_chunk._ts_meta_v2_last_x3, compress_hyper_8_17_chunk._ts_meta_v2_first_x4, compress_hyper_8_17_chunk._ts_meta_v2_last_x4
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=12.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -1397,7 +1397,7 @@ SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=11.00 loops=1)
-                     Sort Key: compress_hyper_8_18_chunk.x1, compress_hyper_8_18_chunk.x2, compress_hyper_8_18_chunk.x5, compress_hyper_8_18_chunk._ts_meta_min_1, compress_hyper_8_18_chunk._ts_meta_max_1, compress_hyper_8_18_chunk._ts_meta_min_2, compress_hyper_8_18_chunk._ts_meta_max_2
+                     Sort Key: compress_hyper_8_18_chunk.x1, compress_hyper_8_18_chunk.x2, compress_hyper_8_18_chunk.x5, compress_hyper_8_18_chunk._ts_meta_v2_first_x3, compress_hyper_8_18_chunk._ts_meta_v2_last_x3, compress_hyper_8_18_chunk._ts_meta_v2_first_x4, compress_hyper_8_18_chunk._ts_meta_v2_last_x4
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=11.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -1409,7 +1409,7 @@ SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=12.00 loops=1)
-                     Sort Key: compress_hyper_8_19_chunk.x1, compress_hyper_8_19_chunk.x2, compress_hyper_8_19_chunk.x5, compress_hyper_8_19_chunk._ts_meta_min_1, compress_hyper_8_19_chunk._ts_meta_max_1, compress_hyper_8_19_chunk._ts_meta_min_2, compress_hyper_8_19_chunk._ts_meta_max_2
+                     Sort Key: compress_hyper_8_19_chunk.x1, compress_hyper_8_19_chunk.x2, compress_hyper_8_19_chunk.x5, compress_hyper_8_19_chunk._ts_meta_v2_first_x3, compress_hyper_8_19_chunk._ts_meta_v2_last_x3, compress_hyper_8_19_chunk._ts_meta_v2_first_x4, compress_hyper_8_19_chunk._ts_meta_v2_last_x4
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=12.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
@@ -1421,7 +1421,7 @@ SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
                ->  Sort (actual rows=11.00 loops=1)
-                     Sort Key: compress_hyper_8_20_chunk.x1, compress_hyper_8_20_chunk.x2, compress_hyper_8_20_chunk.x5, compress_hyper_8_20_chunk._ts_meta_min_1, compress_hyper_8_20_chunk._ts_meta_max_1, compress_hyper_8_20_chunk._ts_meta_min_2, compress_hyper_8_20_chunk._ts_meta_max_2
+                     Sort Key: compress_hyper_8_20_chunk.x1, compress_hyper_8_20_chunk.x2, compress_hyper_8_20_chunk.x5, compress_hyper_8_20_chunk._ts_meta_v2_first_x3, compress_hyper_8_20_chunk._ts_meta_v2_last_x3, compress_hyper_8_20_chunk._ts_meta_v2_first_x4, compress_hyper_8_20_chunk._ts_meta_v2_last_x4
                      Sort Method: quicksort 
                      ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=11.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)

@@ -331,10 +331,14 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 	initStringInfo(&orderby_buf);
 	for (int i = 1; i <= ts_array_length(settings->fd.orderby); i++)
 	{
+		char *lower_name;
+		char *upper_name;
+		orderby_sparse_metadata_names(settings, i, &lower_name, &upper_name);
+
 		resetStringInfo(&orderby_buf);
-		/* Add min metadata column */
-		IndexElem *orderby_min_elem = makeNode(IndexElem);
-		orderby_min_elem->name = column_segment_min_name(i);
+		/* Lower-boundary metadata column. */
+		IndexElem *orderby_lower_elem = makeNode(IndexElem);
+		orderby_lower_elem->name = lower_name;
 		if (ts_array_get_element_bool(settings->fd.orderby_desc, i))
 		{
 			appendStringInfoString(&orderby_buf, " DESC");
@@ -345,11 +349,11 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 			appendStringInfoString(&orderby_buf, " ASC");
 			ordering = SORTBY_ASC;
 		}
-		orderby_min_elem->ordering = ordering;
+		orderby_lower_elem->ordering = ordering;
 
 		if (ts_array_get_element_bool(settings->fd.orderby_nullsfirst, i))
 		{
-			if (orderby_min_elem->ordering != SORTBY_DESC)
+			if (orderby_lower_elem->ordering != SORTBY_DESC)
 			{
 				appendStringInfoString(&orderby_buf, " NULLS FIRST");
 				nulls_ordering = SORTBY_NULLS_FIRST;
@@ -361,7 +365,7 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		}
 		else
 		{
-			if (orderby_min_elem->ordering != SORTBY_DESC)
+			if (orderby_lower_elem->ordering != SORTBY_DESC)
 			{
 				nulls_ordering = SORTBY_NULLS_DEFAULT;
 			}
@@ -371,21 +375,21 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 				nulls_ordering = SORTBY_NULLS_LAST;
 			}
 		}
-		orderby_min_elem->nulls_ordering = nulls_ordering;
-		appendStringInfoString(&buf, orderby_min_elem->name);
+		orderby_lower_elem->nulls_ordering = nulls_ordering;
+		appendStringInfoString(&buf, orderby_lower_elem->name);
 		appendStringInfoString(&buf, orderby_buf.data);
 		appendStringInfoString(&buf, ", ");
-		indexcols = lappend(indexcols, orderby_min_elem);
+		indexcols = lappend(indexcols, orderby_lower_elem);
 
-		/* Add max metadata column */
-		IndexElem *orderby_max_elem = makeNode(IndexElem);
-		orderby_max_elem->name = column_segment_max_name(i);
-		orderby_max_elem->ordering = orderby_min_elem->ordering;
-		orderby_max_elem->nulls_ordering = orderby_min_elem->nulls_ordering;
-		appendStringInfoString(&buf, orderby_max_elem->name);
+		/* Upper-boundary metadata column. */
+		IndexElem *orderby_upper_elem = makeNode(IndexElem);
+		orderby_upper_elem->name = upper_name;
+		orderby_upper_elem->ordering = orderby_lower_elem->ordering;
+		orderby_upper_elem->nulls_ordering = orderby_lower_elem->nulls_ordering;
+		appendStringInfoString(&buf, orderby_upper_elem->name);
 		appendStringInfoString(&buf, orderby_buf.data);
 		appendStringInfoString(&buf, ", ");
-		indexcols = lappend(indexcols, orderby_max_elem);
+		indexcols = lappend(indexcols, orderby_upper_elem);
 	}
 
 	stmt.indexParams = indexcols;
