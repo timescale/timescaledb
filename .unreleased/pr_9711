@@ -1,1 +1,0 @@
-Fixes: #9711 Fix registration row leak when continuous aggregate refresh fails
