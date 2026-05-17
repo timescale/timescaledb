@@ -317,11 +317,12 @@ VACUUM ANALYZE mytab_prep;
 set enable_sort to off; /* penalize MergeAppend for predictable plans on PG < 17. */
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
 --- QUERY PLAN ---
- Sort
+ Merge Append
    Sort Key: mytab_prep.a, mytab_prep.c, mytab_prep."time" DESC
-   ->  Append
-         ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
-               ->  Seq Scan on compress_hyper_10_11_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+         ->  Index Scan using compress_hyper_10_11_chunk_a_c__ts_meta_min_1__ts_meta_max__idx on compress_hyper_10_11_chunk
+   ->  Sort
+         Sort Key: _hyper_9_10_chunk.a, _hyper_9_10_chunk.c, _hyper_9_10_chunk."time" DESC
          ->  Seq Scan on _hyper_9_10_chunk
 
 EXECUTE p1;

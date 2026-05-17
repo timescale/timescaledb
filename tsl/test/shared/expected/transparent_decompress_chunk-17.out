@@ -24,14 +24,9 @@ SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY time LIMIT 5;
                Chunk Status: PARTIAL
                Reverse: true
                Bulk Decompression: true
-               ->  Sort (actual rows=1.00 loops=1)
+               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1, compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count
-                     Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
-                     Sort Method: quicksort 
-                     ->  Seq Scan on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=2.00 loops=1)
-                           Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1, compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count
-                           Filter: (compress_hyper_X_X_chunk.device_id = 1)
-                           Rows Removed by Filter: 16
+                     Index Cond: (compress_hyper_X_X_chunk.device_id = 1)
          ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_X_X_chunk (actual rows=5.00 loops=1)
                Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0, _hyper_X_X_chunk.v1, _hyper_X_X_chunk.v2, _hyper_X_X_chunk.v3
                Filter: (_hyper_X_X_chunk.device_id = 1)
@@ -210,12 +205,8 @@ ORDER BY time, device_id;
          Sort Key: _hyper_X_X_chunk."time"
          ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                Filter: (device_id = 1)
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=2.00 loops=1)
-                           Filter: (device_id = 1)
-                           Rows Removed by Filter: 16
+               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (device_id = 1)
          ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk (actual rows=10.00 loops=1)
                Filter: (device_id = 1)
 
@@ -282,12 +273,8 @@ ORDER BY time, device_id;
          Sort Key: _hyper_X_X_chunk."time"
          ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                Filter: (device_id = 1)
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=2.00 loops=1)
-                           Filter: (device_id = 1)
-                           Rows Removed by Filter: 16
+               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (device_id = 1)
          ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk (actual rows=10.00 loops=1)
                Filter: (device_id = 1)
 
@@ -330,12 +317,8 @@ ORDER BY time, device_id;
          Sort Key: _hyper_X_X_chunk."time"
          ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=10.00 loops=1)
                Filter: (device_id = 3)
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4.00 loops=1)
-                           Filter: (device_id = 3)
-                           Rows Removed by Filter: 14
+               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (device_id = 3)
          ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk (actual rows=0.00 loops=1)
                Index Cond: (device_id = 3)
 
@@ -550,14 +533,9 @@ ORDER BY time, device_id;
                Chunk Status: PARTIAL
                Reverse: true
                Bulk Decompression: true
-               ->  Sort (actual rows=1.00 loops=1)
+               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1, compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count
-                     Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
-                     Sort Method: quicksort 
-                     ->  Seq Scan on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=2.00 loops=1)
-                           Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1, compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count
-                           Filter: ((compress_hyper_X_X_chunk._ts_meta_max_1 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (compress_hyper_X_X_chunk.device_id = 1))
-                           Rows Removed by Filter: 16
+                     Index Cond: ((compress_hyper_X_X_chunk.device_id = 1) AND (compress_hyper_X_X_chunk._ts_meta_max_1 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
          ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_X_X_chunk (actual rows=10.00 loops=1)
                Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0, _hyper_X_X_chunk.v1, _hyper_X_X_chunk.v2, _hyper_X_X_chunk.v3
                Index Cond: (_hyper_X_X_chunk."time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
@@ -635,9 +613,7 @@ ORDER BY time, device_id;
    ->  Merge Append
          Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time" DESC
          ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
-               ->  Sort
-                     Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_min_1 DESC, compress_hyper_X_X_chunk._ts_meta_max_1 DESC
-                     ->  Seq Scan on compress_hyper_X_X_chunk
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
          ->  Sort
                Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time" DESC
                ->  Seq Scan on _hyper_X_X_chunk
@@ -726,12 +702,8 @@ SELECT * FROM q1 INNER JOIN q2 ON q1.time = q2.time ORDER BY q1.time;
          Sort Key: _hyper_X_X_chunk."time"
          ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=3598.00 loops=1)
                Filter: (device_id = 2)
-               ->  Sort (actual rows=4.00 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4.00 loops=1)
-                           Filter: (device_id = 2)
-                           Rows Removed by Filter: 14
+               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4.00 loops=1)
+                     Index Cond: (device_id = 2)
          ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk (actual rows=0.00 loops=1)
                Index Cond: (device_id = 2)
    ->  Materialize (actual rows=3598.00 loops=1)
@@ -739,12 +711,8 @@ SELECT * FROM q1 INNER JOIN q2 ON q1.time = q2.time ORDER BY q1.time;
                Sort Key: _hyper_X_X_chunk_1."time"
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=2000.00 loops=1)
                      Filter: (device_id = 1)
-                     ->  Sort (actual rows=2.00 loops=1)
-                           Sort Key: compress_hyper_X_X_chunk_1._ts_meta_min_1, compress_hyper_X_X_chunk_1._ts_meta_max_1
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=2.00 loops=1)
-                                 Filter: (device_id = 1)
-                                 Rows Removed by Filter: 16
+                     ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=2.00 loops=1)
+                           Index Cond: (device_id = 1)
                ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=1598.00 loops=1)
                      Filter: (device_id = 1)
 
@@ -755,65 +723,56 @@ SET enable_seqscan TO FALSE;
 -- IndexScans should work
 :PREFIX_VERBOSE SELECT time, device_id FROM :TEST_TABLE WHERE device_id = 1 ORDER BY device_id, time;
 --- QUERY PLAN ---
- Sort (actual rows=3598.00 loops=1)
-   Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
+ Merge Append (actual rows=3598.00 loops=1)
    Sort Key: _hyper_X_X_chunk."time"
-   Sort Method: quicksort 
-   ->  Append (actual rows=3598.00 loops=1)
-         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_X_X_chunk (actual rows=2000.00 loops=1)
-               Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
-               Filter: (_hyper_X_X_chunk.device_id = 1)
-               Chunk Status: PARTIAL
-               Reverse: true
-               Bulk Decompression: true
-               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=2.00 loops=1)
-                     Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1, compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_count
-                     Index Cond: (compress_hyper_X_X_chunk.device_id = 1)
-         ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _timescaledb_internal._hyper_X_X_chunk (actual rows=1598.00 loops=1)
-               Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
-               Index Cond: (_hyper_X_X_chunk.device_id = 1)
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_X_X_chunk (actual rows=2000.00 loops=1)
+         Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
+         Filter: (_hyper_X_X_chunk.device_id = 1)
+         Chunk Status: PARTIAL
+         Reverse: true
+         Bulk Decompression: true
+         ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=2.00 loops=1)
+               Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1, compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_count
+               Index Cond: (compress_hyper_X_X_chunk.device_id = 1)
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _timescaledb_internal._hyper_X_X_chunk (actual rows=1598.00 loops=1)
+         Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
+         Index Cond: (_hyper_X_X_chunk.device_id = 1)
 
 -- globs should not plan IndexOnlyScans
 :PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY device_id, time;
 --- QUERY PLAN ---
- Sort (actual rows=3598.00 loops=1)
-   Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0, _hyper_X_X_chunk.v1, _hyper_X_X_chunk.v2, _hyper_X_X_chunk.v3
+ Merge Append (actual rows=3598.00 loops=1)
    Sort Key: _hyper_X_X_chunk."time"
-   Sort Method: quicksort 
-   ->  Append (actual rows=3598.00 loops=1)
-         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_X_X_chunk (actual rows=2000.00 loops=1)
-               Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0, _hyper_X_X_chunk.v1, _hyper_X_X_chunk.v2, _hyper_X_X_chunk.v3
-               Filter: (_hyper_X_X_chunk.device_id = 1)
-               Chunk Status: PARTIAL
-               Reverse: true
-               Bulk Decompression: true
-               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=2.00 loops=1)
-                     Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1, compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count
-                     Index Cond: (compress_hyper_X_X_chunk.device_id = 1)
-         ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_X_X_chunk (actual rows=1598.00 loops=1)
-               Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0, _hyper_X_X_chunk.v1, _hyper_X_X_chunk.v2, _hyper_X_X_chunk.v3
-               Filter: (_hyper_X_X_chunk.device_id = 1)
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_X_X_chunk (actual rows=2000.00 loops=1)
+         Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0, _hyper_X_X_chunk.v1, _hyper_X_X_chunk.v2, _hyper_X_X_chunk.v3
+         Filter: (_hyper_X_X_chunk.device_id = 1)
+         Chunk Status: PARTIAL
+         Reverse: true
+         Bulk Decompression: true
+         ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=2.00 loops=1)
+               Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1, compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count
+               Index Cond: (compress_hyper_X_X_chunk.device_id = 1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_X_X_chunk (actual rows=1598.00 loops=1)
+         Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0, _hyper_X_X_chunk.v1, _hyper_X_X_chunk.v2, _hyper_X_X_chunk.v3
+         Filter: (_hyper_X_X_chunk.device_id = 1)
 
 -- whole row reference should work
 :PREFIX_VERBOSE SELECT test_table FROM :TEST_TABLE AS test_table WHERE device_id = 1 ORDER BY device_id, time;
 --- QUERY PLAN ---
- Sort (actual rows=3598.00 loops=1)
-   Output: test_table.*, test_table.device_id, test_table."time"
+ Merge Append (actual rows=3598.00 loops=1)
    Sort Key: test_table."time"
-   Sort Method: quicksort 
-   ->  Append (actual rows=3598.00 loops=1)
-         ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_X_X_chunk test_table (actual rows=2000.00 loops=1)
-               Output: test_table.*, test_table.device_id, test_table."time"
-               Filter: (test_table.device_id = 1)
-               Chunk Status: PARTIAL
-               Reverse: true
-               Bulk Decompression: true
-               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=2.00 loops=1)
-                     Output: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1, compress_hyper_X_X_chunk._ts_meta_count, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3
-                     Index Cond: (compress_hyper_X_X_chunk.device_id = 1)
-         ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_X_X_chunk test_table (actual rows=1598.00 loops=1)
-               Output: test_table.*, test_table.device_id, test_table."time"
-               Filter: (test_table.device_id = 1)
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_X_X_chunk test_table (actual rows=2000.00 loops=1)
+         Output: test_table.*, test_table.device_id, test_table."time"
+         Filter: (test_table.device_id = 1)
+         Chunk Status: PARTIAL
+         Reverse: true
+         Bulk Decompression: true
+         ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=2.00 loops=1)
+               Output: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1, compress_hyper_X_X_chunk._ts_meta_count, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3
+               Index Cond: (compress_hyper_X_X_chunk.device_id = 1)
+   ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_X_X_chunk test_table (actual rows=1598.00 loops=1)
+         Output: test_table.*, test_table.device_id, test_table."time"
+         Filter: (test_table.device_id = 1)
 
 -- even when we select only a segmentby column, we still need count
 :PREFIX_VERBOSE SELECT device_id FROM :TEST_TABLE WHERE device_id = 1 ORDER BY device_id;
@@ -962,12 +921,8 @@ CREATE OR REPLACE VIEW compressed_view AS SELECT time, device_id, v1, v2 FROM :T
          Sort Key: _hyper_X_X_chunk."time" DESC
          ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=10.00 loops=1)
                Filter: (device_id = 1)
-               ->  Sort (actual rows=1.00 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1 DESC, compress_hyper_X_X_chunk._ts_meta_max_1 DESC
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=2.00 loops=1)
-                           Filter: (device_id = 1)
-                           Rows Removed by Filter: 16
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (device_id = 1)
          ->  Index Scan Backward using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                Filter: (device_id = 1)
 
@@ -1053,10 +1008,8 @@ FROM :TEST_TABLE m1
                Sort Key: m2."time"
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2
                      Filter: (device_id = 2)
-                     ->  Sort
-                           Sort Key: compress_hyper_X_X_chunk_1._ts_meta_min_1, compress_hyper_X_X_chunk_1._ts_meta_max_1
-                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-                                 Filter: (device_id = 2)
+                     ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+                           Index Cond: (device_id = 2)
                ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m2
                      Index Cond: (device_id = 2)
          ->  Materialize
@@ -1064,10 +1017,8 @@ FROM :TEST_TABLE m1
                      Sort Key: m1."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1
                            Filter: (device_id = 1)
-                           ->  Sort
-                                 Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
-                                 ->  Seq Scan on compress_hyper_X_X_chunk
-                                       Filter: (device_id = 1)
+                           ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk
+                                 Index Cond: (device_id = 1)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk m1
                            Filter: (device_id = 1)
 

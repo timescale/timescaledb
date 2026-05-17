@@ -1679,15 +1679,6 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			continue;
 		}
 
-		if (decompression_path == chunk_path_no_sort)
-		{
-			/*
-			 * We can't use the unsorted decompression path directly because it
-			 * doesn't have the sort projection cost workaround.
-			 */
-			continue;
-		}
-
 		if (!bms_is_empty(chunk_rel->lateral_relids) || !bms_is_empty(req_outer))
 		{
 			/*
@@ -1701,10 +1692,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			/*
 			 * We have to remove the explicit Sort, otherwise it will lead to
 			 * planning time regression because of double call of
-			 * prepare_sort_from_pathkeys() in MergeAppend plan creation. Still,
-			 * we have to use the copy of ColumnarScan path that we created
-			 * for explicit sorting, because it has the sort projection cost
-			 * workaround.
+			 * prepare_sort_from_pathkeys() in MergeAppend plan creation.
 			 */
 			decompression_path = castNode(SortPath, decompression_path)->subpath;
 		}
