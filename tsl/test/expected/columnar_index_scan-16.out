@@ -2373,3 +2373,19 @@ SELECT device, max(time), min(time) FROM metrics GROUP BY device ORDER BY 1,2,3;
 + on
  
   device | count 
+NOTICE:  using column "ts" as partitioning column
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_3_5_chunk
+
+--- QUERY PLAN ---
+ HashAggregate
+   Group Key: (_hyper_3_5_chunk.device_id)::text
+   ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk
+         ->  Seq Scan on compress_hyper_4_6_chunk
+
+ count 
+-------
+     1
+     1
+
