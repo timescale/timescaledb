@@ -16,9 +16,11 @@
 #include <optimizer/tlist.h>
 #include <parser/parse_func.h>
 #include <utils/lsyscache.h>
+#include <utils/selfuncs.h>
 
 #include "compat/compat.h"
 
+#include "estimate.h"
 #include "gapfill.h"
 #include "gapfill_internal.h"
 #include "import/list.h"
@@ -242,6 +244,133 @@ gapfill_correct_order(PlannerInfo *root, Path *subpath, FuncExpr *func)
 	return false;
 }
 
+/*
+ * Estimate simple expression
+ * and if it resolves to a non-null Const evaluate it,
+ * otherwise set it to NULL.
+ */
+Datum
+gapfill_estimate_arg(GapFillArgEvalContext *gapfill_plan_ctx, Node *arg)
+{
+	Assert(gapfill_plan_ctx->root);
+	Node *copy_arg = copyObject(arg);
+	copy_arg = estimate_expression_value(gapfill_plan_ctx->root, copy_arg);
+	if (IsA(copy_arg, Const) && !gapfill_is_const_null((Expr *) copy_arg))
+	{
+		return castNode(Const, copy_arg)->constvalue;
+	}
+	else
+	{
+		gapfill_plan_ctx->estimate_failed = true;
+		return (Datum) 0;
+	}
+}
+
+static int64
+gapfill_estimate_boundary(GapFillArgEvalContext *gapfill_plan_ctx, GapFillBoundary boundary)
+{
+	List *args = gapfill_plan_ctx->args;
+	int64 result = -1;
+	Node *arg = NULL;
+	if (boundary == GAPFILL_START)
+	{
+		arg = (list_length(args) < 5 ? lthird(args) : lfourth(args));
+	}
+	else
+	{
+		arg = (list_length(args) < 5 ? lfourth(args) : lfifth(args));
+	}
+
+	if (gapfill_is_const_null((Expr *) arg))
+	{
+		result = infer_gapfill_boundary(gapfill_plan_ctx, boundary);
+	}
+	else
+	{
+		Datum value = gapfill_estimate_arg(gapfill_plan_ctx, arg);
+		if (!gapfill_plan_ctx->estimate_failed)
+		{
+			result = gapfill_datum_get_internal(value, gapfill_plan_ctx->typid);
+		}
+	}
+	return result;
+}
+
+/* Estimate bucket_width in int64 internal format.
+ * For variable-length intervals use approximation.
+ * Error out on invalid bucket_width. */
+static int64
+estimate_and_check_gapfill_bucket_width(GapFillArgEvalContext *gapfill_plan_ctx)
+{
+	Node *bucket_width_arg = linitial(gapfill_plan_ctx->args);
+
+	Datum arg_value = gapfill_estimate_arg(gapfill_plan_ctx, bucket_width_arg);
+	/* Cannot estimate bucket_width now: let it be checked during execution */
+	if (gapfill_plan_ctx->estimate_failed)
+	{
+		return INVALID_ESTIMATE;
+	}
+
+	Interval *gapfill_interval = NULL;
+	int64 gapfill_bucket_width =
+		gapfill_bucket_width_get_internal(gapfill_plan_ctx->typid,
+										  exprType((Node *) bucket_width_arg),
+										  arg_value,
+										  &gapfill_interval);
+	if (gapfill_interval)
+	{
+		gapfill_bucket_width = ts_get_interval_period_approx(gapfill_interval);
+	}
+
+	/* negative bucket_width can be reported here */
+	if (gapfill_bucket_width <= 0)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg(
+					 "invalid time_bucket_gapfill argument: bucket_width must be greater than 0")));
+	}
+
+	return gapfill_bucket_width;
+}
+
+/* Try to get start and finish from args or from WHERE clause,
+ * estimate bucket_width including when it's a variable-length interval,
+ * bail out and return 0 rows if start/finish/bucket_width are missing or invalid:
+ * we will fall back to subplan rows in this case. */
+static double
+check_args_and_estimate_gapfill_rows(PlannerInfo *root, FuncExpr *func)
+{
+	GapFillArgEvalContext gapfill_plan_ctx = {
+		.root = root,
+		.state = NULL,
+		.typid = func->funcresulttype,
+		.args = func->args,
+		.jt = root->parse->jointree,
+		.estimate_failed = false,
+	};
+
+	int64 bucket_width = estimate_and_check_gapfill_bucket_width(&gapfill_plan_ctx);
+	if (gapfill_plan_ctx.estimate_failed)
+	{
+		return 0;
+	}
+	int64 start = gapfill_estimate_boundary(&gapfill_plan_ctx, GAPFILL_START);
+	if (gapfill_plan_ctx.estimate_failed)
+	{
+		return 0;
+	}
+	int64 finish = gapfill_estimate_boundary(&gapfill_plan_ctx, GAPFILL_END);
+	if (gapfill_plan_ctx.estimate_failed)
+	{
+		return 0;
+	}
+
+	Assert(bucket_width > 0);
+	/* Cap row count at 0 if (start > finish) */
+	return Max(0.0, (((double) finish - (double) start) / (double) bucket_width));
+}
+
 /* Create a gapfill plan node in the form of a CustomScan node. The
  * purpose of this plan node is to insert tuples for missing groups.
  *
@@ -441,6 +570,38 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
 	}
 }
 
+static int
+estimate_gapfill_groups(PlannerInfo *root, int path_rows)
+{
+#if PG16_GE
+	List *group_exprs = get_sortgrouplist_exprs(root->processed_groupClause, root->processed_tlist);
+#else
+	List *group_exprs = get_sortgrouplist_exprs(root->parse->groupClause, root->parse->targetList);
+#endif
+	/* If we group on something beside time_bucket_gapfill, estimate number of groups */
+	List *group_exprs_without_gapfill = NULL;
+	if (list_length(group_exprs) > 1)
+	{
+		ListCell *lc;
+		foreach (lc, group_exprs)
+		{
+			Node *group_expr = lfirst(lc);
+			if (IsA(group_expr, FuncExpr) &&
+				is_gapfill_function_call(castNode(FuncExpr, group_expr)))
+			{
+				continue;
+			}
+			group_exprs_without_gapfill = lappend(group_exprs_without_gapfill, group_expr);
+		}
+	}
+	int num_groups = 1;
+	if (group_exprs_without_gapfill != NULL)
+	{
+		num_groups = estimate_num_groups(root, group_exprs_without_gapfill, path_rows, NULL, NULL);
+	}
+	return num_groups;
+}
+
 /*
  * Create a Gapfill Path node.
  *
@@ -457,12 +618,28 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 	path->cpath.path.pathtype = T_CustomScan;
 	path->cpath.methods = &gapfill_path_methods;
 
+	/* try to infer start/end boundaries and a bucket_width for time_bucket_gapfill in int64
+	 * internal format, estimate rows as (end-start)/(bucket_width), return 0 if
+	 * start/end/bucket_width are not inferable.
+	 */
+	double gapfill_rows = check_args_and_estimate_gapfill_rows(root, func);
+
+	/* If we can estimate gapfills, we should estimate number of non-gapfill groups
+	 * as gapfills will be repeated for each group. */
+	int num_groups = 1;
+	if (gapfill_rows > 0)
+	{
+		num_groups = estimate_gapfill_groups(root, subpath->rows);
+	}
 	/*
 	 * parallel_safe must be false because it is not safe to execute this node
 	 * in parallel, but it is safe for child nodes to be parallel
 	 */
 	Assert(!path->cpath.path.parallel_safe);
-	path->cpath.path.rows = subpath->rows;
+	/* we may have filled gaps in addition to original tuples
+	 * filled gaps set per each group */
+	path->cpath.path.rows = subpath->rows + gapfill_rows * num_groups;
+
 	path->cpath.path.parent = subpath->parent;
 	path->cpath.path.param_info = subpath->param_info;
 	path->cpath.flags = 0;

@@ -8,6 +8,7 @@
 #include <postgres.h>
 #include <nodes/pathnodes.h>
 #include <nodes/primnodes.h>
+#include <utils/builtins.h>
 
 #define GAPFILL_FUNCTION "time_bucket_gapfill"
 #define GAPFILL_LOCF_FUNCTION "locf"
@@ -34,3 +35,29 @@ typedef struct GapFillPath
 	CustomPath cpath;
 	FuncExpr *func; /* time_bucket_gapfill function call */
 } GapFillPath;
+
+typedef enum GapFillBoundary
+{
+	GAPFILL_START,
+	GAPFILL_END,
+} GapFillBoundary;
+
+typedef struct GapFillArgEvalContext
+{
+	PlannerInfo *root;		/* needed for evaluation at planning time */
+	CustomScanState *state; /* needed for evaluation at execution time */
+	Oid typid;				/* gapfill function type */
+	List *args;				/* gapfill function arguments */
+	FromExpr *jt;			/* needed for inferring boundaries from WHERE */
+	bool estimate_failed;	/* whether estimation during planning failed */
+} GapFillArgEvalContext;
+
+extern int64 infer_gapfill_boundary(GapFillArgEvalContext *gapfill_ctx, GapFillBoundary boundary);
+extern Datum gapfill_estimate_arg(GapFillArgEvalContext *gapfill_plan_ctx, Node *arg);
+
+extern bool gapfill_is_const_null(Expr *expr);
+extern bool gapfill_is_simple_expr(Expr *node);
+extern Const *make_const_value_for_gapfill_internal(Oid typid, int64 value);
+extern int64 gapfill_datum_get_internal(Datum, Oid);
+extern int64 gapfill_bucket_width_get_internal(Oid timetype, Oid argtype, Datum arg,
+											   Interval **interval);
