@@ -9,6 +9,7 @@ name: LLM fuzzer
   push:
     branches:
       - main
+      - trigger/llm-fuzzer
   pull_request:
 
 env:
