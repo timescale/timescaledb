@@ -923,10 +923,7 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time DESC, x3 ASC, x
          ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=13.00 loops=1)
-                     Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1 DESC, compress_hyper_4_8_chunk._ts_meta_max_1 DESC, compress_hyper_4_8_chunk._ts_meta_min_2, compress_hyper_4_8_chunk._ts_meta_max_2, compress_hyper_4_8_chunk._ts_meta_min_3, compress_hyper_4_8_chunk._ts_meta_max_3
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+               ->  Index Scan using compress_hyper_4_8_chunk_x1_x2_x5__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
          ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4
                Sort Method: quicksort 
