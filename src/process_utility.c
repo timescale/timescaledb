@@ -5003,6 +5003,36 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 
 	continuous_agg_with_clause_perm_check(cagg, view_relid);
 
+	/*
+	 * CAgg add column handler.
+	 * Split `stmt->cmds` into the GENERATED ALWAYS AS and everything else
+	 * (handled by the switch below). Process all ADD COLUMNs at once since
+	 * they require a rewrite of the view, and doing them one by one would
+	 * be inefficient.
+	 */
+	{
+		List *addcol_cmds = NIL;
+		List *other_cmds = NIL;
+		foreach (lc, stmt->cmds)
+		{
+			AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+			if (cmd->subtype == AT_AddColumn)
+				addcol_cmds = lappend(addcol_cmds, cmd);
+			else
+				other_cmds = lappend(other_cmds, cmd);
+		}
+
+		if (addcol_cmds != NIL)
+		{
+			AlterTableStmt addcol_stmt = *stmt;
+			addcol_stmt.cmds = addcol_cmds;
+			ts_cm_functions->continuous_agg_add_column(cagg, &addcol_stmt);
+			CommandCounterIncrement();
+
+			stmt->cmds = other_cmds;
+		}
+	}
+
 	foreach (lc, stmt->cmds)
 	{
 		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);

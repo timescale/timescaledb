@@ -96,7 +96,6 @@ static void cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const ch
 								   int64 mat_tbltimecol_interval);
 static void mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matcolinfo,
 												  Hypertable *ht);
-static ObjectAddress create_view_for_query(Query *selquery, RangeVar *viewrel);
 static void fixup_userview_query_tlist(Query *userquery, List *tlist_aliases);
 static void cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
 						ContinuousAggTimeBucketInfo *bucket_info,
