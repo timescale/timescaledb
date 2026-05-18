@@ -5065,17 +5065,11 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	/* insert dimension slices if they do not exist.
 	 */
 	ts_dimension_slice_insert_multi(chunk->cube->slices, chunk->cube->num_slices);
-	/* check constraints are not automatically created for foreign tables.
-	 * See: ts_chunk_constraints_add_dimension_constraints.
-	 * Collect all the check constraints from the hypertable and add them to the
-	 * foreign table. Otherwise, cannot add as child of the hypertable (pg inheritance
-	 * code will error. Note that the name of the check constraint on the hypertable
-	 * and the foreign table chunk should match.
+	/* CHECK constraints are not inherited automatically by foreign tables, so
+	 * clone them from the hypertable onto the foreign chunk before running
+	 * ALTER TABLE ... INHERIT below.
 	 */
-	ts_chunk_constraints_add_inheritable_check_constraints(chunk->constraints,
-														   chunk->fd.id,
-														   chunk->relkind,
-														   chunk->hypertable_relid);
+	ts_chunk_clone_check_constraints(relid, chunk->hypertable_relid);
 	chunk_create_table_constraints(parent_ht, chunk);
 	/* Add dimension constraints for the chunk */
 	ts_chunk_constraints_add_dimension_constraints(chunk->constraints, chunk->fd.id, chunk->cube);
