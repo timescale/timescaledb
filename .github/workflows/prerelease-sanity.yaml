@@ -30,7 +30,7 @@ jobs:
 
         if  [[ "${{ github.event_name }}" == "pull_request" ]]
         then
-          base=${{ github.event.pull_request.base.sha }}
+          base="${{ github.event.pull_request.base.sha }}"
           git fetch origin "${base}"
 
           # PR that modifies the workflow.
@@ -38,18 +38,18 @@ jobs:
            then
              echo "should_run=true" >> ${GITHUB_OUTPUT}
              exit 0
-           fi
+          fi
 
-           # PR into a release branch that modifies the version.
-           if [[ "${{ github.event.pull_request.base.ref }}" == ?.*.x ]] \
-             && ! git diff "${base}" --exit-code -- version.config
-           then
-             echo "should_run=true" >> ${GITHUB_OUTPUT}
-             exit 0
-           fi
+          # PR into a release branch that modifies the version.
+          if [[ "${{ github.event.pull_request.base.ref }}" == ?.*.x ]] \
+            && ! git diff "${base}" --exit-code -- version.config
+          then
+            echo "should_run=true" >> ${GITHUB_OUTPUT}
+            exit 0
+          fi
 
-           # Don't run on other PRs.
-           echo "should_run=false" >> ${GITHUB_OUTPUT}
+          # Don't run on other PRs.
+          echo "should_run=false" >> ${GITHUB_OUTPUT}
           exit 0
         fi
 
@@ -129,12 +129,14 @@ jobs:
       if: github.event_name == 'push'
       run: |
         version=$(sed -n "s/^version = //p" version.config)
-        echo $version
+        echo "Version ${version}"
 
         branch=$(echo ${version} | sed 's/\([0-9]\+\.[0-9]\+\.\).*/\1x/')
-        echo $branch
+        echo "Expected branch ${branch}"
 
-        echo ${{ github.ref_name }} | grep $branch
+        git fetch origin ${branch}
+
+        git branch --contains @ | grep -F $branch
 
     - name: The release PR must target the corresponding release branch
       if: github.event_name == 'pull_request'

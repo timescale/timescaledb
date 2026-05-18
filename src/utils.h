@@ -143,6 +143,7 @@ extern TSDLLEXPORT Expr *ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInf
 extern TSDLLEXPORT EquivalenceMember *ts_find_em_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
 
 extern TSDLLEXPORT bool ts_has_row_security(Oid relid);
+extern TSDLLEXPORT bool ts_has_owner_privs(Oid userid, Oid ownerid);
 
 extern TSDLLEXPORT List *ts_get_reloptions(Oid relid);
 

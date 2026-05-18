@@ -286,7 +286,7 @@ jobs:
       run: |
         set -xeu
 
-        sudo coredumpctl rm
+        sudo rm -f /var/lib/systemd/coredump/*
 
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
 
