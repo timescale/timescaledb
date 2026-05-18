@@ -4,6 +4,7 @@ name: Prerelease Sanity
     branches:
       - prerelease_test
       - trigger/prerelease-sanity
+      - ?.*.x
 
   pull_request:
 
@@ -11,10 +12,11 @@ name: Prerelease Sanity
 
 jobs:
   # We need two disjoint conditions for pull requests that are combined with OR,
-  # and it impossible to set up through the "on" key, so check that in a separate
-  # step below.
+  # and it is impossible to set up through the "on" key, so check that in a
+  # separate step below.
   config:
     name: Check the configuration
+    runs-on: timescaledb-runner-arm64
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
@@ -28,8 +30,11 @@ jobs:
 
           if ${{ github.event_name == 'pull_request' }}
           then
+            base=${{ github.event.pull_request.base.sha }}
+            git fetch "${base}"
+
             # PR that modifies the workflow.
-            if ! git diff --exit-code -- .github/workflows/prerelease-sanity.yaml
+            if ! git diff "${base}" --exit-code -- .github/workflows/prerelease-sanity.yaml
             then
               echo "should_run=true" >> ${GITHUB_OUTPUT}
               exit 0
@@ -37,7 +42,7 @@ jobs:
 
             # PR into a release branch that modifies the version.
             if [[ "${{ github.event.pull_request.base.ref }}" == ?.*.x ]] \
-              && ! git diff --exit-code -- version.config
+              && ! git diff "${base}" --exit-code -- version.config
             then
               echo "should_run=true" >> ${GITHUB_OUTPUT}
               exit 0
@@ -54,13 +59,13 @@ jobs:
   check_release_commit:
     name: Check Release Commit
     needs: config
-    if: needs.config.outputs.should_run
+    if: needs.config.outputs.should_run == 'true'
     runs-on: timescaledb-runner-arm64
 
     steps:
     - name: Checkout TimescaleDB
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      # GitHub creates an empty merge commit even for fast-fordward merges, which
+      # GitHub creates an empty merge commit even for fast-forward merges, which
       # makes it needlessly difficult to inspect the actual commit title. Since
       # we require the PRs to release branches to be up to date before merging,
       # we can just work with the PR head here.
@@ -77,6 +82,7 @@ jobs:
         ! git diff --exit-code @^0~ @^0 -- version.config
 
     - name: The release commit must not use the -dev version
+      run: |
         ! grep 'version = .*-dev$' version.config
 
     # The combined changelog must reference all changes, and the respective
@@ -134,9 +140,10 @@ jobs:
       if: github.event_name == 'pull_request'
       run: |
         version=$(sed -n "s/^version = //p" version.config)
-        echo Version '$version'
+        echo "Version ${version}"
 
         branch=$(echo ${version} | sed 's/\([0-9]\+\.[0-9]\+\.\).*/\1x/')
-        echo Expected branch '$branch'
+        echo "Expected branch ${branch}"
 
-        git branch --contains @ | grep $branch
+        echo "PR base: ${{ github.event.pull_request.base.ref }}"
+        [[ "${{ github.event.pull_request.base.ref }}" == "$branch" ]]
