@@ -79,7 +79,7 @@ jobs:
         if [[ "${{ github.event_name }}" == "pull_request" ]]
         then
             git remote set-branches origin '*'
-            git fetch "${{ github.event.pull_request.base.ref }}"
+            git fetch origin "${{ github.event.pull_request.base.ref }}"
 
             # We're working with pull request head here, see the comment
             # at checkout step.
