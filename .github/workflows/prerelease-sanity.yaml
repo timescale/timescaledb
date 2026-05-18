@@ -117,7 +117,7 @@ jobs:
         git log --oneline -1 @^0
         git log --oneline -1 "${base}"
         ! git diff --exit-code "${base}" @^0 -- version.config
-		
+
     # The SQL upgrade scripts must be moved from the development files to
     # the respective versioned files.
     - name: The latest-dev.sql and the reverse-dev.sql must be empty
